@@ -191,7 +191,8 @@ void allocate_sleepable_kv_caches(std::vector<KVCache>& kv_caches,
       << "Sleep mode only supports standard key/value KV cache.";
   CHECK(!create_options.enable_linear_attention() &&
         !create_options.enable_lighting_indexer() &&
-        !create_options.enable_kv_cache_quant())
+        !create_options.enable_kv_cache_quant() &&
+        !create_options.fp8_kv_cache())
       << "Sleep mode does not support linear/indexer/quantized KV cache.";
 
   CHECK(!kv_cache_shape.has_kpool_tail_shape() ||

@@ -39,7 +39,9 @@ DEFINE_string(
     "auto",
     "KV cache data type for quantization. \"auto\" (default): KV "
     "cache dtype aligns with model dtype (no quantization). "
-    "\"int8\": Enables INT8 quantization. Only supported on MLU backend.");
+    "\"int8\": Enables INT8 quantization. Only supported on MLU backend. "
+    "\"fp8_e4m3\": Stores full-attention K/V as FP8 E4M3 and runs MUSA FA3 "
+    "on those tensors. Query and new K/V are cast at the kernel boundary.");
 
 DEFINE_string(indexer_cache_dtype,
               "auto",

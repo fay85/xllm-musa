@@ -147,7 +147,9 @@ IndexCacheFootprint estimate_index_cache_footprint(
 
 int64_t scale_slot_size(const ModelArgs& model_args,
                         const KVCacheEstimateOptions& options) {
-  if (options.kv_cache_dtype == "auto") {
+  if (options.kv_cache_dtype == "auto" ||
+      options.kv_cache_dtype == "fp8_e4m3" ||
+      options.kv_cache_dtype == "fp8_e5m2") {
     return 0;
   }
   if (model_args.enable_mla()) {

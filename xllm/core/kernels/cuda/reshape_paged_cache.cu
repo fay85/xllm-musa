@@ -75,13 +75,31 @@ void reshape_paged_cache(
   const int64_t n_kv_heads = keys.size(-2);
   const int64_t head_dim = keys.size(-1);
   const int64_t block_size = key_cache.size(-3);
-  // it is possible that keys and values have different strides
+  if (key_cache.scalar_type() != keys.scalar_type() ||
+      value_cache.scalar_type() != values.scalar_type()) {
+    CHECK(key_cache.scalar_type() == torch::kFloat8_e4m3fn ||
+          key_cache.scalar_type() == torch::kFloat8_e5m2)
+        << "paged cache dtype conversion only supports FP8 storage";
+    CHECK_EQ(value_cache.scalar_type(), key_cache.scalar_type());
+    keys = keys.to(key_cache.scalar_type());
+    values = values.to(value_cache.scalar_type());
+  }
+  // Recompute after a possible FP8 cast. .to() may repack the tensor.
   const int64_t k_stride = keys.stride(-3);
   const int64_t v_stride = values.stride(-3);
   const int64_t n = n_kv_heads * head_dim;
   dim3 grid(n_tokens);
   dim3 block(std::min<int>(n, 1024));
-  DISPATCH_FLOATING_TYPES(
+#define DISPATCH_PAGED_CACHE_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH( \
+      TYPE, \
+      NAME, \
+      AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
+      AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
+      AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
+      AT_DISPATCH_CASE(at::ScalarType::Float8_e4m3fn, __VA_ARGS__) \
+      AT_DISPATCH_CASE(at::ScalarType::Float8_e5m2, __VA_ARGS__))
+  DISPATCH_PAGED_CACHE_TYPES(
       keys.scalar_type(), "reshape_paged_cache_kernel", [&] {
         reshape_paged_cache_kernel<scalar_t>
             <<<grid, block, 0, c10::cuda::getCurrentCUDAStream()>>>(
@@ -96,6 +114,7 @@ void reshape_paged_cache(
                 head_dim,
                 block_size);
       });
+#undef DISPATCH_PAGED_CACHE_TYPES
 }
 
 }  // namespace xllm::kernel::cuda

@@ -190,7 +190,8 @@ torch::Tensor fa3_prefill_scheduler_metadata(
     int32_t window_size_right,
     const torch::Tensor& cu_seqlens_q,
     const torch::Tensor& cu_seqlens_k_new,
-    const torch::Tensor& seqused_k);
+    const torch::Tensor& seqused_k,
+    torch::ScalarType kv_dtype = torch::kBFloat16);
 
 void fa3_prefill_paged(const torch::Tensor& query,
                        const torch::Tensor& k_cache,
@@ -222,7 +223,8 @@ torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
                                             int32_t window_size_left,
                                             int32_t window_size_right,
                                             const torch::Tensor& cu_seqlens_q,
-                                            const torch::Tensor& seqused_k);
+                                            const torch::Tensor& seqused_k,
+                                            torch::ScalarType kv_dtype = torch::kBFloat16);
 
 void fa3_decode_scheduler_metadata(const torch::Device& device,
                                    int32_t batch_size,
@@ -237,7 +239,8 @@ void fa3_decode_scheduler_metadata(const torch::Device& device,
                                    const torch::Tensor& cu_seqlens_q,
                                    const torch::Tensor& seqused_k,
                                    int64_t num_splits,
-                                   torch::Tensor& metadata);
+                                   torch::Tensor& metadata,
+                                   torch::ScalarType kv_dtype = torch::kBFloat16);
 
 void gemma_rms_norm(torch::Tensor output,
                     torch::Tensor input,

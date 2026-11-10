@@ -86,6 +86,9 @@ struct KVCacheCreateOptions {
   // whether that layer owns indexer cache tensors.
   PROPERTY(std::vector<bool>, indexer_cache_enabled_layers);
   PROPERTY(bool, enable_kv_cache_quant) = false;
+  // Mate FMHA FP8 KV. Key/value tensors only; conv/SSM stay on dtype.
+  PROPERTY(bool, fp8_kv_cache) = false;
+  PROPERTY(torch::ScalarType, fp8_kv_dtype) = torch::kFloat8_e4m3fn;
   PROPERTY(std::shared_ptr<KVCacheTensorAllocator>, tensor_allocator);
 
   // Convenience: true when this options set drives the SFA C8 packed KV cache

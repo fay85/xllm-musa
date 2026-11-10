@@ -42,6 +42,7 @@ exp("CONC", ex.get("max_concurrent_requests"))
 exp("ENABLE_DISAGG_PD", ex.get("enable_disagg_pd", True))
 exp("ENABLE_NATIVE_SERVICE_ADAPTER", ex.get("enable_native_service_adapter", True))
 exp("KV_CACHE_TRANSFER_MODE", ex.get("kv_cache_transfer_mode", "PULL"))
+exp("KV_CACHE_DTYPE", ex.get("kv_cache_dtype", "auto"))
 exp("KV_SPLIT_SIZE", ex.get("kv_split_size", 1))
 piece = ex.get("enable_prefill_piecewise_graph") or {}
 if isinstance(piece, dict):
@@ -73,6 +74,12 @@ if topo.get("decode_gpus"):
     exp("DECODE_GPUS", topo["decode_gpus"])
 if topo.get("prefill_nnodes") is not None:
     exp("VL_PREFILL_NNODES", topo["prefill_nnodes"])
+if topo.get("prefill_cp_size") is not None:
+    exp("VL_PREFILL_CP_SIZE", topo["prefill_cp_size"])
+if topo.get("dp_size") is not None:
+    exp("VL_DP_SIZE", topo["dp_size"])
+if topo.get("decode_nnodes") is not None:
+    exp("VL_DECODE_NNODES", topo["decode_nnodes"])
 
 if paths.get("model"):
     exp("MODEL", paths["model"])
