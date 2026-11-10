@@ -13,6 +13,7 @@ cc_library(
   SRCS
     active.cpp
     attention.cpp
+    paged_attention_graph_operation.cpp
     fused_layernorm.cpp
     npu_adalayernorm.cpp
     matmul.cpp

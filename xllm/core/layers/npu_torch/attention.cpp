@@ -395,19 +395,50 @@ void AttentionImpl::decoder_forward(torch::Tensor& query,
   const bool use_fia_graph_decode =
       enable_fia_decode_ &&
       (!attn_metadata.is_spec_verify || attn_metadata.expanded_decode.enabled);
-  if (tiling_data.defined() && !use_fia_graph_decode) {
-    xllm::kernel::npu::batch_decode_acl_graph(query,
-                                              k_cache,
-                                              v_cache.value_or(torch::Tensor()),
-                                              scale_,
-                                              block_table,
-                                              kv_seq_lens,
-                                              tiling_data,
-                                              output);
+  const auto& graph_context = attn_metadata.acl_graph_task_update_context;
+  if (graph_context != nullptr && graph_context->capturing &&
+      !use_fia_graph_decode) {
+    CHECK(v_cache.has_value() && v_cache->defined());
+    CHECK(kv_seq_lens.device().is_cpu());
+    CHECK_EQ(kv_seq_lens.scalar_type(), torch::kInt32);
+    CHECK(kv_seq_lens.is_contiguous());
+    CHECK_EQ(query.size(0), kv_seq_lens.numel())
+        << "PA graph tasks require one query per KV length";
+    const int32_t* lengths = kv_seq_lens.data_ptr<int32_t>();
+    CHECK(graph_context->paged_attention_resources != nullptr);
+    auto operation =
+        std::make_shared<kernel::npu::PagedAttentionGraphOperation>(
+            graph_context->paged_attention_resources,
+            query,
+            k_cache,
+            *v_cache,
+            block_table,
+            output,
+            scale_);
+    operation->prepare(
+        std::vector<int32_t>(lengths, lengths + kv_seq_lens.numel()));
+    const auto stream = c10_npu::getCurrentNPUStream();
+    auto event = std::make_shared<c10_npu::NPUEvent>(ACL_EVENT_EXTERNAL);
+    event->block(stream);
+    event->reset(stream);
+    c10_npu::graph_task_group_begin(stream);
+    operation->execute();
+    const auto handle = c10_npu::graph_task_group_end(stream);
+    graph_context->paged_attention_tasks.emplace_back(
+        npu::PagedAttentionGraphTask{
+            .operation = std::move(operation),
+            .batch_size = query.size(0),
+            .branch = attn_metadata.expanded_decode.enabled
+                          ? npu::PagedAttentionGraphBranch::SPEC_VERIFY
+                          : npu::PagedAttentionGraphBranch::DECODE,
+            .capture_order = graph_context->next_capture_order++,
+            .handle = handle,
+            .event = std::move(event),
+        });
     return;
   }
-
-  if (!tiling_data.defined() && !enable_fia_decode_) {
+  // Preserve eager PA/FIA selection without using the legacy CustomPA tiling.
+  if (!enable_fia_decode_ || (tiling_data.defined() && !use_fia_graph_decode)) {
     xllm::kernel::npu::batch_decode(query,
                                     k_cache,
                                     v_cache.value_or(torch::Tensor()),
@@ -445,7 +476,7 @@ void AttentionImpl::decoder_forward(torch::Tensor& query,
   std::vector<int64_t> actual_q_lens =
       make_decode_actual_seq_lengths(query_tnd.size(0));
 
-  if (tiling_data.defined()) {
+  if (graph_context != nullptr && graph_context->capturing) {
     const xllm::npu::FusedInferAttentionGraphBranch graph_branch =
         attn_metadata.expanded_decode.enabled
             ? xllm::npu::FusedInferAttentionGraphBranch::kSpecVerify

@@ -156,6 +156,7 @@ class AclGraph {
                                     ModelInputParams& params);
   void update_spec_verify_attention_tiling(const ModelInputParams& params);
   bool has_fused_infer_attention_graph_tasks() const;
+  bool has_paged_attention_graph_tasks() const;
 
   bool update_graph_tasks(const ModelInputParams& params,
                           bool update_causal_conv1d_tasks);

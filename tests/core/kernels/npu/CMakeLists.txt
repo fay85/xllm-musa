@@ -2,6 +2,24 @@ include(cc_test)
 
 cc_test(
   NAME
+    paged_attention_graph_operation_test
+  RUN_SERIAL
+  SRCS
+    paged_attention_graph_operation_test.cpp
+  DEPS
+    ascendcl
+    atb
+    torch
+    torch_npu
+    npu_kernels
+    GTest::gtest_main
+    glog::glog
+    unified_dlog
+    pybind11::embed
+)
+
+cc_test(
+  NAME
     npu_xllm_ops_test
   SRCS
     npu_xllm_ops_test.cpp

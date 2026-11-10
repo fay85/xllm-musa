@@ -15,12 +15,17 @@ limitations under the License.
 
 #pragma once
 
+#include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
+
+#include "core/kernels/npu/paged_attention_graph_operation.h"
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
@@ -110,23 +115,84 @@ struct FusedInferAttentionGraphTask {
   std::shared_ptr<c10_npu::NPUEvent> event;
 };
 
+enum class PagedAttentionGraphBranch {
+  DECODE,
+  SPEC_VERIFY,
+};
+
+struct PagedAttentionGraphTask {
+  std::shared_ptr<kernel::npu::PagedAttentionGraphOperation> operation;
+  int64_t batch_size = 0;
+  PagedAttentionGraphBranch branch = PagedAttentionGraphBranch::DECODE;
+  uint64_t capture_order = 0;
+  c10_npu::NPUTaskGroupHandle handle{};
+  std::shared_ptr<c10_npu::NPUEvent> event;
+};
+
+enum class AclGraphTaskType {
+  CAUSAL_CONV1D,
+  FUSED_INFER_ATTENTION,
+  PAGED_ATTENTION,
+};
+
+struct AclGraphTaskUpdateEntry {
+  AclGraphTaskType type;
+  size_t index;
+  uint64_t capture_order;
+};
+
 class AclGraphTaskUpdateContext final {
  public:
   void begin_capture() {
     capturing = true;
     next_capture_order = 0;
+    ordered_tasks.clear();
     causal_conv1d_tasks.clear();
     fused_infer_attention_tasks.clear();
+    paged_attention_tasks.clear();
+    paged_attention_resources.reset();
     fused_infer_attention_workspace_signature.reset();
     fused_infer_attention_workspace = torch::Tensor();
   }
 
-  void end_capture() { capturing = false; }
+  void end_capture() {
+    // Build the update schedule once. Replay must preserve capture order
+    // across operator types because their ready events gate dependent tasks.
+    ordered_tasks.clear();
+    ordered_tasks.reserve(causal_conv1d_tasks.size() +
+                          fused_infer_attention_tasks.size() +
+                          paged_attention_tasks.size());
+    auto append_tasks = [this](const auto& tasks, AclGraphTaskType type) {
+      for (size_t index = 0; index < tasks.size(); ++index) {
+        ordered_tasks.emplace_back(
+            AclGraphTaskUpdateEntry{type, index, tasks[index].capture_order});
+      }
+    };
+    append_tasks(causal_conv1d_tasks, AclGraphTaskType::CAUSAL_CONV1D);
+    append_tasks(fused_infer_attention_tasks,
+                 AclGraphTaskType::FUSED_INFER_ATTENTION);
+    append_tasks(paged_attention_tasks, AclGraphTaskType::PAGED_ATTENTION);
+    std::sort(ordered_tasks.begin(),
+              ordered_tasks.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.capture_order < rhs.capture_order;
+              });
+    for (size_t index = 1; index < ordered_tasks.size(); ++index) {
+      CHECK_LT(ordered_tasks[index - 1].capture_order,
+               ordered_tasks[index].capture_order)
+          << "ACL graph task capture order must be unique";
+    }
+    capturing = false;
+  }
 
   bool capturing = false;
   uint64_t next_capture_order = 0;
   std::vector<CausalConv1dGraphTask> causal_conv1d_tasks;
   std::vector<FusedInferAttentionGraphTask> fused_infer_attention_tasks;
+  std::vector<PagedAttentionGraphTask> paged_attention_tasks;
+  std::vector<AclGraphTaskUpdateEntry> ordered_tasks;
+  std::shared_ptr<kernel::npu::PagedAttentionGraphResources>
+      paged_attention_resources;
   std::optional<FusedInferAttentionWorkspaceSignature>
       fused_infer_attention_workspace_signature;
   torch::Tensor fused_infer_attention_workspace;

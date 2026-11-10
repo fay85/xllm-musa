@@ -134,7 +134,10 @@ DcpAttentionResult run_local_dcp_cache_attention(
 
   torch::Tensor partial_output;
   torch::Tensor partial_lse;
-  if (attention_metadata.paged_attention_tiling_data.defined()) {
+  const auto& graph_context = attention_metadata.acl_graph_task_update_context;
+  const bool capturing_graph =
+      graph_context != nullptr && graph_context->capturing;
+  if (capturing_graph) {
     partial_output = torch::empty_like(gathered_query);
     partial_lse = detail::run_fused_infer_attention_graph(
         attention_metadata.acl_graph_task_update_context,
@@ -169,7 +172,7 @@ DcpAttentionResult run_local_dcp_cache_attention(
             "TND",
             /*softmax_lse_flag=*/true);
   }
-  if (attention_metadata.paged_attention_tiling_data.defined()) {
+  if (capturing_graph) {
     const torch::Tensor empty_shards =
         (attention_metadata.kv_seq_lens <=
          static_cast<int64_t>(dcp_rank) * block_size)

@@ -31,6 +31,7 @@ limitations under the License.
 #include "core/framework/block/block.h"
 #include "core/framework/block/block_manager_impl.h"
 #include "core/framework/config/execution_config.h"
+#include "core/framework/config/kernel_config.h"
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/kv_cache/linear_state_restore.h"
 #include "core/framework/model/model_args.h"
@@ -352,6 +353,8 @@ class HybridConv1dMockLM final : public CausalLM {
             !graph_context->causal_conv1d_tasks.empty();
         saw_fia_graph_task_ |=
             !graph_context->fused_infer_attention_tasks.empty();
+        saw_paged_attention_graph_task_ |=
+            !graph_context->paged_attention_tasks.empty();
         fia_graph_task_count_ =
             graph_context->fused_infer_attention_tasks.size();
         if (!graph_context->fused_infer_attention_tasks.empty()) {
@@ -378,7 +381,11 @@ class HybridConv1dMockLM final : public CausalLM {
     return ModelOutput(hidden);
   }
 
-  bool is_hybrid_linear_attention() override { return true; }
+  bool is_hybrid_linear_attention() override {
+    return is_hybrid_linear_attention_;
+  }
+
+  void use_plain_attention() { is_hybrid_linear_attention_ = false; }
 
   const torch::TensorOptions& options() const override {
     static torch::TensorOptions opts = torch::dtype(kDtype).device(device_);
@@ -400,6 +407,9 @@ class HybridConv1dMockLM final : public CausalLM {
     return saw_causal_conv_graph_task_;
   }
   bool saw_fia_graph_task() const { return saw_fia_graph_task_; }
+  bool saw_paged_attention_graph_task() const {
+    return saw_paged_attention_graph_task_;
+  }
   uint32_t captured_fia_batch_size() const { return captured_fia_batch_size_; }
   size_t fia_graph_task_count() const { return fia_graph_task_count_; }
   bool all_fia_graph_tasks_share_workspace() const {
@@ -433,8 +443,10 @@ class HybridConv1dMockLM final : public CausalLM {
   torch::Tensor token_embedding_table_;
   torch::Tensor pos_embedding_table_;
   int32_t attention_repetitions_ = 1;
+  bool is_hybrid_linear_attention_ = true;
   bool saw_causal_conv_graph_task_ = false;
   bool saw_fia_graph_task_ = false;
+  bool saw_paged_attention_graph_task_ = false;
   uint32_t captured_fia_batch_size_ = 0;
   size_t fia_graph_task_count_ = 0;
   bool all_fia_graph_tasks_share_workspace_ = false;
@@ -450,6 +462,10 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
     sequences_.reserve(100);
 
     auto& execution_config = ExecutionConfig::get_instance();
+    original_enable_fia_decode_ = execution_config.enable_fia_decode();
+    original_npu_kernel_backend_ =
+        KernelConfig::get_instance().npu_kernel_backend();
+    KernelConfig::get_instance().npu_kernel_backend("TORCH");
     original_enable_graph_ = execution_config.enable_graph();
     original_enable_graph_double_buffer_ =
         execution_config.enable_graph_double_buffer();
@@ -503,6 +519,9 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
   void TearDown() override {
     reset_sequences();
     auto& execution_config = ExecutionConfig::get_instance();
+    execution_config.enable_fia_decode(original_enable_fia_decode_);
+    KernelConfig::get_instance().npu_kernel_backend(
+        original_npu_kernel_backend_);
     execution_config.enable_graph(original_enable_graph_);
     execution_config.enable_graph_double_buffer(
         original_enable_graph_double_buffer_);
@@ -998,6 +1017,8 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
   std::vector<Sequence> sequences_;
   IncrementalDecoder fake_decoder_ = IncrementalDecoder("", 1, false, false);
   bool original_enable_graph_ = false;
+  bool original_enable_fia_decode_ = false;
+  std::string original_npu_kernel_backend_;
   bool original_enable_graph_double_buffer_ = true;
   bool original_enable_graph_mode_decode_no_padding_ = false;
   int32_t original_acl_graph_decode_batch_size_limit_ = 16;
@@ -1364,6 +1385,98 @@ TEST_F(AclGraphTaskUpdateTest,
              .item<float>();
 }
 
+TEST_F(AclGraphTaskUpdateTest, PlainPagedAttentionReusesPreparedDecodeInputs) {
+  for (const bool double_buffer : {false, true}) {
+    ExecutionConfig::get_instance().enable_graph_double_buffer(double_buffer);
+    ModelArgs plain_args = model_args_;
+    plain_args.model_type("test_attention_model");
+    plain_args.layer_types({"full_attention", "full_attention"});
+    auto pa_model = std::make_unique<HybridConv1dMockLM>(
+        plain_args, *device_, /*enable_fia_decode=*/false);
+    pa_model->use_plain_attention();
+    auto kv_eager = create_hybrid_kv_caches();
+    auto kv_graph = create_hybrid_kv_caches();
+    kv_eager[0] = KVCache();
+    kv_graph[0] = KVCache();
+    auto graph_exec = std::make_unique<npu::AclGraphExecutorImpl>(
+        pa_model.get(), plain_args, *device_, options_);
+    const int32_t slot_count = graph_exec->graph_slot_count_for_test();
+    auto make_input = [&](uint32_t batch_size, int32_t context_length) {
+      reset_sequences();
+      auto batch = create_decode_batch(batch_size);
+      ForwardInput input = batch->prepare_forward_input(
+          options_.num_decoding_tokens(), 0, plain_args);
+      input = input.to(*device_, kDtype);
+      torch::Tensor blocks =
+          input.input_params.attention.device.block_tables.to(torch::kCPU)
+              .contiguous();
+      std::vector<int32_t> lengths(batch_size);
+      std::vector<int64_t> slots(batch_size);
+      std::vector<int64_t> positions(batch_size);
+      for (uint32_t row = 0; row < batch_size; ++row) {
+        lengths[row] = context_length - static_cast<int32_t>(row % 2);
+        positions[row] = lengths[row] - 1;
+        slots[row] = blocks[row][positions[row] / kBlockSize].item<int32_t>() *
+                         kBlockSize +
+                     positions[row] % kBlockSize;
+      }
+      input.positions.copy_(
+          torch::tensor(positions, torch::kInt64).to(*device_));
+      input.input_params.attention.host.kv_seq_lens = lengths;
+      input.input_params.attention.device.kv_seq_lens.copy_(
+          torch::tensor(lengths, torch::kInt32).to(*device_));
+      input.input_params.attention.device.new_cache_slots.copy_(
+          torch::tensor(slots, torch::kInt64).to(*device_));
+      input.input_params.meta.kv_max_seq_len = context_length;
+      return input;
+    };
+    // Populate both slots and two token buckets, then replay with changing
+    // real batch sizes, KV lengths and token data without another capture.
+    for (const uint32_t batch_size : {3, 7}) {
+      for (int32_t slot = 0; slot < slot_count; ++slot) {
+        auto input = make_input(batch_size, /*context_length=*/16);
+        (void)pa_model->forward(
+            input.token_ids, input.positions, kv_eager, input.input_params);
+        (void)graph_exec->run(
+            input.token_ids, input.positions, kv_graph, input.input_params);
+      }
+    }
+    int32_t step = 0;
+    for (const uint32_t batch_size : {3, 4, 7, 8}) {
+      const int32_t context_length = step % 2 == 0 ? 129 : 17;
+      auto input = make_input(batch_size, context_length);
+      torch::Tensor expected_positions = input.positions.clone();
+      graph_exec->prepare_graph_input(
+          input.token_ids, input.positions, kv_graph, input.input_params);
+      const int32_t slot = step++ % slot_count;
+      ASSERT_EQ(graph_exec->graph_slot_prepared_for_test(slot), double_buffer);
+      if (double_buffer) {
+        // Preparation takes a snapshot. Reusing the source after that copy
+        // must not overwrite the persistent positions during replay.
+        input.positions.add_(32);
+      }
+      input.input_params.graph.input_tokens_override = input.token_ids + 5;
+      auto expected =
+          pa_model->forward(input.input_params.graph.input_tokens_override,
+                            expected_positions,
+                            kv_eager,
+                            input.input_params);
+      auto actual = graph_exec->run(
+          input.token_ids, input.positions, kv_graph, input.input_params);
+      ASSERT_TRUE(torch::allclose(actual.hidden_states.to(torch::kFloat32),
+                                  expected.hidden_states.to(torch::kFloat32),
+                                  /*rtol=*/1e-2,
+                                  /*atol=*/1e-2))
+          << "double_buffer=" << double_buffer << ", batch=" << batch_size
+          << ", step=" << step;
+      ASSERT_EQ(pa_model->capture_forward_count(), 2 * slot_count);
+    }
+    EXPECT_TRUE(pa_model->saw_paged_attention_graph_task());
+    EXPECT_FALSE(pa_model->saw_causal_conv_graph_task());
+    EXPECT_FALSE(pa_model->saw_fia_graph_task());
+  }
+}
+
 TEST_F(AclGraphTaskUpdateTest,
        Qwen35OptOutKeepsPagedAttentionForExpandedSpecVerify) {
   constexpr int32_t kNumSequences = 2;
@@ -1394,9 +1507,102 @@ TEST_F(AclGraphTaskUpdateTest,
 
   EXPECT_TRUE(pa_model->saw_causal_conv_graph_task());
   EXPECT_FALSE(pa_model->saw_fia_graph_task());
+  EXPECT_TRUE(pa_model->saw_paged_attention_graph_task());
   EXPECT_EQ(eager_out.hidden_states.sizes(), graph_out.hidden_states.sizes());
   EXPECT_TRUE(torch::isfinite(eager_out.hidden_states).all().item<bool>());
   EXPECT_TRUE(torch::isfinite(graph_out.hidden_states).all().item<bool>());
+  EXPECT_TRUE(torch::allclose(eager_out.hidden_states.to(torch::kFloat32),
+                              graph_out.hidden_states.to(torch::kFloat32),
+                              /*rtol=*/1e-2,
+                              /*atol=*/1e-2));
+}
+
+TEST_F(AclGraphTaskUpdateTest,
+       PagedAttentionSpecVerifyUpdatesLengthsWithoutRecapturing) {
+  ExecutionConfig::get_instance().enable_fia_decode(false);
+  ExecutionConfig::get_instance().enable_graph_mode_decode_no_padding(true);
+  for (const int32_t spec_width : std::vector<int32_t>{3, 6}) {
+    SCOPED_TRACE("spec_width=" + std::to_string(spec_width));
+    reset_sequences();
+    auto pa_model = std::make_unique<HybridConv1dMockLM>(
+        model_args_, *device_, /*enable_fia_decode=*/false);
+    auto batch = create_decode_batch(/*batch_size=*/1);
+    auto input = batch->prepare_forward_input(
+        options_.num_decoding_tokens(), 0, model_args_);
+    input = input.to(*device_, kDtype);
+    input.input_params.attention.host.block_tables =
+        torch::tensor({{0, 1}}, torch::kInt32);
+    input.input_params.attention.device.block_tables =
+        input.input_params.attention.host.block_tables.to(*device_);
+    setup_spec_verify_input(input, /*num_sequences=*/1, spec_width);
+    input.input_params.graph.input_tokens_override = input.token_ids;
+    input.input_params.graph.spec_verify_source_addresses_stable = true;
+    auto graph_cache = create_hybrid_kv_caches();
+    auto executor = std::make_unique<npu::AclGraphExecutorImpl>(
+        pa_model.get(), model_args_, *device_, options_);
+    auto& params = input.input_params;
+    for (const int32_t context_length : {16, 127, 128, 129, 248, 16}) {
+      SCOPED_TRACE("context_length=" + std::to_string(context_length));
+      std::vector<int32_t> lengths;
+      std::vector<int32_t> slots;
+      std::vector<int32_t> positions;
+      lengths.reserve(spec_width);
+      slots.reserve(spec_width);
+      positions.reserve(spec_width);
+      for (int32_t token = 0; token < spec_width; ++token) {
+        lengths.emplace_back(context_length + token + 1);
+        slots.emplace_back(context_length + token);
+        positions.emplace_back(context_length + token);
+      }
+      params.attention.host.kv_seq_lens = {context_length};
+      params.attention.device.kv_seq_lens.copy_(
+          torch::tensor({context_length}, torch::kInt32));
+      params.meta.kv_max_seq_len = lengths.back();
+      params.graph.expanded_kv_seq_lens_vec = lengths;
+      params.graph.expanded_kv_seq_lens.copy_(
+          torch::tensor(lengths, torch::kInt32));
+      layer::ExpandedDecodeMetadataBuilder::populate_expanded_layout(
+          params,
+          params.graph.expanded_kv_seq_lens,
+          params.graph.expanded_block_tables,
+          lengths,
+          kBlockSize);
+      params.attention.host.new_cache_slots = slots;
+      params.attention.device.new_cache_slots.copy_(
+          torch::tensor(slots, torch::kInt32));
+      input.positions.copy_(torch::tensor(positions, torch::kInt32));
+      const int32_t accepted = context_length % 2 == 0 ? 1 : spec_width;
+      params.num_accepted_tokens_host = {accepted};
+      params.num_accepted_tokens.fill_(accepted);
+      // Both runs start with identical recurrent and KV states. Compare the
+      // full attention output and accepted-token state transition together.
+      auto eager_cache = clone_kv_caches(graph_cache);
+      const auto actual =
+          executor->run(input.token_ids, input.positions, graph_cache, params);
+      const auto expected = pa_model->forward(
+          input.token_ids, input.positions, eager_cache, params);
+      ASSERT_TRUE(pa_model->saw_paged_attention_graph_task());
+      ASSERT_EQ(pa_model->capture_forward_count(), 1)
+          << "KV length changes must update the PA task, not capture a variant";
+      ASSERT_TRUE(torch::allclose(actual.hidden_states.to(torch::kFloat32),
+                                  expected.hidden_states.to(torch::kFloat32),
+                                  /*rtol=*/1e-2,
+                                  /*atol=*/1e-2));
+      for (size_t layer = 0; layer < graph_cache.size(); ++layer) {
+        const auto actual_states = graph_cache[layer].get_cache_tensors();
+        const auto expected_states = eager_cache[layer].get_cache_tensors();
+        ASSERT_EQ(actual_states.size(), expected_states.size());
+        for (size_t state = 0; state < actual_states.size(); ++state) {
+          ASSERT_TRUE(
+              torch::allclose(actual_states[state].tensor.to(torch::kFloat32),
+                              expected_states[state].tensor.to(torch::kFloat32),
+                              /*rtol=*/1e-2,
+                              /*atol=*/1e-2))
+              << "layer=" << layer << ", state=" << state;
+        }
+      }
+    }
+  }
 }
 
 TEST_F(AclGraphTaskUpdateTest,

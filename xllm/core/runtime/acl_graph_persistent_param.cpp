@@ -470,6 +470,12 @@ GraphPersistentParam::GraphPersistentParam(
     return;
   }
 
+  // Torch decode and expanded speculative verification use operator-owned
+  // PA/FIA graph tasks. The ATB backend still consumes external PA tiling.
+  if (KernelConfig::get_instance().npu_kernel_backend() == "TORCH") {
+    return;
+  }
+
   initialize_paged_attention_plan_context(device);
 }
 
