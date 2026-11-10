@@ -262,7 +262,7 @@ bool DSparkWorkerImpl::can_prepare_without_compute_stream_wait(
 
 bool DSparkWorkerImpl::can_prelaunch_draft_for_this_step(
     const ForwardInput& input) const {
-  // Draft sampling consumes JSON grammar state, which is not available before
+  // Draft sampling consumes constraint state, which is not available before
   // the previous accepted-token D2H and Host state update.
   if (!draft_prelaunch_enabled_for_init_ ||
       input.input_params.meta.is_graph_warmup ||
@@ -280,16 +280,16 @@ bool DSparkWorkerImpl::can_prelaunch_draft_for_this_step(
        block_copy.src_block_indices.numel() > 0)) {
     return false;
   }
-  if (!input.json_object_states.empty() ||
-      !input.json_object_state_snapshots.empty()) {
+  // Shared constraint gate: builtin JSON states/snapshots and sequence-level
+  // filter masks/bitmasks (e.g. xgrammar).
+  if (!constraint_states_allow_prelaunch(input)) {
     return false;
   }
   const auto& sampling = input.sampling_params;
   return sampling.all_greedy_sample && !sampling.unique_token_ids.defined() &&
          !sampling.frequency_penalties.defined() &&
          !sampling.presence_penalties.defined() &&
-         !sampling.repetition_penalties.defined() &&
-         !sampling.filter_mask.defined() && !sampling.filter_bitmask.defined();
+         !sampling.repetition_penalties.defined();
 }
 
 std::vector<int64_t> DSparkWorkerImpl::build_batch_to_pending_row_mapping(

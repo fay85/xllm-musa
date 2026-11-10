@@ -32,6 +32,7 @@ limitations under the License.
 namespace xllm {
 
 class JsonObjectGrammar;
+struct SamplingParameters;
 
 enum class JsonObjectMaskBuildPhase : uint8_t {
   NORMAL = 0,
@@ -196,10 +197,6 @@ class JsonObjectGrammar final {
 
  private:
   friend class JsonObjectGrammarState;
-  friend torch::Tensor build_json_object_filter_mask(
-      const std::vector<JsonObjectGrammarState>& states,
-      const torch::Device& device,
-      torch::ScalarType dtype);
   friend torch::Tensor build_json_object_filter_bitmask(
       const std::vector<JsonObjectGrammarState>& states,
       const torch::Device& device,
@@ -207,7 +204,6 @@ class JsonObjectGrammar final {
 
   struct CachedMask final {
     std::vector<uint32_t> bitmask;
-    torch::Tensor float_mask_cpu;
   };
 
   struct FilterMaskCacheEntry final {
@@ -221,7 +217,6 @@ class JsonObjectGrammar final {
     std::unordered_map<std::string, FilterMaskCacheEntry> entries;
   };
 
-  torch::Tensor get_cpu_filter_mask(const JsonObjectGrammarState& state) const;
   std::vector<uint32_t> compute_allowed_bitmask(
       const JsonObjectGrammarState& state) const;
   std::shared_ptr<const CachedMask> cached_mask_for_state(
@@ -233,28 +228,24 @@ class JsonObjectGrammar final {
   std::vector<std::string> token_pieces_;
   std::unordered_set<int32_t> stop_token_ids_;
   std::vector<int32_t> reasoning_end_token_ids_;
-  // Precomputed additive mask for reasoning: allow all tokens except stops.
-  torch::Tensor reasoning_filter_mask_cpu_;
   std::vector<uint32_t> reasoning_bitmask_;
   std::shared_ptr<const CachedMask> reasoning_cached_mask_;
 
   std::shared_ptr<FilterMaskCache> filter_mask_cache_;
 };
 
-torch::Tensor build_json_object_filter_mask(
-    const std::vector<JsonObjectGrammarState>& states,
-    const torch::Device& device = torch::kCPU,
-    torch::ScalarType dtype = torch::kFloat32);
-
 torch::Tensor build_json_object_filter_bitmask(
     const std::vector<JsonObjectGrammarState>& states,
     const torch::Device& device = torch::kCPU,
     JsonObjectMaskBuildPhase phase = JsonObjectMaskBuildPhase::NORMAL);
 
-// Advances each initialized state with its corresponding accepted token.
-std::vector<JsonObjectGrammarState> advance_json_object_states(
+// Installs the packed bitmask from `states` on `sampling_params`, clearing the
+// dense filter mask (the Sampler prefers the compact bitmask).
+void set_filter_bitmask(
+    SamplingParameters& sampling_params,
     const std::vector<JsonObjectGrammarState>& states,
-    const std::vector<int32_t>& token_ids);
+    const torch::Device& device = torch::kCPU,
+    JsonObjectMaskBuildPhase phase = JsonObjectMaskBuildPhase::NORMAL);
 
 // Apply a [batch, ceil(vocab/32)] int32 bitmask in-place on logits [batch,
 // vocab].

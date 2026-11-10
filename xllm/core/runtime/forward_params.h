@@ -661,6 +661,17 @@ struct ForwardInput {
   std::vector<torch::Tensor> retained_device_tensors;
 };
 
+// True when no structured-output constraint is present on `input` (no JSON
+// grammar states/snapshots, no filter mask/bitmask). Shared by the
+// speculative families' prelaunch gates; family-specific conditions stay at
+// the call sites.
+inline bool constraint_states_allow_prelaunch(const ForwardInput& input) {
+  return input.json_object_states.empty() &&
+         input.json_object_state_snapshots.empty() &&
+         !input.sampling_params.filter_mask.defined() &&
+         !input.sampling_params.filter_bitmask.defined();
+}
+
 // output after forward execution
 struct ForwardOutput {
   // Local runtime handle, not in proto/shm; metrics recording skips warmup.

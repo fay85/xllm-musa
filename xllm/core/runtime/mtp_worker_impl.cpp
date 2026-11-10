@@ -1988,12 +1988,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
         }
         break;
       }
-      current_draft_input.sampling_params.filter_bitmask =
-          build_json_object_filter_bitmask(
-              current_draft_input.json_object_states,
-              device_,
-              JsonObjectMaskBuildPhase::DRAFT);
-      current_draft_input.sampling_params.filter_mask = torch::Tensor();
+      set_filter_bitmask(current_draft_input.sampling_params,
+                         current_draft_input.json_object_states,
+                         device_,
+                         JsonObjectMaskBuildPhase::DRAFT);
     }
     record_current_metadata_ready_event(current_draft_input, *compute_stream_);
   }
@@ -2045,11 +2043,10 @@ void MTPWorkerImpl::fill_validate_input_from_draft_outputs(
         input.json_object_states,
         *json_scratch,
         validate_input.json_object_invalid_draft);
-    validate_input.sampling_params.filter_bitmask =
-        build_json_object_filter_bitmask(validate_input.json_object_states,
-                                         device_,
-                                         JsonObjectMaskBuildPhase::TARGET);
-    validate_input.sampling_params.filter_mask = torch::Tensor();
+    set_filter_bitmask(validate_input.sampling_params,
+                       validate_input.json_object_states,
+                       device_,
+                       JsonObjectMaskBuildPhase::TARGET);
   }
 
   validate_input.device_tensors_ready = false;
@@ -2890,23 +2887,28 @@ bool MTPWorkerImpl::can_prelaunch_next_first_draft(
   if (!can_use_combined_first_draft(input)) {
     return false;
   }
-  // JSON-constrained rows carry host-side grammar bookkeeping that a
+  // Structured-output-constrained rows carry host-side bookkeeping that a
   // prelaunched draft cannot account for: step_decode() consumes the prepared
   // draft without rebuilding current_draft_input, so the draft token count
-  // would not match the grammar state count. Keep those batches on the in-loop
-  // draft path, which copies the states from this input. The decision must be
-  // identical on every DP rank because the prelaunched draft forward carries
-  // HCCL collectives.
+  // would not match the constraint state count (builtin JSON states) or the
+  // prelaunched sampling would miss the sequence-level constraint masks
+  // (xgrammar filter_bitmask/filter_mask). Keep those batches on the in-loop
+  // draft path, which copies the constraint state from this input. The
+  // decision must be identical on every DP rank because the prelaunched
+  // draft forward carries HCCL collectives.
   if (!mtp_async::json_object_allows_draft_prelaunch(
           parallel_args_.dp_size(),
           input.input_params.parallel.dp_global_json_object_active,
-          !input.json_object_states.empty())) {
+          !constraint_states_allow_prelaunch(input))) {
     LOG_FIRST_N(WARNING, 4)
-        << "MTP first-draft prelaunch disabled: json_object constrained "
+        << "MTP first-draft prelaunch disabled: structured-output constrained "
            "decoding is active for this DP batch; using the in-loop draft "
            "path."
         << " dp_size=" << parallel_args_.dp_size()
         << ", local_json_object_rows=" << input.json_object_states.size()
+        << ", local_filter_bitmask="
+        << input.sampling_params.filter_bitmask.defined()
+        << ", local_filter_mask=" << input.sampling_params.filter_mask.defined()
         << ", dp_global_json_object_active="
         << input.input_params.parallel.dp_global_json_object_active;
     return false;

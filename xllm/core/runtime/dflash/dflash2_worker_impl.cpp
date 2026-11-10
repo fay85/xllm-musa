@@ -275,8 +275,13 @@ bool DFlash2WorkerImpl::can_stage_prelaunch_input(
       !input.input_params.block_copy.swap_blocks.empty() ||
       (input.input_params.block_copy.src_block_indices.defined() &&
        input.input_params.block_copy.src_block_indices.numel() > 0) ||
-      !input.transfer_kv_infos.empty() || !input.json_object_states.empty() ||
-      !input.json_object_state_snapshots.empty() ||
+      !input.transfer_kv_infos.empty() ||
+      // Shared constraint gate across the prelaunch families: builtin JSON
+      // states/snapshots and sequence-level filter masks/bitmasks (e.g.
+      // xgrammar) cannot be rebuilt on the prelaunched path;
+      // prepare_next_target() applies the same rejection to the follow-up
+      // target preparation.
+      !constraint_states_allow_prelaunch(input) ||
       input.input_params.embedding.embedding_ids.empty() ||
       input.input_params.embedding.request_ids.size() !=
           input.input_params.embedding.embedding_ids.size()) {

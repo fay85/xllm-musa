@@ -1099,10 +1099,7 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
       CHECK(state.accept_token(token_id));
     }
   }
-  input.sampling_params.filter_bitmask =
-      build_json_object_filter_bitmask(input.json_object_states, device_);
-  // Prefer compact bitmask; clear dense float mask to avoid duplicate H2D.
-  input.sampling_params.filter_mask = torch::Tensor();
+  set_filter_bitmask(input.sampling_params, input.json_object_states, device_);
 }
 
 void WorkerImpl::sanitize_json_object_error_inputs(ForwardInput& input) {

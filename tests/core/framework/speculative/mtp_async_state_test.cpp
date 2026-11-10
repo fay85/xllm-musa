@@ -25,6 +25,7 @@ limitations under the License.
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/speculative/mtp_execution_policy.h"
 #include "core/framework/speculative/speculative_cache_utils.h"
+#include "core/runtime/forward_params.h"
 
 namespace xllm::mtp_async {
 namespace {
@@ -235,44 +236,75 @@ TEST(MtpAsyncStateTest, AllowsDraftPrelaunchOnlyForPlainBatches) {
   const std::vector<int32_t> no_dp_metadata;
   const std::vector<int32_t> plain_dp_batch = {0, 0};
 
-  // A single DP rank owns the whole batch, so its local grammar state decides.
+  // A single DP rank owns the whole batch, so its local constraint state
+  // decides.
   EXPECT_TRUE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/1, no_dp_metadata, /*has_local_json_object_states=*/false));
+      /*dp_size=*/1, no_dp_metadata, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/1, no_dp_metadata, /*has_local_json_object_states=*/true));
+      /*dp_size=*/1, no_dp_metadata, /*has_local_constraints=*/true));
 
   // In DP only a complete all-zero vector permits the prelaunch.
   EXPECT_TRUE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, plain_dp_batch, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, plain_dp_batch, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {0, 1}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, {0, 1}, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {1, 0}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, {1, 0}, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {1, 1}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, {1, 1}, /*has_local_constraints=*/false));
 }
 
 TEST(MtpAsyncStateTest, RejectsDraftPrelaunchOnMalformedDpMetadata) {
   // Missing, short, and long metadata is ineligible instead of falling back to
   // rank-local state, which would desynchronise the collective order.
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, {}, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {0}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, {0}, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/3, {0, 0}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/3, {0, 0}, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/0, {}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/0, {}, /*has_local_constraints=*/false));
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/-1, {}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/-1, {}, /*has_local_constraints=*/false));
   // A flag outside {0, 1} is malformed, not constrained.
   EXPECT_FALSE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {0, 2}, /*has_local_json_object_states=*/false));
+      /*dp_size=*/2, {0, 2}, /*has_local_constraints=*/false));
 
   // The replicated vector is authoritative in DP: a contradictory rank-local
   // flag must not flip the decision on its own.
   EXPECT_TRUE(json_object_allows_draft_prelaunch(
-      /*dp_size=*/2, {0, 0}, /*has_local_json_object_states=*/true));
+      /*dp_size=*/2, {0, 0}, /*has_local_constraints=*/true));
+}
+
+TEST(MtpAsyncStateTest, DraftPrelaunchGateRejectsConstraintMaskOnlyBatches) {
+  // Regression: the gate used to key only on json_object_states. A rank-local
+  // batch whose only constraint is a mask (bitmask or float) must not
+  // prelaunch; a dp>1 batch still keys on the json-only replicated vector.
+  ForwardInput input;
+  EXPECT_TRUE(constraint_states_allow_prelaunch(input));
+  EXPECT_TRUE(json_object_allows_draft_prelaunch(
+      /*dp_size=*/1, {}, !constraint_states_allow_prelaunch(input)));
+
+  input.sampling_params.filter_bitmask =
+      torch::ones({1, 1}, torch::TensorOptions().dtype(torch::kInt32));
+  EXPECT_TRUE(input.json_object_states.empty());
+  EXPECT_FALSE(constraint_states_allow_prelaunch(input));
+  EXPECT_FALSE(json_object_allows_draft_prelaunch(
+      /*dp_size=*/1, {}, !constraint_states_allow_prelaunch(input)));
+
+  input.sampling_params.filter_bitmask = torch::Tensor();
+  input.sampling_params.filter_mask = torch::ones({1, 1});
+  EXPECT_FALSE(json_object_allows_draft_prelaunch(
+      /*dp_size=*/1, {}, !constraint_states_allow_prelaunch(input)));
+
+  // dp>1 pins the current design: the replicated vector counts json states
+  // only, so a mask-only local batch reads as plain (xgrammar coverage is
+  // future work, unreachable today via the startup gate).
+  EXPECT_TRUE(json_object_allows_draft_prelaunch(
+      /*dp_size=*/2, {0, 0}, !constraint_states_allow_prelaunch(input)));
+  EXPECT_FALSE(json_object_allows_draft_prelaunch(
+      /*dp_size=*/2, {0, 1}, !constraint_states_allow_prelaunch(input)));
 }
 
 TEST(MtpAsyncStateTest, ExtractsTargetBaseKvLengthsFromVerifyLayouts) {

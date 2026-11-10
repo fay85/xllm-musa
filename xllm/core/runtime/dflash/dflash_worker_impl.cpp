@@ -1402,11 +1402,10 @@ void DFlashWorkerImpl::prepare_json_validation_states(
   CHECK_EQ(validate_input.json_object_states.size(),
            static_cast<size_t>(batch_size) * (num_speculative_tokens + 1))
       << "DFlash JSON validation states must cover every verify row";
-  validate_input.sampling_params.filter_bitmask =
-      build_json_object_filter_bitmask(validate_input.json_object_states,
-                                       device_,
-                                       JsonObjectMaskBuildPhase::TARGET);
-  validate_input.sampling_params.filter_mask = torch::Tensor();
+  set_filter_bitmask(validate_input.sampling_params,
+                     validate_input.json_object_states,
+                     device_,
+                     JsonObjectMaskBuildPhase::TARGET);
 }
 
 void DFlashWorkerImpl::check_json_accepted_tokens(

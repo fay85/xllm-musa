@@ -146,12 +146,12 @@ TEST(JsonObjectGrammarTest, MtpDraftStatesAccumulateAcceptedTokens) {
       grammar.initial_state()};
 
   // The second draft row must be built from S+d0, not from the original S.
-  const std::vector<JsonObjectGrammarState> after_d0 =
-      advance_json_object_states(original_states, {0});
-  const std::vector<JsonObjectGrammarState> cumulative_states =
-      advance_json_object_states(after_d0, {2});
-  const std::vector<JsonObjectGrammarState> reset_states =
-      advance_json_object_states(original_states, {2});
+  std::vector<JsonObjectGrammarState> after_d0 = original_states;
+  ASSERT_TRUE(after_d0[0].accept_token(/*d0=*/0));
+  std::vector<JsonObjectGrammarState> cumulative_states = after_d0;
+  ASSERT_TRUE(cumulative_states[0].accept_token(/*d1=*/2));
+  std::vector<JsonObjectGrammarState> reset_states = original_states;
+  ASSERT_FALSE(reset_states[0].can_accept_token(/*d1=*/2));
 
   EXPECT_TRUE(cumulative_states[0].can_accept_token(/*d2=*/3));
   EXPECT_FALSE(reset_states[0].can_accept_token(/*d2=*/3));
@@ -341,18 +341,20 @@ TEST(JsonObjectGrammarTest, KeepsModelOnlyTokensMasked) {
   EXPECT_LT(mask.index({24}).item<float>(), -1.0F);
 }
 
-TEST(JsonObjectGrammarTest, BuildsMixedBatchMask) {
+TEST(JsonObjectGrammarTest, AppliesMixedBatchBitmaskToLogits) {
   JsonObjectGrammar grammar = make_grammar();
   std::vector<JsonObjectGrammarState> states = {grammar.initial_state(),
                                                 JsonObjectGrammarState()};
 
-  torch::Tensor mask = build_json_object_filter_mask(states);
+  const torch::Tensor bitmask = build_json_object_filter_bitmask(states);
 
-  ASSERT_EQ(mask.sizes(), torch::IntArrayRef({2, 24}));
-  EXPECT_EQ(mask.index({0, 0}).item<float>(), 0.0F);
-  EXPECT_LT(mask.index({0, 1}).item<float>(), -1.0F);
-  EXPECT_EQ(mask.index({1, 0}).item<float>(), 0.0F);
-  EXPECT_EQ(mask.index({1, 1}).item<float>(), 0.0F);
+  ASSERT_EQ(bitmask.sizes(), torch::IntArrayRef({2, 1}));
+  torch::Tensor masked_logits = torch::zeros({2, 24});
+  apply_token_bitmask_inplace(masked_logits, bitmask);
+  EXPECT_EQ(masked_logits.index({0, 0}).item<float>(), 0.0F);
+  EXPECT_LT(masked_logits.index({0, 1}).item<float>(), -1.0F);
+  EXPECT_EQ(masked_logits.index({1, 0}).item<float>(), 0.0F);
+  EXPECT_EQ(masked_logits.index({1, 1}).item<float>(), 0.0F);
 }
 
 TEST(JsonObjectGrammarTest, BuildsMaskWithMixedReasoningDefinitions) {
@@ -369,7 +371,13 @@ TEST(JsonObjectGrammarTest, BuildsMaskWithMixedReasoningDefinitions) {
       reasoning_grammar.initial_state(/*reasoning_phase=*/true),
       json_grammar.initial_state()};
 
-  torch::Tensor mask = build_json_object_filter_mask(states);
+  torch::Tensor mask =
+      torch::stack({json_grammar.build_filter_mask(states[0]),
+                    reasoning_grammar.build_filter_mask(states[1]),
+                    torch::zeros({5}),
+                    reasoning_grammar.build_filter_mask(states[3]),
+                    json_grammar.build_filter_mask(states[4])},
+                   /*dim=*/0);
 
   ASSERT_EQ(mask.sizes(), torch::IntArrayRef({5, 5}));
   EXPECT_EQ(mask.index({0, 0}).item<float>(), 0.0F);

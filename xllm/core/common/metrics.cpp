@@ -205,8 +205,6 @@ DEFINE_COUNTER(json_object_mask_cache_misses_total,
                "JSON object mask cache miss count");
 DEFINE_HISTOGRAM(json_object_mask_vocab_scan_latency_microseconds,
                  "JSON object mask vocabulary scan latency in microseconds");
-DEFINE_HISTOGRAM(json_object_mask_row_build_latency_microseconds,
-                 "JSON object CPU mask row build latency in microseconds");
 DEFINE_HISTOGRAM(json_object_mask_batch_build_latency_microseconds,
                  "JSON object CPU mask batch build latency in microseconds");
 DEFINE_HISTOGRAM(json_object_mask_device_copy_latency_microseconds,
