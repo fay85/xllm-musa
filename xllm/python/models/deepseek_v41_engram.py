@@ -246,7 +246,9 @@ def normalize_token_text(text: str) -> str:
     """
     s = unicodedata.normalize("NFKC", text)
     s = unicodedata.normalize("NFD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    # tokenizers.StripAccents removes all Unicode Mark categories, including
+    # spacing/enclosing marks and variation selectors with combining class 0.
+    s = "".join(ch for ch in s if not unicodedata.category(ch).startswith("M"))
     s = s.lower()
     s = _WHITESPACE_RE.sub(" ", s)
     if s == " ":
@@ -356,7 +358,7 @@ def build_engram_hash_state(
     if tokenizer_vocab != vocab_size:
         raise ValueError(f"tokenizer vocab size {tokenizer_vocab} does not match config vocab_size {vocab_size}")
 
-    token_texts = tokenizer.decode_batch([[token_id] for token_id in range(vocab_size)])
+    token_texts = tokenizer.decode_batch([[token_id] for token_id in range(vocab_size)], skip_special_tokens=False)
     lookup, compressed = build_compressed_token_map_from_texts(token_texts, id_to_token=tokenizer.id_to_token)
     if compressed != compressed_vocab:
         raise ValueError(

@@ -35,6 +35,8 @@ With TP=8 on one host, the default sharded host path requires approximately 23.6
 
 Under the DeepSeek-V4.1 W8A8 (Eco-Tech int8) export, the Engram n-gram table holds about **27.7 GiB of HBM per card**. `engram_config.cpu_offload` moves that table into **host memory** (pageable CPU memory) to free the HBM budget, at the cost of one NPU->CPU id sync per step plus a CPU int8 dequant and an H2D upload of the touched rows. That path is served by the fused CPU lookup op (`xllm_ops.engram_int8_lookup_cpu`); only the int8 table can be offloaded.
 
+The DeepSeek-V4.1-Flash-1017 W8A8 export uses UE8M0 (safetensors `F8_E8M0`) group-32 scales for its INT8 Engram tables; earlier exports use FP32 scales. Both are supported. Loading decodes only the owning TP rank's rows in bounded chunks, retaining FP32 runtime scales. CPU offload and DP sharing therefore keep the same configuration, memory budget, and lookup-op contract. No offline checkpoint rewrite is required; numerically casting the raw bytes to float is not UE8M0 decoding.
+
 ## Configuration (`--engram-config`)
 
 The config is a **raw JSON string** carried by the C++ gflag `engram_config` and parsed in Python (`xllm/python/models/engram_config.py`). The flag is spelled `--engram-config`:

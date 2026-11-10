@@ -95,7 +95,11 @@ from xllm.python.model_executor.forward_context import (
     wait_for_layer_load,
 )
 from xllm.python.model_executor.runners.base import GraphInputPreparation
-from xllm.python.model_loader.module_loaders import load_w8a8_dynamic_projection
+from xllm.python.model_loader.module_loaders import (
+    load_w8a8_dynamic_projection,
+    quant_description_weight_is_quantized,
+    read_quant_description,
+)
 from xllm.python.models.aux_hidden_capture import AuxHiddenCapture
 from xllm.python.models.base import PyModelBase
 from xllm.python.models.deepseek_v4 import (
@@ -322,6 +326,7 @@ _V41_FIELD_DEFAULTS: dict[str, Any] = {
 # candidate value: the real deadline behavior still has to be measured on the
 # NPU host.
 _ENGRAM_SHARED_LOAD_BARRIER_TIMEOUT = timedelta(seconds=30)
+_ENGRAM_TABLE_LOAD_CHUNK_ROWS = 1 << 20
 
 
 @dataclass
@@ -367,6 +372,8 @@ class DeepseekV41Config(DeepseekV4Config):
     dspark_noise_token_id: int = 128799
     dspark_n_routed_experts: int = 128
     dspark_num_experts_per_tok: int = 3
+    # Checkpoint-derived FLOAT projections in otherwise W8A8 attention.
+    unquantized_attn_projections: frozenset[tuple[int, str]] = field(default_factory=frozenset)
     enable_dsa_cp: bool = False
     # Explicit runtime opt-in: approximate prefill, default full computation.
     enable_swa_bounded_replay: bool = False
@@ -559,6 +566,66 @@ def _detect_v41_quant_mode(config: dict) -> str:
     if method == "ascend":
         return V41_QUANT_ASCEND
     return V41_QUANT_NONE
+
+
+def _v41_unquantized_attn_projections(
+    config: dict, quant_mode: str, n_layers: int, checkpoint_prefix: str = "layers"
+) -> frozenset[tuple[int, str]]:
+    """Read mixed attention precision once, before allocating parameters.
+
+    Older exports quantize all four projections. The 1017 export declares
+    wq_a/wkv FLOAT in both the target and DSpark; absent entries retain the
+    legacy W8A8 contract and are checked against actual tensors at load time.
+    """
+    if quant_mode != V41_QUANT_ASCEND:
+        return frozenset()
+    description = read_quant_description(config.get("model_path"))
+    if description is None:
+        return frozenset()
+    projections = ("wq_a", "wq_b", "wkv", "indexer.wq_b")
+    unquantized = set()
+    for layer_id in range(n_layers):
+        for projection in projections:
+            key = f"{checkpoint_prefix}.{layer_id}.attn.{projection}.weight"
+            if quant_description_weight_is_quantized(description, key) is False:
+                unquantized.add((layer_id, projection))
+    return frozenset(unquantized)
+
+
+def _load_v41_attn_projection(
+    loader: W8A8WeightLoader,
+    module: nn.Module,
+    checkpoint_prefix: str,
+    parameter_prefix: str,
+    shard_dims: dict[str, int] | None = None,
+) -> None:
+    """Load the precision selected at construction without casting INT8 codes."""
+    weight = loader.load_tensor(checkpoint_prefix + ".weight")
+    quantized = isinstance(module, W8A8DynamicLinear)
+    if quantized:
+        if weight.dtype not in (torch.int8, torch.uint8):
+            raise ValueError(
+                f"{checkpoint_prefix}.weight has dtype {weight.dtype}; the ascend W8A8 projection expects int8 weights"
+            )
+        load_w8a8_dynamic_projection(
+            loader,
+            checkpoint_prefix,
+            parameter_prefix,
+            shard_dims,
+            require_weight_and_scale=True,
+            fill_missing_offset=True,
+            description=f"DeepSeek-V4.1 W8A8 {checkpoint_prefix}",
+        )
+    else:
+        if weight.dtype not in (torch.float16, torch.bfloat16, torch.float32):
+            raise ValueError(
+                f"{checkpoint_prefix}.weight has dtype {weight.dtype}; "
+                "the checkpoint declares an unquantized attention projection"
+            )
+        shard_dim = (shard_dims or {}).get("weight")
+        if shard_dim is not None:
+            weight = loader.shard(weight, dim=shard_dim)
+        loader.copy_in(parameter_prefix + ".weight", weight)
 
 
 def _make_v41_linear(
@@ -1456,11 +1523,15 @@ class DeepseekV41Attention(Attention):
             nn.Parameter(torch.zeros(num_heads, dtype=torch.float32, device=device)),
         )
         self.attn_sink_loaded = False
+
         # Q/KV projections.
-        self.q_a_proj = _make_v41_linear(cfg.hidden_size, cfg.q_lora_rank, quant_mode, dtype, device)
+        def projection_mode(name: str) -> str:
+            return V41_QUANT_NONE if (layer_id, name) in cfg.unquantized_attn_projections else quant_mode
+
+        self.q_a_proj = _make_v41_linear(cfg.hidden_size, cfg.q_lora_rank, projection_mode("wq_a"), dtype, device)
         self.q_a_layernorm = DeepseekV41RMSNorm(cfg.q_lora_rank, cfg.rms_norm_eps, dtype, device)
-        self.q_b_proj = _make_v41_linear(cfg.q_lora_rank, num_heads * head_dim, quant_mode, dtype, device)
-        self.kv_proj = _make_v41_linear(cfg.hidden_size, head_dim, quant_mode, dtype, device)
+        self.q_b_proj = _make_v41_linear(cfg.q_lora_rank, num_heads * head_dim, projection_mode("wq_b"), dtype, device)
+        self.kv_proj = _make_v41_linear(cfg.hidden_size, head_dim, projection_mode("wkv"), dtype, device)
         self.kv_a_layernorm = DeepseekV41RMSNorm(head_dim, cfg.rms_norm_eps, dtype, device)
         # Grouped output projection: o_a (block-diagonal over groups, bf16
         # after the official conversion) -> o_b.
@@ -1515,7 +1586,7 @@ class DeepseekV41Attention(Attention):
         # Indexer: Full layers write the shared K and select; Reindex layers
         # re-select against it; Reuse/SWA layers own no indexer weights.
         self.indexer: DeepseekV41Indexer | None = (
-            DeepseekV41Indexer(cfg, dtype, device, quant_mode, owns_k=mode.is_full)
+            DeepseekV41Indexer(cfg, dtype, device, projection_mode("indexer.wq_b"), owns_k=mode.is_full)
             if mode.is_full or mode.is_reindex
             else None
         )
@@ -1526,7 +1597,8 @@ class DeepseekV41Attention(Attention):
     def process_weights_after_loading(self) -> None:
         if self.quant_mode == V41_QUANT_ASCEND:
             for module in (self.q_a_proj, self.q_b_proj, self.kv_proj):
-                module.process_weights_after_loading()
+                if isinstance(module, W8A8DynamicLinear):
+                    module.process_weights_after_loading()
             if hasattr(self.o_a_proj, "process_weights_after_loading"):
                 self.o_a_proj.process_weights_after_loading()
             if self.indexer is not None:
@@ -1569,7 +1641,11 @@ class DeepseekV41Attention(Attention):
         # feeds both projections (bitwise-identical to the per-projection
         # quant; saves 40 dynamic_quant calls per prefill step, each over
         # [tokens, hidden]).
-        if self.quant_mode == V41_QUANT_ASCEND and _merged_attn_quant_supported(hidden):
+        if (
+            isinstance(self.q_a_proj, W8A8DynamicLinear)
+            and isinstance(self.kv_proj, W8A8DynamicLinear)
+            and _merged_attn_quant_supported(hidden)
+        ):
             from xllm.python import kernels as _kernels
 
             hidden_int8, hidden_pertoken = _kernels.dynamic_quant(hidden)
@@ -2900,6 +2976,13 @@ class DeepseekV41Model(nn.Module):
         config: dict | None = None,
     ) -> None:
         super().__init__()
+        # Keep caller-owned configuration untouched, including explicit
+        # unquantized projections when checkpoint metadata is unavailable.
+        cfg = replace(
+            cfg,
+            unquantized_attn_projections=cfg.unquantized_attn_projections
+            | _v41_unquantized_attn_projections(config or {}, quant_mode, cfg.n_layers),
+        )
         self.cfg = cfg
         self.quant_mode = quant_mode
         self._engram_staging_executor: ThreadPoolExecutor | None = None
@@ -4443,7 +4526,7 @@ class DeepseekV41ForCausalLM(PyModelBase):
         """W8A8 export loading (existing V4 W8A8DynamicLinear path).
 
         The Eco-Tech W8A8 export ships the engram tables as symmetric int8 +
-        fp32 group-32 scales and keeps engram wkv/q/k in bf16; the QuaRot
+        FP32 or UE8M0 group-32 scales and keeps engram wkv/q/k in bf16; the QuaRot
         trunk rotation is fully folded into the weights, so only the engram
         gate needs the runtime un-rotation (see Engram.forward).
         """
@@ -4453,34 +4536,6 @@ class DeepseekV41ForCausalLM(PyModelBase):
         def _has(name: str) -> bool:
             return loader.has(name)
 
-        def _w8a8(
-            ckpt_prefix: str,
-            param_prefix: str,
-            shard_dims: dict | None = None,
-            required: bool = False,
-        ) -> None:
-            """Load one W8A8-dynamic projection (weight + scale + offset).
-
-            Delegates to :func:`load_w8a8_dynamic_projection` so a missing
-            ``weight_offset`` is explicitly zero-filled: the symmetric int8
-            export omits it, and ``W8A8DynamicLinear.weight_offset`` otherwise
-            stays at its ``torch.empty`` (garbage) initialization, failing the
-            all-zero check in ``process_weights_after_loading``. A present
-            non-zero offset is copied verbatim and still rejected there.
-            ``required`` marks the projections
-            :class:`DeepseekV41Attention` constructs unconditionally, so a
-            missing ``weight`` / ``weight_scale`` raises.
-            """
-            load_w8a8_dynamic_projection(
-                loader,
-                ckpt_prefix,
-                param_prefix,
-                shard_dims,
-                require_weight_and_scale=required,
-                fill_missing_offset=True,
-                description=f"DeepSeek-V4.1 W8A8 {ckpt_prefix}",
-            )
-
         loader.copy_in(
             "model.embed_tokens.weight",
             loader.shard(loader.load_tensor("embed.weight"), dim=1),
@@ -4489,14 +4544,15 @@ class DeepseekV41ForCausalLM(PyModelBase):
             ck = f"layers.{i}."
             pm = f"model.layers.{i}."
             attn = self.model.layers[i].self_attn
-            _w8a8(ck + "attn.wq_a", pm + "self_attn.q_a_proj", required=True)
-            _w8a8(
+            _load_v41_attn_projection(loader, attn.q_a_proj, ck + "attn.wq_a", pm + "self_attn.q_a_proj")
+            _load_v41_attn_projection(
+                loader,
+                attn.q_b_proj,
                 ck + "attn.wq_b",
                 pm + "self_attn.q_b_proj",
                 None if attn.enable_dsa_cp else {"weight": 0, "weight_scale": 0, "weight_offset": 0},
-                required=True,
             )
-            _w8a8(ck + "attn.wkv", pm + "self_attn.kv_proj", required=True)
+            _load_v41_attn_projection(loader, attn.kv_proj, ck + "attn.wkv", pm + "self_attn.kv_proj")
             loader.copy_in(
                 pm + "self_attn.o_a_proj.weight",
                 loader.shard(loader.load_tensor(ck + "attn.wo_a.weight"), dim=0),
@@ -4539,7 +4595,9 @@ class DeepseekV41ForCausalLM(PyModelBase):
                     loader.load_tensor(ck + "attn.compressor.norm.weight"),
                 )
             if attn.indexer is not None and _has(ck + "attn.indexer.wq_b.weight"):
-                _w8a8(ck + "attn.indexer.wq_b", pm + "self_attn.indexer.wq_b")
+                _load_v41_attn_projection(
+                    loader, attn.indexer.wq_b, ck + "attn.indexer.wq_b", pm + "self_attn.indexer.wq_b"
+                )
                 loader.copy_in(
                     pm + "self_attn.indexer.weights_proj.weight",
                     loader.load_tensor(ck + "attn.indexer.weights_proj.weight"),
@@ -4580,7 +4638,7 @@ class DeepseekV41ForCausalLM(PyModelBase):
         """Load one engram layer from the Eco-Tech W8A8 export.
 
         The hash table stays int8 in memory (payload [rows, 256] int8 + one
-        fp32 scale per 32-column group) and is narrowed to this rank's
+        FP32 or UE8M0 scale per 32-column group) and is narrowed to this rank's
         head-bucket row range; ``wkv`` / ``q_weight`` / ``k_weight`` are bf16
         and copied verbatim (the K half and gate stay in the original basis,
         the V half is pre-folded with the QuaRot rotation).
@@ -4617,14 +4675,16 @@ class DeepseekV41ForCausalLM(PyModelBase):
         if table.dtype != torch.int8:
             raise NotImplementedError(
                 f"engram table for layer {layer_id} has dtype {table.dtype}; the "
-                "ascend loader implements the int8_sym export only (fp32 group "
+                "ascend loader implements the int8_sym export only (group-32 "
                 "scales, see quant_model_description.json optional.embedding_storage)"
             )
-        if scale.dtype != torch.float32:
+        if scale.dtype not in (torch.float32, torch.uint8, getattr(torch, "float8_e8m0fnu", None)):
             raise NotImplementedError(
                 f"engram table scale for layer {layer_id} has dtype {scale.dtype}; "
-                "expected float32 group scales of the int8_sym export"
+                "expected float32 or UE8M0 group scales of the int8_sym export"
             )
+        if table.dim() != 2 or table.size(1) % 32 or scale.shape != (table.size(0), table.size(1) // 32):
+            raise ValueError(f"engram table/scale for layer {layer_id} must use matching row-major group-32 shapes")
         return table
 
     @staticmethod
@@ -4638,8 +4698,17 @@ class DeepseekV41ForCausalLM(PyModelBase):
         """
         if rows <= 0:
             return
-        embed.weight.data.copy_(table.narrow(0, start, rows))
-        embed.weight_scale.data.copy_(scale.narrow(0, start, rows))
+        # Bound payload copies as well as scale decoding. Multi-billion-
+        # element CPU copies can use a much slower TensorIterator path.
+        # Never materialize the complete 384M-row scale tensor per rank.
+        chunk_rows = _ENGRAM_TABLE_LOAD_CHUNK_ROWS
+        for offset in range(0, rows, chunk_rows):
+            count = min(chunk_rows, rows - offset)
+            embed.weight.data.narrow(0, offset, count).copy_(table.narrow(0, start + offset, count))
+            chunk_scale = scale.narrow(0, start + offset, count)
+            if scale.dtype != torch.float32:
+                chunk_scale = ue8m0_to_scale(chunk_scale)
+            embed.weight_scale.data.narrow(0, offset, count).copy_(chunk_scale)
 
     def _load_engram_ascend_table(
         self,

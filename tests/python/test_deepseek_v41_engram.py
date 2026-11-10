@@ -1630,3 +1630,42 @@ def test_engram_cache_writes_use_resolved_compressed_ids(with_chunk: bool) -> No
     compressed = torch.tensor([-1, state.token_map[0], state.token_map[7], state.token_map[-1]], dtype=torch.int32)
     torch.testing.assert_close(state._cache[slots.long()], compressed, atol=0, rtol=0)
     assert torch.equal(state._cache[:8], torch.full((8,), 91, dtype=torch.int32))
+
+
+@pytest.mark.parametrize("mark", ["\ufe0f", "\u093e", "\u20dd"])
+def test_1017_token_normalization_strips_all_unicode_mark_categories(mark) -> None:
+    """Match Rust StripAccents for Mn/Mc/Me, not just combining-class marks."""
+    assert normalize_token_text("x" + mark) == "x"
+    lookup, size = build_compressed_token_map_from_texts(["x", "x" + mark])
+    assert lookup == [0, 0]
+    assert size == 1
+
+
+def test_1017_hash_state_builder_preserves_special_tokens_and_mark_aliases(tmp_path) -> None:
+    from xllm.python.models.deepseek_v41_engram import compute_hash_multipliers
+
+    pytest.importorskip("tokenizers")
+    pytest.importorskip("numpy")
+    import json
+
+    from tokenizers import Tokenizer, models
+
+    vocab = {"[PAD]": 0, "hello": 1, "Hello": 2, "🚀": 3, "🚀\ufe0f": 4, "<bos>": 5, "<eos>": 6}
+    tokenizer = Tokenizer(models.WordLevel(vocab=vocab, unk_token="[PAD]"))
+    tokenizer.add_special_tokens(["[PAD]", "<bos>", "<eos>"])
+    tokenizer.save(str(tmp_path / "tokenizer.json"))
+    config = {
+        "model_type": "deepseek_v41",
+        "vocab_size": len(vocab),
+        "engram_layer_ids": [1],
+        "engram_num_embeddings": [1000],
+        "engram_max_ngram_size": 3,
+        "engram_compressed_vocab_size": 5,
+        "engram_pad_token_id": 0,
+    }
+    (tmp_path / "config.json").write_text(json.dumps(config))
+    build_engram_hash_state(str(tmp_path))
+    sidecar = _load_engram_hash_state_sidecar(str(tmp_path))
+    assert sidecar is not None
+    assert sidecar["token_map"].tolist() == [0, 1, 1, 2, 2, 3, 4]
+    assert torch.equal(sidecar["multipliers"], compute_hash_multipliers([1], 3, 5))

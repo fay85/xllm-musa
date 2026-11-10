@@ -27,6 +27,7 @@ those tests are marked ``npu_only`` and skip elsewhere.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -4123,3 +4124,249 @@ def test_v41_decoder_waits_for_host_load_before_any_layer_compute() -> None:
     with forward_context(context), pytest.raises(RuntimeError, match="host restore failed"):
         layer(torch.ones(1, 4), torch.zeros(1), torch.zeros(1))
     assert waited == [3]
+
+
+# ---------------------------------------------------------------------------
+# 1017 mixed attention precision and exponent-only Engram scales
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("dense_projections", [("wq_a", "wkv"), ("wq_a",), ("wkv",), ("wq_b",)])
+@pytest.mark.parametrize("tp_size", [1, 2])
+@pytest.mark.parametrize("enable_dsa_cp", [False, True])
+def test_1017_ascend_load_preserves_float_attention(
+    tmp_path, monkeypatch, dense_projections, tp_size, enable_dsa_cp
+) -> None:
+    import json
+
+    labels = {f"layers.0.attn.{name}.weight": "FLOAT" for name in dense_projections}
+    (tmp_path / "quant_model_description.json").write_text(json.dumps(labels))
+    monkeypatch.setattr(kernels, "prepare_quant_weight", lambda weight: weight, raising=False)
+    lm = DeepseekV41ForCausalLM(
+        {
+            **_DEEPSEEK_V41_ASCEND_CONFIG,
+            "device": "cpu",
+            "dtype": "bfloat16",
+            "model_path": str(tmp_path),
+            "tp_size": tp_size,
+            "enable_dsa_cp": enable_dsa_cp,
+        }
+    )
+    tensors = _ascend_tensors(omit_attn_offsets=True)
+    names = {"wq_a": "q_a_proj", "wq_b": "q_b_proj", "wkv": "kv_proj"}
+    for name in dense_projections:
+        prefix = f"layers.0.attn.{name}"
+        tensors[prefix + ".weight"] = torch.randn(tensors[prefix + ".weight"].shape, dtype=torch.bfloat16)
+        del tensors[prefix + ".weight_scale"]
+    lm.load_weights([_FakeStateDict(tensors)], 0, tp_size)
+    attn = lm.model.layers[0].self_attn
+    for name, parameter in names.items():
+        projection = getattr(attn, parameter)
+        assert isinstance(projection, nn.Linear) == (name in dense_projections)
+        assert projection.weight.dtype == (torch.bfloat16 if name in dense_projections else torch.int8)
+        expected = tensors[f"layers.0.attn.{name}.weight"]
+        if name == "wq_b" and not attn.enable_dsa_cp:
+            expected = expected[: expected.shape[0] // tp_size]
+        assert torch.equal(projection.weight, expected)
+
+
+@pytest.mark.parametrize("declare_float", [True, False])
+def test_1017_ascend_rejects_attention_precision_mismatch(tmp_path, monkeypatch, declare_float) -> None:
+    import json
+
+    labels = {"layers.0.attn.wq_a.weight": "FLOAT"} if declare_float else {}
+    (tmp_path / "quant_model_description.json").write_text(json.dumps(labels))
+    monkeypatch.setattr(kernels, "prepare_quant_weight", lambda weight: weight, raising=False)
+    lm = DeepseekV41ForCausalLM(
+        {**_DEEPSEEK_V41_ASCEND_CONFIG, "device": "cpu", "dtype": "float32", "model_path": str(tmp_path)}
+    )
+    tensors = _ascend_tensors()
+    if not declare_float:
+        tensors["layers.0.attn.wq_a.weight"] = tensors["layers.0.attn.wq_a.weight"].float()
+    match = "unquantized attention" if declare_float else "expects int8 weights"
+    with pytest.raises(ValueError, match=match):
+        lm.load_weights([_FakeStateDict(tensors)], 0, 1)
+
+
+def test_1017_attention_keeps_bf16_inputs_out_of_merged_int8_quant(monkeypatch) -> None:
+    cfg = DeepseekV41Config.from_dict(_DEEPSEEK_V41_ASCEND_CONFIG)
+    cfg.unquantized_attn_projections = frozenset({(0, "wq_a"), (0, "wq_b"), (0, "wkv")})
+    attn = dq.DeepseekV41Attention(
+        cfg, 0, torch.float32, torch.device("cpu"), CSA2LayerPlan.build(1, [0], [], []).mode(0), V41_QUANT_ASCEND
+    )
+    monkeypatch.setattr(dq, "_merged_attn_quant_supported", lambda _: True)
+    monkeypatch.setattr(
+        kernels, "dynamic_quant", lambda _: pytest.fail("BF16 projections must not quantize hidden"), raising=False
+    )
+    captured = []
+
+    def execute(query, kv, layer):
+        captured.append((query.clone(), kv.clone()))
+        return query
+
+    monkeypatch.setattr(
+        dq,
+        "get_forward_context",
+        lambda: SimpleNamespace(attention_backend=SimpleNamespace(execute_csa2_layer=execute)),
+    )
+    hidden = torch.randn(3, cfg.hidden_size)
+    positions = torch.zeros(3, dtype=torch.int64)
+    cache = torch.cat([torch.ones(1, cfg.qk_rope_head_dim // 2), torch.zeros(1, cfg.qk_rope_head_dim // 2)], dim=-1)
+    output = attn(hidden, positions, cache)
+    assert output.shape == hidden.shape
+    query, kv = captured[0]
+    expected_query = attn.q_b_proj(attn.q_a_layernorm(attn.q_a_proj(hidden))).view_as(query)
+    torch.testing.assert_close(query, expected_query)
+    torch.testing.assert_close(kv, attn.kv_a_layernorm(attn.kv_proj(hidden)))
+
+
+@pytest.mark.parametrize(
+    "scale_dtype",
+    [
+        torch.uint8,
+        pytest.param(
+            getattr(torch, "float8_e8m0fnu", None),
+            marks=pytest.mark.skipif(not hasattr(torch, "float8_e8m0fnu"), reason="UE8M0 dtype unavailable"),
+        ),
+        torch.float32,
+    ],
+)
+@pytest.mark.parametrize("offload", [False, True])
+def test_1017_engram_load_decodes_only_own_tp_rows_in_chunks(monkeypatch, scale_dtype, offload) -> None:
+    from xllm.python.models.weight_utils import W8A8WeightLoader
+
+    heads = [6, 8]
+    embed = EngramEmbedding(
+        sum(heads), 64, heads, 2, 1, storage=ENGRAM_STORAGE_INT8, device=torch.device("cpu"), offload=offload
+    )
+    table = torch.randint(-127, 127, (sum(heads), 64), dtype=torch.int8)
+    encoded = torch.full((sum(heads), 2), 121, dtype=torch.uint8)
+    encoded[:6] = 255  # Another rank's NaNs must never be decoded locally.
+    scale = encoded.view(scale_dtype) if scale_dtype != torch.float32 else torch.full((sum(heads), 2), 0.015625)
+    loader = W8A8WeightLoader(
+        nn.Module(),
+        [_FakeStateDict({"layers.1.engram.embed.weight": table, "layers.1.engram.embed.scale": scale})],
+        2,
+        1,
+    )
+    lm = DeepseekV41ForCausalLM.__new__(DeepseekV41ForCausalLM)
+    nn.Module.__init__(lm)
+    monkeypatch.setattr(dq, "_ENGRAM_TABLE_LOAD_CHUNK_ROWS", 3)
+    decode = dq.ue8m0_to_scale
+    decoded_chunks = []
+
+    def decode_chunk(raw):
+        decoded_chunks.append(raw.shape[0])
+        return decode(raw)
+
+    monkeypatch.setattr(dq, "ue8m0_to_scale", decode_chunk)
+    copy_tensor = torch.Tensor.copy_
+    payload_chunks = []
+
+    def copy_chunk(destination, source, *args, **kwargs):
+        if destination.dtype == torch.int8:
+            payload_chunks.append(destination.shape[0])
+        return copy_tensor(destination, source, *args, **kwargs)
+
+    monkeypatch.setattr(torch.Tensor, "copy_", copy_chunk)
+    lm._load_engram_ascend_private(loader, "layers.1.", 1, embed)
+    assert payload_chunks == [3, 3, 2]
+    assert torch.equal(embed.weight, table[6:])
+    torch.testing.assert_close(embed.weight_scale, torch.full((8, 2), 0.015625))
+    assert decoded_chunks == ([] if scale_dtype == torch.float32 else [3, 3, 2])
+
+
+def test_1017_engram_rejects_local_nan_scale_and_bad_group_shapes() -> None:
+    table = torch.zeros(4, 64, dtype=torch.int8)
+    with pytest.raises(ValueError, match="group-32 shapes"):
+        DeepseekV41ForCausalLM._validate_engram_table_dtypes(1, table, torch.zeros(4, 1, dtype=torch.uint8))
+    with pytest.raises(NotImplementedError, match="UE8M0"):
+        DeepseekV41ForCausalLM._validate_engram_table_dtypes(1, table, torch.zeros(4, 2, dtype=torch.float16))
+    embed = EngramEmbedding(4, 64, [4], 1, 0, storage=ENGRAM_STORAGE_INT8, device=torch.device("cpu"))
+    with pytest.raises(ValueError, match="NaN"):
+        DeepseekV41ForCausalLM._copy_engram_rows(embed, table, torch.full((4, 2), 255, dtype=torch.uint8), 0, 4)
+
+
+def test_1017_attention_metadata_handles_prefixed_indexer_and_invalid_schema(tmp_path) -> None:
+    import json
+
+    config = {"model_path": str(tmp_path)}
+    path = tmp_path / "quant_model_description.json"
+    path.write_text(
+        json.dumps({"model.layers.0.attn.indexer.wq_b.weight": " BF16 ", "mtp.0.attn.wq_a.weight": "FLOAT"})
+    )
+    target = dq._v41_unquantized_attn_projections(config, V41_QUANT_ASCEND, 1)
+    draft = dq._v41_unquantized_attn_projections(config, V41_QUANT_ASCEND, 1, "mtp")
+    assert target == frozenset({(0, "indexer.wq_b")})
+    assert draft == frozenset({(0, "wq_a")})
+    assert not dq._v41_unquantized_attn_projections(config, V41_QUANT_NONE, 1)
+    cfg = DeepseekV41Config.from_dict(_DEEPSEEK_V41_ASCEND_CONFIG)
+    cfg.unquantized_attn_projections = target
+    mode = CSA2LayerMode(0, CSA2_MODE_FULL, 2, 0)
+    attn = dq.DeepseekV41Attention(cfg, 0, torch.bfloat16, torch.device("cpu"), mode, V41_QUANT_ASCEND)
+    assert isinstance(attn.indexer.wq_b, nn.Linear)
+    assert attn.indexer.wq_b.weight.dtype == torch.bfloat16
+    attn.indexer.process_weights_after_loading()
+    path.write_text("[]")
+    with pytest.raises(ValueError, match="JSON object"):
+        dq._v41_unquantized_attn_projections(config, V41_QUANT_ASCEND, 1)
+
+
+@pytest.mark.parametrize("invalid_scale", [False, True])
+def test_1017_engram_shared_load_propagates_decode_result(monkeypatch, invalid_scale) -> None:
+    from xllm.python.models.weight_utils import W8A8WeightLoader
+
+    embed = EngramEmbedding(4, 64, [4], 1, 0, storage=ENGRAM_STORAGE_INT8, device=torch.device("cpu"))
+    states = []
+    embed._shared_storage = SimpleNamespace(
+        mark_loaded=lambda: states.append("loaded"), mark_failed=lambda: states.append("failed")
+    )
+    embed._dp_group = SimpleNamespace(rank=lambda: 0, size=lambda: 1)
+    table = torch.ones(4, 64, dtype=torch.int8)
+    scale = torch.full((4, 2), 255 if invalid_scale else 122, dtype=torch.uint8)
+    loader = W8A8WeightLoader(
+        nn.Module(),
+        [_FakeStateDict({"layers.1.engram.embed.weight": table, "layers.1.engram.embed.scale": scale})],
+        1,
+        0,
+    )
+    lm = DeepseekV41ForCausalLM.__new__(DeepseekV41ForCausalLM)
+    nn.Module.__init__(lm)
+    monkeypatch.setattr(dq, "engram_all_gather_object", lambda outputs, value: outputs.__setitem__(0, value))
+    monkeypatch.setattr(dq, "engram_barrier", lambda **_: states.append("barrier"))
+    if invalid_scale:
+        with pytest.raises(RuntimeError, match="NaN"):
+            lm._load_engram_ascend_shared(loader, "layers.1.", 1, embed)
+        assert states == ["barrier", "failed"]
+    else:
+        lm._load_engram_ascend_shared(loader, "layers.1.", 1, embed)
+        torch.testing.assert_close(embed.weight_scale, torch.full((4, 2), 0.03125))
+        assert states == ["barrier", "loaded"]
+
+
+@pytest.mark.parametrize("metadata", ["none", "missing", "empty", "float"])
+@pytest.mark.parametrize("explicit_precision", [False, True])
+def test_1017_model_derives_precision_without_mutating_caller_config(
+    tmp_path: Path, metadata: str, explicit_precision: bool
+) -> None:
+    import json
+    from dataclasses import replace
+
+    cfg = DeepseekV41Config.from_dict(_DEEPSEEK_V41_ASCEND_CONFIG)
+    explicit = frozenset({(0, "wq_a")}) if explicit_precision else frozenset()
+    cfg.unquantized_attn_projections = explicit
+    before = replace(cfg)
+    config = None if metadata == "none" else {"model_path": str(tmp_path)}
+    if metadata in ("empty", "float"):
+        description = {"model.layers.0.attn.wkv.weight": " BF16 "} if metadata == "float" else {}
+        (tmp_path / "quant_model_description.json").write_text(json.dumps(description))
+    model = DeepseekV41Model(cfg, torch.bfloat16, torch.device("cpu"), V41_QUANT_ASCEND, config)
+    expected = explicit | (frozenset({(0, "wkv")}) if metadata == "float" else frozenset())
+    assert cfg == before
+    assert model.cfg is not cfg
+    assert model.cfg.unquantized_attn_projections == expected
+    attn = model.layers[0].self_attn
+    assert isinstance(attn.q_a_proj, nn.Linear) == explicit_precision
+    assert isinstance(attn.kv_proj, nn.Linear) == (metadata == "float")
+    assert attn.q_a_proj.weight.dtype == (torch.bfloat16 if explicit_precision else torch.int8)
+    assert attn.kv_proj.weight.dtype == (torch.bfloat16 if metadata == "float" else torch.int8)

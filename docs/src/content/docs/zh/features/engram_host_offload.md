@@ -35,6 +35,8 @@ MLU 原生配置只接受与 SGLang 同名的字符串选项：`placement`（`cp
 
 DeepSeek-V4.1 的 Engram n-gram 表在 W8A8（Eco-Tech int8）导出下每卡约 **27.7 GiB** 的常驻显存（可被卸载释放）。`engram_config.cpu_offload` 把这部分表搬到 **host 内存**（pageable CPU 内存），换取 HBM 预算，代价是每步一次 NPU→CPU 的 id 同步 + CPU int8 去量化 + 命中行的 H2D 回传。该路径由融合 CPU 查表算子（`xllm_ops.engram_int8_lookup_cpu`）承担，仅 int8 表可卸载。
 
+DeepSeek-V4.1-Flash-1017 W8A8 的 INT8 Engram 表使用 UE8M0（safetensors `F8_E8M0`）group-32 scale，而较早的导出使用 FP32 scale。两者均支持：加载时只对当前 TP rank 的行分块解码 UE8M0，运行期仍使用 FP32 scale，因此 CPU 卸载与 DP 共享的配置、内存预算和查表算子合同不变。无需离线重写权重；直接将原始字节转成浮点数不是正确的 UE8M0 解码。
+
 ## 配置方式（`--engram-config`）
 
 配置以 **原始 JSON 字符串** 经 C++ gflag `engram_config` 透传到 Python 执行器解析（`xllm/python/models/engram_config.py`），命令行参数写作 `--engram-config`：

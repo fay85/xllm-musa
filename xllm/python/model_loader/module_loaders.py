@@ -21,6 +21,8 @@ submodule structure, so multiple model families load the same layout once.
 
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -29,6 +31,45 @@ import torch
 from .parallel_load_context import ParallelLoadContext
 from .scoped_weight_loader import ScopedWeightLoader
 from .sharding import gqa_qkv_shards
+
+# Ascend export labels describing the on-disk tensor precision.
+_QUANT_DESCRIPTION_FILE = "quant_model_description.json"
+_FLOAT_QUANT_LABELS = frozenset({"FLOAT", "FLOAT16", "FLOAT32", "BF16", "BFLOAT16", "FP16", "FP32"})
+
+
+def read_quant_description(model_path: str | None) -> dict | None:
+    """Read checkpoint precision metadata; absence keeps the export default."""
+    if not model_path:
+        return None
+    path = os.path.join(model_path, _QUANT_DESCRIPTION_FILE)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        description = json.load(handle)
+    if not isinstance(description, dict):
+        raise ValueError(f"{path} must contain a JSON object describing checkpoint weights")
+    return description
+
+
+def quant_description_weight_is_quantized(description: dict | None, tensor_name: str) -> bool | None:
+    """Classify a weight label, preferring its bare key to the ``model.`` alias.
+
+    Missing/non-string labels return ``None`` so model-specific export defaults
+    remain explicit. Actual tensor dtypes must still be checked during loading.
+    """
+    if description is None:
+        return None
+    label = description.get(tensor_name)
+    if label is None:
+        label = description.get("model." + tensor_name)
+    if not isinstance(label, str):
+        return None
+    return label.strip().upper() not in _FLOAT_QUANT_LABELS
+
+
+def checkpoint_weight_is_quantized(model_path: str | None, tensor_name: str) -> bool | None:
+    """Read and classify one weight when no parsed description is available."""
+    return quant_description_weight_is_quantized(read_quant_description(model_path), tensor_name)
 
 
 class _WeightModule(Protocol):

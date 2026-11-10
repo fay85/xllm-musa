@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -1359,3 +1360,58 @@ def test_draft_group_infos_is_a_single_swa_group() -> None:
     group_infos = _draft_group_infos()
     assert len(group_infos) == 1
     assert group_infos[0].cache_type == DSA_CACHE_SLIDING_WINDOW
+
+
+@pytest.mark.parametrize("tp_size", [1, 2])
+def test_1017_dspark_loads_mixed_attention_without_quant_scales(monkeypatch, tmp_path, tp_size) -> None:
+    labels = {"mtp.0.main_proj.weight": "FLOAT"}
+    for stage in range(_config_dict()["num_nextn_predict_layers"]):
+        labels[f"mtp.{stage}.attn.wq_a.weight"] = "FLOAT"
+        labels[f"mtp.{stage}.attn.wkv.weight"] = "FLOAT"
+    _write_quant_description(tmp_path, labels)
+    monkeypatch.setattr(kernels, "prepare_quant_weight", lambda weight: weight, raising=False)
+    config = _config_dict(model_path=str(tmp_path), tp_size=tp_size)
+    cfg = DeepseekV41DSparkConfig.from_dict(config)
+    lm = DeepseekV41DSparkForCausalLM(config)
+    tensors = _build_w8a8_checkpoint(cfg, main_proj_float=True)
+    for stage in range(cfg.num_draft_layers):
+        for name in ("wq_a", "wkv"):
+            prefix = f"mtp.{stage}.attn.{name}"
+            tensors[prefix + ".weight"] = torch.randn(tensors[prefix + ".weight"].shape)
+            del tensors[prefix + ".weight_scale"]
+            del tensors[prefix + ".weight_offset"]
+    lm.load_weights([_FakeStateDict(tensors)], 0, tp_size)
+    for stage in range(cfg.num_draft_layers):
+        attn = lm.model.backbone.layers[stage].self_attn
+        assert isinstance(attn.q_a_proj, torch.nn.Linear)
+        assert isinstance(attn.kv_proj, torch.nn.Linear)
+        assert attn.q_b_proj.weight.dtype == torch.int8
+        assert torch.equal(attn.q_a_proj.weight, tensors[f"mtp.{stage}.attn.wq_a.weight"])
+        assert torch.equal(attn.kv_proj.weight, tensors[f"mtp.{stage}.attn.wkv.weight"])
+
+
+@pytest.mark.parametrize("metadata", ["none", "missing", "empty", "float"])
+@pytest.mark.parametrize("explicit_precision", [False, True])
+def test_1017_dspark_derives_precision_without_mutating_caller_config(
+    tmp_path: Path, metadata: str, explicit_precision: bool
+) -> None:
+    from dataclasses import replace
+
+    cfg = DeepseekV41DSparkConfig.from_dict(_config_dict())
+    explicit = frozenset({(0, "wq_a")}) if explicit_precision else frozenset()
+    cfg.unquantized_attn_projections = explicit
+    before = replace(cfg)
+    config = None if metadata == "none" else {"model_path": str(tmp_path)}
+    if metadata in ("empty", "float"):
+        labels = {"model.mtp.0.attn.wkv.weight": " BF16 "} if metadata == "float" else {}
+        _write_quant_description(tmp_path, labels)
+    model = dsp.DeepseekV41DSparkModel(cfg, torch.bfloat16, torch.device("cpu"), dsp.V41_QUANT_ASCEND, config)
+    expected = explicit | (frozenset({(0, "wkv")}) if metadata == "float" else frozenset())
+    assert cfg == before
+    assert model.layer_cfg is not cfg
+    assert model.layer_cfg.unquantized_attn_projections == expected
+    attn = model.layers[0].self_attn
+    assert isinstance(attn.q_a_proj, torch.nn.Linear) == explicit_precision
+    assert isinstance(attn.kv_proj, torch.nn.Linear) == (metadata == "float")
+    assert attn.q_a_proj.weight.dtype == (torch.bfloat16 if explicit_precision else torch.int8)
+    assert attn.kv_proj.weight.dtype == (torch.bfloat16 if metadata == "float" else torch.int8)

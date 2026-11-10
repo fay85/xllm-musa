@@ -41,8 +41,6 @@ pre-injected context rows.
 
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -54,6 +52,7 @@ from xllm.python import distributed
 from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear
 from xllm.python.model_executor.forward_context import LayerSynchronizer
+from xllm.python.model_loader.module_loaders import checkpoint_weight_is_quantized
 from xllm.python.models.deepseek_v4 import DeepseekV4ForCausalLM, DeepseekV4MoE
 from xllm.python.models.deepseek_v32 import W8A8DynamicLinear
 from xllm.python.models.deepseek_v41 import (
@@ -69,7 +68,9 @@ from xllm.python.models.deepseek_v41 import (
     DeepseekV41RMSNorm,
     _detect_v41_quant_mode,
     _find_checkpoint_prefix,
+    _load_v41_attn_projection,
     _PlainRotaryEmbedding,
+    _v41_unquantized_attn_projections,
     dequant_fp8_block,
 )
 from xllm.python.models.dspark import DSparkForCausalLMBase
@@ -79,34 +80,6 @@ from xllm.python.models.weight_utils import W8A8WeightLoader
 DSPARK_DEFAULT_LAYERS = 3
 
 _DROPPED_DRAFT_TENSOR_LOGGED = False
-
-#: Ascend (Eco-Tech / ModelSlim) export metadata that names a tensor's storage type.
-_QUANT_DESCRIPTION_FILE = "quant_model_description.json"
-#: Labels that mean "this tensor is exported unquantized" (bf16/fp16/fp32).
-_FLOAT_QUANT_LABELS = frozenset({"FLOAT", "FLOAT16", "FLOAT32", "BF16", "BFLOAT16", "FP16", "FP32"})
-
-
-def checkpoint_weight_is_quantized(model_path: Optional[str], tensor_name: str) -> Optional[bool]:
-    """Whether ``quant_model_description.json`` marks ``tensor_name`` quantized.
-
-    Returns ``None`` when the description file, the entry, or a usable label is
-    missing so the caller can fall back to the official export contract instead
-    of guessing. The metadata is the only signal available before the model is
-    built; the actual tensor dtype is re-checked at load time.
-    """
-    if not model_path:
-        return None
-    path = os.path.join(model_path, _QUANT_DESCRIPTION_FILE)
-    if not os.path.isfile(path):
-        return None
-    with open(path, encoding="utf-8") as handle:
-        description = json.load(handle)
-    label = description.get(tensor_name)
-    if label is None:
-        label = description.get("model." + tensor_name)
-    if not isinstance(label, str):
-        return None
-    return label.strip().upper() not in _FLOAT_QUANT_LABELS
 
 
 def _main_proj_quantized(quant_mode: str, config: dict) -> bool:
@@ -356,6 +329,8 @@ class DeepseekV41DSparkModel(nn.Module):
             n_activated_experts=cfg.dspark_num_experts_per_tok,
             first_k_dense_replace=0,
             moe_layer_freq=1,
+            unquantized_attn_projections=cfg.unquantized_attn_projections
+            | _v41_unquantized_attn_projections(config, quant_mode, self.num_layers, checkpoint_prefix="mtp"),
         )
         # The draft owns the vocabulary embedding row of its noise/mask token
         # (dedicated ``mtp.0.embed`` on rotated checkpoints, else the shared
@@ -761,14 +736,15 @@ class DeepseekV41DSparkForCausalLM(DSparkForCausalLMBase):
         stage: int,
     ) -> None:
         attn = self.model.backbone.layers[stage].self_attn
-        self._load_w8a8(loader, ck + "attn.wq_a", pm + "self_attn.q_a_proj")
-        self._load_w8a8(
+        _load_v41_attn_projection(loader, attn.q_a_proj, ck + "attn.wq_a", pm + "self_attn.q_a_proj")
+        _load_v41_attn_projection(
             loader,
+            attn.q_b_proj,
             ck + "attn.wq_b",
             pm + "self_attn.q_b_proj",
             {"weight": 0, "weight_scale": 0, "weight_offset": 0},
         )
-        self._load_w8a8(loader, ck + "attn.wkv", pm + "self_attn.kv_proj")
+        _load_v41_attn_projection(loader, attn.kv_proj, ck + "attn.wkv", pm + "self_attn.kv_proj")
         loader.copy_in(
             pm + "self_attn.o_a_proj.weight",
             loader.shard(loader.load_tensor(ck + "attn.wo_a.weight"), dim=0),
