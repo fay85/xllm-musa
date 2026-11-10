@@ -485,6 +485,26 @@ TEST(ModelConfigValidationTest, AcceptsSupportedPythonExecutionModes) {
 #endif
 }
 
+TEST(ModelConfigValidationTest, Qwen35PythonDFlash2FollowsBackendSupport) {
+  for (const std::string& model_type : {"qwen3_5_text", "qwen3_5_moe_text"}) {
+    for (const std::string& model_impl : {"python", "py"}) {
+      for (const std::string& algorithm : {"DFlash2", "dflash2", "DFLASH2"}) {
+        const std::optional<std::string> error =
+            ModelConfig::validate_python_speculative_decode(
+                model_impl,
+                model_type,
+                algorithm,
+                /*num_speculative_tokens=*/7);
+#if defined(USE_NPU)
+        EXPECT_FALSE(error.has_value());
+#else
+        EXPECT_TRUE(error.has_value());
+#endif
+      }
+    }
+  }
+}
+
 TEST(ConfigJsonTest, FromJsonUsesParsedOverrides) {
   const JsonReader json = config::parse_json_string(kInlineConfig);
   ConfigFlagGuard flag_guard;

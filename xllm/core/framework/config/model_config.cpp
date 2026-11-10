@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
+#include "core/framework/config/speculative_config.h"
 #include "core/util/utils.h"
 
 DEFINE_string(model_id, "", "hf model name.");
@@ -162,11 +163,12 @@ std::optional<std::string> ModelConfig::validate_python_speculative_decode(
     return std::nullopt;
   }
 #if defined(USE_NPU)
-  if (speculative_algorithm == "DSpark" || speculative_algorithm == "MTP") {
+  if (speculative_algorithm == "DSpark" || speculative_algorithm == "MTP" ||
+      SpeculativeConfig::is_dflash2_algorithm(speculative_algorithm)) {
     return std::nullopt;
   }
   return "Qwen3.5 Python model executor does not support speculative decoding; "
-         "use speculative_algorithm=DSpark or MTP, set "
+         "use speculative_algorithm=DSpark, MTP, or DFlash2, set "
          "num_speculative_tokens=0, or "
          "use the native model executor";
 #else
