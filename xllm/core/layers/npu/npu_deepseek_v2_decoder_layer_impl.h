@@ -111,6 +111,9 @@ class NpuDeepseekV2DecoderLayerImpl : public BaseLayer {
 
   ~NpuDeepseekV2DecoderLayerImpl() override = default;
 
+  // The compressed MLA decode graph requires KV-length graph bucketing.
+  static bool uses_mla_graph(const ModelArgs& args);
+
   torch::Tensor build_expert_routing_map(std::vector<int32_t> expert_lists);
 
   void prepare_expert_weight(const std::vector<int32_t>& expert_list);

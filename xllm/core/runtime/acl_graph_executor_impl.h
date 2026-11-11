@@ -265,7 +265,8 @@ class AclGraphExecutorImpl : public ExecutorImpl {
     c10_npu::MempoolId_t graph_pool{0, 0};
     std::optional<c10_npu::NPUStream> graph_capture_stream;
     absl::flat_hash_map<uint64_t, std::shared_ptr<AclGraph>> graphs;
-    std::deque<uint64_t> spec_verify_graph_keys;
+    // LRU shared by spec-verify and raw-shape-specialized DP-EP decode graphs.
+    std::deque<uint64_t> specialized_graph_keys;
     bool is_prepared = false;
   };
   std::array<GraphSlot, 2> graph_slots_;

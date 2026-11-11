@@ -19,6 +19,7 @@ limitations under the License.
 #include <torch/torch.h>
 #include <torch_npu/torch_npu.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <memory>
@@ -51,6 +52,7 @@ limitations under the License.
 #include "core/framework/speculative/mtp_async_state.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
+#include "core/layers/npu/npu_deepseek_v2_decoder_layer_impl.h"
 #include "core/layers/npu/npu_lm_head_impl.h"
 #include "core/layers/npu/npu_word_embedding_impl.h"
 #include "core/layers/npu_torch/qwen3_next_attention.h"
@@ -478,6 +480,7 @@ class SimpleCausalLM : public CausalLM {
                       const torch::Tensor& positions,
                       std::vector<KVCache>& kv_caches,
                       const ModelInputParams& parameters) override {
+    ++forward_call_count_;
     last_forward_enabled_graph_ = parameters.enable_graph;
     last_forward_had_attn_metadata_ = parameters.attn_metadata != nullptr;
     auto hidden_states = forward_impl(tokens, positions, kv_caches, parameters);
@@ -508,6 +511,8 @@ class SimpleCausalLM : public CausalLM {
   bool last_forward_had_attn_metadata() const {
     return last_forward_had_attn_metadata_;
   }
+
+  int64_t forward_call_count() const { return forward_call_count_; }
 
   // Implement required virtual functions
   torch::Tensor logits(const torch::Tensor& hidden_states,
@@ -568,6 +573,7 @@ class SimpleCausalLM : public CausalLM {
   bool return_aux_hidden_states_ = false;
   bool last_forward_enabled_graph_ = false;
   bool last_forward_had_attn_metadata_ = false;
+  int64_t forward_call_count_ = 0;
 };
 
 class AclGraphExecutorTest : public ::testing::Test {
@@ -1453,7 +1459,20 @@ TEST_F(AclGraphExecutorTest, GraphDoubleBufferFlagControlsSlotCount) {
       original_enable_graph_double_buffer);
 }
 
-TEST_F(AclGraphExecutorTest, DpDecodeGraphKeyIgnoresRawTokenDistribution) {
+TEST(MlaGraphCapabilityTest, DeepseekV2DecodePathRequiresKvBucketing) {
+  for (const std::string model_type :
+       {"deepseek_v3", "kimi_k25", "deepseek_v2", "deepseek_v32", "kimi_k2"}) {
+    SCOPED_TRACE(model_type);
+    ModelArgs args;
+    args.model_type(model_type).enable_mla(true);
+    EXPECT_EQ(layer::NpuDeepseekV2DecoderLayerImpl::uses_mla_graph(args),
+              model_type == "deepseek_v3" || model_type == "kimi_k25");
+    args.enable_mla(false);
+    EXPECT_FALSE(layer::NpuDeepseekV2DecoderLayerImpl::uses_mla_graph(args));
+  }
+}
+
+TEST_F(AclGraphExecutorTest, DpDecodeGraphKeySeparatesRawPaddingShapes) {
   options_.world_size(16).dp_size(8);
   ::xllm::npu::AclGraphExecutorImpl graph_executor(
       model_.get(), model_args_, *device_, options_);
@@ -1470,20 +1489,147 @@ TEST_F(AclGraphExecutorTest, DpDecodeGraphKeyIgnoresRawTokenDistribution) {
       {8, 8, 12, 8, 12, 16, 12, 20},
       {4, 8, 12, 4, 12, 16, 4, 20},
       {4, 8, 12, 0, 12, 12, 4, 20},
+      {0, 8, 12, 4, 12, 12, 4, 20},
+      {4, 4, 4, 4, 4, 4, 4, 4},
+      {3, 3, 3, 3, 3, 3, 3, 3},
   };
 
-  std::optional<uint64_t> expected_graph_key;
+  std::vector<uint64_t> graph_keys;
+  graph_keys.reserve(dp_token_distributions.size());
   for (const std::vector<int32_t>& distribution : dp_token_distributions) {
-    params.parallel.dp_global_token_nums = distribution;
+    params.parallel.dp_global_token_nums.assign(8, 32);
     params.parallel.raw_dp_global_token_nums = distribution;
     const uint64_t graph_key =
         graph_executor.graph_key_for_test(/*bucket_num_tokens=*/32, params);
-    if (!expected_graph_key.has_value()) {
-      expected_graph_key = graph_key;
-    }
-    EXPECT_EQ(graph_key, expected_graph_key.value());
+    EXPECT_EQ(
+        graph_key,
+        graph_executor.graph_key_for_test(/*bucket_num_tokens=*/32, params));
+    EXPECT_EQ(std::find(graph_keys.begin(), graph_keys.end(), graph_key),
+              graph_keys.end());
+    graph_keys.emplace_back(graph_key);
   }
 }
+
+TEST_F(AclGraphExecutorTest, DpDecodeGraphKeyIsIndependentOfRankLocalPadding) {
+  options_.world_size(16).dp_size(2);
+  ModelInputParams params;
+  params.meta.batch_forward_type = BatchForwardType::DECODE;
+  params.parallel.dp_global_token_nums = {4, 4};
+  params.parallel.raw_dp_global_token_nums = {0, 3};
+  std::optional<uint64_t> expected_key;
+  for (int32_t rank = 0; rank < 16; ++rank) {
+    SCOPED_TRACE(rank);
+    options_.node_rank(rank);
+    ::xllm::npu::AclGraphExecutorImpl graph_executor(
+        model_.get(), model_args_, *device_, options_);
+    // Engine-provided global counts are identical; local input/index shapes
+    // differ between the empty DP shard and the three-query DP shard.
+    params.meta.num_sequences = rank < 8 ? 0 : 3;
+    params.parallel.dp_ep_padding_data.attn_padding_idx(
+        torch::zeros({rank < 8 ? 1 : 3}, torch::kInt32));
+    const uint64_t key =
+        graph_executor.graph_key_for_test(/*bucket_num_tokens=*/4, params);
+    if (!expected_key.has_value()) {
+      expected_key = key;
+    }
+    EXPECT_EQ(key, expected_key.value());
+  }
+}
+
+TEST_F(AclGraphExecutorTest, DpDecodeGraphKeyRequiresCompleteRawCounts) {
+  options_.world_size(16).dp_size(2);
+  ::xllm::npu::AclGraphExecutorImpl graph_executor(
+      model_.get(), model_args_, *device_, options_);
+  ModelInputParams params;
+  params.meta.batch_forward_type = BatchForwardType::DECODE;
+  params.parallel.dp_global_token_nums = {4, 4};
+  params.parallel.dp_ep_padding_data.attn_padding_idx(
+      torch::zeros({1}, torch::kInt32));
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  for (const std::vector<int32_t>& counts :
+       std::vector<std::vector<int32_t>>{{}, {3}, {0, 3, 1}}) {
+    params.parallel.raw_dp_global_token_nums = counts;
+    EXPECT_DEATH(static_cast<void>(graph_executor.graph_key_for_test(
+                     /*bucket_num_tokens=*/4, params)),
+                 "requires complete global raw token counts");
+  }
+  params.parallel.raw_dp_global_token_nums = {0, -1};
+  EXPECT_DEATH(static_cast<void>(graph_executor.graph_key_for_test(
+                   /*bucket_num_tokens=*/4, params)),
+               "Global raw DP token counts must be nonnegative");
+}
+
+class DpDecodeGraphVariantTest : public AclGraphExecutorTest,
+                                 public ::testing::WithParamInterface<bool> {};
+
+TEST_P(DpDecodeGraphVariantTest, BoundsVariantsAndRecapturesEvictedShapes) {
+  GraphConfigRestore config_restore;
+  ExecutionConfig::get_instance().graph_capture_sizes({4});
+  ExecutionConfig::get_instance().enable_graph_double_buffer(GetParam());
+  ExecutionConfig::get_instance().enable_graph_mode_decode_no_padding(false);
+  options_.world_size(4)
+      .dp_size(4)
+      .enable_graph(true)
+      .max_seqs_per_batch(4)
+      .max_tokens_per_batch(16);
+  auto batch = CreateTestBatch();
+  auto input = batch->prepare_forward_input(
+      options_.num_decoding_tokens(), 0, model_args_);
+  input = input.to(*device_, torch::kFloat32);
+  input.input_params.parallel.dp_global_token_nums.assign(4, 4);
+  input.input_params.parallel.dp_is_decode.assign(4, 1);
+  input.input_params.parallel.dp_ep_padding_data.attn_padding_idx(
+      torch::zeros({1}, torch::kInt32));
+  first_full_attention_cache(kv_caches_).get_k_cache().select(0, 0).zero_();
+  const auto expected = model_->forward(
+      input.token_ids, input.positions, kv_caches_, input.input_params);
+  const auto* simple_model = dynamic_cast<SimpleCausalLM*>(model_.get());
+  ASSERT_NE(simple_model, nullptr);
+  npu::AclGraphExecutorImpl executor(
+      model_.get(), model_args_, *device_, options_);
+  const int32_t slots = executor.graph_slot_count_for_test();
+  constexpr size_t kVariantLimit = 16;
+  // Hold the padded bucket/local input fixed while varying global raw shapes.
+  // This exercises the actual capture/replay/destruction path, not a mock LRU.
+  auto run_variant = [&](int32_t variant) {
+    SCOPED_TRACE(variant);
+    input.input_params.parallel.raw_dp_global_token_nums = {
+        1, variant % 4, (variant / 4) % 4, variant / 16};
+    for (int32_t slot = 0; slot < slots; ++slot) {
+      const auto output = executor.run(
+          input.token_ids, input.positions, kv_caches_, input.input_params);
+      EXPECT_TRUE(torch::allclose(expected.hidden_states,
+                                  output.hidden_states,
+                                  /*rtol=*/1e-5,
+                                  /*atol=*/1e-6));
+    }
+  };
+  for (int32_t variant = 0; variant < 16; ++variant) {
+    run_variant(variant);
+    EXPECT_EQ(executor.get_graph_count(), (variant + 1) * slots);
+  }
+  const int64_t calls_at_capacity = simple_model->forward_call_count();
+  run_variant(0);  // Refresh the oldest key in every slot.
+  EXPECT_EQ(simple_model->forward_call_count(), calls_at_capacity);
+  run_variant(16);  // Evict key 1 rather than the recently used key 0.
+  EXPECT_GT(simple_model->forward_call_count(), calls_at_capacity);
+  EXPECT_EQ(executor.get_graph_count(), kVariantLimit * slots);
+  const int64_t calls_after_eviction = simple_model->forward_call_count();
+  run_variant(0);
+  EXPECT_EQ(simple_model->forward_call_count(), calls_after_eviction);
+  run_variant(1);  // Evicted shapes must be captured again with correct output.
+  EXPECT_GT(simple_model->forward_call_count(), calls_after_eviction);
+  for (int32_t variant = 17; variant < 32; ++variant) {
+    run_variant(variant);
+    EXPECT_EQ(executor.get_graph_count(), kVariantLimit * slots);
+  }
+  EXPECT_EQ(executor.get_graph_memory_pool_count(), slots);
+  EXPECT_EQ(executor.get_graph_capture_stream_count(), slots);
+}
+
+INSTANTIATE_TEST_SUITE_P(BufferModes,
+                         DpDecodeGraphVariantTest,
+                         ::testing::Bool());
 
 TEST_F(AclGraphExecutorTest, Qwen35DpDecodeGraphAdmission) {
   GraphConfigRestore config_restore;
@@ -2081,6 +2227,116 @@ TEST(AclGraphPersistentParamTest, EmptyDpDecodeMetadataScope) {
     EXPECT_FALSE(capture->attention.device.q_cu_seq_lens.defined());
     EXPECT_EQ(capture->parallel.query_start_loc,
               std::vector<int64_t>({0, 1, 2}));
+  }
+}
+
+TEST(AclGraphPersistentParamTest, EmptyDpDecodePadsCumulativeQueryLengths) {
+  const torch::Device device(torch::kCPU);
+  const auto int_options = torch::TensorOptions().dtype(torch::kInt);
+  ModelArgs args;
+  args.model_type("deepseek_v32")
+      .dtype("float32")
+      .hidden_size(8)
+      .head_dim(0)
+      .max_position_embeddings(32);
+  runtime::Options options;
+  options.world_size(2)
+      .dp_size(2)
+      .enable_graph(true)
+      .block_size(4)
+      .max_seqs_per_batch(4)
+      .max_tokens_per_batch(4)
+      .num_decoding_tokens(1);
+  npu::GraphPersistentParam persistent_param(
+      args, device, options, /*need_update_attn_mask=*/false);
+  ModelInputParams params;
+  params.meta.batch_forward_type = BatchForwardType::DECODE;
+  params.parallel.dp_global_token_nums = {0, 1};
+  params.parallel.raw_dp_global_token_nums = {0, 1};
+  params.parallel.dp_is_decode = {1, 1};
+  // Empty batches can carry either an undefined or an empty query tensor.
+  for (const bool defined_q_cu : {false, true}) {
+    SCOPED_TRACE(defined_q_cu);
+    params.attention.device.q_cu_seq_lens =
+        defined_q_cu ? torch::empty({0}, int_options) : torch::Tensor();
+    for (const uint32_t bucket : {1, 2, 4}) {
+      SCOPED_TRACE(bucket);
+      const auto capture =
+          persistent_param.update(torch::ones({1}, int_options),
+                                  torch::Tensor(),
+                                  torch::Tensor(),
+                                  torch::zeros({1}, int_options),
+                                  params,
+                                  bucket,
+                                  /*return_capture_params=*/true,
+                                  /*skip_token_update=*/false,
+                                  /*for_capture=*/true,
+                                  /*update_paged_attention_plan=*/false);
+      ASSERT_TRUE(capture.has_value());
+      EXPECT_TRUE(capture->enable_graph);
+      EXPECT_FALSE(params.enable_graph);
+      EXPECT_EQ(capture->meta.actual_num_sequences, 0);
+      EXPECT_EQ(capture->meta.num_sequences, bucket);
+      ASSERT_TRUE(capture->attention.device.q_cu_seq_lens.defined());
+      EXPECT_TRUE(torch::equal(
+          capture->attention.device.q_cu_seq_lens,
+          torch::arange(1, static_cast<int64_t>(bucket) + 1, int_options)));
+      EXPECT_EQ(capture->attention.device.kv_seq_lens.numel(), bucket);
+    }
+  }
+}
+
+TEST(AclGraphPersistentParamTest,
+     EmptyDecodeQueryLengthsStayScopedToV32DpGraph) {
+  const torch::Device device(torch::kCPU);
+  const auto int_options = torch::TensorOptions().dtype(torch::kInt);
+  for (const std::string model_type :
+       {"deepseek_v32", "deepseek_v3", "qwen2", "kimi_k25"}) {
+    for (const bool enable_graph : {false, true}) {
+      for (const int32_t dp_size : {1, 2}) {
+        SCOPED_TRACE(model_type);
+        SCOPED_TRACE(enable_graph);
+        SCOPED_TRACE(dp_size);
+        ModelArgs args;
+        args.model_type(model_type)
+            .dtype("float32")
+            .hidden_size(8)
+            .head_dim(0)
+            .max_position_embeddings(32);
+        runtime::Options options;
+        options.world_size(2)
+            .dp_size(dp_size)
+            .enable_graph(enable_graph)
+            .block_size(4)
+            .max_seqs_per_batch(2)
+            .max_tokens_per_batch(2)
+            .num_decoding_tokens(1);
+        npu::GraphPersistentParam persistent_param(
+            args, device, options, /*need_update_attn_mask=*/false);
+        ModelInputParams params;
+        params.meta.batch_forward_type = BatchForwardType::DECODE;
+        params.parallel.dp_global_token_nums.assign(dp_size, 1);
+        // A fake token represents an empty shard only when other DP shards
+        // participate. A single-DP empty batch has no input token at all.
+        const int64_t input_tokens = dp_size > 1 ? 1 : 0;
+        const auto graph_params =
+            persistent_param.update(torch::ones({input_tokens}, int_options),
+                                    torch::Tensor(),
+                                    torch::Tensor(),
+                                    torch::zeros({input_tokens}, int_options),
+                                    params,
+                                    /*padded_num_tokens=*/2,
+                                    /*return_capture_params=*/true,
+                                    /*skip_token_update=*/false,
+                                    /*for_capture=*/false,
+                                    /*update_paged_attention_plan=*/false);
+        ASSERT_TRUE(graph_params.has_value());
+        EXPECT_EQ(graph_params->attention.device.q_cu_seq_lens.defined(),
+                  model_type == "deepseek_v32" && enable_graph && dp_size > 1);
+        EXPECT_FALSE(params.attention.device.q_cu_seq_lens.defined());
+        EXPECT_FALSE(params.enable_graph);
+      }
+    }
   }
 }
 

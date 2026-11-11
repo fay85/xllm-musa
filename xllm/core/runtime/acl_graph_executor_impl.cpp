@@ -54,7 +54,7 @@ constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
 constexpr uint64_t kSpecVerifyBucketMask = (1ull << 16) - 1;
 constexpr uint64_t kSpecVerifyFieldMask = (1ull << 16) - 1;
 constexpr uint64_t kSpecVerifyExpandedBlockMask = (1ull << 15) - 1;
-constexpr size_t kMaxSpecVerifyGraphVariantsPerSlot = 16;
+constexpr size_t kMaxSpecializedGraphVariantsPerSlot = 16;
 constexpr uint64_t kMlaGraphKeyMask = 1ull << 62;
 constexpr uint64_t kMlaGraphKeyPayloadMask = (1ull << 62) - 1;
 
@@ -213,16 +213,39 @@ bool has_non_uniform_positive_dp_token_counts(
   return non_uniform;
 }
 
+bool uses_dp_ep_decode_graph_specialization(const ModelInputParams& params) {
+  const auto& padding_idx =
+      params.parallel.dp_ep_padding_data.attn_padding_idx();
+  return params.meta.batch_forward_type.is_decode() &&
+         params.parallel.dp_global_token_nums.size() > 1 &&
+         padding_idx.defined() && padding_idx.numel() > 0;
+}
+
 uint64_t specialize_dp_ep_graph_key(uint64_t graph_key,
                                     const ModelInputParams& params) {
   const auto& dp_token_counts = params.parallel.dp_global_token_nums;
-  const bool uses_dense_decode_layout =
-      params.meta.batch_forward_type.is_decode() &&
-      dp_token_counts.size() > 1 &&
-      params.parallel.dp_ep_padding_data.attn_padding_idx().defined() &&
-      params.parallel.dp_ep_padding_data.attn_padding_idx().numel() > 0;
-  if (uses_dense_decode_layout ||
-      !has_non_uniform_positive_dp_token_counts(dp_token_counts) ||
+  if (uses_dp_ep_decode_graph_specialization(params)) {
+    // ATB padding index views retain the raw per-DP shapes. Equal decode
+    // buckets can therefore have different gather/scatter launch shapes,
+    // including when a shard becomes empty. LLMEngine::prepare_inputs() copies
+    // the same complete raw vector to every DP shard before WorkerImpl builds
+    // rank-local padding indices. Never substitute graph-padded counts here:
+    // they no longer describe those raw views. All ranks must retain this
+    // global metadata so capture/cache-hit decisions remain collective.
+    const auto& raw_token_counts = params.parallel.raw_dp_global_token_nums;
+    CHECK_EQ(raw_token_counts.size(), dp_token_counts.size())
+        << "DP decode graph requires complete global raw token counts";
+    const uint64_t graph_namespace = graph_key & ~kMlaGraphKeyPayloadMask;
+    graph_key &= kMlaGraphKeyPayloadMask;
+    graph_key = mix_graph_key(graph_key, 0x445045505f444543ull);
+    for (int32_t token_count : raw_token_counts) {
+      CHECK_GE(token_count, 0)
+          << "Global raw DP token counts must be nonnegative";
+      graph_key = mix_graph_key(graph_key, static_cast<uint64_t>(token_count));
+    }
+    return graph_namespace | (graph_key & kMlaGraphKeyPayloadMask);
+  }
+  if (!has_non_uniform_positive_dp_token_counts(dp_token_counts) ||
       !params.parallel.dp_ep_padding_data.attn_padding_idx().defined() ||
       params.parallel.dp_ep_padding_data.attn_padding_idx().numel() == 0) {
     return graph_key;
@@ -1479,15 +1502,16 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   const uint64_t graph_key =
       get_graph_key(bucket_num_tokens, params_single, attention_plan_class);
-  const bool bounded_spec_graph =
-      model_->is_hybrid_linear_attention() && params_single.is_spec_verify;
+  const bool bounded_graph_variant =
+      (model_->is_hybrid_linear_attention() && params_single.is_spec_verify) ||
+      uses_dp_ep_decode_graph_specialization(params_single);
   std::shared_ptr<AclGraph> replay_graph;
   {
     std::lock_guard<std::mutex> lock(graph_slots_mutex_);
     auto it = active_slot.graphs.find(graph_key);
     if (it != active_slot.graphs.end()) {
       replay_graph = it->second;
-      auto& keys = active_slot.spec_verify_graph_keys;
+      auto& keys = active_slot.specialized_graph_keys;
       auto key_it = std::find(keys.begin(), keys.end(), graph_key);
       if (key_it != keys.end()) {
         keys.erase(key_it);
@@ -1551,11 +1575,14 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
   // Release a cold variant before capturing the next graph. Destruction
   // synchronizes its stream and must happen outside the cache lock. Keep the
   // per-slot shared graph pool used by main; do not restore private pools.
+  // DP-EP decode retains exact raw shapes for ATB launch compatibility, but
+  // shares the bounded LRU with spec verify so distributions cannot grow the
+  // cache without limit. All ranks see the same global keys and access order.
   std::shared_ptr<AclGraph> evicted_graph;
-  if (bounded_spec_graph) {
+  if (bounded_graph_variant) {
     std::lock_guard<std::mutex> lock(graph_slots_mutex_);
-    auto& keys = active_slot.spec_verify_graph_keys;
-    if (keys.size() >= kMaxSpecVerifyGraphVariantsPerSlot) {
+    auto& keys = active_slot.specialized_graph_keys;
+    if (keys.size() >= kMaxSpecializedGraphVariantsPerSlot) {
       const uint64_t evicted_key = keys.front();
       keys.pop_front();
       auto it = active_slot.graphs.find(evicted_key);
@@ -1595,8 +1622,8 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   {
     std::lock_guard<std::mutex> lock(graph_slots_mutex_);
-    if (bounded_spec_graph) {
-      active_slot.spec_verify_graph_keys.emplace_back(graph_key);
+    if (bounded_graph_variant) {
+      active_slot.specialized_graph_keys.emplace_back(graph_key);
     }
     // shared_ptr keeps a replay/prepare that already left the map alive if a
     // later capture evicts this variant.

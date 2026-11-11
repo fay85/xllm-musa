@@ -347,7 +347,14 @@ class DeepseekV2ForCausalLMImpl
   DeepseekV2ForCausalLMImpl(const ModelContext& context)
       : xllm::npu::model::LlmForCausalLMImplBase<DeepseekV2Model>(context),
         first_k_dense_replace_(
-            context.get_model_args().first_k_dense_replace()) {}
+            context.get_model_args().first_k_dense_replace()),
+        supports_mla_graph_kv_bucketing_(
+            layer::NpuDeepseekV2DecoderLayerImpl::uses_mla_graph(
+                context.get_model_args())) {}
+
+  bool supports_mla_graph_kv_bucketing() const {
+    return supports_mla_graph_kv_bucketing_;
+  }
 
   void prepare_expert_weight(int32_t layer_id,
                              const std::vector<int32_t>& expert_ids) override {
@@ -410,6 +417,7 @@ class DeepseekV2ForCausalLMImpl
 
  private:
   int32_t first_k_dense_replace_;
+  bool supports_mla_graph_kv_bucketing_ = false;
 };
 TORCH_MODULE(DeepseekV2ForCausalLM);
 

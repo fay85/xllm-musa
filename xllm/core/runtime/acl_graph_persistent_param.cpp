@@ -1317,7 +1317,18 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
   const bool synthesize_empty_hybrid_q_cu =
       !has_q_cu && is_hybrid_spec_verify_chunked_prefill &&
       is_empty_qwen3_5_dp_graph_rank;
-  if (has_q_cu || synthesize_empty_hybrid_q_cu) {
+  // V3.2 LightningIndexer executes padded queries even on an empty DP shard.
+  // Its cumulative lengths must cover every padded row. This graph-only
+  // update receives pre-graph params: enable_graph is set on the returned
+  // graph_params below, so use the executor options rather than that input bit.
+  // Empty shards may have either undefined or defined-but-empty lengths.
+  const bool synthesize_empty_decode_q_cu =
+      !has_q_cu && options_.enable_graph() &&
+      args_.model_type() == "deepseek_v32" && is_empty_dp_graph_rank &&
+      is_decode && !is_hybrid_linear_attention_;
+  const bool synthesize_empty_q_cu =
+      synthesize_empty_hybrid_q_cu || synthesize_empty_decode_q_cu;
+  if (has_q_cu || synthesize_empty_q_cu) {
     const bool input_has_leading_zero =
         params.is_spec_verify && use_hybrid_query_start_loc;
     const int64_t required_q_cu_seq_lens =
@@ -1328,7 +1339,7 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
           << "q_cu_seq_lens does not have enough entries for ACL graph "
              "execution";
     }
-    if (synthesize_empty_hybrid_q_cu) {
+    if (synthesize_empty_q_cu) {
       q_cu_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/1).zero_();
     } else if (use_hybrid_query_start_loc && !input_has_leading_zero) {
       q_cu_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/1).zero_();
@@ -1676,7 +1687,7 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
           uses_paged_attention_tiling() ? tiling_data() : torch::Tensor();
     }
     if (params.attention.device.q_cu_seq_lens.defined() ||
-        synthesize_empty_hybrid_q_cu) {
+        synthesize_empty_q_cu) {
       graph_params->attention.device.q_cu_seq_lens = q_cu_seq_lens_.slice(
           /*dim=*/0,
           /*start=*/0,

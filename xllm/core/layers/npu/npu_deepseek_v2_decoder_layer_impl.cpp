@@ -39,10 +39,6 @@ bool is_kimi_text_model(const ModelArgs& args) {
   return args.model_type() == "kimi_k2" || args.model_type() == "kimi_k25";
 }
 
-bool uses_deepseek_v2_mla_graph(const ModelArgs& args) {
-  return args.enable_mla() && args.model_type() == "kimi_k25";
-}
-
 }  // namespace
 
 enum DecoderLayerTensorId : int {
@@ -148,6 +144,11 @@ enum DecoderLayerTensorId : int {
 
 static const uint64_t WEIGHT_COUNT_PER_LAYER = 84;
 
+bool NpuDeepseekV2DecoderLayerImpl::uses_mla_graph(const ModelArgs& args) {
+  return args.enable_mla() && (args.model_type() == "kimi_k25" ||
+                               args.model_type() == "deepseek_v3");
+}
+
 NpuDeepseekV2DecoderLayerImpl::NpuDeepseekV2DecoderLayerImpl(
     const ModelContext& context,
     const int32_t layer_id)
@@ -178,7 +179,7 @@ NpuDeepseekV2DecoderLayerImpl::NpuDeepseekV2DecoderLayerImpl(
   auto model_args = context.get_model_args();
   auto quant_args = context.get_quant_args();
   auto options = context.get_tensor_options();
-  uses_deepseek_v2_mla_graph_ = uses_deepseek_v2_mla_graph(model_args);
+  uses_deepseek_v2_mla_graph_ = uses_mla_graph(model_args);
 
   rank_ = parallel_args.rank();
   first_k_dense_replace_ = model_args.first_k_dense_replace();

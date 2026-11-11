@@ -1482,11 +1482,11 @@ void NpuDeepseekV32DecoderLayerImpl::build_node_variant_pack(
 
   const bool empty_eager_batch =
       !input_params.enable_graph && input_params.meta.num_sequences == 0;
-  const bool empty_graph_batch =
-      input_params.enable_graph && input_params.meta.actual_num_sequences == 0;
-  const bool empty_batch = empty_eager_batch || empty_graph_batch;
+  // Empty graph shards execute padded queries with persistent cumulative
+  // lengths. A scalar placeholder cannot describe a multi-row graph bucket.
   const bool use_q_cu_seq_lens =
-      !empty_batch && input_params.attention.device.q_cu_seq_lens.defined() &&
+      !empty_eager_batch &&
+      input_params.attention.device.q_cu_seq_lens.defined() &&
       input_params.attention.device.q_cu_seq_lens.numel() != 0;
   if (use_q_cu_seq_lens) {
     node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
