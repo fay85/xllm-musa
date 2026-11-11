@@ -29,6 +29,7 @@ from scripts.build_support.env import (
     set_musa_envs,
     set_npu_envs,
 )
+from scripts.build_support.release_pack import collect_xllm_release_pack, strip_release_debug_symbols
 from scripts.build_support.testing import prepare_test_environment
 from scripts.build_support.utils import (
     check_and_install_pre_commit,
@@ -853,6 +854,9 @@ class BuildDistWheel(bdist_wheel):
                 if "_test" in item and os.path.isfile(path):
                     os.remove(path)
         BUILD_TEST_FILE = False
+        # Strip before super().run() so the wheel and the Mooncake runtime
+        # copied from this directory ship the smaller binaries.
+        strip_release_debug_symbols(tmp_path)
 
         self.skip_build = True
         InstallWheel._building_wheel = True
@@ -861,9 +865,54 @@ class BuildDistWheel(bdist_wheel):
         finally:
             InstallWheel._building_wheel = False
 
+        wheel_path = _locate_distribution_wheel(self.distribution, self.dist_dir)
+        if wheel_path is None:
+            raise RuntimeError(f"bdist_wheel finished without a wheel in {self.dist_dir}")
+        # install builds a wheel through this command and then pip-installs it.
+        # The release directory is a bdist_wheel artifact, not an install side effect.
+        if _release_pack_requested(self.distribution):
+            collect_xllm_release_pack(
+                get_base_dir(),
+                os.path.join(ext_path, "xllm"),
+                get_cmake_dir(),
+                self.device or "",
+                self.dist_dir,
+                wheel_path,
+            )
+        else:
+            logger.info("Skip xllm release pack. install builds the wheel only; run bdist_wheel to assemble xllm_pack.")
+
+
+def _release_pack_requested(distribution: Any) -> bool:
+    """Return whether this process was started as ``bdist_wheel``.
+
+    ``python setup.py install`` reaches this command through InstallWheel.
+    setuptools keeps only the user-facing commands on ``distribution.commands``,
+    so that nested ``bdist_wheel`` must not assemble ``xllm_pack``.
+    """
+    return "bdist_wheel" in getattr(distribution, "commands", ())
+
+
+def _locate_distribution_wheel(distribution: Any, dist_dir: str | None) -> str | None:
+    """Return the wheel bdist_wheel just recorded, falling back to dist_dir."""
+    wheels = [
+        path
+        for command, _, path in getattr(distribution, "dist_files", [])
+        if command == "bdist_wheel" and path.endswith(".whl") and os.path.isfile(path)
+    ]
+    if wheels:
+        return max(wheels, key=os.path.getmtime)
+    candidates = glob.glob(os.path.join(dist_dir or "dist", "*.whl"))
+    if candidates:
+        return max(candidates, key=os.path.getmtime)
+    return None
+
 
 class InstallWheel(install):
     """`python setup.py install` builds the wheel, then pip-installs it.
+
+    The nested bdist_wheel does not assemble xllm_pack. Run bdist_wheel itself
+    when the release directory is needed.
 
     bdist_wheel re-invokes the install command internally to stage files into
     its own build directory; the _building_wheel guard makes that re-entrant
@@ -909,21 +958,9 @@ class InstallWheel(install):
 
     def _locate_built_wheel(self) -> str | None:
         # bdist_wheel records produced artifacts in distribution.dist_files.
-        wheels = [
-            path
-            for command, _, path in self.distribution.dist_files
-            if command == "bdist_wheel" and path.endswith(".whl") and os.path.isfile(path)
-        ]
-        if wheels:
-            return max(wheels, key=os.path.getmtime)
-
-        # Fallback: scan the wheel output directory directly.
         bdist_wheel_cmd = self.get_finalized_command("bdist_wheel")
         dist_dir = getattr(bdist_wheel_cmd, "dist_dir", None) or "dist"
-        candidates = glob.glob(os.path.join(dist_dir, "*.whl"))
-        if candidates:
-            return max(candidates, key=os.path.getmtime)
-        return None
+        return _locate_distribution_wheel(self.distribution, dist_dir)
 
 
 class TestUT(Command):

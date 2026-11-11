@@ -62,6 +62,19 @@ class WheelMetadataTest(unittest.TestCase):
             with open(os.path.join(egg_info.egg_info, "PKG-INFO"), encoding="utf-8") as metadata:
                 self.assertIn("Name: xllm_mlu_torch2.10.0\n", metadata.read())
 
+    def test_install_does_not_request_the_release_pack(self) -> None:
+        setup_module = _load_setup_module()
+        distribution = Distribution({"name": "xllm", "version": "0.11.0"})
+
+        distribution.commands = ["install"]
+        self.assertFalse(setup_module._release_pack_requested(distribution))
+
+        distribution.commands = ["bdist_wheel"]
+        self.assertTrue(setup_module._release_pack_requested(distribution))
+
+        distribution.commands = ["install", "bdist_wheel"]
+        self.assertTrue(setup_module._release_pack_requested(distribution))
+
 
 if __name__ == "__main__":
     unittest.main()

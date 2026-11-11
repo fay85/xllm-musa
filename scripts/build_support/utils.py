@@ -572,6 +572,19 @@ def _get_cmake_cache_path() -> str:
     return os.path.join(get_base_dir(), "build", dir_name, "CMakeCache.txt")
 
 
+def _xllm_ops_vendor_name(opp_root: str) -> str:
+    """Return the xllm_ops vendor directory installed under ``opp_root``.
+
+    CMakeLists.txt writes the git marker to ``vendors/xllm`` unless the
+    DeepSeekV4 / CANN 9.0 tree ``vendors/custom_xllm_math/op_api/include/aclnnop``
+    is present. Callers must use this probe instead of a fixed directory name.
+    """
+    custom_headers = os.path.join(opp_root, "vendors", "custom_xllm_math", "op_api", "include", "aclnnop")
+    if os.path.isdir(custom_headers):
+        return "custom_xllm_math"
+    return "xllm"
+
+
 def _get_xllm_ops_marker_path() -> str:
     opp_root = os.getenv("ASCEND_OPP_PATH")
     if not opp_root:
@@ -580,14 +593,9 @@ def _get_xllm_ops_marker_path() -> str:
         exit(1)
 
     opp_root = os.path.abspath(os.path.expanduser(opp_root))
-    # Adapt to the DeepSeekV4 / CANN 9.0 change where xllm_ops installs under the
-    # "custom_xllm_math" vendor instead of "xllm". The marker must be read from the
-    # same vendor directory CMakeLists.txt writes it to; otherwise the read and
-    # write paths diverge and the incremental-build cache never hits. Detection
-    # mirrors CMakeLists.txt exactly (same ASCEND_OPP_PATH root and probe path).
-    vendor = "xllm"
-    if os.path.isdir(os.path.join(opp_root, "vendors", "custom_xllm_math", "op_api", "include", "aclnnop")):
-        vendor = "custom_xllm_math"
+    # The marker must be read from the same vendor directory CMakeLists.txt writes
+    # it to; otherwise the incremental-build cache never hits.
+    vendor = _xllm_ops_vendor_name(opp_root)
     return os.path.join(opp_root, "vendors", vendor, ".xllm_ops_git_head")
 
 
@@ -637,14 +645,17 @@ def _read_version_info(file_path: str) -> str | None:
     return None
 
 
-def _get_cann_version_info() -> tuple[str, str | None]:
-    marker_path = _get_xllm_ops_marker_path()
-    opp_root = os.path.dirname(os.path.dirname(os.path.dirname(marker_path)))
-    version_info_path = os.path.join(
-        os.path.dirname(opp_root),
-        "compiler",
-        "version.info",
-    )
+def _get_cann_version_info(cann_root: str | None = None) -> tuple[str, str | None]:
+    """Return ``compiler/version.info`` and its full ``Version=`` value.
+
+    ``cann_root`` is the toolkit root, such as ``ASCEND_HOME_PATH``. When it is
+    omitted, derive that root from the installed xllm_ops marker under ``opp/vendors``.
+    """
+    if not cann_root:
+        marker_path = _get_xllm_ops_marker_path()
+        opp_root = os.path.dirname(os.path.dirname(os.path.dirname(marker_path)))
+        cann_root = os.path.dirname(opp_root)
+    version_info_path = os.path.join(cann_root, "compiler", "version.info")
     return version_info_path, _read_version_info(version_info_path)
 
 
