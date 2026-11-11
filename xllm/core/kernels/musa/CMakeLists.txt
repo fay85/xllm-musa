@@ -58,6 +58,8 @@ set(_TORCH_MUSA_KERNEL_SRCS
   moe_combine_indexed.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
+  # Unscaled BF16 projection-view to contiguous FP8 query in one launch.
+  fp8_query_cast.cu
   # BF16 GEMM for small-row, small-column projections
   skinny_gemm.cu
   # Block-scaled FP8 GEMM for at most 8 rows on MP31

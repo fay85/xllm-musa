@@ -28,6 +28,10 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 
+// Cast a BF16 [tokens, heads, dim] projection view directly to contiguous FP8.
+// Reads all three source strides; no intermediate contiguous BF16 tensor.
+torch::Tensor query_cast_fp8_e4m3(const torch::Tensor& query);
+
 // Replaces negative dst entries with indexed values from src.
 void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,
@@ -212,35 +216,37 @@ void fa3_prefill_paged(const torch::Tensor& query,
 // sequence's query and KV block counts, not on its exact lengths.
 int32_t fa3_decode_kv_tile_size();
 
-torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
-                                            int32_t batch_size,
-                                            int32_t num_heads_q,
-                                            int32_t num_heads_kv,
-                                            int32_t head_dim_qk,
-                                            int32_t head_dim_vo,
-                                            int32_t max_seqlen_q,
-                                            int32_t max_seqlen_k,
-                                            int32_t window_size_left,
-                                            int32_t window_size_right,
-                                            const torch::Tensor& cu_seqlens_q,
-                                            const torch::Tensor& seqused_k,
-                                            torch::ScalarType kv_dtype = torch::kBFloat16);
+torch::Tensor fa3_decode_scheduler_metadata(
+    const torch::Device& device,
+    int32_t batch_size,
+    int32_t num_heads_q,
+    int32_t num_heads_kv,
+    int32_t head_dim_qk,
+    int32_t head_dim_vo,
+    int32_t max_seqlen_q,
+    int32_t max_seqlen_k,
+    int32_t window_size_left,
+    int32_t window_size_right,
+    const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& seqused_k,
+    torch::ScalarType kv_dtype = torch::kBFloat16);
 
-void fa3_decode_scheduler_metadata(const torch::Device& device,
-                                   int32_t batch_size,
-                                   int32_t num_heads_q,
-                                   int32_t num_heads_kv,
-                                   int32_t head_dim_qk,
-                                   int32_t head_dim_vo,
-                                   int32_t max_seqlen_q,
-                                   int32_t max_seqlen_k,
-                                   int32_t window_size_left,
-                                   int32_t window_size_right,
-                                   const torch::Tensor& cu_seqlens_q,
-                                   const torch::Tensor& seqused_k,
-                                   int64_t num_splits,
-                                   torch::Tensor& metadata,
-                                   torch::ScalarType kv_dtype = torch::kBFloat16);
+void fa3_decode_scheduler_metadata(
+    const torch::Device& device,
+    int32_t batch_size,
+    int32_t num_heads_q,
+    int32_t num_heads_kv,
+    int32_t head_dim_qk,
+    int32_t head_dim_vo,
+    int32_t max_seqlen_q,
+    int32_t max_seqlen_k,
+    int32_t window_size_left,
+    int32_t window_size_right,
+    const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& seqused_k,
+    int64_t num_splits,
+    torch::Tensor& metadata,
+    torch::ScalarType kv_dtype = torch::kBFloat16);
 
 void gemma_rms_norm(torch::Tensor output,
                     torch::Tensor input,
@@ -337,9 +343,8 @@ void rescore_top_logits(const torch::Tensor& input,
 // returns the first one, which muDNN does not guarantee.
 bool row_argmax_supported(const torch::Tensor& input);
 
-torch::Tensor row_argmax(
-    const torch::Tensor& input,
-    const torch::Tensor& column_ids = torch::Tensor());
+torch::Tensor row_argmax(const torch::Tensor& input,
+                         const torch::Tensor& column_ids = torch::Tensor());
 
 void register_compact_vocab_column_ids(const torch::Tensor& compact_logits,
                                        const torch::Tensor& column_ids);

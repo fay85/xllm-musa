@@ -66,7 +66,7 @@ torch::Tensor fa3_kernel_query(const torch::Tensor& query,
   CHECK_EQ(query.scalar_type(), torch::kBFloat16)
       << "FP8 KV FA3 quantizes a bf16 query";
   CHECK_EQ(gqa_ratio, 6) << "FP8 KV FA3 kernels are built for GQA 6 head 256";
-  return query.contiguous().to(torch::kFloat8_e4m3fn);
+  return query_cast_fp8_e4m3(query);
 }
 constexpr int64_t kFa3PageSize = 64;
 // Metadata and forward must use the same split policy. Zero lets both invoke
@@ -101,7 +101,9 @@ constexpr const char* kFa3FwdCombine32Uri =
 constexpr const char* kFa3FwdCombine64Uri =
     "fmha_fwd_combine_bf16_16x64x64_ragged_q_metadata";
 
-// Dense ragged FA3 prefill. GQA6 is a Mate 0.2.7 head-256 kernel: TileHeadDim 128, stages 2, tile 32. GQA 2/4/7 are Mate 0.2.7 head-128 stage 2. GQA 8 prefill is head-256 TileHeadDim 128.
+// Dense ragged FA3 prefill. GQA6 is a Mate 0.2.7 head-256 kernel: TileHeadDim
+// 128, stages 2, tile 32. GQA 2/4/7 are Mate 0.2.7 head-128 stage 2. GQA 8
+// prefill is head-256 TileHeadDim 128.
 constexpr const char* kFa3PrefillFwdUriHashGqa6 =
     "639113a0bd9f58a20ca13cdc5b37f65cfe8d2b6cba2296105219fd8299cad5bd";
 constexpr const char* kFa3PrefillFwdUriHashGqa2 =
@@ -158,8 +160,7 @@ bool use_fa3_paged_prefill_kernel(int64_t gqa_ratio, int32_t batch_size) {
   static const bool available =
       fa3_module_available(kFa3PagedPrefillFwdUriGqa6) &&
       fa3_module_available(kFa3PagedPrefillMetadataUriGqa6);
-  return available && gqa_ratio == 6 &&
-         fa3_metadata_num_warps(batch_size) == 1;
+  return available && gqa_ratio == 6 && fa3_metadata_num_warps(batch_size) == 1;
 }
 
 int64_t fa3_metadata_numel(int32_t batch_size) {
@@ -169,8 +170,8 @@ int64_t fa3_metadata_numel(int32_t batch_size) {
 }
 
 std::string fa3_metadata_uri(int64_t gqa_ratio,
-                            int32_t batch_size,
-                            torch::ScalarType kv_dtype = torch::kBFloat16) {
+                             int32_t batch_size,
+                             torch::ScalarType kv_dtype = torch::kBFloat16) {
   CHECK(gqa_ratio == 2 || gqa_ratio == 4 || gqa_ratio == 6 || gqa_ratio == 7 ||
         gqa_ratio == 8)
       << "MUSA FA3 metadata supports GQA ratios 2, 4, 6, 7, and 8, got "
@@ -411,45 +412,45 @@ void fa3_decode_scheduler_metadata(const torch::Device& device,
           : (gqa_ratio == 6 ? fa3_gqa6_num_splits(batch_size, max_seqlen_k)
                             : static_cast<int64_t>(0));
 
-  get_function(uri, uri)(static_cast<int64_t>(batch_size),
-                         static_cast<int64_t>(num_heads_q),
-                         static_cast<int64_t>(num_heads_kv),
-                         static_cast<int64_t>(head_dim_qk),
-                         static_cast<int64_t>(head_dim_vo),
-                         static_cast<int64_t>(max_seqlen_q),
-                         static_cast<int64_t>(max_seqlen_k),
-                         /*max_seqlen_k_new=*/static_cast<int64_t>(0),
-                         to_ffi_tensor(cu_seqlens_q),
-                         none_tensor(),
-                         none_tensor(),
-                         to_ffi_tensor(seqused_k),
-                         none_tensor(),
-                         static_cast<int64_t>(window_size_left),
-                         static_cast<int64_t>(window_size_right),
-                         none_tensor(),
-                         to_ffi_tensor(metadata),
-                         metadata_num_splits,
-                         static_cast<int64_t>(kFa3TileM),
-                         static_cast<int64_t>(fp8_kv ? kFa3Fp8TileN : kFa3TileN),
-                         /*mp_margin=*/static_cast<int64_t>(0));
+  get_function(uri, uri)(
+      static_cast<int64_t>(batch_size),
+      static_cast<int64_t>(num_heads_q),
+      static_cast<int64_t>(num_heads_kv),
+      static_cast<int64_t>(head_dim_qk),
+      static_cast<int64_t>(head_dim_vo),
+      static_cast<int64_t>(max_seqlen_q),
+      static_cast<int64_t>(max_seqlen_k),
+      /*max_seqlen_k_new=*/static_cast<int64_t>(0),
+      to_ffi_tensor(cu_seqlens_q),
+      none_tensor(),
+      none_tensor(),
+      to_ffi_tensor(seqused_k),
+      none_tensor(),
+      static_cast<int64_t>(window_size_left),
+      static_cast<int64_t>(window_size_right),
+      none_tensor(),
+      to_ffi_tensor(metadata),
+      metadata_num_splits,
+      static_cast<int64_t>(kFa3TileM),
+      static_cast<int64_t>(fp8_kv ? kFa3Fp8TileN : kFa3TileN),
+      /*mp_margin=*/static_cast<int64_t>(0));
 }
 
 // Keep the v0.11 caller ABI while routing it through the MATE 0.2.7
 // scheduler contract.  New callers can provide an explicit split policy.
-torch::Tensor fa3_decode_scheduler_metadata(
-    const torch::Device& device,
-    int32_t batch_size,
-    int32_t num_heads_q,
-    int32_t num_heads_kv,
-    int32_t head_dim_qk,
-    int32_t head_dim_vo,
-    int32_t max_seqlen_q,
-    int32_t max_seqlen_k,
-    int32_t window_size_left,
-    int32_t window_size_right,
-    const torch::Tensor& cu_seqlens_q,
-    const torch::Tensor& seqused_k,
-    torch::ScalarType kv_dtype) {
+torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
+                                            int32_t batch_size,
+                                            int32_t num_heads_q,
+                                            int32_t num_heads_kv,
+                                            int32_t head_dim_qk,
+                                            int32_t head_dim_vo,
+                                            int32_t max_seqlen_q,
+                                            int32_t max_seqlen_k,
+                                            int32_t window_size_left,
+                                            int32_t window_size_right,
+                                            const torch::Tensor& cu_seqlens_q,
+                                            const torch::Tensor& seqused_k,
+                                            torch::ScalarType kv_dtype) {
   return fa3_decode_scheduler_metadata(device,
                                        batch_size,
                                        num_heads_q,
@@ -510,8 +511,8 @@ void fa3_decode(const torch::Tensor& query,
   const bool fp8_kv = fa3_is_fp8_kv(k_cache.scalar_type());
   torch::Tensor query_kernel =
       fa3_kernel_query(query, k_cache, v_cache, gqa_ratio);
-  const std::string uri = fp8_kv ? std::string(kFa3Fp8DecodeFwdUriGqa6)
-                                 : fa3_fwd_uri(gqa_ratio);
+  const std::string uri =
+      fp8_kv ? std::string(kFa3Fp8DecodeFwdUriGqa6) : fa3_fwd_uri(gqa_ratio);
   TvmffiStreamGuard stream_guard(query.device());
 
   auto fwd_result =
@@ -799,10 +800,13 @@ void fa3_prefill_paged(const torch::Tensor& query,
       << "fa3_prefill_paged: deployed FA3 artifacts require page size 64";
   CHECK_EQ(output.scalar_type(), torch::kBFloat16);
   CHECK_EQ(output_lse.scalar_type(), torch::kFloat32);
-  CHECK(query.is_contiguous() && k_cache.is_contiguous() &&
+  const bool fp8_kv = fa3_is_fp8_kv(k_cache.scalar_type());
+  // FP8 conversion reads projection strides and creates the contiguous raw
+  // kernel input. The BF16 attention path still requires contiguous Q.
+  CHECK((fp8_kv || query.is_contiguous()) && k_cache.is_contiguous() &&
         v_cache.is_contiguous() && output.is_contiguous() &&
         output_lse.is_contiguous())
-      << "fa3_prefill_paged: tensors must be contiguous";
+      << "fa3_prefill_paged: unsupported tensor layout";
   CHECK(cu_seqlens_q.is_contiguous() && cu_seqlens_k_new.is_contiguous() &&
         seqused_k.is_contiguous() && page_table.is_contiguous() &&
         scheduler_metadata.is_contiguous())
@@ -826,17 +830,19 @@ void fa3_prefill_paged(const torch::Tensor& query,
   CHECK_EQ(scheduler_metadata.numel(), fa3_metadata_numel(batch_size));
   CHECK_GT(max_seqlen_q, 0);
 
-  const bool fp8_kv = fa3_is_fp8_kv(k_cache.scalar_type());
   const bool paged_prefill_kernel =
       use_fa3_paged_prefill_kernel(gqa_ratio, batch_size) ||
       (fp8_kv && gqa_ratio == 6 && fa3_metadata_num_warps(batch_size) == 1);
   torch::Tensor query_kernel =
       fa3_kernel_query(query, k_cache, v_cache, gqa_ratio);
+  CHECK(query_kernel.is_contiguous())
+      << "fa3_prefill_paged: converted query must be contiguous";
   const std::string uri =
-      fp8_kv ? (paged_prefill_kernel ? std::string(kFa3Fp8PagedPrefillFwdUriGqa6)
-                                     : std::string(kFa3Fp8DecodeFwdUriGqa6))
-             : (paged_prefill_kernel ? std::string(kFa3PagedPrefillFwdUriGqa6)
-                                     : fa3_fwd_uri(gqa_ratio));
+      fp8_kv
+          ? (paged_prefill_kernel ? std::string(kFa3Fp8PagedPrefillFwdUriGqa6)
+                                  : std::string(kFa3Fp8DecodeFwdUriGqa6))
+          : (paged_prefill_kernel ? std::string(kFa3PagedPrefillFwdUriGqa6)
+                                  : fa3_fwd_uri(gqa_ratio));
   TvmffiStreamGuard stream_guard(query.device());
 
   auto fwd_result =
