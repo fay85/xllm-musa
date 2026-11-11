@@ -15,18 +15,18 @@ limitations under the License.
 
 #include <c10/cuda/CUDAStream.h>
 
-#include "cuda_ops_api.h"
-#include "device_utils.cuh"
+#include "core/kernels/cuda/cuda_ops_api.h"
+#include "core/kernels/cuda/device_utils.cuh"
 
 namespace xllm::kernel::cuda {
 
-template <typename T>
+template <typename SourceT, typename CacheT = SourceT>
 __global__ void XLLM_KERNEL_ATTR(1024) reshape_paged_cache_kernel(
-    const int* __restrict__ slot_ids,  // [n_tokens]
-    const T* __restrict__ keys,        // [n_tokens, n_heads, head_dim]
-    const T* __restrict__ values,      // [n_tokens, n_heads, head_dim]
-    T* __restrict__ key_cache,
-    T* __restrict__ value_cache,
+    const int* __restrict__ slot_ids,    // [n_tokens]
+    const SourceT* __restrict__ keys,    // [n_tokens, n_heads, head_dim]
+    const SourceT* __restrict__ values,  // [n_tokens, n_heads, head_dim]
+    CacheT* __restrict__ key_cache,
+    CacheT* __restrict__ value_cache,
     int64_t k_stride,
     int64_t v_stride,
     int64_t n_kv_heads,
@@ -57,8 +57,8 @@ __global__ void XLLM_KERNEL_ATTR(1024) reshape_paged_cache_kernel(
     // which dim within head to write to
     const int head_offset = i % head_dim;
     const int64_t dst_idx = head_base_idx + head_idx * head_dim + head_offset;
-    key_cache[dst_idx] = keys[k_src_idx];
-    value_cache[dst_idx] = values[v_src_idx];
+    key_cache[dst_idx] = static_cast<CacheT>(keys[k_src_idx]);
+    value_cache[dst_idx] = static_cast<CacheT>(values[v_src_idx]);
   }
 }
 
@@ -75,45 +75,86 @@ void reshape_paged_cache(
   const int64_t n_kv_heads = keys.size(-2);
   const int64_t head_dim = keys.size(-1);
   const int64_t block_size = key_cache.size(-3);
-  if (key_cache.scalar_type() != keys.scalar_type() ||
-      value_cache.scalar_type() != values.scalar_type()) {
+  CHECK_EQ(keys.scalar_type(), values.scalar_type());
+  CHECK_EQ(key_cache.scalar_type(), value_cache.scalar_type());
+  const bool convert_to_fp8 = key_cache.scalar_type() != keys.scalar_type();
+  if (convert_to_fp8) {
     CHECK(key_cache.scalar_type() == torch::kFloat8_e4m3fn ||
           key_cache.scalar_type() == torch::kFloat8_e5m2)
         << "paged cache dtype conversion only supports FP8 storage";
-    CHECK_EQ(value_cache.scalar_type(), key_cache.scalar_type());
-    keys = keys.to(key_cache.scalar_type());
-    values = values.to(value_cache.scalar_type());
   }
-  // Recompute after a possible FP8 cast. .to() may repack the tensor.
+  // Keep source strides: projection views can interleave K/V with Q and gates.
+  // The scatter converts directly into cache storage without temporary tensors.
   const int64_t k_stride = keys.stride(-3);
   const int64_t v_stride = values.stride(-3);
   const int64_t n = n_kv_heads * head_dim;
   dim3 grid(n_tokens);
   dim3 block(std::min<int>(n, 1024));
-#define DISPATCH_PAGED_CACHE_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH( \
-      TYPE, \
-      NAME, \
-      AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
-      AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
-      AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
-      AT_DISPATCH_CASE(at::ScalarType::Float8_e4m3fn, __VA_ARGS__) \
-      AT_DISPATCH_CASE(at::ScalarType::Float8_e5m2, __VA_ARGS__))
-  DISPATCH_PAGED_CACHE_TYPES(
-      keys.scalar_type(), "reshape_paged_cache_kernel", [&] {
-        reshape_paged_cache_kernel<scalar_t>
-            <<<grid, block, 0, c10::cuda::getCurrentCUDAStream()>>>(
-                slot_ids.data_ptr<int>(),
-                keys.data_ptr<scalar_t>(),
-                values.data_ptr<scalar_t>(),
-                key_cache.data_ptr<scalar_t>(),
-                value_cache.data_ptr<scalar_t>(),
-                k_stride,
-                v_stride,
-                n_kv_heads,
-                head_dim,
-                block_size);
-      });
+#define DISPATCH_PAGED_CACHE_TYPES(TYPE, NAME, ...)                          \
+  AT_DISPATCH_SWITCH(                                                        \
+      TYPE,                                                                  \
+      NAME,                                                                  \
+      AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) AT_DISPATCH_CASE( \
+          at::ScalarType::Half, __VA_ARGS__)                                 \
+          AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)            \
+              AT_DISPATCH_CASE(at::ScalarType::Float8_e4m3fn, __VA_ARGS__)   \
+                  AT_DISPATCH_CASE(at::ScalarType::Float8_e5m2, __VA_ARGS__))
+  if (convert_to_fp8) {
+    AT_DISPATCH_SWITCH(
+        key_cache.scalar_type(),
+        "reshape_paged_cache_fp8",
+        AT_DISPATCH_CASE(torch::kFloat8_e4m3fn, [&] {
+          using CacheT = scalar_t;
+          DISPATCH_PAGED_CACHE_TYPES(
+              keys.scalar_type(), "reshape_paged_cache_fp8_input", [&] {
+                reshape_paged_cache_kernel<scalar_t, CacheT>
+                    <<<grid, block, 0, c10::cuda::getCurrentCUDAStream()>>>(
+                        slot_ids.data_ptr<int>(),
+                        keys.data_ptr<scalar_t>(),
+                        values.data_ptr<scalar_t>(),
+                        key_cache.data_ptr<CacheT>(),
+                        value_cache.data_ptr<CacheT>(),
+                        k_stride,
+                        v_stride,
+                        n_kv_heads,
+                        head_dim,
+                        block_size);
+              });
+        }) AT_DISPATCH_CASE(torch::kFloat8_e5m2, [&] {
+          using CacheT = scalar_t;
+          DISPATCH_PAGED_CACHE_TYPES(
+              keys.scalar_type(), "reshape_paged_cache_fp8_input", [&] {
+                reshape_paged_cache_kernel<scalar_t, CacheT>
+                    <<<grid, block, 0, c10::cuda::getCurrentCUDAStream()>>>(
+                        slot_ids.data_ptr<int>(),
+                        keys.data_ptr<scalar_t>(),
+                        values.data_ptr<scalar_t>(),
+                        key_cache.data_ptr<CacheT>(),
+                        value_cache.data_ptr<CacheT>(),
+                        k_stride,
+                        v_stride,
+                        n_kv_heads,
+                        head_dim,
+                        block_size);
+              });
+        }));
+  } else {
+    DISPATCH_PAGED_CACHE_TYPES(
+        keys.scalar_type(), "reshape_paged_cache_kernel", [&] {
+          reshape_paged_cache_kernel<scalar_t>
+              <<<grid, block, 0, c10::cuda::getCurrentCUDAStream()>>>(
+                  slot_ids.data_ptr<int>(),
+                  keys.data_ptr<scalar_t>(),
+                  values.data_ptr<scalar_t>(),
+                  key_cache.data_ptr<scalar_t>(),
+                  value_cache.data_ptr<scalar_t>(),
+                  k_stride,
+                  v_stride,
+                  n_kv_heads,
+                  head_dim,
+                  block_size);
+        });
+  }
 #undef DISPATCH_PAGED_CACHE_TYPES
 }
 
