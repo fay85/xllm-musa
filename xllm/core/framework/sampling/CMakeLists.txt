@@ -4,6 +4,7 @@ cc_library(
   NAME
     xgrammar_constraint
   HDRS
+    fnv1a.h
     xgrammar_constraint.h
   SRCS
     xgrammar_constraint.cpp
@@ -17,6 +18,7 @@ cc_library(
   NAME
     json_object_grammar
   HDRS
+    fnv1a.h
     json_object_grammar.h
   SRCS
     json_object_grammar.cpp

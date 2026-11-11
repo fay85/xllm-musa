@@ -74,6 +74,7 @@ cc_library(
     priority_comparator.cpp
   DEPS
     :config
+    :constraint
     :request_timing
     :kv_cache
     :block_hasher

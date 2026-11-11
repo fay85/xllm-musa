@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://www.apache.org/licenses/LICENSE-2.0
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,13 +24,13 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "core/framework/sampling/json_object_grammar.h"
+#include "core/framework/constraint/state_machine.h"
 
 namespace xllm::detail {
 
 struct JsonDraftValidationScratch final {
   // State after each draft step, indexed [draft_step][sequence].
-  std::vector<std::vector<JsonObjectGrammarState>> states_after;
+  std::vector<std::vector<ConstraintState>> states_after;
   // Invalid suffix flags in [draft_step][sequence] order.
   std::vector<uint8_t> invalid_draft_step_major;
 };
@@ -57,8 +57,8 @@ inline std::vector<int32_t> copy_json_draft_token_ids(const int64_t* token_ids,
   return result;
 }
 
-inline bool append_json_draft_step(
-    std::vector<JsonObjectGrammarState>& current_states,
+inline bool advance_json_draft_step(
+    std::vector<ConstraintState>& current_states,
     std::vector<uint8_t>& invalid_suffix,
     const std::vector<int32_t>& token_ids,
     JsonDraftValidationScratch& scratch) {
@@ -67,15 +67,26 @@ inline bool append_json_draft_step(
   CHECK_EQ(invalid_suffix.size(), current_states.size())
       << "JSON invalid suffix count must match grammar state count";
 
-  std::vector<JsonObjectGrammarState> next_states = current_states;
+  // Draft rows diverge from the live states only when they actually advance:
+  // start from cheap handle copies (shared payloads) and fork lazily for the
+  // rows that pass the validity and can_accept gates. Forking copies the
+  // matcher and the committed history per row per step, which would dominate
+  // the MTP draft loop once rows are frozen or rejected.
+  std::vector<ConstraintState> next_states;
+  next_states.reserve(current_states.size());
+  for (const ConstraintState& state : current_states) {
+    next_states.push_back(state);
+  }
   bool halt_json_draft = false;
   for (size_t state_idx = 0; state_idx < next_states.size(); ++state_idx) {
-    const JsonObjectGrammarState& state = current_states[state_idx];
+    const ConstraintState& state = current_states[state_idx];
     bool invalid = invalid_suffix[state_idx] != 0;
     if (!invalid && state.initialized()) {
-      invalid = !state.can_accept_token(token_ids[state_idx]);
+      invalid = !state.can_accept(token_ids[state_idx]);
       if (!invalid) {
-        CHECK(next_states[state_idx].accept_token(token_ids[state_idx]));
+        next_states[state_idx] = state.fork();
+        CHECK(next_states[state_idx].advance(token_ids[state_idx],
+                                             HaltPolicy::RESPECT));
       } else {
         halt_json_draft = true;
       }
@@ -83,13 +94,15 @@ inline bool append_json_draft_step(
     invalid_suffix[state_idx] = static_cast<uint8_t>(invalid);
     scratch.invalid_draft_step_major.push_back(static_cast<uint8_t>(invalid));
   }
+  // The scratch entry shares the (immutable) payloads with the next-step
+  // current states; divergence happens on the next fork.
   scratch.states_after.push_back(next_states);
   current_states = std::move(next_states);
   return halt_json_draft;
 }
 
-inline std::vector<JsonObjectGrammarState> build_json_validation_states(
-    const std::vector<JsonObjectGrammarState>& initial_states,
+inline std::vector<ConstraintState> build_json_validation_states(
+    const std::vector<ConstraintState>& initial_states,
     const JsonDraftValidationScratch& scratch,
     std::vector<uint8_t>& invalid_draft) {
   CHECK(!scratch.states_after.empty())
@@ -104,7 +117,7 @@ inline std::vector<JsonObjectGrammarState> build_json_validation_states(
            num_sequences * num_draft_steps)
       << "JSON invalid draft flags must cover every draft row";
 
-  std::vector<JsonObjectGrammarState> validation_states;
+  std::vector<ConstraintState> validation_states;
   validation_states.reserve(num_sequences * (num_draft_steps + 1));
   invalid_draft.clear();
   invalid_draft.reserve(num_sequences * num_draft_steps);
@@ -122,9 +135,8 @@ inline std::vector<JsonObjectGrammarState> build_json_validation_states(
   return validation_states;
 }
 
-inline std::vector<JsonAcceptedTokenMismatch>
-find_json_accepted_token_mismatches(
-    const std::vector<JsonObjectGrammarState>& initial_states,
+inline std::vector<JsonAcceptedTokenMismatch> verify_json_accepted_rows(
+    const std::vector<ConstraintState>& initial_states,
     const int64_t* accepted_tokens,
     size_t num_rows,
     size_t row_width) {
@@ -136,7 +148,10 @@ find_json_accepted_token_mismatches(
   std::vector<JsonAcceptedTokenMismatch> mismatches;
   mismatches.reserve(num_rows);
   for (size_t sequence_index = 0; sequence_index < num_rows; ++sequence_index) {
-    JsonObjectGrammarState state = initial_states[sequence_index];
+    // Verification advances a private fork, never the live state.
+    ConstraintState state = initial_states[sequence_index].initialized()
+                                ? initial_states[sequence_index].fork()
+                                : ConstraintState();
     if (!state.initialized()) {
       continue;
     }
@@ -152,8 +167,8 @@ find_json_accepted_token_mismatches(
                static_cast<int64_t>(std::numeric_limits<int32_t>::max()))
           << "JSON accepted output token id exceeds int32 range";
       const int32_t token_id = static_cast<int32_t>(raw_token_id);
-      if (!state.can_accept_token(token_id)) {
-        const JsonObjectGrammarSnapshot snapshot = state.snapshot();
+      if (!state.can_accept(token_id)) {
+        const ConstraintSnapshot snapshot = state.snapshot();
         mismatches.push_back({sequence_index,
                               token_offset,
                               token_id,
@@ -161,7 +176,7 @@ find_json_accepted_token_mismatches(
                               state.fingerprint()});
         break;
       }
-      CHECK(state.accept_token(token_id));
+      CHECK(state.advance(token_id, HaltPolicy::RESPECT));
     }
   }
   return mismatches;

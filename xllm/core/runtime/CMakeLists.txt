@@ -120,6 +120,7 @@ cc_library(
     :model_context
     :request
     :speculative
+    :constraint
     :encoder_cache
     :multimodal
     :state_dict

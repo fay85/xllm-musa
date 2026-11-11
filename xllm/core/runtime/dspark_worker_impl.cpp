@@ -175,8 +175,13 @@ DSparkWorkerImpl::DraftBlock DSparkWorkerImpl::execute_draft_query(
     draft_impl_->prepare_work_before_execute_on_stream(
         query_input, processed_input, *prepare_stream_);
   }
+  // Take the draft sampling params before any move: clear the sequence-level
+  // constraint mask from input.sampling_params (it does not model the expanded
+  // draft positions) while keeping every other setting.
+  const SamplingParameters query_sampling_params =
+      dflash_detail::make_draft_sampling_params(input.sampling_params);
   ModelSamplingInput sampling;
-  sampling.parameters = input.sampling_params;
+  sampling.parameters = query_sampling_params;
   if (draft_sampling_mode_ == DraftSamplingMode::GREEDY) {
     force_greedy_draft_sampling(sampling.parameters);
   }
@@ -227,23 +232,35 @@ DSparkWorkerImpl::DraftBlock DSparkWorkerImpl::execute_draft_query(
       }
     }
 
+    // H2D the sampling params on prepare_stream_ (overlapping the draft
+    // forward), then record an event so compute_stream_ only consumes the
+    // converted params after the H2D completes.
+    SamplingParameters sampling_params_on_device;
+    StreamEventPtr sampling_params_ready;
+    {
+      c10::StreamGuard prepare_guard = prepare_stream_->set_stream_guard();
+      sampling_params_on_device =
+          query_sampling_params.to(draft_impl_->device(), torch::kFloat32);
+      sampling_params_ready = prepare_stream_->record_event();
+      CHECK(sampling_params_ready != nullptr);
+    }
+
     BlockSample sampled = [&]() {
       c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+      // Wait for the prepare_stream_ H2D before consuming the params.
+      CHECK(compute_stream_->wait_event(sampling_params_ready));
       torch::Tensor anchor_token_ids =
           processed_input.token_ids.view({batch_size, num_speculative_tokens})
               .select(1, 0)
               .to(device_, torch::kLong);
-      SamplingParameters sampling_params_on_device =
-          prepared ? input.sampling_params
-                   : input.sampling_params.to(base_logits.device(),
-                                              base_logits.scalar_type());
+      // The params are already on device; only re-type (device-to-device).
+      SamplingParameters typed_params = sampling_params_on_device.to(
+          base_logits.device(), base_logits.scalar_type());
       if (draft_sampling_mode_ == DraftSamplingMode::GREEDY) {
-        force_greedy_draft_sampling(sampling_params_on_device);
+        force_greedy_draft_sampling(typed_params);
       }
-      return sample_block(base_logits,
-                          last_hidden,
-                          anchor_token_ids,
-                          sampling_params_on_device);
+      return sample_block(
+          base_logits, last_hidden, anchor_token_ids, typed_params);
     }();
     draft_block.proposal = std::move(sampled.proposal);
     draft_block.confidence_probs = std::move(sampled.confidence_probs);
@@ -513,7 +530,7 @@ void DSparkWorkerImpl::finalize_validate_output_async(
     // host. The context KV write can finish independently through
     // context_ready.
     CHECK(pending.d2h_ready->synchronize());
-    check_json_accepted_tokens(
+    verify_json_accepted_tokens(
         input,
         pending.accepted_host.to(torch::kInt64).contiguous(),
         target_output);

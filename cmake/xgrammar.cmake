@@ -4,6 +4,10 @@
 # The pinned upstream config enables Python bindings. Define only its CPU
 # target here, preserving xLLM's compiler and ABI options.
 set(XGRAMMAR_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../third_party/xgrammar")
+# dlpack is a header-only dependency of xgrammar. It is hosted as an xllm-level
+# submodule (git forbids nesting a gitlink inside the xgrammar gitlink) and is
+# pinned to the same commit (v1.0) that xgrammar's own 3rdparty/dlpack records.
+set(DLPACK_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../third_party/dlpack")
 
 file(GLOB_RECURSE XGRAMMAR_CPU_SOURCES CONFIGURE_DEPENDS
   "${XGRAMMAR_SOURCE_DIR}/cpp/*.cc")
@@ -12,7 +16,7 @@ add_library(xgrammar STATIC ${XGRAMMAR_CPU_SOURCES})
 target_include_directories(xgrammar PUBLIC "${XGRAMMAR_SOURCE_DIR}/include")
 target_include_directories(xgrammar SYSTEM PUBLIC
   "${XGRAMMAR_SOURCE_DIR}/3rdparty/picojson"
-  "${XGRAMMAR_SOURCE_DIR}/3rdparty/dlpack/include")
+  "${DLPACK_SOURCE_DIR}/include")
 target_compile_features(xgrammar PUBLIC cxx_std_17)
 target_compile_definitions(xgrammar PRIVATE
   XGRAMMAR_ENABLE_CPPTRACE=0

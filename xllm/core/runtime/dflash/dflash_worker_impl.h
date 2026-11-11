@@ -64,6 +64,19 @@ inline DSparkSasMode classify_dspark_sas_mode(const ModelArgs& draft_args,
                                             : DSparkSasMode::COMPATIBILITY;
 }
 
+// Draft sampling params: clear the sequence-level constraint masks (drafts
+// sample unconstrained; the per-position verify rows enforce the grammar)
+// while keeping every other sampling setting (do_sample, penalties, greedy)
+// intact. Do NOT reuse prepare_query_inputs' params - those also force greedy
+// and repeat the parameter rows for the expanded draft positions.
+inline SamplingParameters make_draft_sampling_params(
+    const SamplingParameters& params) {
+  SamplingParameters out = params;
+  out.filter_bitmask = torch::Tensor();
+  out.filter_mask = torch::Tensor();
+  return out;
+}
+
 }  // namespace dflash_detail
 
 // DFlash2 proposal attention follows the prelaunch gate: A3, Python, CP 1,
@@ -288,9 +301,9 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
   // records json_object_errors for sequences whose accepted tokens violate
   // the grammar. Defense in depth on top of the per-position masks.
   // `accepted_tokens_cpu` is [batch, num_val_tokens] with -1 padding.
-  void check_json_accepted_tokens(const ForwardInput& input,
-                                  const torch::Tensor& accepted_tokens_cpu,
-                                  ForwardOutput& output);
+  void verify_json_accepted_tokens(const ForwardInput& input,
+                                   const torch::Tensor& accepted_tokens_cpu,
+                                   ForwardOutput& output);
 
   int32_t mask_token_id_ = -1;
   int64_t expected_context_hidden_size_ = 0;

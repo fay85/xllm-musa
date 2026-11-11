@@ -1243,7 +1243,7 @@ bool MTPWorkerImpl::requires_full_target_replay() const {
 ForwardInput
 MTPWorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
     ForwardInput& inputs) {
-  update_json_object_states_by_last_step_output(inputs);
+  advance_json_object_states(inputs);
   sanitize_json_object_error_inputs(inputs);
   return update_input_by_last_step_output(inputs);
 }
@@ -1941,11 +1941,11 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
             static_cast<int32_t>(draft_tokens[token_idx].item<int64_t>()));
       }
 #endif
-      halt_json_draft =
-          detail::append_json_draft_step(current_draft_input.json_object_states,
-                                         json_invalid_suffix,
-                                         draft_token_ids,
-                                         json_scratch);
+      halt_json_draft = detail::advance_json_draft_step(
+          current_draft_input.json_object_states,
+          json_invalid_suffix,
+          draft_token_ids,
+          json_scratch);
     }
     if (draft_idx == num_speculative_tokens - 1) {
       continue;
@@ -1953,7 +1953,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
 
     const SampleOutput& last_output = draft_outputs.back().sample_output;
     check_draft_input_embedding(last_output.embeddings, "decode");
-    std::vector<JsonObjectGrammarState> previous_draft_states =
+    std::vector<ConstraintState> previous_draft_states =
         std::move(current_draft_input.json_object_states);
     current_draft_input = next_step_input;
     current_draft_input.json_object_states = std::move(previous_draft_states);
@@ -1979,7 +1979,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
           rejected_output.sample_output.next_tokens = torch::full_like(
               rejected_output.sample_output.next_tokens, /*fill_value=*/-1);
           draft_outputs.push_back(std::move(rejected_output));
-          detail::append_json_draft_step(
+          detail::advance_json_draft_step(
               current_draft_input.json_object_states,
               json_invalid_suffix,
               std::vector<int32_t>(
@@ -1988,10 +1988,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
         }
         break;
       }
-      set_filter_bitmask(current_draft_input.sampling_params,
-                         current_draft_input.json_object_states,
-                         device_,
-                         JsonObjectMaskBuildPhase::DRAFT);
+      install_filter_bitmask(current_draft_input.sampling_params,
+                            current_draft_input.json_object_states,
+                            device_,
+                            JsonObjectMaskBuildPhase::DRAFT);
     }
     record_current_metadata_ready_event(current_draft_input, *compute_stream_);
   }
@@ -2043,10 +2043,10 @@ void MTPWorkerImpl::fill_validate_input_from_draft_outputs(
         input.json_object_states,
         *json_scratch,
         validate_input.json_object_invalid_draft);
-    set_filter_bitmask(validate_input.sampling_params,
-                       validate_input.json_object_states,
-                       device_,
-                       JsonObjectMaskBuildPhase::TARGET);
+    install_filter_bitmask(validate_input.sampling_params,
+                          validate_input.json_object_states,
+                          device_,
+                          JsonObjectMaskBuildPhase::TARGET);
   }
 
   validate_input.device_tensors_ready = false;
@@ -2513,7 +2513,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
     const torch::Tensor accepted_tokens =
         accepted_tokens_host.to(torch::kInt64).contiguous();
     const std::vector<detail::JsonAcceptedTokenMismatch> mismatches =
-        detail::find_json_accepted_token_mismatches(
+        detail::verify_json_accepted_rows(
             input.json_object_states,
             accepted_tokens.const_data_ptr<int64_t>(),
             static_cast<size_t>(accepted_tokens.size(0)),
@@ -2634,7 +2634,7 @@ void MTPWorkerImpl::stage_target_context_write(
   pending_target_context_.json_constrained_rows.clear();
   pending_target_context_.json_constrained_rows.reserve(
       input.json_object_states.size());
-  for (const JsonObjectGrammarState& state : input.json_object_states) {
+  for (const ConstraintState& state : input.json_object_states) {
     pending_target_context_.json_constrained_rows.emplace_back(
         state.initialized() ? 1U : 0U);
   }

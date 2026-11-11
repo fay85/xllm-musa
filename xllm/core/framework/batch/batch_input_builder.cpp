@@ -31,6 +31,7 @@ limitations under the License.
 #include "common/global_flags.h"
 #include "common/metrics.h"
 #include "core/framework/block/block.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/scheduler_config.h"
@@ -1139,9 +1140,7 @@ void BatchInputBuilder::handle_sampling_parameters(Sequence* sequence,
     state.xgrammar_states.emplace_back(sequence->xgrammar_state());
   }
   if (enable_json_object_output_) {
-    const JsonObjectGrammarState* json_state = sequence->json_object_state();
-    state.json_object_states.push_back(
-        json_state == nullptr ? JsonObjectGrammarState() : *json_state);
+    state.json_object_states.push_back(sequence->json_constraint_state());
     state.sample_sequence_ids.emplace_back(sequence->sample_sequence_id());
     const int32_t sampled_input_token = state.flatten_tokens_vec.back();
     state.sample_prior_output_rows.emplace_back(
@@ -1575,7 +1574,7 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
     CHECK_EQ(sample_prior_output_rows.size(),
              forward_input.json_object_states.size());
     if (state_.sample_idxes.size() != forward_input.json_object_states.size()) {
-      std::vector<JsonObjectGrammarState> sampled_states;
+      std::vector<ConstraintState> sampled_states;
       sampled_states.reserve(state_.sample_idxes.size());
       std::vector<std::string> sampled_sequence_ids;
       sampled_sequence_ids.reserve(state_.sample_idxes.size());
@@ -1594,15 +1593,13 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
       sample_sequence_ids = std::move(sampled_sequence_ids);
       sample_prior_output_rows = std::move(sampled_prior_output_rows);
     }
-    const bool has_json_object_state =
-        std::any_of(forward_input.json_object_states.begin(),
-                    forward_input.json_object_states.end(),
-                    [](const JsonObjectGrammarState& state) {
-                      return state.initialized();
-                    });
+    const bool has_json_object_state = std::any_of(
+        forward_input.json_object_states.begin(),
+        forward_input.json_object_states.end(),
+        [](const ConstraintState& state) { return state.initialized(); });
     if (has_json_object_state) {
-      set_filter_bitmask(forward_input.sampling_params,
-                         forward_input.json_object_states);
+      install_filter_bitmask(forward_input.sampling_params,
+                            forward_input.json_object_states);
       forward_input.sample_sequence_ids = std::move(sample_sequence_ids);
       forward_input.sample_prior_output_rows =
           std::move(sample_prior_output_rows);
@@ -1610,7 +1607,9 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
           forward_input.json_object_states.size());
       for (const auto& json_state : forward_input.json_object_states) {
         forward_input.json_object_state_snapshots.push_back(
-            json_state.snapshot());
+            json_state.initialized()
+                ? to_grammar_snapshot(json_state.snapshot())
+                : JsonObjectGrammarSnapshot());
       }
     } else {
       forward_input.json_object_states.clear();

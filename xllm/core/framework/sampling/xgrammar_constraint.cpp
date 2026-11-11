@@ -21,6 +21,9 @@ limitations under the License.
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <string_view>
+
+#include "core/framework/sampling/fnv1a.h"
 
 #if defined(USE_XGRAMMAR)
 #include <xgrammar/xgrammar.h>
@@ -35,6 +38,13 @@ namespace xllm {
 
 #if defined(USE_XGRAMMAR)
 namespace {
+// Multiplier for the state fingerprint's token-history mixing (a prime, so
+// the hash spreads well). Named per the project's constant rule.
+constexpr uint64_t kFingerprintMultiplier = 1000003ULL;
+// Salt mixed into the fingerprint of an invalid (halted) state, so an invalid
+// state never collides with a valid one. Named per the project's constant rule.
+constexpr uint64_t kInvalidStateSalt = 0x9e3779b97f4a7c15ULL;
+
 template <typename Compile>
 std::shared_ptr<const CompiledXGrammar> compile_grammar(Compile compile,
                                                         std::mutex& mutex,
@@ -88,15 +98,96 @@ std::shared_ptr<const CompiledXGrammar> XGrammarCompiler::compile_regex(
       [&] { return compiler_->CompileRegex(regex); }, mutex_, error);
 }
 
-XGrammarState::XGrammarState(const CompiledXGrammar& grammar)
+XGrammarState::XGrammarState(const CompiledXGrammar& grammar,
+                             uint64_t grammar_id)
     : matcher_(std::make_unique<xgrammar::GrammarMatcher>(grammar)),
-      vocab_size_(grammar.GetTokenizerInfo().GetVocabSize()) {}
+      vocab_size_(grammar.GetTokenizerInfo().GetVocabSize()),
+      // Content hash, not the object address: a grammar freed and recompiled
+      // at the same address must not collide, and a hash of the serialized
+      // grammar stays stable across the grammar's lifetime (and across
+      // processes once the fingerprint is persisted for PD spec transfer).
+      // The caller (machine/compiler) passes a cached id so the per-state
+      // construction on the draft hot path does not re-serialize the grammar.
+      grammar_id_(grammar_id != 0 ? grammar_id
+                                  : fnv1a(grammar.SerializeJSON())) {}
 
-bool XGrammarState::accept_token(int32_t token_id) {
-  return matcher_->AcceptToken(token_id);
+XGrammarState::XGrammarState(std::unique_ptr<xgrammar::GrammarMatcher> matcher,
+                             int64_t vocab_size)
+    : matcher_(std::move(matcher)), vocab_size_(vocab_size) {}
+
+XGrammarState XGrammarState::fork() const {
+  XGrammarState forked(
+      std::make_unique<xgrammar::GrammarMatcher>(matcher_->Fork()),
+      vocab_size_);
+  forked.grammar_id_ = grammar_id_;
+  forked.invalid_ = invalid_;
+  forked.accepted_tokens_ = accepted_tokens_;
+  return forked;
 }
 
-void XGrammarState::fill_next_token_bitmask(std::span<int32_t> words) {
+bool XGrammarState::accept_token(int32_t token_id) {
+  const bool accepted = matcher_->AcceptToken(token_id);
+  if (accepted) {
+    accepted_tokens_.push_back(token_id);
+  }
+  return accepted;
+}
+
+bool XGrammarState::can_accept(int32_t token_id) {
+  if (token_id < 0 || token_id >= vocab_size_) {
+    return false;
+  }
+  const size_t num_words = static_cast<size_t>((vocab_size_ + 31) / 32);
+  // Thread-local probe buffer: can_accept is logically read-only and runs per
+  // token, so the scratch is reused within a thread without allocation, while
+  // thread isolation keeps it from racing a concurrent allowed_bitmask.
+  // resize (not assign): the fill fully writes the row when it returns true,
+  // and is not read when false, so a same-size probe does no memset.
+  thread_local std::vector<int32_t> probe_bitmask;
+  probe_bitmask.resize(num_words);
+  if (!fill_next_token_bitmask(probe_bitmask)) {
+    return true;  // Unconstrained step: every token is allowed.
+  }
+  return (probe_bitmask[token_id >> 5] >> (token_id & 31)) & 1;
+}
+
+bool XGrammarState::is_completed() const { return matcher_->IsCompleted(); }
+
+std::vector<uint32_t> XGrammarState::allowed_bitmask() const {
+  const size_t num_words = static_cast<size_t>((vocab_size_ + 31) / 32);
+  // A frozen matcher rejects everything: the all-deny mask matches
+  // can_accept instead of the live fill.
+  if (!is_valid()) {
+    return std::vector<uint32_t>(num_words, 0);
+  }
+  // Logically read-only: the fill may refresh matcher caches, like the
+  // builtin grammar's cached-mask path.
+  std::vector<int32_t> words(num_words, 0);
+  // A false return means an unconstrained step (all tokens allowed); the
+  // zero-initialized buffer would otherwise read as all-deny.
+  if (!const_cast<XGrammarState*>(this)->fill_next_token_bitmask(words)) {
+    return std::vector<uint32_t>(num_words, ~uint32_t{0});
+  }
+  return std::vector<uint32_t>(words.begin(), words.end());
+}
+
+uint64_t XGrammarState::fingerprint() const {
+  // FSM-only fingerprint: hash the current allowed mask (a pure function of the
+  // matcher's FSM state), NOT the accepted-token history. Identical FSM states
+  // share the same allowed mask regardless of how many tokens were committed,
+  // so the fingerprint must not depend on the history.
+  uint64_t hash = grammar_id_;
+  const std::vector<uint32_t> mask = allowed_bitmask();
+  for (const uint32_t word : mask) {
+    hash = (hash ^ static_cast<uint64_t>(word)) * kFingerprintMultiplier;
+  }
+  // A frozen matcher is a distinct state: it rejects everything.
+  hash =
+      (hash ^ (invalid_ ? kInvalidStateSalt : 0ULL)) * kFingerprintMultiplier;
+  return hash;
+}
+
+bool XGrammarState::fill_next_token_bitmask(std::span<int32_t> words) {
   int64_t num_words = static_cast<int64_t>(words.size());
   DLTensor bitmask{};
   bitmask.data = words.data();
@@ -104,7 +195,7 @@ void XGrammarState::fill_next_token_bitmask(std::span<int32_t> words) {
   bitmask.ndim = 1;
   bitmask.dtype = {kDLInt, 32, 1};
   bitmask.shape = &num_words;
-  matcher_->FillNextTokenBitmask(&bitmask);
+  return matcher_->FillNextTokenBitmask(&bitmask);
 }
 #else
 XGrammarCompiler::XGrammarCompiler(const std::vector<std::string>&,
@@ -125,12 +216,21 @@ std::shared_ptr<const CompiledXGrammar> XGrammarCompiler::compile_regex(
     std::string& error) {
   return compile_json_schema({}, false, error);
 }
-XGrammarState::XGrammarState(const CompiledXGrammar&) {
+XGrammarState::XGrammarState(const CompiledXGrammar&, uint64_t) {
   LOG(FATAL) << "Cannot construct a matcher without XGrammar support";
 }
+XGrammarState XGrammarState::fork() const {
+  LOG(FATAL) << "Cannot fork a matcher without XGrammar support";
+}
+uint64_t XGrammarState::fingerprint() const { return 0; }
 bool XGrammarState::accept_token(int32_t) { return false; }
-void XGrammarState::fill_next_token_bitmask(std::span<int32_t>) {
+bool XGrammarState::can_accept(int32_t) { return false; }
+bool XGrammarState::is_completed() const { return false; }
+bool XGrammarState::fill_next_token_bitmask(std::span<int32_t>) {
   LOG(FATAL) << "Cannot construct a bitmask without XGrammar support";
+}
+std::vector<uint32_t> XGrammarState::allowed_bitmask() const {
+  LOG(FATAL) << "Cannot produce a bitmask without XGrammar support";
 }
 #endif
 
@@ -160,8 +260,13 @@ torch::Tensor build_xgrammar_filter_bitmask(
     }
     CHECK_EQ(states[row]->vocab_size(), vocab_size)
         << "mixed XGrammar vocabularies in one batch";
-    states[row]->fill_next_token_bitmask(
-        {row_data, static_cast<size_t>(num_words)});
+    if (!states[row]->fill_next_token_bitmask(
+            {row_data, static_cast<size_t>(num_words)})) {
+      // A false fill means an unconstrained step (every token allowed) and
+      // leaves the buffer untouched; the torch::empty row would otherwise
+      // read as uninitialized garbage. Fill all-allow.
+      std::fill_n(row_data, num_words, -1);
+    }
   }
   return bitmask;
 }

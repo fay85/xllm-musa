@@ -328,7 +328,7 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/npu_layers.links" "${{links}}")
             "cache_layout_builder_test",
             "adaptive_speculative_controller_test",
             "speculative_profile_registry_test",
-            "mtp_json_object_state_test",
+            "draft_validation_test",
             "eplb_options_test",
             "eplb_utils_test",
             "eplb_aggregator_test",

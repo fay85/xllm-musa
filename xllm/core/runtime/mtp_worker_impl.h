@@ -22,10 +22,10 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "core/framework/constraint/draft_validation.h"
 #include "core/framework/speculative/embedding_cache.h"
 #include "core/framework/speculative/mtp_async_state.h"
 #include "core/framework/speculative/mtp_execution_policy.h"
-#include "core/framework/speculative/mtp_json_object_state.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #include "runtime/draft_model_spec_worker_impl.h"
 

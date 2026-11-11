@@ -30,6 +30,7 @@ limitations under the License.
 #include "core/framework/chat_template/tool_call_arguments.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "framework/request/request_state.h"
 #include "framework/request/stopping_checker.h"
 #include "framework/tokenizer/tokenizer.h"
@@ -302,6 +303,8 @@ bool LLMRequestFactory::apply_json_object_grammar(
         sp.source_xservice_addr);
     return false;
   }
+  req_state.constraint_machine =
+      wrap_builtin_machine(req_state.json_object_grammar);
   req_state.json_reasoning_enabled = reasoning_enabled;
   return true;
 }

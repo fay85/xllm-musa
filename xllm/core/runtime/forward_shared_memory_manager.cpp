@@ -118,7 +118,7 @@ inline bool is_aligned_for_cuda_zero_copy(const void* ptr) {
 // v4: V4.1 request lookback ids precede extra_token_ids and engram_history.
 // v5: per-seq adapter_ids follows execution_batch.is_prefilling in the
 // descriptor section (multi-tenant LoRA routing).
-constexpr uint64_t kRawInputFormatTag = 0x584C4C4D00000005ULL;
+constexpr uint64_t kRawInputFormatTag = 0x584C4C4D00000006ULL;
 
 struct RawInputLayoutHeader final {
   uint64_t format_tag = kRawInputFormatTag;
@@ -692,6 +692,7 @@ void write_json_object_state_snapshots(
     write_data(cursor, snapshot.enabled);
     write_data(cursor, snapshot.reasoning_enabled);
     write_vector(cursor, snapshot.token_ids);
+    write_data(cursor, snapshot.invalid);
   }
 }
 
@@ -1664,6 +1665,7 @@ void read_json_object_state_snapshots(
     read_data(context, snapshot.enabled);
     read_data(context, snapshot.reasoning_enabled);
     read_vector(context, snapshot.token_ids);
+    read_data(context, snapshot.invalid);
   }
 }
 

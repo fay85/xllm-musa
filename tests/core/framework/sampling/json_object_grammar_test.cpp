@@ -23,7 +23,9 @@ limitations under the License.
 #include <vector>
 
 #include "core/common/metrics.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/tokenizer/tokenizer.h"
+#include "tests/core/framework/constraint/builtin_state_test_utils.h"
 
 namespace xllm {
 namespace {
@@ -82,6 +84,24 @@ JsonObjectGrammar make_grammar(bool add_model_only_token = false) {
   return JsonObjectGrammar(std::move(token_pieces),
                            {add_model_only_token ? 25 : 24});
 }
+
+namespace {
+std::vector<ConstraintState> wrap_states_for_bitmask(
+    const JsonObjectGrammar& grammar,
+    std::vector<JsonObjectGrammarState> states) {
+  auto machine = make_builtin_test_machine(grammar);
+  std::vector<ConstraintState> out;
+  out.reserve(states.size());
+  for (auto& st : states) {
+    if (st.initialized()) {
+      out.push_back(machine->restore(to_constraint_snapshot(st.snapshot())));
+    } else {
+      out.emplace_back();
+    }
+  }
+  return out;
+}
+}  // namespace
 
 TEST(JsonObjectGrammarTest, AcceptsNestedValuesAndEscapes) {
   JsonObjectGrammar grammar = make_grammar();
@@ -172,7 +192,7 @@ TEST(JsonObjectGrammarTest, SnapshotRestoresCommittedState) {
   EXPECT_EQ(snapshot.token_ids, std::vector<int32_t>({0, 2, 3, 2}));
   const uint64_t fingerprint = state.fingerprint();
 
-  JsonObjectGrammarState restored = grammar.restore_state(snapshot);
+  JsonObjectGrammarState restored = grammar.restore_from_snapshot(snapshot);
   EXPECT_TRUE(restored.is_valid());
   EXPECT_EQ(restored.fingerprint(), fingerprint);
   EXPECT_TRUE(restored.can_accept_piece(":1}"));
@@ -276,7 +296,7 @@ TEST(JsonObjectGrammarTest, MatcherFingerprintIgnoresCommittedHistory) {
             grammar.allowed_token_ids(via_piece));
 
   JsonObjectGrammarState restored =
-      grammar.restore_state(via_tokens.snapshot());
+      grammar.restore_from_snapshot(via_tokens.snapshot());
   EXPECT_EQ(restored.fingerprint(), via_piece.fingerprint());
 }
 
@@ -312,7 +332,8 @@ TEST(JsonObjectGrammarTest, BuildsMixedBatchBitmask) {
   std::vector<JsonObjectGrammarState> states = {grammar.initial_state(),
                                                 JsonObjectGrammarState()};
 
-  torch::Tensor bitmask = build_json_object_filter_bitmask(states);
+  torch::Tensor bitmask =
+      build_filter_bitmask(wrap_states_for_bitmask(grammar, states));
   ASSERT_EQ(bitmask.sizes(),
             torch::IntArrayRef(
                 {2, static_cast<int64_t>(grammar.bitmask_num_words())}));
@@ -339,22 +360,6 @@ TEST(JsonObjectGrammarTest, KeepsModelOnlyTokensMasked) {
 
   EXPECT_EQ(mask.size(0), 25);
   EXPECT_LT(mask.index({24}).item<float>(), -1.0F);
-}
-
-TEST(JsonObjectGrammarTest, AppliesMixedBatchBitmaskToLogits) {
-  JsonObjectGrammar grammar = make_grammar();
-  std::vector<JsonObjectGrammarState> states = {grammar.initial_state(),
-                                                JsonObjectGrammarState()};
-
-  const torch::Tensor bitmask = build_json_object_filter_bitmask(states);
-
-  ASSERT_EQ(bitmask.sizes(), torch::IntArrayRef({2, 1}));
-  torch::Tensor masked_logits = torch::zeros({2, 24});
-  apply_token_bitmask_inplace(masked_logits, bitmask);
-  EXPECT_EQ(masked_logits.index({0, 0}).item<float>(), 0.0F);
-  EXPECT_LT(masked_logits.index({0, 1}).item<float>(), -1.0F);
-  EXPECT_EQ(masked_logits.index({1, 0}).item<float>(), 0.0F);
-  EXPECT_EQ(masked_logits.index({1, 1}).item<float>(), 0.0F);
 }
 
 TEST(JsonObjectGrammarTest, BuildsMaskWithMixedReasoningDefinitions) {
@@ -388,7 +393,22 @@ TEST(JsonObjectGrammarTest, BuildsMaskWithMixedReasoningDefinitions) {
   EXPECT_EQ(mask.index({3, 2}).item<float>(), 0.0F);
   EXPECT_LT(mask.index({4, 2}).item<float>(), -1.0F);
 
-  const torch::Tensor bitmask = build_json_object_filter_bitmask(states);
+  // Each row is restored with its own grammar (json vs reasoning).
+  auto json_machine = make_builtin_test_machine(json_grammar);
+  auto reasoning_machine = make_builtin_test_machine(reasoning_grammar);
+  std::vector<ConstraintState> constraint_states;
+  constraint_states.reserve(states.size());
+  for (size_t i = 0; i < states.size(); ++i) {
+    if (!states[i].initialized()) {
+      constraint_states.emplace_back();
+      continue;
+    }
+    const bool is_reasoning = states[i].reasoning_enabled();
+    auto& machine = is_reasoning ? reasoning_machine : json_machine;
+    constraint_states.push_back(
+        machine->restore(to_constraint_snapshot(states[i].snapshot())));
+  }
+  const torch::Tensor bitmask = build_filter_bitmask(constraint_states);
   ASSERT_EQ(bitmask.sizes(), torch::IntArrayRef({5, 1}));
   torch::Tensor masked_logits = torch::zeros({5, 5});
   apply_token_bitmask_inplace(masked_logits, bitmask);

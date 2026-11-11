@@ -30,6 +30,7 @@ limitations under the License.
 #include <vector>
 
 #include "common/types.h"
+#include "core/framework/constraint/output_rows.h"
 #include "core/framework/multimodal/mm_batch_data.h"
 #include "core/framework/multimodal/mm_data.h"
 #include "framework/config/execution_config.h"
@@ -41,7 +42,6 @@ limitations under the License.
 #include "platform/device.h"
 #include "platform/platform.h"
 #include "runtime/dit_forward_params.h"
-#include "runtime/json_object_output_rows.h"
 
 namespace xllm {
 
@@ -617,7 +617,7 @@ struct ForwardInput {
   SamplingParameters decoder_sampling_params;
   std::vector<std::string> sample_sequence_ids;
   std::vector<int32_t> sample_prior_output_rows;
-  std::vector<JsonObjectGrammarState> json_object_states;
+  std::vector<ConstraintState> json_object_states;
   std::vector<JsonObjectGrammarSnapshot> json_object_state_snapshots;
   // Flattened [sequence][draft position] flags produced during MTP
   // validation. This is execution-local metadata and is not transported.

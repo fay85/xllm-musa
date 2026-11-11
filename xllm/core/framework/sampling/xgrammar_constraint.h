@@ -60,17 +60,53 @@ class XGrammarCompiler final {
 // Sequence-owned matcher; only generated tokens advance its state.
 class XGrammarState final {
  public:
-  explicit XGrammarState(const CompiledXGrammar& grammar);
+  explicit XGrammarState(const CompiledXGrammar& grammar,
+                         uint64_t grammar_id = 0);
   ~XGrammarState();
+  XGrammarState(XGrammarState&&) = default;
+  XGrammarState& operator=(XGrammarState&&) = default;
+
+  // Deep copy for draft/beam/parallel candidates; the compiled grammar and
+  // tokenizer info stay shared with the source matcher.
+  XGrammarState fork() const;
 
   bool accept_token(int32_t token_id);
+  // Read-only probe: reports whether accept_token would accept, without
+  // advancing the matcher.
+  bool can_accept(int32_t token_id);
+  // The root rule is fully matched by the accepted input (stop token not
+  // required).
+  bool is_completed() const;
+  // A frozen matcher rejects everything; used for halt semantics.
+  bool is_valid() const { return !invalid_; }
+  void set_invalid() { invalid_ = true; }
+  // FSM-only hash of (grammar identity, allowed bitmask, invalid salt):
+  // identical FSM states share the fingerprint regardless of how many
+  // tokens were committed to reach them; the history must not leak in
+  // (mask-cache keys and beam-restore comparisons rely on that).
+  uint64_t fingerprint() const;
+  // Accepted-token prefix, in commit order; drives snapshot and replay.
+  const std::vector<int32_t>& accepted_tokens() const {
+    return accepted_tokens_;
+  }
   int64_t vocab_size() const { return vocab_size_; }
   // Fully writes a caller-owned CPU row of (vocab_size() + 31) / 32 words.
-  void fill_next_token_bitmask(std::span<int32_t> words);
+  // Returns whether the mask needs applying (false means all-true).
+  bool fill_next_token_bitmask(std::span<int32_t> words);
+  // The same mask as a packed uint32 vector: all-deny when frozen,
+  // all-allow when the step is unconstrained. Single source for the
+  // machine's allowed_bitmask and the FSM-only fingerprint.
+  std::vector<uint32_t> allowed_bitmask() const;
 
  private:
+  XGrammarState(std::unique_ptr<xgrammar::GrammarMatcher> matcher,
+                int64_t vocab_size);
+
   std::unique_ptr<xgrammar::GrammarMatcher> matcher_;
   int64_t vocab_size_ = 0;
+  uint64_t grammar_id_ = 0;
+  bool invalid_ = false;
+  std::vector<int32_t> accepted_tokens_;
 };
 
 // Rows follow selected-token order, including unconstrained (nullptr) rows.

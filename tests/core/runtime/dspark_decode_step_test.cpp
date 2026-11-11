@@ -26,6 +26,7 @@ limitations under the License.
 
 #include "core/framework/config/load_config.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/parallel_state/process_group.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/framework/speculative/spec_input_builder.h"
@@ -37,8 +38,20 @@ limitations under the License.
 #include "runtime/mtp_worker_impl.h"
 #include "runtime/params_utils.h"
 #include "runtime/vlm_worker_impl.h"
+#include "tests/core/framework/constraint/builtin_state_test_utils.h"
 
 namespace xllm {
+
+ConstraintState make_json_state(
+    const std::shared_ptr<const JsonObjectGrammar>& grammar) {
+  return wrap_builtin_machine(grammar)->initial_state(
+      /*reasoning_phase=*/false);
+}
+
+ConstraintState make_json_state(const JsonObjectGrammar& grammar) {
+  // Stack grammar: the shared helper aliases the caller-owned grammar.
+  return make_builtin_test_state(grammar);
+}
 
 class DFlashWorkerImplTestPeer final {
  public:
@@ -965,6 +978,63 @@ TEST(DSparkDecodeStepTest, RestoreAndMultiTableDoNotDisableAsyncOrPrelaunch) {
   EXPECT_TRUE(input.input_params.meta.requires_host_restore);
 }
 
+TEST(DSparkDecodeStepTest, PrepareQueryClearsXgrammarDraftMaskLikeJsonStates) {
+  Device device(0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(0, 1, nullptr);
+  for (const std::string& algorithm : {"DFlash2", "DSpark"}) {
+    SCOPED_TRACE(algorithm);
+    runtime::Options options;
+    options.speculative_algorithm(algorithm)
+        .num_speculative_tokens(2)
+        .block_size(16);
+    std::unique_ptr<DFlashWorkerImpl> worker;
+    if (algorithm == "DSpark") {
+      worker = std::make_unique<DSparkWorkerImpl>(
+          parallel_args,
+          device.unwrap(),
+          options,
+          /*worker_type=*/WorkerType::LLM);
+    } else {
+      worker = std::make_unique<DFlash2WorkerImpl>(
+          parallel_args,
+          device.unwrap(),
+          options,
+          /*worker_type=*/WorkerType::LLM);
+    }
+    // An XGrammar batch carries its constraint as an installed bitmask with
+    // no builtin JSON states; the draft query must drop it exactly like the
+    // JSON path, so the draft stays unconstrained and grammar is enforced
+    // on the target verify rows instead.
+    ForwardInput input;
+    input.input_params.meta.num_sequences = 1;
+    input.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+    input.input_params.execution_batch.num_reqs = 1;
+    input.input_params.execution_batch.num_tokens = 1;
+    input.input_params.execution_batch.num_scheduled_tokens = {1};
+    input.input_params.execution_batch.num_computed_tokens = {3};
+    input.input_params.execution_batch.query_start_loc = {0, 1};
+    input.input_params.execution_batch.is_prefilling = {0};
+    input.token_ids_host = torch::tensor({0}, torch::kInt32);
+    input.positions_host = torch::tensor({3}, torch::kInt32);
+    input.token_ids = input.token_ids_host.to(device.unwrap());
+    input.positions = input.positions_host.to(device.unwrap());
+    input.input_params.attention.host.q_seq_lens = {1};
+    input.input_params.attention.host.kv_seq_lens = {4};
+    input.input_params.attention.host.block_tables =
+        torch::arange(8, torch::kInt32).reshape({1, 8});
+    input.sampling_params.all_greedy_sample = true;
+    input.sampling_params.filter_bitmask = torch::tensor({{10}}, torch::kInt32);
+
+    ForwardInput query =
+        DFlashWorkerImplTestPeer::prepare_query(*worker, input);
+    EXPECT_FALSE(query.sampling_params.filter_bitmask.defined());
+    EXPECT_FALSE(query.sampling_params.filter_mask.defined());
+    EXPECT_TRUE(input.sampling_params.filter_bitmask.defined());
+  }
+}
+
 TEST(DSparkDecodeStepTest,
      JsonDecodePreparationUsesNormalPathAndAllowsRecovery) {
   Device device(0);
@@ -989,7 +1059,7 @@ TEST(DSparkDecodeStepTest,
       torch::tensor({{0}}, torch::kInt32);
   input.sampling_params.all_greedy_sample = true;
   JsonObjectGrammar grammar({"{", "}", "stop"}, {2});
-  input.json_object_states = {grammar.initial_state()};
+  input.json_object_states = {make_json_state(grammar)};
 
   DSparkWorkerImpl worker(
       parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
@@ -1445,9 +1515,8 @@ TEST(DSparkDecodeStepTest, AsyncAcceptedOutputReplaysJsonForMixedRows) {
   input.input_params.meta.num_sequences = 3;
   input.input_params.attention.device.block_tables =
       torch::tensor({{0}, {1}, {2}}, torch::kInt32).to(device.unwrap());
-  input.json_object_states = {grammar->initial_state(),
-                              grammar->initial_state(),
-                              JsonObjectGrammarState()};
+  input.json_object_states = {
+      make_json_state(grammar), make_json_state(grammar), ConstraintState()};
   input.sample_sequence_ids = {"valid", "invalid", "plain"};
   const torch::Tensor accepted =
       torch::tensor({{0, 1, -1}, {0, 2, -1}, {2, 2, -1}}, torch::kLong);
@@ -1525,16 +1594,21 @@ TEST(DSparkDecodeStepTest, DraftQueryPreservesNonJsonSamplingMasks) {
     input.input_params.attention.host.block_tables =
         torch::arange(8, torch::kInt32).reshape({1, 8});
     input.sampling_params.all_greedy_sample = true;
+    // The dense filter_mask is a sequence-level mask like the constraint
+    // bitmaps: it does not model the expanded draft positions either, so the
+    // draft query clears it too (drafts sample unconstrained). See
+    // PrepareQueryClearsXgrammarDraftMaskLikeJsonStates and the assertion
+    // below.
     input.sampling_params.filter_mask =
         torch::tensor({{0.0f, 1.0f, 0.0f, 1.0f}});
-    input.sampling_params.filter_bitmask = torch::tensor({{10}}, torch::kInt32);
     ForwardInput plain =
         DFlashWorkerImplTestPeer::prepare_query(*worker, input);
-    EXPECT_TRUE(plain.sampling_params.filter_mask.is_same(
-        input.sampling_params.filter_mask));
-    EXPECT_TRUE(plain.sampling_params.filter_bitmask.is_same(
-        input.sampling_params.filter_bitmask));
-    input.json_object_states = {grammar->initial_state()};
+    // The dense filter_mask is also a sequence-level constraint mask that does
+    // not model expanded draft positions, so it is cleared too (drafts sample
+    // unconstrained), not preserved.
+    EXPECT_FALSE(plain.sampling_params.filter_mask.defined());
+    input.sampling_params.filter_bitmask = torch::tensor({{10}}, torch::kInt32);
+    input.json_object_states = {make_json_state(grammar)};
     ForwardInput constrained =
         DFlashWorkerImplTestPeer::prepare_query(*worker, input);
     EXPECT_FALSE(constrained.sampling_params.filter_mask.defined());
@@ -1554,9 +1628,8 @@ TEST(DSparkDecodeStepTest,
       std::unordered_set<int32_t>{3});
   ForwardInput input;
   input.input_params.meta.num_sequences = 3;
-  input.json_object_states = {grammar->initial_state(),
-                              grammar->initial_state(),
-                              JsonObjectGrammarState()};
+  input.json_object_states = {
+      make_json_state(grammar), make_json_state(grammar), ConstraintState()};
   JsonObjectGrammarState open = grammar->initial_state();
   ASSERT_TRUE(open.accept_token(0));
   JsonObjectGrammarState complete = open;
@@ -1646,7 +1719,7 @@ TEST(DSparkDecodeStepTest, JsonConsumesHostTokensOnlyAfterReadyEvent) {
       std::vector<std::string>{"{", "}", "stop"},
       std::unordered_set<int32_t>{2});
   ForwardInput input;
-  input.json_object_states = {grammar->initial_state()};
+  input.json_object_states = {make_json_state(grammar)};
   input.sample_sequence_ids = {"request"};
   input.sample_prior_output_rows = {0};
   torch::Tensor host_tokens = torch::full(
@@ -1671,7 +1744,7 @@ TEST(DSparkDecodeStepTest, JsonConsumesHostTokensOnlyAfterReadyEvent) {
   output.sample_output.next_tokens = host_tokens;
   output.requires_host_retirement = true;
   DSparkWorkerImplTestPeer::install_output(worker, std::move(output));
-  worker.update_json_object_states_by_last_step_output(input);
+  worker.advance_json_object_states(input);
   ASSERT_TRUE(input.json_object_errors.empty());
   EXPECT_TRUE(input.json_object_states.front().is_complete());
   EXPECT_TRUE(

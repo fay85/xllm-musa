@@ -48,7 +48,7 @@ limitations under the License.
 #include "core/layers/common/expanded_decode_metadata_builder.h"
 #include "core/layers/npu_torch/deepseek_sparse_attention.h"
 #endif
-#include "core/framework/speculative/mtp_json_object_state.h"
+#include "core/framework/constraint/draft_validation.h"
 #include "core/framework/speculative/spec_input_builder.h"
 #include "core/framework/speculative/spec_verify.h"
 #include "core/platform/platform.h"
@@ -1299,7 +1299,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
         std::make_move_iterator(failed_request_ids.end()));
   }
   if (has_json_states) {
-    check_json_accepted_tokens(
+    verify_json_accepted_tokens(
         input,
         val_output.next_tokens.to(torch::kInt64).contiguous(),
         target_output);
@@ -1417,13 +1417,13 @@ void DFlashWorkerImpl::prepare_json_validation_states(
       << "failed to wait for DFlash draft tokens for JSON grammar replay";
 
   // Advance each sequence's grammar state position by position across the
-  // drafted block. append_json_draft_step freezes a state at the first token
+  // drafted block. advance_json_draft_step freezes a state at the first token
   // the grammar rejects; the frozen-state masks keep the target's resampled
   // tokens legal at and beyond that position, and the illegal draft token
   // itself can never be accepted (its target probability is zero under the
   // mask). The halt flag is intentionally ignored: the whole block was
   // already drafted in one forward, so there is nothing left to stop.
-  std::vector<JsonObjectGrammarState> current_states = input.json_object_states;
+  std::vector<ConstraintState> current_states = input.json_object_states;
   std::vector<uint8_t> invalid_suffix(static_cast<size_t>(batch_size), 0);
   detail::JsonDraftValidationScratch scratch;
   scratch.states_after.reserve(static_cast<size_t>(num_speculative_tokens));
@@ -1439,7 +1439,7 @@ void DFlashWorkerImpl::prepare_json_validation_states(
       position_tokens.emplace_back(static_cast<int32_t>(
           draft_token_ids[seq_idx * num_speculative_tokens + draft_idx]));
     }
-    detail::append_json_draft_step(
+    detail::advance_json_draft_step(
         current_states, invalid_suffix, position_tokens, scratch);
   }
 
@@ -1454,13 +1454,13 @@ void DFlashWorkerImpl::prepare_json_validation_states(
   CHECK_EQ(validate_input.json_object_states.size(),
            static_cast<size_t>(batch_size) * (num_speculative_tokens + 1))
       << "DFlash JSON validation states must cover every verify row";
-  set_filter_bitmask(validate_input.sampling_params,
-                     validate_input.json_object_states,
-                     device_,
-                     JsonObjectMaskBuildPhase::TARGET);
+  install_filter_bitmask(validate_input.sampling_params,
+                        validate_input.json_object_states,
+                        device_,
+                        JsonObjectMaskBuildPhase::TARGET);
 }
 
-void DFlashWorkerImpl::check_json_accepted_tokens(
+void DFlashWorkerImpl::verify_json_accepted_tokens(
     const ForwardInput& input,
     const torch::Tensor& accepted_tokens_cpu,
     ForwardOutput& output) {
@@ -1474,7 +1474,7 @@ void DFlashWorkerImpl::check_json_accepted_tokens(
       << "DFlash JSON accepted rows must match sampled sequence ids";
 
   const std::vector<detail::JsonAcceptedTokenMismatch> mismatches =
-      detail::find_json_accepted_token_mismatches(
+      detail::verify_json_accepted_rows(
           input.json_object_states,
           accepted_tokens_cpu.const_data_ptr<int64_t>(),
           static_cast<size_t>(batch_size),
@@ -1693,10 +1693,13 @@ void DFlashWorkerImpl::prepare_query_inputs(const ForwardInput& input,
   // before rebuilding the draft query geometry.
   input_params.clear_linear_attention_state();
   input_params.embedding.input_embedding = torch::Tensor();
-  if (!input.json_object_states.empty()) {
-    // The sequence-level JSON mask does not model expanded draft positions.
+  if (!input.json_object_states.empty() ||
+      input.sampling_params.filter_bitmask.defined() ||
+      input.sampling_params.filter_mask.defined()) {
+    // The sequence-level constraint masks (builtin JSON states or the
+    // installed XGrammar bitmask) do not model expanded draft positions.
     // Enforce grammar on target verify rows instead, while preserving other
-    // sampling masks for inputs without JSON grammar states.
+    // sampling masks for unconstrained inputs. Include filter_mask-only rows.
     query_input.sampling_params.filter_bitmask = torch::Tensor();
     query_input.sampling_params.filter_mask = torch::Tensor();
   }

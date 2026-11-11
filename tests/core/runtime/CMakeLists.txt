@@ -274,7 +274,7 @@ cc_test(
   SRCS
     worker_json_object_overlap_test.cpp
   DEPS
-    :json_object_grammar
+    :constraint
     GTest::gtest_main
 )
 

@@ -32,6 +32,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/common/types.h"
+#include "core/framework/constraint/state_machine.h"
 #include "core/framework/multimodal/mm_data.h"
 #include "core/framework/prefix_cache/block_hasher.h"
 #include "core/framework/request/request_timing.h"
@@ -131,6 +132,7 @@ struct SequenceParams {
   StoppingChecker* stopping_checker;  // not owned
 
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar;
+  std::shared_ptr<ConstraintStateMachine> constraint_machine;
   std::shared_ptr<const CompiledXGrammar> xgrammar_constraint;
   bool json_reasoning_enabled = false;
   std::shared_ptr<RequestFailureState> request_failure_state;
@@ -381,8 +383,22 @@ class Sequence final {
   }
 
   const JsonObjectGrammarState* json_object_state() const {
-    return json_object_state_.has_value() ? &json_object_state_.value()
-                                          : nullptr;
+    return json_object_state_.get();
+  }
+
+  // Machine-backed state for the constraint channels; empty when
+  // unconstrained or when no machine is attached.
+  ConstraintState json_constraint_state() const {
+    if (json_object_state_ == nullptr || constraint_machine_ == nullptr) {
+      return ConstraintState();
+    }
+    // Fork an independent copy for the channel: the worker advances the copy
+    // while the scheduler commits the live state exactly once. Returning the
+    // shared payload would double-advance it under schedule overlap (worker
+    // advance + scheduler try_commit on the same token) and race the
+    // non-atomic matcher between the two threads.
+    ConstraintState live(json_object_state_, constraint_machine_);
+    return live.fork();
   }
 
   XGrammarState* xgrammar_state() const { return xgrammar_state_.get(); }
@@ -717,7 +733,8 @@ class Sequence final {
 
   std::optional<OneRecState> onerec_state_;
 
-  std::optional<JsonObjectGrammarState> json_object_state_;
+  std::shared_ptr<JsonObjectGrammarState> json_object_state_;
+  std::shared_ptr<ConstraintStateMachine> constraint_machine_;
   std::unique_ptr<XGrammarState> xgrammar_state_;
 
   // NOTE: MUST FIXME Later

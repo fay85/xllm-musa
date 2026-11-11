@@ -21,6 +21,7 @@ limitations under the License.
 #include <cstring>
 
 #include "core/common/metrics.h"
+#include "core/framework/sampling/fnv1a.h"
 #include "core/framework/sampling/sampling_params.h"
 #include "core/util/slice.h"
 #if defined(USE_NPU)
@@ -31,8 +32,6 @@ namespace xllm {
 namespace {
 
 constexpr float kDisallowedTokenMask = -1.0e9F;
-constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
-constexpr uint64_t kFnvPrime = 1099511628211ULL;
 constexpr size_t kMaxFilterMaskCacheEntries = 64;
 
 void record_mask_build_metrics(JsonObjectMaskBuildPhase phase,
@@ -61,7 +60,7 @@ void record_mask_build_metrics(JsonObjectMaskBuildPhase phase,
 }
 
 uint64_t hash_byte(uint64_t hash, uint8_t value) {
-  return (hash ^ value) * kFnvPrime;
+  return fnv1a_byte(hash, value);
 }
 
 uint64_t hash_uint64(uint64_t hash, uint64_t value) {
@@ -201,6 +200,7 @@ JsonObjectGrammarSnapshot JsonObjectGrammarState::snapshot() const {
   snapshot.enabled = initialized();
   snapshot.reasoning_enabled = reasoning_enabled_;
   snapshot.token_ids = committed_token_ids_;
+  snapshot.invalid = !valid_;
   return snapshot;
 }
 
@@ -731,7 +731,7 @@ JsonObjectGrammarState JsonObjectGrammar::initial_state(
   return JsonObjectGrammarState(this, reasoning_phase);
 }
 
-JsonObjectGrammarState JsonObjectGrammar::restore_state(
+JsonObjectGrammarState JsonObjectGrammar::restore_from_snapshot(
     const JsonObjectGrammarSnapshot& snapshot) const {
   JsonObjectGrammarState state = initial_state(snapshot.reasoning_enabled);
   if (!snapshot.enabled) {
@@ -742,6 +742,12 @@ JsonObjectGrammarState JsonObjectGrammar::restore_state(
       state.invalidate();
       break;
     }
+  }
+  // A frozen snapshot stays frozen even when its committed history would
+  // replay back to a valid state (a positional RESPECT rejection leaves the
+  // history itself clean).
+  if (snapshot.invalid) {
+    state.invalidate();
   }
   return state;
 }
@@ -858,7 +864,13 @@ std::vector<uint32_t> JsonObjectGrammar::allowed_token_bitmask(
   return cached_mask_for_state(state)->bitmask;
 }
 
-// Test-only convenience: expands the cached bitmask on demand.
+std::shared_ptr<const std::vector<uint32_t>>
+JsonObjectGrammar::shared_cached_bitmask(
+    const JsonObjectGrammarState& state) const {
+  const auto cached = cached_mask_for_state(state);
+  return std::shared_ptr<const std::vector<uint32_t>>(cached, &cached->bitmask);
+}
+
 torch::Tensor JsonObjectGrammar::build_filter_mask(
     const JsonObjectGrammarState& state,
     const torch::Device& device,
@@ -901,50 +913,59 @@ torch::Tensor JsonObjectGrammar::build_filter_bitmask(
   return tensor;
 }
 
-torch::Tensor build_json_object_filter_bitmask(
-    const std::vector<JsonObjectGrammarState>& states,
-    const torch::Device& device,
-    JsonObjectMaskBuildPhase phase) {
+torch::Tensor build_filter_bitmask(const std::vector<ConstraintState>& states,
+                                   const torch::Device& device,
+                                   JsonObjectMaskBuildPhase phase) {
   if (states.empty()) {
     return torch::Tensor();
   }
 
-  const JsonObjectGrammar* grammar = nullptr;
+  // Drive the batch through the machine interface: one machine per compiled
+  // spec, so machine identity replaces the vocabulary comparison and
+  // shared_allowed_bitmask hands out the zero-copy cached mask without a
+  // per-row deep copy or a cast to the concrete payload.
+  const ConstraintStateMachine* machine = nullptr;
   for (const auto& state : states) {
     if (state.initialized()) {
-      grammar = state.grammar();
+      machine = state.machine();
       break;
     }
   }
-  if (grammar == nullptr) {
+  if (machine == nullptr) {
     return torch::Tensor();
   }
 
   Timer batch_timer;
   int64_t constrained_rows = 0;
-  const int64_t num_words = static_cast<int64_t>(grammar->bitmask_num_words());
+  const int64_t num_words = static_cast<int64_t>(machine->bitmask_num_words());
   torch::Tensor mask = torch::empty(
       {static_cast<int64_t>(states.size()), num_words},
       torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU));
   int32_t* mask_data = mask.data_ptr<int32_t>();
   const size_t row_bytes = static_cast<size_t>(num_words) * sizeof(int32_t);
   for (size_t row = 0; row < states.size(); ++row) {
-    const auto& state = states[row];
     int32_t* row_data = mask_data + row * static_cast<size_t>(num_words);
-    if (state.initialized()) {
-      ++constrained_rows;
-      const JsonObjectGrammar* state_grammar = state.grammar();
-      CHECK_EQ(state_grammar->vocab_size(), grammar->vocab_size())
-          << "mixed JSON grammar vocabularies in one batch";
-      if (state.is_valid()) {
-        const auto cached_mask = state_grammar->cached_mask_for_state(state);
-        std::memcpy(row_data, cached_mask->bitmask.data(), row_bytes);
-      } else {
-        std::fill_n(row_data, num_words, 0);
-      }
-    } else {
+    if (!states[row].initialized()) {
       // Unconstrained row: all tokens allowed (matches float-mask zeros).
       std::fill_n(row_data, num_words, static_cast<int32_t>(-1));
+      continue;
+    }
+    ++constrained_rows;
+    // Dispatch each row through its own state's machine: a batch may mix
+    // machine instances (and, with equal vocabularies, grammars), so the
+    // only batch-wide invariant is the row layout - every cached mask is
+    // exactly as wide as the batch mask, which also guards the memcpy.
+    if (states[row].is_valid()) {
+      const std::shared_ptr<const std::vector<uint32_t>> cached_mask =
+          states[row].machine()->shared_allowed_bitmask(states[row]);
+      CHECK(cached_mask != nullptr)
+          << "backend did not provide a shared cached bitmask";
+      CHECK_EQ(cached_mask->size(), static_cast<size_t>(num_words))
+          << "constraint row mask width differs from the batch mask";
+      std::memcpy(row_data, cached_mask->data(), row_bytes);
+    } else {
+      // Frozen row: deny everything.
+      std::fill_n(row_data, num_words, 0);
     }
   }
   HISTOGRAM_OBSERVE(json_object_mask_batch_build_latency_microseconds,
@@ -959,19 +980,6 @@ torch::Tensor build_json_object_filter_bitmask(
         static_cast<int64_t>(transfer_timer.elapsed_microseconds()));
   }
   return mask;
-}
-
-void set_filter_bitmask(SamplingParameters& sampling_params,
-                        const std::vector<JsonObjectGrammarState>& states,
-                        const torch::Device& device,
-                        JsonObjectMaskBuildPhase phase) {
-  sampling_params.filter_bitmask =
-      build_json_object_filter_bitmask(states, device, phase);
-  // Builtin-JSON rows only: never clear a dense mask another constraint
-  // backend installed when this batch has no initialized JSON rows.
-  if (sampling_params.filter_bitmask.defined()) {
-    sampling_params.filter_mask = torch::Tensor();
-  }
 }
 
 void apply_token_bitmask_inplace(torch::Tensor& logits,
@@ -1025,6 +1033,19 @@ const std::string& JsonObjectGrammar::token_piece(int32_t token_id) const {
   CHECK_GE(token_id, 0);
   CHECK_LT(static_cast<size_t>(token_id), token_pieces_.size());
   return token_pieces_[token_id];
+}
+
+void install_filter_bitmask(SamplingParameters& sampling_params,
+                            const std::vector<ConstraintState>& states,
+                            const torch::Device& device,
+                            JsonObjectMaskBuildPhase phase) {
+  sampling_params.filter_bitmask = build_filter_bitmask(states, device, phase);
+  // Only clear the dense mask when a bitmask was actually installed: an
+  // all-unconstrained batch keeps whatever dense mask another constraint
+  // backend left behind.
+  if (sampling_params.filter_bitmask.defined()) {
+    sampling_params.filter_mask = torch::Tensor();
+  }
 }
 
 }  // namespace xllm

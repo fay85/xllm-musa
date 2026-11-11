@@ -24,8 +24,9 @@ limitations under the License.
 
 #include <algorithm>
 
+#include "core/framework/constraint/builtin_json_machine.h"
+#include "core/framework/constraint/output_rows.h"
 #include "core/runtime/forward_shared_memory_manager.h"
-#include "core/runtime/json_object_output_rows.h"
 #if defined(USE_NPU)
 #include "acl/acl.h"
 #include "kernels/npu/xllm_ops/xllm_ops_api.h"
@@ -952,13 +953,12 @@ std::optional<ForwardOutput> WorkerImpl::step_for_schedule_overlap(
 
 ForwardInput WorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
     ForwardInput& input) {
-  update_json_object_states_by_last_step_output(input);
+  advance_json_object_states(input);
   sanitize_json_object_error_inputs(input);
   return update_input_by_last_step_output(input);
 }
 
-void WorkerImpl::update_json_object_states_by_last_step_output(
-    ForwardInput& input) {
+void WorkerImpl::advance_json_object_states(ForwardInput& input) {
   if (input.json_object_states.empty()) {
     return;
   }
@@ -1037,7 +1037,7 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
 
   for (size_t state_idx = 0; state_idx < input.json_object_states.size();
        ++state_idx) {
-    JsonObjectGrammarState& state = input.json_object_states[state_idx];
+    ConstraintState& state = input.json_object_states[state_idx];
     if (!state.initialized()) {
       continue;
     }
@@ -1045,7 +1045,7 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
     const std::string& sequence_id = input.sample_sequence_ids[state_idx];
     const int32_t output_idx = output_rows[state_idx];
     if (output_idx == detail::kInvalidJsonObjectOutputRow) {
-      state = JsonObjectGrammarState();
+      state = ConstraintState();
       continue;
     }
     if (output_idx == detail::kNoPriorJsonObjectOutputRow) {
@@ -1058,8 +1058,8 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
       const int32_t token_id =
           static_cast<int32_t>(next_tokens[output_idx].item<int64_t>());
       if (token_id >= 0) {
-        if (!state.can_accept_token(token_id)) {
-          const JsonObjectGrammarSnapshot snapshot = state.snapshot();
+        if (!state.can_accept(token_id)) {
+          const ConstraintSnapshot snapshot = state.snapshot();
           LOG(ERROR)
               << "last-step token violates json_object grammar, sequence_id="
               << sequence_id << ", output_row=" << output_idx
@@ -1068,10 +1068,10 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
               << ", state_fingerprint=" << state.fingerprint();
           input.json_object_errors.push_back(
               {sequence_id, "prior token violates json_object grammar"});
-          state = JsonObjectGrammarState();
+          state = ConstraintState();
           continue;
         }
-        CHECK(state.accept_token(token_id));
+        CHECK(state.advance(token_id, HaltPolicy::IGNORE));
       }
       continue;
     }
@@ -1083,8 +1083,8 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
       if (token_id < 0) {
         break;
       }
-      if (!state.can_accept_token(token_id)) {
-        const JsonObjectGrammarSnapshot snapshot = state.snapshot();
+      if (!state.can_accept(token_id)) {
+        const ConstraintSnapshot snapshot = state.snapshot();
         LOG(ERROR)
             << "last-step token violates json_object grammar, sequence_id="
             << sequence_id << ", output_row=" << output_idx
@@ -1093,13 +1093,14 @@ void WorkerImpl::update_json_object_states_by_last_step_output(
             << ", state_fingerprint=" << state.fingerprint();
         input.json_object_errors.push_back(
             {sequence_id, "prior token violates json_object grammar"});
-        state = JsonObjectGrammarState();
+        state = ConstraintState();
         break;
       }
-      CHECK(state.accept_token(token_id));
+      CHECK(state.advance(token_id, HaltPolicy::IGNORE));
     }
   }
-  set_filter_bitmask(input.sampling_params, input.json_object_states, device_);
+  install_filter_bitmask(
+      input.sampling_params, input.json_object_states, device_);
 }
 
 void WorkerImpl::sanitize_json_object_error_inputs(ForwardInput& input) {
@@ -1527,22 +1528,79 @@ void WorkerImpl::restore_json_object_states(ForwardInput& input) {
   }
   CHECK(tokenizer_ != nullptr)
       << "JSON object state restoration requires a worker tokenizer";
+  // SHM/RPC arrival has only snapshots (ConstraintState is not serializable),
+  // so states may be empty there; when states are present they must be
+  // row-aligned with the snapshots for the non-builtin fallback below.
+  CHECK(input.json_object_states.empty() ||
+        input.json_object_states.size() ==
+            input.json_object_state_snapshots.size())
+      << "constraint states and spec snapshots must be row-aligned when states "
+         "are present";
 
-  std::vector<JsonObjectGrammarState> states;
+  std::vector<ConstraintState> states;
   states.reserve(input.json_object_state_snapshots.size());
-  for (const auto& snapshot : input.json_object_state_snapshots) {
+  // Reuse the stateless machine per grammar instead of re-wrapping per row.
+  std::unordered_map<const JsonObjectGrammar*,
+                     std::shared_ptr<BuiltinJsonConstraintMachine>>
+      machine_cache;
+  for (size_t row = 0; row < input.json_object_state_snapshots.size(); ++row) {
+    const auto& snapshot = input.json_object_state_snapshots[row];
     if (!snapshot.enabled) {
-      states.emplace_back();
+      // An empty snapshot means either a genuinely unconstrained row or a
+      // backend whose spec snapshot is not yet implemented (xgrammar). Only
+      // keep the builder's state for the latter: a non-builtin (xgrammar) row
+      // has no spec snapshot, so its live constraint must be preserved. A
+      // builtin empty snapshot means genuinely unconstrained. The predicate
+      // is the backend-neutral spec-snapshot support: a backend whose
+      // snapshots round-trip the matcher restores from them, one without
+      // keeps its live state instead of being reset to unconstrained.
+      const bool non_builtin_initialized =
+          row < input.json_object_states.size() &&
+          input.json_object_states[row].initialized() &&
+          !input.json_object_states[row].machine()->supports_spec_snapshot();
+      if (non_builtin_initialized) {
+        states.push_back(input.json_object_states[row]);
+      } else {
+        states.emplace_back();
+      }
       continue;
     }
 
+    const std::string row_sequence_id =
+        row < input.sample_sequence_ids.size()
+            ? input.sample_sequence_ids[row]
+            : "<row " + std::to_string(row) + ">";
+    const auto fail_row = [&](const std::string& message) {
+      // A bad snapshot is a request-level failure, not an engine fault:
+      // report the row through the error channel (the request fails at
+      // output time) and decode it unconstrained, instead of aborting the
+      // whole engine with a CHECK like the sequence-side restore used to.
+      LOG(ERROR) << "JSON object state restore failed: sequence_id="
+                 << row_sequence_id << ", error=" << message;
+      input.json_object_errors.emplace_back(
+          JsonObjectOutputError{row_sequence_id, message});
+      states.emplace_back();
+    };
+
     std::shared_ptr<const JsonObjectGrammar> grammar =
         ensure_json_object_grammar(snapshot.reasoning_enabled);
-    CHECK(grammar != nullptr) << "Failed to restore JSON object grammar";
+    if (grammar == nullptr) {
+      fail_row("failed to restore the JSON object grammar");
+      continue;
+    }
 
-    JsonObjectGrammarState state = grammar->restore_state(snapshot);
-    CHECK(state.is_valid())
-        << "Serialized JSON object grammar state is invalid";
+    std::shared_ptr<BuiltinJsonConstraintMachine>& machine =
+        machine_cache[grammar.get()];
+    if (machine == nullptr) {
+      machine = wrap_builtin_machine(grammar);
+    }
+    ConstraintState state = machine->restore(to_constraint_snapshot(snapshot));
+    if (!state.initialized() || !state.is_valid()) {
+      // initialized() is checked first: is_valid() CHECKs it internally and
+      // must not run on an empty restore result.
+      fail_row("serialized JSON object grammar state is invalid");
+      continue;
+    }
     states.push_back(std::move(state));
   }
   input.json_object_states = std::move(states);
@@ -1742,7 +1800,7 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
           // replace step i model input with true output of step i-1
           input = update_input_by_last_step_output_for_schedule_overlap(input);
         } else {
-          update_json_object_states_by_last_step_output(input);
+          advance_json_object_states(input);
           sanitize_json_object_error_inputs(input);
         }
       }

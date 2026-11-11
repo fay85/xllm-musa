@@ -27,12 +27,12 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
+#include "core/framework/constraint/state_machine.h"
 #include "core/framework/tokenizer/tokenizer.h"
 
 namespace xllm {
 
 class JsonObjectGrammar;
-struct SamplingParameters;
 
 enum class JsonObjectMaskBuildPhase : uint8_t {
   NORMAL = 0,
@@ -40,10 +40,15 @@ enum class JsonObjectMaskBuildPhase : uint8_t {
   TARGET = 2,
 };
 
+struct SamplingParameters;
+
 struct JsonObjectGrammarSnapshot final {
   bool enabled = false;
   bool reasoning_enabled = false;
   std::vector<int32_t> token_ids;
+  // Frozen (halted) states round-trip their invalid flag so a RESPECT
+  // freeze survives snapshot/restore instead of replaying back to valid.
+  bool invalid = false;
 };
 
 class JsonObjectGrammarState final {
@@ -58,6 +63,10 @@ class JsonObjectGrammarState final {
 
   bool is_valid() const { return valid_; }
   bool is_complete() const { return valid_ && root_complete_; }
+  // Freeze the matcher: every later accept is rejected. The machine adapter
+  // applies this for HaltPolicy::RESPECT rejections; the grammar itself
+  // calls it for piece-level violations.
+  void invalidate() { valid_ = false; }
   bool in_reasoning() const { return reasoning_phase_; }
   bool reasoning_enabled() const { return reasoning_enabled_; }
   bool initialized() const { return grammar_ != nullptr; }
@@ -121,7 +130,6 @@ class JsonObjectGrammarState final {
   void complete_value();
   bool close_container(ContainerType type);
   bool is_value_delimiter(char character) const;
-  void invalidate() { valid_ = false; }
   bool has_complete_number() const;
   // Copy matcher fields for trial accepts without cloning committed_token_ids_.
   void copy_trial_state_from(const JsonObjectGrammarState& other);
@@ -146,6 +154,10 @@ class JsonObjectGrammarState final {
 
 class JsonObjectGrammar final {
  public:
+  // Whether the compiled grammar carries reasoning end markers (i.e. the
+  // reasoning phase flow can actually terminate).
+  bool has_reasoning() const { return !reasoning_end_token_ids_.empty(); }
+
   JsonObjectGrammar(std::vector<std::string> token_pieces,
                     std::unordered_set<int32_t> stop_token_ids = {},
                     std::vector<int32_t> reasoning_end_token_ids = {});
@@ -168,7 +180,7 @@ class JsonObjectGrammar final {
 
   JsonObjectGrammarState initial_state(bool reasoning_phase = false) const;
 
-  JsonObjectGrammarState restore_state(
+  JsonObjectGrammarState restore_from_snapshot(
       const JsonObjectGrammarSnapshot& snapshot) const;
 
   std::vector<int32_t> allowed_token_ids(
@@ -177,6 +189,11 @@ class JsonObjectGrammar final {
   // Packed allowed-token bitmask, little-endian words, bit i => token i
   // allowed.
   std::vector<uint32_t> allowed_token_bitmask(
+      const JsonObjectGrammarState& state) const;
+
+  // Shared view of the cached allowed-token bitmask for a state (no copy).
+  // The cache entry stays alive as long as any caller holds the view.
+  std::shared_ptr<const std::vector<uint32_t>> shared_cached_bitmask(
       const JsonObjectGrammarState& state) const;
 
   torch::Tensor build_filter_mask(
@@ -197,10 +214,6 @@ class JsonObjectGrammar final {
 
  private:
   friend class JsonObjectGrammarState;
-  friend torch::Tensor build_json_object_filter_bitmask(
-      const std::vector<JsonObjectGrammarState>& states,
-      const torch::Device& device,
-      JsonObjectMaskBuildPhase phase);
 
   struct CachedMask final {
     std::vector<uint32_t> bitmask;
@@ -234,16 +247,17 @@ class JsonObjectGrammar final {
   std::shared_ptr<FilterMaskCache> filter_mask_cache_;
 };
 
-torch::Tensor build_json_object_filter_bitmask(
-    const std::vector<JsonObjectGrammarState>& states,
+torch::Tensor build_filter_bitmask(
+    const std::vector<ConstraintState>& states,
     const torch::Device& device = torch::kCPU,
     JsonObjectMaskBuildPhase phase = JsonObjectMaskBuildPhase::NORMAL);
 
-// Installs the packed bitmask from `states` on `sampling_params`, clearing the
-// dense filter mask (the Sampler prefers the compact bitmask).
-void set_filter_bitmask(
+// Installs the packed bitmask built from `states` on `sampling_params` and
+// clears the dense float mask: the sampler prefers the compact bitmask, and
+// a dense leftover would ship a duplicate H2D copy.
+void install_filter_bitmask(
     SamplingParameters& sampling_params,
-    const std::vector<JsonObjectGrammarState>& states,
+    const std::vector<ConstraintState>& states,
     const torch::Device& device = torch::kCPU,
     JsonObjectMaskBuildPhase phase = JsonObjectMaskBuildPhase::NORMAL);
 

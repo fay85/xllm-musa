@@ -62,12 +62,12 @@ endif()
 
 cc_test(
   NAME
-    mtp_json_object_state_test
+    draft_validation_test
   CPU_ONLY
   SRCS
-    mtp_json_object_state_test.cpp
+    draft_validation_test.cpp
   DEPS
-    :speculative
+    :constraint
     :json_object_grammar
     GTest::gtest_main
 )

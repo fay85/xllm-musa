@@ -21,6 +21,7 @@ limitations under the License.
 #include "common/types.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "distributed_runtime/llm_engine.h"
 #include "framework/request/request_output.h"
@@ -177,6 +178,8 @@ std::shared_ptr<Request> DisaggPDServiceImpl::generate_request(
         return nullptr;
       }
       req_state.json_reasoning_enabled = req.json_reasoning_enabled();
+      req_state.constraint_machine =
+          wrap_builtin_machine(req_state.json_object_grammar);
     }
   }
 

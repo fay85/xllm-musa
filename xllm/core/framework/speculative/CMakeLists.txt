@@ -14,7 +14,6 @@ cc_library(
     mtp_async_state.h
     dflash_async_input_builder.h
     mtp_execution_policy.h
-    mtp_json_object_state.h
     embedding_cache.h
     spec_verify.h
   SRCS

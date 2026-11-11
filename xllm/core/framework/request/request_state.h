@@ -26,6 +26,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "core/framework/constraint/state_machine.h"
 #include "core/framework/multimodal/mm_data.h"
 #include "core/framework/request/request_timing.h"
 #include "core/framework/sampling/json_object_grammar.h"
@@ -219,8 +220,8 @@ class RequestState final {
   // Set by the request factory from RequestParams::adapter_id.
   uint64_t adapter_id = 0;
 
-
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar;
+  std::shared_ptr<ConstraintStateMachine> constraint_machine;
   std::shared_ptr<const CompiledXGrammar> xgrammar_constraint;
   bool json_reasoning_enabled = false;
 };

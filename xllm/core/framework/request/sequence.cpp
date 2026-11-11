@@ -37,6 +37,7 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/multimodal_config.h"
 #include "core/framework/config/rec_config.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/model/model_args.h"
 #include "core/framework/multimodal/embedding_output.h"
 #include "core/framework/multimodal/mm_visitor.h"
@@ -255,9 +256,15 @@ Sequence::Sequence(size_t index,
     sequence_params_.request_failure_state =
         std::make_shared<RequestFailureState>();
   }
-  if (sequence_params_.json_object_grammar != nullptr) {
-    json_object_state_ = sequence_params_.json_object_grammar->initial_state(
-        sequence_params_.json_reasoning_enabled);
+  constraint_machine_ =
+      sequence_params_.constraint_machine != nullptr
+          ? sequence_params_.constraint_machine
+          : wrap_builtin_machine(sequence_params_.json_object_grammar);
+  if (constraint_machine_ != nullptr) {
+    json_object_state_ =
+        constraint_machine_
+            ->initial_state(sequence_params_.json_reasoning_enabled)
+            .shared<JsonObjectGrammarState>();
   }
   if (sequence_params_.xgrammar_constraint != nullptr) {
     xgrammar_state_ =
@@ -354,7 +361,12 @@ Sequence::Sequence(const Sequence& other, size_t index)
       hash_type_(other.hash_type_),
       linear_prefix_checkpoint_(other.linear_prefix_checkpoint_),
       onerec_state_(other.onerec_state_),
-      json_object_state_(other.json_object_state_),
+      // Beam candidates diverge: copy the matcher state, never share it.
+      json_object_state_(other.json_object_state_ == nullptr
+                             ? nullptr
+                             : std::make_shared<JsonObjectGrammarState>(
+                                   *other.json_object_state_)),
+      constraint_machine_(other.constraint_machine_),
       volatile_num_prompt_tokens_(other.volatile_num_prompt_tokens_),
       finished_(other.finished_),
       finish_status_invalidated_(other.finish_status_invalidated_),
@@ -411,11 +423,12 @@ void Sequence::record_first_token(const Token& token) {
 
 bool Sequence::try_commit_json_object_token(int32_t token_id,
                                             int64_t token_offset) {
-  if (!json_object_state_.has_value() || token_id < 0) {
+  if (json_object_state_ == nullptr || token_id < 0) {
     return true;
   }
-  if (json_object_state_->can_accept_token(token_id)) {
-    CHECK(json_object_state_->accept_token(token_id));
+  ConstraintState live(json_object_state_, constraint_machine_);
+  if (constraint_machine_->can_accept(live, token_id)) {
+    CHECK(constraint_machine_->advance(live, token_id, HaltPolicy::IGNORE));
     return true;
   }
 
@@ -452,23 +465,57 @@ bool Sequence::try_commit_json_object_token(int32_t token_id,
 
 bool Sequence::restore_json_object_state(
     const JsonObjectGrammarSnapshot& snapshot) {
-  if (!json_object_state_.has_value()) {
+  if (json_object_state_ == nullptr) {
     return true;
   }
   const JsonObjectGrammar* grammar = json_object_state_->grammar();
+  // Every failure branch clears the live state first: a failed sequence must
+  // not keep handing its stale matcher out through json_constraint_state()
+  // while the request is being torn down.
+  const auto fail_restore = [&](const std::string& detail,
+                                const std::string& status) {
+    json_object_state_.reset();
+    LOG(ERROR) << detail << ": request_id=" << request_id()
+               << ", sequence_index=" << index_;
+    fail(Status(StatusCode::UNKNOWN, status));
+    return false;
+  };
   if (grammar == nullptr) {
-    fail(Status(StatusCode::UNKNOWN,
-                "cannot restore an uninitialized json_object grammar state"));
-    return false;
+    return fail_restore("cannot restore an uninitialized json_object grammar",
+                        "cannot restore an uninitialized json_object grammar "
+                        "state");
   }
-  JsonObjectGrammarState restored_state = grammar->restore_state(snapshot);
-  if (!restored_state.is_valid()) {
-    LOG(ERROR) << "JSON grammar replay failed during beam state restoration: "
-               << "request_id=" << request_id() << ", sequence_index=" << index_
-               << ", committed_tokens=" << snapshot.token_ids.size();
-    fail(Status(StatusCode::UNKNOWN,
-                "beam candidate violates json_object grammar"));
-    return false;
+  // A disabled snapshot legitimately means unconstrained, regardless of
+  // backend - do not judge it by the restored state's validity.
+  if (!snapshot.enabled) {
+    json_object_state_.reset();
+    return true;
+  }
+  // An enabled snapshot that restores to nothing is a real failure (the typed
+  // extraction would otherwise trip the payload-type CHECK or a null deref).
+  ConstraintState restored =
+      constraint_machine_->restore(to_constraint_snapshot(snapshot));
+  if (!restored.initialized()) {
+    return fail_restore("JSON grammar restore returned an empty state",
+                        "json_object grammar restore failed");
+  }
+  std::shared_ptr<JsonObjectGrammarState> restored_state =
+      restored.shared<JsonObjectGrammarState>();
+  if (!restored_state->is_valid()) {
+    return fail_restore(
+        "JSON grammar replay failed during beam state restoration "
+        "(committed_tokens=" +
+            std::to_string(snapshot.token_ids.size()) + ")",
+        "beam candidate violates json_object grammar");
+  }
+  // The machine must wrap the same compiled grammar as the live state;
+  // divergence would silently mix vocabularies across the restore. A
+  // divergence is a data or wiring error, but it must fail the request
+  // through the Status path like the other restore failures instead of
+  // aborting the whole engine with a CHECK.
+  if (restored_state->grammar() != grammar) {
+    return fail_restore("JSON grammar restore diverged from the live grammar",
+                        "json_object grammar restore diverged");
   }
   json_object_state_ = std::move(restored_state);
   return true;

@@ -13,13 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/framework/speculative/mtp_json_object_state.h"
+#include "core/framework/constraint/draft_validation.h"
 
 #include <gtest/gtest.h>
 
 #include <vector>
 
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/sampling/json_object_grammar.h"
+#include "tests/core/framework/constraint/builtin_state_test_utils.h"
 
 namespace xllm {
 namespace {
@@ -31,17 +33,17 @@ JsonObjectGrammar make_mtp_grammar() {
 
 TEST(MtpJsonObjectStateTest, BuildsSequenceMajorRowsForMixedAcceptedDrafts) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state(), JsonObjectGrammarState()};
-  std::vector<JsonObjectGrammarState> current_states = initial_states;
+  const std::vector<ConstraintState> initial_states = {
+      make_builtin_test_state(grammar), ConstraintState()};
+  std::vector<ConstraintState> current_states = initial_states;
   std::vector<uint8_t> invalid_suffix(2, 0);
   detail::JsonDraftValidationScratch scratch;
 
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {0, 4}, scratch));
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {1, 4}, scratch));
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {2, 4}, scratch));
 
   std::vector<uint8_t> invalid_draft;
@@ -66,17 +68,17 @@ TEST(MtpJsonObjectStateTest, BuildsSequenceMajorRowsForMixedAcceptedDrafts) {
 
 TEST(MtpJsonObjectStateTest, FreezesFirstInvalidDraftAndItsSuffix) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state(), JsonObjectGrammarState()};
-  std::vector<JsonObjectGrammarState> current_states = initial_states;
+  const std::vector<ConstraintState> initial_states = {
+      make_builtin_test_state(grammar), ConstraintState()};
+  std::vector<ConstraintState> current_states = initial_states;
   std::vector<uint8_t> invalid_suffix(2, 0);
   detail::JsonDraftValidationScratch scratch;
 
-  EXPECT_TRUE(detail::append_json_draft_step(
+  EXPECT_TRUE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {4, 0}, scratch));
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {-1, 0}, scratch));
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {-1, 0}, scratch));
 
   std::vector<uint8_t> invalid_draft;
@@ -92,17 +94,17 @@ TEST(MtpJsonObjectStateTest, FreezesFirstInvalidDraftAndItsSuffix) {
 
 TEST(MtpJsonObjectStateTest, PreservesAcceptedPrefixAfterMiddleInvalidDraft) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state()};
-  std::vector<JsonObjectGrammarState> current_states = initial_states;
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1);
+  std::vector<ConstraintState> current_states = initial_states;
   std::vector<uint8_t> invalid_suffix(1, 0);
   detail::JsonDraftValidationScratch scratch;
 
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {0}, scratch));
-  EXPECT_TRUE(detail::append_json_draft_step(
+  EXPECT_TRUE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {2}, scratch));
-  EXPECT_FALSE(detail::append_json_draft_step(
+  EXPECT_FALSE(detail::advance_json_draft_step(
       current_states, invalid_suffix, {-1}, scratch));
 
   std::vector<uint8_t> invalid_draft;
@@ -121,37 +123,38 @@ TEST(MtpJsonObjectStateTest, PreservesAcceptedPrefixAfterMiddleInvalidDraft) {
 
 TEST(MtpJsonObjectStateTest, FiveDraftRowsReplayFromCommittedState) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state()};
-  std::vector<JsonObjectGrammarState> current_states = initial_states;
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1);
+  std::vector<ConstraintState> current_states = initial_states;
   std::vector<uint8_t> invalid_suffix(1, 0);
   detail::JsonDraftValidationScratch scratch;
   const std::vector<int32_t> draft_tokens = {0, 1, 2, 3, 4};
 
   for (const int32_t token_id : draft_tokens) {
-    EXPECT_FALSE(detail::append_json_draft_step(
+    EXPECT_FALSE(detail::advance_json_draft_step(
         current_states, invalid_suffix, {token_id}, scratch));
   }
 
   std::vector<uint8_t> invalid_draft;
-  const std::vector<JsonObjectGrammarState> validation_states =
+  const std::vector<ConstraintState> validation_states =
       detail::build_json_validation_states(
           initial_states, scratch, invalid_draft);
 
   ASSERT_EQ(validation_states.size(), 6u);
   EXPECT_EQ(invalid_draft, std::vector<uint8_t>({0, 0, 0, 0, 0}));
-  JsonObjectGrammarState committed_state = initial_states[0];
+  ConstraintState committed_state = initial_states[0].fork();
   for (size_t token_idx = 0; token_idx < draft_tokens.size(); ++token_idx) {
     EXPECT_EQ(validation_states[token_idx].fingerprint(),
               committed_state.fingerprint());
     ASSERT_TRUE(
-        validation_states[token_idx].can_accept_token(draft_tokens[token_idx]));
-    ASSERT_TRUE(committed_state.accept_token(draft_tokens[token_idx]));
+        validation_states[token_idx].can_accept(draft_tokens[token_idx]));
+    ASSERT_TRUE(
+        committed_state.advance(draft_tokens[token_idx], HaltPolicy::RESPECT));
   }
   EXPECT_EQ(validation_states.back().fingerprint(),
             committed_state.fingerprint());
-  EXPECT_TRUE(validation_states.back().can_accept_token(/*stop=*/5));
-  EXPECT_TRUE(committed_state.accept_token(/*stop=*/5));
+  EXPECT_TRUE(validation_states.back().can_accept(/*stop=*/5));
+  EXPECT_TRUE(committed_state.advance(/*stop=*/5, HaltPolicy::RESPECT));
 }
 
 TEST(MtpJsonObjectStateTest,
@@ -160,34 +163,34 @@ TEST(MtpJsonObjectStateTest,
       {"{", "\"a\"", ":", "1", "}", "stop", "<think>", "</think>"},
       /*stop_token_ids=*/{5},
       /*reasoning_end_token_ids=*/{7});
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state(/*reasoning_phase=*/false)};
-  std::vector<JsonObjectGrammarState> current_states = initial_states;
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1, /*reasoning_phase=*/false);
+  std::vector<ConstraintState> current_states = initial_states;
   std::vector<uint8_t> invalid_suffix(1, 0);
   detail::JsonDraftValidationScratch scratch;
   const std::vector<int32_t> draft_tokens = {0, 1, 2, 3, 4};
 
   for (const int32_t token_id : draft_tokens) {
-    EXPECT_FALSE(detail::append_json_draft_step(
+    EXPECT_FALSE(detail::advance_json_draft_step(
         current_states, invalid_suffix, {token_id}, scratch));
   }
 
   std::vector<uint8_t> invalid_draft;
-  const std::vector<JsonObjectGrammarState> validation_states =
+  const std::vector<ConstraintState> validation_states =
       detail::build_json_validation_states(
           initial_states, scratch, invalid_draft);
 
   ASSERT_EQ(validation_states.size(), 6u);
-  for (const JsonObjectGrammarState& state : validation_states) {
-    EXPECT_FALSE(state.in_reasoning());
-    EXPECT_FALSE(state.can_accept_token(/*reasoning_end=*/7));
+  for (const ConstraintState& state : validation_states) {
+    EXPECT_FALSE(state.as<JsonObjectGrammarState>().in_reasoning());
+    EXPECT_FALSE(state.can_accept(/*reasoning_end=*/7));
   }
 }
 
 TEST(MtpJsonObjectStateTest, ReplaysFiveStepMixedAcceptedOutputRows) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state(), JsonObjectGrammarState()};
+  const std::vector<ConstraintState> initial_states = {
+      make_builtin_test_state(grammar), ConstraintState()};
   const int64_t accepted_tokens[] = {
       0,
       1,
@@ -204,7 +207,7 @@ TEST(MtpJsonObjectStateTest, ReplaysFiveStepMixedAcceptedOutputRows) {
   };
 
   const std::vector<detail::JsonAcceptedTokenMismatch> mismatches =
-      detail::find_json_accepted_token_mismatches(
+      detail::verify_json_accepted_rows(
           initial_states, accepted_tokens, /*num_rows=*/2, /*row_width=*/6);
 
   EXPECT_TRUE(mismatches.empty());
@@ -212,10 +215,12 @@ TEST(MtpJsonObjectStateTest, ReplaysFiveStepMixedAcceptedOutputRows) {
 
 TEST(MtpJsonObjectStateTest, ReportsFirstAcceptedOutputMismatchPerSequence) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  JsonObjectGrammarState committed_state = grammar.initial_state();
-  ASSERT_TRUE(committed_state.accept_token(/*open_object=*/0));
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      committed_state, JsonObjectGrammarState()};
+  std::vector<ConstraintState> machine_states =
+      make_builtin_test_states(grammar, 1);
+  ConstraintState committed_state = machine_states[0].fork();
+  ASSERT_TRUE(committed_state.advance(/*open_object=*/0, HaltPolicy::RESPECT));
+  const std::vector<ConstraintState> initial_states = {committed_state,
+                                                       ConstraintState()};
   const int64_t accepted_tokens[] = {
       1,
       4,
@@ -232,7 +237,7 @@ TEST(MtpJsonObjectStateTest, ReportsFirstAcceptedOutputMismatchPerSequence) {
   };
 
   const std::vector<detail::JsonAcceptedTokenMismatch> mismatches =
-      detail::find_json_accepted_token_mismatches(
+      detail::verify_json_accepted_rows(
           initial_states, accepted_tokens, /*num_rows=*/2, /*row_width=*/6);
 
   ASSERT_EQ(mismatches.size(), 1u);
@@ -244,12 +249,12 @@ TEST(MtpJsonObjectStateTest, ReportsFirstAcceptedOutputMismatchPerSequence) {
 
 TEST(MtpJsonObjectStateTest, AcceptedOutputOnlyUsesMinusOneAsPadding) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state()};
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1);
   const int64_t accepted_tokens[] = {0, -2};
 
   EXPECT_DEATH(
-      detail::find_json_accepted_token_mismatches(
+      detail::verify_json_accepted_rows(
           initial_states, accepted_tokens, /*num_rows=*/1, /*row_width=*/2),
       "padding must use -1");
 }
@@ -267,31 +272,31 @@ TEST(MtpJsonObjectStateTest, CopiesContiguousHostDraftTokensInBulk) {
 // DFlash JSON validation relies on.
 TEST(DFlashJsonObjectStateTest, BlockDraftFreezesAtMidBlockInvalid) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state()};
-  std::vector<JsonObjectGrammarState> current_states = initial_states;
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1);
+  std::vector<ConstraintState> current_states = initial_states;
   std::vector<uint8_t> invalid_suffix(1, 0);
   detail::JsonDraftValidationScratch scratch;
   // Drafted block: "{" `"a"` "stop"(illegal mid-object) ":" "}".
   const std::vector<int32_t> draft_block = {0, 1, 5, 3, 4};
 
   for (size_t draft_idx = 0; draft_idx < draft_block.size(); ++draft_idx) {
-    detail::append_json_draft_step(
+    detail::advance_json_draft_step(
         current_states, invalid_suffix, {draft_block[draft_idx]}, scratch);
   }
 
   std::vector<uint8_t> invalid_draft;
-  const std::vector<JsonObjectGrammarState> validation_states =
+  const std::vector<ConstraintState> validation_states =
       detail::build_json_validation_states(
           initial_states, scratch, invalid_draft);
 
   ASSERT_EQ(validation_states.size(), 6u);
   EXPECT_EQ(invalid_draft, std::vector<uint8_t>({0, 0, 1, 1, 1}));
   // Rows 0..2 reflect the legal prefix (initial, after "{", after `"a"`).
-  JsonObjectGrammarState committed_state = initial_states[0];
-  ASSERT_TRUE(committed_state.accept_token(0));
+  ConstraintState committed_state = initial_states[0].fork();
+  ASSERT_TRUE(committed_state.advance(0, HaltPolicy::RESPECT));
   EXPECT_EQ(validation_states[1].fingerprint(), committed_state.fingerprint());
-  ASSERT_TRUE(committed_state.accept_token(1));
+  ASSERT_TRUE(committed_state.advance(1, HaltPolicy::RESPECT));
   EXPECT_EQ(validation_states[2].fingerprint(), committed_state.fingerprint());
   // Rows at and beyond the invalid draft freeze at the last legal prefix,
   // which is exactly the state the sequence tracker will be in when the
@@ -304,15 +309,15 @@ TEST(DFlashJsonObjectStateTest, BlockDraftFreezesAtMidBlockInvalid) {
 
 TEST(DFlashJsonObjectStateTest, MaskedResampleAtRejectionReplaysCleanly) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state()};
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1);
   // Rejection sampling under the frozen-state mask accepts the legal prefix,
   // resamples the illegal position from the target's masked distribution
   // (":" here), and pads the rest of the row with -1.
   const int64_t accepted_tokens[] = {0, 1, 2, -1, -1, -1};
 
   const std::vector<detail::JsonAcceptedTokenMismatch> mismatches =
-      detail::find_json_accepted_token_mismatches(
+      detail::verify_json_accepted_rows(
           initial_states, accepted_tokens, /*num_rows=*/1, /*row_width=*/6);
 
   EXPECT_TRUE(mismatches.empty());
@@ -320,14 +325,14 @@ TEST(DFlashJsonObjectStateTest, MaskedResampleAtRejectionReplaysCleanly) {
 
 TEST(DFlashJsonObjectStateTest, IllegalAcceptedTokenReportsMismatch) {
   JsonObjectGrammar grammar = make_mtp_grammar();
-  const std::vector<JsonObjectGrammarState> initial_states = {
-      grammar.initial_state()};
+  const std::vector<ConstraintState> initial_states =
+      make_builtin_test_states(grammar, 1);
   // An accepted row that (incorrectly) keeps the illegal draft token must be
   // reported at the exact offset and token id.
   const int64_t accepted_tokens[] = {0, 1, 5, 3, 4, -1};
 
   const std::vector<detail::JsonAcceptedTokenMismatch> mismatches =
-      detail::find_json_accepted_token_mismatches(
+      detail::verify_json_accepted_rows(
           initial_states, accepted_tokens, /*num_rows=*/1, /*row_width=*/6);
 
   ASSERT_EQ(mismatches.size(), 1u);

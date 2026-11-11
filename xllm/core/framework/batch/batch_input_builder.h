@@ -114,7 +114,7 @@ class BatchInputBuilder {
 
     // Sampling data
     std::vector<const RequestSamplingParam*> sampling_params;
-    std::vector<JsonObjectGrammarState> json_object_states;
+    std::vector<ConstraintState> json_object_states;
     std::vector<XGrammarState*> xgrammar_states;  // Sequence owns these states.
     std::vector<std::string> sample_sequence_ids;
     std::vector<int32_t> sample_prior_output_rows;

@@ -24,6 +24,7 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
+#include "core/framework/constraint/state_machine.h"
 #include "core/framework/sampling/json_object_grammar.h"
 
 namespace xllm {
@@ -76,7 +77,7 @@ inline bool has_request_id_overlap(
 }
 
 inline bool resolve_json_object_output_rows(
-    const std::vector<JsonObjectGrammarState>& states,
+    const std::vector<ConstraintState>& states,
     const std::vector<std::string>& current_sample_sequence_ids,
     const std::vector<int32_t>& current_prior_output_rows,
     const std::vector<std::string>& last_sample_sequence_ids,

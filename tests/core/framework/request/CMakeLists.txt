@@ -287,6 +287,19 @@ target_link_options(sequence_generated_tokens_test
 
 cc_test(
   NAME
+    sequence_json_object_restore_test
+  CPU_ONLY
+  SRCS
+    sequence_json_object_restore_test.cpp
+  DEPS
+    :request
+    :constraint
+    $<$<BOOL:${USE_MLU}>:torch_mlu>
+    $<$<BOOL:${USE_NPU}>:torch_npu>
+    GTest::gtest_main
+)
+cc_test(
+  NAME
     sequence_stop_output_test
   CPU_ONLY
   SRCS

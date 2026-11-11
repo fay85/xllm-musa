@@ -35,6 +35,7 @@ cc_test(
     json_object_grammar_test.cpp
   DEPS
     :json_object_grammar
+    :constraint
     GTest::gtest_main
 )
 

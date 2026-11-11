@@ -163,7 +163,7 @@ class WorkerImpl {
   virtual void process_group_test();
 
   virtual ForwardInput update_input_by_last_step_output(ForwardInput& inputs);
-  void update_json_object_states_by_last_step_output(ForwardInput& inputs);
+  void advance_json_object_states(ForwardInput& inputs);
   void sanitize_json_object_error_inputs(ForwardInput& inputs);
 
   // initialize model, cache manager. async call
