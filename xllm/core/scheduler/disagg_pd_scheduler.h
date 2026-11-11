@@ -282,7 +282,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
   ThreadPool prefill_threadpool_{
       /*num_threads=*/(std::getenv("XLLM_PREFILL_SEND_THREADS") != nullptr
                            ? std::max(1, std::atoi(std::getenv("XLLM_PREFILL_SEND_THREADS")))
-                           : 1),
+                           : 4),
       /*cpu_binding=*/false,
       /*pool_name=*/"DisaggPDScheduler.prefill"};
 

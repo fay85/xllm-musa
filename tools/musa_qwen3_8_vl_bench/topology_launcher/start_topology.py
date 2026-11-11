@@ -222,11 +222,11 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
             f'--max_memory_utilization={"0.85" if decode else "0.9"}',
             f'--max_linear_state_cache_slots={12 if decode else 32}',
             f'--max_tokens_per_batch={32768 if decode else 10240}',
-            f'--max_tokens_per_chunk_for_prefill={2048 if decode else int(os.environ.get("TOPOLOGY_PREFILL_CHUNK", "10240"))}',
+            f'--max_tokens_per_chunk_for_prefill={2048 if decode else int(os.environ.get("TOPOLOGY_PREFILL_CHUNK", "8192"))}',
             f'--max_tokens_for_graph_mode={4096 if decode else int(os.environ.get("TOPOLOGY_PREFILL_GRAPH_TOKENS", "8192"))}', f'--enable_prefill_piecewise_graph={str(not decode).lower()}']
     if not decode:
         argv += ["--prefill_batch_wait_ms=0", "--enable_in_batch_prefix_cache=false", "--musa_prefill_graph_token_stride=64"]
-    req_threads = os.environ.get("TOPOLOGY_NUM_REQUEST_HANDLING_THREADS", "").strip()
+    req_threads = os.environ.get("TOPOLOGY_NUM_REQUEST_HANDLING_THREADS", "8").strip()
     if req_threads:
         argv.append(f"--num_request_handling_threads={int(req_threads)}")
     if role == "DEFAULT":
@@ -236,10 +236,10 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
                  "MTHREADS_VISIBLE_DEVICES": gpu_string, "LD_PRELOAD": env["MUSA_PRELOAD"],
                  "FLASHINFER_OPS_PATH": env["MUSA_OPS_DIR"], "MC_MIN_RPC_PORT": str(p["mooncake_min"]),
                  "MC_MAX_RPC_PORT": str(p["mooncake_max"]),
-                 "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "180"}
-    for passthrough in ("XLLM_DISABLE_ASYNC_PREFILL_DP", "XLLM_PREFILL_SEND_THREADS"):
-        if os.environ.get(passthrough):
-            overrides[passthrough] = os.environ[passthrough]
+                 "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "180",
+                 "XLLM_PREFILL_SEND_THREADS": os.environ.get("XLLM_PREFILL_SEND_THREADS", "4")}
+    if os.environ.get("XLLM_DISABLE_ASYNC_PREFILL_DP"):
+        overrides["XLLM_DISABLE_ASYNC_PREFILL_DP"] = os.environ["XLLM_DISABLE_ASYNC_PREFILL_DP"]
     return {**rank, "argv": argv, "env_overrides": overrides}
 
 
