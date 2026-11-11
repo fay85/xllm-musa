@@ -266,12 +266,6 @@ int64_t dsv41_cache_unit_tokens(bool is_v41,
   return static_cast<int64_t>(block_size) * std::max<int64_t>(max_ratio, 1);
 }
 
-inline constexpr char kV41ExperimentalPrefixCacheRequired[] =
-    "V4.1 host offload and Store require experimental prefix cache; "
-    "set XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE=1";
-
-bool v41_experimental_prefix_cache_enabled();
-
 // Return an actionable error for an unsupported host prefix-cache
 // configuration, or std::nullopt when the configuration is valid.
 std::optional<std::string> validate_host_cache_options(

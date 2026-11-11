@@ -44,7 +44,6 @@ limitations under the License.
 #include "framework/block/sliding_window_block_manager.h"
 #include "framework/config/scheduler_config.h"
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
-#include "framework/kv_cache_transfer/scoped_environment_variable.h"
 #include "framework/request/request.h"
 #include "framework/request/sequence.h"
 #include "framework/request/stopping_checker.h"
@@ -610,9 +609,6 @@ TEST(HierarchyBlockManagerPoolTest, TypedLayoutHasSwaC4C128HostLeaves) {
 }
 
 TEST(HierarchyBlockManagerPoolTest, V41TokenGroupsOffloadAndRestoreCommonUnit) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   for (const uint32_t ratio : {1u, 2u, 0u}) {
     SCOPED_TRACE(ratio);
     const bool has_c2 = ratio != 1;
@@ -694,9 +690,6 @@ TEST(HierarchyBlockManagerPoolTest, SwaTailBlocksClampToAvailableHistory) {
 }
 
 TEST(HierarchyBlockManagerPoolTest, V41NarrowWindowOffloadKeepsSwaTails) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   auto options = make_typed_cache_options();
   options.model_type("deepseek_v41")
       .num_blocks(64)
@@ -748,9 +741,6 @@ TEST(HierarchyBlockManagerPoolTest, V41NarrowWindowOffloadKeepsSwaTails) {
 }
 
 TEST(HierarchyBlockManagerPoolTest, V41DSparkOffloadsOnlyCommittedCheckpoints) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   for (const uint32_t committed : {511u, 512u, 513u}) {
     SCOPED_TRACE(committed);
     auto options = make_typed_cache_options();
@@ -788,9 +778,6 @@ TEST(HierarchyBlockManagerPoolTest, V41DSparkOffloadsOnlyCommittedCheckpoints) {
 
 TEST(HierarchyBlockManagerPoolTest,
      V41DecodeUnsupportedLayoutNamesRoleAndLeaves) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   auto options = make_typed_cache_options();
   options.model_type("deepseek_v41")
       .compress_ratios({0, 2, 1})
@@ -803,9 +790,6 @@ TEST(HierarchyBlockManagerPoolTest,
 }
 
 TEST(HierarchyBlockManagerPoolTest, V41StorePrefetchGatesBothTokenGroups) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   auto options = make_typed_cache_options();
   options.model_type("deepseek_v41")
       .num_blocks(64)
@@ -861,9 +845,6 @@ TEST(HierarchyBlockManagerPoolTest, V41StorePrefetchGatesBothTokenGroups) {
 }
 
 TEST(HierarchyBlockManagerPoolTest, V41StorePrefetchFitsCheckpointSwaCapacity) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   auto options = make_typed_cache_options();
   options.model_type("deepseek_v41")
       .num_blocks(64)

@@ -31,7 +31,6 @@ limitations under the License.
 #include "framework/kv_cache/cache_layout_builder.h"
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
 #include "framework/kv_cache/kv_cache_shape.h"
-#include "util/env_var.h"
 #include "util/utils.h"
 #if defined(USE_MLU)
 #include "platform/mlu/mlu_host_memory.h"
@@ -628,11 +627,6 @@ int64_t dsv4_host_swa_block_count(int64_t checkpoint_block_count,
   return host_checkpoint_blocks * blocks_per_checkpoint;
 }
 
-bool v41_experimental_prefix_cache_enabled() {
-  return util::get_bool_env("XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE",
-                            /*defaultValue=*/false);
-}
-
 std::optional<std::string> validate_host_cache_options(
     const HostCacheValidationOptions& options) {
   if (!std::isfinite(options.host_blocks_factor) ||
@@ -698,9 +692,6 @@ std::optional<std::string> validate_host_cache_options(
   }
   if (options.has_grouped_cache_layout &&
       util::is_deepseek_v41_model_type(options.model_type)) {
-    if (!v41_experimental_prefix_cache_enabled()) {
-      violations.emplace_back(kV41ExperimentalPrefixCacheRequired);
-    }
     if (options.instance_role == InstanceRole::DECODE) {
       violations.emplace_back(
           "V4.1 grouped host offload/Store is not supported on DECODE "

@@ -37,7 +37,6 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache_shape.h"
 #include "framework/kv_cache/kv_cache_tensor_allocator.h"
 #include "framework/kv_cache/kv_cache_utils.h"
-#include "framework/kv_cache_transfer/scoped_environment_variable.h"
 #include "framework/parallel_state/linear_attention_parallel.h"
 #include "platform/device.h"
 #include "platform/platform.h"
@@ -1466,9 +1465,7 @@ TEST_F(HostKVCacheConfigTest, RejectsUnsupportedGroupedCacheLayout) {
   EXPECT_NE(error->find("grouped cache layout"), std::string::npos);
 }
 
-TEST_F(HostKVCacheConfigTest, V41GroupedHostCacheRequiresExperimentalOptIn) {
-  tests::ScopedEnvironmentVariable env(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
+TEST_F(HostKVCacheConfigTest, V41GroupedHostCacheNeedsNoExperimentalOptIn) {
   HostCacheValidationOptions options;
   options.host_blocks_factor = 2.0;
   options.device_block_count = 128;
@@ -1479,25 +1476,8 @@ TEST_F(HostKVCacheConfigTest, V41GroupedHostCacheRequiresExperimentalOptIn) {
   for (bool store_enabled : {false, true}) {
     SCOPED_TRACE(store_enabled);
     options.enable_kvcache_store = store_enabled;
-    ASSERT_EQ(unsetenv("XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE"), 0);
-    EXPECT_FALSE(v41_experimental_prefix_cache_enabled());
-    const std::optional<std::string> missing =
-        validate_host_cache_options(options);
-    ASSERT_TRUE(missing.has_value());
-    EXPECT_NE(missing->find(kV41ExperimentalPrefixCacheRequired),
-              std::string::npos);
-    for (const char* disabled : {"0", "false"}) {
-      ASSERT_TRUE(env.set(disabled));
-      EXPECT_FALSE(v41_experimental_prefix_cache_enabled());
-      EXPECT_TRUE(validate_host_cache_options(options).has_value());
-    }
-    for (const char* enabled : {"1", "true"}) {
-      ASSERT_TRUE(env.set(enabled));
-      EXPECT_TRUE(v41_experimental_prefix_cache_enabled());
-      EXPECT_FALSE(validate_host_cache_options(options).has_value());
-    }
+    EXPECT_FALSE(validate_host_cache_options(options).has_value());
   }
-  ASSERT_EQ(unsetenv("XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE"), 0);
   options.model_type = "deepseek_v4";
   EXPECT_FALSE(validate_host_cache_options(options).has_value());
   options.model_type = "deepseek_v41";
@@ -1521,9 +1501,6 @@ TEST_F(HostKVCacheConfigTest, AcceptsSupportedGroupedCacheLayout) {
 }
 
 TEST_F(HostKVCacheConfigTest, V41GroupedHostCacheRejectsDecodeRole) {
-  tests::ScopedEnvironmentVariable experimental(
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE");
-  ASSERT_TRUE(experimental.set("1"));
   HostCacheValidationOptions options;
   options.host_blocks_factor = 2.0;
   options.device_block_count = 128;

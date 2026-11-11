@@ -42,7 +42,6 @@ limitations under the License.
 #include "framework/sampling/sampling_params.h"
 #include "platform/device.h"
 #include "platform/platform.h"
-#include "tests/core/framework/kv_cache_transfer/scoped_environment_variable.h"
 
 namespace xllm {
 
@@ -3575,9 +3574,6 @@ TEST_F(V41PrefixCacheTest, V41PressureEvictsPrefixAndAllowsRepublication) {
 }
 
 TEST_F(V41PrefixCacheTest, V41HostAndStoreLeavesUseValidatedOptions) {
-  tests::ScopedEnvironmentVariable env{
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE"};
-  ASSERT_EQ(unsetenv("XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE"), 0);
   BlockManager::Options options = make_v41_prefix_options();
   options.enable_host_offload(true);
   EXPECT_NO_FATAL_FAILURE(build_composite_leaves(options));
@@ -3730,9 +3726,6 @@ TEST_F(V41SpecPrefixCacheTest, SpecRejectsMtpLookaheadHashers) {
 }
 
 TEST_F(V41SpecPrefixCacheTest, SpecSupportsHostOffloadAndStore) {
-  tests::ScopedEnvironmentVariable env{
-      "XLLM_ENABLE_EXPERIMENTAL_V41_PREFIX_CACHE"};
-  ASSERT_TRUE(env.set("1"));
   for (const bool use_store : {false, true}) {
     BlockManager::Options options = make_v41_prefix_options();
     options.num_speculative_tokens(5)
