@@ -1,0 +1,355 @@
+{
+  "status": "PASS",
+  "model_impl": "python",
+  "mode": "1P1D eager C1",
+  "attention_tp": 8,
+  "routed_ep": 8,
+  "expert_tp": 1,
+  "scope": "model selection, GPU ranks and actual Mooncake pull evidence; no layerwise accuracy claim",
+  "rows": [
+    {
+      "host": "sj9",
+      "rank": 0,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank0.log",
+      "log_bytes": 110054,
+      "log_prefix_sha256": "c03f3967721f2d94bb90845d5c5ce03da750f6305f4541633ff356c5fa30682d",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 1,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank1.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "b0f125eca2d089a4d6dd324fb0e4f03ad83eb57964fbe44d10b6bccbb970a5f9",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 2,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank2.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "060fdef9543a37cdd56bc29a2de9217242ab15707b6f1f20b505451480753c7c",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 3,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank3.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "e42072e6eb53a6e9bc36274347ab020c8727ec6f76655a740260a7f09657548b",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 4,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank4.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "3b8ab89e51930660361a496aed0bcf8b075d9838e294f1a0ea5e9c6368c8a0dd",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 5,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank5.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "eea63277dc42023767e7d6270f8d8175ba1919aa14bd134631cf7cbefa656c16",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 6,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank6.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "fa34958b748f0c29da9236283dd957aa4b2cb17e2bb8bb7fde3287764934a910",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 7,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj9/rank7.log",
+      "log_bytes": 91496,
+      "log_prefix_sha256": "082c67e2d699cdb5b20260075d4068b90628a2f9ac310004672e571515dc0cf1",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj10",
+      "rank": 0,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank0.log",
+      "log_bytes": 113816,
+      "log_prefix_sha256": "3cdb03b1066378fec33bc4dd1b4e506db2027298d4dc72c1ed43b742167a514e",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.697242 60532 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.04183, move_ms=23.8319, success=true",
+        "I20261111 07:46:41.419487 60532 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.061939, move_ms=0.329419, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 1,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank1.log",
+      "log_bytes": 95674,
+      "log_prefix_sha256": "e458573cf60fab7e0699783fa6ccedf3f1a7a417b0549ddee396b79633fd15e9",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.696970 60533 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.039637, move_ms=23.3863, success=true",
+        "I20261111 07:46:41.420307 60533 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.070441, move_ms=1.00939, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 2,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank2.log",
+      "log_bytes": 95672,
+      "log_prefix_sha256": "07c28d667e93a0d1afca9ce18e2670a4976304799837291a3fa530c813da39ec",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.697749 60534 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.044103, move_ms=24.2147, success=true",
+        "I20261111 07:46:41.420233 60534 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.076099, move_ms=0.970484, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 3,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank3.log",
+      "log_bytes": 95670,
+      "log_prefix_sha256": "03257589f0608d79d59833b5c6d5d3656a1b79213da31b36f2260371b594471b",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.697165 60541 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.042721, move_ms=23.6341, success=true",
+        "I20261111 07:46:41.420320 60541 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.102066, move_ms=1.00731, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 4,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank4.log",
+      "log_bytes": 95670,
+      "log_prefix_sha256": "c2b7d28385a4a646ec8179f28ed15e2cd68d37840743b61b0128dd87ec3f35ab",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.697628 60535 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.040007, move_ms=24.0569, success=true",
+        "I20261111 07:46:41.420284 60535 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.0838, move_ms=1.02341, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 5,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank5.log",
+      "log_bytes": 95672,
+      "log_prefix_sha256": "477d7f8b53a7da67f75fa1a28b9bac4fa4ab1be0925c0d671b8346feb83f64d1",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.699700 60537 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.043242, move_ms=26.1637, success=true",
+        "I20261111 07:46:41.420210 60537 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.061578, move_ms=0.921114, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 6,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank6.log",
+      "log_bytes": 95672,
+      "log_prefix_sha256": "6bbf0f222a3c30bebb0f119527a7cf0335e25c68a37a6ed096271239e7fb54fc",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.697410 60545 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.055559, move_ms=23.8461, success=true",
+        "I20261111 07:46:41.420359 60545 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.13316, move_ms=0.959969, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 7,
+      "model_impl": "python",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_python_aligned_runtime_v2/source_manifest.json",
+      "log_markers": [
+        "V4.1 MUSA shared SwiGLU: mode=v4_fused,",
+        "V4.1 MUSA mHC: ",
+        "Original FP8 dense activation QDQ selected",
+        "Original V4.1 attention QDQ selected"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_python_aligned_v2/sj10/rank7.log",
+      "log_bytes": 95673,
+      "log_prefix_sha256": "d1b1a7da1082e68c2f88f9f121bcc8d96482433d227b34020cedfeee8a435a7a",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:46:30.697811 60540 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.050872, move_ms=24.2614, success=true",
+        "I20261111 07:46:41.420353 60540 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26406, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.073235, move_ms=1.01724, success=true"
+      ]
+    }
+  ]
+}

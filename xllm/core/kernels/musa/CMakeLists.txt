@@ -11,6 +11,9 @@ set(_TORCH_MUSA_KERNEL_HDRS
   mrope.h
   musa_kernel_utils.h
   musa_fp8_quant_utils.cuh
+  deepseek_v41_attention_quant.h
+  deepseek_v41_engram_gate.h
+  deepseek_v41_fp4_accum.cuh
   deepseek_v4_dsa_rope.h
   deepseek_v4_fp8_roundtrip.h
   deepseek_v4_indexer_metadata.h
@@ -91,6 +94,12 @@ set(_TORCH_MUSA_KERNEL_SRCS
   deepseek_v4_dsa_rope.cu
   deepseek_v4_gate_gemv.cu
   deepseek_v4_gate_topk.cu
+  deepseek_v41_gate_topk.cu
+  deepseek_v41_engram_gate.cu
+  deepseek_v41_attention_quant.cu
+  deepseek_v41_fp4.cu
+  deepseek_v41_partition_gemm.cpp
+  deepseek_v41_decode_moe.cu
   deepseek_v4_shared_expert_gate.cu
   deepseek_v4_fp8_roundtrip.cu
   deepseek_v4_dsa_cache_ops.cu

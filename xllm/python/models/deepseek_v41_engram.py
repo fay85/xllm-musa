@@ -1751,6 +1751,10 @@ class Engram(nn.Module):
         # rotated (h_rot) while q/k/wkv-K are in the original basis, so the
         # gate dot uses h_rot @ Q.T. None on unrotated checkpoints.
         self.register_buffer("gate_unrotate", gate_unrotate, persistent=False)
+        from xllm.python.kernels_musa.engram import select_engram_gate
+
+        self._musa_gate = select_engram_gate(device, dtype, hidden_size, hc_mult,
+                                              rms_norm_eps, gate_unrotate is not None)
         self._staged_rows: torch.Tensor | None = None
         # Offload: this rank's host-gathered block, staged by the runner outside
         # the graph. The TP all-gather stays in-graph (gather_heads below).
@@ -1930,6 +1934,8 @@ class Engram(nn.Module):
         """
         rows = self.embed(hash_ids, num_tokens=hidden_states.shape[0]).to(self.wkv.weight.dtype)
         kv = self.wkv(rows.flatten(-2))
+        if self._musa_gate is not None:
+            return self._musa_gate(hidden_states, kv, self.q_weight, self.k_weight, token_mask)
         num_tokens, hc_mult, dim = hidden_states.shape
         keys = kv[:, : hc_mult * dim].view(num_tokens, hc_mult, dim).float()
         value = kv[:, hc_mult * dim :].float()

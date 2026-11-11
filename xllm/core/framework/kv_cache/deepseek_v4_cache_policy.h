@@ -15,9 +15,12 @@ limitations under the License.
 
 #pragma once
 
+#include <glog/logging.h>
 #include <torch/torch.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <string_view>
 
 namespace xllm {
 
@@ -46,14 +49,38 @@ struct DeepSeekV4CachePolicy {
   int64_t scale_dtype_size = 2;
 };
 
+// Both allocator and estimator use this model-specific choice. BF16 carries
+// the original FP4 QDQ values exactly; it is not the final packed cache layout.
+inline bool dsv41_original_attention_qdq_enabled([[maybe_unused]] bool is_v41) {
+#if defined(USE_MUSA)
+  if (!is_v41) {
+    return false;
+  }
+  const char* value = std::getenv("XLLM_DSV41_MUSA_ATTENTION_QUANT");
+  const std::string_view mode = value == nullptr ? "reference" : value;
+  CHECK(mode == "reference" || mode == "original_qdq")
+      << "Invalid XLLM_DSV41_MUSA_ATTENTION_QUANT: " << mode;
+  return mode == "original_qdq";
+#else
+  return false;
+#endif
+}
+
 inline DeepSeekV4CachePolicy get_dsv4_cache_policy(
-    [[maybe_unused]] torch::ScalarType model_dtype) {
+    [[maybe_unused]] torch::ScalarType model_dtype,
+    bool is_v41 = false) {
   DeepSeekV4CachePolicy policy;
 #if defined(USE_MLU)
   // MLU keeps the index plane in the model dtype with no per-token scale.
   policy.index_dtype = model_dtype;
   policy.has_indexer_cache_scale = false;
 #endif
+  if (dsv41_original_attention_qdq_enabled(is_v41)) {
+    CHECK_EQ(model_dtype, torch::kBFloat16)
+        << "Original V4.1 attention QDQ cache requires BF16 model storage";
+    policy.index_dtype = torch::kBFloat16;
+    policy.has_indexer_cache_scale = false;
+  }
   policy.index_dtype_size =
       static_cast<int64_t>(torch::elementSize(policy.index_dtype));
   policy.scale_dtype_size =

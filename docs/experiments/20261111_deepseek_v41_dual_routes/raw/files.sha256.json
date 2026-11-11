@@ -1,0 +1,10 @@
+{
+  "source_manifest.json": "658237438590fae970a27c78b702ac0c0118c6aeda6132b6dc65b2302fd7b241",
+  "evalscope/pd_evidence.json": "922d9bed4fe1a0f446b7dbbf0b42f56c4d36c19eaf082c5652479fdf4cb63872",
+  "evalscope/validated_summary.json": "3b565e16a56e9400763ab98244c3cd93c0bb82efa423d20d13e63edf2125797f",
+  "evalscope/measured_per_request.csv": "c237fb0d7eb9ade8314277c86c3553c03a88986271f637615f1a2464cf360437",
+  "inputs/input256_output256.jsonl": "08fc9be80799e1a4b9b39eb7a2d22293fa652d73599ff883dffcb58fdc1d7462",
+  "inputs/input2048_output256.jsonl": "5454bc24c2545508e21f61c81c7fbe14137a815d5f9462d97bd90513a577e047",
+  "launcher/launch.json": "9dc448e6cee7146008e67f57d0aeb2d7e45a15af146c9734ac7e736fb8ff81ec",
+  "launcher/basic_pd_gate.json": "999758394edb6bbf27a9498b1cab7301d6308225e393b660f337a07a68196388"
+}

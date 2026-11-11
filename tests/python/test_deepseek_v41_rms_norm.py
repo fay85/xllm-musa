@@ -455,7 +455,7 @@ def test_pure_torch_moe_applies_post_norm_before_routing() -> None:
 
     norm = v41.DeepseekV41RMSNorm(8, 1e-6, torch.float32)
     hidden = torch.randn(4, 8, dtype=torch.float32)
-    moe = SimpleNamespace(cfg=SimpleNamespace(hidden_size=8), _selection_logits=capture_selection)
+    moe = SimpleNamespace(cfg=SimpleNamespace(hidden_size=8), _musa_gate=None, _selection_logits=capture_selection)
 
     with pytest.raises(_StopForward):
         v41.DeepseekV41MoE.forward(moe, hidden, post_norm=norm)

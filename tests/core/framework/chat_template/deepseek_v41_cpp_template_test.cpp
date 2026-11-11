@@ -143,4 +143,76 @@ TEST(DeepseekV41CppTemplate, TextMarkerWithoutImagesSurvives) {
 }
 
 }  // namespace
+
+TEST(DeepseekV41CppTemplate, ContinueAssistantKeepsOriginalPromptAndPrefix) {
+  auto encoder = make_encoder();
+  ChatMessages messages;
+  messages.emplace_back("user", "Only answer: 1.3+2.9?");
+  nlohmann::ordered_json kwargs = {{"thinking", false}};
+  auto base = encoder.apply(messages, {}, kwargs);
+  ASSERT_TRUE(base.has_value());
+  messages.emplace_back("assistant", "4.");
+  kwargs["continue_final_message"] = true;
+  auto continued = encoder.apply(messages, {}, kwargs);
+  ASSERT_TRUE(continued.has_value());
+  EXPECT_EQ(continued.value(), base.value() + "4.");
+  EXPECT_FALSE(continued->ends_with("<｜end▁of▁sentence｜>"));
+}
+
+TEST(DeepseekV41CppTemplate, ContinueAssistantPreservesTrailingSpace) {
+  auto encoder = make_encoder();
+  ChatMessages messages;
+  messages.emplace_back("user", "Explain experiment records.");
+  nlohmann::ordered_json kwargs = {{"thinking", false}};
+  auto base = encoder.apply(messages, {}, kwargs);
+  ASSERT_TRUE(base.has_value());
+  const std::string prefix =
+      "Keeping experiment records helps engineers because it ";
+  messages.emplace_back("assistant", prefix);
+  kwargs["continue_final_message"] = true;
+  auto continued = encoder.apply(messages, {}, kwargs);
+  ASSERT_TRUE(continued.has_value());
+  EXPECT_EQ(continued.value(), base.value() + prefix);
+}
+
+TEST(DeepseekV41CppTemplate, AssistantContinuationDefaultKeepsEos) {
+  auto encoder = make_encoder();
+  ChatMessages messages;
+  messages.emplace_back("user", "Only answer: 1.3+2.9?");
+  messages.emplace_back("assistant", "4.");
+  const nlohmann::ordered_json kwargs = {{"thinking", false}};
+  auto prompt = encoder.apply(messages, {}, kwargs);
+  ASSERT_TRUE(prompt.has_value());
+  EXPECT_TRUE(prompt->ends_with("4.<｜end▁of▁sentence｜>"));
+}
+
+TEST(DeepseekV41CppTemplate, ContinueAssistantRejectsNonBoolean) {
+  auto encoder = make_encoder();
+  ChatMessages messages;
+  messages.emplace_back("user", "Only answer: 1.3+2.9?");
+  messages.emplace_back("assistant", "4.");
+  const nlohmann::ordered_json kwargs = {{"thinking", false},
+                                         {"continue_final_message", "true"}};
+  EXPECT_FALSE(encoder.apply(messages, {}, kwargs).has_value());
+}
+
+TEST(DeepseekV41CppTemplate, ContinueAssistantRejectsFinalUser) {
+  auto encoder = make_encoder();
+  ChatMessages messages;
+  messages.emplace_back("user", "Only answer: 1.3+2.9?");
+  const nlohmann::ordered_json kwargs = {{"thinking", false},
+                                         {"continue_final_message", true}};
+  EXPECT_FALSE(encoder.apply(messages, {}, kwargs).has_value());
+}
+
+TEST(DeepseekV41CppTemplate, ContinueAssistantRejectsThinkingMode) {
+  auto encoder = make_encoder();
+  ChatMessages messages;
+  messages.emplace_back("user", "Only answer: 1.3+2.9?");
+  messages.emplace_back("assistant", "4.");
+  const nlohmann::ordered_json kwargs = {{"thinking", true},
+                                         {"continue_final_message", true}};
+  EXPECT_FALSE(encoder.apply(messages, {}, kwargs).has_value());
+}
+
 }  // namespace xllm
