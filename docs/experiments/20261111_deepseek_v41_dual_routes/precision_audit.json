@@ -1,0 +1,32 @@
+{
+  "diagnostic_binary_sha256": "bfd08ee86774cd0326cb69826da1c7eff46b32952b4c3e36076aa232c2facc4f",
+  "cases": {
+    "control": {
+      "position": 22,
+      "native_vs_archived_python_same_role_exact": {
+        "prefill": true,
+        "decode": true
+      },
+      "first_native_prefill_decode_difference": "attn_tp_sum",
+      "rank0_projection_before_reduce_max_abs": 0.0,
+      "rank0_projection_after_reduce_max_abs": 0.03125,
+      "native_prefill_decode_full_logits_max_abs": 3.0,
+      "prefill_argmax": 20,
+      "decode_argmax": 20
+    },
+    "original_common": {
+      "position": 262,
+      "native_vs_archived_python_same_role_exact": {
+        "prefill": true,
+        "decode": true
+      },
+      "first_native_prefill_decode_difference": "attn_tp_sum",
+      "rank0_projection_before_reduce_max_abs": 0.0,
+      "rank0_projection_after_reduce_max_abs": 0.03125,
+      "native_prefill_decode_full_logits_max_abs": 2.5,
+      "prefill_argmax": 15170,
+      "decode_argmax": 15170
+    }
+  },
+  "scope": "Native diagnostic versus archived Python diagnostic, fixed short and historical prompt. Same-role equality for 40 last-row hidden, pre_mix, final hidden, and full logits. P/D contrast separately recorded. Rank0 only for pre-reduction observation."
+}

@@ -25,14 +25,19 @@ top of the runtime :class:`DsaMetadata` contract built by :mod:`dsa_metadata`:
   * the sparse attention gather over ``[window rows ; top-k compressed rows]``
     with the attention-sink normalizer term.
 
-DeepSeek-V4.1 is NPU-only (no CPU/CUDA fallback). The decode ACL-graph path
-routes through the official fused ops, selected by their static guards and
+The NPU decode ACL-graph path uses fused ops selected by static guards and
 registration state (no env gating): ``quant_lightning_indexer_v2_va``
 (QLI v3) replaces the indexer chain, and the interleaved RoPE has a fused
 partial-rotary path. On A3, BF16 sparse attention uses the migrated DSV4.1
 SMLA kernel; the reference implementation remains available for other shapes
 and numerical validation. The model owns all weights; the backend only
 orchestrates caches and math.
+
+MUSA can explicitly select original_qdq: Indexer FP4/group32 UE8M0,
+compressed-KV FP4/group16 E4M3, and the SWA/output FP8/block32 boundaries.
+The first implementation carries quantized-dequantized values in BF16 cache
+storage, paired with native allocation/estimation and transfer identity.
+This is not a packed-cache or fully fused sparse-attention implementation.
 """
 
 from __future__ import annotations
@@ -44,6 +49,8 @@ from typing import Any, Sequence
 import torch
 
 from scripts.logger import logger
+from xllm.python.kernels_musa.attention_quant import select_attention_quant
+from xllm.python.kernels_musa.rotary import select_rotary
 from xllm.python.attention.csa2_block_metadata import Csa2BlockAttentionMetadata
 from xllm.python.attention.csa_attention import (
     DsaAttentionBackend,
@@ -465,6 +472,10 @@ def apply_interleaved_rope(
     (the position axis is always ``x``'s first axis). The math runs in fp32
     and the result is cast back to ``x``'s dtype.
     """
+    if x.device.type == "musa":
+        musa_rotary = select_rotary()
+        if musa_rotary is not None:
+            return musa_rotary(x, positions, cos_sin_cache, inverse)
     if _rope_fused_supported(x, positions, cos_sin_cache, inverse):
         if inverse:
             _log_fused_rope_inverse_active()
@@ -703,6 +714,8 @@ def _select_candidate_blocks(
     compress_lens: torch.Tensor,
     topk_blocks: int,
     block_size: int,
+    *,
+    stable_ties: bool = False,
 ) -> torch.Tensor:
     """Level one of the two-level top-k (model.py:583-610).
 
@@ -712,7 +725,12 @@ def _select_candidate_blocks(
     """
     width = score.size(-1)
     padded = torch.nn.functional.pad(score, (0, -width % block_size), value=float("-inf"))
-    blocks = padded.unflatten(-1, (-1, block_size)).amax(dim=-1)
+    grouped = padded.unflatten(-1, (-1, block_size))
+    blocks = grouped.amax(dim=-1)
+    if stable_ties:
+        # TorchMUSA amax(all -inf) returns lowest-finite. Keep unreachable
+        # blocks at -inf before candidate selection in original-QDQ mode.
+        blocks = torch.where(grouped.ne(float("-inf")).any(dim=-1), blocks, float("-inf"))
     num_blocks = blocks.size(-1)
     # Pin the block holding the query's newest committed position: it is only
     # partly filled and could otherwise be outscored by an older, full block.
@@ -721,8 +739,16 @@ def _select_candidate_blocks(
         torch.arange(num_blocks, device=score.device) == last.unsqueeze(-1),
         float("inf"),
     )
-    top = blocks.topk(min(topk_blocks, num_blocks), dim=-1)
-    keep = torch.zeros_like(blocks, dtype=torch.bool).scatter_(-1, top.indices, top.values > float("-inf"))
+    count = min(topk_blocks, num_blocks)
+    if stable_ties:
+        # Zero-score block ties are common after relu-weighted scoring.
+        # topk's tie order depends on total capacity, making an identical
+        # prefix choose a different candidate pool in a longer prefill.
+        indices = torch.argsort(blocks, dim=-1, descending=True, stable=True)[..., :count]
+        values = blocks.gather(-1, indices)
+    else:
+        values, indices = blocks.topk(count, dim=-1)
+    keep = torch.zeros_like(blocks, dtype=torch.bool).scatter_(-1, indices, values > float("-inf"))
     # repeat_interleave is pathological for 1-byte dtypes on Ascend, so the
     # unsqueeze->expand->flatten form replaces it.
     expanded = keep.unsqueeze(-1).expand(*keep.shape, block_size)
@@ -1231,6 +1257,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         self.head_dim = attn_head_dim
         self.device = device
         self.dtype = dtype
+        self._attention_quant = select_attention_quant(device, dtype)
         self.scale = attn_head_dim**-0.5
 
         self.index_source_layer_ids = sorted({int(source) for source in index_source_layer_ids})
@@ -1314,6 +1341,12 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         return (self.window_size - 1) // swa_block + 1
 
     def bind_kv_caches(self, kv_caches: list[Any]) -> None:
+        if self._attention_quant is not None:
+            for cache in kv_caches:
+                if cache.index is not None and cache.index.dtype != torch.bfloat16:
+                    raise ValueError("Original V4.1 QDQ requires a BF16 index cache; rebuild native allocator")
+                if cache.indexer_scale is not None:
+                    raise ValueError("Original V4.1 BF16 index carrier has no separate INT8 scale plane")
         super().bind_kv_caches(kv_caches)
         if self._kv_caches and self._kv_caches[0].swa is not None:
             block_size = int(self._kv_caches[0].swa.size(1))
@@ -1835,19 +1868,23 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                     all_slot_seqs,
                     all_slot_mask,
                 )
-                # The index plane is always INT8 (NPU platform policy): the
-                # cache keeps per-row symmetric int8 codes plus an fp16
-                # per-token scale, matching vllm-ascend's index K cache.
-                index_codes, index_scales = _quantize_indexer_rows_int8(index_k)
-                _scatter_by_slot(layer_cache.index, index_slots, index_codes)
-                if layer_cache.indexer_scale is not None:
-                    _scatter_by_slot(
-                        layer_cache.indexer_scale,
-                        index_slots,
-                        index_scales.unsqueeze(-1),
-                    )
+                if self._attention_quant is not None:
+                    index_values = self._attention_quant.index(index_k)
+                    _scatter_by_slot(layer_cache.index, index_slots, index_values)
+                else:
+                    # Preserve the existing INT8/FP16 NPU representation.
+                    index_codes, index_scales = _quantize_indexer_rows_int8(index_k)
+                    _scatter_by_slot(layer_cache.index, index_slots, index_codes)
+                    if layer_cache.indexer_scale is not None:
+                        _scatter_by_slot(
+                            layer_cache.indexer_scale,
+                            index_slots,
+                            index_scales.unsqueeze(-1),
+                        )
         if latent is not None:
             rotated = apply_interleaved_rope(latent, all_starts, ctx.cos_sin_cache)
+            if self._attention_quant is not None:
+                rotated = self._attention_quant.compressed(rotated)
             if layer_cache.key is not None:
                 key_slots = _token_cache_slots(
                     key_block_table,
@@ -1922,26 +1959,29 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         # single-arg call is kept for backends/fakes that predate the switch.
         q_idx = layer.indexer_query(ctx.qr, ctx.qr_scale) if ctx.qr_scale is not None else layer.indexer_query(ctx.qr)
         q_idx = apply_interleaved_rope(q_idx, ctx.positions, ctx.cos_sin_cache)
-        qli_reason = self._qli_v3_fallback_reason(layer, dsa, q_lens, shared, index_cache)
-        if qli_reason is None:
-            _log_qli_v3_active()
-            return self._run_indexer_qli_v3(
-                layer,
-                q_idx,
-                ctx,
-                dsa,
-                q_lens,
-                shared,
-                block_table,
-                capacity,
-            )
-        _log_qli_v3_fallback(qli_reason)
-        # The eager indexer scores in the INT8 query domain: the query is
-        # per-row symmetric INT8 quantized and dequantized back to fp32, the
-        # same representation the fused path uses for its query side. This
-        # matches the INT8 index cache write exactly.
-        q_codes, q_scales = _quantize_indexer_rows_int8(q_idx)
-        q_idx = q_codes.float() * q_scales.unsqueeze(-1).float()
+        if self._attention_quant is not None:
+            q_idx = self._attention_quant.index(q_idx).float()
+        else:
+            qli_reason = self._qli_v3_fallback_reason(layer, dsa, q_lens, shared, index_cache)
+            if qli_reason is None:
+                _log_qli_v3_active()
+                return self._run_indexer_qli_v3(
+                    layer,
+                    q_idx,
+                    ctx,
+                    dsa,
+                    q_lens,
+                    shared,
+                    block_table,
+                    capacity,
+                )
+            _log_qli_v3_fallback(qli_reason)
+            # The eager indexer scores in the INT8 query domain: the query is
+            # per-row symmetric INT8 quantized and dequantized back to fp32, the
+            # same representation the fused path uses for its query side. This
+            # matches the INT8 index cache write exactly.
+            q_codes, q_scales = _quantize_indexer_rows_int8(q_idx)
+            q_idx = q_codes.float() * q_scales.unsqueeze(-1).float()
         weights = layer.indexer_weights(ctx.x)
 
         candidates_per_seq: list[torch.Tensor | None] | None = None
@@ -1967,12 +2007,13 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             # values before math, not only the later attention/indexer scores.
             committed_rows = torch.arange(capacity, device=q_idx.device) < committed
             index_k = torch.where(committed_rows.unsqueeze(-1), index_k, 0)
-            # The index plane is always INT8 (NPU platform policy): the cache
-            # holds per-row codes; dequantize with the per-token scale plane
-            # (same physical slots, gathered the same way).
-            index_scales = self._gather_cache_rows(shared.index_scale, block_table, seq, capacity, block_size)
-            index_scales = torch.where(committed_rows.unsqueeze(-1), index_scales, 0)
-            index_k = index_k.float() * index_scales.float()
+            if self._attention_quant is not None:
+                index_k = index_k.float()
+            else:
+                # INT8 and its scale remain paired for the existing NPU path.
+                index_scales = self._gather_cache_rows(shared.index_scale, block_table, seq, capacity, block_size)
+                index_scales = torch.where(committed_rows.unsqueeze(-1), index_scales, 0)
+                index_k = index_k.float() * index_scales.float()
             # A compressed group is visible to query p once p has passed its
             # last token: visible(p) = (p + 1) // ratio (model.py:562-567);
             # rows past this sequence's committed count (or past the graph's
@@ -1998,14 +2039,15 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                 score.masked_fill_(t_range >= committed.unsqueeze(-1), float("-inf"))
                 if layer_id == self.candidate_source_layer_id:
                     assert candidates_per_seq is not None
-                    pool_tiles.append(
-                        _select_candidate_blocks(
-                            score,
-                            tile_visible,
-                            self.candidate_topk_blocks,
-                            self.candidate_block_size,
-                        )
-                    )
+                    if self._attention_quant is not None:
+                        pool = _select_candidate_blocks(
+                            score, tile_visible, self.candidate_topk_blocks,
+                            self.candidate_block_size, stable_ties=True)
+                    else:
+                        pool = _select_candidate_blocks(
+                            score, tile_visible, self.candidate_topk_blocks,
+                            self.candidate_block_size)
+                    pool_tiles.append(pool)
                 elif self._uses_candidates(layer_id):
                     if shared.candidates is None or seq >= len(shared.candidates):
                         raise RuntimeError(

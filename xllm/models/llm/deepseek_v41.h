@@ -33,9 +33,9 @@ namespace xllm {
 
 // DeepSeek V4.1 Flash config.json -> ModelArgs loader plus its args policy.
 //
-// deepseek_v41 is a TORCH-only, python-impl model (like glm5_next): this
-// header registers ONLY the args loader and the "llm" model backend; the
-// CausalLM is built by PyCausalLM via xllm.python.models.deepseek_v41.
+// Shared V4.1 arguments for PyCausalLM and the MUSA native CausalLM. This
+// header registers the args loader and backend; the native factory is
+// registered only for MUSA in models/llm/musa/deepseek_v41_native.h.
 //
 // The V4.1 HF config keeps model_type / dtype / token ids / image_token_id at
 // the root and nests every text-side field under "text_config" (verified
@@ -275,6 +275,8 @@ inline bool load_deepseek_v41_model_args(const JsonReader& json,
               "text_config.num_experts_per_tok",
               args->n_activated_experts());
   LOAD_ARG_OR(n_shared_experts, "text_config.n_shared_experts", 1);
+  LOAD_ARG_OR(first_k_dense_replace, "text_config.first_k_dense_replace", 0);
+  LOAD_ARG_OR(moe_layer_freq, "text_config.moe_layer_freq", 1);
   LOAD_ARG_OR(moe_intermediate_size, "text_config.moe_intermediate_size", 2304);
   LOAD_ARG_OR(routed_scaling_factor, "text_config.routed_scaling_factor", 1.5f);
   LOAD_ARG_OR(scoring_func, "text_config.scoring_func", "sqrtsoftplus");
@@ -434,9 +436,7 @@ inline bool load_deepseek_v41_model_args(const JsonReader& json,
   return true;
 }
 
-// Register the deepseek_v41 model backend ("llm"); no C++ CausalLM class is
-// registered because the model runs exclusively through the python executor
-// (--model_impl=python -> PyCausalLM -> xllm.python.models.deepseek_v41).
+// Register the shared deepseek_v41 model backend.
 REGISTER_MODEL_BACKEND(deepseek_v41, "llm");
 
 // register the model args

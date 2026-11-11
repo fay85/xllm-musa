@@ -759,14 +759,15 @@ def _build_tiny_checkpoint(cfg: DeepseekV41Config) -> dict[str, torch.Tensor]:
         tensors[p + "attn.q_norm.weight"] = torch.ones(q_lora)
         tensors[p + "attn.kv_norm.weight"] = torch.ones(head_dim)
         tensors[p + "attn.attn_sink"] = torch.zeros(n_heads)
-        if i in (2, 4):  # Full layers: compressor (gate only at ratio 2) + indexer.
+        if i in cfg.kv_source_layer_ids:  # Full layers own compressor and index K.
             tensors[p + "attn.compressor.wkv.weight"] = w(head_dim, hidden)
             if cfg.compress_ratios[i] > 1:
                 tensors[p + "attn.compressor.wgate.weight"] = w(head_dim, hidden)
             tensors[p + "attn.compressor.norm.weight"] = torch.ones(head_dim)
-            tensors[p + "attn.indexer.wq_b.weight"] = w(cfg.index_n_heads * cfg.index_head_dim, q_lora)
             tensors[p + "attn.indexer.wk.weight"] = w(cfg.index_head_dim, head_dim)
             tensors[p + "attn.indexer.k_norm.weight"] = torch.ones(cfg.index_head_dim)
+        if i in cfg.index_source_layer_ids or i in cfg.kv_source_layer_ids:
+            tensors[p + "attn.indexer.wq_b.weight"] = w(cfg.index_n_heads * cfg.index_head_dim, q_lora)
             tensors[p + "attn.indexer.weights_proj.weight"] = w(cfg.index_n_heads, hidden)
         # MoE: gate + bias + bias_vl, routed + shared experts.
         tensors[p + "ffn.gate.weight"] = torch.randn(n_experts, hidden)
@@ -781,11 +782,11 @@ def _build_tiny_checkpoint(cfg: DeepseekV41Config) -> dict[str, torch.Tensor]:
         # wkv / q / k arrive as plain floats.
         if i in cfg.engram_layer_ids:
             n_hash_cols = (cfg.engram_max_ngram_size - 1) * cfg.engram_n_heads
-            head_dim = cfg.engram_head_dim
+            engram_head_dim = cfg.engram_head_dim
             rows = cfg.engram_num_embeddings[cfg.engram_layer_ids.index(i)]
-            tensors[p + "engram.embed.weight"] = torch.randint(0, 256, (rows, head_dim), dtype=torch.uint8)
-            tensors[p + "engram.embed.scale"] = torch.randint(126, 130, (rows, head_dim // 32), dtype=torch.uint8)
-            tensors[p + "engram.wkv.weight"] = w(hidden * (cfg.hc_mult + 1), n_hash_cols * head_dim)
+            tensors[p + "engram.embed.weight"] = torch.randint(0, 256, (rows, engram_head_dim), dtype=torch.uint8)
+            tensors[p + "engram.embed.scale"] = torch.randint(126, 130, (rows, engram_head_dim // 32), dtype=torch.uint8)
+            tensors[p + "engram.wkv.weight"] = w(hidden * (cfg.hc_mult + 1), n_hash_cols * engram_head_dim)
             tensors[p + "engram.q_weight"] = w(cfg.hc_mult, hidden)
             tensors[p + "engram.k_weight"] = w(cfg.hc_mult, hidden)
     return tensors
@@ -1300,6 +1301,7 @@ def _allocate_v41_layer_caches(
     device: torch.device | None = None,
     *,
     reserve_token_sink: bool = False,
+    original_attention_qdq: bool = False,
 ) -> list[LayerCache]:
     """LayerCache tensors for the contract-section-2 layout.
 
@@ -1328,11 +1330,13 @@ def _allocate_v41_layer_caches(
                 value=None,
                 # The NPU platform policy keeps the index plane in INT8 plus an
                 # FP16 per-token scale; the pure-Python tests mirror it.
-                index=torch.zeros(token_blocks, _TOKEN_BLOCK_SIZE, cfg.index_head_dim, dtype=torch.int8, device=device),
+                index=torch.zeros(token_blocks, _TOKEN_BLOCK_SIZE, cfg.index_head_dim,
+                                  dtype=dtype if original_attention_qdq else torch.int8, device=device),
                 swa=swa(),
                 compress_kv_state=swa(torch.float32) if states else None,
                 compress_score_state=swa(torch.float32) if states else None,
-                indexer_scale=torch.zeros(token_blocks, _TOKEN_BLOCK_SIZE, 1, dtype=torch.float16, device=device),
+                indexer_scale=None if original_attention_qdq else torch.zeros(
+                    token_blocks, _TOKEN_BLOCK_SIZE, 1, dtype=torch.float16, device=device),
             )
         )
     return caches
@@ -1353,6 +1357,8 @@ class _V41ForwardHarness:
         n_seqs: int,
         dtype: torch.dtype,
         device: torch.device | None = None,
+        *,
+        original_attention_qdq: bool = False,
     ) -> None:
         self.lm = lm
         self.cfg = lm.cfg
@@ -1367,7 +1373,8 @@ class _V41ForwardHarness:
         self.tok2_bt = (torch.arange(n_seqs, dtype=torch.int32, device=self.device) + 1).view(n_seqs, 1)
         self.tok1_bt = (torch.arange(n_seqs, dtype=torch.int32, device=self.device) + 1).view(n_seqs, 1)
         self.layer_caches = _allocate_v41_layer_caches(
-            self.cfg, n_seqs, dtype, device=self.device, reserve_token_sink=True
+            self.cfg, n_seqs, dtype, device=self.device, reserve_token_sink=True,
+            original_attention_qdq=original_attention_qdq
         )
         self.executor = ModelExecutor(lm, dict(config), max_seqs_per_batch=n_seqs)
         self.executor.bind_kv_caches(self.layer_caches)

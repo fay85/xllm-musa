@@ -1,0 +1,307 @@
+{
+  "status": "PASS",
+  "model_impl": "native",
+  "mode": "1P1D eager C1",
+  "attention_tp": 8,
+  "routed_ep": 8,
+  "expert_tp": 1,
+  "scope": "model selection, GPU ranks and actual Mooncake pull evidence; no layerwise accuracy claim",
+  "rows": [
+    {
+      "host": "sj9",
+      "rank": 0,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank0.log",
+      "log_bytes": 43978,
+      "log_prefix_sha256": "3018d4dfce0fd7c0f2b8bc0884c3f760ae4ad96d9134c2a9dee4a8d812d185fc",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 1,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank1.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "b5bc7a36c20e736aa7d9328bc31126ececa8545327ebf52c0b23662b5717ca41",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 2,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank2.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "2090ce2d97eaf8dd6f7aca4d6c1e97d403e779386a2443a5917f75f59cd57c65",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 3,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank3.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "5a5852647ee5d7d8448346915997466bfe9639bf341cd4e1f964b67ab6a19bf8",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 4,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank4.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "77e5d235d440c66015907c6b0b2a984ad1dd2b960c2b798fbf834e974eebb139",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 5,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank5.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "8d28405311889f848ce2519c813ac356a1fecc5dc0d20f64378060ff8a527d23",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 6,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank6.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "4c1239e267a9b632b27d71bd0a9eb24729251482a89b842b1f7c04003721c7f3",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj9",
+      "rank": 7,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj9/rank7.log",
+      "log_bytes": 25424,
+      "log_prefix_sha256": "9be1dba67f17144c330a43b0451b75d04d316460b347cbdb3ec1f67bb754a132",
+      "configured_nic_filter": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+      "nonempty_successful_pulls": 0,
+      "first_two_pulls": []
+    },
+    {
+      "host": "sj10",
+      "rank": 0,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank0.log",
+      "log_bytes": 47739,
+      "log_prefix_sha256": "57bc459f6f9a0921822ebf17a6ae74a7f8a73fd4b133070c19009de49edf480e",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.322479 52258 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.045525, move_ms=23.8828, success=true",
+        "I20261111 07:14:08.228169 52258 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.052074, move_ms=0.601528, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 1,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank1.log",
+      "log_bytes": 29601,
+      "log_prefix_sha256": "fdc494e8b102f9bea9fb6a1389aa9b41b7480c5a0957a3334d192b20acbc2126",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.322646 52259 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.04228, move_ms=24.0476, success=true",
+        "I20261111 07:14:08.228550 52259 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.05614, move_ms=0.924619, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 2,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank2.log",
+      "log_bytes": 29600,
+      "log_prefix_sha256": "6a82abedeba2e908c207bc3ffdc64af9eb0f9c76b669f6cf44ed0a6cae8e0fb1",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.322989 52260 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.046155, move_ms=24.3306, success=true",
+        "I20261111 07:14:08.228740 52260 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.146859, move_ms=0.940041, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 3,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank3.log",
+      "log_bytes": 29600,
+      "log_prefix_sha256": "f3b1b35853e8350262c3b39dd487da0d48a7f105d95669744c0fe07e35ef228c",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.322778 52261 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.047688, move_ms=24.1178, success=true",
+        "I20261111 07:14:08.228415 52261 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.04958, move_ms=0.816765, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 4,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank4.log",
+      "log_bytes": 29600,
+      "log_prefix_sha256": "7a4eb777b6677bc213bd260b073b44a6e7d757540f198268a9cc1a1a3f5b9e07",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.323609 52262 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.04201, move_ms=24.9933, success=true",
+        "I20261111 07:14:08.228739 52262 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.089558, move_ms=1.02042, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 5,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank5.log",
+      "log_bytes": 29606,
+      "log_prefix_sha256": "7df10a08bb3185970184ce580a5281b1768da751bbd5de92d2a88058bd0a7449",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.325531 52267 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.047428, move_ms=26.7075, success=true",
+        "I20261111 07:14:08.228659 52267 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.056641, move_ms=0.950236, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 6,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank6.log",
+      "log_bytes": 29602,
+      "log_prefix_sha256": "46fce9995cfb0c5a816e379c078ca95489f451bf9a0dc4f2b0fbf3008994692e",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.322956 52270 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.047778, move_ms=24.2316, success=true",
+        "I20261111 07:14:08.228720 52270 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.089638, move_ms=1.06509, success=true"
+      ]
+    },
+    {
+      "host": "sj10",
+      "rank": 7,
+      "model_impl": "native",
+      "model_path": "/work/artifacts/model_view_native_1017_v1",
+      "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+      "source_manifest": "artifacts/night_cpp_native_runtime_v3/source_manifest.json",
+      "log_markers": [
+        "Native V4.1 original weights ready"
+      ],
+      "log_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3/sj10/rank7.log",
+      "log_bytes": 29600,
+      "log_prefix_sha256": "7535bd8228de785d6d6b0c76ede68145eac4874ba84baa5c4f7e69fd041c6297",
+      "configured_nic_filter": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+      "nonempty_successful_pulls": 2,
+      "first_two_pulls": [
+        "I20261111 07:13:57.322362 52263 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.057642, move_ms=23.6501, success=true",
+        "I20261111 07:14:08.228722 52263 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376896700, remote=10.121.32.7:26400, mapping_groups=3, layers=40, regions=54, packed_regions=54, bind_ms=0.081817, move_ms=1.02012, success=true"
+      ]
+    }
+  ]
+}

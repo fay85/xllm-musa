@@ -1,0 +1,28 @@
+{
+  "command": [
+    "docker",
+    "exec",
+    "-d",
+    "-e",
+    "MUSA_VISIBLE_DEVICES=-1",
+    "xiaopang1110_v41_decode_sj10",
+    "bash",
+    "-c",
+    "echo $$ > /work/03_benchmarks/night_cpp_native_v3_launch/client_shell.pid; (python3 /work/03_benchmarks/night_cpp_native_v3_launch/scripts/run_official_performance.py --url http://10.121.32.9:29080/v1/chat/completions --gate /work/02_correctness/night_cpp_native_v3/basic/basic_gate.json --output /work/03_benchmarks/night_cpp_native_v3 --binary /work/artifacts/night_cpp_native_runtime_v3/xllm && python3 /work/03_benchmarks/night_cpp_native_v3_launch/scripts/summarize_performance.py --run /work/03_benchmarks/night_cpp_native_v3 --server-run /work/runs/night_cpp_native_v3 && python3 /work/03_benchmarks/night_cpp_native_v3_launch/scripts/verify_aligned_pd.py --run /work/runs/night_cpp_native_v3 --output /work/03_benchmarks/night_cpp_native_v3/pd_evidence.json --model-impl native --min-pulls 14) > /work/03_benchmarks/night_cpp_native_v3_launch/client.log 2>&1; rc=$?; echo \"$rc\" > /work/03_benchmarks/night_cpp_native_v3_launch/exit; exit \"$rc\""
+  ],
+  "script_sha256": {
+    "run_official_performance.py": "44dbc23a7a3b8e87bc3281c16922084d7e3fba4214d52b3dee3a98ee93ba2b69",
+    "summarize_performance.py": "1c80d4d2c811d69035c73f87cc5f8f669a455f6ac8e110c31b4803a90c2851c4",
+    "verify_aligned_pd.py": "eba35b5f76445ef1cbb1ad5aa496198f84ba659c57a6eb5dad4b7d3d42e1891c"
+  },
+  "model_impl": "native",
+  "server_run": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/night_cpp_native_v3",
+  "output": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/03_benchmarks/night_cpp_native_v3",
+  "evalscope_version": "1.14.1",
+  "binary_sha256": "aaae381a887ea5bc288fb3ffb728021cb4f4b1b553fe37cfed9a93b4748513d3",
+  "model_path": "/work/artifacts/model_view_native_1017_v1",
+  "prompt_sha256": {
+    "256": "08fc9be80799e1a4b9b39eb7a2d22293fa652d73599ff883dffcb58fdc1d7462",
+    "2048": "5454bc24c2545508e21f61c81c7fbe14137a815d5f9462d97bd90513a577e047"
+  }
+}

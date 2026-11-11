@@ -35,7 +35,10 @@ limitations under the License.
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/kv_cache/deepseek_v4_cache_policy.h"
 #include "core/platform/platform.h"
+#include "core/runtime/deepseek_v41_execution_contract.h"
+#include "core/util/utils.h"
 
 namespace xllm {
 namespace {
@@ -113,6 +116,16 @@ std::string kv_layout_contract(const ModelArgs& args,
                                bool include_block_size) {
   std::string contract;
   append_contract_value(args.model_type(), &contract);
+  if (dsv41_original_attention_qdq_enabled(
+          util::is_deepseek_v41_model_type(args.model_type()))) {
+    append_contract_value("v41-original-attention-qdq-bf16-carrier-v1",
+                          &contract);
+  }
+  const std::string execution_contract = deepseek_v41_execution_contract(
+      util::is_deepseek_v41_model_type(args.model_type()));
+  if (!execution_contract.empty()) {
+    append_contract_value(execution_contract, &contract);
+  }
   append_contract_value(args.dtype(), &contract);
   append_numeric_contract_value(args.n_layers(), &contract);
   append_numeric_contract_value(args.n_heads(), &contract);

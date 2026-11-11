@@ -26,15 +26,21 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--shared-swiglu", choices=("reference", "v4_fused"), default="reference")
     parser.add_argument("--save-tensors", type=Path)
+    parser.add_argument("--rope", choices=("reference", "v4_fused"), default="reference")
     parser.add_argument("--mhc", choices=("reference", "post", "post_pre", "all"), default="reference")
+    parser.add_argument("--gate", choices=("reference", "v41_fused"), default="reference")
+    parser.add_argument("--attention-quant", choices=("reference", "original_qdq"), default="reference")
     args = parser.parse_args()
     if torch.musa.device_count() != 1:
         raise RuntimeError("Expose exactly one idle GPU")
     os.environ["XLLM_DSV41_MUSA_SHARED_SWIGLU"] = args.shared_swiglu
+    os.environ["XLLM_DSV41_MUSA_ROPE"] = args.rope
+    os.environ["XLLM_DSV41_MUSA_GATE"] = args.gate
+    os.environ["XLLM_DSV41_MUSA_ATTENTION_QUANT"] = args.attention_quant
     for part in ("POST", "PRE", "METADATA"):
         enabled = args.mhc == "all" or part == "POST" and args.mhc in ("post", "post_pre") or part == "PRE" and args.mhc == "post_pre"
         os.environ[f"XLLM_DSV41_MUSA_HC_{part}"] = "v4_fused" if enabled else "reference"
-    if args.shared_swiglu == "v4_fused" or args.mhc != "reference":
+    if args.shared_swiglu == "v4_fused" or args.mhc != "reference" or args.rope == "v4_fused" or args.gate == "v41_fused" or args.attention_quant != "reference":
         import musa_python_kernel_test_module
 
         sys.modules["xllm_runtime"] = musa_python_kernel_test_module
@@ -74,7 +80,8 @@ def main() -> None:
         logger.info("Fixture initialized")
         nseq, length = 2, model.cfg.window_size + 1
         ids = torch.randint(0, model.cfg.vocab_size, (nseq, length)).to(device)
-        prefill = _V41ForwardHarness(model, config, nseq, torch.bfloat16, device)
+        prefill = _V41ForwardHarness(model, config, nseq, torch.bfloat16, device,
+                                      original_attention_qdq=args.attention_quant == "original_qdq")
         hidden = prefill.step(ids.flatten(), torch.arange(length, device=device).repeat(nseq), [length] * nseq, [length] * nseq, is_prefill=True)
         logits = prefill.logits(hidden).reshape(nseq, length, -1)
         saved_hidden = hidden.detach().cpu() if args.save_tensors else None
@@ -84,7 +91,8 @@ def main() -> None:
         if magnitude <= 1e-4 or diversity <= 1e-5:
             raise AssertionError("Degenerate logits would make parity validation vacuous")
         logger.info("Prefill finished: magnitude=%s, adjacent-token diversity=%s", magnitude, diversity)
-        decode = _V41ForwardHarness(model, config, nseq, torch.bfloat16, device)
+        decode = _V41ForwardHarness(model, config, nseq, torch.bfloat16, device,
+                                      original_attention_qdq=args.attention_quant == "original_qdq")
         errors = []
         decode_logits = []
         for pos in range(length):
@@ -98,11 +106,14 @@ def main() -> None:
             logger.info("Decode position %s: max_abs_logits_error=%s", pos, error)
         result = {"status": "PASS", "sequences": nseq, "tokens_each": length, "layers": model.cfg.n_layers, "engram_layers": model.cfg.engram_layer_ids, "max_abs_logits": magnitude, "adjacent_token_logits_difference": diversity, "max_abs_logits_error_by_position": errors, "scope": "real single-GPU MUSA execution; random tiny weights and Engram table, synthetic page metadata, no network transfer; not full-model accuracy"}
         result["mhc"] = args.mhc
+        result["rope"] = args.rope
+        result["gate"] = args.gate
+        result["attention_quant"] = args.attention_quant
         args.output.write_text(json.dumps(result, indent=2))
         if args.save_tensors:
             torch.save({"ids": ids.cpu(), "hidden": saved_hidden, "prefill_logits": logits.cpu(),
                         "decode_logits": torch.stack(decode_logits, dim=1),
-                        "shared_swiglu": args.shared_swiglu, "mhc": args.mhc}, args.save_tensors)
+                        "shared_swiglu": args.shared_swiglu, "mhc": args.mhc, "rope": args.rope, "gate": args.gate}, args.save_tensors)
         print(json.dumps(result), flush=True)
 
 
