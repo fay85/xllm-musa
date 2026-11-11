@@ -1,13 +1,18 @@
 {
   "topology_name": "pd_1p1d_dp2cp2_dp4",
   "mode": "pd",
-  "concurrency": 16,
+  "concurrency": 24,
   "benchmark_concurrency": 8,
   "groups": [
     {
       "name": "prefill0",
       "role": "PREFILL",
-      "visible_gpus": [0, 1, 2, 3],
+      "visible_gpus": [
+        0,
+        1,
+        2,
+        3
+      ],
       "world_size": 4,
       "dp_size": 2,
       "cp_size": 2
@@ -15,7 +20,12 @@
     {
       "name": "decode0",
       "role": "DECODE",
-      "visible_gpus": [4, 5, 6, 7],
+      "visible_gpus": [
+        4,
+        5,
+        6,
+        7
+      ],
       "world_size": 4,
       "dp_size": 4,
       "cp_size": 1

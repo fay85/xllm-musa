@@ -28,7 +28,7 @@ import urllib.request
 
 
 HERE = Path(__file__).resolve().parent
-EXPECTED_ENGINE_MD5 = "3e464a5b77092efe063631d333ce6532"
+EXPECTED_ENGINE_MD5 = "4201d1dc45da88f9fa54773f3448615f"
 DEFAULT_BUNDLE = "/workspace/ttft_delivery_1110/release/xllm_ttft_fix_1110"
 DEFAULT_WORK = "/workspace/topology_sweep_1110"
 # Below the ephemeral range 32768-60999. Ports inside that range lose the bind
@@ -222,10 +222,13 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
             f'--max_memory_utilization={"0.85" if decode else "0.9"}',
             f'--max_linear_state_cache_slots={12 if decode else 32}',
             f'--max_tokens_per_batch={32768 if decode else 10240}',
-            f'--max_tokens_per_chunk_for_prefill={2048 if decode else 10240}',
-            "--max_tokens_for_graph_mode=4096", f'--enable_prefill_piecewise_graph={str(not decode).lower()}']
+            f'--max_tokens_per_chunk_for_prefill={2048 if decode else int(os.environ.get("TOPOLOGY_PREFILL_CHUNK", "10240"))}',
+            f'--max_tokens_for_graph_mode={4096 if decode else int(os.environ.get("TOPOLOGY_PREFILL_GRAPH_TOKENS", "8192"))}', f'--enable_prefill_piecewise_graph={str(not decode).lower()}']
     if not decode:
         argv += ["--prefill_batch_wait_ms=0", "--enable_in_batch_prefix_cache=false", "--musa_prefill_graph_token_stride=64"]
+    req_threads = os.environ.get("TOPOLOGY_NUM_REQUEST_HANDLING_THREADS", "").strip()
+    if req_threads:
+        argv.append(f"--num_request_handling_threads={int(req_threads)}")
     if role == "DEFAULT":
         argv += ["--enable_service_routing=true"]
     gpu_string = ",".join(map(str, rank["visible_gpus"]))
@@ -234,6 +237,9 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
                  "FLASHINFER_OPS_PATH": env["MUSA_OPS_DIR"], "MC_MIN_RPC_PORT": str(p["mooncake_min"]),
                  "MC_MAX_RPC_PORT": str(p["mooncake_max"]),
                  "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "180"}
+    for passthrough in ("XLLM_DISABLE_ASYNC_PREFILL_DP", "XLLM_PREFILL_SEND_THREADS"):
+        if os.environ.get(passthrough):
+            overrides[passthrough] = os.environ[passthrough]
     return {**rank, "argv": argv, "env_overrides": overrides}
 
 

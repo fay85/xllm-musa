@@ -39,7 +39,9 @@ def snapshot(run: Path, dest: Path) -> None:
     plan = json.loads((run / "effective_plan.json").read_text())
     ports = sorted({r["ports"]["http"] for r in plan["ranks"] if r["node_rank"] == 0})
     fields = ("mm_input_loading", "mm_preprocess", "tokenization_latency",
-              "chat_template_latency", "request_handling_latency")
+              "chat_template_latency", "request_handling_latency",
+              "prefix_cache_prompt_tokens_total", "prefix_cache_hit_tokens_total",
+              "prefix_cache_token_hit_rate_perc")
     data = {}
     for port in ports:
         try:
@@ -51,7 +53,37 @@ def snapshot(run: Path, dest: Path) -> None:
     dest.write_text(json.dumps(data, indent=2))
 
 
-def qualify(run: Path, out: Path) -> dict:
+
+def parse_bvar_prefix_cache(vars_path: Path, prefill_ports: list[int]) -> dict:
+    if not vars_path.exists():
+        return {}
+    raw_map = json.loads(vars_path.read_text())
+    prompt_sum = 0
+    hit_sum = 0
+    gauges = {}
+    for p in prefill_ports:
+        snippet = raw_map.get(str(p), "")
+        if not isinstance(snippet, str):
+            continue
+        m_p = re.search(r'id="value-prefix_cache_prompt_tokens_total">([0-9.eE+-]+)<', snippet)
+        m_h = re.search(r'id="value-prefix_cache_hit_tokens_total">([0-9.eE+-]+)<', snippet)
+        m_g = re.search(r'id="value-prefix_cache_token_hit_rate_perc">([0-9.eE+-]+)<', snippet)
+        if not m_p:
+            m_p = re.search(r'prefix_cache_prompt_tokens_total\s*:\s*([0-9.]+)', snippet)
+        if not m_h:
+            m_h = re.search(r'prefix_cache_hit_tokens_total\s*:\s*([0-9.]+)', snippet)
+        if not m_g:
+            m_g = re.search(r'prefix_cache_token_hit_rate_perc\s*:\s*([0-9.]+)', snippet)
+        if m_p:
+            prompt_sum += int(float(m_p.group(1)))
+        if m_h:
+            hit_sum += int(float(m_h.group(1)))
+        if m_g:
+            gauges[str(p)] = float(m_g.group(1))
+    return {"prompt_tokens_total": prompt_sum, "hit_tokens_total": hit_sum, "gauges_perc": gauges}
+
+
+def qualify(run: Path, out: Path, prompt_tokens: int = 22752, cached_tokens: int = 20480) -> dict:
     plan = json.loads((run / "effective_plan.json").read_text())
     data = json.loads((out / "bench.json").read_text())
     ids = {x["request_id"] for x in data["requests"]}
@@ -84,8 +116,8 @@ def qualify(run: Path, out: Path) -> dict:
         rid = request["request_id"]
         source = terminal["DEFAULT" if aggregate else "PREFILL"].get(rid, {})
         final = source if aggregate else terminal["DECODE"].get(rid, {})
-        valid = (source.get("prompt_tokens") == final.get("prompt_tokens") == 22752 and
-                 source.get("num_prefix_cache_tokens") == 20480 and
+        valid = (source.get("prompt_tokens") == final.get("prompt_tokens") == prompt_tokens and
+                 source.get("num_prefix_cache_tokens") == cached_tokens and
                  source.get("generated_tokens") == (100 if aggregate else 1) and
                  final.get("generated_tokens") == request.get("completion_tokens") == 100)
         rows.append(dict(request_id=rid, valid=valid, source=source, final=final))
@@ -93,10 +125,25 @@ def qualify(run: Path, out: Path) -> dict:
     proposed = sum(r.get("speculative_proposed_tokens", 0) for r in final_stats.values())
     accepted = sum(r.get("speculative_accepted_tokens", 0) for r in final_stats.values())
     summary = data["summary"]
-    summary["kv_logged_requests"] = len(terminal["DEFAULT" if aggregate else "PREFILL"])
-    summary["kv_prompt_tokens"] = sum(r["source"].get("prompt_tokens", 0) for r in rows)
-    summary["kv_cached_tokens"] = sum(r["source"].get("num_prefix_cache_tokens", 0) for r in rows)
-    summary["kv_hit_rate"] = round(summary["kv_cached_tokens"] / summary["kv_prompt_tokens"], 4) if summary["kv_prompt_tokens"] else None
+    prefill_role = "DEFAULT" if aggregate else "PREFILL"
+    prefill_ports = sorted({r["ports"]["http"] for r in plan["ranks"] if r["node_rank"] == 0 and r["role"] == prefill_role})
+    bvar_before = parse_bvar_prefix_cache(out / "vars_before.json", prefill_ports)
+    bvar_after = parse_bvar_prefix_cache(out / "vars_after.json", prefill_ports)
+    bvar_window_prompt = bvar_after.get("prompt_tokens_total", 0) - bvar_before.get("prompt_tokens_total", 0)
+    bvar_window_hit = bvar_after.get("hit_tokens_total", 0) - bvar_before.get("hit_tokens_total", 0)
+    bvar_cum_prompt = bvar_after.get("prompt_tokens_total", 0)
+    bvar_cum_hit = bvar_after.get("hit_tokens_total", 0)
+    summary["bvar_cumulative_prompt_tokens"] = bvar_cum_prompt
+    summary["bvar_cumulative_hit_tokens"] = bvar_cum_hit
+    summary["bvar_cumulative_hit_rate_perc"] = round(bvar_cum_hit * 100.0 / bvar_cum_prompt, 4) if bvar_cum_prompt > 0 else None
+    summary["bvar_port_gauges_perc"] = bvar_after.get("gauges_perc", {})
+    summary["bvar_window_prompt_tokens"] = bvar_window_prompt
+    summary["bvar_window_hit_tokens"] = bvar_window_hit
+    summary["bvar_window_hit_rate"] = round(bvar_window_hit / bvar_window_prompt, 4) if bvar_window_prompt > 0 else None
+    summary["kv_logged_requests"] = len(terminal[prefill_role])
+    summary["kv_prompt_tokens"] = bvar_window_prompt if bvar_window_prompt > 0 else sum(r["source"].get("prompt_tokens", 0) for r in rows)
+    summary["kv_cached_tokens"] = bvar_window_hit if bvar_window_prompt > 0 else sum(r["source"].get("num_prefix_cache_tokens", 0) for r in rows)
+    summary["kv_hit_rate"] = summary["bvar_window_hit_rate"] if bvar_window_prompt > 0 else (round(summary["kv_cached_tokens"] / summary["kv_prompt_tokens"], 4) if summary["kv_prompt_tokens"] else None)
     summary["mtp_acceptance"] = round(accepted / proposed, 4) if proposed else None
     for label, values in [("ttft", [r["ttft_ms"] for r in data["requests"]]),
                           ("tpot", [(r["last_ms"] - r["ttft_ms"]) / 99 for r in data["requests"]])]:
@@ -125,6 +172,12 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--request-timeout", type=float, default=240)
     parser.add_argument("--warm-closed", type=int, default=240)
+    parser.add_argument("--prompts", type=Path)
+    parser.add_argument("--isl", type=int, default=22752)
+    parser.add_argument("--shared", type=int, default=21904)
+    parser.add_argument("--prefix-cached", type=int, default=20480)
+    parser.add_argument("--warm", type=int, default=28)
+    parser.add_argument("--requests", type=int, default=60)
     args = parser.parse_args()
     bundle = args.bundle_dir.resolve()
     run = args.run_dir.resolve()
@@ -172,14 +225,15 @@ def main() -> int:
     bench._master_burst = tiny
     bench._MASTER_BURST = args.concurrency
     url = f'http://127.0.0.1:{plan["port_bases"]["master_http"]}'
+    prompts = (args.prompts or (bundle / "data/prompts_88.json")).resolve()
     argv = ["--url", url, "--model", "Qwen3.8-27B-FP8", "--tokenizer", args.model_dir,
-            "--data-dir", str(bundle / "data"), "--prompts", str(bundle / "data/prompts_88.json"),
-            "--isl", "22752", "--shared", "21904", "--osl", "100", "--concurrency", str(args.concurrency),
-            "--requests", "60", "--warm", "28", "--warm-concurrency", "4", "--warm-master", "2",
+            "--data-dir", str(bundle / "data"), "--prompts", str(prompts),
+            "--isl", str(args.isl), "--shared", str(args.shared), "--osl", "100", "--concurrency", str(args.concurrency),
+            "--requests", str(args.requests), "--warm", str(args.warm), "--warm-concurrency", "4", "--warm-master", "2",
             "--warm-closed", str(args.warm_closed), "--timeout", str(args.request_timeout),
             "--server-log-dir", str(run), "--out", str(out / "bench.json")]
     (out / "provenance.json").write_text(json.dumps(dict(
-        plan=plan, client_argv=argv, input_sha256=hashlib.sha256((bundle / "data/prompts_88.json").read_bytes()).hexdigest(),
+        plan=plan, client_argv=argv, input_sha256=hashlib.sha256(prompts.read_bytes()).hexdigest(),
         client_sha256=hashlib.sha256((bundle / "python/vl_bench.py").read_bytes()).hexdigest(),
         shim_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()), indent=2))
     sys.argv = [str(bundle / "python/vl_bench.py"), *argv]
@@ -187,7 +241,7 @@ def main() -> int:
     hook = os.environ.get("TOPOLOGY_BEFORE_QUALIFY", "")
     if hook:
         subprocess.run(["bash", "-lc", hook], check=True)
-    result = qualify(run, out)
+    result = qualify(run, out, args.isl, args.prefix_cached)
     print("QUALIFICATION " + json.dumps({"qualified": result["qualified"], "summary": result["summary"]}), flush=True)
     return 0 if result["qualified"] else 2
 
