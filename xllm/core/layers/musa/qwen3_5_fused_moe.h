@@ -21,16 +21,16 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "framework/model/model_args.h"
-#include "framework/model/model_input_params.h"
-#include "framework/parallel_state/parallel_args.h"
-#include "framework/quant_args.h"
-#include "framework/state_dict/state_dict.h"
-#include "framework/state_dict/utils.h"
-#include "layers/common/activation.h"
-#include "layers/common/dense_mlp.h"
-#include "layers/common/fused_moe_base.h"
-#include "layers/common/linear.h"
+#include "core/framework/model/model_args.h"
+#include "core/framework/model/model_input_params.h"
+#include "core/framework/parallel_state/parallel_args.h"
+#include "core/framework/quant_args.h"
+#include "core/framework/state_dict/state_dict.h"
+#include "core/framework/state_dict/utils.h"
+#include "core/layers/common/activation.h"
+#include "core/layers/common/dense_mlp.h"
+#include "core/layers/common/fused_moe_base.h"
+#include "core/layers/common/linear.h"
 
 namespace xllm {
 namespace layer {

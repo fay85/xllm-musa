@@ -204,7 +204,7 @@ class DeepseekV2ModelImpl : public torch::nn::Module {
         return false;
       }
       // NOTE: we will remove this until refactor flashinfer API
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
       attn_metadata.plan_info->layer_id = i;
 #endif
       layer::DeepseekV2DecoderLayer& decoder_layer = layers_[i];

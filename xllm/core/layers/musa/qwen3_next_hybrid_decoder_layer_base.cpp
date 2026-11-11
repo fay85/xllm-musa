@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
+#include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 
 #include <algorithm>
 #include <optional>
@@ -30,6 +30,9 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
   const auto& quant_args = context.get_quant_args();
   const auto& parallel_args = context.get_parallel_args();
   const auto& options = context.get_tensor_options();
+  CHECK(model_args.n_routed_experts() == 0 ||
+        model_args.model_type() == "qwen3_5_moe_text")
+      << "MUSA hybrid MoE currently supports qwen3_5_moe_text only";
   const bool use_full_attention = is_full_attention_layer(model_args, layer_id);
 
   // Initialize attention layers
@@ -56,6 +59,7 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
 
   // Initialize the feed-forward block. Qwen3.5 uses a routed block; select the
   // MUSA MoE path only for qwen3_5_moe_text (generic Qwen3-Next MoE differs).
+  CHECK_GT(model_args.decoder_sparse_step(), 0);
   auto mlp_only_layers = model_args.mlp_only_layers();
   const bool is_moe_layer =
       std::count(mlp_only_layers.begin(), mlp_only_layers.end(), layer_id) ==

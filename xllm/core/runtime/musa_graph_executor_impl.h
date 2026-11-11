@@ -48,6 +48,7 @@ using c10::musa::MUSAStream;
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/kernels/musa/llm_decode_metadata_update.h"
+#include "core/layers/common/attention_metadata.h"
 #include "core/runtime/executor_impl.h"
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
@@ -221,15 +222,19 @@ class MusaGraphPersistentParam final {
   }
 
  private:
-  bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
-                                    const torch::Tensor& positions,
-                                    const ModelInputParams& params) const;
-  void update_llm_decode_metadata_fast_path(const torch::Tensor& tokens,
-                                            const torch::Tensor& positions,
-                                            const ModelInputParams& params,
-                                            uint32_t padded_num_tokens,
-                                            int64_t actual_batch_size,
-                                            int64_t actual_num_tokens);
+  bool can_use_llm_decode_fast_path(
+      const torch::Tensor& tokens,
+      const torch::Tensor& positions,
+      const ModelInputParams& params,
+      const layer::Fa3AttentionMetadata& fa3_metadata) const;
+  void update_llm_decode_metadata_fast_path(
+      const torch::Tensor& tokens,
+      const torch::Tensor& positions,
+      const ModelInputParams& params,
+      const layer::Fa3AttentionMetadata& fa3_metadata,
+      uint32_t padded_num_tokens,
+      int64_t actual_batch_size,
+      int64_t actual_num_tokens);
 
   const ModelArgs& args_;
   const torch::Device& device_;
@@ -295,25 +300,6 @@ class MusaGraph final {
   // Print graph held tensors for debugging
   void print_graph_tensors() const;
 
-  // Refresh the persistent host mirrors used by the Mate FFI batch_decode
-  // run() call. Lazily allocates pinned CPU buffers sized to worst case (set
-  // by MusaGraphPersistentParam at executor construction), then copies the
-  // current device-tensor contents into them and overwrites
-  // `attn_metadata->paged_kv_*_host` to reference those persistent buffers.
-  //
-  // Called once after persistent_param_.update() returns, for the warmup
-  // forward, the FFI record pass, AND the captured pass -- they all reuse the
-  // same shared_ptr<AttentionMetadata>.
-  //
-  // On replay (graph_.replay() path), the captured graph already references
-  // the persistent host buffer pointers from capture time; this method
-  // refreshes their *contents* so the captured H2D copy sees fresh values.
-  // When attention.host paged-KV mirrors are populated (normal LLM-engine
-  // path), copies CPU->pinned host directly and avoids per-step D2H sync.
-  void refresh_persistent_paged_kv_host_mirrors(
-      const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
-      const AttentionHostInput& host_src);
-
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
   MusaGraphPersistentParam& persistent_param_;
@@ -334,53 +320,8 @@ class MusaGraph final {
   // Must outlive the graph holders declared last below.
   std::vector<torch::Tensor> recorded_ffi_allocs_;
 
-  // Persistent host (CPU) mirrors of paged_kv_* tensors, owned by this graph.
-  //
-  // Why these exist: the Mate FFI batch_decode `run` function takes
-  // kDLCPU pointers for paged_kv_indptr / paged_kv_indices /
-  // paged_kv_last_page_len. Inside the FFI those host buffers are read at
-  // submit time *and* their pointers may be baked into captured device
-  // operations (e.g., for the FmhaFwdKernelWarpSpecialized parameter
-  // struct). If we let `.to(kCPU)` create a fresh per-call tensor, then on
-  // every replay the captured graph holds a dangling pointer to the
-  // previous-step host buffer (already freed). On torch_musa 2.7.1 this
-  // surfaces as a GPU page fault inside the captured Mate decode kernel
-  // ("ExceptionType: IllegalAddress ... Reading from 0x... Fault (Page
-  // Directory)"; see the .mudmp under repro logs).
-
-  // Grow-only across captures so smaller-bucket graphs keep referencing
-  // the same storage even when a larger bucket later expands the buffer.
-  //
-  // PRE-CAPTURE PRE-ALLOCATION (set in capture(), enforced inside
-  // refresh_persistent_paged_kv_host_mirrors):
-  //   The first allocation MUST size the buffer to the maximum possible
-  //   numel for this MusaGraph instance, not the warmup-time numel. If
-  //   we sized to warmup-time (typically 1 block per sequence), then
-  //   when the KV cache crosses a block boundary (e.g., decode step 38
-  //   of a 27-token-prefill question with block_size=64), the helper's
-  //   `host_buf.numel() < numel` check would trigger a realloc to a new
-  //   storage. The captured graph still references the OLD storage's
-  //   data_ptr (baked into the FmhaFwdKernelWarpSpecialized param
-  //   struct), so it reads stale/freed memory and produces a small but
-  //   nonzero divergence at L3 (first full-attention layer). That
-  //   divergence cascades through all downstream layers and surfaces as
-  //   silently-wrong arithmetic in the generated text. Pre-allocating
-  //   to the worst-case size makes subsequent refresh_one() calls a
-  //   no-op for the alloc branch and keeps the captured pointer stable.
-  torch::Tensor paged_kv_indptr_host_buf_;
-  torch::Tensor paged_kv_indices_host_buf_;
-  torch::Tensor paged_kv_last_page_len_host_buf_;
-
-  // Pre-computed max numel for each host buf (set in capture()).
-  // 0 means "no pre-allocation hint", and refresh_one() falls back to its
-  // legacy "alloc to current device numel" behavior. Non-zero means the
-  // first allocation will be max(device_numel, hint).
-  int64_t paged_kv_indptr_host_max_numel_{0};
-  int64_t paged_kv_indices_host_max_numel_{0};
-  int64_t paged_kv_last_page_len_host_max_numel_{0};
-
   // Declare graph holders last so they are destroyed before the tensors and
-  // host buffers whose addresses were retained during capture.
+  // scratch buffers whose addresses were retained during capture.
   at::musa::MUSAGraph graph_;
 };
 

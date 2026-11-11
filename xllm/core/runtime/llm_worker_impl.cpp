@@ -37,7 +37,7 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
-#if defined(USE_CUDA) || defined(USE_ILU) || defined(USE_MUSA)
+#if defined(USE_CUDA) || defined(USE_ILU)
 #include "layers/cuda/flashinfer_workspace.h"
 #endif
 #include "models/model_registry.h"
@@ -68,7 +68,7 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   const auto& model_config = ModelConfig::get_instance();
   if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
     threadpool_.schedule([this]() mutable {
@@ -102,7 +102,7 @@ bool LLMWorkerImpl::init_model(ModelContext& context) {
          "layers.";
 #endif
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   // Ensure FlashinferWorkspace is initialized on the calling thread before
   // constructing model layers. When called synchronously from
   // SpeculativeWorkerImpl (e.g. MTP target/draft setup), init_model runs on

@@ -4,9 +4,7 @@ include(cc_library)
 set(_MUSA_LAYERS_HDRS
   attention.h
   flashinfer_attention.h
-  flashinfer_planinfo.h
   ../cuda/base_attention_impl.h
-  ../cuda/flashinfer_workspace.h
   qwen3_gated_delta_net_base.h
   qwen3_next_attention.h
   qwen3_next_gated_delta_net.h
@@ -19,8 +17,6 @@ set(_MUSA_LAYERS_HDRS
 set(_MUSA_LAYERS_SRCS
   attention.cpp
   flashinfer_attention.cpp
-  flashinfer_planinfo.cpp
-  ../cuda/flashinfer_workspace.cpp
   qwen3_gated_delta_net_base.cpp
   qwen3_next_attention.cpp
   qwen3_next_gated_delta_net.cpp
@@ -52,8 +48,6 @@ cc_library(
     ${_MUSA_LAYERS_HDRS}
   SRCS
     ${_MUSA_LAYERS_SRCS}
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
   DEPS
     "-Wl,--whole-archive"
     "-Wl,--no-whole-archive"

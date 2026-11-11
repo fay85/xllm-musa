@@ -28,3 +28,7 @@ endif()
 if(USE_MLU)
   add_subdirectory(mlu)
 endif()
+
+if(USE_MUSA)
+  add_subdirectory(musa)
+endif()

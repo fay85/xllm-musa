@@ -16,6 +16,7 @@ limitations under the License.
 // c10/cuda headers are remapped by mcc_wrapper on MUSA builds; keep the
 // shared CUDA exception macros while launching with an explicit musaStream_t.
 #include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <musa.h>
 
 #include <cstddef>
@@ -33,7 +34,7 @@ constexpr int32_t kCombineBlockSize = 256;
 constexpr std::size_t kSharedMemoryBytes = 0;
 constexpr int32_t kValuesPerChunk = 8;
 
-template <typename ScalarType>
+template <typename ScalarType, bool Indexed = true, bool Weighted = true>
 __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
     moe_combine_indexed_kernel(const ScalarType* __restrict__ gemm2_sorted,
                                const int32_t* __restrict__ sorted_positions,
@@ -55,10 +56,11 @@ __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
     for (int32_t top_k_idx = 0; top_k_idx < top_k; ++top_k_idx) {
       const int64_t flat_idx = token_id * static_cast<int64_t>(top_k) +
                                static_cast<int64_t>(top_k_idx);
-      const int32_t sorted_idx = sorted_positions[flat_idx];
+      const int32_t sorted_idx =
+          Indexed ? sorted_positions[flat_idx] : static_cast<int32_t>(flat_idx);
       if (sorted_idx >= 0 && static_cast<int64_t>(sorted_idx) < gemm2_rows) {
         accumulator +=
-            reduce_weight[flat_idx] *
+            (Weighted ? reduce_weight[flat_idx] : 1.0f) *
             static_cast<float>(
                 gemm2_sorted[static_cast<int64_t>(sorted_idx) * hidden_size +
                              hidden_idx]);
@@ -74,6 +76,7 @@ union Bf16Pack8 {
   c10::BFloat16 values[kValuesPerChunk];
 };
 
+template <bool Indexed = true, bool Weighted = true>
 __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
     moe_combine_indexed_bf16_vec8_kernel(
         const c10::BFloat16* __restrict__ gemm2_sorted,
@@ -99,12 +102,13 @@ __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
     for (int32_t top_k_idx = 0; top_k_idx < top_k; ++top_k_idx) {
       const int64_t flat_idx = token_id * static_cast<int64_t>(top_k) +
                                static_cast<int64_t>(top_k_idx);
-      const int32_t sorted_idx = sorted_positions[flat_idx];
+      const int32_t sorted_idx =
+          Indexed ? sorted_positions[flat_idx] : static_cast<int32_t>(flat_idx);
       if (sorted_idx < 0 || static_cast<int64_t>(sorted_idx) >= gemm2_rows) {
         continue;
       }
 
-      const float weight = reduce_weight[flat_idx];
+      const float weight = Weighted ? reduce_weight[flat_idx] : 1.0f;
       Bf16Pack8 input_pack;
       input_pack.vector = *reinterpret_cast<const int4*>(
           gemm2_sorted + static_cast<int64_t>(sorted_idx) * hidden_size +
@@ -128,6 +132,51 @@ __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
 }
 
 }  // namespace
+
+torch::Tensor moe_sum_reduce(const torch::Tensor& assignments) {
+  CHECK_EQ(assignments.dim(), 3);
+  CHECK_EQ(assignments.scalar_type(), torch::kBFloat16);
+  CHECK(assignments.device().is_privateuseone());
+  CHECK(assignments.is_contiguous());
+  CHECK_GT(assignments.size(0), 0);
+  CHECK_LE(assignments.size(0), 8);
+  CHECK_EQ(assignments.size(1), 8);
+  const int64_t hidden_size = assignments.size(2);
+  CHECK_GT(hidden_size, 0);
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(assignments));
+  auto output =
+      torch::empty({assignments.size(0), hidden_size}, assignments.options());
+  const musaStream_t stream = c10::musa::getCurrentMUSAStream().stream();
+  const c10::BFloat16* input_ptr = assignments.data_ptr<c10::BFloat16>();
+  c10::BFloat16* output_ptr = output.data_ptr<c10::BFloat16>();
+  if (hidden_size % kValuesPerChunk == 0 &&
+      reinterpret_cast<uintptr_t>(input_ptr) % alignof(int4) == 0 &&
+      reinterpret_cast<uintptr_t>(output_ptr) % alignof(int4) == 0) {
+    moe_combine_indexed_bf16_vec8_kernel<false, false>
+        <<<assignments.size(0), kCombineBlockSize, 0, stream>>>(
+            input_ptr,
+            nullptr,
+            nullptr,
+            output_ptr,
+            assignments.size(0),
+            8,
+            assignments.size(0) * 8,
+            hidden_size);
+  } else {
+    moe_combine_indexed_kernel<c10::BFloat16, false, false>
+        <<<assignments.size(0), kCombineBlockSize, 0, stream>>>(
+            input_ptr,
+            nullptr,
+            nullptr,
+            output_ptr,
+            assignments.size(0),
+            8,
+            assignments.size(0) * 8,
+            hidden_size);
+  }
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+  return output;
+}
 
 torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
                                          const torch::Tensor& sorted_positions,
@@ -167,6 +216,7 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
     return output;
   }
 
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(gemm2_sorted));
   torch::Tensor reduce_weight_fp32 =
       reduce_weight.to(gemm2_sorted.device(), torch::kFloat32).contiguous();
   const musaStream_t stream =
@@ -191,18 +241,16 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
         reinterpret_cast<uintptr_t>(output_ptr) % alignof(int4) == 0;
     if (hidden_size % static_cast<int64_t>(kValuesPerChunk) == 0 &&
         is_vec8_aligned) {
-      moe_combine_indexed_bf16_vec8_kernel<<<num_tokens,
-                                             kCombineBlockSize,
-                                             kSharedMemoryBytes,
-                                             stream>>>(
-          input_ptr,
-          sorted_positions.data_ptr<int32_t>(),
-          reduce_weight_fp32.data_ptr<float>(),
-          output_ptr,
-          num_tokens,
-          top_k,
-          gemm2_sorted.size(0),
-          hidden_size);
+      moe_combine_indexed_bf16_vec8_kernel<>
+          <<<num_tokens, kCombineBlockSize, kSharedMemoryBytes, stream>>>(
+              input_ptr,
+              sorted_positions.data_ptr<int32_t>(),
+              reduce_weight_fp32.data_ptr<float>(),
+              output_ptr,
+              num_tokens,
+              top_k,
+              gemm2_sorted.size(0),
+              hidden_size);
     } else {
       moe_combine_indexed_kernel<c10::BFloat16>
           <<<num_tokens, kCombineBlockSize, kSharedMemoryBytes, stream>>>(

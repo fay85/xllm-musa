@@ -13,39 +13,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "ops_api.h"
+#include "core/kernels/ops_api.h"
 
 #if defined(USE_MLU)
-#include "mlu/mlu_ops_api.h"
+#include "core/kernels/mlu/mlu_ops_api.h"
 #elif defined(USE_NPU)
+#include "core/kernels/npu/npu_ops_api.h"
 #include "core/kernels/npu/tilelang/tilelang_ops_api.h"
-#include "npu/npu_ops_api.h"
-#include "npu/xllm_ops/xllm_ops_api.h"
+#include "core/kernels/npu/xllm_ops/xllm_ops_api.h"
 #include "triton_npu/torch_api/triton_ops_api.h"
 #elif defined(USE_MUSA)
 #include "core/kernels/musa/gdn_ops.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #elif defined(USE_CUDA)
-#include "cuda/attention_runner.h"
-#include "cuda/cuda_ops_api.h"
+#include "core/kernels/cuda/attention_runner.h"
+#include "core/kernels/cuda/cuda_ops_api.h"
 #elif defined(USE_ILU)
-#include "ilu/ilu_ops_api.h"
+#include "core/kernels/ilu/ilu_ops_api.h"
 #elif defined(USE_DCU)
-#include "cuda/cuda_ops_api.h"
-#include "dcu/aiter_quant_adapter.h"
-#include "dcu/dcu_ops_api.h"
-#include "dcu/hipblaslt_fp8_adapter.h"
+#include "core/kernels/cuda/cuda_ops_api.h"
+#include "core/kernels/dcu/aiter_quant_adapter.h"
+#include "core/kernels/dcu/dcu_ops_api.h"
+#include "core/kernels/dcu/hipblaslt_fp8_adapter.h"
 #endif
 
 #include <cmath>
 #include <numeric>
+#include <optional>
 
-#include "common/macros.h"
-#include "layers/common/attention_metadata.h"
+#include "core/common/macros.h"
+#include "core/layers/common/attention_metadata.h"
 
 namespace xllm::kernel {
 
 namespace {
+#if defined(USE_MUSA)
+namespace gpu_kernels = musa;
+#elif defined(USE_CUDA) || defined(USE_DCU)
+namespace gpu_kernels = cuda;
+#endif
+
 #if defined(USE_NPU)
 bool is_supported_initial_state_dtype(torch::ScalarType dtype) {
   return dtype == torch::kBFloat16 || dtype == torch::kFloat32;
@@ -197,11 +204,11 @@ void apply_rotary(RotaryParams& params) {
     LOG(FATAL) << "apply_rotary: neither cos_sin nor cos/sin "
                   "provided; cannot infer cos_sin.";
   }
-#if defined(USE_DCU)
-  std::optional<torch::Tensor> key =
+#if defined(USE_DCU) || defined(USE_MUSA)
+  const std::optional<torch::Tensor> key =
       params.k.defined() ? std::optional<torch::Tensor>(params.k)
                          : std::nullopt;
-  cuda::rotary_embedding(pos_ids, params.q, key, cos_sin, is_neox);
+  gpu_kernels::rotary_embedding(pos_ids, params.q, key, cos_sin, is_neox);
 #else
   cuda::rotary_embedding(pos_ids, params.q, params.k, cos_sin, is_neox);
 #endif
@@ -260,11 +267,11 @@ void reshape_paged_cache(ReshapePagedCacheParams& params) {
                            params.v_cache,
                            params.slot_mapping);
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
-  cuda::reshape_paged_cache(params.slot_mapping,
-                            params.key,
-                            params.value.value_or(torch::Tensor()),
-                            params.k_cache,
-                            params.v_cache.value_or(torch::Tensor()));
+  gpu_kernels::reshape_paged_cache(params.slot_mapping,
+                                   params.key,
+                                   params.value.value_or(torch::Tensor()),
+                                   params.k_cache,
+                                   params.v_cache.value_or(torch::Tensor()));
 #elif defined(USE_ILU)
   // auto v_cache = params.v_cache.value_or(torch::Tensor());
   ilu::reshape_paged_cache(params.key,
@@ -382,12 +389,13 @@ void fused_layernorm(FusedLayerNormParams& params) {
   }
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (params.residual.has_value()) {
-    cuda::fused_add_rms_norm(
+    gpu_kernels::fused_add_rms_norm(
         params.input, params.residual.value(), params.weight, params.eps);
     params.output = params.input;
     params.residual_out = params.residual;
   } else {
-    cuda::rms_norm(params.output, params.input, params.weight, params.eps);
+    gpu_kernels::rms_norm(
+        params.output, params.input, params.weight, params.eps);
   }
 #elif defined(USE_ILU)
   if (params.residual.has_value()) {
@@ -659,11 +667,11 @@ std::tuple<torch::Tensor, torch::Tensor> moe_active_topk(
                               params.scoring_func,
                               params.route_scale);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-  return cuda::moe_fused_topk(params.input,
-                              params.topk,
-                              params.normalize,
-                              params.e_score_correction_bias,
-                              params.scoring_func);
+  return gpu_kernels::moe_fused_topk(params.input,
+                                     params.topk,
+                                     params.normalize,
+                                     params.e_score_correction_bias,
+                                     params.scoring_func);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -676,7 +684,7 @@ std::vector<torch::Tensor> moe_gen_idx(MoeGenIdxParams& params) {
   return ilu::moe_gen_idx(params.expert_id, params.expert_num);
 #elif defined(USE_MUSA) || defined(USE_DCU)
   auto [src_dst, dst_src, expert_sizes] =
-      cuda::moe_compute_index(params.expert_id, params.expert_num);
+      gpu_kernels::moe_compute_index(params.expert_id, params.expert_num);
   return {src_dst, dst_src, expert_sizes};
 #else
   NOT_IMPLEMENTED();
@@ -728,8 +736,8 @@ torch::Tensor moe_combine_result(MoeCombineResultParams& params) {
   // N = params.reduce_weight.size(0), topk = params.reduce_weight.size(1)
   int64_t N = params.reduce_weight.size(0);
   int32_t topk = static_cast<int32_t>(params.reduce_weight.size(1));
-  auto out =
-      cuda::moe_combine_result(params.input, params.reduce_weight, N, topk);
+  auto out = gpu_kernels::moe_combine_result(
+      params.input, params.reduce_weight, N, topk);
   if (params.residual.has_value()) {
     out = out + params.residual.value();
   }
@@ -904,7 +912,7 @@ torch::Tensor random_sample(RandomSampleParams& params) {
 #if defined(USE_MLU)
   return mlu::random_sample(params.logits);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-  return cuda::random_sample(params.logits);
+  return gpu_kernels::random_sample(params.logits);
 #elif defined(USE_DCU)
   return dcu::random_sample(params.logits);
 #else

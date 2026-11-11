@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <vector>
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 #include <tvm/ffi/container/array.h>
 namespace ffi = tvm::ffi;
 #endif
@@ -85,7 +85,7 @@ struct MegaGdnPrefillIndicesCache {
   int64_t device_tensor_materializations;
 };
 #endif
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 struct PlanInfo {
   int32_t layer_id = -1;
   ffi::Array<int64_t> plan_info;
@@ -213,7 +213,7 @@ struct AttentionMetadata {
   // attention kernel. Only updated at layer 0 (shared across all layers). The
   // plan_info tensor contains pre-computed execution parameters optimized for
   // the current batch configuration.
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   std::shared_ptr<PlanInfo> plan_info;
   // Separate plan info for the shared stage in xattention two-stage decode.
   std::shared_ptr<PlanInfo> shared_plan_info;

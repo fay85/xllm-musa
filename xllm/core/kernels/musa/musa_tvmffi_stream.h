@@ -31,6 +31,21 @@ namespace ffi = tvm::ffi;
 
 namespace xllm::kernel::musa {
 
+// MATE 0.2.7 metadata consists of four arrays, each padded to a multiple of 4.
+inline int64_t fa3_scheduler_metadata_size(int64_t batch_size) {
+  return ((batch_size + 3) / 4) * 16;
+}
+
+// Resolved once; set FLASHINFER_OPS_PATH before the first operator lookup.
+std::string get_musa_ops_root();
+
+// Verify the complete bundle once per root, before loading any device code.
+// Deployed bundles must remain immutable for the lifetime of the process.
+void validate_musa_ops_bundle(const std::string& root);
+
+// Query the compiled inventory without loading or executing device code.
+bool is_musa_operator_built(const std::string& uri);
+
 inline bool is_torch_device(const torch::Device& device) {
   return device.is_privateuseone() || device.is_cuda();
 }
@@ -93,56 +108,13 @@ class TvmffiStreamGuard final {
   bool uses_event_handoff_ = false;
 };
 
-torch::Tensor get_cache_buffer(const int32_t seq_len,
-                               const torch::Device& device);
-
-#define DISPATCH_CASE_FLOATING_TYPES(...)              \
-  AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)  \
-  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
-#define DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
 #define DISPATCH_CASE_HALF_TYPES(...)                 \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
 #define DISPATCH_HALF_TYPES(TYPE, NAME, ...) \
   AT_DISPATCH_SWITCH(TYPE, NAME, DISPATCH_CASE_HALF_TYPES(__VA_ARGS__))
 
-bool should_use_tensor_core(torch::ScalarType kv_cache_dtype,
-                            int64_t num_attention_heads,
-                            int64_t num_kv_heads);
-
-bool support_pdl();
-
 std::string path_to_uri_so_lib(const std::string& uri);
-
-std::string determine_attention_backend(int64_t pos_encoding_mode,
-                                        bool use_fp16_qk_reduction,
-                                        bool use_custom_mask);
-
-std::string get_batch_prefill_uri(const std::string& backend,
-                                  torch::ScalarType dtype_q,
-                                  torch::ScalarType dtype_kv,
-                                  torch::ScalarType dtype_o,
-                                  torch::ScalarType dtype_idx,
-                                  int64_t head_dim_qk,
-                                  int64_t head_dim_vo,
-                                  int64_t pos_encoding_mode,
-                                  bool use_sliding_window,
-                                  bool use_logits_soft_cap,
-                                  bool use_fp16_qk_reduction);
-
-std::string get_batch_decode_uri(torch::ScalarType dtype_q,
-                                 torch::ScalarType dtype_kv,
-                                 torch::ScalarType dtype_o,
-                                 torch::ScalarType dtype_idx,
-                                 int64_t head_dim_qk,
-                                 int64_t head_dim_vo,
-                                 int64_t pos_encoding_mode,
-                                 bool use_sliding_window,
-                                 bool use_logits_soft_cap);
-
-std::tuple<torch::Tensor, double> split_scale_param(const torch::Tensor& scale);
 
 DLDataType to_dl_data_type(torch::ScalarType scalar_type);
 

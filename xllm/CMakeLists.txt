@@ -45,6 +45,10 @@ endif()
 
 option(GENERATE_SO "Enable compile to generate .so" OFF)
 
+if(USE_MUSA)
+  set(XLLM_MUSA_OPS_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:xllm>/musa_ops")
+endif()
+
 add_subdirectory(api_service)
 add_subdirectory(core)
 add_subdirectory(function_call)

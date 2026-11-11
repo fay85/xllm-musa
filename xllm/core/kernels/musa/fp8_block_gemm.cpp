@@ -14,12 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include <tvm/ffi/extra/stl.h>
-#include <tvm/ffi/string.h>
 
 #include <optional>
-#include <string>
 #include <tuple>
 
+#include "core/kernels/musa/musa_aot_config.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::musa {
@@ -50,20 +49,20 @@ torch::Tensor gemm_fp8_nt_groupwise(
 
   TvmffiStreamGuard stream_guard(a.device());
 
-  static const std::string kGemmOpsUri = "gemm_ops";
-  get_function(kGemmOpsUri, "gemm_fp8_nt_groupwise")(
-      to_ffi_tensor(a),
-      to_ffi_tensor(b),
-      to_ffi_tensor(a_scale),
-      to_ffi_tensor(b_scale),
-      /*scale_major_mode=*/std::string("K"),
-      /*mma_sm=*/static_cast<int64_t>(1),
-      /*scale_granularity_mnk=*/
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
-      to_ffi_tensor(out),
-      /*backend=*/std::string("mudnn"));
+  get_function(aot::kBmmUri, /*func_name=*/"bmm")(
+      to_ffi_tensor_view(a.unsqueeze(/*dim=*/0)),
+      to_ffi_tensor_view(b.unsqueeze(/*dim=*/0)),
+      to_ffi_tensor_view(out.unsqueeze(/*dim=*/0)),
+      /*c=*/to_ffi_optional_tensor(std::nullopt),
+      to_ffi_tensor_view(a_scale.unsqueeze(/*dim=*/0)),
+      to_ffi_tensor_view(b_scale.unsqueeze(/*dim=*/0)),
+      /*recipe_a=*/
+      std::make_tuple(static_cast<int64_t>(1), static_cast<int64_t>(128)),
+      /*recipe_b=*/
+      std::make_tuple(static_cast<int64_t>(128), static_cast<int64_t>(128)),
+      /*trans_a=*/false,
+      /*trans_b=*/true,
+      /*fixed_scale_layout=*/false);
 
   return out;
 }

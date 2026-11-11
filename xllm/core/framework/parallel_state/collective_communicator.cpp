@@ -25,13 +25,13 @@ limitations under the License.
 #include "xllm_atb_layers/core/include/atb_speed/base/external_comm_manager.h"
 #include "xllm_atb_layers/core/include/atb_speed/utils/singleton.h"
 #elif defined(USE_MLU)
-#include "mlu_process_group.h"
+#include "core/framework/parallel_state/mlu_process_group.h"
 #elif defined(USE_CUDA) || defined(USE_DCU)
-#include "cuda_process_group.h"
+#include "core/framework/parallel_state/cuda_process_group.h"
 #elif defined(USE_ILU)
-#include "ilu_process_group.h"
+#include "core/framework/parallel_state/ilu_process_group.h"
 #elif defined(USE_MUSA)
-#include "musa_process_group.h"
+#include "core/framework/parallel_state/musa_process_group.h"
 #endif
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/kernel_config.h"
@@ -39,12 +39,12 @@ limitations under the License.
 #include "core/framework/config/multimodal_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/parallel_state/context_parallel_topology.h"
+#include "core/framework/parallel_state/parallel_args.h"
+#include "core/framework/parallel_state/parallel_state.h"
+#include "core/framework/parallel_state/process_group.h"
 #include "core/platform/platform.h"
-#include "parallel_args.h"
-#include "parallel_state.h"
-#include "process_group.h"
-#include "util/json_reader.h"
-#include "util/net.h"
+#include "core/util/json_reader.h"
+#include "core/util/net.h"
 
 namespace xllm {
 
@@ -446,6 +446,10 @@ void CollectiveCommunicator::create_process_groups(
   // make ranks r and r + tp_size hold the same heads and double-accumulate in
   // the all-reduce, which is a silent numerical error rather than a crash.
   const int32_t normalized_cp_size = cp_size > 0 ? cp_size : 1;
+#if !defined(USE_NPU) && !defined(USE_MLU) && !defined(USE_DCU)
+  CHECK_EQ(normalized_cp_size, 1)
+      << "This backend does not support explicit context-parallel groups.";
+#endif
   CHECK_EQ(world_size % (dp_size * normalized_cp_size), 0)
       << "world_size (" << world_size
       << ") must be divisible by dp_size * cp_size (" << dp_size << " * "
@@ -517,6 +521,7 @@ void CollectiveCommunicator::create_process_groups(
   }
   port += tp_group_count + single_rank_group_port_gap + single_rank_group_count;
 
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
   if (cp_topology.has_value()) {
     const std::vector<int32_t>& cp_ranks = cp_topology->pcp_group_ranks();
     const int32_t cp_local_rank = cp_topology->pcp_rank();
@@ -572,7 +577,9 @@ void CollectiveCommunicator::create_process_groups(
               << ", pcp_size=" << cp_topology->pcp_size()
               << ", dcp_rank=" << cp_topology->dcp_rank()
               << ", dcp_size=" << cp_topology->dcp_size();
-  } else {
+  }
+#endif
+  if (!cp_topology.has_value()) {
     // CP is disabled, so the TP group remains the CP collective handle.
     parallel_args_->cp_group_ = tp_group_.get();
     if constexpr (Platform::is_mlu()) {

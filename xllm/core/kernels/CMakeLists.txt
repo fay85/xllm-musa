@@ -31,8 +31,6 @@ cc_library(
     xllm_torch_ops.h
   SRCS
     ops_api.cpp
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
   DEPS
     torch
     $<$<BOOL:${USE_NPU}>:triton_adapter>

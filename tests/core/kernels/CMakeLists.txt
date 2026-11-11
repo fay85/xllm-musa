@@ -10,6 +10,10 @@ if(USE_MLU)
   add_subdirectory(mlu)
 endif()
 
+if(USE_MUSA)
+  add_subdirectory(musa)
+endif()
+
 if(USE_DCU)
   add_subdirectory(dcu)
 endif()

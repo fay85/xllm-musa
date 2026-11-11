@@ -574,12 +574,8 @@ std::string get_mate_kkt_solve_uri(int64_t num_q_heads,
 }
 
 bool mate_kkt_module_available(const std::string& uri) {
-  const std::string ops_path = util::get_string_env("FLASHINFER_OPS_PATH");
-  if (ops_path.empty()) {
-    return false;
-  }
-  const std::string so_path = ops_path + "/" + uri + "/" + uri + ".so";
-  return is_readable_file(so_path);
+  return is_musa_operator_built(uri) &&
+         is_readable_file(path_to_uri_so_lib(uri));
 }
 
 // Reference host KKT implementation for [B, T, Hqk, D] keys.
@@ -898,12 +894,8 @@ bool mate_gdn_c1_partial_fixed_enabled() {
 }
 
 bool mate_gdn_module_available(const std::string& uri) {
-  const std::string ops_path = util::get_string_env("FLASHINFER_OPS_PATH");
-  if (ops_path.empty()) {
-    return false;
-  }
-  const std::string so_path = ops_path + "/" + uri + "/" + uri + ".so";
-  return is_readable_file(so_path);
+  return is_musa_operator_built(uri) &&
+         is_readable_file(path_to_uri_so_lib(uri));
 }
 
 // Use packed varlen when padding exceeds this fraction.
@@ -1025,9 +1017,6 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     return {output, final_state};
   }
 
-  // Register the TileLang loader before resolving FFI functions.
-  ensure_tilelang_loader();
-
   const std::string full_varlen_uri = get_mate_gdn_prefill_full_varlen_uri(
       num_q_heads, num_v_heads, query.scalar_type());
   const std::string full_uri = get_mate_gdn_prefill_full_uri(
@@ -1069,9 +1058,12 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       mate_kkt_module_available(get_mate_kkt_solve_uri(
           num_q_heads, num_v_heads, query.scalar_type()));
 
+  const bool needs_varlen_packing =
+      mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len);
   const bool use_c1_partial_fixed =
       mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
-      input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
+      !needs_varlen_packing && input_seq_len >= kGdnChunkSize &&
+      input_seq_len % kGdnChunkSize != 0 &&
       (strided_padded_available || legacy_padded_available);
   // Full-varlen kernels accept a partial final chunk.
   const bool use_unpadded_c1_varlen =
@@ -1083,8 +1075,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       ((params.output.has_value() && params.output->defined()) ||
        (params.final_state.has_value() && params.final_state->defined()) ||
        (params.kkt_output.has_value() && params.kkt_output->defined()) ||
-       mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len) ||
-       use_unpadded_c1_varlen);
+       needs_varlen_packing || use_unpadded_c1_varlen);
   const bool use_full_padded =
       !use_full_varlen && (strided_padded_available || legacy_padded_available);
   const bool use_strided_abi = (use_full_varlen && strided_varlen_available) ||
@@ -1096,6 +1087,13 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
                  ? (use_strided_abi ? full_strided_uri : full_uri)
                  : get_mate_gdn_prefill_simple_uri(
                        num_q_heads, num_v_heads, query.scalar_type()));
+
+  CHECK(head_k_dim == 128 && is_musa_operator_built(uri))
+      << "Unsupported MUSA GDN prefill configuration: operator " << uri
+      << " is not part of this build. The pinned bundle provides bf16 "
+         "strided fixed/varlen kernels with Hq=16, Hv=32/48 and D=128; "
+         "legacy/simple kernels are not built. Do not force "
+         "XLLM_MATE_GDN_PREFILL_SIMPLE or disable the strided ABI.";
 
   if (!use_strided_abi) {
     query = query.contiguous();
@@ -1159,7 +1157,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       query = pad_time_dim_4d(query, pad_size);
       key = pad_time_dim_4d(key, pad_size);
       value = pad_time_dim_4d(value, pad_size);
-      cu_host.back() += static_cast<int32_t>(pad_size);
+      // Allocation padding must not extend the recurrent sequence length.
     }
     const int64_t num_tokens = query.size(1);
     CHECK_EQ(query.size(0), 1);
@@ -1307,8 +1305,10 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
           !(params.kkt_output.has_value() && params.kkt_output->defined()))
         << "caller-owned Mate GDN buffers require the varlen kernel";
     const int64_t batch_size = input_batch;
-    const int64_t pad_size =
-        use_c1_partial_fixed ? 0 : chunk_pad_size(input_seq_len, kGdnChunkSize);
+    // Strided kernels accept partial chunks without adding recurrent tokens.
+    const int64_t pad_size = use_strided_abi || use_c1_partial_fixed
+                                 ? 0
+                                 : chunk_pad_size(input_seq_len, kGdnChunkSize);
     if (pad_size > 0) {
       query = pad_time_dim_4d(query, pad_size);
       key = pad_time_dim_4d(key, pad_size);

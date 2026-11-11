@@ -15,8 +15,6 @@ limitations under the License.
 
 #pragma once
 
-#include <ATen/DynamicLibrary.h>
-#include <ATen/core/dispatch/Dispatcher.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
 
@@ -40,6 +38,32 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
                                          int64_t num_tokens,
                                          int32_t top_k);
 
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_align_block_size(
+    const torch::Tensor& topk_ids,
+    int64_t num_experts,
+    int64_t block_size);
+
+torch::Tensor moe_sum_reduce(const torch::Tensor& assignments);
+
+bool fused_moe_aot_available(int64_t num_tokens);
+bool fused_moe_bf16_aot_available(int64_t num_tokens);
+void prepare_fused_moe_aot(const torch::Device& device);
+void prepare_fused_moe_bf16_aot(const torch::Device& device);
+
+torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
+                                const torch::Tensor& w13,
+                                const torch::Tensor& w13_scale,
+                                const torch::Tensor& w2,
+                                const torch::Tensor& w2_scale,
+                                const torch::Tensor& topk_weights,
+                                const torch::Tensor& topk_ids);
+
+torch::Tensor fused_moe_aot_bf16(const torch::Tensor& hidden_states,
+                                 const torch::Tensor& w13,
+                                 const torch::Tensor& w2,
+                                 const torch::Tensor& topk_weights,
+                                 const torch::Tensor& topk_ids);
+
 void rotary_embedding(torch::Tensor& positions,
                       torch::Tensor& query,
                       std::optional<torch::Tensor> key,
@@ -56,83 +80,6 @@ void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
 void fused_shared_expert_gate_inplace(torch::Tensor& shared_output,
                                       const torch::Tensor& hidden_states,
                                       const torch::Tensor& gate_weight);
-
-void batch_prefill(const std::string& uri,
-                   ffi::Array<int64_t> plan_info,
-                   torch::Tensor float_workspace_buffer,
-                   torch::Tensor int_workspace_buffer,
-                   torch::Tensor page_locked_int_workspace_buffer,
-                   torch::Tensor query,
-                   torch::Tensor key,
-                   torch::Tensor value,
-                   torch::Tensor q_cu_seq_lens,
-                   torch::Tensor kv_cu_seq_lens,
-                   int64_t window_left,
-                   double sm_scale,
-                   torch::Tensor output,
-                   std::optional<torch::Tensor>& output_lse,
-                   const std::optional<torch::Tensor>& mask = std::nullopt);
-
-void batch_prefill_non_causal(
-    const std::string& uri,
-    ffi::Array<int64_t> plan_info,
-    torch::Tensor float_workspace_buffer,
-    torch::Tensor int_workspace_buffer,
-    torch::Tensor page_locked_int_workspace_buffer,
-    torch::Tensor query,
-    torch::Tensor key,
-    torch::Tensor value,
-    torch::Tensor q_cu_seq_lens,
-    torch::Tensor kv_cu_seq_lens,
-    int64_t window_left,
-    double sm_scale,
-    torch::Tensor output,
-    std::optional<torch::Tensor>& output_lse,
-    const std::optional<torch::Tensor>& mask = std::nullopt);
-
-void batch_chunked_prefill(
-    const std::string& uri,
-    ffi::Array<int64_t> plan_info,
-    torch::Tensor float_workspace_buffer,
-    torch::Tensor int_workspace_buffer,
-    torch::Tensor page_locked_int_workspace_buffer,
-    torch::Tensor query,
-    torch::Tensor k_cache,
-    torch::Tensor v_cache,
-    torch::Tensor paged_kv_indptr,
-    torch::Tensor paged_kv_indices,
-    torch::Tensor paged_kv_last_page_len,
-    int64_t window_left,
-    double sm_scale,
-    torch::Tensor output,
-    std::optional<torch::Tensor>& output_lse,
-    std::optional<torch::Tensor> qo_indptr = std::nullopt,
-    bool causal = true,
-    const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
-    const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
-    const torch::Tensor& paged_kv_last_page_len_host = torch::Tensor());
-
-void batch_decode(
-    const std::string& uri,
-    ffi::Array<int64_t> plan_info,
-    torch::Tensor float_workspace_buffer,
-    torch::Tensor int_workspace_buffer,
-    torch::Tensor page_locked_int_workspace_buffer,
-    torch::Tensor query,
-    torch::Tensor k_cache,
-    torch::Tensor v_cache,
-    torch::Tensor paged_kv_indptr,
-    torch::Tensor paged_kv_indices,
-    torch::Tensor paged_kv_last_page_len,
-    int64_t window_left,
-    double sm_scale,
-    torch::Tensor output,
-    std::optional<torch::Tensor>& output_lse,
-    bool use_tensor_core,
-    std::optional<torch::Tensor> qo_indptr = std::nullopt,
-    const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
-    const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
-    const torch::Tensor& paged_kv_last_page_len_host = torch::Tensor());
 
 void fa3_decode(const torch::Tensor& query,
                 const torch::Tensor& k_cache,
@@ -162,26 +109,23 @@ void fa3_prefill(const torch::Tensor& query,
                  torch::Tensor& output_lse);
 
 // Builds metadata for paged-KV FA3 prefill.
-torch::Tensor fa3_prefill_scheduler_metadata(
-    const torch::Device& device,
-    int32_t batch_size,
-    int32_t num_heads_q,
-    int32_t num_heads_kv,
-    int32_t head_dim_qk,
-    int32_t head_dim_vo,
-    int32_t max_seqlen_q,
-    int32_t max_seqlen_k,
-    int32_t window_size_left,
-    int32_t window_size_right,
-    const torch::Tensor& cu_seqlens_q,
-    const torch::Tensor& cu_seqlens_k_new,
-    const torch::Tensor& seqused_k);
+torch::Tensor fa3_prefill_scheduler_metadata(const torch::Device& device,
+                                             int32_t batch_size,
+                                             int32_t num_heads_q,
+                                             int32_t num_heads_kv,
+                                             int32_t head_dim_qk,
+                                             int32_t head_dim_vo,
+                                             int32_t max_seqlen_q,
+                                             int32_t max_seqlen_k,
+                                             int32_t window_size_left,
+                                             int32_t window_size_right,
+                                             const torch::Tensor& cu_seqlens_q,
+                                             const torch::Tensor& seqused_k);
 
 void fa3_prefill_paged(const torch::Tensor& query,
                        const torch::Tensor& k_cache,
                        const torch::Tensor& v_cache,
                        const torch::Tensor& cu_seqlens_q,
-                       const torch::Tensor& cu_seqlens_k_new,
                        const torch::Tensor& seqused_k,
                        const torch::Tensor& page_table,
                        const torch::Tensor& scheduler_metadata,
@@ -313,29 +257,6 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
                                        int64_t num_tokens,
                                        int64_t alignment);
 
-// AOT kernels support decode batch sizes 1 through 8.
-bool fused_moe_aot_available(int64_t num_tokens);
-
-bool fused_moe_bf16_aot_available(int64_t num_tokens);
-
-void prepare_fused_moe_aot(const torch::Device& device);
-
-void prepare_fused_moe_bf16_aot(const torch::Device& device);
-
-torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
-                                const torch::Tensor& w13,
-                                const torch::Tensor& w13_scale,
-                                const torch::Tensor& w2,
-                                const torch::Tensor& w2_scale,
-                                const torch::Tensor& topk_weights,
-                                const torch::Tensor& topk_ids);
-
-torch::Tensor fused_moe_aot_bf16(const torch::Tensor& hidden_states,
-                                 const torch::Tensor& w13,
-                                 const torch::Tensor& w2,
-                                 const torch::Tensor& topk_weights,
-                                 const torch::Tensor& topk_ids);
-
 torch::Tensor random_sample(const torch::Tensor& probs);
 
 // Returns [B, 2] with rejected suffix positions masked to -1.
@@ -397,14 +318,10 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
 std::tuple<torch::Tensor, torch::Tensor> moe_topk_softmax(
     const torch::Tensor& router_logits,
     int64_t topk);
-bool moe_topk_softmax_available();
-
-}  // namespace xllm::kernel::musa
 
 // Shared CUDA-source helpers compiled into the MUSA kernel library via
-// mcc_wrapper. Keep them in kernel::cuda so USE_CUDA || USE_MUSA dispatch in
-// ops_api.cpp can call one namespace for both backends.
-namespace xllm::kernel::cuda {
+// mcc_wrapper. musamapping exports these symbols in kernel::musa; host-side
+// declarations must use that namespace as well.
 
 void reshape_paged_cache(torch::Tensor slot_ids,
                          torch::Tensor keys,
@@ -447,6 +364,6 @@ torch::Tensor moe_combine_result(const torch::Tensor& gemm2,
                                  int64_t N,
                                  int32_t topk);
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa
 
 #include "core/kernels/musa/gdn_ops.h"

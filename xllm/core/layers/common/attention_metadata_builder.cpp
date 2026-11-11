@@ -358,7 +358,7 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.paged_kv_indices = params.attention.device.paged_kv_indices;
   attn_metadata.paged_kv_last_page_len =
       params.attention.device.paged_kv_last_page_len;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   attn_metadata.plan_info = std::make_shared<PlanInfo>();
   attn_metadata.shared_plan_info = std::make_shared<PlanInfo>();
   attn_metadata.unshared_plan_info = std::make_shared<PlanInfo>();
@@ -569,7 +569,7 @@ AttentionMetadata build_attention_metadata(
     }
 
     if (!::xllm::RecConfig::get_instance().enable_xattention_one_stage()) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
       attn_metadata.xattention_two_stage_decode_cache.emplace(
           XAttentionTwoStageDecodeCache{});
       auto& cache = attn_metadata.xattention_two_stage_decode_cache.value();

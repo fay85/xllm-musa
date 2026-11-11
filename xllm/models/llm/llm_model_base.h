@@ -141,7 +141,7 @@ class LlmModelImplBase : public torch::nn::Module {
         attn_metadata.unshared_k_cache = llmrec_params->unshared_k_caches[i];
         attn_metadata.unshared_v_cache = llmrec_params->unshared_v_caches[i];
       }
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
       attn_metadata.plan_info->layer_id = i;
 #endif
       auto& layer = layers_[i];

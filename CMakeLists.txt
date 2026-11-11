@@ -289,8 +289,7 @@ if(USE_CUDA AND USE_MUSA)
 endif()
 
 if(USE_MUSA)
-  # MUSA uses CUDA language with mcc_wrapper + musamapping plugin.
-  # mcc_wrapper must be set before project().
+  # MUSA uses the host C++ toolchain and a separate device compiler.
   if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
     set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
   elseif(DEFINED ENV{MUSA_HOME} AND NOT "$ENV{MUSA_HOME}" STREQUAL "")
@@ -304,10 +303,16 @@ if(USE_MUSA)
     "-x" "musa"
     "-I."
   )
-  set(CMAKE_CXX_COMPILER "${_XLLM_MCC_WRAPPER}" CACHE FILEPATH
-      "C++ compiler for the MUSA compatibility path" FORCE)
+  if(CMAKE_CXX_COMPILER STREQUAL "${_XLLM_MCC_WRAPPER}" OR
+     "$ENV{CXX}" STREQUAL "${_XLLM_MCC_WRAPPER}")
+    message(FATAL_ERROR
+      "This build directory uses mcc_wrapper as the host C++ compiler. "
+      "Configure MUSA in a fresh build directory with a host C++ compiler.")
+  endif()
+  set(CMAKE_CUDA_COMPILER "${_XLLM_MCC_WRAPPER}" CACHE FILEPATH
+      "MUSA device compiler for CUDA-compatible sources" FORCE)
   project("xllm" LANGUAGES C CXX CUDA)
-  add_compile_options(-Wno-c++11-narrowing)
+  add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Wno-c++11-narrowing>)
 elseif(USE_CUDA)
   project("xllm" LANGUAGES C CXX CUDA)
   find_package(CUDAToolkit REQUIRED)
@@ -417,6 +422,25 @@ endif()
 # Important Note: Always invoke find_package for other dependencies
 # before including libtorch, as doing so afterwards may lead to
 # unexpected linker errors.
+if(USE_MUSA)
+  if(NOT DEFINED MUSA_PATH)
+    if(DEFINED ENV{MUSA_HOME} AND NOT "$ENV{MUSA_HOME}" STREQUAL "")
+      set(MUSA_PATH "$ENV{MUSA_HOME}")
+    else()
+      set(MUSA_PATH /usr/local/musa)
+    endif()
+  endif()
+  if(DEFINED ENV{MKLROOT} AND NOT "$ENV{MKLROOT}" STREQUAL "" AND
+     NOT DEFINED MKL_DIR)
+    set(MKL_DIR "$ENV{MKLROOT}/lib/cmake/mkl")
+  endif()
+  # Match the pinned Torch wheel's BLAS integer ABI and OpenMP runtime.
+  set(MKL_INTERFACE "lp64")
+  set(MKL_INTERFACE_FULL "intel_lp64" CACHE STRING "MKL integer interface" FORCE)
+  set(MKL_THREADING "gnu_thread" CACHE STRING "MKL threading runtime" FORCE)
+  find_package(MKL REQUIRED)
+endif()
+
 if(USE_DCU)
   if(NOT DEFINED TORCH_CMAKE_PREFIX OR "${TORCH_CMAKE_PREFIX}" STREQUAL "")
     message(FATAL_ERROR "TORCH_CMAKE_PREFIX is required for DCU build.")
@@ -614,13 +638,6 @@ endif()
 if(USE_MUSA)
   add_definitions(-DUSE_MUSA)
   add_compile_definitions(TORCH_CUDA=1)
-  if(NOT DEFINED MUSA_PATH)
-    if(DEFINED ENV{MUSA_HOME} AND NOT "$ENV{MUSA_HOME}" STREQUAL "")
-      set(MUSA_PATH "$ENV{MUSA_HOME}")
-    else()
-      set(MUSA_PATH /usr/local/musa)
-    endif()
-  endif()
   list(APPEND CMAKE_MODULE_PATH "${MUSA_PATH}/cmake")
   find_package(MUSA REQUIRED)
   # MUSA builds use the FlashInfer/Mate TVM-FFI path; MTTOplib is not needed.
@@ -638,12 +655,13 @@ if(USE_MUSA)
     _TORCH_MUSA_ROOT
     "$ENV{TORCH_MUSA_PYTHONPATH}/../.."
     ABSOLUTE)
-
-  if(DEFINED ENV{MKLROOT} AND NOT "$ENV{MKLROOT}" STREQUAL "" AND
-     NOT DEFINED MKL_DIR)
-    set(MKL_DIR "$ENV{MKLROOT}/lib/cmake/mkl")
-  endif()
-  find_package(MKL REQUIRED)
+  # Native MUSA graph/stream/allocator APIs are defined in this framework DSO.
+  # The vendor target only declares musa_python and omits this direct dependency.
+  find_library(XLLM_TORCH_MUSA_KERNELS_LIBRARY
+    NAMES musa_kernels
+    PATHS "${_TORCH_MUSA_ROOT}/lib"
+    NO_DEFAULT_PATH REQUIRED)
+  target_link_libraries(torch_musa INTERFACE "${XLLM_TORCH_MUSA_KERNELS_LIBRARY}")
 
   set(_MUSA_MKL_LIBRARY_DIRS ${MKL_LIB_PATH})
   if(DEFINED ENV{MKLROOT} AND NOT "$ENV{MKLROOT}" STREQUAL "")
@@ -676,10 +694,11 @@ if(USE_MUSA)
   endif()
   
 
-  include_directories(
+  # Keep framework-bundled fmt behind the shared vcpkg dependency headers.
+  # As in the NPU branch, SDK headers are system headers, not project headers.
+  include_directories(SYSTEM
       ${MUSA_INCLUDE_DIRS}
       ${TorchMusa_INCLUDE_DIRS}
-      ${Python_SITELIB}/torch_musa_compiled/share/torch_musa_codegen
       ${tvm_ffi_INCLUDE_DIR}
       ${MUSA_PATH}/include
       ${_TORCH_MUSA_ROOT}/share/torch_musa_codegen

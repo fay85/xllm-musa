@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "layers/musa/qwen3_5_fused_moe.h"
+#include "core/layers/musa/qwen3_5_fused_moe.h"
 
 #include <glog/logging.h>
 
@@ -21,8 +21,8 @@ limitations under the License.
 #include <cstdint>
 #include <tuple>
 
-#include "kernels/musa/musa_ops_api.h"
-#include "util/env_var.h"
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/util/env_var.h"
 
 namespace xllm {
 namespace layer {
@@ -116,34 +116,16 @@ bool use_bf16_moe_decode_token_loop(int64_t num_tokens, bool is_decode) {
   return enabled && is_decode && num_tokens > 1;
 }
 
-bool use_fused_moe_aot(int64_t num_tokens, bool is_decode) {
-  static const bool enabled =
+bool use_fused_moe_aot(int64_t num_tokens, bool is_decode, bool fp8) {
+  static const bool fp8_enabled =
       util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true);
-  if (!enabled || !is_decode) {
-    return false;
-  }
-  if (xllm::kernel::musa::fused_moe_aot_available(num_tokens)) {
-    return true;
-  }
-  LOG_FIRST_N(WARNING, 1)
-      << "MUSA fused MoE AOT artifacts are unavailable for decode batch "
-      << num_tokens << "; using the contiguous fallback.";
-  return false;
-}
-
-bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
-  static const bool enabled =
+  static const bool bf16_enabled =
       util::get_bool_env("XLLM_MUSA_FUSED_MOE_BF16_AOT", true);
-  if (!enabled || !is_decode) {
+  if (!is_decode || !(fp8 ? fp8_enabled : bf16_enabled)) {
     return false;
   }
-  if (xllm::kernel::musa::fused_moe_bf16_aot_available(num_tokens)) {
-    return true;
-  }
-  LOG_FIRST_N(WARNING, 1)
-      << "MUSA BF16 fused MoE AOT artifacts are unavailable for decode batch "
-      << num_tokens << "; using the Ragged fallback.";
-  return false;
+  return fp8 ? xllm::kernel::musa::fused_moe_aot_available(num_tokens)
+             : xllm::kernel::musa::fused_moe_bf16_aot_available(num_tokens);
 }
 
 bool use_moe_topk(int64_t num_tokens,
@@ -161,15 +143,7 @@ bool use_moe_topk(int64_t num_tokens,
       num_tokens <= max_tokens && num_experts == 256 && topk == 8 &&
       router_logits.scalar_type() == torch::kBFloat16 &&
       router_logits.is_contiguous();
-  if (!enabled || !shape_supported) {
-    return false;
-  }
-  if (xllm::kernel::musa::moe_topk_softmax_available()) {
-    return true;
-  }
-  LOG_FIRST_N(WARNING, 1)
-      << "MUSA top-k artifact is unavailable; using Torch top-k.";
-  return false;
+  return enabled && shape_supported;
 }
 
 bool is_16byte_aligned(const torch::Tensor& tensor) {
@@ -294,16 +268,14 @@ Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
                                          intermediate_size_ / 128},
                                         options_.dtype(torch::kFloat32)),
                            false);
-
-    if (util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true) &&
-        xllm::kernel::musa::fused_moe_aot_available(
-            /*num_tokens=*/1)) {
+  }
+  if (topk_ == 8 && num_experts_ <= 1024 &&
+      use_fused_moe_aot(/*num_tokens=*/1, /*is_decode=*/true, use_fp8_)) {
+    if (use_fp8_) {
       xllm::kernel::musa::prepare_fused_moe_aot(w13_.device());
+    } else {
+      xllm::kernel::musa::prepare_fused_moe_bf16_aot(w13_.device());
     }
-  } else if (util::get_bool_env("XLLM_MUSA_FUSED_MOE_BF16_AOT", true) &&
-             xllm::kernel::musa::fused_moe_bf16_aot_available(
-                 /*num_tokens=*/1)) {
-    xllm::kernel::musa::prepare_fused_moe_bf16_aot(w13_.device());
   }
 }
 
@@ -440,19 +412,19 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   const int64_t assignment_count = num_tokens * topk_;
   auto flat_ids = topk_ids.reshape({assignment_count});
 
-  if (!use_fp8_ && use_bf16_fused_moe_aot(num_tokens, is_decode)) {
+  if (topk_ == 8 && num_experts_ <= 1024 &&
+      use_fused_moe_aot(num_tokens, is_decode, use_fp8_)) {
+    if (use_fp8_) {
+      return xllm::kernel::musa::fused_moe_aot_fp8(hidden_states,
+                                                   w13_,
+                                                   w13_scale_inv_,
+                                                   w2_,
+                                                   w2_scale_inv_,
+                                                   topk_weights,
+                                                   topk_ids);
+    }
     return xllm::kernel::musa::fused_moe_aot_bf16(
         hidden_states, w13_, w2_, topk_weights, topk_ids);
-  }
-
-  if (use_fp8_ && use_fused_moe_aot(num_tokens, is_decode)) {
-    return xllm::kernel::musa::fused_moe_aot_fp8(hidden_states,
-                                                 w13_,
-                                                 w13_scale_inv_,
-                                                 w2_,
-                                                 w2_scale_inv_,
-                                                 topk_weights,
-                                                 topk_ids);
   }
 
   if (use_fp8_ && use_contiguous_fp8_moe_ &&
@@ -714,7 +686,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   }
 
   auto route_index =
-      xllm::kernel::cuda::moe_compute_index(flat_ids, num_experts_);
+      xllm::kernel::musa::moe_compute_index(flat_ids, num_experts_);
   auto dst_src_i32 = std::get<1>(route_index);
   auto token_counts_i32 = std::get<2>(route_index);
   auto original_indices = dst_src_i32.to(torch::kLong);

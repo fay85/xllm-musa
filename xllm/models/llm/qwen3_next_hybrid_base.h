@@ -221,17 +221,6 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     std::optional<torch::Tensor> residual = std::nullopt;
     for (size_t i = 0; i < layers_.size(); i++) {
       set_lora_context_layer(static_cast<int32_t>(i));
-#if defined(USE_MUSA)
-      if (attn_metadata.plan_info != nullptr) {
-        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
-      }
-      if (attn_metadata.shared_plan_info != nullptr) {
-        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
-      }
-      if (attn_metadata.unshared_plan_info != nullptr) {
-        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
-      }
-#endif
       // Capture hooks run before a layer. Worker-side draft config loading
       // converts target output layer L to capture index L + 1, matching the
       // established Qwen3 DFlash convention. Hybrid layers keep the residual

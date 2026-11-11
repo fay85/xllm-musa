@@ -27,6 +27,20 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
+bool use_fa3_attention(int64_t head_size,
+                       int64_t num_heads,
+                       int64_t num_kv_heads,
+                       torch::ScalarType dtype,
+                       bool is_decode,
+                       int64_t window_left);
+
+void check_fa3_attention(int64_t head_size,
+                         int64_t num_heads,
+                         int64_t num_kv_heads,
+                         torch::ScalarType dtype,
+                         bool is_decode,
+                         int64_t window_left);
+
 class FlashInferAttentionImpl final : public BaseAttentionImpl {
  public:
   FlashInferAttentionImpl(int64_t num_heads,
@@ -51,28 +65,17 @@ class FlashInferAttentionImpl final : public BaseAttentionImpl {
                        torch::Tensor& output,
                        std::optional<torch::Tensor>& output_lse,
                        const torch::Tensor& k_cache,
-                       const torch::Tensor& v_cache);
-
-  void chunked_prefill_forward(const AttentionMetadata& attn_metadata,
-                               torch::Tensor& query,
-                               const torch::Tensor& key,
-                               torch::Tensor& output,
-                               std::optional<torch::Tensor>& output_lse,
-                               const torch::Tensor& k_cache,
-                               const torch::Tensor& v_cache);
+                       const torch::Tensor& v_cache,
+                       bool has_cached_prefix);
 
   void decoder_forward(const AttentionMetadata& attn_metadata,
                        torch::Tensor& query,
-                       const torch::Tensor& key,
                        torch::Tensor& output,
                        std::optional<torch::Tensor>& output_lse,
                        const torch::Tensor& k_cache,
                        const torch::Tensor& v_cache);
 
  private:
-  torch::Tensor float_workspace_buffer_;
-  torch::Tensor int_workspace_buffer_;
-  torch::Tensor page_locked_int_workspace_buffer_;
   torch::Tensor prefill_lse_buf_;
   torch::Tensor decode_lse_buf_;
 };

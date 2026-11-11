@@ -21,29 +21,66 @@ limitations under the License.
 #include <dlfcn.h>
 #include <dlpack/dlpack.h>
 #include <glog/logging.h>
+#include <openssl/evp.h>
+#include <torch_musa/csrc/core/MUSAGraphsC10Utils.h>
+#include <torch_musa/csrc/core/MUSAGuard.h>
 #include <tvm/ffi/extra/c_env_api.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include <fstream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
-#include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-#include "core/platform/device.h"
-#include "core/platform/platform.h"
-#include "core/util/env_var.h"
-#include "core/util/utils.h"
+#include "core/kernels/musa/musa_aot_config.h"
 
 namespace xllm::kernel::musa {
 namespace {
 
 thread_local bool s_force_ffi_preparation_sync = false;
+
+std::string sha512_file(const std::string& path) {
+  std::ifstream stream(path, std::ios::binary);
+  CHECK(stream.is_open()) << "Missing or unreadable MUSA operator artifact: "
+                          << path;
+  const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context(
+      EVP_MD_CTX_new(), &EVP_MD_CTX_free);
+  CHECK(context != nullptr &&
+        EVP_DigestInit_ex(context.get(), EVP_sha512(), nullptr) == 1)
+      << "Cannot initialize MUSA artifact SHA512 verification";
+  std::array<char, 64 * 1024> buffer;
+  while (stream.read(buffer.data(), buffer.size()) || stream.gcount() > 0) {
+    CHECK_EQ(
+        EVP_DigestUpdate(
+            context.get(), buffer.data(), static_cast<size_t>(stream.gcount())),
+        1)
+        << "Cannot hash MUSA operator artifact: " << path;
+  }
+  CHECK(stream.eof() && !stream.bad())
+      << "Cannot read MUSA operator artifact: " << path;
+  std::array<unsigned char, EVP_MAX_MD_SIZE> digest;
+  unsigned int length = 0;
+  CHECK_EQ(EVP_DigestFinal_ex(context.get(), digest.data(), &length), 1)
+      << "Cannot finalize MUSA artifact SHA512 verification";
+  constexpr char kHexDigits[] = "0123456789abcdef";
+  std::string hex;
+  hex.reserve(length * 2);
+  for (uint32_t index = 0; index < length; ++index) {
+    hex.push_back(kHexDigits[digest[index] >> 4]);
+    hex.push_back(kHexDigits[digest[index] & 0xf]);
+  }
+  return hex;
+}
 
 void*& get_forced_tvmffi_stream(c10::DeviceIndex device_index) {
   static thread_local std::array<void*, 8> streams{};
@@ -368,20 +405,6 @@ TvmffiStreamGuard::~TvmffiStreamGuard() {
 }  // namespace xllm::kernel::musa
 
 namespace {
-const std::unordered_map<torch::ScalarType, std::string_view>
-    filename_safe_dtype_map = {
-        {torch::kFloat16, "f16"},
-        {torch::kBFloat16, "bf16"},
-        {torch::kFloat8_e4m3fn, "e4m3"},
-        {torch::kFloat8_e5m2, "e5m2"},
-        {torch::kInt8, "i8"},
-        {torch::kUInt8, "u8"},
-        {torch::kInt32, "i32"},
-        {torch::kUInt32, "u32"},
-        {torch::kInt64, "i64"},
-        {torch::kUInt64, "u64"},
-};
-
 void ensure_tvm_ffi_global_symbols() {
   static std::once_flag once;
   std::call_once(once, []() {
@@ -881,122 +904,64 @@ void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device) {
   }
 }
 
-bool should_use_tensor_core(torch::ScalarType kv_cache_dtype,
-                            int64_t num_attention_heads,
-                            int64_t num_kv_heads) {
-  int64_t gqa_group_size = num_attention_heads / num_kv_heads;
-
-  if (kv_cache_dtype == torch::ScalarType::Float8_e4m3fn ||
-      kv_cache_dtype == torch::ScalarType::Float8_e5m2) {
-    return true;
-  } else if (kv_cache_dtype == torch::ScalarType::Half ||
-             kv_cache_dtype == torch::ScalarType::BFloat16) {
-    return gqa_group_size >= 4;
-  }
-
-  return false;
+std::string get_musa_ops_root() {
+  // Fix the root at first use, matching the module/function cache lifetime.
+  static const std::string root = []() -> std::string {
+    const char* override_path = std::getenv("FLASHINFER_OPS_PATH");
+    if (override_path != nullptr && override_path[0] != '\0') {
+      return override_path;
+    }
+    // Locate the containing executable/DSO, also when loaded through Python.
+    Dl_info info{};
+    CHECK(dladdr(reinterpret_cast<void*>(&get_musa_ops_root), &info) != 0 &&
+          info.dli_fname != nullptr)
+        << "Cannot locate the MUSA runtime operator bundle";
+    const auto runtime_dir =
+        std::filesystem::absolute(info.dli_fname).parent_path();
+    const auto adjacent_dir = runtime_dir / "musa_ops";
+    if (std::filesystem::exists(adjacent_dir)) {
+      return adjacent_dir.string();
+    }
+    return (runtime_dir / XLLM_MUSA_INSTALL_OPS_RELATIVE_DIR)
+        .lexically_normal()
+        .string();
+  }();
+  return root;
 }
-
-bool support_pdl() { return Platform::is_enable_pdl(); }
 
 std::string path_to_uri_so_lib(const std::string& uri) {
-  return util::get_string_env("FLASHINFER_OPS_PATH") + "/" + uri + "/" + uri +
-         ".so";
+  CHECK(!uri.empty() && uri != "." && uri != ".." &&
+        uri.find('/') == std::string::npos &&
+        uri.find('\\') == std::string::npos)
+      << "Invalid MUSA operator URI: " << uri;
+  return get_musa_ops_root() + "/" + uri + "/" + uri + ".so";
 }
 
-std::string determine_attention_backend(int64_t pos_encoding_mode,
-                                        bool use_fp16_qk_reduction,
-                                        bool use_custom_mask) {
-  bool support_fa3_backend =
-      (pos_encoding_mode == 0) && !use_fp16_qk_reduction && !use_custom_mask;
-
-  if (Platform::is_support_sm90a() && support_fa3_backend) {
-    return "fa3";
+void validate_musa_ops_bundle(const std::string& root) {
+  static std::mutex mutex;
+  static std::unordered_set<std::string> verified_roots;
+  std::lock_guard<std::mutex> lock(mutex);
+  if (verified_roots.contains(root)) {
+    return;
   }
-  return "fa2";
-}
-
-std::string get_batch_prefill_uri(const std::string& backend,
-                                  torch::ScalarType dtype_q,
-                                  torch::ScalarType dtype_kv,
-                                  torch::ScalarType dtype_o,
-                                  torch::ScalarType dtype_idx,
-                                  int64_t head_dim_qk,
-                                  int64_t head_dim_vo,
-                                  int64_t pos_encoding_mode,
-                                  bool use_sliding_window,
-                                  bool use_logits_soft_cap,
-                                  bool use_fp16_qk_reduction) {
-  std::ostringstream oss;
-  oss << "batch_prefill_with_kv_cache_"
-      << "dtype_q_" << filename_safe_dtype_map.at(dtype_q) << "_"
-      << "dtype_kv_" << filename_safe_dtype_map.at(dtype_kv) << "_"
-      << "dtype_o_" << filename_safe_dtype_map.at(dtype_o) << "_"
-      << "dtype_idx_" << filename_safe_dtype_map.at(dtype_idx) << "_"
-      << "head_dim_qk_" << head_dim_qk << "_"
-      << "head_dim_vo_" << head_dim_vo << "_"
-      << "posenc_" << pos_encoding_mode << "_"
-      << "use_swa_" << (use_sliding_window ? "True" : "False") << "_"
-      << "use_logits_cap_" << (use_logits_soft_cap ? "True" : "False") << "_"
-      << "f16qk_" << (use_fp16_qk_reduction ? "True" : "False");
-
-  if (backend == "fa3") oss << "_sm90";
-
-  return oss.str();
-}
-
-std::string get_batch_decode_uri(torch::ScalarType dtype_q,
-                                 torch::ScalarType dtype_kv,
-                                 torch::ScalarType dtype_o,
-                                 torch::ScalarType dtype_idx,
-                                 int64_t head_dim_qk,
-                                 int64_t head_dim_vo,
-                                 int64_t pos_encoding_mode,
-                                 bool use_sliding_window,
-                                 bool use_logits_soft_cap) {
-  std::ostringstream oss;
-  oss << "batch_decode_with_kv_cache_"
-      << "dtype_q_" << filename_safe_dtype_map.at(dtype_q) << "_"
-      << "dtype_kv_" << filename_safe_dtype_map.at(dtype_kv) << "_"
-      << "dtype_o_" << filename_safe_dtype_map.at(dtype_o) << "_"
-      << "dtype_idx_" << filename_safe_dtype_map.at(dtype_idx) << "_"
-      << "head_dim_qk_" << head_dim_qk << "_"
-      << "head_dim_vo_" << head_dim_vo << "_"
-      << "posenc_" << pos_encoding_mode << "_"
-      << "use_swa_" << (use_sliding_window ? "True" : "False") << "_"
-      << "use_logits_cap_" << (use_logits_soft_cap ? "True" : "False");
-
-  return oss.str();
-}
-
-torch::Tensor get_cache_buffer(const int32_t seq_len,
-                               const torch::Device& device) {
-  static std::unordered_map<std::string, torch::Tensor> cache_buffer_map;
-  int32_t seq_len_pow2 = xllm::util::ceil_pow2(seq_len);
-
-  std::string key = std::string("range_") + std::to_string(seq_len_pow2);
-  auto it = cache_buffer_map.find(key);
-  if (it != cache_buffer_map.end()) {
-    return it->second.slice(0, 0, seq_len);
+  const std::string marker_path = root + "/.bundle-id";
+  std::ifstream marker(marker_path);
+  CHECK(marker.is_open())
+      << "Missing or unreadable MUSA operator bundle marker: " << marker_path;
+  std::string bundle_id;
+  CHECK(static_cast<bool>(std::getline(marker, bundle_id)))
+      << "Empty or unreadable MUSA operator bundle marker: " << marker_path;
+  CHECK_EQ(bundle_id, aot::kBundleId)
+      << "MUSA operator bundle does not match this executable. Rebuild xLLM "
+         "with its pinned MATE toolchain and deploy the matching musa_ops "
+         "directory; do not reuse an old deployment cache.";
+  for (const aot::Artifact& artifact : aot::kArtifacts) {
+    const std::string path = root + "/" + artifact.path;
+    CHECK_EQ(sha512_file(path), artifact.sha512)
+        << "MUSA operator artifact checksum mismatch: " << path
+        << ". Rebuild musa_aot_ops and deploy the matching musa_ops bundle.";
   }
-
-  auto options = torch::TensorOptions().dtype(torch::kInt32).device(device);
-  torch::Tensor buffer = torch::arange(seq_len_pow2, options);
-  cache_buffer_map.insert(std::make_pair(key, buffer));
-  return buffer.slice(0, 0, seq_len);
-}
-
-std::tuple<torch::Tensor, double> split_scale_param(
-    const torch::Tensor& scale) {
-  if (!scale.defined()) {
-    return std::make_tuple(torch::Tensor(), 1.0);
-  }
-
-  if (scale.dim() == 0) {
-    return std::make_tuple(torch::Tensor(), scale.item<double>());
-  }
-
-  return std::make_tuple(scale, 1.0);
+  verified_roots.insert(root);
 }
 
 DLDataType to_dl_data_type(torch::ScalarType scalar_type) {
@@ -1078,7 +1043,16 @@ ffi::Optional<ffi::Array<ffi::Tensor>> to_ffi_optional_array_tensors(
       to_ffi_array_tensors(optional.value()));
 }
 
+bool is_musa_operator_built(const std::string& uri) {
+  return std::find(aot::kOperatorUris.begin(), aot::kOperatorUris.end(), uri) !=
+         aot::kOperatorUris.end();
+}
+
 ffi::Module get_module(const std::string& uri) {
+  CHECK(is_musa_operator_built(uri))
+      << "MUSA operator URI is not part of this build: " << uri
+      << ". Deploy only the operators generated by musa_aot_ops; do not reuse "
+         "an old deployment cache.";
   static thread_local std::unordered_map<std::string, ffi::Module> module_cache;
 
   auto it = module_cache.find(uri);
@@ -1086,15 +1060,20 @@ ffi::Module get_module(const std::string& uri) {
     return it->second;
   }
 
+  const std::string root = get_musa_ops_root();
+  validate_musa_ops_bundle(root);
   ensure_tvm_ffi_global_symbols();
   ensure_tvm_ffi_tensor_allocator();
-  // TileLang device kernels are packaged as ffi.Module.load_from_bytes.musa;
-  // without this registration LoadFromFile aborts the process.
-  CHECK(ensure_tilelang_loader())
-      << "TileLang MUSA FFI loader unavailable; set XLLM_TILELANG_LIB to "
-         "libtilelang.so before loading Mate/FlashInfer ops (uri="
-      << uri << ")";
-  std::string so_file_path = path_to_uri_so_lib(uri);
+  // Only TileLang modules need the ffi.Module.load_from_bytes.musa loader.
+  if (std::find(aot::kTileLangOperatorUris.begin(),
+                aot::kTileLangOperatorUris.end(),
+                uri) != aot::kTileLangOperatorUris.end()) {
+    CHECK(ensure_tilelang_loader())
+        << "TileLang MUSA FFI loader unavailable; set XLLM_TILELANG_LIB to "
+           "libtilelang.so before loading this TileLang operator (uri="
+        << uri << ")";
+  }
+  const std::string so_file_path = root + "/" + uri + "/" + uri + ".so";
   auto mod = ffi::Module::LoadFromFile(so_file_path);
   module_cache.emplace(uri, mod);
   return mod;

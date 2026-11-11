@@ -13,7 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "device.h"
+#include "core/platform/device.h"
+
+#include <mutex>
 
 #include "core/framework/config/model_config.h"
 #include "core/platform/platform.h"
@@ -34,8 +36,10 @@ limitations under the License.
 #include <c10/cuda/CUDAStream.h>
 #include <cuda.h>
 #elif defined(USE_MUSA)
-#include <c10/musa/MUSAGuard.h>
+#include <ATen/Context.h>
 #include <musa.h>
+#include <torch_musa/csrc/core/MUSAGuard.h>
+#include <torch_musa/csrc/core/MUSAHooksInterface.h>
 #elif defined(USE_DCU)
 #include <c10/hip/HIPCachingAllocator.h>
 #include <c10/hip/HIPStream.h>
@@ -119,6 +123,15 @@ void Device::init_device_context() const {
       torch_npu::init_npu(index());
     }
   }
+#elif defined(USE_MUSA)
+  // Standalone native workers do not import torch_musa. Register its hooks
+  // and backend name before ATen allocates device or pinned host memory.
+  static std::once_flag init_musa_backend;
+  std::call_once(init_musa_backend, []() {
+    c10::register_privateuse1_backend("musa");
+    at::detail::getMUSAHooks();
+  });
+  at::globalContext().lazyInitDevice(device_.type());
 #endif
 }
 

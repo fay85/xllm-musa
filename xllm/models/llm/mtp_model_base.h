@@ -425,7 +425,7 @@ class MtpModelImplBase : public torch::nn::Module {
       return ModelOutput();
     }
     for (size_t i = 0; i < mtp_layers_.size(); i++) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
       attn_metadata.plan_info->layer_id = i;
 #endif
       auto& layer = mtp_layers_[i];

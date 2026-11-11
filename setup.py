@@ -301,6 +301,22 @@ def _stage_mlu_bangc_runtime(base_dir: str, extdir: str, device: str) -> None:
     logger.info("Staged BangC loader and in-tree library: %s", library)
 
 
+def _stage_musa_runtime(extdir: str, server_output_dir: str, device: str) -> None:
+    """Copy the CMake-built MATE runtime beside the staged executable."""
+    if device != "musa":
+        return
+
+    source_dir = os.path.join(extdir, "musa_ops")
+    for name in ("manifest.json", ".bundle-id"):
+        if not os.path.isfile(os.path.join(source_dir, name)):
+            raise RuntimeError(f"The musa_aot_ops CMake target did not produce {source_dir}/{name}")
+    dest_dir = os.path.join(server_output_dir, "musa_ops")
+    if os.path.isdir(dest_dir):
+        shutil.rmtree(dest_dir)
+    shutil.copytree(source_dir, dest_dir, ignore=shutil.ignore_patterns(".build.lock", "*.tmp"))
+    logger.info("Staged CMake-built MUSA runtime: %s", dest_dir)
+
+
 def _stage_triton_jit_scripts(base_dir: str, extdir: str) -> None:
     """Stage the triton_jit compile script as an importable package module.
 
@@ -544,6 +560,7 @@ class ExtBuild(build_ext):
                 f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}",
                 "-DCMAKE_CUDA_ARCHITECTURES=90",
                 "-DBUILD_TESTING=OFF",
+                f"-DXLLM_MUSA_AOT_JOBS={os.getenv('XLLM_MUSA_AOT_JOBS', max_jobs)}",
             ]
             set_musa_envs()
             global BUILD_TEST_FILE
@@ -674,6 +691,7 @@ class ExtBuild(build_ext):
             server_output_dir,
         )
         _stage_mlu_bangc_runtime(self.base_dir, extdir, self.device)
+        _stage_musa_runtime(extdir, server_output_dir, self.device)
         if self.device == "mlu":
             shutil.copy2(os.path.join(extdir, "libxllm_mlu_ops.so"), server_output_dir)
         etcd_wrapper = os.path.join(extdir, "libetcd_wrapper.so")

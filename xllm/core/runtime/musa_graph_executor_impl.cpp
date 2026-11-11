@@ -35,7 +35,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/linear.h"
-#include "core/layers/musa/flashinfer_planinfo.h"
+#include "core/layers/musa/flashinfer_attention.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/runtime/decode_graph_bucket.h"
@@ -53,21 +53,6 @@ bool s_enable_graph_timing() {
     return env != nullptr && std::string(env) == "1";
   }();
   return val;
-}
-
-bool s_use_fa3_decode(int64_t gqa_ratio) {
-  static const int32_t setting = [] {
-    const char* decode_env = std::getenv("XLLM_USE_FA3_DECODE");
-    if (decode_env != nullptr) {
-      return std::string(decode_env) == "1" ? int32_t{1} : int32_t{0};
-    }
-    const char* env = std::getenv("XLLM_USE_FA3");
-    if (env == nullptr) {
-      return int32_t{-1};
-    }
-    return std::string(env) == "1" ? int32_t{1} : int32_t{0};
-  }();
-  return setting < 0 ? gqa_ratio == 8 : setting == 1;
 }
 
 // Phase D: wall+device time for packed/eager pure-prefill forwards.
@@ -176,11 +161,15 @@ bool is_cpu_int32_tensor(const torch::Tensor& tensor) {
   return tensor.scalar_type() == torch::kInt32;
 }
 
-bool has_llm_decode_host_metadata(const AttentionHostInput& host) {
-  return !host.kv_seq_lens.empty() &&
-         is_cpu_int32_tensor(host.paged_kv_indptr) &&
-         is_cpu_int32_tensor(host.paged_kv_indices) &&
-         is_cpu_int32_tensor(host.paged_kv_last_page_len);
+bool has_llm_decode_host_metadata(
+    const AttentionHostInput& host,
+    const layer::Fa3AttentionMetadata& fa3_metadata) {
+  return !host.kv_seq_lens.empty() && host.kv_seq_lens.front() == 0 &&
+         is_cpu_int32_tensor(fa3_metadata.paged_kv_indptr_host) &&
+         is_cpu_int32_tensor(fa3_metadata.paged_kv_indices_host) &&
+         is_cpu_int32_tensor(fa3_metadata.paged_kv_last_page_len_host) &&
+         static_cast<int64_t>(host.kv_seq_lens.size()) ==
+             fa3_metadata.paged_kv_indptr_host.numel();
 }
 
 struct IndexedTensorSnapshot {
@@ -298,7 +287,7 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   hidden_states_ = torch::zeros({max_tokens_per_batch, args.hidden_size()},
                                 torch::dtype(dtype).device(device));
 
-  // FlashInfer decode mode parameters
+  // Persistent paged-KV metadata for decode.
   // paged_kv_indptr: shape [max_seqs_per_batch + 1]
   persistent_paged_kv_indptr_ = torch::zeros(
       {max_seqs_per_batch + 1}, torch::dtype(torch::kInt).device(device));
@@ -326,7 +315,8 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
 bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
     const torch::Tensor& tokens,
     const torch::Tensor& positions,
-    const ModelInputParams& params) const {
+    const ModelInputParams& params,
+    const layer::Fa3AttentionMetadata& fa3_metadata) const {
   if (!params.meta.batch_forward_type.is_decode() ||
       is_rec_multi_round_mode() || params.has_llmrec_params()) {
     return false;
@@ -337,7 +327,7 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
   if (!device_token_metadata_ok) {
     return false;
   }
-  if (has_llm_decode_host_metadata(params.attention.host)) {
+  if (has_llm_decode_host_metadata(params.attention.host, fa3_metadata)) {
     return true;
   }
   return is_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
@@ -351,6 +341,7 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
     const torch::Tensor& tokens,
     const torch::Tensor& positions,
     const ModelInputParams& params,
+    const layer::Fa3AttentionMetadata& fa3_metadata,
     uint32_t padded_num_tokens,
     int64_t actual_batch_size,
     int64_t actual_num_tokens) {
@@ -371,22 +362,24 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       to_int32(params.attention.device.kv_seq_lens);
 
   const musaStream_t stream = c10::musa::getCurrentMUSAStream(device_.index());
-  if (has_llm_decode_host_metadata(params.attention.host)) {
+  if (has_llm_decode_host_metadata(params.attention.host, fa3_metadata)) {
     const auto& host = params.attention.host;
     CHECK_GE(static_cast<int64_t>(host.kv_seq_lens.size()),
              actual_batch_size + 1)
         << "host kv_seq_lens too small for batch";
     const int64_t actual_indices_size =
-        host.paged_kv_indices.defined() ? host.paged_kv_indices.numel() : 0;
+        fa3_metadata.paged_kv_indices_host.numel();
     xllm::kernel::musa::LlmDecodeMetadataHostUpdateParams host_update_params{
         .src_tokens = tokens_i32.data_ptr<int32_t>(),
         .src_positions = positions_i32.data_ptr<int32_t>(),
         .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
         .host_kv_seq_lens = host.kv_seq_lens.data(),
-        .host_paged_kv_indptr = host.paged_kv_indptr.data_ptr<int32_t>(),
-        .host_paged_kv_indices = host.paged_kv_indices.data_ptr<int32_t>(),
+        .host_paged_kv_indptr =
+            fa3_metadata.paged_kv_indptr_host.data_ptr<int32_t>(),
+        .host_paged_kv_indices =
+            fa3_metadata.paged_kv_indices_host.data_ptr<int32_t>(),
         .host_paged_kv_last_page_len =
-            host.paged_kv_last_page_len.data_ptr<int32_t>(),
+            fa3_metadata.paged_kv_last_page_len_host.data_ptr<int32_t>(),
         .dst_tokens = persistent_tokens_.data_ptr<int32_t>(),
         .dst_positions = persistent_positions_.data_ptr<int32_t>(),
         .dst_new_cache_slots = persistent_new_cache_slots_.data_ptr<int32_t>(),
@@ -512,7 +505,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     params_for_capture = std::make_optional<ModelInputParams>(params);
   }
   // Build attn_metadata with original model_input_params. So we can set actual
-  // batch size in plan_info.
+  // batch size in attention metadata.
   std::shared_ptr<layer::AttentionMetadata> attn_metadata =
       std::make_shared<layer::AttentionMetadata>(
           layer::AttentionMetadataBuilder::build(params, args_.enable_mla()));
@@ -544,8 +537,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           : std::min<int64_t>(params.embedding.linear_state_ids.size(),
                               persistent_linear_state_indices_.numel());
 
-  const bool use_llm_decode_fast_path =
-      can_use_llm_decode_fast_path(tokens, positions, params);
+  const bool use_llm_decode_fast_path = can_use_llm_decode_fast_path(
+      tokens, positions, params, attn_metadata->fa3_metadata);
 
   // Cheap when the input builder already pre-staged (just a shared_ptr ref);
   // a single per-step D2H per index tensor in the fallback case (3 D2H total,
@@ -626,6 +619,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     update_llm_decode_metadata_fast_path(tokens,
                                          positions,
                                          params,
+                                         attn_metadata->fa3_metadata,
                                          padded_num_tokens,
                                          actual_batch_size,
                                          actual_num_tokens);
@@ -850,7 +844,6 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       (total_kv_heads >= tp_size)
           ? (total_kv_heads / std::max(tp_size, int64_t{1}))
           : 1;
-  const int64_t block_size = options_.block_size();
 
   // ModelArgs stores the window length, while the attention kernels consume
   // the inclusive left-window offset. Preserve -1 as the disabled sentinel.
@@ -863,19 +856,24 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // Get dtype from k_cache
   const auto dtype = k_cache.scalar_type();
 
-  bool use_tensor_core =
-      xllm::kernel::musa::should_use_tensor_core(dtype, n_heads, n_kv_heads);
-  // Keep in sync with BaseAttentionImpl::decode_use_tensor_core_ on MUSA:
-  // the Mate FFI ships the dedicated `batch_decode_*` kernel (exporting the
-  // "run" symbol) for our paged-KV layouts, while the chunked-prefill
-  // `batch_prefill_*` kernel only exports "paged_run". When this graph-mode
-  // planner picks the chunked-prefill URI but `FlashInferAttentionImpl::
-  // decoder_forward` calls `batch_decode(..., decode_use_tensor_core_=false)`,
-  // `batch_decode` falls into the else branch and tries to look up
-  // get_function(prefill_uri, "run") which doesn't exist in the .so. Force
-  // the same value here so the planner and the runtime caller agree on the
-  // URI scheme.
-  use_tensor_core = false;
+  layer::check_fa3_attention(
+      head_dim,
+      n_heads,
+      n_kv_heads,
+      dtype,
+      !attn_metadata->is_prefill && !attn_metadata->is_chunked_prefill,
+      sliding_window);
+
+  // Prefill prepares its scheduler metadata in the attention layer.
+  const bool use_fa3_decode = !attn_metadata->is_prefill &&
+                              !attn_metadata->is_chunked_prefill &&
+                              layer::use_fa3_attention(head_dim,
+                                                       n_heads,
+                                                       n_kv_heads,
+                                                       dtype,
+                                                       /*is_decode=*/true,
+                                                       sliding_window);
+
   if (use_two_stage_decode) {
     LOG(FATAL) << "two-stage xattention decode is not supported in "
                   "MUSA builds.";
@@ -992,56 +990,6 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       attn_metadata->qo_indptr = persistent_decode_qo_indptr(metadata_batch);
     }
   }
-  // Update plan_info if attn_metadata exists and device-graph mode is on
-  // This ensures plan_info is updated before MUSA graph capture/replay.
-  {
-    // Update plan_info
-    // Note: plan_info is only updated at layer 0, so we set layer_id to 0
-    attn_metadata->plan_info->layer_id = 0;
-    CHECK_EQ(dtype, torch::ScalarType::BFloat16)
-        << "only support bf16 kvcache for now";
-
-    VLOG(kGraphExecutorLogVerboseLevel)
-        << "MusaGraphPersistentParam::update() calling update_plan_info: "
-        << "is_prefill=" << attn_metadata->is_prefill
-        << ", is_chunked_prefill=" << attn_metadata->is_chunked_prefill
-        << ", enable_cuda_graph=" << attn_metadata->enable_cuda_graph;
-
-    if (!attn_metadata->is_prefill && !attn_metadata->is_chunked_prefill) {
-      // Regular decode uses the paged batch-decode plan.
-      const int32_t max_kv_blocks_per_seq_for_capture =
-          block_size > 0
-              ? static_cast<int32_t>(
-                    (args_.max_position_embeddings() + block_size - 1) /
-                    block_size)
-              : 0;
-      layer::musa::flashinfer::update_decode_plan_info(
-          attn_metadata->plan_info,
-          /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
-          *attn_metadata,
-          dtype,                             // query_dtype
-          dtype,                             // key_dtype
-          dtype,                             // output_dtype
-          head_dim,                          // head_dim_qk
-          head_dim,                          // head_dim_vo
-          static_cast<int32_t>(n_heads),     // num_qo_heads
-          static_cast<int32_t>(n_kv_heads),  // num_kv_heads
-          static_cast<int32_t>(block_size),  // block_size
-          sliding_window,                    // window_size_left
-          /*enable_cuda_graph=*/true,
-          use_tensor_core,
-          max_kv_blocks_per_seq_for_capture);
-    }
-
-    VLOG(kGraphExecutorLogVerboseLevel)
-        << "MusaGraphPersistentParam::update() plan_info state: uri="
-        << attn_metadata->plan_info->uri << ", plan_info.defined="
-        << attn_metadata->plan_info->plan_info.defined() << ", plan_info.size="
-        << (attn_metadata->plan_info->plan_info.defined()
-                ? attn_metadata->plan_info->plan_info.size()
-                : 0);
-  }
-
   // MUSA FA3 graph replay must not capture scheduler-metadata generation.
   // The optimal split count depends on the live KV length, while decode
   // graphs are initially captured with a short synthetic sequence. Generate
@@ -1049,12 +997,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // copy it into the tensor address retained by the captured attention calls.
   const bool is_qwen3_5 = args_.model_type() == "qwen3_5_text" ||
                           args_.model_type() == "qwen3_5_moe_text";
-  const int64_t gqa_ratio = n_kv_heads > 0 ? n_heads / n_kv_heads : int64_t{0};
-  if (s_use_fa3_decode(gqa_ratio) && is_qwen3_5 && !attn_metadata->is_prefill &&
-      !attn_metadata->is_chunked_prefill &&
-      attn_metadata->block_table.defined()) {
+  if (use_fa3_decode && is_qwen3_5 && attn_metadata->block_table.defined()) {
     const int64_t batch_size = attn_metadata->block_table.size(0);
-    if (batch_size > 0 && (gqa_ratio == 6 || gqa_ratio == 8)) {
+    if (batch_size > 0) {
       const torch::Tensor cu_seqlens_q =
           attn_metadata->qo_indptr.has_value() &&
                   attn_metadata->qo_indptr->defined()
@@ -1084,108 +1029,6 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   return build_capture_params_if_needed();
 }
 
-void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
-    const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
-    const AttentionHostInput& host_src) {
-  // Only applies to the Mate FFI decode path. Prefill/chunked-prefill and MLA
-  // attention do not pass host pointers through the FFI run() boundary, so
-  // there is nothing to stabilize there.
-  if (!attn_metadata) {
-    return;
-  }
-  if (attn_metadata->is_prefill || attn_metadata->is_chunked_prefill) {
-    return;
-  }
-
-  // Helper: lazily allocate / grow a pinned host buffer, copy fresh metadata
-  // into it, then re-point `host_field` at the owning slice. The buffer's
-  // underlying storage pointer must be STABLE across the lifetime of this
-  // MusaGraph (captured FFI run() bakes it into the graph).
-  //
-  // Prefer copying from attention.host CPU mirrors (batch_input_builder path):
-  // the values are already on host, so a CPU->pinned memcpy avoids the extra
-  // device round-trip and the musaStreamSync that blocking D2H would insert.
-  // Fall back to blocking D2H from persistent device tensors for callers that
-  // did not pre-stage host mirrors (profile / warmup paths).
-  //
-  // CRITICAL: when allocating for the first time, size to max(numel,
-  // min_alloc_numel). The captured graph cannot tolerate a later realloc:
-  // if the KV cache crosses a block boundary mid-replay (e.g., decode 38 of
-  // a question with prefill=27, block_size=64), the device-side
-  // paged_kv_indices numel grows from 1 to 2 entries. With min_alloc_numel
-  // set to the worst case at capture time, the first allocation is already
-  // large enough and subsequent refresh calls hit the same storage.
-  // Otherwise the realloc returns fresh memory and the captured kernel
-  // dereferences a stale (freed) pointer, producing silently-wrong
-  // attention outputs from L3 onward. See refresh-call-site comment.
-  auto refresh_one = [](torch::Tensor& host_buf,
-                        torch::Tensor& host_field,
-                        const torch::Tensor& device_src,
-                        const torch::Tensor& cpu_src,
-                        int64_t min_alloc_numel) {
-    if (!device_src.defined()) {
-      return;
-    }
-    const int64_t numel = device_src.numel();
-    const torch::ScalarType src_dtype = device_src.scalar_type();
-    const bool needs_alloc =
-        !host_buf.defined() || host_buf.scalar_type() != src_dtype ||
-        host_buf.numel() < numel || host_buf.numel() < min_alloc_numel;
-    if (needs_alloc) {
-      // Pinned so musaMemcpyAsync from device is a real async copy that can
-      // be captured into the graph (the Mate FFI submits H2D internally on
-      // some shapes; pinning ensures the captured operation refreshes the
-      // device buffer from our stable host pointer on every replay). Sized
-      // to max(numel, min_alloc_numel) so the first allocation already
-      // covers the worst-case KV cache layout for this MusaGraph instance.
-      auto opts = torch::TensorOptions()
-                      .dtype(src_dtype)
-                      .device(torch::kCPU)
-                      .pinned_memory(true);
-      const int64_t alloc_numel = std::max<int64_t>(numel, min_alloc_numel);
-      host_buf = torch::empty({alloc_numel}, opts);
-    }
-    auto dst = host_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/numel);
-    // device_src may have a non-1D shape (e.g., [bs+1]); view as flat for the
-    // copy and let host_field carry the original shape via a view-back.
-    //
-    // The Mate FFI batch_decode wrapper reads paged_kv_* host tensors on the
-    // CPU at submit time, so destination bytes must be valid before replay.
-    // CPU->pinned and blocking D2H both satisfy that; async D2H would not.
-    const bool use_cpu_src = cpu_src.defined() && cpu_src.device().is_cpu() &&
-                             cpu_src.numel() == numel;
-    if (use_cpu_src) {
-      torch::Tensor cpu_flat = cpu_src.contiguous().view({numel});
-      if (cpu_flat.scalar_type() != src_dtype) {
-        cpu_flat = cpu_flat.to(src_dtype);
-      }
-      dst.copy_(cpu_flat);
-    } else {
-      dst.copy_(device_src.contiguous().view({numel}), /*non_blocking=*/false);
-    }
-    // Re-point host_field at the persistent storage; preserve the original
-    // logical shape so downstream callers that interrogate sizes still see
-    // the same view they did before this rewrite.
-    host_field = dst.view(device_src.sizes());
-  };
-
-  refresh_one(paged_kv_indptr_host_buf_,
-              attn_metadata->fa3_metadata.paged_kv_indptr_host,
-              attn_metadata->paged_kv_indptr,
-              host_src.paged_kv_indptr,
-              paged_kv_indptr_host_max_numel_);
-  refresh_one(paged_kv_indices_host_buf_,
-              attn_metadata->fa3_metadata.paged_kv_indices_host,
-              attn_metadata->paged_kv_indices,
-              host_src.paged_kv_indices,
-              paged_kv_indices_host_max_numel_);
-  refresh_one(paged_kv_last_page_len_host_buf_,
-              attn_metadata->fa3_metadata.paged_kv_last_page_len_host,
-              attn_metadata->paged_kv_last_page_len,
-              host_src.paged_kv_last_page_len,
-              paged_kv_last_page_len_host_max_numel_);
-}
-
 // MusaGraph implementation
 bool MusaGraph::capture(CausalLM* model,
                         const ModelArgs& args,
@@ -1201,29 +1044,6 @@ bool MusaGraph::capture(CausalLM* model,
   const uint32_t actual_num_tokens = tokens.size(0);
   CHECK_GE(padded_num_tokens_, actual_num_tokens)
       << "bucket_num_tokens >= actual_num_tokens";
-
-  // Compute worst-case pinned-host-mirror sizes for paged-KV metadata so the
-  // FIRST allocation inside refresh_persistent_paged_kv_host_mirrors already
-  // covers the largest layout this MusaGraph instance can ever see. Without
-  // this, the captured graph bakes in a host pointer whose underlying buffer
-  // gets reallocated mid-replay when the KV cache crosses a block boundary
-  // (e.g., decode step 38 of a 27-token-prefill question with block_size=64
-  // grows paged_kv_indices from 1 -> 2 entries), causing the captured Mate
-  // FFI batch_decode kernel to dereference stale memory and silently corrupt
-  // attention output. See refresh_persistent_paged_kv_host_mirrors comment.
-  //
-  // For a decode bucket of N input tokens, at most N sequences are active and
-  // each can hold up to ceil(max_position_embeddings / block_size) blocks.
-  {
-    const int64_t block_size = options.block_size();
-    const int64_t max_pos = args.max_position_embeddings();
-    const int64_t max_blocks_per_seq =
-        block_size > 0 ? (max_pos + block_size - 1) / block_size : 0;
-    const int64_t max_seqs = static_cast<int64_t>(bucket_num_tokens);
-    paged_kv_indptr_host_max_numel_ = max_seqs + 1;
-    paged_kv_indices_host_max_numel_ = max_seqs * max_blocks_per_seq;
-    paged_kv_last_page_len_host_max_numel_ = max_seqs;
-  }
 
   // Guard MUSA graph capture region with a device-level exclusive lock to
   // prevent conflicting GPU work from other streams (e.g., prepare streams) on
@@ -1250,8 +1070,7 @@ bool MusaGraph::capture(CausalLM* model,
 
   // auto& tensor_options = model->options();
 
-  // Update persistent parameters with input data before capture (includes
-  // FlashInfer plan/update).
+  // Update persistent parameters and FA3 scheduler metadata before capture.
   auto full_attention_cache =
       MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
   CHECK(full_attention_cache.has_value())
@@ -1292,9 +1111,6 @@ bool MusaGraph::capture(CausalLM* model,
     linear_state_snapshots = snapshot_linear_attention_state(
         kv_cache, linear_state_snapshot_indices);
   }
-
-  refresh_persistent_paged_kv_host_mirrors(
-      graph_params_opt.value().attn_metadata, params.attention.host);
 
   LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens
@@ -1362,7 +1178,7 @@ bool MusaGraph::capture(CausalLM* model,
 
     // MemPoolContext has been deprecated in torch >= 2.8
 #if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
-    // Activate VMM mempool only for the actual capture to keep plan_info
+    // Activate VMM mempool only for the actual capture to keep scratch
     // allocations out of the shared physical memory pool.
     std::optional<c10::musa::MemPoolContext> mempool_ctx;
     if (pool_ptr != nullptr) {
@@ -1455,19 +1271,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   const torch::Tensor& v_cache = full_attention_cache->second;
 
   {
-    // Normal replay mode (for decode).
-    //
-    // Request the metadata back from update() so we can refresh the
-    // per-MusaGraph persistent host mirrors of paged_kv_* before replaying.
-    // The captured graph holds (stable) pointers to our pinned host buffers
-    // from capture time; the data inside those buffers must reflect the
-    // current step's paged-KV layout, which is what update() just materialized
-    // on the corresponding persistent *device* tensors. The returned
-    // ModelInputParams is otherwise unused in the replay branch -- it is a
-    // single small per-step allocation that pays for itself by avoiding the
-    // page fault inside the captured Mate decode kernel (see .mudmp under
-    // repro logs and refresh_persistent_paged_kv_host_mirrors() for the
-    // pointer-stability rationale).
+    // Refresh device tensors and copy FA3 scheduler data into captured storage.
     auto replay_params_opt =
         persistent_param_.update(tokens,
                                  k_cache,
@@ -1490,28 +1294,6 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
           << "FA3 scheduler metadata shape changed after graph capture";
       captured_fa3_scheduler_metadata_.copy_(fresh_fa3_scheduler_metadata,
                                              /*non_blocking=*/true);
-    }
-
-    // During graph replay, the captured graph reads paged-KV metadata from
-    // persistent *device* tensors (updated by update_llm_decode_metadata_fast
-    // _path() above). The pinned host mirrors were set up during capture
-    // (see capture() path) and their pointers are baked into the graph, but
-    // the graph's FFI batch_decode() call casts paged_kv_*_host to (void) —
-    // they are NOT read during replay. The plan_info that consumed the host
-    // mirror is cached after first creation and never recomputed on replay.
-    //
-    // Skipping refresh_persistent_paged_kv_host_mirrors() here avoids 3
-    // blocking D2H copies (paged_kv_indptr/indices/last_page_len) that would
-    // otherwise stall the CPU for ~48 ms waiting for the previous graph to
-    // complete on the same stream. Set XLLM_KEEP_HOST_MIRROR_REFRESH=1 to
-    // re-enable for debugging.
-    static const bool s_keep_host_mirror_refresh = [] {
-      const char* env = std::getenv("XLLM_KEEP_HOST_MIRROR_REFRESH");
-      return env && std::string(env) == "1";
-    }();
-    if (s_keep_host_mirror_refresh) {
-      refresh_persistent_paged_kv_host_mirrors(
-          replay_params_opt.value().attn_metadata, params.attention.host);
     }
 
     if (s_enable_graph_timing()) {
