@@ -1,0 +1,781 @@
+/* Copyright 2026 The xLLM Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+//
+// Fused indexer query projection for mtp_592 (xLLM contract):
+//   P   = BF16(qr[t] . wq[128h + d])            (FP32 accumulate, RNE)
+//   out[0:64]  = P[0:64]                         (BF16)
+//   out[64:]   = BF16(RoPE_fp32(FP32(P[64:]), cos/sin FP32 table))  (BF16)
+//
+// Task mapping: one IPU per head (32 heads == 32 IPUs).  Each IPU keeps the
+// complete 128x1280 BF16 weight slice of its head resident in WRAM, so the
+// weight matrix is read from GDRAM exactly once per launch.  Every output
+// channel is one full-K conv (single FP32 accumulation, one RNE rounding).
+//
+// Tokens are streamed in blocks of up to kMMax rows.  The cluster MPU loads
+// each qr block once into a double-buffered SRAM stage shared by the cluster's
+// 4 IPUs, which move it SRAM->NRAM (Move queue) while computing the previous
+// block.  The FP32 cos|sin table rows (one 512 B row per token) are fetched
+// once per cluster as well: the MPU copies the rows of the first three blocks
+// (one DMA in flight, hidden behind the weight stream; block 2 also gets its
+// qr in a dedicated SRAM stage), later blocks are gathered a quarter per IPU
+// and published through a triple-buffered SRAM stage behind an IPU-only
+// barrier.
+//
+// The first two blocks form one super block (<= 2 * kMMax tokens).  The
+// weights arrive as two 64-channel halves: the non-rope half's conv and store
+// overlap the transfer of the rope half.
+#include <bang.h>
+
+#include <cstdint>
+
+#include "kernels/mlu/bangc/src/deepseek_v41/launch.h"
+
+namespace xllm::kernel::mlu::bangc::indexer_q {
+namespace {
+
+constexpr int32_t kKDim = 1280;
+constexpr int32_t kHeads = 32;
+constexpr int32_t kHead = 128;
+constexpr int32_t kHalf = 64;
+constexpr int32_t kRowBytes = kKDim * 2;       // 2560 B of BF16
+constexpr int32_t kTableRowBytes = kHead * 4;  // 512 B of FP32 per position
+// WRAM LT16 layout for conv.nram: 16 LTs; channel c = 64*i + 4*l + r lives in
+// LT l at row (4*i + r), rows padded to 64 B.
+constexpr int32_t kLtNum = 16;
+constexpr int32_t kLtRows = 4;
+constexpr int32_t kWramBytes = __MLU_WRAM_SIZE__ * 1024;
+constexpr int32_t kWramLtStride = kWramBytes / kLtNum;
+constexpr int32_t kWHalf =
+    kLtRows * kRowBytes;  // WRAM offset of channels 64..127
+static_assert(2 * kWHalf <= kWramLtStride, "WRAM overflow");
+constexpr int32_t kMMax = kRowsPerBlock;  // tokens per block
+constexpr int32_t kSuperBlocks = 2;  // blocks in the first super block
+constexpr int32_t kPosChunk = (2048 / kMMax) * kMMax;  // offsets held in NRAM
+static_assert(kPosChunk % kMMax == 0, "offset chunk must hold whole blocks");
+constexpr int32_t kBlkElems = kMMax * kHalf;  // elements of one [M,64] tile
+
+// NRAM layout (bytes).
+constexpr int32_t kMaskBytes = 2 * kHalf * sizeof(uint32_t);
+constexpr int32_t kOffsBytes = kPosChunk * 4;
+constexpr int32_t kInBytes = kMMax * kRowBytes;
+constexpr int32_t kTileF32 = kBlkElems * 4;
+constexpr int32_t kTileBf16 = kBlkElems * 2;
+constexpr int32_t kGuard = 128;
+constexpr int32_t kQmMax = (kMMax + 3) / 4;  // rows gathered per IPU
+constexpr int32_t kRowsBytes = kQmMax * kTableRowBytes;  // NRAM row staging
+constexpr int32_t kCsBytes = kMMax * kTableRowBytes;     // SRAM cos|sin stage
+constexpr int32_t kCsStages = 3;
+
+constexpr int32_t kOffMask = 0;
+constexpr int32_t kOffOffs = kOffMask + kMaskBytes;
+constexpr int32_t kOffIn = kOffOffs + kOffsBytes;  // in[0] | in[1]
+constexpr int32_t kOffCos = kOffIn + 2 * kInBytes;
+constexpr int32_t kOffSin = kOffCos + 2 * kTileF32;
+constexpr int32_t kOffH1 = kOffSin + 2 * kTileF32;  // 2 slots, BF16 results
+constexpr int32_t kOffH2 = kOffH1 + kSuperBlocks * kTileBf16;
+constexpr int32_t kOffX = kOffH2 + kSuperBlocks * kTileBf16 + kGuard;
+constexpr int32_t kOffZ1 = kOffX + kTileF32 + kGuard;
+constexpr int32_t kOffZ2 = kOffZ1 + kTileF32;
+constexpr int32_t kOffRows = kOffZ2 + kTileF32;
+constexpr int32_t kNramUsed = kOffRows + 2 * kRowsBytes;
+static_assert(kNramUsed <= (__MLU_NRAM_SIZE__ - 16) * 1024, "NRAM overflow");
+
+__nram__ int8_t nram_buf[kNramUsed];
+__wram__ int8_t wram_buf[kWramBytes];
+__mlu_shared__ int8_t sram_buf[2 * kInBytes];
+__mlu_shared__ int8_t sram_cs[kCsStages * kCsBytes];
+__mlu_shared__ int32_t sram_pos[(kSuperBlocks + 1) * kMMax];
+// The last mpu_weight_rows() rope channels of the cluster's 4 heads, loaded by
+// the MPU so that its DMA engines add to the IPUs' weight stream.
+constexpr int32_t kMpuWRows = 32;  // capacity
+constexpr int32_t kSramWHead = kMpuWRows * kRowBytes;
+__mlu_shared__ int8_t sram_w[4 * kSramWHead];
+// SRAM stage for the qr of the first block after the super block, loaded by
+// the MPU together with its table rows (CS stage kSuperBlocks) while the IPUs
+// run the super block.  It reuses sram_w: that staging only runs for calls
+// above 2 * kMMax tokens, which never have a weight share (see mpu_weight_rows
+// / Stage2).
+static_assert(kInBytes <= 4 * kSramWHead,
+              "block-2 qr stage does not fit in sram_w");
+__mlu_func__ int8_t* qr2_stage() { return sram_w; }
+
+// Cluster-local barrier ids.  FULL[s]: MPU filled qr stage s.  EMPTY[s]: all
+// IPUs moved stage s (qr and rows) out.  CS[st] (IPU-only): all four quarters
+// of rows stage st published.  MROWS[g]: MPU copied the rows of block g.
+constexpr int32_t kBarFull = 1;
+constexpr int32_t kBarEmpty = 3;
+constexpr int32_t kBarCs = 5;
+constexpr int32_t kBarMrows = 8;
+constexpr int32_t kBarW = 10;   // MPU weight share landed in sram_w
+constexpr int32_t kBarB2 = 11;  // MPU loaded qr + rows of block kSuperBlocks
+constexpr int32_t kIpuCount = 4;
+
+// Weight share of a call: only calls of up to 24 tokens, where the MPU's own
+// qr load is small (a share then delays nothing on the MPU).  For 25..40
+// tokens the share is faster on most wq placements but, depending on where
+// wq lands in device memory, it can also be 1-2.5 us slower than no share
+// (the MPU's single weight stream finishes last); no share has no such slow
+// placement there, so the share stays limited to 24 tokens.
+__mlu_func__ int32_t mpu_weight_rows(int32_t tokens) {
+  return tokens <= 24 ? kMpuWRows : 0;
+}
+
+// Calls of kSuperBlocks + 1 or more blocks and at most this many tokens (the
+// decode range, up to 96 requests x 6 rows) launch the Stage2 kernel: block
+// kSuperBlocks is staged by the MPU (qr + rows) while the IPUs run the super
+// block.  Larger (prefill) calls keep the IPU gather for that block: there the
+// staging gains nothing.  The choice is a template parameter so that the
+// kernel of all other calls keeps the instruction stream of the plain schedule.
+constexpr int32_t kStage2MaxTokens = 576;
+
+__mlu_func__ void mpu_arrive_full(int32_t s, int32_t count) {
+  __asm__ __volatile__(
+      "barrier.arrive.local.pio %[id], %[cnt];\n\t" ::[id] "r"(kBarFull + s),
+      [cnt] "r"(count));
+}
+__mlu_func__ void mpu_wait_empty(int32_t s, int32_t count) {
+  __asm__ __volatile__(
+      "barrier.sync.local.cio %[id], %[cnt];\n\t" ::[id] "r"(kBarEmpty + s),
+      [cnt] "r"(count));
+}
+__mlu_func__ void mpu_arrive_rows(int32_t g, int32_t count) {
+  __asm__ __volatile__(
+      "barrier.arrive.local.pio %[id], %[cnt];\n\t" ::[id] "r"(kBarMrows + g),
+      [cnt] "r"(count));
+}
+__mlu_func__ void ipu_wait_full(int32_t s, int32_t count) {
+  __asm__ __volatile__(
+      "barrier.sync.local.cmv %[id], %[cnt];\n\t" ::[id] "r"(kBarFull + s),
+      [cnt] "r"(count));
+}
+__mlu_func__ void ipu_arrive_empty(int32_t s, int32_t count) {
+  __asm__ __volatile__(
+      "barrier.arrive.local.pmv %[id], %[cnt];\n\t" ::[id] "r"(kBarEmpty + s),
+      [cnt] "r"(count));
+}
+__mlu_func__ void ipu_wait_rows(int32_t g, int32_t count) {
+  __asm__ __volatile__(
+      "barrier.sync.local.cmv %[id], %[cnt];\n\t" ::[id] "r"(kBarMrows + g),
+      [cnt] "r"(count));
+}
+__mlu_func__ void ipu_wait_weights(int32_t count) {
+  __asm__ __volatile__(
+      "barrier.sync.local.cmv %[id], %[cnt];\n\t" ::[id] "r"(kBarW),
+      [cnt] "r"(count));
+}
+__mlu_func__ void ipu_wait_block2(int32_t count) {
+  __asm__ __volatile__(
+      "barrier.sync.local.cmv %[id], %[cnt];\n\t" ::[id] "r"(kBarB2),
+      [cnt] "r"(count));
+}
+__mlu_func__ void ipu_sync_cs(int32_t st) {
+  __asm__ __volatile__(
+      "barrier.sync.local.pmv.cmv %[id], %[cnt];\n\t" ::[id] "r"(kBarCs + st),
+      [cnt] "r"(kIpuCount));
+}
+
+// GDRAM -> SRAM copy on MPU IO queue 0/1 with LLC-allocating reads
+// (.scmnormal): data read by all 8 clusters (qr, repeated table rows) then
+// hits the LLC instead of DRAM.  The default (.scmtransient) does not
+// allocate on a miss.
+__mlu_func__ void mpu_load_normal0(void* dst, const void* src, uint32_t bytes) {
+  __asm__ __volatile__(
+      "ld.async.sram.gdram.io0.scmnormal [%[dst]], [%[src]], %[n];\n\t" ::
+          [dst] "r"(dst),
+      [src] "r"(src),
+      [n] "r"(bytes));
+}
+__mlu_func__ void mpu_load_normal1(void* dst, const void* src, uint32_t bytes) {
+  __asm__ __volatile__(
+      "ld.async.sram.gdram.io1.scmnormal [%[dst]], [%[src]], %[n];\n\t" ::
+          [dst] "r"(dst),
+      [src] "r"(src),
+      [n] "r"(bytes));
+}
+
+__mlu_func__ int32_t block_tokens(int32_t tokens, int32_t t0) {
+  return tokens - t0 < kMMax ? tokens - t0 : kMMax;
+}
+
+// Bit masks used to pick pair neighbours without multiplying by zero.
+struct PairMasks {
+  uint32_t values[2 * kHalf];
+};
+
+constexpr PairMasks make_pair_masks() {
+  constexpr uint32_t kAllBits = 0xffffffffu;
+  PairMasks masks = {};
+  for (int32_t i = 0; i < kHalf; ++i) {
+    // Even lanes keep x[k+1]; odd lanes keep x[k-1].
+    masks.values[i] = (i & 1) == 0 ? kAllBits : 0u;
+    masks.values[kHalf + i] = (i & 1) == 0 ? 0u : kAllBits;
+  }
+  return masks;
+}
+
+// Generate the table at compile time; keep the existing asynchronous load.
+__mlu_const__ PairMasks kPairMasks = make_pair_masks();
+static_assert(sizeof(PairMasks) == kMaskBytes, "pair mask size mismatch");
+
+// Full-K conv of one 64-channel half: BF16 x BF16 -> FP32, rounded RNE to BF16
+// on output (the contract's first BF16 boundary).
+__mlu_func__ void conv_half(bfloat16_t* dst,
+                            const bfloat16_t* src,
+                            const int8_t* filter,
+                            int32_t m) {
+  __asm__ __volatile__(
+      "conv.nram.f32.bf16.bf16 [%[dst]], [%[src]], [%[w]], %[ci], 1, %[wi], "
+      "1, 1, 1, 1, %[co], .cvt.dst.rn.bf16();\n\t" ::[dst] "r"(dst),
+      [src] "r"(src),
+      [w] "r"(filter),
+      [ci] "r"(kKDim),
+      [wi] "r"(m),
+      [co] "r"(kHalf));
+}
+
+// Weight half i (channels 64i..64i+63) -> WRAM; LTs 0..7 on io0 and 8..15 on
+// io1 so the half streams at the full per-IPU rate on both queues.
+__mlu_func__ void issue_weight_half(const bfloat16_t* wq,
+                                    int32_t head,
+                                    int32_t i) {
+  const bfloat16_t* src =
+      wq + (static_cast<size_t>(head) * kHead + i * 64) * kKDim;
+  int8_t* dst = wram_buf + i * kWHalf;
+  __memcpy_io0_async(dst,
+                     src,
+                     kRowBytes,
+                     GDRAM2WRAM,
+                     kRowBytes,
+                     kLtRows - 1,
+                     kWramLtStride,
+                     kLtNum / 2 - 1,
+                     kRowBytes,
+                     31,
+                     0,
+                     0);
+  __memcpy_io1_async(dst + (kLtNum / 2) * kWramLtStride,
+                     src + 32 * kKDim,
+                     kRowBytes,
+                     GDRAM2WRAM,
+                     kRowBytes,
+                     kLtRows - 1,
+                     kWramLtStride,
+                     kLtNum / 2 - 1,
+                     kRowBytes,
+                     31,
+                     0,
+                     0);
+}
+
+struct Buffers {
+  uint32_t* mask_even;
+  uint32_t* mask_odd;
+  uint32_t* offs;
+  bfloat16_t* in[2];
+  float* cos[2];
+  float* sin[2];
+  bfloat16_t* h1;  // [2 slots][M,64] non-rope result, stored directly
+  bfloat16_t* h2;  // [2 slots][M,64] rope result (RoPE applied in place)
+  float* x;
+  float* z1;
+  float* z2;
+  float* rows[2];
+};
+
+// This IPU's quarter of the block's table rows -> NRAM staging (io0).
+__mlu_func__ void gather_quarter(const Buffers& b,
+                                 int32_t buf,
+                                 const float* rope,
+                                 int32_t token0,
+                                 int32_t offs_base,
+                                 int32_t m) {
+  const int32_t qm = (m + 3) / 4;
+  const int32_t q0 = coreId * qm;
+  const int32_t cnt = m - q0 < qm ? m - q0 : qm;
+  if (cnt <= 0) {
+    return;
+  }
+  // LLC-allocating gather (.scmnormal): repeated rows hit the LLC.
+  __asm__ __volatile__(
+      "gather.vector.async.nram.gdram.nram.scmnormal.u32.io0 [%[dst]], "
+      "[%[src]], "
+      "[%[off]], %[size], %[num], %[stride];\n\t" ::[dst] "r"(b.rows[buf]),
+      [src] "r"(rope),
+      [off] "r"(b.offs + (token0 - offs_base) + q0),
+      [size] "r"(kTableRowBytes),
+      [num] "r"(cnt),
+      [stride] "r"(kTableRowBytes));
+}
+
+// Publish the quarter into SRAM stage st and wait until all 4 quarters landed.
+// Stage st was last read for block (gblk - 3); every IPU's moves of that block
+// completed before the FULL barrier of block gblk - 1 could open.  With a
+// staged block kSuperBlocks the super-block moves complete before the kBarB2
+// sync and the staged block's moves before the CS barrier of the next block.
+__mlu_func__ void publish_quarter(const Buffers& b,
+                                  int32_t buf,
+                                  int32_t gblk,
+                                  int32_t m) {
+  const int32_t st = gblk % kCsStages;
+  const int32_t qm = (m + 3) / 4;
+  const int32_t q0 = coreId * qm;
+  const int32_t cnt = m - q0 < qm ? m - q0 : qm;
+  if (cnt > 0) {
+    __asm__ __volatile__("sync.pio0.cmv;\n\t");
+    __memcpy_async(sram_cs + st * kCsBytes + q0 * kTableRowBytes,
+                   b.rows[buf],
+                   cnt * kTableRowBytes,
+                   NRAM2SRAM);
+  }
+  ipu_sync_cs(st);
+}
+
+// SRAM table-row stage -> dense cos[m,64] / sin[m,64] (Move queue).
+__mlu_func__ void move_rows(const Buffers& b,
+                            int32_t buf,
+                            int32_t gblk,
+                            int32_t m) {
+  const int32_t st = gblk % kCsStages;
+  __memcpy_async(b.cos[buf],
+                 sram_cs + st * kCsBytes,
+                 kHalf * 4,
+                 SRAM2NRAM,
+                 kHalf * 4,
+                 kTableRowBytes,
+                 m - 1);
+  __memcpy_async(b.sin[buf],
+                 sram_cs + st * kCsBytes + kHalf * 4,
+                 kHalf * 4,
+                 SRAM2NRAM,
+                 kHalf * 4,
+                 kTableRowBytes,
+                 m - 1);
+}
+
+// SRAM qr stage of block gblk -> NRAM dst (Move queue).
+__mlu_func__ void move_qr(bfloat16_t* dst,
+                          int32_t gblk,
+                          int32_t m,
+                          int32_t count) {
+  ipu_wait_full(gblk & 1, count);
+  __memcpy_async(
+      dst, sram_buf + (gblk & 1) * kInBytes, m * kRowBytes, SRAM2NRAM);
+}
+
+__mlu_func__ void store_half(const bfloat16_t* src,
+                             bfloat16_t* out,
+                             int32_t head,
+                             int32_t token0,
+                             int32_t m,
+                             int32_t part,
+                             bool on_io0 = false) {
+  bfloat16_t* dst = out +
+                    (static_cast<size_t>(token0) * kHeads + head) * kHead +
+                    part * kHalf;
+  if (on_io0) {
+    __memcpy_io0_async(dst,
+                       const_cast<bfloat16_t*>(src),
+                       kHalf * 2,
+                       NRAM2GDRAM,
+                       kHeads * kHead * 2,
+                       kHalf * 2,
+                       m - 1);
+    return;
+  }
+  __memcpy_io1_async(dst,
+                     const_cast<bfloat16_t*>(src),
+                     kHalf * 2,
+                     NRAM2GDRAM,
+                     kHeads * kHead * 2,
+                     kHalf * 2,
+                     m - 1);
+}
+
+// Rope half: RoPE in FP32 on FP32(BF16 P) with the FP32 table, rounded RNE to
+// BF16 in place (the contract's second BF16 boundary).  Rows of the MPU-fed
+// blocks are only waited for here.
+__mlu_func__ void rope_block(const Buffers& b,
+                             int32_t buf,
+                             int32_t gblk,
+                             int32_t m,
+                             int32_t count,
+                             bfloat16_t* h2) {
+  const int32_t n = m * kHalf;
+  if (gblk < kSuperBlocks) {
+    ipu_wait_rows(gblk, count);
+    move_rows(b, buf, gblk, m);
+    ipu_arrive_empty(gblk & 1, count);
+    __asm__ __volatile__("sync.pmv.csimd;\n\t");
+  }
+  __bang_bfloat162float(b.x, h2, n);
+  // z1[k] = x[k+1] on even lanes, z2[k] = x[k-1] on odd lanes, zero elsewhere.
+  __bang_cycle_band(reinterpret_cast<uint32_t*>(b.z1),
+                    reinterpret_cast<uint32_t*>(b.x + 1),
+                    b.mask_even,
+                    n,
+                    kHalf);
+  __bang_cycle_band(reinterpret_cast<uint32_t*>(b.z2),
+                    reinterpret_cast<uint32_t*>(b.x - 1),
+                    b.mask_odd,
+                    n,
+                    kHalf);
+  // z2 = (z2 - z1) * sin  -> even: -b*sin[2j], odd: a*sin[2j+1]
+  __bang_fusion(FUSION_FSM, b.z2, b.z2, b.z1, b.sin[buf], n, n);
+  // h2 = BF16(x * cos + z2): muladd with the BF16 output conversion folded in
+  // (same FP32 arithmetic as the separate muladd + RNE cvt).
+  __asm__ __volatile__(
+      "muladd.nram.bf16.f32 [%[dst]], [%[x]], [%[c]], [%[z]], %[n];\n\t" ::
+          [dst] "r"(h2),
+      [x] "r"(b.x),
+      [c] "r"(b.cos[buf]),
+      [z] "r"(b.z2),
+      [n] "r"(n));
+}
+
+// MPU: qr of the super block, table rows of the super block, then the
+// remaining qr blocks through the two SRAM stages.
+template <bool Stage2>
+__mlu_func__ void mpu_producer(const bfloat16_t* qr,
+                               const bfloat16_t* wq,
+                               const int32_t* positions,
+                               const float* rope,
+                               int32_t tokens) {
+  const int32_t count = coreDim + 1;
+  const int32_t blocks = (tokens + (kMMax - 1)) / kMMax;
+  const int32_t sblocks = blocks < kSuperBlocks ? blocks : kSuperBlocks;
+  // Weight share on io1 from kernel start (head = taskIdY * 4 + c; clusterId
+  // is not meaningful on the MPU); qr and the table rows use io0.
+  const int32_t mrows = mpu_weight_rows(tokens);
+  if (mrows > 0) {
+    for (int32_t c = 0; c < 4; ++c) {
+      mpu_load_normal1(
+          sram_w + c * kSramWHead,
+          wq + (static_cast<size_t>(taskIdY * 4 + c) * kHead + kHead - mrows) *
+                   kKDim,
+          mrows * kRowBytes);
+    }
+  }
+  for (int32_t g = 0; g < sblocks; ++g) {
+    mpu_load_normal0(sram_buf + g * kInBytes,
+                     qr + static_cast<size_t>(g) * kMMax * kKDim,
+                     block_tokens(tokens, g * kMMax) * kRowBytes);
+    __asm__ __volatile__(
+        "barrier.arrive.local.pio0 %[id], %[cnt];\n\t" ::[id] "r"(kBarFull + g),
+        [cnt] "r"(count));
+  }
+  // Positions of the super block (and of block kSuperBlocks when staged).
+  const bool stage2 = Stage2;
+  const int32_t mblocks = stage2 ? kSuperBlocks + 1 : sblocks;
+  const int32_t ptokens = tokens < mblocks * kMMax ? tokens : mblocks * kMMax;
+  __memcpy(sram_pos, positions, ptokens * 4, GDRAM2SRAM);
+  for (int32_t g = 0; g < mblocks; ++g) {
+    if (stage2 && g == kSuperBlocks) {
+      // Block kSuperBlocks: weight-share signal first (the IPUs need it for
+      // the super block), then its qr into the dedicated stage.
+      __asm__ __volatile__(
+          "barrier.arrive.local.pio1 %[id], %[cnt];\n\t" ::[id] "r"(kBarW),
+          [cnt] "r"(count));
+      mpu_load_normal0(qr2_stage(),
+                       qr + static_cast<size_t>(g) * kMMax * kKDim,
+                       block_tokens(tokens, g * kMMax) * kRowBytes);
+    }
+    int8_t* cs = sram_cs + (g % kCsStages) * kCsBytes;
+    const int32_t m = block_tokens(tokens, g * kMMax);
+    const int32_t* pos = sram_pos + g * kMMax;
+    // One DMA per run of consecutive positions (decode requests and prefill
+    // chunks are runs); arbitrary positions degrade to one row per DMA.
+    for (int32_t i = 0; i < m;) {
+      const int32_t row = pos[i];
+      int32_t j = i + 1;
+      while (j < m && pos[j] == row + (j - i)) {
+        ++j;
+      }
+      mpu_load_normal0(cs + i * kTableRowBytes,
+                       rope + static_cast<size_t>(row) * kHead,
+                       (j - i) * kTableRowBytes);
+      i = j;
+    }
+    __asm__ __volatile__(
+        "barrier.arrive.local.pio0 %[id], %[cnt];\n\t" ::[id] "r"(
+            stage2 && g == kSuperBlocks ? kBarB2 : kBarMrows + g),
+        [cnt] "r"(count));
+  }
+  if (!stage2) {
+    __asm__ __volatile__(
+        "barrier.arrive.local.pio1 %[id], %[cnt];\n\t" ::[id] "r"(kBarW),
+        [cnt] "r"(count));
+  }
+  for (int32_t g = mblocks; g < blocks; ++g) {
+    const int32_t s = g & 1;
+    mpu_wait_empty(s, count);
+    mpu_load_normal0(sram_buf + s * kInBytes,
+                     qr + static_cast<size_t>(g) * kMMax * kKDim,
+                     block_tokens(tokens, g * kMMax) * kRowBytes);
+    mpu_arrive_full(s, count);
+  }
+  // Balance the barrier: consume the EMPTY signals of the last two stages.
+  for (int32_t g = blocks < 2 ? 0 : blocks - 2; g < blocks; ++g) {
+    mpu_wait_empty(g & 1, count);
+  }
+}
+
+// Positions [t0, t0 + n) -> byte offsets into the FP32 table (io0 + compute).
+__mlu_func__ void load_offsets(const Buffers& b,
+                               const int32_t* positions,
+                               int32_t t0,
+                               int32_t tokens) {
+  const int32_t n = tokens - t0 < kPosChunk ? tokens - t0 : kPosChunk;
+  __memcpy_io0_async(b.offs, positions + t0, n * 4, GDRAM2NRAM);
+  __asm__ __volatile__("sync.pio0.csimd;\n\t");
+  __bang_mul_scalar(reinterpret_cast<int32_t*>(b.offs),
+                    reinterpret_cast<int32_t*>(b.offs),
+                    kTableRowBytes,
+                    n);
+  __asm__ __volatile__("sync.psimd.cio0;\n\t");
+}
+
+// Prepare block `next` (>= kSuperBlocks): rows published, rows + qr moved.
+__mlu_func__ void prepare_block(const Buffers& b,
+                                int32_t next,
+                                int32_t tokens,
+                                int32_t count) {
+  const int32_t mn = block_tokens(tokens, next * kMMax);
+  publish_quarter(b, next & 1, next, mn);
+  move_rows(b, next & 1, next, mn);
+  move_qr(b.in[next & 1], next, mn, count);
+  ipu_arrive_empty(next & 1, count);
+}
+
+template <bool Stage2>
+__mlu_global__ void fused_indexer_q_kernel(const bfloat16_t* qr,
+                                           const bfloat16_t* wq,
+                                           const int32_t* positions,
+                                           const float* rope,
+                                           bfloat16_t* out,
+                                           int32_t tokens) {
+  if (__is_mpu()) {
+    mpu_producer<Stage2>(qr, wq, positions, rope, tokens);
+    return;
+  }
+  const int32_t count = coreDim + 1;
+  const int32_t head = taskId;
+  if (head >= kHeads) {
+    return;
+  }
+  Buffers b;
+  b.mask_even = reinterpret_cast<uint32_t*>(nram_buf + kOffMask);
+  b.mask_odd = b.mask_even + kHalf;
+  b.offs = reinterpret_cast<uint32_t*>(nram_buf + kOffOffs);
+  for (int32_t i = 0; i < 2; ++i) {
+    b.in[i] = reinterpret_cast<bfloat16_t*>(nram_buf + kOffIn + i * kInBytes);
+    b.cos[i] = reinterpret_cast<float*>(nram_buf + kOffCos + i * kTileF32);
+    b.sin[i] = reinterpret_cast<float*>(nram_buf + kOffSin + i * kTileF32);
+    b.rows[i] = reinterpret_cast<float*>(nram_buf + kOffRows + i * kRowsBytes);
+  }
+  b.h1 = reinterpret_cast<bfloat16_t*>(nram_buf + kOffH1);
+  b.h2 = reinterpret_cast<bfloat16_t*>(nram_buf + kOffH2);
+  b.x = reinterpret_cast<float*>(nram_buf + kOffX);
+  b.z1 = reinterpret_cast<float*>(nram_buf + kOffZ1);
+  b.z2 = reinterpret_cast<float*>(nram_buf + kOffZ2);
+
+  const int32_t blocks = (tokens + (kMMax - 1)) / kMMax;
+  const int32_t sblocks = blocks < kSuperBlocks ? blocks : kSuperBlocks;
+  const int32_t stokens = tokens < sblocks * kMMax ? tokens : sblocks * kMMax;
+  const bool stage2 = Stage2;
+
+  // ---- Super block: blocks 0..sblocks-1 as one [stokens, 1280] operand. ----
+  issue_weight_half(wq, head, 0);
+  __memcpy_io0_async(b.mask_even, kPairMasks.values, kMaskBytes, GDRAM2NRAM);
+  for (int32_t g = 0; g < sblocks; ++g) {
+    move_qr(
+        b.in[0] + g * kMMax * kKDim, g, block_tokens(tokens, g * kMMax), count);
+  }
+  __asm__ __volatile__("sync.pmv.csimd;\n\t");
+  __asm__ __volatile__("sync.pio.csimd;\n\t");  // weight half 0 + masks
+  conv_half(b.h1, b.in[0], wram_buf, stokens);
+  // The IPU's part of the rope half (channels 64 .. 127 - mrows = the first
+  // LTs, rows 4..7) streams on io0 while half 0 is converted; stores use io1.
+  // The MPU's part is moved from SRAM into the remaining LTs.
+  const int32_t mrows = mpu_weight_rows(tokens);
+  const int32_t own_rows = kHalf - mrows;
+  {
+    __memcpy_io0_async(wram_buf + kWHalf,
+                       wq + (static_cast<size_t>(head) * kHead + 64) * kKDim,
+                       kRowBytes,
+                       GDRAM2WRAM,
+                       kRowBytes,
+                       kLtRows - 1,
+                       kWramLtStride,
+                       own_rows / kLtRows - 1,
+                       kRowBytes,
+                       own_rows - 1,
+                       0,
+                       0);
+  }
+  __asm__ __volatile__("sync.psimd.cio1;\n\t");
+  for (int32_t g = 0; g < sblocks; ++g) {
+    store_half(b.h1 + g * kBlkElems,
+               out,
+               head,
+               g * kMMax,
+               block_tokens(tokens, g * kMMax),
+               0);
+  }
+  ipu_wait_weights(count);
+  if (mrows > 0) {
+    __memcpy_async(wram_buf + kWHalf + own_rows / kLtRows * kWramLtStride,
+                   sram_w + taskIdX * kSramWHead,
+                   kRowBytes,
+                   SRAM2WRAM,
+                   kRowBytes,
+                   kLtRows - 1,
+                   kWramLtStride,
+                   mrows / kLtRows - 1,
+                   kRowBytes,
+                   mrows - 1,
+                   0,
+                   0);
+    __asm__ __volatile__("sync.pmv.csimd;\n\t");
+  }
+  __asm__ __volatile__("sync.pio0.csimd;\n\t");  // weight half 1
+  conv_half(b.h2, b.in[0], wram_buf + kWHalf, stokens);
+  for (int32_t g = 0; g < sblocks; ++g) {
+    const int32_t m = block_tokens(tokens, g * kMMax);
+    rope_block(b, g, g, m, count, b.h2 + g * kBlkElems);
+    // With a staged next block, the last super-block store goes on the (idle)
+    // io0 queue so that the next block only waits for io1 to reuse slot 0.
+    const bool last_on_io0 = stage2 && g == sblocks - 1;
+    if (last_on_io0) {
+      __asm__ __volatile__("sync.psimd.cio0;\n\t");
+    } else {
+      __asm__ __volatile__("sync.psimd.cio1;\n\t");
+    }
+    store_half(b.h2 + g * kBlkElems, out, head, g * kMMax, m, 1, last_on_io0);
+  }
+
+  // ---- Remaining blocks: double-buffered pipeline. ----
+  // With a staged block kSuperBlocks the offsets are loaded on first use
+  // (block kSuperBlocks + 1).
+  int32_t offs_base = -kPosChunk;
+  if (blocks > sblocks) {
+    const int32_t tn = sblocks * kMMax;
+    const int32_t mn = block_tokens(tokens, tn);
+    if (!stage2) {
+      offs_base = tn;  // kPosChunk is a multiple of kMMax
+      load_offsets(b, positions, tn, tokens);
+      gather_quarter(b, sblocks & 1, rope, tn, offs_base, mn);
+    }
+    // in/cos/sin/h1/h2[sblocks & 1] were used by the super block.
+    __asm__ __volatile__("sync.psimd.cmv;\n\t");
+    __asm__ __volatile__("sync.pio1.cmv;\n\t");
+    if (stage2) {
+      // Staged by the MPU: no offsets, gather or EMPTY signal.
+      ipu_wait_block2(count);
+      move_rows(b, sblocks & 1, sblocks, mn);
+      __memcpy_async(b.in[sblocks & 1], qr2_stage(), mn * kRowBytes, SRAM2NRAM);
+    } else {
+      prepare_block(b, sblocks, tokens, count);
+    }
+  }
+  for (int32_t blk = sblocks; blk < blocks; ++blk) {
+    const int32_t buf = blk & 1;
+    const int32_t t0 = blk * kMMax;
+    const int32_t m = block_tokens(tokens, t0);
+    // in/cos/sin(blk) moved, stores of blk-2 done, compute of blk-1 done.
+    // A staged first block after the super block reuses slot 0 only: the io0
+    // store of the super block's last rope half may still be in flight.
+    if (stage2 && blk == sblocks) {
+      __asm__ __volatile__("sync.pio1.csimd;\n\t");
+    } else {
+      __asm__ __volatile__("sync.pio.csimd;\n\t");
+    }
+    __asm__ __volatile__("sync.pmv.csimd;\n\t");
+    __asm__ __volatile__("sync.psimd.cio;\n\t");
+    __asm__ __volatile__("sync.psimd.cmv;\n\t");
+    const int32_t next = blk + 1;
+    if (next < blocks) {
+      const int32_t tn = next * kMMax;
+      if (tn >= offs_base + kPosChunk) {
+        offs_base = tn;
+        load_offsets(b, positions, tn, tokens);
+      }
+      gather_quarter(
+          b, next & 1, rope, tn, offs_base, block_tokens(tokens, tn));
+    }
+    if (blk > sblocks) {
+      store_half(b.h1 + (buf ^ 1) * kBlkElems, out, head, t0 - kMMax, kMMax, 0);
+      store_half(b.h2 + (buf ^ 1) * kBlkElems, out, head, t0 - kMMax, kMMax, 1);
+    }
+    conv_half(b.h1 + buf * kBlkElems, b.in[buf], wram_buf, m);
+    conv_half(b.h2 + buf * kBlkElems, b.in[buf], wram_buf + kWHalf, m);
+    rope_block(b, buf, blk, m, count, b.h2 + buf * kBlkElems);
+    if (next < blocks) {
+      prepare_block(b, next, tokens, count);
+    }
+  }
+  if (blocks > sblocks) {
+    const int32_t t_last = (blocks - 1) * kMMax;
+    __asm__ __volatile__("sync.psimd.cio;\n\t");
+    store_half(b.h1 + ((blocks - 1) & 1) * kBlkElems,
+               out,
+               head,
+               t_last,
+               tokens - t_last,
+               0);
+    store_half(b.h2 + ((blocks - 1) & 1) * kBlkElems,
+               out,
+               head,
+               t_last,
+               tokens - t_last,
+               1);
+  }
+  __sync_io_move_compute();
+}
+
+}  // namespace
+
+int32_t launch(cnrtQueue_t queue,
+               const void* qr,
+               const void* wq,
+               const int32_t* positions,
+               const float* rope,
+               void* out,
+               int32_t tokens) {
+  if (tokens <= 0) {
+    return 1;
+  }
+  cnrtDim3_t dim{4, 8, 1};
+  if (tokens > kSuperBlocks * kMMax && tokens <= kStage2MaxTokens) {
+    fused_indexer_q_kernel<true>
+        <<<dim, cnrtFuncTypeUnion1, queue>>>(static_cast<const bfloat16_t*>(qr),
+                                             static_cast<const bfloat16_t*>(wq),
+                                             positions,
+                                             rope,
+                                             static_cast<bfloat16_t*>(out),
+                                             tokens);
+  } else {
+    fused_indexer_q_kernel<false>
+        <<<dim, cnrtFuncTypeUnion1, queue>>>(static_cast<const bfloat16_t*>(qr),
+                                             static_cast<const bfloat16_t*>(wq),
+                                             positions,
+                                             rope,
+                                             static_cast<bfloat16_t*>(out),
+                                             tokens);
+  }
+  return static_cast<int32_t>(cnrtGetLastError());
+}
+
+}  // namespace xllm::kernel::mlu::bangc::indexer_q

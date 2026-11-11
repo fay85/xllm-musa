@@ -137,6 +137,142 @@ TEST(DeepseekV41GraphTest, SparseVerificationIgnoresCausallyMaskedSelections) {
   }
 }
 
+TEST(DeepseekV41IndexerTest, CandidateSelectionKeepsOnlyVisibleRows) {
+  const torch::Device device(torch::kPrivateUse1, 0);
+  const torch::DeviceGuard guard(device);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  test::MockProcessGroup group(device);
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+  parallel.tp_group_ = &group;
+  for (int32_t ratio : {1, 2}) {
+    SCOPED_TRACE(ratio);
+    ModelArgs args;
+    args.compress_ratios({ratio, ratio})
+        .index_topk(8)
+        .candidate_source_layer_id(0)
+        .candidate_block_size(4)
+        .candidate_topk_blocks(1);
+    const ModelContext context(parallel, args, QuantArgs(), options);
+    DeepseekV41Indexer source(context, /*layer_id=*/0);
+    DeepseekV41Indexer consumer(context, /*layer_id=*/1);
+    Csa2Context shared;
+    shared.topk.resize(1);
+    shared.candidates.resize(1);
+    auto query = torch::ones({1, 1, 1}, options.dtype(torch::kFloat32));
+    auto weights = torch::ones({1, 1}, query.options());
+    auto keys = torch::arange(6, query.options()).view({6, 1});
+    source->select_indices(query,
+                           weights,
+                           keys,
+                           /*begin=*/6 * ratio - 1,
+                           /*seq=*/0,
+                           shared);
+    EXPECT_TRUE(torch::equal(shared.candidates[0].cpu(),
+                             torch::tensor({{1}}, torch::kInt64)));
+    auto cache = torch::zeros({256, 1}, options);
+    cache.slice(0, 128, 134).copy_(keys.to(options));
+    auto table = torch::tensor({1}, options.dtype(torch::kInt32));
+    consumer->select_candidate_indices(query[0],
+                                       weights[0],
+                                       cache,
+                                       table,
+                                       /*length=*/6,
+                                       /*seq=*/0,
+                                       shared);
+    EXPECT_TRUE(torch::equal(std::get<0>(shared.topk[0].cpu().sort()),
+                             torch::tensor({{-1, -1, 4, 5}}, torch::kInt64)));
+    shared.candidates[0] =
+        torch::tensor({{-1, 1}}, options.dtype(torch::kInt64));
+    consumer->select_candidate_indices(query[0],
+                                       weights[0],
+                                       cache,
+                                       table,
+                                       /*length=*/6,
+                                       /*seq=*/0,
+                                       shared);
+    auto valid = shared.topk[0].masked_select(shared.topk[0].ge(0));
+    EXPECT_TRUE(torch::equal(std::get<0>(valid.cpu().sort()),
+                             torch::tensor({4, 5}, torch::kInt64)));
+    source->select_indices(query,
+                           weights,
+                           keys.slice(0, 0, 0),
+                           /*begin=*/0,
+                           /*seq=*/0,
+                           shared);
+    EXPECT_EQ(shared.candidates[0].numel(), 0);
+  }
+}
+
+TEST(DeepseekV41IndexerTest, PagedSelectionMatchesScoreBoundaryAndRepeatsTies) {
+  const torch::Device device(torch::kPrivateUse1, 0);
+  const torch::DeviceGuard guard(device);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  test::MockProcessGroup group(device);
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+  parallel.tp_group_ = &group;
+  ModelArgs args;
+  args.compress_ratios({2}).index_topk(512).index_n_heads(32).index_head_dim(
+      128);
+  DeepseekV41Indexer indexer(ModelContext(parallel, args, QuantArgs(), options),
+                             /*layer_id=*/0);
+  Csa2Context shared;
+  shared.topk.resize(1);
+  auto query = torch::ones({32, 128}, options.dtype(torch::kFloat32));
+  auto weights = torch::ones({32}, query.options()) / 32;
+  auto table = torch::tensor({5, 3, 1, 0, 4, 2}, options.dtype(torch::kInt32));
+  auto cache = torch::zeros({6, 1, 128, 128}, options);
+  auto logical = torch::zeros({768, 128}, options);
+  logical.slice(0, 0, 512).fill_(2);
+  cache.index_copy_(0, table.to(torch::kInt64), logical.view({6, 1, 128, 128}));
+  indexer->select_decode_indices(query,
+                                 weights,
+                                 cache,
+                                 table,
+                                 /*length=*/700,
+                                 /*seq=*/0,
+                                 shared);
+  auto paged = shared.topk[0].cpu();
+  indexer->select_indices(query.unsqueeze(0),
+                          weights.unsqueeze(0),
+                          logical.slice(0, 0, 700).to(torch::kFloat32),
+                          /*begin=*/1399,
+                          /*seq=*/0,
+                          shared);
+  EXPECT_TRUE(torch::equal(std::get<0>(paged.sort()),
+                           std::get<0>(shared.topk[0].cpu().sort())));
+  EXPECT_TRUE(torch::equal(std::get<0>(paged.sort()).flatten(),
+                           torch::arange(512, torch::kInt64)));
+  // At an exactly tied boundary, retain the paged kernel's choice. It must be
+  // unique, in range and reproducible; general top-k need not order ties alike.
+  cache.fill_(1);
+  indexer->select_decode_indices(query,
+                                 weights,
+                                 cache,
+                                 table,
+                                 /*length=*/700,
+                                 /*seq=*/0,
+                                 shared);
+  auto tied = shared.topk[0].clone();
+  for (int32_t repeat = 0; repeat < 3; ++repeat) {
+    indexer->select_decode_indices(query,
+                                   weights,
+                                   cache,
+                                   table,
+                                   /*length=*/700,
+                                   /*seq=*/0,
+                                   shared);
+    EXPECT_TRUE(torch::equal(shared.topk[0], tied));
+  }
+  auto indices = tied.cpu().flatten();
+  EXPECT_GE(indices.min().item<int64_t>(), 0);
+  EXPECT_LT(indices.max().item<int64_t>(), 700);
+  auto membership = torch::zeros({700}, torch::kBool);
+  membership.index_fill_(0, indices, true);
+  EXPECT_EQ(membership.sum().item<int64_t>(), 512);
+}
+
 class DeepseekV41MaskedGatherTest : public ::testing::TestWithParam<int64_t> {};
 
 TEST_P(DeepseekV41MaskedGatherTest, ReplayCompactsLiveIndicesAndUpdatesLength) {

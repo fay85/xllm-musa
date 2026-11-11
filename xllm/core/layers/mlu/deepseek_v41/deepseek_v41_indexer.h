@@ -23,35 +23,28 @@ limitations under the License.
 
 #include "framework/model_context.h"
 #include "framework/state_dict/state_dict.h"
+#include "layers/mlu/deepseek_v41/deepseek_v41_metadata.h"
 
 namespace xllm::layer {
-// One forward's cross-layer selection. KV itself remains framework-owned.
-struct Csa2Context {
-  // Each defined entry has shape {query_rows, k}: one top-k list per query.
-  // A selection with no keys keeps the two-dimensional shape {query_rows, 0}.
-  std::vector<torch::Tensor> topk;
-  std::vector<torch::Tensor> candidates;
-  std::vector<torch::Tensor> block_tables;
-  // Graph-owned scratch. Piecewise segments consume then overwrite this on
-  // the same replay stream; addresses remain fixed for the graph lifetime.
-  torch::Tensor selected_kv;
-  torch::Tensor selected_lengths;
-};
-
 class DeepseekV41IndexerImpl final : public torch::nn::Module {
  public:
   explicit DeepseekV41IndexerImpl(const ModelContext& context,
                                   int32_t layer_id);
   void load_state_dict(const StateDict& state);
   void verify_loaded_weights() const;
-  std::pair<torch::Tensor, torch::Tensor> project_query(
+  torch::Tensor project_query(const torch::Tensor& qr,
+                              const torch::Tensor& positions,
+                              const torch::Tensor& rope);
+  torch::Tensor project_indexer(
       const torch::Tensor& x,
-      const torch::Tensor& qr,
+      const torch::Tensor& latent,
       const torch::Tensor& positions,
-      const torch::Tensor& rope);
-  torch::Tensor project_key(const torch::Tensor& latent,
-                            const torch::Tensor& positions,
-                            const torch::Tensor& rope);
+      const torch::Tensor& slots,
+      const torch::Tensor& rope,
+      const torch::Tensor& cache,
+      const std::optional<torch::Tensor>& num_valid_input_rows = std::nullopt,
+      const std::optional<torch::Tensor>& num_valid_compressed_rows =
+          std::nullopt);
   void select_candidate_indices(const torch::Tensor& iq,
                                 const torch::Tensor& iw,
                                 const torch::Tensor& cache,

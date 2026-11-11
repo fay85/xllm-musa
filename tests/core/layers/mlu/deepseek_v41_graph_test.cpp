@@ -151,6 +151,263 @@ TEST(DeepseekV41GraphTest, NativeHashStateMatchesFullCheckpointReference) {
   }
 }
 
+TEST(DeepseekV41GraphTest, IndexerConsumerNeedsOnlyHeadWeights) {
+  const torch::Device device(torch::kPrivateUse1, torch_mlu::current_device());
+  const torch::DeviceGuard guard(device);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  ModelArgs args;
+  args.hidden_size() = 5120;
+  args.index_n_heads() = 32;
+  args.index_head_dim() = 128;
+  args.qk_rope_head_dim() = 64;
+  args.compress_ratios() = {1, 1};
+  args.kv_source_layer_ids() = {0};
+  args.index_source_layer_ids() = {1};
+  test::MockProcessGroup group(device);
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+  parallel.tp_group_ = &group;
+  DeepseekV41Indexer indexer(ModelContext(parallel, args, QuantArgs(), options),
+                             /*layer_id=*/1);
+  torch::manual_seed(41);
+  const torch::Tensor weight = torch::randn({32, 5120}, options) * 0.02;
+  indexer->load_state_dict(StateDict({{"weights_proj.weight", weight}}));
+  const torch::Tensor x = torch::randn({17, 5120}, options);
+  const torch::Tensor cache = torch::full({2, 128, 1, 128}, -7, options);
+  const torch::Tensor actual = indexer->project_indexer(x,
+                                                        torch::Tensor(),
+                                                        torch::Tensor(),
+                                                        torch::Tensor(),
+                                                        torch::Tensor(),
+                                                        cache);
+  const torch::Tensor expected =
+      torch::matmul(x, weight.t()).to(torch::kFloat32) / 64;
+  EXPECT_TRUE(torch::allclose(actual.cpu(), expected.cpu(), 0.02, 0.001));
+  EXPECT_TRUE(cache.cpu().eq(-7).all().item<bool>());
+}
+
+TEST(DeepseekV41GraphTest, QueryProjectionKeepsFloat32Contract) {
+  const torch::Device device(torch::kPrivateUse1, torch_mlu::current_device());
+  const torch::DeviceGuard guard(device);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  ModelArgs args;
+  args.hidden_size() = 5120;
+  args.q_lora_rank() = 1280;
+  args.index_n_heads() = 32;
+  args.index_head_dim() = 128;
+  args.qk_rope_head_dim() = 64;
+  args.compress_ratios() = {1};
+  args.index_source_layer_ids() = {0};
+  test::MockProcessGroup group(device);
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+  parallel.tp_group_ = &group;
+  DeepseekV41Indexer indexer(ModelContext(parallel, args, QuantArgs(), options),
+                             0);
+  const torch::Tensor weight = torch::ones({4096, 1280}, options) / 1280;
+  indexer->load_state_dict(StateDict({{"wq_b.weight", weight}}));
+  auto qr = torch::ones({6, 1280}, options);
+  auto positions = torch::arange(6, options.dtype(torch::kInt64));
+  const torch::Tensor angles =
+      torch::arange(6, options.dtype(torch::kFloat32)).unsqueeze(1) * 0.1;
+  const torch::Tensor rope = torch::cat(
+      {angles.cos().expand({6, 64}), angles.sin().expand({6, 64})}, 1);
+  const torch::Tensor output = indexer->project_query(qr, positions, rope);
+  EXPECT_EQ(output.scalar_type(), torch::kFloat32);
+  EXPECT_EQ(output.sizes(), (torch::IntArrayRef{6, 32, 128}));
+  EXPECT_TRUE(torch::equal(
+      output, indexer->project_query(qr, positions.to(torch::kInt32), rope)));
+  torch_mlu::synchronize();
+  torch_mlu::mlu::MLUStreamGuard stream(
+      torch_mlu::getStreamFromPool(/*isHighPriority=*/false, device.index()));
+  for (int32_t i = 0; i < 10; ++i) {
+    indexer->project_query(qr, positions, rope);
+  }
+  torch_mlu::MLUGraph graph;
+  graph.capture_begin();
+  const torch::Tensor captured = indexer->project_query(qr, positions, rope);
+  graph.capture_end();
+  qr.mul_(0.5);
+  positions.fill_(0);
+  graph.replay();
+  EXPECT_TRUE(
+      torch::equal(captured, indexer->project_query(qr, positions, rope)));
+  EXPECT_FALSE(torch::equal(captured, output));
+}
+
+TEST(DeepseekV41GraphTest, FusedIndexerMatchesIndependentRequests) {
+  const torch::Device device(torch::kPrivateUse1, torch_mlu::current_device());
+  const torch::DeviceGuard guard(device);
+  const torch::NoGradGuard no_grad;
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  for (const bool decode : {false, true}) {
+    SCOPED_TRACE(decode);
+    for (const int32_t ratio : {1, 2}) {
+      torch::manual_seed(2026);
+      ModelArgs args;
+      args.hidden_size() = 5120;
+      args.n_heads() = 1;
+      args.head_dim() = 512;
+      args.q_lora_rank() = 1280;
+      args.qk_rope_head_dim() = 64;
+      args.o_groups() = 1;
+      args.o_lora_rank() = 8;
+      args.window_size() = 16;
+      args.rms_norm_eps() = 1e-20;
+      args.compress_ratios() = {ratio};
+      args.kv_source_layer_ids() = {0};
+      args.index_source_layer_ids() = {0};
+      args.index_n_heads() = 32;
+      args.index_head_dim() = 128;
+      args.index_topk() = 4;
+      args.num_speculative_tokens() = 5;
+      test::MockProcessGroup group(device);
+      ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+      parallel.tp_group_ = &group;
+      DeepseekV41Attention attention(
+          ModelContext(parallel, args, QuantArgs(), options), 0);
+      auto random = [&](std::vector<int64_t> shape) {
+        return torch::randn(shape, options) * 0.02;
+      };
+      StateDict state({
+          {"wq_a.weight", random({1280, 5120})},
+          {"wq_b.weight", random({512, 1280})},
+          {"wkv.weight", random({512, 5120})},
+          {"q_norm.weight", torch::ones({1280}, options)},
+          {"kv_norm.weight", torch::ones({512}, options)},
+          {"wo_a.weight", random({1, 8, 512})},
+          {"wo_b.weight", random({5120, 8})},
+          {"attn_sink", torch::zeros({1}, options)},
+          {"compressor.wkv.weight", random({512, 5120})},
+          {"compressor.wgate.weight", random({512, 5120})},
+          {"compressor.norm.weight", torch::ones({512}, options)},
+          {"indexer.wq_b.weight", random({4096, 1280})},
+          {"indexer.weights_proj.weight", random({32, 5120})},
+          {"indexer.wk.weight", random({128, 512})},
+          {"indexer.k_norm.weight", torch::ones({128}, options)},
+      });
+      // Single dyadic products keep KV projections exact across GEMM row
+      // counts, so batched and independent cache placement can be compared
+      // bitwise without depending on the selected GEMM accumulation order.
+      for (const std::string name :
+           {"wkv.weight", "compressor.wkv.weight", "compressor.wgate.weight"}) {
+        torch::Tensor weight = state.get_tensor(name);
+        weight.zero_();
+        weight.select(/*dim=*/1, /*index=*/0).fill_(/*value=*/0.125);
+      }
+      attention->load_state_dict(state);
+      attention->verify_loaded_weights();
+      auto make_cache = [&]() {
+        DeepSeekV4KVCacheTensors tensors;
+        tensors.swa_cache = torch::zeros({3, 128, 1, 512}, options);
+        tensors.key_cache = torch::zeros({3, 128, 1, 512}, options);
+        tensors.index_cache = torch::full({3, 128, 1, 128}, -7, options);
+        tensors.compress_kv_state =
+            torch::zeros({3, 32, 512}, options.dtype(torch::kFloat32));
+        tensors.compress_score_state =
+            torch::zeros_like(tensors.compress_kv_state);
+        std::vector<KVCache> result;
+        result.emplace_back(tensors);
+        return result;
+      };
+      auto batched = make_cache();
+      auto independent = make_cache();
+      const torch::Tensor table =
+          torch::tensor({2, 0, 1}, options.dtype(torch::kInt32)).view({3, 1});
+      const torch::Tensor angles =
+          torch::arange(32, options.dtype(torch::kFloat32))
+              .unsqueeze(1)
+              .expand({32, 64}) *
+          0.017;
+      const torch::Tensor rope =
+          torch::cat({angles.cos(), angles.sin()}, /*dim=*/1);
+      const torch::Tensor hidden = random({12, 5120});
+      for (int32_t step = 0; step < 3; ++step) {
+        const bool initial = step == 0;
+        std::vector<int32_t> counts = initial ? std::vector<int32_t>{1, 0, 3}
+                                              : std::vector<int32_t>{3, 0, 5};
+        std::vector<int32_t> begins = initial ? std::vector<int32_t>{0, 0, 0}
+                                              : std::vector<int32_t>{1, 0, 3};
+        if (step == 2) {
+          counts = {1, 0, 1};
+          begins = {4, 0, 8};
+        }
+        ModelInputParams input;
+        input.meta.batch_forward_type = decode
+                                            ? BatchForwardType::DECODE
+                                            : BatchForwardType::CHUNKED_PREFILL;
+        input.meta.num_sequences = 3;
+        input.attention.host.q_seq_lens = {
+            0, counts[0], counts[0], counts[0] + counts[2]};
+        input.multi_block_tables = {table, table, table};
+        Csa2Context shared;
+        shared.topk.resize(3);
+        shared.candidates.resize(3);
+        const torch::Tensor positions =
+            torch::cat({torch::arange(begins[0],
+                                      begins[0] + counts[0],
+                                      options.dtype(torch::kInt64)),
+                        torch::arange(begins[2],
+                                      begins[2] + counts[2],
+                                      options.dtype(torch::kInt64))});
+        const torch::Tensor batch_x =
+            step == 2 ? hidden.slice(0, 0, 2)
+                      : hidden.slice(0, initial ? 0 : 4, initial ? 4 : 12);
+        deepseek_v41::prepare_metadata(
+            shared, input, positions, input.meta.num_sequences);
+        deepseek_v41::prepare_workspace(
+            shared, input, args, batch_x.size(0), options);
+        const torch::Tensor actual = attention->forward(
+            batch_x, positions, rope, batched, input, shared);
+        int64_t offset = 0;
+        for (const int32_t seq : {0, 2}) {
+          ModelInputParams single;
+          single.meta.num_sequences = 1;
+          single.meta.batch_forward_type = input.meta.batch_forward_type;
+          single.attention.host.q_seq_lens = {0, counts[seq]};
+          single.multi_block_tables = {table.slice(0, seq, seq + 1),
+                                       table.slice(0, seq, seq + 1),
+                                       table.slice(0, seq, seq + 1)};
+          Csa2Context reference_shared;
+          reference_shared.topk.resize(1);
+          reference_shared.candidates.resize(1);
+          deepseek_v41::prepare_metadata(
+              reference_shared,
+              single,
+              positions.slice(0, offset, offset + counts[seq]),
+              single.meta.num_sequences);
+          deepseek_v41::prepare_workspace(
+              reference_shared, single, args, counts[seq], options);
+          const torch::Tensor expected = attention->forward(
+              batch_x.slice(0, offset, offset + counts[seq]),
+              positions.slice(0, offset, offset + counts[seq]),
+              rope,
+              independent,
+              single,
+              reference_shared);
+          EXPECT_TRUE(
+              torch::allclose(actual.slice(0, offset, offset + counts[seq]),
+                              expected,
+                              0.02,
+                              0.02));
+          EXPECT_TRUE(torch::equal(shared.topk[seq].cpu(),
+                                   reference_shared.topk[0].cpu()));
+          offset += counts[seq];
+        }
+        EXPECT_TRUE(torch::equal(batched[0].get_swa_cache().cpu(),
+                                 independent[0].get_swa_cache().cpu()));
+        EXPECT_TRUE(torch::equal(batched[0].get_k_cache().cpu(),
+                                 independent[0].get_k_cache().cpu()));
+        EXPECT_TRUE(torch::allclose(batched[0].get_index_cache().cpu(),
+                                    independent[0].get_index_cache().cpu(),
+                                    0.02,
+                                    0.02));
+      }
+    }
+  }
+}
+
 TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
   torch::manual_seed(91);
   const torch::Device device(torch::kPrivateUse1, 0);
@@ -166,7 +423,7 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
   args.o_groups() = 1;
   args.o_lora_rank() = 8;
   args.window_size() = 16;
-  args.rms_norm_eps() = 1e-6;
+  args.rms_norm_eps() = 1e-20;
   args.compress_ratios() = {2};
   args.kv_source_layer_ids() = {0};
   args.index_head_dim() = 128;
@@ -224,6 +481,8 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
   auto run = [&](std::vector<KVCache>& caches, int64_t begin, int64_t count) {
     ModelInputParams input;
     input.meta.num_sequences = 1;
+    input.meta.batch_forward_type = BatchForwardType::DECODE;
+    input.is_spec_verify = count > 1;
     input.attention.host.q_seq_lens = {0, static_cast<int32_t>(count)};
     auto table =
         torch::tensor({0, 1}, options.dtype(torch::kInt32)).view({1, 2});
@@ -232,6 +491,12 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
     shared.topk.emplace_back(
         torch::empty({count, 0}, options.dtype(torch::kInt64)));
     shared.candidates.resize(1);
+    deepseek_v41::prepare_metadata(
+        shared,
+        input,
+        torch::arange(begin, begin + count, options.dtype(torch::kInt64)),
+        input.meta.num_sequences);
+    deepseek_v41::prepare_workspace(shared, input, args, count, options);
     return attention->forward(
         hidden.slice(0, begin, begin + count),
         torch::arange(begin, begin + count, options.dtype(torch::kInt64)),
@@ -261,6 +526,7 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
   run(eager_caches, 0, 1);
   ModelInputParams input;
   input.enable_graph = true;
+  input.meta.batch_forward_type = BatchForwardType::DECODE;
   input.meta.actual_num_sequences = 1;
   input.meta.num_sequences = 1;
   input.meta.kv_max_seq_len = 7;
@@ -274,9 +540,11 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
   shared.topk.emplace_back(torch::empty({6, 0}, options.dtype(torch::kInt64)));
   shared.candidates.resize(1);
   auto table = torch::tensor({0, 1}, options.dtype(torch::kInt32)).view({1, 2});
-  shared.block_tables = {table, table};
+  input.multi_block_tables = {table, table};
   auto graph_hidden = hidden.slice(0, 1, 7).clone();
   auto positions = torch::arange(1, 7, options.dtype(torch::kInt64));
+  deepseek_v41::prepare_metadata(
+      shared, input, positions, input.meta.actual_num_sequences);
   auto graph_forward = [&]() {
     return attention->forward(
         graph_hidden, positions, rope, graph_caches, input, shared);
@@ -304,6 +572,8 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
     input.meta.kv_max_seq_len = begin + 6;
     input.attention.host.kv_seq_lens = {0, begin + 6};
     auto eager_output = run(eager_caches, begin, 6);
+    deepseek_v41::prepare_metadata(
+        shared, input, positions, input.meta.actual_num_sequences);
     graph.replay();
     torch_mlu::synchronize();
     EXPECT_TRUE(torch::allclose(graph_output, eager_output, 0.02, 0.02));
@@ -313,6 +583,46 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
                              eager_caches[0].get_k_cache()));
     EXPECT_TRUE(torch::equal(graph_caches[0].get_index_cache(),
                              eager_caches[0].get_index_cache()));
+  }
+  std::vector<torch::Tensor> snapshots;
+  for (const auto& tensor : {graph_caches[0].get_k_cache(),
+                             graph_caches[0].get_index_cache(),
+                             graph_caches[0].get_swa_cache(),
+                             graph_caches[0].get_compress_kv_state(),
+                             graph_caches[0].get_compress_score_state()}) {
+    snapshots.emplace_back(tensor.clone());
+  }
+  input.meta.actual_num_sequences = 0;
+  ModelInputParams empty_input = input;
+  empty_input.enable_graph = false;
+  empty_input.graph.eager_context = nullptr;
+  Csa2Context empty_shared;
+  deepseek_v41::prepare_metadata(empty_shared,
+                                 empty_input,
+                                 positions,
+                                 /*num_sequences=*/0);
+  deepseek_v41::prepare_workspace(
+      empty_shared, empty_input, args, positions.numel(), options);
+  const auto empty_output = attention->forward(
+      graph_hidden, positions, rope, graph_caches, empty_input, empty_shared);
+  EXPECT_TRUE(torch::isfinite(empty_output).all().item<bool>());
+  EXPECT_TRUE(empty_shared.selected_lengths.eq(0).all().item<bool>());
+  EXPECT_EQ(empty_shared.compressed[1].outputs.num_valid_rows.item<int32_t>(),
+            0);
+  deepseek_v41::prepare_metadata(
+      shared, input, positions, input.meta.actual_num_sequences);
+  graph.replay();
+  torch_mlu::synchronize();
+  EXPECT_EQ(shared.compressed[1].outputs.num_valid_rows.item<int32_t>(), 0);
+  EXPECT_TRUE(shared.compressed[1].outputs.slots.eq(-1).all().item<bool>());
+  EXPECT_TRUE(shared.compressed[1].outputs.latent.eq(0).all().item<bool>());
+  int32_t index = 0;
+  for (const auto& tensor : {graph_caches[0].get_k_cache(),
+                             graph_caches[0].get_index_cache(),
+                             graph_caches[0].get_swa_cache(),
+                             graph_caches[0].get_compress_kv_state(),
+                             graph_caches[0].get_compress_score_state()}) {
+    EXPECT_TRUE(torch::equal(tensor, snapshots[index++]));
   }
 }
 
@@ -764,6 +1074,7 @@ TEST(DeepseekV41GraphTest, CaptureUsesOneGatherBufferAcrossLayers) {
   Csa2Context shared;
   ModelInputParams input;
   input.enable_graph = true;
+  input.meta.batch_forward_type = BatchForwardType::DECODE;
   const int32_t kv_max_seq_len = 1;
   const auto pool = torch_mlu::graph_pool_handle();
   auto graph = std::make_unique<kernel::mlu::PiecewiseGraph>(kv_max_seq_len);
@@ -858,6 +1169,7 @@ TEST(DeepseekV41GraphTest, SharedGatherReplayMatchesIndependentLayerBuffers) {
   auto make_trial = [&](int64_t batch) {
     auto trial = std::make_unique<AttentionReplayTrial>();
     trial->input.enable_graph = true;
+    trial->input.meta.batch_forward_type = BatchForwardType::DECODE;
     trial->input.meta.num_sequences = batch;
     trial->shared.selected_kv =
         torch::empty({batch * max_capacity, 1, 1, dim}, options);
@@ -953,10 +1265,17 @@ TEST(DeepseekV41GraphTest, SharedGatherReplayMatchesIndependentLayerBuffers) {
       trial->shared.selected_lengths.fill_(-1);
       ModelInputParams reference_input = trial->input;
       reference_input.graph.eager_context = nullptr;
+      reference_input.enable_graph = false;
+      trial->input.multi_block_tables = trial->shared.block_tables;
+      reference_input.multi_block_tables = trial->shared.block_tables;
+      deepseek_v41::prepare_metadata(
+          trial->shared, trial->input, trial->positions, active);
       std::vector<torch::Tensor> reference;
       reference.reserve(layers.size());
       torch::Tensor hidden = trial->hidden;
       for (size_t id = 0; id < layers.size(); ++id) {
+        deepseek_v41::prepare_metadata(
+            trial->independent[id], reference_input, trial->positions, active);
         hidden = layers[id]->forward(hidden,
                                      trial->positions,
                                      trial->rope,

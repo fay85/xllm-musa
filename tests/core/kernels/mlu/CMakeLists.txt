@@ -108,3 +108,27 @@ cc_test(
     glog::glog
     GTest::gtest_main
 )
+
+cc_test(
+  NAME fused_indexer_k_mlu_test
+  RUN_SERIAL
+  SRCS fused_indexer_k_test.cpp
+  DEPS xllm::mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
+  ENVIRONMENT "OMP_NUM_THREADS=1;MKL_NUM_THREADS=1"
+)
+
+cc_test(
+  NAME fused_indexer_q_mlu_test
+  RUN_SERIAL
+  SRCS fused_indexer_q_test.cpp
+  DEPS xllm::mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
+  ENVIRONMENT "OMP_NUM_THREADS=4;MKL_NUM_THREADS=4"
+)
+
+cc_test(
+  NAME fused_compress_kv_cache_mlu_test
+  RUN_SERIAL
+  SRCS fused_compress_kv_cache_test.cpp fused_compress_kv_cache_placement_test.cpp
+  DEPS xllm::mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
+  ENVIRONMENT "OMP_NUM_THREADS=4;MKL_NUM_THREADS=4"
+)

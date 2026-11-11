@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #pragma once
+
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
 #include "framework/model_context.h"
@@ -47,14 +48,10 @@ class DeepseekV41AttentionImpl final : public torch::nn::Module {
                         const torch::Tensor& lengths,
                         torch::Tensor output);
   void forward_cached_attention(
+      const torch::Tensor& iw,
       const torch::Tensor& q,
       const torch::Tensor& kv,
-      const torch::Tensor& raw,
-      const torch::Tensor& scores,
       const torch::Tensor& iq,
-      const torch::Tensor& iw,
-      const torch::Tensor& positions,
-      const torch::Tensor& rope,
       std::vector<KVCache>& caches,
       const ModelInputParams& input,
       Csa2Context& shared,
@@ -62,13 +59,6 @@ class DeepseekV41AttentionImpl final : public torch::nn::Module {
       torch::Tensor selected,
       torch::Tensor lengths,
       const mlu_v4_cp::DeepseekV4CpContext* cp_context);
-  void update_compressed_cache(const torch::Tensor& raw,
-                               const torch::Tensor& scores,
-                               int64_t begin,
-                               int32_t seq,
-                               const torch::Tensor& rope,
-                               KVCache& cache,
-                               const std::vector<torch::Tensor>& tables);
   void compute_attention(const torch::Tensor& q,
                          const torch::Tensor& window,
                          const torch::Tensor& main,

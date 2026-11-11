@@ -1,0 +1,1588 @@
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+#include <mlu.h>
+
+#include <algorithm>
+
+#include "kernels/mlu/bangc/src/deepseek_v41/compress_params.h"
+
+namespace xllm::kernel::mlu::bangc {
+namespace {
+
+constexpr int32_t kHeadDim = 512;
+constexpr int32_t kRopeDim = 64;
+constexpr int32_t kNopeDim = kHeadDim - kRopeDim;
+constexpr int32_t kPageSize = 128;
+constexpr int32_t kStateRows = 32;
+constexpr int32_t kMaxMetaBatch = 512;
+constexpr int32_t kMapWindow = 4096;
+// Positions/slots of this core are accumulated and stored once.
+constexpr int32_t kAccumRows = 1536;
+constexpr int32_t kPageCache = 32;
+// Page segments up to this many rows are filled by scalar stores.
+constexpr int32_t kScalarFill = 16;
+// Whole compressed page table in NRAM when batch * columns fits.
+constexpr int32_t kTableCache = 4096;
+// Rows covered by one vectorized map contiguity test (multi-task kernel).
+constexpr int32_t kRunSpan = 256;
+// Input channels of the row-scale conv (64 B of float, the WRAM ci unit).
+constexpr int32_t kConvCi = 16;
+constexpr float kLog2e = 1.4426950408889634f;
+// Single NRAM arena carved per ratio; see Layout below.
+constexpr int32_t kArenaBytes = 324 * 1024;
+
+template <typename T>
+__mlu_func__ T min_of(T a, T b) {
+  return a < b ? a : b;
+}
+
+template <typename T>
+__mlu_func__ T max_of(T a, T b) {
+  return a < b ? b : a;
+}
+
+class Meta final {
+ public:
+  const int32_t* query_start_loc_;
+  const int32_t* chunk_begins_;
+  const int32_t* compressed_start_loc_;
+  int32_t* nram_qsl_;
+  int32_t* nram_begin_;
+  int32_t* nram_csl_;
+  bool cached_;
+
+  __mlu_func__ int32_t qsl(int32_t i) const {
+    if (cached_) {
+      return nram_qsl_[i];
+    }
+    return __load_gdram(query_start_loc_ + i);
+  }
+  __mlu_func__ int32_t begin(int32_t i) const {
+    if (cached_) {
+      return nram_begin_[i];
+    }
+    return __load_gdram(chunk_begins_ + i);
+  }
+  __mlu_func__ int32_t csl(int32_t i) const {
+    if (cached_) {
+      return nram_csl_[i];
+    }
+    return __load_gdram(compressed_start_loc_ + i);
+  }
+};
+
+// One tile: `count` consecutive compressed groups of one request.
+struct Tile {
+  int32_t request;
+  int32_t out_row;
+  int32_t count;
+  int64_t group0;
+  // Logical input row of member 0 of the first group (one before the request
+  // start when that member is history).
+  int64_t base;
+  bool history;
+};
+
+// Per ping-pong slot buffers. Inputs are consumed by compute; outputs are
+// read by the asynchronous stores of the same tile.
+struct Slot {
+  float* raw_a;
+  float* raw_b;
+  float* score_a;
+  float* score_b;
+  bfloat16_t* input;
+  float* cos;
+  float* sin;
+  bfloat16_t* latent;
+  bfloat16_t* tail_bf16;
+};
+
+struct Scratch {
+  float* x;
+  float* tmp;
+  float* tail;
+  float* rotated;
+  float* swapped;
+  float* weight;
+  float* sum;
+  // Conv operands of the row scale: sum is row 0 of [kConvCi][rows] (other
+  // rows stay zero); conv_src is its [rows][kConvCi] transpose.
+  float* conv_src;
+  float* conv_kernel;
+};
+
+struct MapWindow {
+  int32_t* data;
+  int64_t start;
+  int32_t size;
+  // Aligned scratch for the vectorized contiguity test of one tile.
+  int32_t* rows;
+  float* breaks;
+};
+
+// Per-core positions/slots for output rows [base, base + used).
+struct Accum {
+  int32_t* positions;
+  // Points past a prefix retaining the previous window's pending slots.
+  int32_t* slots;
+  // [0, 1, ..., 127] and an aligned staging row for the vector fills.
+  int32_t* iota;
+  int32_t* scratch;
+  // Page-table columns of the request being filled.
+  int32_t* pages;
+  // The whole page table ([batch][columns], loaded with the metadata), or
+  // nullptr when it does not fit.
+  const int32_t* table;
+  int32_t base;
+  int32_t used;
+  // Every row of this core was filled up front (fill_slots).
+  bool complete;
+  // Page segments up to this many rows are filled by scalar stores.
+  int32_t scalar_fill;
+};
+
+// Logical rows [start, end) of the map window known to map to consecutive
+// physical rows (multi-task kernel: one test covers up to kRunSpan rows).
+struct RunSpan {
+  int64_t window_start;
+  int64_t start;
+  int64_t end;
+};
+
+template <int32_t Ratio>
+struct Layout {
+  static constexpr int32_t kTile = Ratio == 1 ? 32 : 16;
+  static constexpr int32_t kElems = kTile * kHeadDim;
+  static constexpr int32_t kRope = kTile * kRopeDim;
+  // r=2 inputs: raw_a, raw_b, score_a, score_b (FP32); r=1: BF16 input.
+  static constexpr int32_t kInputBytes =
+      Ratio == 1 ? kElems * 2 : 4 * kElems * 4;
+  static constexpr int32_t kSlotBytes =
+      kInputBytes + 2 * kRope * 4 + kElems * 2 + kRope * 2;
+  // r=1 needs FP32 x and squares; r=2 computes inside the slot inputs.
+  static constexpr int32_t kScratchBytes =
+      (Ratio == 1 ? 2 * kElems * 4 : 0) + 3 * kRope * 4;
+  static_assert(2 * kSlotBytes + kScratchBytes <= kArenaBytes,
+                "NRAM arena too small");
+};
+
+// Preparing the next tile can retire the window while both the previous
+// and current tiles still need its slots. Keep their rows immediately before
+// accum.slots so store_tile's relative indexing also addresses the old window.
+constexpr int32_t kPendingSlotRows =
+    2 * std::max(Layout<1>::kTile, Layout<2>::kTile);
+static_assert(kAccumRows >= kPendingSlotRows +
+                                std::max(Layout<1>::kTile, Layout<2>::kTile),
+              "A rollover must have enough rows to retain both pending tiles");
+
+// Gathers `count` logical rows `logical0 + i * step` into consecutive NRAM
+// rows. Physical rows that stay consecutive under the optional map are merged
+// into one strided DMA.
+template <typename T>
+__mlu_func__ void gather_rows(T* dst,
+                              const T* src,
+                              int64_t row_stride,
+                              const int32_t* phys,
+                              int64_t logical0,
+                              int32_t step,
+                              int32_t count) {
+  if (count <= 0) {
+    return;
+  }
+  const uint32_t bytes = kHeadDim * sizeof(T);
+  const int32_t src_stride =
+      static_cast<int32_t>(step * row_stride * static_cast<int64_t>(sizeof(T)));
+  if (phys == nullptr) {
+    __memcpy_io0_async(dst,
+                       src + logical0 * row_stride,
+                       bytes,
+                       GDRAM2NRAM,
+                       bytes,
+                       src_stride,
+                       count - 1);
+    return;
+  }
+  int32_t i = 0;
+  while (i < count) {
+    const int64_t first = phys[i * step];
+    int32_t j = i + 1;
+    while (j < count && phys[j * step] == first + (j - i) * step) {
+      ++j;
+    }
+    __memcpy_io0_async(dst + i * kHeadDim,
+                       src + first * row_stride,
+                       bytes,
+                       GDRAM2NRAM,
+                       bytes,
+                       src_stride,
+                       j - i - 1);
+    i = j;
+  }
+}
+
+// Copies one FP32 row (r=2 member) with a 1D DMA.
+__mlu_func__ void load_row(float* dst,
+                           const float* src,
+                           int64_t row_stride,
+                           int64_t phys) {
+  __memcpy_io0_async(
+      dst, src + phys * row_stride, kHeadDim * sizeof(float), GDRAM2NRAM);
+}
+
+// Loads r=2 member rows r in [r0, rows): even r is member A of group r/2,
+// odd r member B. Logical row base + r maps through `phys[r - r0]` (or is
+// physical when there is no map). Each physically consecutive run becomes one
+// 3D DMA that splits A/B rows into their buffers, plus at most one leading B
+// and one trailing A row.
+__mlu_func__ void gather_pairs(float* dst_a,
+                               float* dst_b,
+                               const float* src,
+                               int64_t row_stride,
+                               const int32_t* phys,
+                               int64_t base,
+                               int32_t r0,
+                               int32_t rows) {
+  int32_t i = r0;
+  while (i < rows) {
+    int64_t first = phys == nullptr ? base + i : phys[i - r0];
+    int32_t j = i + 1;
+    if (phys == nullptr) {
+      j = rows;
+    } else {
+      while (j < rows && phys[j - r0] == first + (j - i)) {
+        ++j;
+      }
+    }
+    if (i & 1) {
+      load_row(dst_b + (i / 2) * kHeadDim, src, row_stride, first);
+      ++i;
+      ++first;
+    }
+    const int32_t pairs = (j - i) / 2;
+    if (pairs > 0) {
+      const int64_t row_bytes =
+          row_stride * static_cast<int64_t>(sizeof(float));
+      __memcpy_io0_async(dst_a + (i / 2) * kHeadDim,
+                         src + first * row_stride,
+                         kHeadDim * sizeof(float),
+                         GDRAM2NRAM,
+                         (dst_b - dst_a) * static_cast<int64_t>(sizeof(float)),
+                         1,
+                         kHeadDim * sizeof(float),
+                         pairs - 1,
+                         row_bytes,
+                         2 * pairs - 1,
+                         0,
+                         0);
+      i += 2 * pairs;
+      first += 2 * pairs;
+    }
+    if (i < j) {
+      load_row(dst_a + (i / 2) * kHeadDim, src, row_stride, first);
+      ++i;
+    }
+  }
+}
+
+// Packed projection: raw and score of one physical row are adjacent 2 KiB
+// halves of a 4 KiB row (scores == raw + 512, row stride 1024). Loads rows
+// r in [r0, rows) like gather_pairs, but each run's raw and score halves of
+// both members land in raw_a | score_a | raw_b | score_b with one 3D DMA.
+__mlu_func__ void gather_quads(const Slot& slot,
+                               const float* src,
+                               int64_t row_stride,
+                               const int32_t* phys,
+                               int64_t base,
+                               int32_t r0,
+                               int32_t rows) {
+  constexpr int32_t kHalf = kHeadDim * sizeof(float);
+  const int64_t part =
+      (slot.score_a - slot.raw_a) * static_cast<int64_t>(sizeof(float));
+  int32_t i = r0;
+  while (i < rows) {
+    int64_t first = phys == nullptr ? base + i : phys[i - r0];
+    int32_t j = i + 1;
+    if (phys == nullptr) {
+      j = rows;
+    } else {
+      while (j < rows && phys[j - r0] == first + (j - i)) {
+        ++j;
+      }
+    }
+    if (i & 1) {
+      __memcpy_io0_async(slot.raw_b + (i / 2) * kHeadDim,
+                         src + first * row_stride,
+                         kHalf,
+                         GDRAM2NRAM,
+                         part,
+                         kHalf,
+                         1);
+      ++i;
+      ++first;
+    }
+    const int32_t pairs = (j - i) / 2;
+    if (pairs > 0) {
+      __memcpy_io0_async(slot.raw_a + (i / 2) * kHeadDim,
+                         src + first * row_stride,
+                         kHalf,
+                         GDRAM2NRAM,
+                         part,
+                         3,
+                         kHalf,
+                         pairs - 1,
+                         kHalf,
+                         4 * pairs - 1,
+                         0,
+                         0);
+      i += 2 * pairs;
+      first += 2 * pairs;
+    }
+    if (i < j) {
+      __memcpy_io0_async(slot.raw_a + (i / 2) * kHeadDim,
+                         src + first * row_stride,
+                         kHalf,
+                         GDRAM2NRAM,
+                         part,
+                         kHalf,
+                         1);
+      ++i;
+    }
+  }
+}
+
+// Returns map entries for logical rows [logical0, logical0 + span), refilling
+// the window synchronously when needed. Called only while the IO queues are
+// drained, so the refill does not serialize behind in-flight tiles.
+__mlu_func__ const int32_t* map_rows(const FusedCompressKvCacheParams& p,
+                                     MapWindow& window,
+                                     int64_t logical0,
+                                     int32_t span) {
+  if (p.input_row_map == nullptr) {
+    return nullptr;
+  }
+  if (logical0 < window.start || logical0 + span > window.start + window.size) {
+    // Never read past the caller's Tcap entries.
+    window.start = logical0;
+    window.size = static_cast<int32_t>(
+        min_of(static_cast<int64_t>(kMapWindow), p.row_map_size - logical0));
+    __memcpy(window.data,
+             p.input_row_map + logical0,
+             window.size * sizeof(int32_t),
+             GDRAM2NRAM);
+  }
+  return window.data + (logical0 - window.start);
+}
+
+// Last request q with csl[q] <= row (row < K).
+__mlu_func__ int32_t request_of(const Meta& meta, int32_t batch, int32_t row) {
+  int32_t lo = 0;
+  int32_t hi = batch - 1;
+  while (lo < hi) {
+    const int32_t mid = (lo + hi + 1) / 2;
+    if (meta.csl(mid) <= row) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}
+
+// Start row of task `task`'s slice. Nominal slices are equal row ranges; a
+// boundary inside a small live request (at most kSnapRows groups) moves to
+// the request start, so short requests are never split into extra tiles.
+// Boundaries stay monotone, and every task computes the same partition.
+constexpr int32_t kSnapRows = 32;
+
+__mlu_func__ int32_t slice_begin(const Meta& meta,
+                                 int32_t batch,
+                                 int32_t live,
+                                 int32_t k_capacity,
+                                 int32_t rows_per_task,
+                                 int32_t tasks,
+                                 int32_t task) {
+  if (task >= tasks) {
+    return k_capacity;
+  }
+  const int32_t row = min_of(k_capacity, task * rows_per_task);
+  if (row == 0 || row >= live) {
+    return row;
+  }
+  const int32_t q = request_of(meta, batch, row);
+  const int32_t start = meta.csl(q);
+  return meta.csl(q + 1) - start <= kSnapRows ? start : row;
+}
+
+// Loads every map entry this core's output rows [row_begin, live_end) read
+// with one DMA when it fits the window; otherwise map_rows refills lazily.
+__mlu_func__ void prefetch_map(const FusedCompressKvCacheParams& p,
+                               const Meta& meta,
+                               MapWindow& window,
+                               int32_t row_begin,
+                               int32_t live_end) {
+  if (p.input_row_map == nullptr || row_begin >= live_end) {
+    return;
+  }
+  const int32_t q0 = request_of(meta, p.batch, row_begin);
+  const int64_t begin0 = meta.begin(q0);
+  const int64_t token0 =
+      (begin0 / p.ratio + row_begin - meta.csl(q0)) * p.ratio;
+  const int64_t first = meta.qsl(q0) + max_of(token0, begin0) - begin0;
+  const int32_t q1 = request_of(meta, p.batch, live_end - 1);
+  const int64_t begin1 = meta.begin(q1);
+  const int64_t group1 = begin1 / p.ratio + (live_end - 1 - meta.csl(q1));
+  const int64_t last = meta.qsl(q1) + group1 * p.ratio + p.ratio - 1 - begin1;
+  const int64_t span = last - first + 1;
+  if (span <= 0 || span > kMapWindow) {
+    return;
+  }
+  window.start = first;
+  window.size = static_cast<int32_t>(span);
+  __memcpy(window.data,
+           p.input_row_map + first,
+           window.size * sizeof(int32_t),
+           GDRAM2NRAM);
+}
+
+__mlu_func__ bool next_tile(const FusedCompressKvCacheParams& p,
+                            const Meta& meta,
+                            int32_t tile_rows,
+                            int32_t live_end,
+                            int32_t& row,
+                            int32_t& request,
+                            Tile& tile) {
+  if (row >= live_end) {
+    return false;
+  }
+  while (meta.csl(request + 1) <= row) {
+    ++request;
+  }
+  const int32_t out_start = meta.csl(request);
+  const int32_t out_stop = min_of(meta.csl(request + 1), live_end);
+  const int64_t logical_start = meta.qsl(request);
+  const int64_t begin = meta.begin(request);
+  const int64_t first = begin / p.ratio;
+  tile.request = request;
+  tile.out_row = row;
+  tile.count = min_of(out_stop - row, tile_rows);
+  tile.group0 = first + (row - out_start);
+  const int64_t token0 = tile.group0 * p.ratio;
+  tile.base = logical_start + token0 - begin;
+  tile.history = token0 < begin;
+  row += tile.count;
+  return true;
+}
+
+// Stores the accumulated positions/slots (their vector fills must have been
+// drained). Asynchronous: the kernel's final __sync covers it; in-loop
+// flushes are followed by a drain before the buffers are refilled.
+__mlu_func__ void flush_accum(const FusedCompressKvCacheParams& p,
+                              Accum& accum) {
+  if (accum.used > 0) {
+    __memcpy_io0_async(p.positions_out + accum.base,
+                       accum.positions,
+                       accum.used * sizeof(int32_t),
+                       NRAM2GDRAM);
+    __memcpy_io0_async(p.slots_out + accum.base,
+                       accum.slots,
+                       accum.used * sizeof(int32_t),
+                       NRAM2GDRAM);
+  }
+  accum.base += accum.used;
+  accum.used = 0;
+}
+
+// Positions and physical slots of a tile (vector fills from an iota row);
+// the page table is read here, once per page segment.
+__mlu_func__ void tile_slots(const FusedCompressKvCacheParams& p,
+                             const Tile& tile,
+                             Accum& accum) {
+  if (accum.complete) {
+    return;
+  }
+  if (accum.used + tile.count > kAccumRows) {
+    __sync();
+    // The old window ends at the new base. Its final two tiles are the only
+    // stores not yet issued; earlier stores have drained above. This prefix
+    // cannot be reused until another window fills, long after both are stored.
+    __memcpy(accum.slots - kPendingSlotRows,
+             accum.slots + accum.used - kPendingSlotRows,
+             kPendingSlotRows * sizeof(int32_t),
+             NRAM2NRAM);
+    flush_accum(p, accum);
+    // Drain both the prefix copy and metadata flush before refilling.
+    __sync();
+  }
+  const int32_t count = tile.count;
+  // positions = (group0 + i) * ratio
+  __bang_mul_scalar(accum.scratch, accum.iota, p.ratio, count);
+  __bang_add_scalar(accum.scratch,
+                    accum.scratch,
+                    static_cast<int32_t>(tile.group0 * p.ratio),
+                    count);
+  __memcpy(accum.positions + accum.used,
+           accum.scratch,
+           count * sizeof(int32_t),
+           NRAM2NRAM);
+  const int32_t* table =
+      p.compressed_block_table + tile.request * p.compressed_table_stride;
+  int32_t i = 0;
+  while (i < count) {
+    const int64_t group = tile.group0 + i;
+    const int32_t in_page = static_cast<int32_t>(group % kPageSize);
+    const int32_t seg = min_of(count - i, kPageSize - in_page);
+    const int32_t page = __load_gdram(table + group / kPageSize);
+    // slots[i + k] = page * 128 + in_page + k
+    __bang_add_scalar(
+        accum.scratch, accum.iota, page * kPageSize + in_page, seg);
+    __memcpy(accum.slots + accum.used + i,
+             accum.scratch,
+             seg * sizeof(int32_t),
+             NRAM2NRAM);
+    i += seg;
+  }
+  accum.used += count;
+}
+
+// Fills positions/slots of all output rows [row_begin, live_end) at kernel
+// start, one page segment at a time, when they fit the accumulator; the tile
+// loop then has no page-table reads.
+__mlu_func__ void fill_slots(const FusedCompressKvCacheParams& p,
+                             const Meta& meta,
+                             Accum& accum,
+                             int32_t request,
+                             int32_t row_begin,
+                             int32_t live_end) {
+  if (live_end - row_begin > kAccumRows) {
+    return;
+  }
+  int32_t row = row_begin;
+  int32_t cached_request = -1;
+  int64_t cached_col = 0;
+  int32_t cached_cols = 0;
+  while (row < live_end) {
+    while (meta.csl(request + 1) <= row) {
+      ++request;
+    }
+    const int32_t out_start = meta.csl(request);
+    const int32_t out_stop = min_of(meta.csl(request + 1), live_end);
+    const int64_t first_group = meta.begin(request) / p.ratio;
+    const int64_t group = first_group + (row - out_start);
+    const int32_t in_page = static_cast<int32_t>(group % kPageSize);
+    const int32_t seg = min_of(out_stop - row, kPageSize - in_page);
+    const int32_t* table =
+        p.compressed_block_table + request * p.compressed_table_stride;
+    if (accum.table != nullptr) {
+      cached_request = request;
+      cached_col = 0;
+      cached_cols = 0;
+    } else if (request != cached_request) {
+      // All page-table columns this core needs from the request, in one DMA.
+      cached_request = request;
+      cached_col = group / kPageSize;
+      const int64_t last_col =
+          (first_group + (out_stop - 1 - out_start)) / kPageSize;
+      cached_cols = static_cast<int32_t>(last_col - cached_col + 1);
+      if (cached_cols <= kPageCache) {
+        __memcpy(accum.pages,
+                 table + cached_col,
+                 cached_cols * sizeof(int32_t),
+                 GDRAM2NRAM);
+      }
+    }
+    const int64_t col = group / kPageSize;
+    int32_t page;
+    if (accum.table != nullptr) {
+      page = accum.table[request * p.compressed_columns + col];
+    } else if (cached_cols <= kPageCache) {
+      page = accum.pages[col - cached_col];
+    } else {
+      page = __load_gdram(table + col);
+    }
+    int32_t* positions = accum.positions + (row - row_begin);
+    int32_t* slots = accum.slots + (row - row_begin);
+    if (seg <= accum.scalar_fill) {
+      // Short segments (decode): scalar stores beat five dependent vector
+      // ops of fixed cost. Readers come after a full __sync.
+      const int32_t position = static_cast<int32_t>(group * p.ratio);
+      const int32_t slot = page * kPageSize + in_page;
+      for (int32_t k = 0; k < seg; ++k) {
+        positions[k] = position + k * p.ratio;
+        slots[k] = slot + k;
+      }
+    } else {
+      __bang_mul_scalar(accum.scratch, accum.iota, p.ratio, seg);
+      __bang_add_scalar(accum.scratch,
+                        accum.scratch,
+                        static_cast<int32_t>(group * p.ratio),
+                        seg);
+      __memcpy(positions, accum.scratch, seg * sizeof(int32_t), NRAM2NRAM);
+      __bang_add_scalar(
+          accum.scratch, accum.iota, page * kPageSize + in_page, seg);
+      __memcpy(slots, accum.scratch, seg * sizeof(int32_t), NRAM2NRAM);
+    }
+    row += seg;
+  }
+  accum.used = live_end - row_begin;
+  accum.complete = true;
+}
+
+__mlu_func__ void load_rope(const FusedCompressKvCacheParams& p,
+                            const Tile& tile,
+                            const Slot& slot) {
+  // One 3D DMA: each table row [cos(64) | sin(64)] splits into the two
+  // compact buffers.
+  const float* row = p.cos_sin_cache + tile.group0 * p.ratio * 2 * kRopeDim;
+  const int64_t half_row = kRopeDim * sizeof(float);
+  __memcpy_io0_async(
+      slot.cos,
+      row,
+      kRopeDim * sizeof(float),
+      GDRAM2NRAM,
+      (slot.sin - slot.cos) * static_cast<int64_t>(sizeof(float)),
+      1,
+      half_row,
+      tile.count - 1,
+      half_row,
+      1,
+      p.ratio * 2 * half_row,
+      tile.count - 1);
+}
+
+template <int32_t Ratio>
+__mlu_func__ Slot carve_slot(char* base) {
+  using L = Layout<Ratio>;
+  Slot slot;
+  char* cursor = base;
+  if constexpr (Ratio == 1) {
+    slot.input = reinterpret_cast<bfloat16_t*>(cursor);
+    slot.raw_a = nullptr;
+    slot.raw_b = nullptr;
+    slot.score_a = nullptr;
+    slot.score_b = nullptr;
+  } else {
+    slot.input = nullptr;
+    slot.raw_a = reinterpret_cast<float*>(cursor);
+    // raw_a | score_a | raw_b | score_b: the order a packed [raw | score]
+    // projection row pair lands in with one 3D DMA (see gather_quads).
+    slot.score_a = slot.raw_a + L::kElems;
+    slot.raw_b = slot.score_a + L::kElems;
+    slot.score_b = slot.raw_b + L::kElems;
+  }
+  cursor += L::kInputBytes;
+  slot.cos = reinterpret_cast<float*>(cursor);
+  slot.sin = slot.cos + L::kRope;
+  cursor += 2 * L::kRope * 4;
+  slot.latent = reinterpret_cast<bfloat16_t*>(cursor);
+  cursor += L::kElems * 2;
+  slot.tail_bf16 = reinterpret_cast<bfloat16_t*>(cursor);
+  return slot;
+}
+
+// Pending DMA work of one pipeline step: stores of the previous tile and
+// loads of the next one, issued in small groups between compute stages so
+// that each blocking DMA issue overlaps vector work already queued.
+template <int32_t Ratio>
+struct IoPlan {
+  const FusedCompressKvCacheParams* p;
+  MapWindow* window;
+  Accum* accum;
+  bool store;
+  Tile store_tile;
+  char* store_base;
+  bool load;
+  Tile load_tile;
+  char* load_base;
+  const int32_t* phys;
+  // Mapped rows of the load tile are one consecutive physical run starting at
+  // `direct_row` (then the gathers take the unmapped single-run path).
+  bool direct;
+  int64_t direct_row;
+  int32_t step;
+};
+
+constexpr int32_t kIoSteps = 4;
+
+// Asynchronous stores of a computed tile. Every run of consecutive slots is
+// one 3D DMA writing, per row, the latent row to latent_out and the main row
+// to the cache: the second segment of each row is reached through the
+// (possibly negative) distance between the two tensors.
+__mlu_func__ void store_tile(const FusedCompressKvCacheParams& p,
+                             const Accum& accum,
+                             const Tile& tile,
+                             const Slot& slot) {
+  constexpr int32_t kRowBytes = kHeadDim * sizeof(bfloat16_t);
+  bfloat16_t* main = static_cast<bfloat16_t*>(p.main_kv_cache);
+  bfloat16_t* latent_out = static_cast<bfloat16_t*>(p.latent_out) +
+                           static_cast<int64_t>(tile.out_row) * kHeadDim;
+  const int32_t* slots = accum.slots + (tile.out_row - accum.base);
+  // Slots are consecutive within a 128-group page: runs end at page
+  // boundaries, so only the first slot of each run is read.
+  int32_t i = 0;
+  while (i < tile.count) {
+    const int32_t in_page = static_cast<int32_t>((tile.group0 + i) % kPageSize);
+    const int32_t j = min_of(tile.count, i + kPageSize - in_page);
+    bfloat16_t* latent_row = latent_out + i * kHeadDim;
+    bfloat16_t* main_row = main + static_cast<int64_t>(slots[i]) * kHeadDim;
+    const bfloat16_t* rows = slot.latent + i * kHeadDim;
+    const uint32_t segs = j - i - 1;
+    // Latent front and main front come from the same NRAM rows.
+    __memcpy_io0_async(
+        latent_row,
+        rows,
+        kNopeDim * sizeof(bfloat16_t),
+        NRAM2GDRAM,
+        (main_row - latent_row) * static_cast<int64_t>(sizeof(bfloat16_t)),
+        1,
+        kRowBytes,
+        segs,
+        0,
+        1,
+        kRowBytes,
+        segs);
+    // Unrotated latent tail and rotated main tail.
+    __memcpy_io0_async(latent_row + kNopeDim,
+                       rows + kNopeDim,
+                       kRopeDim * sizeof(bfloat16_t),
+                       NRAM2GDRAM,
+                       kRowBytes,
+                       kRowBytes,
+                       segs);
+    __memcpy_io0_async(main_row + kNopeDim,
+                       slot.tail_bf16 + i * kRopeDim,
+                       kRopeDim * sizeof(bfloat16_t),
+                       NRAM2GDRAM,
+                       kRowBytes,
+                       kRopeDim * sizeof(bfloat16_t),
+                       segs);
+    i = j;
+  }
+}
+
+// Slots/positions and map rows of the next tile. Runs at the loop head
+// before the drain: it reads NRAM metadata and the prefetched map window
+// (a refill is a rare synchronous DMA).
+// Spans (multi-task kernel): one test covers up to kRunSpan rows, so tiles
+// inside a known run skip it. The single-task kernel keeps the per-tile test
+// and none of the span state (that instruction-fetch-bound kernel pays even
+// for reordered code).
+template <int32_t Ratio, bool Spans>
+__mlu_func__ void prepare_tile(IoPlan<Ratio>& io, RunSpan& run) {
+  const FusedCompressKvCacheParams& p = *io.p;
+  const Tile& tile = io.load_tile;
+  tile_slots(p, tile, *io.accum);
+  // Member A of group i is logical row base + 2i, member B base + 2i + 1
+  // (r=2). With history, member A of the first group lives in the state ring.
+  const int32_t skip = tile.history ? 1 : 0;
+  const int32_t rows = Ratio * tile.count - skip;
+  io.phys = map_rows(p, *io.window, tile.base + skip, rows);
+  io.direct = false;
+  if (io.phys != nullptr) {
+    MapWindow& window = *io.window;
+    io.direct_row = io.phys[0];
+    if constexpr (Spans) {
+      const int64_t first = tile.base + skip;
+      if (run.window_start != window.start || first < run.start ||
+          first + rows > run.end) {
+        // breaks[i] = phys[i + 1] - phys[i] - 1 over up to kRunSpan rows
+        // from this tile: the first nonzero ends the run. Later tiles inside
+        // the run need no test.
+        const int32_t span =
+            static_cast<int32_t>(min_of(static_cast<int64_t>(kRunSpan),
+                                        window.start + window.size - first));
+        int32_t length = span;
+        if (span > 1) {
+          __memcpy(window.rows, io.phys, span * sizeof(int32_t), NRAM2NRAM);
+          __bang_sub(
+              window.rows + span, window.rows + 1, window.rows, span - 1);
+          __bang_sub_scalar(
+              window.rows + span, window.rows + span, 1, span - 1);
+          __bang_int322float(window.breaks, window.rows + span, span - 1, 0);
+          const uint32_t brk = __bang_findfirst1(window.breaks, span - 1);
+          length = brk == 0xffffffffu ? span : static_cast<int32_t>(brk) + 1;
+        }
+        run.window_start = window.start;
+        run.start = first;
+        run.end = first + length;
+      }
+      io.direct = first + rows <= run.end;
+    } else {
+      // breaks[i] = phys[i + 1] - phys[i] - 1; the run is consecutive iff
+      // all are zero. Vector work plus one find-first, instead of a scalar
+      // scan.
+      io.direct = true;
+      if (rows > 1) {
+        __memcpy(window.rows, io.phys, rows * sizeof(int32_t), NRAM2NRAM);
+        __bang_sub(window.rows + rows, window.rows + 1, window.rows, rows - 1);
+        __bang_sub_scalar(window.rows + rows, window.rows + rows, 1, rows - 1);
+        __bang_int322float(window.breaks, window.rows + rows, rows - 1, 0);
+        io.direct = __bang_findfirst1(window.breaks, rows - 1) == 0xffffffffu;
+      }
+    }
+  }
+}
+
+// r=2 history member A of the first group, from the state ring.
+template <int32_t Ratio>
+__mlu_func__ void load_history(IoPlan<Ratio>& io) {
+  const FusedCompressKvCacheParams& p = *io.p;
+  const Tile& tile = io.load_tile;
+  const Slot slot = carve_slot<Ratio>(io.load_base);
+  const int64_t token = tile.group0 * 2;
+  const int32_t* table =
+      p.state_block_table + tile.request * p.state_table_stride;
+  const int64_t page =
+      __load_gdram(table + (token / kPageSize) % p.state_columns);
+  const int64_t row = token % kStateRows;
+  __memcpy_io0_async(slot.raw_a,
+                     p.state_raw + page * p.state_raw_page_stride +
+                         row * p.state_raw_row_stride,
+                     kHeadDim * sizeof(float),
+                     GDRAM2NRAM);
+  __memcpy_io0_async(slot.score_a,
+                     p.state_score + page * p.state_score_page_stride +
+                         row * p.state_score_row_stride,
+                     kHeadDim * sizeof(float),
+                     GDRAM2NRAM);
+}
+
+// Steps 1/2: input rows (step 0 stores the previous tile, step 3 loads the
+// RoPE rows). Issued early in the compute of the current tile so the loads
+// land before the loop-head drain.
+template <int32_t Ratio>
+__mlu_func__ void load_rows(IoPlan<Ratio>& io, int32_t member) {
+  const FusedCompressKvCacheParams& p = *io.p;
+  const Tile& tile = io.load_tile;
+  const Slot slot = carve_slot<Ratio>(io.load_base);
+  const int32_t skip = tile.history ? 1 : 0;
+  const int32_t* phys = io.direct ? nullptr : io.phys;
+  // Unmapped start of the single run, in the gathers' logical coordinates.
+  const int64_t base = io.direct ? io.direct_row - skip : tile.base;
+  if constexpr (Ratio == 1) {
+    if (member == 0) {
+      gather_rows(slot.input,
+                  static_cast<const bfloat16_t*>(p.raw),
+                  p.raw_row_stride,
+                  phys,
+                  phys == nullptr ? base : 0,
+                  1,
+                  tile.count);
+    }
+  } else {
+    // Packed projection: step 1 loads raw and score of both members in one
+    // DMA per run. Otherwise step 1 loads raw and step 2 scores.
+    if (member == 0 && tile.history) {
+      load_history(io);
+    }
+    if (p.packed_projection) {
+      if (member == 0) {
+        gather_quads(slot,
+                     static_cast<const float*>(p.raw),
+                     p.raw_row_stride,
+                     phys,
+                     base,
+                     skip,
+                     2 * tile.count);
+      }
+    } else if (member == 0) {
+      gather_pairs(slot.raw_a,
+                   slot.raw_b,
+                   static_cast<const float*>(p.raw),
+                   p.raw_row_stride,
+                   phys,
+                   base,
+                   skip,
+                   2 * tile.count);
+    } else {
+      gather_pairs(slot.score_a,
+                   slot.score_b,
+                   p.scores,
+                   p.score_row_stride,
+                   phys,
+                   base,
+                   skip,
+                   2 * tile.count);
+    }
+  }
+}
+
+template <int32_t Ratio>
+__mlu_func__ void io_step(IoPlan<Ratio>& io) {
+  const int32_t step = io.step++;
+  if (step == 0 && io.store) {
+    store_tile(
+        *io.p, *io.accum, io.store_tile, carve_slot<Ratio>(io.store_base));
+  } else if (step == 1 && io.load) {
+    load_rows(io, 0);
+  } else if (step == 2 && io.load) {
+    load_rows(io, 1);
+  } else if (step == 3 && io.load) {
+    load_rope(*io.p, io.load_tile, carve_slot<Ratio>(io.load_base));
+  }
+}
+
+template <int32_t Ratio>
+__mlu_func__ void io_finish(IoPlan<Ratio>& io) {
+  while (io.step < kIoSteps) {
+    io_step(io);
+  }
+}
+
+// Vector work of one tile, with the pending DMA groups interleaved between
+// stages. On-chip copies are 1D NRAM2NRAM, which execute on the Compute queue
+// in order with the vector work. Rows past `count` in the [kRows, ...]
+// reduction buffers are don't-care.
+template <int32_t Ratio>
+__mlu_func__ void compute_tile(const FusedCompressKvCacheParams& p,
+                               const Scratch& scratch,
+                               const Tile& tile,
+                               const Slot& slot,
+                               IoPlan<Ratio>& io) {
+  using L = Layout<Ratio>;
+  constexpr int32_t kRows = L::kTile;
+  const int32_t count = tile.count;
+  const int32_t elems = count * kHeadDim;
+  float* x;
+  float* tmp;
+  if constexpr (Ratio == 1) {
+    x = scratch.x;
+    tmp = scratch.tmp;
+    __bang_bfloat162float(x, slot.input, elems);
+    io_step(io);
+  } else {
+    x = slot.raw_a;
+    tmp = slot.raw_b;
+    // w_b = 1 / (1 + exp(s_a - s_b)); pooled = r_a + (r_b - r_a) * w_b.
+    __bang_fusion(FUSION_FSM,
+                  slot.score_b,
+                  slot.score_a,
+                  slot.score_b,
+                  kLog2e,
+                  elems,
+                  elems);
+    io_step(io);
+    __bang_pow2(slot.score_b, slot.score_b, elems);
+    __bang_add_scalar(slot.score_b, slot.score_b, 1.0f, elems);
+    __bang_recip(slot.score_b, slot.score_b, elems);
+    __bang_fusion(FUSION_FSM,
+                  slot.raw_b,
+                  slot.raw_b,
+                  slot.raw_a,
+                  slot.score_b,
+                  elems,
+                  elems);
+    __bang_add(slot.raw_a, slot.raw_a, slot.raw_b, elems);
+    // First BF16 rounding: pooled value.
+    __bang_float2bfloat16_rn(slot.latent, slot.raw_a, elems);
+    __bang_bfloat162float(x, slot.latent, elems);
+  }
+  // RMSNorm. Row sums of squares: fold [rows][8][64] -> [rows][64], transpose
+  // the small partials to [64][rows] and pool them (no full-tile transpose).
+  // Reductions run over the live rows rounded up to 8 (small decode tiles do
+  // not pay for a full tile).
+  const int32_t rows = min_of(kRows, (count + 7) / 8 * 8);
+  __bang_mul(tmp, x, x, elems);
+  __bang_sumpool(scratch.tail, tmp, kRopeDim, rows, 8, 1, 8, 8, 1);
+  io_step(io);
+  __bang_transpose(scratch.rotated, scratch.tail, rows, kRopeDim);
+  __bang_sumpool(
+      scratch.sum, scratch.rotated, rows, kRopeDim, 1, kRopeDim, 1, 1, 1);
+  __bang_mul_scalar(scratch.sum, scratch.sum, 1.0f / kHeadDim, rows);
+  __bang_add_scalar(scratch.sum, scratch.sum, p.rms_norm_eps, rows);
+  __bang_rsqrt(scratch.sum, scratch.sum, rows);
+  io_step(io);
+  if (scratch.conv_kernel != nullptr) {
+    // Row scale on the matrix unit: R[r][c] = rstd[r] * w[c] is a 1x1 conv
+    // of the [rows][16] rstd column (zero-padded channels) with w in WRAM;
+    // one multiply then applies it (no scalar reads, no compute drain).
+    // The [16][kRows] rstd matrix keeps a fixed row stride (zero rows 1..15).
+    __bang_transpose(scratch.conv_src, scratch.sum, kConvCi, kRows);
+    __bang_conv(tmp,
+                scratch.conv_src,
+                scratch.conv_kernel,
+                kConvCi,
+                kRows,
+                1,
+                1,
+                1,
+                1,
+                1,
+                kHeadDim);
+    __bang_mul(x, x, tmp, elems);
+  } else {
+    // Single-tile slices skip the WRAM set-up: one drain, then per-row
+    // scaling with the rstd values as scalars.
+    __sync_compute();
+    for (int32_t i = 0; i < count; ++i) {
+      __bang_mul_scalar(
+          x + i * kHeadDim, x + i * kHeadDim, scratch.sum[i], kHeadDim);
+    }
+    __bang_cycle_mul(x, x, scratch.weight, elems, kHeadDim);
+  }
+  // Second BF16 rounding: latent. The RoPE tail is taken from the FP32 rows
+  // by one strided Move-queue copy that runs beside the latent conversion,
+  // then rounded the same way (bit-identical to the latent tail).
+  __sync_io_move_compute(false, false, true, false, true, false);
+  __memcpy_async(scratch.rotated,
+                 x + kNopeDim,
+                 kRopeDim * sizeof(float),
+                 NRAM2NRAM,
+                 kRopeDim * sizeof(float),
+                 kHeadDim * sizeof(float),
+                 count - 1);
+  __bang_float2bfloat16_rn(slot.latent, x, elems);
+  __sync_io_move_compute(false, true, false, false, false, true);
+  __bang_float2bfloat16_rn(slot.tail_bf16, scratch.rotated, count * kRopeDim);
+  io_step(io);
+  const int32_t rope_elems = count * kRopeDim;
+  // Pair swap on the BF16 tail: each little-endian uint32 holds (t[2j],
+  // t[2j+1]); rotating it by 16 bits swaps the pair exactly.
+  const int32_t words = rope_elems / 2;
+  uint32_t* pairs = reinterpret_cast<uint32_t*>(slot.tail_bf16);
+  uint32_t* swapped = reinterpret_cast<uint32_t*>(scratch.swapped);
+  __bang_rol(swapped, pairs, 16, words);
+  // Negate the low half (new element 2j = -t[2j+1]) by flipping its BF16
+  // sign bit: exact, and replaces a multiply of sin by the sign pattern.
+  __bang_bxor_scalar(swapped, swapped, 0x00008000u, words);
+  __bang_bfloat162float(scratch.tail, slot.tail_bf16, rope_elems);
+  __bang_mul(scratch.rotated, scratch.tail, slot.cos, rope_elems);
+  io_step(io);
+  // rotated = signed_swap(t) * sin + t * cos
+  __bang_bfloat162float(
+      scratch.tail, reinterpret_cast<bfloat16_t*>(swapped), rope_elems);
+  __bang_fusion(FUSION_FMA,
+                scratch.rotated,
+                scratch.tail,
+                slot.sin,
+                scratch.rotated,
+                rope_elems,
+                rope_elems);
+  __bang_float2bfloat16_rn(slot.tail_bf16, scratch.rotated, rope_elems);
+  io_finish(io);
+}
+
+// Software pipeline over this core's tiles: the IO0 stores of tile k-1 and
+// loads of tile k+1 are issued between the compute stages of tile k, so their
+// DMA latency hides under the computation. Loads only write input buffers and
+// stores only read latent/tail buffers, so the two never conflict.
+template <int32_t Ratio, bool OneTask>
+__mlu_func__ void run_tiles(const FusedCompressKvCacheParams& p,
+                            const Meta& meta,
+                            MapWindow& window,
+                            Accum& accum,
+                            Scratch& scratch,
+                            char* arena,
+                            int32_t row_begin,
+                            int32_t live_end) {
+  using L = Layout<Ratio>;
+  if (row_begin >= live_end) {
+    return;
+  }
+  // Slot k of the ping-pong pair starts at arena + k * kSlotBytes; slots are
+  // re-carved on demand (pure pointer arithmetic, no per-tile struct copies).
+  char* scratch_base = arena + 2 * L::kSlotBytes;
+  if constexpr (Ratio == 1) {
+    scratch.x = reinterpret_cast<float*>(scratch_base);
+    scratch.tmp = scratch.x + L::kElems;
+    scratch_base += 2 * L::kElems * 4;
+  }
+  scratch.tail = reinterpret_cast<float*>(scratch_base);
+  scratch.rotated = scratch.tail + L::kRope;
+  scratch.swapped = scratch.rotated + L::kRope;
+
+  prefetch_map(p, meta, window, row_begin, live_end);
+  int32_t request = request_of(meta, p.batch, row_begin);
+  fill_slots(p, meta, accum, request, row_begin, live_end);
+  int32_t row = row_begin;
+  Tile current;
+  Tile next;
+  Tile previous;
+  bool have = next_tile(p, meta, L::kTile, live_end, row, request, current);
+  bool have_previous = false;
+  RunSpan run;
+  run.window_start = -1;
+  run.start = 0;
+  run.end = 0;
+  IoPlan<Ratio> io;
+  io.p = &p;
+  io.window = &window;
+  io.accum = &accum;
+  if (have) {
+    io.store = false;
+    io.load = true;
+    io.load_tile = current;
+    io.load_base = arena;
+    prepare_tile<Ratio, !OneTask>(io, run);
+    io.step = 1;
+    io_finish(io);
+  }
+  int32_t k = 0;
+  while (have) {
+    // Next tile's scalar set-up first: it reads NRAM metadata and the
+    // prefetched map only, so it overlaps the in-flight queues.
+    const bool have_next =
+        next_tile(p, meta, L::kTile, live_end, row, request, next);
+    io.store = have_previous;
+    io.store_tile = previous;
+    io.store_base = arena + ((k + 1) & 1) * L::kSlotBytes;
+    io.load = have_next;
+    io.load_tile = next;
+    io.load_base = io.store_base;
+    if (have_next) {
+      prepare_tile<Ratio, !OneTask>(io, run);
+    }
+    // __sync_io() only covers IO0; drain every queue (loads of tile k,
+    // stores of tile k-2, compute of tile k-1).
+    __sync();
+    io.step = 0;
+    compute_tile<Ratio>(p,
+                        scratch,
+                        current,
+                        carve_slot<Ratio>(arena + (k & 1) * L::kSlotBytes),
+                        io);
+    previous = current;
+    have_previous = true;
+    current = next;
+    have = have_next;
+    ++k;
+  }
+  __sync();
+  if (have_previous) {
+    store_tile(p,
+               accum,
+               previous,
+               carve_slot<Ratio>(arena + ((k + 1) & 1) * L::kSlotBytes));
+  }
+  // The last stores drain at the kernel's final __sync: padding only
+  // rewrites slot 0's input buffers and the state save touches GDRAM only.
+}
+
+// Saves the request tail into the state ring after every history read of the
+// request on this core has completed. Tokens are copied in runs that stay in
+// one ring page and one 32-row cycle and read consecutive physical rows; a
+// packed state owner and packed projection copy raw and score together.
+__mlu_func__ void save_state(const FusedCompressKvCacheParams& p,
+                             int32_t request,
+                             int64_t logical_start,
+                             int64_t begin,
+                             int64_t count) {
+  const int64_t end = begin + count;
+  const int64_t parked = p.save_full_tail
+                             ? min_of(count, static_cast<int64_t>(kStateRows))
+                             : end % 2;
+  const int32_t* table = p.state_block_table + request * p.state_table_stride;
+  const float* raw = static_cast<const float*>(p.raw);
+  const bool packed = p.packed_state && p.packed_projection;
+  const int32_t bytes = (packed ? 2 : 1) * kHeadDim * sizeof(float);
+  int64_t t = end - parked;
+  while (t < end) {
+    const int64_t page =
+        __load_gdram(table + (t / kPageSize) % p.state_columns);
+    const int64_t row = t % kStateRows;
+    int64_t limit = min_of(end, t + kStateRows - row);
+    limit = min_of(limit, (t / kPageSize + 1) * kPageSize);
+    int64_t logical = logical_start + t - begin;
+    int64_t n = limit - t;
+    if (p.input_row_map != nullptr) {
+      const int64_t first = __load_gdram(p.input_row_map + logical);
+      int64_t k = 1;
+      while (k < n &&
+             __load_gdram(p.input_row_map + logical + k) == first + k) {
+        ++k;
+      }
+      logical = first;
+      n = k;
+    }
+    __memcpy_async(p.state_raw + page * p.state_raw_page_stride +
+                       row * p.state_raw_row_stride,
+                   raw + logical * p.raw_row_stride,
+                   bytes,
+                   GDRAM2GDRAM,
+                   p.state_raw_row_stride * sizeof(float),
+                   p.raw_row_stride * sizeof(float),
+                   n - 1);
+    if (!packed) {
+      __memcpy_async(p.state_score + page * p.state_score_page_stride +
+                         row * p.state_score_row_stride,
+                     p.scores + logical * p.score_row_stride,
+                     bytes,
+                     GDRAM2GDRAM,
+                     p.state_score_row_stride * sizeof(float),
+                     p.score_row_stride * sizeof(float),
+                     n - 1);
+    }
+    t += n;
+  }
+}
+
+// OneTask: the single-task Block launch (one request within one tile). Its
+// instantiation carries no multi-task code: decode of that shape is bound by
+// instruction fetch, and even skipped code costs it.
+template <bool OneTask>
+__mlu_global__ void fused_compress_kv_cache_kernel(
+    FusedCompressKvCacheParams p) {
+  // The cluster Memory Core also runs a Union1 kernel body; it has no NRAM
+  // and must not execute the IPU path (scalar loops over garbage metadata).
+  if (__is_mpu()) {
+    return;
+  }
+  __nram__ char arena[kArenaBytes];
+  __nram__ float nram_weight[kHeadDim];
+  __nram__ bfloat16_t nram_weight_bf16[kHeadDim];
+  __nram__ float nram_sum[kConvCi * Layout<1>::kTile];
+  __nram__ float nram_conv_src[Layout<1>::kTile * kConvCi];
+  __wram__ float wram_conv_kernel[kHeadDim * kConvCi];
+  __nram__ int32_t nram_map[kMapWindow];
+  // The multi-task kernel's span test needs kRunSpan rows of scratch.
+  __nram__ int32_t nram_map_rows[OneTask ? 4 * Layout<1>::kTile : 2 * kRunSpan];
+  __nram__ float nram_map_breaks[OneTask ? 2 * Layout<1>::kTile : kRunSpan];
+  __nram__ int32_t nram_positions[kAccumRows];
+  __nram__ int32_t nram_slot_storage[kPendingSlotRows + kAccumRows];
+  int32_t* nram_slots = nram_slot_storage + kPendingSlotRows;
+  __nram__ int32_t nram_iota[kPageSize];
+  __nram__ int32_t nram_slot_scratch[kPageSize];
+  __nram__ int32_t nram_pages[kPageCache];
+  __nram__ int32_t nram_table[kTableCache];
+  __nram__ int32_t nram_qsl[kMaxMetaBatch + 1];
+  __nram__ int32_t nram_begin[kMaxMetaBatch];
+  __nram__ int32_t nram_csl[kMaxMetaBatch + 1];
+
+  const int32_t batch = p.batch;
+  Meta meta;
+  meta.query_start_loc_ = p.query_start_loc;
+  meta.chunk_begins_ = p.chunk_begins;
+  meta.compressed_start_loc_ = p.compressed_start_loc;
+  meta.nram_qsl_ = nram_qsl;
+  meta.nram_begin_ = nram_begin;
+  meta.nram_csl_ = nram_csl;
+  meta.cached_ = batch <= kMaxMetaBatch;
+  if (meta.cached_) {
+    __memcpy_async(
+        nram_qsl, p.query_start_loc, (batch + 1) * sizeof(int32_t), GDRAM2NRAM);
+    __memcpy_async(nram_csl,
+                   p.compressed_start_loc,
+                   (batch + 1) * sizeof(int32_t),
+                   GDRAM2NRAM);
+    if (batch > 0) {
+      __memcpy_async(
+          nram_begin, p.chunk_begins, batch * sizeof(int32_t), GDRAM2NRAM);
+    }
+  }
+  // The page table rides with the metadata (fill_slots then needs no
+  // synchronous table DMA).
+  const bool table_cached = meta.cached_ && batch > 0 &&
+                            p.compressed_columns > 0 &&
+                            batch * p.compressed_columns <= kTableCache;
+  if (table_cached) {
+    __memcpy_async(nram_table,
+                   p.compressed_block_table,
+                   p.compressed_columns * sizeof(int32_t),
+                   GDRAM2NRAM,
+                   p.compressed_columns * sizeof(int32_t),
+                   p.compressed_table_stride * sizeof(int32_t),
+                   batch - 1);
+  }
+  if (p.norm_weight_bf16) {
+    __memcpy_async(nram_weight_bf16,
+                   p.norm_weight,
+                   kHeadDim * sizeof(bfloat16_t),
+                   GDRAM2NRAM);
+  } else {
+    __memcpy_async(
+        nram_weight, p.norm_weight, kHeadDim * sizeof(float), GDRAM2NRAM);
+  }
+  __bang_write_value(nram_sum, 32, 1.0f);
+  __sync();
+  if (!OneTask) {
+    for (int32_t j = 0; j < 32; ++j) {
+      nram_iota[j] = j;
+    }
+  }
+  if (p.norm_weight_bf16) {
+    __bang_bfloat162float(nram_weight, nram_weight_bf16, kHeadDim);
+  }
+
+  const int32_t live = meta.csl(batch);
+  const int32_t k_capacity = p.k_capacity;
+  // With at least one full tile per core, slices hold whole tiles of live
+  // rows (no trailing one-row tile per core); padding rows fall to the tail
+  // slices. Smaller calls spread rows thinly over all cores.
+  const int32_t tile_rows = p.ratio == 1 ? Layout<1>::kTile : Layout<2>::kTile;
+  const int32_t tiles = (live + tile_rows - 1) / tile_rows;
+  // The single-task instantiation folds every multi-task path: one task
+  // owns all rows, and a single tile (k_capacity <= tile rows) never takes
+  // the conv row scale.
+  const int32_t tasks = OneTask ? 1 : static_cast<int32_t>(taskDim);
+  const int32_t task = OneTask ? 0 : static_cast<int32_t>(taskId);
+  const int32_t rows_per_task = tiles >= tasks
+                                    ? (tiles + tasks - 1) / tasks * tile_rows
+                                    : (k_capacity + tasks - 1) / tasks;
+  const int32_t row_begin =
+      OneTask ? 0
+              : slice_begin(
+                    meta, batch, live, k_capacity, rows_per_task, tasks, task);
+  const int32_t row_end =
+      OneTask
+          ? k_capacity
+          : slice_begin(
+                meta, batch, live, k_capacity, rows_per_task, tasks, task + 1);
+  const int32_t live_end = min_of(row_end, live);
+
+  // The conv row scale pays a WRAM set-up per launch; only slices with more
+  // than one tile use it.
+  const int32_t slice_tile = p.ratio == 1 ? Layout<1>::kTile : Layout<2>::kTile;
+  const bool use_conv = !OneTask && live_end - row_begin > slice_tile;
+  if (use_conv) {
+    // Conv kernel [co=512][ci=16]: w in channel 0, zeros elsewhere, laid out
+    // for WRAM. The rstd matrix keeps its zero rows 1..15 for every tile.
+    // Staged in the (still unused) arena; the Move copy to WRAM is drained by
+    // the __sync before the tile loop.
+    float* conv_stage = reinterpret_cast<float*>(arena);
+    float* conv_stage_t = conv_stage + kConvCi * kHeadDim;
+    __bang_write_value(conv_stage, kConvCi * kHeadDim, 0.0f);
+    __bang_write_value(nram_sum, kConvCi * Layout<1>::kTile, 0.0f);
+    __bang_add(conv_stage, conv_stage, nram_weight, kHeadDim);
+    __bang_transpose(conv_stage_t, conv_stage, kConvCi, kHeadDim);
+    __sync_compute();
+    __bang_reshape_filter(
+        wram_conv_kernel, conv_stage_t, kHeadDim, 1, 1, kConvCi, NRAM2WRAM);
+  }
+  Scratch scratch;
+  scratch.weight = nram_weight;
+  scratch.sum = nram_sum;
+  scratch.conv_src = nram_conv_src;
+  scratch.conv_kernel = use_conv ? wram_conv_kernel : nullptr;
+  MapWindow window;
+  window.data = nram_map;
+  window.start = 0;
+  window.size = 0;
+  window.rows = nram_map_rows;
+  window.breaks = nram_map_breaks;
+  Accum accum;
+  accum.positions = nram_positions;
+  accum.slots = nram_slots;
+  accum.base = row_begin;
+  accum.used = 0;
+  accum.complete = false;
+  accum.iota = nram_iota;
+  accum.scratch = nram_slot_scratch;
+  accum.pages = nram_pages;
+  accum.table = table_cached ? nram_table : nullptr;
+  // A single task has at most one tile of rows: all of its segments take the
+  // scalar fill, so it needs no iota row (and no drain for its stores).
+  accum.scalar_fill = OneTask ? Layout<1>::kTile : kScalarFill;
+  if (!OneTask) {
+    // Scalar iota stores must land before vector reads.
+    __sync();
+    __bang_add_scalar(nram_iota + 32, nram_iota, 32, 32);
+    __bang_add_scalar(nram_iota + 64, nram_iota, 64, 64);
+  }
+  if constexpr (OneTask) {
+    // At most one tile: ping-pong slot 1 of the arena stays free, so the
+    // padding rows (latent 0) and num_valid_compressed_rows leave before the
+    // tile instead of at the tail; padding positions/slots are stored in the
+    // accumulator after the live rows (the loop-head drain lands them) and ride
+    // with its flush.
+    const int32_t pad_rows = k_capacity - live;
+    bfloat16_t* zeros = reinterpret_cast<bfloat16_t*>(
+        arena + (p.ratio == 1 ? Layout<1>::kSlotBytes : Layout<2>::kSlotBytes));
+    int32_t* live_value =
+        reinterpret_cast<int32_t*>(zeros + kStateRows * kHeadDim);
+    if (pad_rows > 0) {
+      __bang_write_value(
+          zeros, pad_rows * kHeadDim, static_cast<bfloat16_t>(0.0f));
+    }
+    __bang_write_value(live_value, kStateRows, live);
+    for (int32_t r = live; r < k_capacity; ++r) {
+      nram_positions[r] = 0;
+      nram_slots[r] = -1;
+    }
+    __sync_io_move_compute(false, false, true, true, false, false);
+    __memcpy_async(p.num_valid_compressed_rows_out,
+                   live_value,
+                   sizeof(int32_t),
+                   NRAM2GDRAM);
+    if (pad_rows > 0) {
+      __memcpy_async(static_cast<bfloat16_t*>(p.latent_out) +
+                         static_cast<int64_t>(live) * kHeadDim,
+                     zeros,
+                     pad_rows * kHeadDim * sizeof(bfloat16_t),
+                     NRAM2GDRAM);
+    }
+    if (live == 0) {
+      __sync();
+    }
+  }
+  if (p.ratio == 1) {
+    run_tiles<1, OneTask>(
+        p, meta, window, accum, scratch, arena, row_begin, live_end);
+  } else {
+    run_tiles<2, OneTask>(
+        p, meta, window, accum, scratch, arena, row_begin, live_end);
+  }
+  if constexpr (OneTask) {
+    accum.used = k_capacity;
+  }
+  // Decode-sized calls whose last task has an empty slice let that task fill
+  // and write every position/slot at the kernel tail (two whole-tensor
+  // DMAs): slices sharing 64 B lines would otherwise write partial lines,
+  // which memory merges by read-modify-write, serializing the cores that
+  // share a line. Decided and placed off the single-task path.
+  bool one_writer = false;
+  if (!OneTask && tasks > 1 && table_cached && k_capacity <= kAccumRows) {
+    one_writer =
+        slice_begin(
+            meta, batch, live, k_capacity, rows_per_task, tasks, tasks - 1) >=
+        k_capacity;
+  }
+  if (!one_writer) {
+    flush_accum(p, accum);
+  }
+
+  // Padding rows: latent 0, position 0, slot -1; num_valid_compressed_rows from
+  // task 0.
+  int32_t pad = max_of(row_begin, live);
+  if (!OneTask && (pad < row_end || task == 0)) {
+    constexpr int32_t kPadRows = 32;
+    bfloat16_t* zeros = reinterpret_cast<bfloat16_t*>(arena);
+    int32_t* positions =
+        reinterpret_cast<int32_t*>(zeros + kPadRows * kHeadDim);
+    int32_t* slots = positions + kPadRows;
+    __bang_write_value(
+        zeros, kPadRows * kHeadDim, static_cast<bfloat16_t>(0.0f));
+    __bang_write_value(positions, kPadRows, static_cast<int32_t>(0));
+    __bang_write_value(slots, kPadRows, static_cast<int32_t>(-1));
+    __bang_write_value(slots + kPadRows, kPadRows, live);
+    __sync_compute();
+    if (task == 0) {
+      __memcpy_async(p.num_valid_compressed_rows_out,
+                     slots + kPadRows,
+                     sizeof(int32_t),
+                     NRAM2GDRAM);
+    }
+    bfloat16_t* latent_out = static_cast<bfloat16_t*>(p.latent_out);
+    while (pad < row_end) {
+      const int32_t count = min_of(row_end - pad, kPadRows);
+      __memcpy_async(latent_out + static_cast<int64_t>(pad) * kHeadDim,
+                     zeros,
+                     count * kHeadDim * sizeof(bfloat16_t),
+                     NRAM2GDRAM);
+      if (!one_writer) {
+        __memcpy_async(p.positions_out + pad,
+                       positions,
+                       count * sizeof(int32_t),
+                       NRAM2GDRAM);
+        __memcpy_async(
+            p.slots_out + pad, slots, count * sizeof(int32_t), NRAM2GDRAM);
+      }
+      pad += count;
+    }
+  }
+
+  if (p.ratio == 2) {
+    for (int32_t q = 0; q < batch; ++q) {
+      const int64_t logical_start = meta.qsl(q);
+      const int64_t count = meta.qsl(q + 1) - logical_start;
+      if (count <= 0) {
+        continue;
+      }
+      const int32_t out_start = meta.csl(q);
+      // Rows of a request with outputs are owned by the slice holding its
+      // first output row (the one that may read history).
+      const bool owner = meta.csl(q + 1) > out_start
+                             ? out_start >= row_begin && out_start < row_end
+                             : q % tasks == task;
+      if (owner) {
+        save_state(p, q, logical_start, meta.begin(q), count);
+      }
+    }
+  }
+  if (one_writer && task == tasks - 1) {
+    // This task has no rows of its own.
+    accum.base = 0;
+    if (live > 0) {
+      fill_slots(p, meta, accum, 0, 0, live);
+    }
+    for (int32_t r = live; r < k_capacity; ++r) {
+      nram_positions[r] = 0;
+      nram_slots[r] = -1;
+    }
+    accum.used = k_capacity;
+    // Scalar and vector fills land before the flush reads them.
+    __sync();
+    flush_accum(p, accum);
+  }
+  __sync();
+}
+
+// Cache only successful queries for the current thread's most recent device.
+cnrtRet_t query_cluster_count(int32_t& cluster_count) {
+  static thread_local int32_t cached_device = -1;
+  static thread_local int32_t cached_clusters = 0;
+  int32_t device = 0;
+  cnrtRet_t status = cnrtGetDevice(&device);
+  if (status != cnrtSuccess) {
+    return status;
+  }
+  if (device != cached_device) {
+    int32_t clusters = 0;
+    status = cnrtDeviceGetAttribute(&clusters, cnrtAttrClusterCount, device);
+    if (status != cnrtSuccess) {
+      return status;
+    }
+    if (clusters <= 0) {
+      return cnrtErrorNotSupport;
+    }
+    cached_device = device;
+    cached_clusters = clusters;
+  }
+  cluster_count = cached_clusters;
+  return cnrtSuccess;
+}
+
+}  // namespace
+
+cnrtRet_t launch_fused_compress_kv_cache(
+    cnrtQueue_t queue,
+    const FusedCompressKvCacheParams& params) {
+  // One request whose capacity fits one tile has nothing to spread: a single
+  // Block task does its tile, padding and state save without the Union1
+  // cluster launch. Depends on static shapes only (Graph-safe).
+  const int32_t tile_rows =
+      params.ratio == 1 ? Layout<1>::kTile : Layout<2>::kTile;
+  if (params.batch == 1 && params.k_capacity <= tile_rows) {
+    cnrtDim3_t one = {1, 1, 1};
+    fused_compress_kv_cache_kernel<true>
+        <<<one, cnrtFuncTypeBlock, queue>>>(params);
+    return cnrtGetLastError();
+  }
+  int32_t cluster_count = 0;
+  const cnrtRet_t status = query_cluster_count(cluster_count);
+  if (status != cnrtSuccess) {
+    return status;
+  }
+  // r=2 decode-sized calls are bound by per-request state saves on the row
+  // owner: spread rows thinner so requests land on different cores.
+  const int32_t rows = params.ratio == 2 ? 2 : 4;
+  const int32_t wanted = (params.k_capacity + rows - 1) / rows;
+  const int32_t clusters =
+      std::max(1, std::min(cluster_count, (wanted + 3) / 4));
+  cnrtDim3_t dim = {4, static_cast<uint32_t>(clusters), 1};
+  fused_compress_kv_cache_kernel<false>
+      <<<dim, cnrtFuncTypeUnion1, queue>>>(params);
+  return cnrtGetLastError();
+}
+
+}  // namespace xllm::kernel::mlu::bangc

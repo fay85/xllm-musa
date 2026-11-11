@@ -22,6 +22,7 @@ cc_library(
     deepseek_v41/deepseek_v41_attention.h
     deepseek_v41/deepseek_v41_attention_utils.h
     deepseek_v41/deepseek_v41_indexer.h
+    deepseek_v41/deepseek_v41_metadata.h
     deepseek_v41/deepseek_v41_engram.h
     deepseek_v41/engram_shared_memory.h
     deepseek_v4/compressor.h
@@ -66,6 +67,7 @@ cc_library(
     deepseek_v41/deepseek_v41_decoder_layer.cpp
     deepseek_v41/deepseek_v41_attention.cpp
     deepseek_v41/deepseek_v41_indexer.cpp
+    deepseek_v41/deepseek_v41_metadata.cpp
     deepseek_v41/deepseek_v41_engram.cpp
     deepseek_v41/engram_shared_memory.cpp
     deepseek_v41/deepseek_v41_hash.cpp

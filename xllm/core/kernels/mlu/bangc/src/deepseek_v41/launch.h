@@ -30,3 +30,16 @@ void deepseek_v41_gather_launch(cnrtQueue_t queue,
                                 int32_t swa_columns,
                                 void* output,
                                 int32_t* length);
+
+namespace xllm::kernel::mlu::bangc::indexer_q {
+// Shared by the kernel tiling and wrapper row-count overflow guard.
+constexpr int32_t kRowsPerBlock = 48;
+
+int32_t launch(cnrtQueue_t queue,
+               const void* qr,
+               const void* wq,
+               const int32_t* positions,
+               const float* rope,
+               void* out,
+               int32_t tokens);
+}  // namespace xllm::kernel::mlu::bangc::indexer_q

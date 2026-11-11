@@ -140,9 +140,9 @@ TEST(DeepseekV41DSparkGraphTest,
                                     .remainder(8)
                                     .view({requests, 2})};
     const torch::Tensor tokens = torch::randint(128, {requests * 5}, ints);
-    const torch::Tensor positions =
-        torch::arange(begin, begin + 5, options.dtype(torch::kInt64))
-            .repeat({requests});
+    input.attention.host.positions =
+        torch::arange(begin, begin + 5, torch::kInt64).repeat({requests});
+    const torch::Tensor positions = input.attention.host.positions.to(device);
     const ModelOutput eager = model->forward(tokens, positions, caches, input);
     const torch::Tensor expected = eager.hidden_states.clone();
     if (step == 0) {

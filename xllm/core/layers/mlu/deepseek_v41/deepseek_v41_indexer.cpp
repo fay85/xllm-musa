@@ -16,18 +16,14 @@ limitations under the License.
 #include "layers/mlu/deepseek_v41/deepseek_v41_indexer.h"
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 
+#include "kernels/mlu/bangc/include/deepseek_v41.h"
 #include "kernels/mlu/bangc/include/deepseek_v41_constants.h"
 #include "kernels/mlu/mlu_ops_api.h"
-#include "layers/mlu/deepseek_v41/deepseek_v41_attention_utils.h"
 
 namespace xllm::layer {
 namespace {
-using deepseek_v41::dense_projection;
-using deepseek_v41::norm;
-using deepseek_v41::rotate;
 using kernel::mlu::bangc::kDeepseekV41MluKVBlockSize;
 }  // namespace
 
@@ -36,7 +32,30 @@ DeepseekV41IndexerImpl::DeepseekV41IndexerImpl(const ModelContext& context,
     : args_(context.get_model_args()),
       layer_id_(layer_id),
       ratio_(args_.compress_ratios().at(layer_id)),
-      options_(context.get_tensor_options()) {}
+      options_(context.get_tensor_options()) {
+  const auto& kv_sources = args_.kv_source_layer_ids();
+  const auto& index_sources = args_.index_source_layer_ids();
+  const bool writes_k = ratio_ > 0 && std::find(kv_sources.begin(),
+                                                kv_sources.end(),
+                                                layer_id_) != kv_sources.end();
+  const bool writes_head =
+      ratio_ > 0 &&
+      std::find(index_sources.begin(), index_sources.end(), layer_id_) !=
+          index_sources.end();
+  if (writes_k || writes_head) {
+    CHECK_EQ(options_.dtype().toScalarType(), torch::kBFloat16);
+    CHECK_EQ(args_.index_head_dim(), 128);
+    CHECK_EQ(args_.qk_rope_head_dim(), 64);
+  }
+  if (writes_head) {
+    CHECK_EQ(args_.hidden_size(), 5120);
+    CHECK_EQ(args_.index_n_heads(), 32);
+  }
+  if (writes_k) {
+    CHECK_EQ(args_.head_dim(), 512);
+    CHECK_EQ(args_.rms_norm_eps(), 1e-20f);
+  }
+}
 
 void DeepseekV41IndexerImpl::load_state_dict(const StateDict& state) {
   for (const std::string name :
@@ -69,32 +88,46 @@ void DeepseekV41IndexerImpl::verify_loaded_weights() const {
   }
 }
 
-std::pair<torch::Tensor, torch::Tensor> DeepseekV41IndexerImpl::project_query(
-    const torch::Tensor& x,
+torch::Tensor DeepseekV41IndexerImpl::project_query(
     const torch::Tensor& qr,
     const torch::Tensor& positions,
     const torch::Tensor& rope) {
-  torch::Tensor iq =
-      rotate(dense_projection(qr, weights_.at("wq_b.weight"))
-                 .view({-1, args_.index_n_heads(), args_.index_head_dim()}),
-             positions,
-             rope,
-             args_.qk_rope_head_dim())
-          .to(torch::kFloat32);
-  torch::Tensor iw = dense_projection(x, weights_.at("weights_proj.weight"))
-                         .to(torch::kFloat32) /
-                     std::sqrt(args_.index_n_heads() * args_.index_head_dim());
-  return {std::move(iq), std::move(iw)};
+  CHECK(positions.scalar_type() == torch::kInt32 ||
+        positions.scalar_type() == torch::kInt64);
+  return kernel::mlu::bangc::fused_indexer_q(
+             qr,
+             weights_.at("wq_b.weight"),
+             positions.to(torch::kInt32).contiguous(),
+             rope)
+      .to(torch::kFloat32);
 }
 
-torch::Tensor DeepseekV41IndexerImpl::project_key(
+torch::Tensor DeepseekV41IndexerImpl::project_indexer(
+    const torch::Tensor& x,
     const torch::Tensor& latent,
     const torch::Tensor& positions,
-    const torch::Tensor& rope) {
-  torch::Tensor key = norm(dense_projection(latent, weights_.at("wk.weight")),
-                           weights_.at("k_norm.weight"),
-                           args_.rms_norm_eps());
-  return rotate(key, positions, rope, args_.qk_rope_head_dim());
+    const torch::Tensor& slots,
+    const torch::Tensor& rope,
+    const torch::Tensor& cache,
+    const std::optional<torch::Tensor>& num_valid_input_rows,
+    const std::optional<torch::Tensor>& num_valid_compressed_rows) {
+  const bool has_head = x.defined() && x.size(0) > 0;
+  const bool has_k = latent.defined() && latent.size(0) > 0;
+  torch::Tensor head = torch::empty({x.defined() ? x.size(0) : 0, 32},
+                                    options_.dtype(torch::kFloat32));
+  return kernel::mlu::bangc::fused_indexer_k(
+      x,
+      latent,
+      has_head ? weights_.at("weights_proj.weight") : torch::Tensor(),
+      has_k ? weights_.at("wk.weight") : torch::Tensor(),
+      has_k ? weights_.at("k_norm.weight") : torch::Tensor(),
+      rope,
+      positions,
+      slots,
+      cache,
+      head,
+      num_valid_input_rows,
+      num_valid_compressed_rows);
 }
 
 void DeepseekV41IndexerImpl::select_candidate_indices(
@@ -115,7 +148,7 @@ void DeepseekV41IndexerImpl::select_candidate_indices(
       (shared.candidates.at(seq).flatten().unsqueeze(1) * candidate_block +
        torch::arange(candidate_block, options_.dtype(torch::kInt64)))
           .flatten();
-  auto safe = logical.clamp_max(length - 1);
+  auto safe = logical.clamp(0, length - 1);
   auto physical =
       table.to(torch::kInt64)
               .index_select(
@@ -124,10 +157,12 @@ void DeepseekV41IndexerImpl::select_candidate_indices(
       safe.remainder(kDeepseekV41MluKVBlockSize);
   auto keys = cache.index_select(0, physical).to(torch::kFloat32);
   auto scores = (torch::matmul(iq, keys.t()).relu() * iw.unsqueeze(1)).sum(0);
-  scores.masked_fill_(logical >= length,
+  scores.masked_fill_((logical < 0) | (logical >= length),
                       -std::numeric_limits<double>::infinity());
-  auto selected = std::get<1>(scores.topk(k));
-  shared.topk.at(seq) = logical.index_select(0, selected).view({1, k});
+  auto [values, selected] = scores.topk(std::min<int64_t>(k, logical.numel()));
+  auto indices = logical.index_select(0, selected);
+  indices.masked_fill_(values == -std::numeric_limits<double>::infinity(), -1);
+  shared.topk.at(seq) = indices.view({1, -1});
 }
 
 void DeepseekV41IndexerImpl::select_decode_indices(const torch::Tensor& iq,
@@ -153,7 +188,7 @@ void DeepseekV41IndexerImpl::select_decode_indices(const torch::Tensor& iq,
   kernel::mlu::masked_indexer_select_paged_kv(
       iq.to(options_.dtype())
           .view({1, 1, args_.index_n_heads(), args_.index_head_dim()}),
-      cache,
+      cache.view({-1, 1, kDeepseekV41MluKVBlockSize, args_.index_head_dim()}),
       iw.view({1, 1, -1}),
       logical_pages,
       std::nullopt,
@@ -187,6 +222,10 @@ void DeepseekV41IndexerImpl::select_indices(const torch::Tensor& iq,
   if (keys.size(0) == 0) {
     shared.topk.at(seq) =
         torch::empty({count, 0}, options_.dtype(torch::kInt64));
+    if (layer_id_ == args_.candidate_source_layer_id()) {
+      shared.candidates.at(seq) =
+          torch::empty({count, 0}, options_.dtype(torch::kInt64));
+    }
     return;
   }
   const double neg_inf = -std::numeric_limits<double>::infinity();

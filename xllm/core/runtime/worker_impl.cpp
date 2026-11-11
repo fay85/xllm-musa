@@ -1400,6 +1400,9 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
     ensure_forward_input_device_tensors(processed_input, device_);
 
     auto& input_params = processed_input.input_params;
+#if defined(USE_MLU)
+    input_params.attention.host.positions = processed_input.positions_host;
+#endif
     bool empty_shard = input_params.meta.num_sequences == 0 &&
                        (!processed_input.token_ids.defined() ||
                         processed_input.token_ids.numel() == 0);
@@ -1424,6 +1427,10 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
           torch::ones({dummy_token_count}, token_options.device(device_));
       processed_input.positions =
           torch::arange(dummy_token_count, position_options.device(device_));
+#if defined(USE_MLU)
+      input_params.attention.host.positions = torch::arange(
+          dummy_token_count, position_options.device(torch::kCPU));
+#endif
       input_params.embedding.linear_state_indices =
           torch::zeros({1}, token_options.dtype(torch::kInt32).device(device_));
       if (options_.num_decoding_tokens() > 1 &&

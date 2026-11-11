@@ -77,6 +77,7 @@ if(USE_MLU)
 
   cc_test(
     NAME deepseek_v41_mlu_model_test
+    RUN_SERIAL
     SRCS deepseek_v41_mlu_model_test.cpp
     DEPS models :runtime :tests_utils :mlu_layers :common_layers :parallel_state
          :model_context :state_dict GTest::gtest_main torch_mlu

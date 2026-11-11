@@ -1,0 +1,2120 @@
+/* Copyright 2026 The xLLM Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+// clang-format off
+#include <mlu.h>
+// clang-format on
+
+#include "kernels/mlu/bangc/src/deepseek_v41/indexer_k_params.h"
+
+#define NRAM_POOL_BYTES (__MLU_NRAM_SIZE__ * 1024 - 32 * 1024)
+#define WRAM_POOL_BYTES (__MLU_WRAM_SIZE__ * 1024)
+#define LT_STRIDE (WRAM_POOL_BYTES / 16)
+
+namespace xllm::kernel::mlu::bangc::indexer_k {
+namespace {
+
+__mlu_host__ __mlu_func__ inline int32_t imin(int32_t a, int32_t b) {
+  return a < b ? a : b;
+}
+
+__mlu_host__ __mlu_func__ inline int32_t imax(int32_t a, int32_t b) {
+  return a > b ? a : b;
+}
+
+#pragma bang walign(16)
+
+__nram__ int8_t nram_pool[NRAM_POOL_BYTES];
+__wram__ int8_t wram_pool[WRAM_POOL_BYTES];
+// Per-cluster weight staging: wp [32, 5120] then wk [128, 512], source layout.
+__mlu_shared__ int8_t
+    sram_weights[kHeads * kHidden * 2 + kHeadDim * kLatent * 2];
+// MPU-assisted head streaming (prefill-like loads): per step, rows
+// [kHeadDirect, 16) of each of the 4 cores' tiles, ping-pong.
+constexpr int32_t kHeadDirect = 8;
+constexpr int32_t kXStageBytes = 4 * (16 - kHeadDirect) * kHidden * 2;
+// Also the MPU-fed head's x staging: 2 buffers x 2 steps x 4 lanes.
+__mlu_shared__ int8_t sram_x[4 * kXStageBytes];
+// Split-K head: 4 K slices of 1280; per-core FP32 partials [rows, 32].
+// Four clusters cover up to 256 dual-branch rows with 64 rows per block.
+constexpr int32_t kHeadSplitRows = 64;
+constexpr int32_t kSplitRows = 64;
+constexpr int32_t kSliceK = kHidden / 4;
+__mlu_shared__ float sram_part[4 * kHeadSplitRows * kHeads];
+// Split-K K branch: 4 latent slices of 128; per-core FP32 partials
+// [rows, 128].
+constexpr int32_t kKSlice = kLatent / 4;
+__mlu_shared__ float sram_kpart[4 * kSplitRows * kHeadDim];
+
+// Head rows per tile; x viewed as [2 * rows, 2560] for the co=64 filter.
+constexpr int32_t kHeadTile = 16;
+constexpr int32_t kHalf = kHidden / 2;
+constexpr int32_t kHalfBytes = kHalf * 2;
+// K rows per tile.
+constexpr int32_t kKeyTile = 64;
+// WRAM: wp as co=64 x ci=2560 (4 rows of 5120 B per LT), wk after it in
+// every LT as two co=64 groups of ci=512 (8 rows of 1024 B per LT).
+constexpr int32_t kWkLtOffset = 4 * kHalfBytes;
+// FP32 norm filters, 2 KB per LT each: all-ones co=64 x ci=128 (row sums)
+// and an e0 selector co=128 x ci=64 (row broadcast of column 0).
+constexpr int32_t kOnesLtOffset = kWkLtOffset + 8 * kLatent * 2;
+constexpr int32_t kSelLtOffset = kOnesLtOffset + 2048;
+
+__mlu_func__ void conv_bf16(float* dst,
+                            const bfloat16_t* src,
+                            const int8_t* filter,
+                            int32_t ci,
+                            int32_t height,
+                            int32_t co) {
+  __asm__ __volatile__(
+      "conv.nram.rn.f32.bf16.bf16 [%[dst]], [%[src]], [%[kernel]], "
+      "%[ci], %[height], 1, 1, 1, 1, 1, %[co];\n\t" ::[dst] "r"(dst),
+      [src] "r"(src),
+      [kernel] "r"(filter),
+      [ci] "r"(ci),
+      [height] "r"(height),
+      [co] "r"(co));
+}
+
+// BF16 x BF16 conv with FP32 accumulation, rounded to BF16 on output
+// (round-to-nearest, the same rounding as a separate float2bfloat16_rn).
+__mlu_func__ void conv_bf16_to_bf16(bfloat16_t* dst,
+                                    const bfloat16_t* src,
+                                    const int8_t* filter,
+                                    int32_t ci,
+                                    int32_t height,
+                                    int32_t co) {
+  __asm__ __volatile__(
+      "conv.nram.rn.f32.bf16.bf16 [%[dst]], [%[src]], [%[kernel]], "
+      "%[ci], %[height], 1, 1, 1, 1, 1, %[co], .cvt.dst.rn.bf16();\n\t" ::
+          [dst] "r"(dst),
+      [src] "r"(src),
+      [kernel] "r"(filter),
+      [ci] "r"(ci),
+      [height] "r"(height),
+      [co] "r"(co));
+}
+
+__mlu_func__ void conv_f32(float* dst,
+                           const float* src,
+                           const int8_t* filter,
+                           int32_t ci,
+                           int32_t height,
+                           int32_t co) {
+  __asm__ __volatile__(
+      "conv.nram.rn.f32.f32.f32 [%[dst]], [%[src]], [%[kernel]], "
+      "%[ci], %[height], 1, 1, 1, 1, 1, %[co];\n\t" ::[dst] "r"(dst),
+      [src] "r"(src),
+      [kernel] "r"(filter),
+      [ci] "r"(ci),
+      [height] "r"(height),
+      [co] "r"(co));
+}
+
+// dst = BF16(conv(src, filter) * partial): FP32 product, then rn rounding.
+__mlu_func__ void conv_f32_mul_partial_to_bf16(bfloat16_t* dst,
+                                               const float* src,
+                                               const int8_t* filter,
+                                               const float* partial,
+                                               int32_t ci,
+                                               int32_t height,
+                                               int32_t co) {
+  __asm__ __volatile__(
+      "conv.nram.rn.f32.f32.f32 [%[dst]], [%[src]], [%[kernel]], "
+      "%[ci], %[height], 1, 1, 1, 1, 1, %[co], "
+      ".mul.partial([%[partial]]), .cvt.dst.rn.bf16();\n\t" ::[dst] "r"(dst),
+      [src] "r"(src),
+      [kernel] "r"(filter),
+      [partial] "r"(partial),
+      [ci] "r"(ci),
+      [height] "r"(height),
+      [co] "r"(co));
+}
+
+// dst = conv(src, filter) * partial, elementwise.
+__mlu_func__ void conv_f32_mul_partial(float* dst,
+                                       const float* src,
+                                       const int8_t* filter,
+                                       const float* partial,
+                                       int32_t ci,
+                                       int32_t height,
+                                       int32_t co) {
+  __asm__ __volatile__(
+      "conv.nram.rn.f32.f32.f32 [%[dst]], [%[src]], [%[kernel]], "
+      "%[ci], %[height], 1, 1, 1, 1, 1, %[co], "
+      ".mul.partial([%[partial]]);\n\t" ::[dst] "r"(dst),
+      [src] "r"(src),
+      [kernel] "r"(filter),
+      [partial] "r"(partial),
+      [ci] "r"(ci),
+      [height] "r"(height),
+      [co] "r"(co));
+}
+
+// Every LT holds 4 ones rows (512 B) and 8 selector rows (256 B, value at
+// column 0 only); each LT's 2 KB block is identical, so one NRAM pattern is
+// replicated to all 16 LTs.
+__mlu_func__ void load_norm_filters() {
+  float* pattern = reinterpret_cast<float*>(nram_pool);
+  __bang_write_value(pattern, 1024, 0.0f);
+  __bang_write_value(pattern, 512, 1.0f);
+  for (int32_t r = 0; r < 8; ++r) {
+    pattern[512 + r * 64] = 1.0f;
+  }
+  __sync();
+  __memcpy(
+      wram_pool + kOnesLtOffset, pattern, 2048, NRAM2WRAM, LT_STRIDE, 0, 15);
+  __memcpy(wram_pool + kSelLtOffset,
+           pattern + 512,
+           2048,
+           NRAM2WRAM,
+           LT_STRIDE,
+           0,
+           15);
+}
+
+// Same filters from a caller scratch `pattern` (1024 floats), without a full
+// fence: Compute builds the pattern, Move copies it to WRAM asynchronously
+// (the consumer waits for Move before the norm convs).
+__mlu_func__ void load_norm_filters_async(float* pattern) {
+  __bang_write_value(pattern, 1024, 0.0f);
+  __bang_write_value(pattern, 512, 1.0f);
+  for (int32_t r = 0; r < 8; ++r) {
+    pattern[512 + r * 64] = 1.0f;
+  }
+  __sync_io_move_compute(false, false, true, false, true, false);
+  __memcpy_async(
+      wram_pool + kOnesLtOffset, pattern, 2048, NRAM2WRAM, LT_STRIDE, 0, 15);
+  __memcpy_async(wram_pool + kSelLtOffset,
+                 pattern + 512,
+                 2048,
+                 NRAM2WRAM,
+                 LT_STRIDE,
+                 0,
+                 15);
+}
+
+// LTs [0, kDirectLts) of every weight load straight from GDRAM on the IPU
+// IO queue; LTs [kDirectLts, 16) come from the cluster's MPU-staged SRAM copy
+// on the Move queue, so both paths run at once. 9/16 balances the measured
+// direct (~58 B/cycle) and staged (~47 B/cycle) per-core rates.
+constexpr int32_t kDirectLts = 9;
+
+// wp as co=64: co c < 32 holds wp[c, 0:2560], co c >= 32 holds
+// wp[c - 32, 2560:5120]; co c lives in LT c / 4 at row c % 4. Loads LTs
+// [lt0, lt1) from `src` laid out like wp.
+__mlu_func__ void load_wp(const bfloat16_t* src,
+                          mluMemcpyDirection_t dir,
+                          int32_t lt0,
+                          int32_t lt1) {
+  for (int32_t hf = 0; hf < 2; ++hf) {
+    const int32_t a = imax(lt0, hf * 8);
+    const int32_t b = imin(lt1, hf * 8 + 8);
+    if (a >= b) {
+      continue;
+    }
+    __memcpy_async(wram_pool + a * LT_STRIDE,
+                   src + (a - hf * 8) * 4 * kHidden + hf * kHalf,
+                   kHalfBytes,
+                   dir,
+                   kHalfBytes,
+                   3,
+                   LT_STRIDE,
+                   b - a - 1,
+                   kHidden * 2,
+                   (b - a) * 4 - 1,
+                   0,
+                   0);
+  }
+}
+
+// wk as two co=64 groups; group g row c lives in LT (c % 64) / 4.
+__mlu_func__ void load_wk(const bfloat16_t* src,
+                          mluMemcpyDirection_t dir,
+                          int32_t lt0,
+                          int32_t lt1) {
+  for (int32_t g = 0; g < kHeadDim / 64; ++g) {
+    __memcpy_async(
+        wram_pool + kWkLtOffset + g * 4 * kLatent * 2 + lt0 * LT_STRIDE,
+        src + (g * 64 + lt0 * 4) * kLatent,
+        kLatent * 2,
+        dir,
+        kLatent * 2,
+        3,
+        LT_STRIDE,
+        lt1 - lt0 - 1,
+        kLatent * 2,
+        (lt1 - lt0) * 4 - 1,
+        0,
+        0);
+  }
+}
+
+// MPU: stage the rows behind LTs [kDirectLts, 16) of each weight into SRAM
+// at their source-layout offsets.
+__mlu_func__ void stage_wp(bfloat16_t* sram, const bfloat16_t* wp) {
+  for (int32_t hf = 0; hf < 2; ++hf) {
+    const int32_t a = imax(kDirectLts, hf * 8);
+    const int32_t b = hf * 8 + 8;
+    if (a >= b) {
+      continue;
+    }
+    const int32_t offset = (a - hf * 8) * 4 * kHidden + hf * kHalf;
+    __memcpy(sram + offset,
+             wp + offset,
+             kHalfBytes,
+             GDRAM2SRAM,
+             kHidden * 2,
+             kHidden * 2,
+             (b - a) * 4 - 1);
+  }
+}
+
+__mlu_func__ void stage_wk(bfloat16_t* sram, const bfloat16_t* wk) {
+  for (int32_t g = 0; g < kHeadDim / 64; ++g) {
+    const int32_t offset = (g * 64 + kDirectLts * 4) * kLatent;
+    __memcpy(sram + offset,
+             wk + offset,
+             (16 - kDirectLts) * 4 * kLatent * 2,
+             GDRAM2SRAM);
+  }
+}
+
+__mlu_func__ int32_t get_num_valid_rows(const int32_t* live, int32_t cap) {
+  if (live == nullptr) {
+    return cap;
+  }
+  int32_t value = __load_gdram(live);
+  return value < 0 ? 0 : (value > cap ? cap : value);
+}
+
+__mlu_func__ void load_head_rows(bfloat16_t* dst,
+                                 const Params& p,
+                                 int32_t r0,
+                                 int32_t valid) {
+  __memcpy_async(dst,
+                 reinterpret_cast<const bfloat16_t*>(p.x) +
+                     static_cast<int64_t>(r0) * p.x_stride,
+                 kHidden * 2,
+                 GDRAM2NRAM,
+                 kHidden * 2,
+                 static_cast<int32_t>((p.x_stride * 2)),
+                 valid - 1);
+}
+
+__mlu_func__ int32_t head_valid(const Params& p, int32_t t, int32_t live) {
+  const int32_t r0 = t * p.head_rows;
+  return imax(0, imin(imin(p.head_rows, p.cap_x - r0), live - r0));
+}
+
+// MPU side of assisted head streaming: stage rows [kHeadDirect, valid) of
+// every core's tile for step k, then release the step with a cluster barrier.
+__mlu_func__ void stage_head_steps(const Params& p,
+                                   int32_t head_tiles,
+                                   int32_t steps,
+                                   int32_t live) {
+  for (int32_t k = 0; k < steps; ++k) {
+    int8_t* buf = sram_x + (k & 1) * kXStageBytes;
+    for (int32_t c = 0; c < coreDim; ++c) {
+      const int32_t t = taskIdY * coreDim + c + k * coreDim * taskDimY;
+      if (t < head_tiles) {
+        const int32_t valid = head_valid(p, t, live);
+        if (valid > kHeadDirect) {
+          __memcpy(buf + c * (16 - kHeadDirect) * kHidden * 2,
+                   reinterpret_cast<const bfloat16_t*>(p.x) +
+                       static_cast<int64_t>((t * p.head_rows + kHeadDirect)) *
+                           p.x_stride,
+                   kHidden * 2,
+                   GDRAM2SRAM,
+                   kHidden * 2,
+                   static_cast<int32_t>((p.x_stride * 2)),
+                   valid - kHeadDirect - 1);
+        }
+      }
+    }
+    __sync_cluster();
+  }
+}
+
+// Head tiles of this core, double buffered: the x rows of the next tile load
+// on IO while the current tile runs conv and post-processing on Compute.
+// With `assist`, rows [kHeadDirect, 16) of each tile arrive instead from the
+// memory core's SRAM stage (Move), one cluster barrier per step; every core
+// of the cluster runs all `steps` so the barriers match.
+__mlu_func__ void head_phase(const Params& p,
+                             int32_t head_tiles,
+                             int32_t live,
+                             bool assist,
+                             int32_t steps) {
+  if (!assist && taskId >= head_tiles) {
+    return;
+  }
+  int8_t* pool = nram_pool;
+  bfloat16_t* nx[2];
+  nx[0] = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadTile * kHidden * 2;
+  nx[1] = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadTile * kHidden * 2;
+  float* nout = reinterpret_cast<float*>(pool);
+  pool += (2 * kHeadTile * 64 + 128) * 4;
+  float* nsum = reinterpret_cast<float*>(pool);
+  pool += kHeadTile * 128 * 4;
+  bfloat16_t* nbf = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadTile * 128 * 2;
+  float* nres = reinterpret_cast<float*>(pool);
+  pool += kHeadTile * 128 * 4;
+  float* nzero = reinterpret_cast<float*>(pool);
+
+  const int32_t hr = p.head_rows;
+  const int32_t direct = assist ? kHeadDirect : hr;
+  if (!assist) {
+    steps = (head_tiles - taskId + taskDim - 1) / taskDim;
+  }
+  __bang_write_value(nzero, kHeadTile * kHeads, 0.0f);
+  if (taskId < head_tiles) {
+    const int32_t first = imin(head_valid(p, taskId, live), direct);
+    if (first > 0) {
+      load_head_rows(nx[0], p, taskId * hr, first);
+    }
+  }
+  int32_t cur = 0;
+  for (int32_t k = 0; k < steps; ++k, cur ^= 1) {
+    const int32_t t = taskId + k * taskDim;
+    const bool has = t < head_tiles;
+    const int32_t r0 = t * hr;
+    const int32_t rows = has ? imin(hr, p.cap_x - r0) : 0;
+    const int32_t valid = has ? head_valid(p, t, live) : 0;
+    if (assist) {
+      __sync_cluster();
+      if (valid > kHeadDirect) {
+        __memcpy_async(nx[cur] + kHeadDirect * kHidden,
+                       sram_x + (k & 1) * kXStageBytes +
+                           coreId * (16 - kHeadDirect) * kHidden * 2,
+                       (valid - kHeadDirect) * kHidden * 2,
+                       SRAM2NRAM);
+      }
+    }
+    // x(t) loaded (IO direct rows, Move staged rows and weights), previous
+    // stores drained.
+    __sync_io_move_compute(true, true, false, false, false, true);
+    const int32_t tn = t + taskDim;
+    if (tn < head_tiles) {
+      const int32_t next = imin(head_valid(p, tn, live), direct);
+      if (next > 0) {
+        // The other buffer was last read by the previous tile's conv.
+        __sync_io_move_compute(false, false, true, true, false, false);
+        load_head_rows(nx[cur ^ 1], p, tn * hr, next);
+      }
+    }
+    float* head = p.head + static_cast<int64_t>(r0) * kHeads;
+    if (valid > 0) {
+      conv_bf16(nout, nx[cur], wram_pool, kHalf, 2 * valid, 64);
+      // Row 2i holds x[i, :2560] against both halves and row 2i+1 holds
+      // x[i, 2560:]; the useful sums are out[i, c] + out[i, 96 + c], c < 32.
+      __bang_add(nsum, nout, nout + 96, valid * 128);
+      __bang_float2bfloat16_rn(nbf, nsum, valid * 128);
+      __bang_bfloat162float(nres, nbf, valid * 128);
+      __bang_mul_scalar(nres, nres, 0.015625f, valid * 128);
+    }
+    __sync_io_move_compute(false, false, true, true, false, false);
+    if (valid > 0) {
+      __memcpy_async(
+          head, nres, kHeads * 4, NRAM2GDRAM, kHeads * 4, 128 * 4, valid - 1);
+    }
+    if (rows > valid) {
+      __memcpy_async(head + static_cast<int64_t>(valid) * kHeads,
+                     nzero,
+                     (rows - valid) * kHeads * 4,
+                     NRAM2GDRAM);
+    }
+  }
+  __sync();
+}
+
+// Split-K head task: block b = task / 4 (head_rows rows), K slice j =
+// task % 4. Each core convolves its slice, the cluster sums the 4 FP32
+// partials through SRAM after one barrier, then each core rounds, scales
+// and stores a quarter of the rows.
+__mlu_func__ void head_split_k(const Params& p, int32_t task, int32_t live) {
+  const int32_t b = task >> 2;
+  const int32_t j = task & 3;
+  const int32_t r0 = b * p.head_rows;
+  const int32_t rows = imax(0, imin(p.head_rows, p.cap_x - r0));
+  const int32_t valid = imax(0, imin(rows, live - r0));
+  int8_t* pool = nram_pool;
+  bfloat16_t* nx = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadSplitRows * kSliceK * 2;
+  float* nout = reinterpret_cast<float*>(pool);
+  pool += kHeadSplitRows * kHeads * 4;
+  float* nsum = reinterpret_cast<float*>(pool);
+  pool += 4 * kHeadSplitRows * kHeads * 4;
+  bfloat16_t* nbf = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadSplitRows * kHeads * 2;
+  float* nzero = reinterpret_cast<float*>(pool);
+  if (valid > 0) {
+    // wp[:, j*1280:(j+1)*1280] as co=32: co c in LT c / 4, row c % 4.
+    __memcpy_async(wram_pool,
+                   reinterpret_cast<const bfloat16_t*>(p.wp) + j * kSliceK,
+                   kSliceK * 2,
+                   GDRAM2WRAM,
+                   kSliceK * 2,
+                   3,
+                   LT_STRIDE,
+                   7,
+                   kHidden * 2,
+                   31,
+                   0,
+                   0);
+    __memcpy_async(nx,
+                   reinterpret_cast<const bfloat16_t*>(p.x) +
+                       static_cast<int64_t>(r0) * p.x_stride + j * kSliceK,
+                   kSliceK * 2,
+                   GDRAM2NRAM,
+                   kSliceK * 2,
+                   static_cast<int32_t>((p.x_stride * 2)),
+                   valid - 1);
+    __sync_io_move_compute(true, false, false, false, false, true);
+    conv_bf16(nout, nx, wram_pool, kSliceK, valid, kHeads);
+    __sync_io_move_compute(false, false, true, false, true, false);
+    __memcpy_async(sram_part + j * kHeadSplitRows * kHeads,
+                   nout,
+                   valid * kHeads * 4,
+                   NRAM2SRAM);
+  }
+  __sync_move();
+  __sync_cluster();
+  // Rows [j * q, j * q + n) of the block: sum the 4 slices in FP32, round to
+  // BF16, scale by 1/64.
+  const int32_t q = (valid + 3) / 4;
+  const int32_t first = j * q;
+  const int32_t n = imax(0, imin(q, valid - first));
+  float* head = p.head + static_cast<int64_t>(r0) * kHeads;
+  if (n > 0) {
+    __memcpy(nsum,
+             sram_part + first * kHeads,
+             n * kHeads * 4,
+             SRAM2NRAM,
+             n * kHeads * 4,
+             kHeadSplitRows * kHeads * 4,
+             3);
+    const int32_t e = n * kHeads;
+    __bang_add(nsum, nsum, nsum + e, e);
+    __bang_add(nsum + 2 * e, nsum + 2 * e, nsum + 3 * e, e);
+    __bang_add(nsum, nsum, nsum + 2 * e, e);
+    __bang_float2bfloat16_rn(nbf, nsum, e);
+    __bang_bfloat162float(nsum, nbf, e);
+    __bang_mul_scalar(nsum, nsum, 0.015625f, e);
+    __sync_compute();
+    __memcpy(
+        head + static_cast<int64_t>(first) * kHeads, nsum, e * 4, NRAM2GDRAM);
+  }
+  if (j == 0 && rows > valid) {
+    __bang_write_value(nzero, kHeadSplitRows * kHeads, 0.0f);
+    __sync_compute();
+    __memcpy(head + static_cast<int64_t>(valid) * kHeads,
+             nzero,
+             (rows - valid) * kHeads * 4,
+             NRAM2GDRAM);
+  }
+}
+
+// ---- Feature-major head tiles (head_fm: prefill-size x) -----------------
+// out^T[32, T] = wp[32, 5120] . x_tile^T over 8 K chunks of 640: wp chunk c
+// ([32, 640], NRAM) is the conv input and x[T tokens, chunk c] the WRAM
+// filter (token r -> LT r / 4, row r % 4), so all co=64 outputs are useful.
+// x chunks rotate through three WRAM buffers in the old wp region; chunk
+// loads alternate between IO0 and IO1 so a step waits only for its own
+// queue while the next chunk's load stays in flight.
+constexpr int32_t kHeadFmTile = 64;
+constexpr int32_t kXChunk = kHidden / 8;
+constexpr int32_t kXWramBytes = 4 * kXChunk * 2;  // per LT, per buffer
+
+// MPU: wp chunks 1..7 into the cluster's SRAM copy (source layout).
+__mlu_func__ void stage_wp_fm(bfloat16_t* sram, const bfloat16_t* wp) {
+  __memcpy(sram + kXChunk,
+           wp + kXChunk,
+           7 * kXChunk * 2,
+           GDRAM2SRAM,
+           kHidden * 2,
+           kHidden * 2,
+           kHeads - 1);
+}
+
+// wp chunks [c0, c1) into NRAM blocks [32, 640] from `src` (wp layout).
+__mlu_func__ void load_wp_fm(bfloat16_t* wpn,
+                             const bfloat16_t* src,
+                             mluMemcpyDirection_t dir,
+                             int32_t c0,
+                             int32_t c1) {
+  for (int32_t c = c0; c < c1; ++c) {
+    __memcpy_async(wpn + c * kHeads * kXChunk,
+                   src + c * kXChunk,
+                   kXChunk * 2,
+                   dir,
+                   kXChunk * 2,
+                   kHidden * 2,
+                   kHeads - 1);
+  }
+}
+
+// x[r0 : r0 + valid, chunk c] into a WRAM filter buffer, on IO1 if `io1`.
+__mlu_func__ void load_x_wram(const Params& p,
+                              int32_t r0,
+                              int32_t valid,
+                              int32_t c,
+                              int8_t* wbuf,
+                              bool io1) {
+  const bfloat16_t* src = reinterpret_cast<const bfloat16_t*>(p.x) +
+                          static_cast<int64_t>(r0) * p.x_stride + c * kXChunk;
+  const int32_t n4 = valid / 4;
+  const int32_t rem = valid % 4;
+  if (n4 > 0) {
+    if (io1) {
+      __memcpy_io1_async(wbuf,
+                         src,
+                         kXChunk * 2,
+                         GDRAM2WRAM,
+                         kXChunk * 2,
+                         3,
+                         LT_STRIDE,
+                         n4 - 1,
+                         p.x_stride * 2,
+                         4 * n4 - 1,
+                         0,
+                         0);
+    } else {
+      __memcpy_async(wbuf,
+                     src,
+                     kXChunk * 2,
+                     GDRAM2WRAM,
+                     kXChunk * 2,
+                     3,
+                     LT_STRIDE,
+                     n4 - 1,
+                     p.x_stride * 2,
+                     4 * n4 - 1,
+                     0,
+                     0);
+    }
+  }
+  if (rem > 0) {
+    int8_t* dst = wbuf + n4 * LT_STRIDE;
+    const bfloat16_t* rsrc = src + static_cast<int64_t>((4 * n4)) * p.x_stride;
+    if (io1) {
+      __memcpy_io1_async(dst,
+                         rsrc,
+                         kXChunk * 2,
+                         GDRAM2WRAM,
+                         kXChunk * 2,
+                         static_cast<int32_t>((p.x_stride * 2)),
+                         rem - 1);
+    } else {
+      __memcpy_async(dst,
+                     rsrc,
+                     kXChunk * 2,
+                     GDRAM2WRAM,
+                     kXChunk * 2,
+                     static_cast<int32_t>((p.x_stride * 2)),
+                     rem - 1);
+    }
+  }
+}
+
+// Head tiles of this core; wpn already requested (chunk 0 on IO, 1..7 on
+// Move). Sub-step s = 8 * k + c is tile k, chunk c: its x arrives on IO
+// queue s & 1 into WRAM buffer s % 3, and the load of s + 2 is issued once
+// the conv of s - 1 (the last reader of that buffer) is done.
+__mlu_func__ void head_phase_fm(const Params& p,
+                                const bfloat16_t* wpn,
+                                int32_t head_tiles,
+                                int32_t live) {
+  if (taskId >= head_tiles) {
+    return;
+  }
+  int8_t* pool = nram_pool + kHeads * kHidden * 2;
+  float* acc = reinterpret_cast<float*>(pool);  // [32, 64]
+  pool += kHeads * kHeadFmTile * 4;
+  float* part = reinterpret_cast<float*>(pool);
+  pool += kHeads * kHeadFmTile * 4;
+  float* tr = reinterpret_cast<float*>(pool);  // [64, 32]
+  pool += kHeadFmTile * kHeads * 4;
+  bfloat16_t* hb = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadFmTile * kHeads * 2;
+  float* nzero = reinterpret_cast<float*>(pool);
+  __bang_write_value(nzero, kHeadFmTile * kHeads, 0.0f);
+  const int32_t hr = p.head_rows;
+  // Tiles with live rows come first (live is a prefix).
+  int32_t kvalid = 0;
+  for (int32_t t = taskId; t < head_tiles; t += taskDim) {
+    kvalid += (head_valid(p, t, live) > 0) ? 1 : 0;
+  }
+  const int32_t subs = 8 * kvalid;
+  auto issue = [&](int32_t s) {
+    const int32_t tn = taskId + (s >> 3) * taskDim;
+    load_x_wram(p,
+                tn * hr,
+                head_valid(p, tn, live),
+                s & 7,
+                wram_pool + (s % 3) * kXWramBytes,
+                (s & 1) != 0);
+  };
+  for (int32_t s = 0; s < imin(2, subs); ++s) {
+    issue(s);
+  }
+  for (int32_t s = 0; s < subs; ++s) {
+    const int32_t c = s & 7;
+    const int32_t t = taskId + (s >> 3) * taskDim;
+    const int32_t valid = head_valid(p, t, live);
+    // x chunk s (its IO queue) and the wp chunks (IO0 / Move) arrived.
+    if (s & 1) {
+      __sync_io0_io1_move_compute<false,
+                                  true,
+                                  true,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  true>();
+    } else {
+      __sync_io0_io1_move_compute<true,
+                                  false,
+                                  true,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  true>();
+    }
+    if (s + 2 < subs) {
+      // Buffer (s + 2) % 3 was last read by the conv of sub-step s - 1.
+      __sync_io_move_compute(false, false, true, true, false, false);
+      issue(s + 2);
+    }
+    conv_bf16(c == 0 ? acc : part,
+              wpn + c * kHeads * kXChunk,
+              wram_pool + (s % 3) * kXWramBytes,
+              kXChunk,
+              kHeads,
+              kHeadFmTile);
+    if (c > 0) {
+      __bang_add(acc, acc, part, kHeads * kHeadFmTile);
+    }
+    if (c == 7) {
+      // The previous tile's store (IO0) has read tr.
+      __sync_io0_io1_move_compute<true,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  true>();
+      __bang_transpose(tr, acc, kHeads, kHeadFmTile);
+      __bang_float2bfloat16_rn(hb, tr, valid * kHeads);
+      __bang_bfloat162float(tr, hb, valid * kHeads);
+      __bang_mul_scalar(tr, tr, 0.015625f, valid * kHeads);
+      __sync_io_move_compute(false, false, true, true, false, false);
+      __memcpy_async(p.head + static_cast<int64_t>(t) * hr * kHeads,
+                     tr,
+                     valid * kHeads * 4,
+                     NRAM2GDRAM);
+    }
+  }
+  // Zero the padding rows: partial live tiles and dead tiles.
+  __sync_io_move_compute(false, false, true, true, false, false);
+  for (int32_t t = taskId; t < head_tiles; t += taskDim) {
+    const int32_t r0 = t * hr;
+    const int32_t rows = imin(hr, p.cap_x - r0);
+    const int32_t valid = head_valid(p, t, live);
+    if (rows > valid) {
+      __memcpy_async(p.head + static_cast<int64_t>((r0 + valid)) * kHeads,
+                     nzero,
+                     (rows - valid) * kHeads * 4,
+                     NRAM2GDRAM);
+    }
+  }
+  __sync();
+}
+
+__mlu_func__ void load_key_rows(const Params& p,
+                                int32_t r0,
+                                int32_t valid,
+                                bfloat16_t* nlat,
+                                int32_t* npos,
+                                int32_t* nslot) {
+  __memcpy_io1_async(nlat,
+                     reinterpret_cast<const bfloat16_t*>(p.latent) +
+                         static_cast<int64_t>(r0) * p.latent_stride,
+                     kLatent * 2,
+                     GDRAM2NRAM,
+                     kLatent * 2,
+                     static_cast<int32_t>((p.latent_stride * 2)),
+                     valid - 1);
+  __memcpy_io1_async(npos, p.positions + r0, valid * 4, GDRAM2NRAM);
+  __memcpy_io1_async(nslot, p.slots + r0, valid * 4, GDRAM2NRAM);
+}
+
+// K tiles of this core, software pipelined over two IO queues: IO1
+// prefetches the next tile's latent/position/slot rows while this tile
+// computes; IO0 carries this tile's RoPE gather and cache scatter, so the
+// RoPE wait only drains IO0. Latent, metadata and output rows are double
+// buffered, letting a tile's scatter finish in the background.
+__mlu_func__ void key_phase(const Params& p,
+                            int32_t tasks,
+                            int32_t head_slots,
+                            int32_t live) {
+  int8_t* pool = nram_pool;
+  bfloat16_t* nlat[2];
+  int32_t* npos[2];
+  int32_t* nslot[2];
+  bfloat16_t* nkb[2];
+  uint64_t* noff[2];
+  uint64_t* ncoff[2];
+  uint8_t* nwrite[2];
+  for (int32_t b = 0; b < 2; ++b) {
+    nlat[b] = reinterpret_cast<bfloat16_t*>(pool);
+    pool += kKeyTile * kLatent * 2;
+    nkb[b] = reinterpret_cast<bfloat16_t*>(pool);
+    pool += kKeyTile * kHeadDim * 2;
+    npos[b] = reinterpret_cast<int32_t*>(pool);
+    pool += kKeyTile * 4;
+    nslot[b] = reinterpret_cast<int32_t*>(pool);
+    pool += kKeyTile * 4;
+    noff[b] = reinterpret_cast<uint64_t*>(pool);
+    pool += kKeyTile * 8;
+    ncoff[b] = reinterpret_cast<uint64_t*>(pool);
+    pool += kKeyTile * 8;
+    nwrite[b] = reinterpret_cast<uint8_t*>(pool);
+    pool += 64;
+  }
+  // 64 padding floats on both sides for the +-1 shifted pair reads.
+  float* nkf = reinterpret_cast<float*>(pool) + 64;
+  pool += (kKeyTile * kHeadDim + 128) * 4;
+  float* nsq = reinterpret_cast<float*>(pool);
+  pool += kKeyTile * kHeadDim * 4;
+  float* ncs = reinterpret_cast<float*>(pool);
+  pool += kKeyTile * kHeadDim * 4;
+  float* nsw = reinterpret_cast<float*>(pool);
+  pool += (kKeyTile * kHeadDim + 64) * 4;
+  float* ntmp = reinterpret_cast<float*>(pool);
+  pool += kKeyTile * kHeadDim * 4;
+  float* nr = reinterpret_cast<float*>(pool);
+  pool += kKeyTile * kHeadDim * 4;
+  bfloat16_t* nrb = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kKeyTile * kHeadDim * 2;
+  float* ngamma = reinterpret_cast<float*>(pool);
+  pool += kHeadDim * 4;
+  bfloat16_t* ngamma_bf = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadDim * 2;
+  uint32_t* mask_even = reinterpret_cast<uint32_t*>(pool);
+  pool += 64 * 4;
+  uint32_t* mask_odd = reinterpret_cast<uint32_t*>(pool);
+  pool += 64 * 4;
+  // Vector metadata scratch (meta_u32 path).
+  int32_t* nwm = reinterpret_cast<int32_t*>(pool);
+  pool += kKeyTile * 4;
+  int32_t* npm = reinterpret_cast<int32_t*>(pool);
+  pool += kKeyTile * 4;
+  float* nwf = reinterpret_cast<float*>(pool);
+
+  // This core's K tiles are t = taskId + k * taskDim, t >= head_slots.
+  int32_t t = taskId;
+  while (t < tasks && t < head_slots) {
+    t += taskDim;
+  }
+  auto rows_of = [&](int32_t task) {
+    const int32_t r0 = (task - head_slots) * p.key_rows;
+    return imax(0, imin(imin(p.key_rows, p.cap_k - r0), live - r0));
+  };
+  if (t >= tasks || rows_of(t) <= 0) {
+    return;
+  }
+  if (p.gamma_fp32) {
+    __memcpy(ngamma, p.gamma, kHeadDim * 4, GDRAM2NRAM);
+  } else {
+    __memcpy(ngamma_bf, p.gamma, kHeadDim * 2, GDRAM2NRAM);
+    __bang_bfloat162float(ngamma, ngamma_bf, kHeadDim);
+  }
+  for (int32_t k = 0; k < 64; ++k) {
+    mask_even[k] = (k & 1) ? 0u : 0xffffffffu;
+    mask_odd[k] = (k & 1) ? 0xffffffffu : 0u;
+  }
+  load_key_rows(
+      p, (t - head_slots) * p.key_rows, rows_of(t), nlat[0], npos[0], nslot[0]);
+  int32_t cur = 0;
+  for (; t < tasks; t += taskDim, cur ^= 1) {
+    const int32_t valid = rows_of(t);
+    if (valid <= 0) {
+      break;
+    }
+    const int32_t n = valid * kHeadDim;
+    // This tile's rows arrived on IO1.
+    __sync_io0_io1_move_compute<false,
+                                true,
+                                false,
+                                false,
+                                false,
+                                false,
+                                false,
+                                true>();
+    int32_t* pos = npos[cur];
+    int32_t* slt = nslot[cur];
+    // Masked rows read the RoPE table at position 0, never at their own
+    // value, and get a cleared bit in the scatter write mask.
+    if (p.meta_u32) {
+      // SIMD over the tile: w = 0 <= slot < cache_rows, m = w and
+      // 0 <= pos < rope_rows; byte offsets as uint32.
+      uint32_t* roff = reinterpret_cast<uint32_t*>(noff[cur]);
+      uint32_t* coff = reinterpret_cast<uint32_t*>(ncoff[cur]);
+      const int32_t n8 = (valid + 7) / 8 * 8;
+      __bang_write_value(nwf, kKeyTile, 0.0f);
+      __bang_ge_scalar(nwm, slt, 0, valid);
+      __bang_lt_scalar(npm, slt, static_cast<int32_t>(p.cache_rows), valid);
+      __bang_mul(nwm, nwm, npm, valid);
+      __bang_ge_scalar(npm, pos, 0, valid);
+      __bang_mul(npm, npm, nwm, valid);
+      __bang_lt_scalar(reinterpret_cast<int32_t*>(roff),
+                       pos,
+                       static_cast<int32_t>(p.rope_rows),
+                       valid);
+      __bang_mul(npm, npm, reinterpret_cast<int32_t*>(roff), valid);
+      __bang_mul(npm, npm, pos, valid);
+      __bang_mul_scalar(reinterpret_cast<int32_t*>(roff),
+                        npm,
+                        static_cast<int32_t>((p.rope_stride * 4)),
+                        valid);
+      __bang_mul(reinterpret_cast<int32_t*>(coff), slt, nwm, valid);
+      __bang_mul_scalar(reinterpret_cast<int32_t*>(coff),
+                        reinterpret_cast<int32_t*>(coff),
+                        kHeadDim * 2,
+                        valid);
+      __bang_int322float(nwf, nwm, valid, 0);
+      __bang_gt_bitindex(reinterpret_cast<float*>(nwrite[cur]), nwf, 0.5f, n8);
+      // IO reads the offsets/mask; the next prefetch overwrites buffers the
+      // previous tile's conv read.
+      __sync_io_move_compute(false, false, true, true, false, false);
+      __gather_async(
+          ncs, p.rope, roff, kHeadDim * 4, GDRAM2NRAM, kHeadDim * 4, valid);
+    } else {
+      // Scalar reads of the IO1-loaded rows (>= 4 GiB tables only).
+      __sync_io();
+      for (int32_t k = 0; k < kKeyTile / 8; ++k) {
+        nwrite[cur][k] = 0;
+      }
+      for (int32_t i = 0; i < valid; ++i) {
+        const int32_t slot = slt[i];
+        int64_t q = pos[i];
+        const bool write =
+            slot >= 0 && static_cast<int64_t>(slot) < p.cache_rows;
+        if (!write || q < 0 || q >= p.rope_rows) {
+          q = 0;
+        }
+        noff[cur][i] = static_cast<uint64_t>((q * p.rope_stride * 4));
+        ncoff[cur][i] = write ? static_cast<uint64_t>(slot) * kHeadDim * 2 : 0;
+        if (write) {
+          nwrite[cur][i >> 3] |= static_cast<uint8_t>((1u << (i & 7)));
+        }
+      }
+      __sync_io_move_compute(false, false, true, true, false, false);
+      __gather_async(ncs,
+                     p.rope,
+                     noff[cur],
+                     kHeadDim * 4,
+                     GDRAM2NRAM,
+                     kHeadDim * 4,
+                     valid);
+    }
+    const int32_t tn = t + taskDim;
+    if (tn < tasks && rows_of(tn) > 0) {
+      load_key_rows(p,
+                    (tn - head_slots) * p.key_rows,
+                    rows_of(tn),
+                    nlat[cur ^ 1],
+                    npos[cur ^ 1],
+                    nslot[cur ^ 1]);
+    }
+    // k0 = BF16(latent @ wk.T)
+    bfloat16_t* kb = nkb[cur];
+    conv_bf16_to_bf16(
+        kb, nlat[cur], wram_pool + kWkLtOffset, kLatent, valid, kHeadDim);
+    __bang_bfloat162float(nkf, kb, n);
+    // Row sums of squares by an all-ones conv (64 copies per row), then the
+    // scale k0 * rsqrt(sum / 128 + eps) is broadcast back per row by the e0
+    // selector conv fused with an elementwise multiply by k0.
+    float* nscale = ntmp;
+    __bang_mul(nsq, nkf, nkf, n);
+    conv_f32(nscale, nsq, wram_pool + kOnesLtOffset, kHeadDim, valid, 64);
+    __bang_mul_scalar(nscale, nscale, 1.0f / kHeadDim, valid * 64);
+    __bang_add_scalar(nscale, nscale, 1e-20f, valid * 64);
+    __bang_rsqrt(nscale, nscale, valid * 64);
+    conv_f32_mul_partial(
+        nkf, nscale, wram_pool + kSelLtOffset, nkf, 64, valid, kHeadDim);
+    __bang_cycle_mul(nkf, nkf, ngamma, n, kHeadDim);
+    __bang_float2bfloat16_rn(kb, nkf, n);
+    __bang_bfloat162float(nkf, kb, n);
+    // swapped[2i] = -t[2i+1], swapped[2i+1] = t[2i]; bitwise masks keep a
+    // NaN from leaking into the neighbouring pair.
+    __bang_mul_scalar(nsw, nkf + 1, -1.0f, n);
+    __bang_cycle_band(reinterpret_cast<float*>(nsw),
+                      reinterpret_cast<float*>(nsw),
+                      reinterpret_cast<float*>(mask_even),
+                      n,
+                      64);
+    __bang_cycle_band(reinterpret_cast<float*>(ntmp),
+                      reinterpret_cast<float*>((nkf - 1)),
+                      reinterpret_cast<float*>(mask_odd),
+                      n,
+                      64);
+    __bang_add(nsw, nsw, ntmp, n);
+    // The gathered cos/sin rows (IO0) are needed from here on; the IO1
+    // prefetch keeps running.
+    __sync_io0_io1_move_compute<true,
+                                false,
+                                false,
+                                false,
+                                false,
+                                false,
+                                false,
+                                true>();
+    // Flat views shifted by 64 pair row r's tail with row r's cos/sin at
+    // r * 128 + j, j < 64.
+    const int32_t n1 = n - kRopeDim;
+    __bang_mul(nr, nkf + kRopeDim, ncs, n1);
+    __bang_mul(ntmp, nsw + kRopeDim, ncs + kRopeDim, n1);
+    __bang_add(nr, nr, ntmp, n1);
+    __bang_float2bfloat16_rn(nrb, nr, n1);
+    __sync_io_move_compute(false, false, true, false, true, false);
+    __memcpy_async(kb + kRopeDim,
+                   nrb,
+                   kRopeDim * 2,
+                   NRAM2NRAM,
+                   kHeadDim * 2,
+                   kHeadDim * 2,
+                   valid - 1);
+    __sync_io_move_compute(false, true, false, true, false, false);
+    if (p.meta_u32) {
+      __scatter_async(p.cache,
+                      kb,
+                      reinterpret_cast<uint32_t*>(ncoff[cur]),
+                      nwrite[cur],
+                      kHeadDim * 2,
+                      NRAM2GDRAM,
+                      kHeadDim * 2,
+                      valid);
+    } else {
+      __scatter_async(p.cache,
+                      kb,
+                      ncoff[cur],
+                      nwrite[cur],
+                      kHeadDim * 2,
+                      NRAM2GDRAM,
+                      kHeadDim * 2,
+                      valid);
+    }
+  }
+  __sync();
+}
+
+// f32 [64, 128] -> [128, 64] on the Move queue (MLISA trans.tiling, 16 x 16
+// element blocks: 4 row blocks x 8 column blocks).
+__mlu_func__ void transpose_tab_move(float* dst, const float* src) {
+  __asm__ __volatile__(
+      "trans.tiling.async.nram.nram.b32 [%[d]], [%[s]], "
+      "64, 16, 512, 1, 0, 8, 64, 4, 8192, 1, 0, "
+      "64, 16, 256, 1, 0, 8, 4096, 4, 64, 1, 0;\n\t" ::[d] "r"(dst),
+      [s] "r"(src));
+}
+
+// bf16 [128, 64] -> [64, 128] on the Move queue (32 x 32 element blocks:
+// 4 row blocks x 2 column blocks).
+__mlu_func__ void transpose_out_move(bfloat16_t* dst, const bfloat16_t* src) {
+  __asm__ __volatile__(
+      "trans.tiling.async.nram.nram.b16 [%[d]], [%[s]], "
+      "64, 32, 128, 1, 0, 2, 64, 4, 4096, 1, 0, "
+      "64, 32, 256, 1, 0, 2, 8192, 4, 64, 1, 0;\n\t" ::[d] "r"(dst),
+      [s] "r"(src));
+}
+
+// MPU-fed head (p.mfuse): live head tiles of lane `lane` of cluster `cy`
+// (tiles cy * 4 + lane + i * 32) and the cluster's step count, 8 chunks per
+// tile of its busiest lane. Every IPU and the memory core of the cluster
+// pass one barrier per two steps.
+constexpr int32_t kXLaneBytes = kHeadFmTile * kXChunk * 2;
+__mlu_func__ int32_t lane_tiles(const Params& p,
+                                int32_t cy,
+                                int32_t lane,
+                                int32_t head_tiles,
+                                int32_t num_valid_input_rows) {
+  int32_t n = 0;
+  for (int32_t h = cy * 4 + lane; h < head_tiles; h += 32) {
+    n += head_valid(p, h, num_valid_input_rows) > 0 ? 1 : 0;
+  }
+  return n;
+}
+
+__mlu_func__ int32_t cluster_steps(const Params& p,
+                                   int32_t cy,
+                                   int32_t head_tiles,
+                                   int32_t num_valid_input_rows) {
+  int32_t m = 0;
+  for (int32_t l = 0; l < 4; ++l) {
+    m = imax(m, lane_tiles(p, cy, l, head_tiles, num_valid_input_rows));
+  }
+  return 8 * m;
+}
+
+// ---- Feature-major K tiles (full 64-row tiles, spans < 4 GiB) ----------
+// The tile is computed transposed, [128 features, 64 tokens]: wk (rows
+// permuted to [0..63, even tail, odd tail]) is the conv input and the latent
+// tile is the conv filter in WRAM. Row sums become a column sumpool, the
+// gamma * rsqrt scale is one ci=1 outer-product conv, and RoPE works on whole
+// rows: even/odd tail features are contiguous 32-row blocks sharing cos/sin.
+constexpr int32_t kLatWramOffset = kWkLtOffset;  // 2 x (4 rows x 1 KB) per LT
+constexpr int32_t kRWramOffset =
+    kOnesLtOffset;  // r as co=64 x ci=1 (64 B rows)
+
+// Latent rows of a K tile into a WRAM filter buffer: token r -> LT r / 4,
+// row r % 4.
+__mlu_func__ void load_latent_wram(const Params& p,
+                                   int32_t r0,
+                                   int32_t valid,
+                                   int8_t* wbuf) {
+  const bfloat16_t* src = reinterpret_cast<const bfloat16_t*>(p.latent) +
+                          static_cast<int64_t>(r0) * p.latent_stride;
+  const int32_t q = valid / 4;
+  const int32_t rem = valid % 4;
+  if (q > 0) {
+    __memcpy_io1_async(wbuf,
+                       src,
+                       kLatent * 2,
+                       GDRAM2WRAM,
+                       kLatent * 2,
+                       3,
+                       LT_STRIDE,
+                       q - 1,
+                       p.latent_stride * 2,
+                       4 * q - 1,
+                       0,
+                       0);
+  }
+  if (rem > 0) {
+    __memcpy_io1_async(wbuf + q * LT_STRIDE,
+                       src + static_cast<int64_t>((4 * q)) * p.latent_stride,
+                       kLatent * 2,
+                       GDRAM2WRAM,
+                       kLatent * 2,
+                       static_cast<int32_t>((p.latent_stride * 2)),
+                       rem - 1);
+  }
+}
+
+// With p.mfuse, the memory core streams this cluster's head x chunks into
+// SRAM (two buffers of two steps, one cluster barrier per two steps); after
+// its Move wait each K tile convolves one chunk moved earlier, passes a
+// barrier when at most one released chunk is left (moving its x chunks of
+// both steps SRAM -> WRAM) and moves the next wp chunk SRAM -> NRAM, so the
+// head stream runs on the memory cores' ports under the compute-bound K tiles.
+__mlu_func__ void key_phase_fm(const Params& p,
+                               int32_t tasks,
+                               int32_t head_slots,
+                               int32_t live,
+                               int32_t head_tiles,
+                               int32_t num_valid_input_rows) {
+  constexpr int32_t V = kKeyTile;  // tile columns (tokens), padded
+  constexpr int32_t F = kHeadDim;  // features
+  int8_t* pool = nram_pool;
+  bfloat16_t* wkn =
+      reinterpret_cast<bfloat16_t*>(pool);  // [128, 512] permuted rows
+  pool += F * kLatent * 2;
+  float* gperm =
+      reinterpret_cast<float*>(pool);  // gamma, permuted like wkn, [128, ci=1]
+  pool += F * 4;
+  float* gnat = reinterpret_cast<float*>(pool);
+  pool += F * 4;
+  bfloat16_t* gbf = reinterpret_cast<bfloat16_t*>(pool);
+  pool += F * 2;
+  // K metadata of up to kMetaTiles of this core's tiles at once: positions,
+  // slots, RoPE/cache byte offsets (double buffered per batch), write flags.
+  constexpr int32_t kMetaTiles = 16;
+  constexpr int32_t M = kMetaTiles * V;
+  uint32_t* broff[2];
+  uint32_t* bcoff[2];
+  for (int32_t b = 0; b < 2; ++b) {
+    broff[b] = reinterpret_cast<uint32_t*>(pool);
+    pool += M * 4;
+    bcoff[b] = reinterpret_cast<uint32_t*>(pool);
+    pool += M * 4;
+  }
+  float* nwf = reinterpret_cast<float*>(pool);
+  pool += M * 4;
+  // Scatter write bits per batch (8 bytes per tile), feature-major k
+  // tiles and token-major output rows, double buffered.
+  uint8_t* wmask[2];
+  bfloat16_t* kbT[2];
+  bfloat16_t* kbns[2];
+  for (int32_t b = 0; b < 2; ++b) {
+    wmask[b] = reinterpret_cast<uint8_t*>(pool);
+    pool += 256;
+    kbT[b] =
+        reinterpret_cast<bfloat16_t*>(pool);  // [64 tokens, 128] output rows
+    pool += V * F * 2;
+    kbns[b] = reinterpret_cast<bfloat16_t*>(pool);  // [128, 64]
+    pool += F * V * 2;
+  }
+  float* kf = reinterpret_cast<float*>(pool);  // [128, 64]
+  pool += F * V * 4;
+  // sq shares tab^T: the table transpose and copies (Move, tile start) are
+  // waited for before the squares are written.
+  float* sq = reinterpret_cast<float*>(pool);
+  float* tabT = reinterpret_cast<float*>(pool);  // [128, 64]
+  pool += F * V * 4;
+  float* rs = reinterpret_cast<float*>(pool);  // [64]
+  pool += V * 4;
+  // Gathered [64 tokens, 128] cos|sin rows, double buffered: tile k + 1's
+  // rows arrive on IO1 during tile k.
+  float* tab[2];
+  for (int32_t b = 0; b < 2; ++b) {
+    tab[b] = reinterpret_cast<float*>(pool);
+    pool += V * F * 4;
+  }
+  float* cs = reinterpret_cast<float*>(pool);  // [32, 64] cos of pair i
+  pool += 32 * V * 4;
+  float* sn = reinterpret_cast<float*>(pool);  // [32, 64] sin of pair i
+  pool += 32 * V * 4;
+  float* kt = reinterpret_cast<float*>(
+      pool);  // tail [64 rows (even block, odd block), 64]
+  pool += 64 * V * 4;
+  // The metadata batch scratch (meta_batch, early in a tile) and the head
+  // output BF16 rows (mid-tile) live in the RoPE temporaries.
+  float* t1 = reinterpret_cast<float*>(pool);
+  int32_t* nwm = reinterpret_cast<int32_t*>(pool);
+  pool += 32 * V * 4;
+  float* t2 = reinterpret_cast<float*>(pool);
+  int32_t* npm = reinterpret_cast<int32_t*>(pool);
+  bfloat16_t* hb = reinterpret_cast<bfloat16_t*>(pool);
+  pool += 32 * V * 4;
+  static_assert(32 * V * 4 >= M * 4, "metadata scratch");
+  float* ev = reinterpret_cast<float*>(pool);
+  int32_t* bpos = reinterpret_cast<int32_t*>(pool);
+  int32_t* bslot = reinterpret_cast<int32_t*>(pool) + M;
+  pool += 32 * V * 4;
+  static_assert(32 * V * 4 >= 2 * M * 4, "metadata batch");
+  float* od = reinterpret_cast<float*>(pool);
+  pool += 32 * V * 4;
+  bfloat16_t* tbe = reinterpret_cast<bfloat16_t*>(pool);
+  pool += 32 * V * 2;
+  bfloat16_t* tbo = reinterpret_cast<bfloat16_t*>(pool);
+  pool += 32 * V * 2;
+  // MPU-fed head: one wp chunk [32, 640], the [32, 64] accumulator and
+  // partial, the [64, 32] FP32 output rows.
+  bfloat16_t* wpb = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeads * kXChunk * 2;
+  float* acc = reinterpret_cast<float*>(pool);
+  pool += kHeads * kHeadFmTile * 4;
+  float* part = reinterpret_cast<float*>(pool);
+  pool += kHeads * kHeadFmTile * 4;
+  float* tr = reinterpret_cast<float*>(pool);
+
+  int32_t t = taskId;
+  while (t < tasks && t < head_slots) {
+    t += taskDim;
+  }
+  auto rows_of = [&](int32_t task) {
+    const int32_t r0 = (task - head_slots) * p.key_rows;
+    return imax(0, imin(imin(p.key_rows, p.cap_k - r0), live - r0));
+  };
+  const bool any_k = t < tasks && rows_of(t) > 0;
+  // MPU-fed head chunks: this core's live tiles taskId + i * taskDim, 8
+  // chunks each; the cluster passes `hsteps` step barriers in total.
+  const int32_t lane = taskId % 4;
+  const int32_t hmine =
+      p.mfuse ? 8 * lane_tiles(
+                        p, taskId / 4, lane, head_tiles, num_valid_input_rows)
+              : 0;
+  const int32_t hsteps =
+      p.mfuse ? cluster_steps(p, taskId / 4, head_tiles, num_valid_input_rows)
+              : 0;
+  if (!any_k && !p.mfuse) {
+    return;
+  }
+  auto htile = [&](int32_t hs) { return taskId + (hs >> 3) * taskDim; };
+  auto xbuf = [&](int32_t hs) { return wram_pool + (hs & 3) * kXWramBytes; };
+  // Conv of head chunk hs (x and wp chunk moved and waited for); the 8th
+  // chunk of a tile finishes it: transpose, BF16, /64, store on IO0.
+  auto conv_h = [&](int32_t hs) {
+    const int32_t c = hs & 7;
+    conv_bf16(c == 0 ? acc : part, wpb, xbuf(hs), kXChunk, kHeads, kHeadFmTile);
+    if (c > 0) {
+      __bang_add(acc, acc, part, kHeads * kHeadFmTile);
+    }
+    if (c == 7) {
+      const int32_t ht = htile(hs);
+      const int32_t hv = head_valid(p, ht, num_valid_input_rows);
+      // The previous head store (IO0) has read tr.
+      __sync_io0_io1_move_compute<true,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  false,
+                                  true>();
+      __bang_transpose(tr, acc, kHeads, kHeadFmTile);
+      __bang_float2bfloat16_rn(hb, tr, hv * kHeads);
+      __bang_bfloat162float(tr, hb, hv * kHeads);
+      __bang_mul_scalar(tr, tr, 0.015625f, hv * kHeads);
+      __sync_io_move_compute(false, false, true, true, false, false);
+      __memcpy_async(p.head + static_cast<int64_t>(ht) * p.head_rows * kHeads,
+                     tr,
+                     hv * kHeads * 4,
+                     NRAM2GDRAM);
+    }
+  };
+  int32_t hpassed = 0;  // steps released by passed barriers (2 per barrier)
+  int32_t hdone = 0;    // own chunks convolved
+  int32_t hwp = 0;      // own wp chunks moved
+  // At a point where all earlier Move work is complete: convolve the next
+  // moved chunk; when at most one released chunk is left, pass the next
+  // barrier (two steps) and move this core's x chunks of both steps into
+  // the 4-buffer WRAM ring; move the wp chunk of the next conv (wp is in
+  // SRAM from the start, no barrier needed).
+  auto head_step = [&]() {
+    // Up to p.mfuse chunk convs; a second one reloads the wp buffer first.
+    for (int32_t i = 0; i < p.mfuse && hdone < imin(hpassed, hmine); ++i) {
+      if (hwp == hdone) {
+        __sync_io_move_compute(false, false, true, false, true, false);
+        __memcpy_async(wpb,
+                       reinterpret_cast<const bfloat16_t*>(sram_weights) +
+                           (hdone & 7) * kXChunk,
+                       kXChunk * 2,
+                       SRAM2NRAM,
+                       kXChunk * 2,
+                       kHidden * 2,
+                       kHeads - 1);
+        ++hwp;
+        __sync_io_move_compute(false, true, false, false, false, true);
+      }
+      conv_h(hdone);
+      ++hdone;
+    }
+    if (hpassed < hsteps && (hdone >= hmine || hpassed <= hdone + 1)) {
+      __sync_io_move_compute(false, false, true, false, true, false);
+      __sync_cluster();
+      for (int32_t q = 0; q < 2; ++q) {
+        const int32_t hs = hpassed + q;
+        if (hs >= hmine) {
+          continue;
+        }
+        const int32_t valid = head_valid(p, htile(hs), num_valid_input_rows);
+        const int8_t* src = sram_x + ((hs >> 1) & 1) * 2 * kXStageBytes +
+                            (hs & 1) * kXStageBytes + lane * kXLaneBytes;
+        const int32_t n4 = valid / 4;
+        const int32_t rem = valid % 4;
+        if (n4 > 0) {
+          __memcpy_async(xbuf(hs),
+                         src,
+                         kXChunk * 2,
+                         SRAM2WRAM,
+                         kXChunk * 2,
+                         3,
+                         LT_STRIDE,
+                         n4 - 1,
+                         kXChunk * 2,
+                         4 * n4 - 1,
+                         0,
+                         0);
+        }
+        if (rem > 0) {
+          __memcpy_async(xbuf(hs) + n4 * LT_STRIDE,
+                         src + 4 * n4 * kXChunk * 2,
+                         kXChunk * 2,
+                         SRAM2WRAM,
+                         kXChunk * 2,
+                         kXChunk * 2,
+                         rem - 1);
+        }
+      }
+      hpassed += 2;
+    }
+    if (hwp == hdone && hdone < imin(hpassed, hmine)) {
+      __sync_io_move_compute(false, false, true, false, true, false);
+      __memcpy_async(wpb,
+                     reinterpret_cast<const bfloat16_t*>(sram_weights) +
+                         (hdone & 7) * kXChunk,
+                     kXChunk * 2,
+                     SRAM2NRAM,
+                     kXChunk * 2,
+                     kHidden * 2,
+                     kHeads - 1);
+      ++hwp;
+    }
+  };
+  const int32_t t0 = t;
+  int32_t nk = 0;
+  int8_t* const wlat0 = wram_pool + kLatWramOffset;
+  int8_t* const wlat1 = wram_pool + kLatWramOffset + 4 * kLatent * 2;
+  if (any_k) {
+    // Per core: wk rows permuted, gamma permuted the same way. With wk_sram
+    // the rows move from the cluster's SRAM copy (Move) instead of GDRAM.
+    const bool from_sram = p.wk_sram != 0;
+    const bfloat16_t* wk =
+        from_sram ? reinterpret_cast<const bfloat16_t*>(sram_weights) +
+                        kHeads * kHidden
+                  : reinterpret_cast<const bfloat16_t*>(p.wk);
+    const mluMemcpyDirection_t wdir = from_sram ? SRAM2NRAM : GDRAM2NRAM;
+    __memcpy_async(wkn, wk, 64 * kLatent * 2, wdir);
+    __memcpy_async(wkn + 64 * kLatent,
+                   wk + 64 * kLatent,
+                   kLatent * 2,
+                   wdir,
+                   kLatent * 2,
+                   2 * kLatent * 2,
+                   31);
+    __memcpy_async(wkn + 96 * kLatent,
+                   wk + 65 * kLatent,
+                   kLatent * 2,
+                   wdir,
+                   kLatent * 2,
+                   2 * kLatent * 2,
+                   31);
+    if (p.gamma_fp32) {
+      __memcpy(gnat, p.gamma, F * 4, GDRAM2NRAM);
+    } else {
+      __memcpy(gbf, p.gamma, F * 2, GDRAM2NRAM);
+      __bang_bfloat162float(gnat, gbf, F);
+    }
+    __sync_compute();
+    __memcpy(gperm, gnat, 64 * 4, NRAM2NRAM);
+    __memcpy(gperm + 64, gnat + 64, 4, NRAM2NRAM, 4, 8, 31);
+    __memcpy(gperm + 96, gnat + 65, 4, NRAM2NRAM, 4, 8, 31);
+    load_latent_wram(p, (t - head_slots) * p.key_rows, rows_of(t), wlat0);
+    // This core's tiles with live rows: t0 + k * taskDim, k < nk; only the
+    // last one can be partial.
+    while (t0 + nk * taskDim < tasks && rows_of(t0 + nk * taskDim) > 0) {
+      ++nk;
+    }
+  }
+  // Metadata of tiles [k0, k0 + kMetaTiles) into batch buffer `bb`: masks
+  // w = 0 <= slot < cache_rows, m = w and 0 <= pos < rope_rows; masked rows
+  // read the RoPE table at position 0; byte offsets as uint32.
+  auto meta_batch = [&](int32_t k0, int32_t bb) {
+    const int32_t cnt = imin(kMetaTiles, nk - k0);
+    const int32_t last = rows_of(t0 + (k0 + cnt - 1) * taskDim);
+    const int32_t full = last == V ? cnt : cnt - 1;
+    const int32_t r0 = (t0 + k0 * taskDim - head_slots) * p.key_rows;
+    const int32_t step = taskDim * p.key_rows * 4;
+    // Blocking loads: also a full fence, so no IO still reads this batch
+    // buffer (its last users were kMetaTiles tiles ago).
+    if (full > 0) {
+      __memcpy(
+          bpos, p.positions + r0, V * 4, GDRAM2NRAM, V * 4, step, full - 1);
+      __memcpy(bslot, p.slots + r0, V * 4, GDRAM2NRAM, V * 4, step, full - 1);
+    }
+    if (full < cnt) {
+      const int32_t rl = r0 + full * taskDim * p.key_rows;
+      __memcpy(bpos + full * V, p.positions + rl, last * 4, GDRAM2NRAM);
+      __memcpy(bslot + full * V, p.slots + rl, last * 4, GDRAM2NRAM);
+      for (int32_t i = full * V + last; i < cnt * V; ++i) {
+        bslot[i] = -1;
+        bpos[i] = 0;
+      }
+    }
+    const int32_t n = cnt * V;
+    uint32_t* roff = broff[bb];
+    uint32_t* coff = bcoff[bb];
+    __bang_ge_scalar(nwm, bslot, 0, n);
+    __bang_lt_scalar(npm, bslot, static_cast<int32_t>(p.cache_rows), n);
+    __bang_mul(nwm, nwm, npm, n);
+    __bang_ge_scalar(npm, bpos, 0, n);
+    __bang_mul(npm, npm, nwm, n);
+    __bang_lt_scalar(reinterpret_cast<int32_t*>(roff),
+                     bpos,
+                     static_cast<int32_t>(p.rope_rows),
+                     n);
+    __bang_mul(npm, npm, reinterpret_cast<int32_t*>(roff), n);
+    __bang_mul(npm, npm, bpos, n);
+    __bang_mul_scalar(reinterpret_cast<int32_t*>(roff),
+                      npm,
+                      static_cast<int32_t>((p.rope_stride * 4)),
+                      n);
+    __bang_mul(reinterpret_cast<int32_t*>(coff), bslot, nwm, n);
+    __bang_mul_scalar(reinterpret_cast<int32_t*>(coff),
+                      reinterpret_cast<int32_t*>(coff),
+                      F * 2,
+                      n);
+    __bang_int322float(nwf, nwm, n, 0);
+    // Rows past `valid` carry w = 0.
+    __bang_gt_bitindex(reinterpret_cast<float*>(wmask[bb]), nwf, 0.5f, n);
+  };
+  if (any_k) {
+    // Batch 0 metadata, then tile 0's RoPE rows on IO1 behind its latent.
+    meta_batch(0, 0);
+    __sync_io_move_compute(false, false, true, true, false, false);
+    __gather_io1_async(
+        tab[0], p.rope, broff[0], F * 4, GDRAM2NRAM, F * 4, rows_of(t0));
+  }
+  int32_t cur = 0;
+  for (int32_t k = 0; k < nk; ++k, t += taskDim, cur ^= 1) {
+    const int32_t valid = rows_of(t);
+    const int32_t bb = (k / kMetaTiles) & 1;
+    const int32_t e = (k % kMetaTiles) * V;
+    bfloat16_t* kbn = kbns[cur];
+    // This tile's latent and RoPE rows arrived on IO1 (the first tile also
+    // waits for wk / gamma on IO0): Compute and Move may use them. Move also
+    // waits for the previous tile's RoPE (Compute) before rewriting
+    // tab^T / cs / sn. The previous tile's output transpose (Move) and
+    // scatter (IO0) keep running.
+    if (k == 0) {
+      __sync();
+    } else {
+      __sync_io0_io1_move_compute<false,
+                                  true,
+                                  false,
+                                  true,
+                                  false,
+                                  false,
+                                  true,
+                                  true>();
+    }
+    // The next tile opens a metadata batch: compute it now (its blocking
+    // loads are a full fence, once per kMetaTiles tiles) so its RoPE rows
+    // can be prefetched.
+    if ((k + 1) % kMetaTiles == 0 && k + 1 < nk) {
+      meta_batch(k + 1, bb ^ 1);
+    }
+    // Move: tab^T, then cos/sin of pair i (rows 2i and 64 + 2i of tab^T),
+    // under the projection conv; Compute never waits for the gather.
+    transpose_tab_move(tabT, tab[cur]);
+    __memcpy_async(cs, tabT, V * 4, NRAM2NRAM, V * 4, 2 * V * 4, 31);
+    __memcpy_async(sn, tabT + 64 * V, V * 4, NRAM2NRAM, V * 4, 2 * V * 4, 31);
+    // IO1: the next tile's latent and RoPE rows (offsets from Compute).
+    const int32_t tn = t + taskDim;
+    if (k + 1 < nk) {
+      const int32_t b1 = ((k + 1) / kMetaTiles) & 1;
+      const int32_t e1 = ((k + 1) % kMetaTiles) * V;
+      // The refilled latent buffer was read by the previous tile's conv, the
+      // tab buffer by the previous table transpose (Move).
+      __sync_io0_io1_move_compute<false,
+                                  false,
+                                  true,
+                                  true,
+                                  false,
+                                  true,
+                                  false,
+                                  false>();
+      load_latent_wram(p,
+                       (tn - head_slots) * p.key_rows,
+                       rows_of(tn),
+                       (cur ? wlat0 : wlat1));
+      __gather_io1_async(tab[cur ^ 1],
+                         p.rope,
+                         broff[b1] + e1,
+                         F * 4,
+                         GDRAM2NRAM,
+                         F * 4,
+                         rows_of(tn));
+    }
+    // k0^T = BF16(wk_perm @ latent^T): [128, 64].
+    conv_bf16_to_bf16(kbn, wkn, (cur ? wlat1 : wlat0), kLatent, F, V);
+    __bang_bfloat162float(kf, kbn, F * V);
+    // sq overwrites tab^T: the Move table work is done.
+    __sync_io_move_compute(false, true, false, false, false, true);
+    // Column sums of squares, rsqrt(mean + eps), then k0 * (gamma_i * r_j)
+    // by an outer-product conv fused with the multiply.
+    __bang_mul(sq, kf, kf, F * V);
+    __bang_sumpool(rs, sq, V, F, 1, F, 1, 1, 1);
+    __bang_mul_scalar(rs, rs, 1.0f / F, V);
+    __bang_add_scalar(rs, rs, 1e-20f, V);
+    __bang_rsqrt(rs, rs, V);
+    // r goes to WRAM on Move (behind the table transpose and copies).
+    __sync_io_move_compute(false, false, true, false, true, false);
+    __memcpy_async(wram_pool + kRWramOffset,
+                   rs,
+                   4,
+                   NRAM2WRAM,
+                   64,
+                   3,
+                   LT_STRIDE,
+                   15,
+                   4,
+                   V - 1,
+                   0,
+                   0);
+    // r in WRAM; cs/sn are complete too (earlier on the same queue), as is
+    // the head chunk moved one step ago.
+    __sync_io_move_compute(false, true, false, false, false, true);
+    if (p.mfuse) {
+      head_step();
+    }
+    conv_f32_mul_partial_to_bf16(
+        kbn, gperm, wram_pool + kRWramOffset, kf, 1, F, V);
+    // k1 = BF16(...); the tail rows go back to FP32 for RoPE.
+    __bang_bfloat162float(kt, kbn + 64 * V, 64 * V);
+    // even' = even * cos - odd * sin; odd' = odd * cos + even * sin.
+    float* evn = kt;
+    float* odd = kt + 32 * V;
+    // Fused multiply-add / -subtract on the cos terms.
+    __bang_mul(t2, odd, sn, 32 * V);
+    __bang_fusion(FUSION_FMS, ev, evn, cs, t2, 32 * V, 32 * V);
+    __bang_mul(t1, evn, sn, 32 * V);
+    __bang_fusion(FUSION_FMA, od, odd, cs, t1, 32 * V, 32 * V);
+    // Re-interleave the tail rows into natural feature order (the even
+    // block's copy runs under the odd block's conversion), transpose to
+    // token rows, scatter.
+    __bang_float2bfloat16_rn(tbe, ev, 32 * V);
+    __sync_io_move_compute(false, false, true, false, true, false);
+    __memcpy_async(kbn + 64 * V, tbe, V * 2, NRAM2NRAM, 2 * V * 2, V * 2, 31);
+    __bang_float2bfloat16_rn(tbo, od, 32 * V);
+    __sync_io_move_compute(false, false, true, false, true, false);
+    __memcpy_async(kbn + 65 * V, tbo, V * 2, NRAM2NRAM, 2 * V * 2, V * 2, 31);
+    // Move transposes to token rows once the scatter two tiles back (IO0)
+    // has read kbT of this parity; IO0 scatters after the transpose. Compute
+    // goes on with the next tile.
+    __sync_io0_io1_move_compute<true,
+                                false,
+                                false,
+                                false,
+                                false,
+                                false,
+                                true,
+                                false>();
+    transpose_out_move(kbT[cur], kbn);
+    __sync_io0_io1_move_compute<false,
+                                false,
+                                true,
+                                true,
+                                true,
+                                false,
+                                false,
+                                false>();
+    __scatter_async(p.cache,
+                    kbT[cur],
+                    bcoff[bb] + e,
+                    wmask[bb] + (k % kMetaTiles) * 8,
+                    F * 2,
+                    NRAM2GDRAM,
+                    F * 2,
+                    valid);
+  }
+  // Remaining step barriers and head chunks after the K tiles.
+  while (hpassed < hsteps || hdone < imin(hpassed, hmine)) {
+    __sync_io_move_compute(true, true, true, false, true, true);
+    head_step();
+  }
+  if (p.mfuse) {
+    // Zero the padding rows of this core's head tiles.
+    __sync();
+    __bang_write_value(part, kHeads * kHeadFmTile, 0.0f);
+    __sync_io_move_compute(false, false, true, true, false, false);
+    for (int32_t h = taskId; h < head_tiles; h += taskDim) {
+      const int32_t rows = imin(p.head_rows, p.cap_x - h * p.head_rows);
+      const int32_t hv = head_valid(p, h, num_valid_input_rows);
+      if (rows > hv) {
+        __memcpy_async(
+            p.head + static_cast<int64_t>((h * p.head_rows + hv)) * kHeads,
+            part,
+            (rows - hv) * kHeads * 4,
+            NRAM2GDRAM);
+      }
+    }
+  }
+  __sync();
+}
+
+// Split-K K task: block b = task / 4 (key_rows rows), latent slice j =
+// task % 4. Each core convolves its 128-wide slice against wk[:, slice];
+// after one cluster barrier, core j sums the 4 FP32 partials of its quarter
+// of the rows and runs the token-major epilogue on them (BF16 k0, RMSNorm,
+// gamma, BF16 k1, tail RoPE, BF16, scatter) with 64-bit offsets.
+__mlu_func__ void key_split_k(const Params& p, int32_t task, int32_t live) {
+  const int32_t b = task >> 2;
+  const int32_t j = task & 3;
+  const int32_t r0 = b * p.key_rows;
+  const int32_t rows = imax(0, imin(p.key_rows, p.cap_k - r0));
+  const int32_t valid = imax(0, imin(rows, live - r0));
+  int8_t* pool = nram_pool;
+  bfloat16_t* nlat = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kSplitRows * kKSlice * 2;
+  float* nout = reinterpret_cast<float*>(pool);
+  pool += kSplitRows * kHeadDim * 4;
+  float* nsum = reinterpret_cast<float*>(pool);  // 4 slices x [rows, 128]
+  pool += 4 * kSplitRows * kHeadDim * 4;
+  bfloat16_t* kb = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kSplitRows * kHeadDim * 2;
+  float* kf =
+      reinterpret_cast<float*>(pool) + 64;  // padding for the +-1 pair reads
+  pool += (kSplitRows * kHeadDim + 128) * 4;
+  float* sq = reinterpret_cast<float*>(pool);
+  pool += kSplitRows * kHeadDim * 4;
+  float* scale = reinterpret_cast<float*>(pool);
+  pool += kSplitRows * 64 * 4;
+  float* csn = reinterpret_cast<float*>(pool);
+  pool += kSplitRows * kHeadDim * 4;
+  float* sw = reinterpret_cast<float*>(pool);
+  pool += (kSplitRows * kHeadDim + 64) * 4;
+  float* tmp = reinterpret_cast<float*>(pool);
+  pool += kSplitRows * kHeadDim * 4;
+  float* rot = reinterpret_cast<float*>(pool);
+  pool += kSplitRows * kHeadDim * 4;
+  bfloat16_t* rotb = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kSplitRows * kHeadDim * 2;
+  float* gamma = reinterpret_cast<float*>(pool);
+  pool += kHeadDim * 4;
+  bfloat16_t* gamma_bf = reinterpret_cast<bfloat16_t*>(pool);
+  pool += kHeadDim * 2;
+  uint32_t* mask_even = reinterpret_cast<uint32_t*>(pool);
+  pool += 64 * 4;
+  uint32_t* mask_odd = reinterpret_cast<uint32_t*>(pool);
+  pool += 64 * 4;
+  int32_t* npos = reinterpret_cast<int32_t*>(pool);
+  pool += kSplitRows * 4;
+  int32_t* nslot = reinterpret_cast<int32_t*>(pool);
+  pool += kSplitRows * 4;
+  uint64_t* roff = reinterpret_cast<uint64_t*>(pool);
+  pool += kSplitRows * 8;
+  uint64_t* coff = reinterpret_cast<uint64_t*>(pool);
+  pool += kSplitRows * 8;
+  uint8_t* wbits = reinterpret_cast<uint8_t*>(pool);
+  pool += 64;
+  float* pattern =
+      reinterpret_cast<float*>(pool);  // norm filter pattern, 1024 floats
+
+  // This core's epilogue rows [first, first + n) of the block are known
+  // before the barrier: their metadata, gamma, masks and the RoPE gather are
+  // all prepared under the slice conv and the barrier wait.
+  const int32_t q = (valid + 3) / 4;
+  const int32_t first = j * q;
+  const int32_t n = imax(0, imin(q, valid - first));
+  const int32_t e = n * kHeadDim;
+  const int32_t rr = r0 + first;
+  if (valid > 0) {
+    // wk[:, j*128:(j+1)*128] as two co=64 groups of 256 B rows.
+    for (int32_t g = 0; g < kHeadDim / 64; ++g) {
+      __memcpy_async(wram_pool + kWkLtOffset + g * 4 * kKSlice * 2,
+                     reinterpret_cast<const bfloat16_t*>(p.wk) +
+                         g * 64 * kLatent + j * kKSlice,
+                     kKSlice * 2,
+                     GDRAM2WRAM,
+                     kKSlice * 2,
+                     3,
+                     LT_STRIDE,
+                     15,
+                     kLatent * 2,
+                     63,
+                     0,
+                     0);
+    }
+    __memcpy_async(nlat,
+                   reinterpret_cast<const bfloat16_t*>(p.latent) +
+                       static_cast<int64_t>(r0) * p.latent_stride + j * kKSlice,
+                   kKSlice * 2,
+                   GDRAM2NRAM,
+                   kKSlice * 2,
+                   static_cast<int32_t>((p.latent_stride * 2)),
+                   valid - 1);
+    if (n > 0) {
+      __memcpy_async(npos, p.positions + rr, n * 4, GDRAM2NRAM);
+      __memcpy_async(nslot, p.slots + rr, n * 4, GDRAM2NRAM);
+      if (p.gamma_fp32) {
+        __memcpy_async(gamma, p.gamma, kHeadDim * 4, GDRAM2NRAM);
+      } else {
+        __memcpy_async(gamma_bf, p.gamma, kHeadDim * 2, GDRAM2NRAM);
+      }
+      for (int32_t k = 0; k < 64; ++k) {
+        mask_even[k] = (k & 1) ? 0u : 0xffffffffu;
+        mask_odd[k] = (k & 1) ? 0xffffffffu : 0u;
+      }
+      wbits[0] = 0;
+      wbits[1] = 0;
+    }
+    // The norm filters build while the loads run; the epilogue reads them
+    // after the pre-barrier Move wait.
+    load_norm_filters_async(pattern);
+    __sync_io_move_compute(true, false, false, false, false, true);
+    conv_bf16(nout, nlat, wram_pool + kWkLtOffset, kKSlice, valid, kHeadDim);
+    __sync_io_move_compute(false, false, true, false, true, false);
+    __memcpy_async(sram_kpart + j * kSplitRows * kHeadDim,
+                   nout,
+                   valid * kHeadDim * 4,
+                   NRAM2SRAM);
+    if (n > 0) {
+      if (!p.gamma_fp32) {
+        __bang_bfloat162float(gamma, gamma_bf, kHeadDim);
+      }
+      for (int32_t i = 0; i < n; ++i) {
+        const int32_t slot = nslot[i];
+        int64_t pos = npos[i];
+        const bool write =
+            slot >= 0 && static_cast<int64_t>(slot) < p.cache_rows;
+        if (!write || pos < 0 || pos >= p.rope_rows) {
+          pos = 0;
+        }
+        roff[i] = static_cast<uint64_t>((pos * p.rope_stride * 4));
+        coff[i] = write ? static_cast<uint64_t>(slot) * kHeadDim * 2 : 0;
+        if (write) {
+          wbits[i >> 3] |= static_cast<uint8_t>((1u << (i & 7)));
+        }
+      }
+      // IO reads the scalar-written offsets.
+      __sync_io_move_compute(false, false, true, true, false, false);
+      __gather_async(
+          csn, p.rope, roff, kHeadDim * 4, GDRAM2NRAM, kHeadDim * 4, n);
+    }
+  }
+  __sync_move();
+  __sync_cluster();
+  if (n <= 0) {
+    return;
+  }
+  __memcpy(nsum,
+           sram_kpart + first * kHeadDim,
+           e * 4,
+           SRAM2NRAM,
+           e * 4,
+           kSplitRows * kHeadDim * 4,
+           3);
+  // k0 = BF16(sum of the 4 slice partials).
+  __bang_fusion(FUSION_FAA, nsum, nsum, nsum + e, nsum + 2 * e, e, e);
+  __bang_add(nsum, nsum, nsum + 3 * e, e);
+  __bang_float2bfloat16_rn(kb, nsum, e);
+  __bang_bfloat162float(kf, kb, e);
+  __bang_mul(sq, kf, kf, e);
+  conv_f32(scale, sq, wram_pool + kOnesLtOffset, kHeadDim, n, 64);
+  __bang_fusion(FUSION_FMA, scale, scale, 1.0f / kHeadDim, 1e-20f, n * 64);
+  __bang_rsqrt(scale, scale, n * 64);
+  conv_f32_mul_partial(
+      kf, scale, wram_pool + kSelLtOffset, kf, 64, n, kHeadDim);
+  __bang_cycle_mul(kf, kf, gamma, e, kHeadDim);
+  __bang_float2bfloat16_rn(kb, kf, e);
+  __bang_bfloat162float(kf, kb, e);
+  __bang_mul_scalar(sw, kf + 1, -1.0f, e);
+  __bang_cycle_band(reinterpret_cast<float*>(sw),
+                    reinterpret_cast<float*>(sw),
+                    reinterpret_cast<float*>(mask_even),
+                    e,
+                    64);
+  __bang_cycle_band(reinterpret_cast<float*>(tmp),
+                    reinterpret_cast<float*>((kf - 1)),
+                    reinterpret_cast<float*>(mask_odd),
+                    e,
+                    64);
+  __bang_add(sw, sw, tmp, e);
+  __sync_io_move_compute(true, false, false, false, false, true);
+  const int32_t e1 = e - kRopeDim;
+  __bang_mul(tmp, sw + kRopeDim, csn + kRopeDim, e1);
+  __bang_fusion(FUSION_FMA, rot, kf + kRopeDim, csn, tmp, e1, e1);
+  __bang_float2bfloat16_rn(rotb, rot, e1);
+  __sync_io_move_compute(false, false, true, false, true, false);
+  __memcpy_async(kb + kRopeDim,
+                 rotb,
+                 kRopeDim * 2,
+                 NRAM2NRAM,
+                 kHeadDim * 2,
+                 kHeadDim * 2,
+                 n - 1);
+  __sync_io_move_compute(false, true, false, true, false, false);
+  __scatter(
+      p.cache, kb, coff, wbits, kHeadDim * 2, NRAM2GDRAM, kHeadDim * 2, n);
+}
+
+// Which weights task `tid` needs, from its tiles' live rows.
+// Which weights task `tid` needs, from its tiles' live rows. Tasks
+// [head_tiles, head_slots) are padding that keeps K tasks cluster-aligned.
+__mlu_func__ void task_needs(const Params& p,
+                             int32_t tid,
+                             int32_t step,
+                             int32_t head_tiles,
+                             int32_t head_slots,
+                             int32_t tasks,
+                             int32_t num_valid_input_rows,
+                             int32_t num_valid_compressed_rows,
+                             bool* need_wp,
+                             bool* need_wk) {
+  for (int32_t t = tid; t < tasks; t += step) {
+    if (t < head_tiles) {
+      *need_wp = *need_wp || t * p.head_rows < num_valid_input_rows;
+    } else if (t >= head_slots) {
+      *need_wk =
+          *need_wk || (t - head_slots) * p.key_rows < num_valid_compressed_rows;
+    }
+  }
+}
+
+__mlu_global__ void fused_indexer_k_kernel(Params p) {
+  const int32_t head_tiles = p.head_splitk
+                                 ? p.head_blocks * 4
+                                 : (p.cap_x + p.head_rows - 1) / p.head_rows;
+  const int32_t key_tiles =
+      p.key_splitk ? p.key_blocks * 4 : (p.cap_k + p.key_rows - 1) / p.key_rows;
+  const int32_t num_valid_input_rows =
+      head_tiles > 0 ? get_num_valid_rows(p.num_valid_input_rows, p.cap_x) : 0;
+  const int32_t num_valid_compressed_rows =
+      key_tiles > 0 ? get_num_valid_rows(p.num_valid_compressed_rows, p.cap_k)
+                    : 0;
+  // One task space: head tiles first, then K tiles starting on a cluster
+  // boundary, so with fewer tiles than cores the branches land on different
+  // cores and no cluster mixes them (its staging barrier would couple them).
+  const int32_t head_slots = (head_tiles + coreDim - 1) / coreDim * coreDim;
+  const int32_t tasks = head_slots + key_tiles;
+  // Union1 launch: one union per cluster, so the cluster index is taskIdY
+  // (clusterId/clusterDim describe the union and are 0/1).
+  const int32_t step = coreDim * taskDimY;
+  bfloat16_t* sram_wp = reinterpret_cast<bfloat16_t*>(sram_weights);
+  bfloat16_t* sram_wk = sram_wp + kHeads * kHidden;
+  // MPU-assisted head streaming when every core streams several full tiles;
+  // capacity-derived, so all cluster members agree on the barrier count.
+  const bool assist =
+      !p.head_fm && p.head_rows == kHeadTile && head_tiles >= 2 * step;
+  const int32_t steps = (head_tiles + step - 1) / step;
+  // Split-K head clusters load their own wp slices and only meet once, for
+  // the partial-sum exchange; their memory core just joins that barrier.
+  const bool splitk_cluster = p.head_splitk && taskIdY * coreDim < head_tiles;
+  const bool ksplit_cluster = p.key_splitk && taskIdY * coreDim >= head_slots;
+  if (__is_mpu()) {
+    if (splitk_cluster || ksplit_cluster) {
+      __sync_cluster();
+      return;
+    }
+    if (p.mfuse) {
+      // Release the IPUs at once, then stage wp and stream the cluster's
+      // head x chunks, one barrier per two steps.
+      __sync_cluster();
+      __memcpy(sram_wp, p.wp, kHeads * kHidden * 2, GDRAM2SRAM);
+      const int32_t steps =
+          cluster_steps(p, taskIdY, head_tiles, num_valid_input_rows);
+      for (int32_t hs = 0; hs < steps; ++hs) {
+        int8_t* buf = sram_x + ((hs >> 1) & 1) * 2 * kXStageBytes +
+                      (hs & 1) * kXStageBytes;
+        for (int32_t l = 0; l < 4; ++l) {
+          if (hs <
+              8 * lane_tiles(p, taskIdY, l, head_tiles, num_valid_input_rows)) {
+            const int32_t h = taskIdY * 4 + l + (hs >> 3) * 32;
+            const int32_t valid = head_valid(p, h, num_valid_input_rows);
+            __memcpy(buf + l * kXLaneBytes,
+                     reinterpret_cast<const bfloat16_t*>(p.x) +
+                         static_cast<int64_t>(h) * p.head_rows * p.x_stride +
+                         (hs & 7) * kXChunk,
+                     kXChunk * 2,
+                     GDRAM2SRAM,
+                     kXChunk * 2,
+                     static_cast<int32_t>((p.x_stride * 2)),
+                     valid - 1);
+          }
+        }
+        // One barrier releases two steps.
+        if ((hs & 1) == 1 || hs + 1 == steps) {
+          __sync_cluster();
+        }
+      }
+      return;
+    }
+    bool any_wp = false;
+    bool any_wk = false;
+    for (int32_t c = 0; c < coreDim; ++c) {
+      task_needs(p,
+                 taskIdY * coreDim + c,
+                 step,
+                 head_tiles,
+                 head_slots,
+                 tasks,
+                 num_valid_input_rows,
+                 num_valid_compressed_rows,
+                 &any_wp,
+                 &any_wk);
+    }
+    if (any_wp) {
+      if (p.head_fm) {
+        stage_wp_fm(sram_wp, reinterpret_cast<const bfloat16_t*>(p.wp));
+      } else {
+        stage_wp(sram_wp, reinterpret_cast<const bfloat16_t*>(p.wp));
+      }
+    }
+    if (any_wk && !(p.key_rows == kKeyTile && p.meta_u32)) {
+      stage_wk(sram_wk, reinterpret_cast<const bfloat16_t*>(p.wk));
+    }
+    __sync_cluster();
+    if (assist) {
+      stage_head_steps(p, head_tiles, steps, num_valid_input_rows);
+    }
+    if (p.wk_sram) {
+      // wk for the feature-major K phase, staged during the head phase and
+      // published by a second barrier at the K phase start.
+      __memcpy(sram_wk, p.wk, kHeadDim * kLatent * 2, GDRAM2SRAM);
+      __sync_cluster();
+    }
+    return;
+  }
+  bool need_wp = false;
+  bool need_wk = false;
+  // Feature-major K keeps wk in NRAM, so WRAM wk staging is skipped.
+  const bool fm_ipu = p.key_rows == kKeyTile && p.meta_u32;
+  task_needs(p,
+             taskId,
+             taskDim,
+             head_tiles,
+             head_slots,
+             tasks,
+             num_valid_input_rows,
+             num_valid_compressed_rows,
+             &need_wp,
+             &need_wk);
+  const bool fm = fm_ipu;
+  need_wk = need_wk && !fm;
+  // MPU-fed head: the head chunks run inside key_phase_fm.
+  need_wp = need_wp && !p.mfuse;
+  if (splitk_cluster) {
+    head_split_k(p, taskId, num_valid_input_rows);
+    return;
+  }
+  if (ksplit_cluster) {
+    if (taskId < tasks) {
+      key_split_k(p, taskId - head_slots, num_valid_compressed_rows);
+    } else {
+      // Spare cores of the cluster still meet the partial-sum barrier.
+      __sync_cluster();
+    }
+    return;
+  }
+  // Direct parts start on IO before the cluster barrier; the staged parts
+  // move from SRAM once the memory core has filled it.
+  bfloat16_t* const wpn = reinterpret_cast<bfloat16_t*>(nram_pool);
+  if (need_wk) {
+    load_wk(
+        reinterpret_cast<const bfloat16_t*>(p.wk), GDRAM2WRAM, 0, kDirectLts);
+    // The norm-filter pattern uses the same NRAM as the head weights.
+    // Finish its copies before issuing any head-weight load into that space.
+    load_norm_filters();
+  }
+  if (need_wp) {
+    if (p.head_fm) {
+      load_wp_fm(
+          wpn, reinterpret_cast<const bfloat16_t*>(p.wp), GDRAM2NRAM, 0, 1);
+    } else {
+      load_wp(
+          reinterpret_cast<const bfloat16_t*>(p.wp), GDRAM2WRAM, 0, kDirectLts);
+    }
+  }
+  __sync_cluster();
+  if (need_wp) {
+    if (p.head_fm) {
+      load_wp_fm(wpn, sram_wp, SRAM2NRAM, 1, 8);
+    } else {
+      load_wp(sram_wp, SRAM2WRAM, kDirectLts, 16);
+    }
+  }
+  if (need_wk) {
+    load_wk(sram_wk, SRAM2WRAM, kDirectLts, 16);
+  }
+  if (p.mfuse) {
+    // The head chunks run inside key_phase_fm.
+  } else if (p.head_fm) {
+    head_phase_fm(p, wpn, head_tiles, num_valid_input_rows);
+  } else {
+    head_phase(p, head_tiles, num_valid_input_rows, assist, steps);
+  }
+  // K tiles need wk in WRAM; head-only cores already drained everything.
+  __sync();
+  if (p.wk_sram) {
+    __sync_cluster();
+  }
+  if (fm) {
+    key_phase_fm(p,
+                 tasks,
+                 head_slots,
+                 num_valid_compressed_rows,
+                 head_tiles,
+                 num_valid_input_rows);
+  } else {
+    key_phase(p, tasks, head_slots, num_valid_compressed_rows);
+  }
+}
+
+}  // namespace
+
+cnrtRet_t launch(cnrtQueue_t queue, const Params& params) {
+  // Spread small capacities over the cores: up to 16 cores per branch when
+  // both run (32 for a single branch), never above the NRAM tile limits.
+  constexpr int32_t kCores = 32;
+  Params p = params;
+  const int32_t share = (p.cap_x > 0 && p.cap_k > 0) ? kCores / 2 : kCores;
+  p.head_rows = imax(1, imin(kHeadTile, (p.cap_x + share - 1) / share));
+  p.key_rows = imax(1, imin(kKeyTile, (p.cap_k + share - 1) / share));
+  // Small head loads: a cluster per block of <= 64 rows with K split over
+  // its 4 cores, so no core streams the whole 320 KB weights_proj.
+  p.head_blocks = imin(share / 4, p.cap_x);
+  const int32_t block_rows =
+      p.head_blocks > 0 ? (p.cap_x + p.head_blocks - 1) / p.head_blocks : 0;
+  p.head_splitk = p.cap_x > 0 && block_rows <= kHeadSplitRows;
+  if (p.head_splitk) {
+    p.head_rows = block_rows;
+    p.head_blocks = (p.cap_x + block_rows - 1) / block_rows;
+    // Split-K clusters return after their head work. K tasks must not wrap
+    // into those clusters; use the shared task-loop path when they would.
+    p.head_splitk =
+        p.head_blocks * 4 + (p.cap_k + p.key_rows - 1) / p.key_rows <= kCores;
+  }
+  // Larger head loads: feature-major tiles of up to 64 rows.
+  p.head_fm = p.cap_x > 0 && !p.head_splitk;
+  // Its tiles always wrap over all cores together with the K tiles, so the
+  // rows come from all 32 cores, not the branch share.
+  if (p.head_fm) {
+    p.head_rows = imax(1, imin(kHeadFmTile, (p.cap_x + kCores - 1) / kCores));
+  }
+  const int32_t head_tiles = p.head_splitk
+                                 ? p.head_blocks * 4
+                                 : (p.cap_x + p.head_rows - 1) / p.head_rows;
+  // Small K loads: same split over the latent dim, as long as the whole task
+  // space fits one pass of the cores (cluster-uniform barriers).
+  p.key_blocks = imin(share / 4, p.cap_k);
+  const int32_t kblock_rows =
+      p.key_blocks > 0 ? (p.cap_k + p.key_blocks - 1) / p.key_blocks : 0;
+  p.key_splitk = p.cap_k > 0 && kblock_rows <= kSplitRows / 4 * 4 &&
+                 (head_tiles + 3) / 4 * 4 +
+                         4 * ((p.cap_k + kblock_rows - 1) / kblock_rows) <=
+                     kCores;
+  if (p.key_splitk) {
+    p.key_rows = kblock_rows;
+    p.key_blocks = (p.cap_k + kblock_rows - 1) / kblock_rows;
+  }
+  const int32_t key_tiles =
+      p.key_splitk ? p.key_blocks * 4 : (p.cap_k + p.key_rows - 1) / p.key_rows;
+  const int32_t tiles = (head_tiles + 3) / 4 * 4 + key_tiles;
+  if (tiles == 0) {
+    return cnrtSuccess;
+  }
+  const int32_t clusters = imin(8, (tiles + 3) / 4);
+  // Feature-major K without split clusters: wk via the clusters' SRAM.
+  p.wk_sram = p.cap_k > 0 && !p.key_splitk && !p.head_splitk &&
+              p.key_rows == kKeyTile && p.meta_u32;
+  // Prefill-size dual-branch loads with full 64-row head tiles (80 KB x
+  // per lane and step) and at most two head chunks per K tile: the memory
+  // cores stream the head x under the K phase.
+  const int32_t kmin = key_tiles / kCores;
+  const int32_t hmax = 8 * ((head_tiles + kCores - 1) / kCores);
+  // p.mfuse = head chunk convs per K tile (1 or 2), 0 = off.
+  const bool mfuse_ok = p.head_fm && p.cap_k > 0 && !p.key_splitk &&
+                        p.key_rows == kKeyTile && p.meta_u32 && clusters == 8 &&
+                        kmin >= 1 && hmax <= 2 * kmin &&
+                        p.head_rows == kHeadFmTile;
+  p.mfuse = mfuse_ok ? (hmax + kmin - 1) / kmin : 0;
+  if (p.mfuse) {
+    p.wk_sram = 0;
+  }
+  cnrtDim3_t dim{4, static_cast<uint32_t>(clusters), 1};
+  fused_indexer_k_kernel<<<dim, cnrtFuncTypeUnion1, queue>>>(p);
+  return cnrtGetLastError();
+}
+
+}  // namespace xllm::kernel::mlu::bangc::indexer_k

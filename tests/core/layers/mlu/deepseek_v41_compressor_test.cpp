@@ -134,11 +134,8 @@ TEST(DeepseekV41CompressorTest, RoundsBeforeNormAndPreservesFp32State) {
       ModelInputParams input;
       input.meta.num_sequences = 2;
       input.attention.host.q_seq_lens = {0, count, 2 * count};
-      auto swa_table =
-          torch::tensor({1, 0}, options.dtype(torch::kInt32)).view({2, 1});
-      auto main_table =
-          torch::tensor({3, 1, 2, 0}, options.dtype(torch::kInt32))
-              .view({2, 2});
+      auto swa_table = torch::tensor({1, 0}, torch::kInt32).view({2, 1});
+      auto main_table = torch::tensor({3, 1, 2, 0}, torch::kInt32).view({2, 2});
       input.multi_block_tables = {swa_table, main_table, main_table};
       Csa2Context shared;
       shared.topk.resize(2);
@@ -147,6 +144,10 @@ TEST(DeepseekV41CompressorTest, RoundsBeforeNormAndPreservesFp32State) {
       }
       auto positions =
           torch::arange(begin, end, options.dtype(torch::kInt64)).repeat({2});
+      input = input.to(device);
+      ASSERT_TRUE(input.multi_block_tables[0].is_cpu());
+      deepseek_v41::prepare_metadata(
+          shared, input, positions, input.meta.num_sequences);
       attention->forward(
           hidden.slice(1, begin, end).reshape({2 * count, 32}).to(options),
           positions,

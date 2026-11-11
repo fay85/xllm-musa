@@ -351,6 +351,9 @@ using RecModelInputParams = std::variant<std::monostate,
                                          LlmRecMultiRoundParams>;
 
 struct AttentionHostInput {
+  // Worker-local CPU positions for the current forward, before graph padding
+  // or CP sharding. Undefined for inputs produced only on the device.
+  torch::Tensor positions;
   // Worker-local request spans retained when MTP expands attention into token
   // rows. Generated after transport; normal scheduler inputs leave this empty.
   std::vector<int32_t> kpool_query_lens;

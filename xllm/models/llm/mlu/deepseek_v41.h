@@ -25,6 +25,7 @@ limitations under the License.
 #include "layers/common/deepseek_v4_rotary_embedding.h"
 #include "layers/common/word_embedding.h"
 #include "layers/mlu/deepseek_v41/deepseek_v41_decoder_layer.h"
+#include "layers/mlu/deepseek_v41/deepseek_v41_metadata.h"
 #include "models/llm/deepseek_v41.h"
 #include "models/llm/llm_model_base.h"
 
@@ -135,6 +136,7 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     graph_state_ = dynamic_cast<DeepseekV41GraphState*>(state);
     CHECK(graph_state_ != nullptr);
     CHECK(input.meta.batch_forward_type.is_decode());
+    graph_state_->verify_input.reset();
     const ModelInputParams* grouped = &input;
     if (input.meta.spec_verify_width > 1) {
       graph_state_->verify_input = group_verify_input(input);
@@ -143,20 +145,6 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     const auto& metadata = *grouped;
 
     if (graph_state_->hashes.empty()) {
-      const bool has_compressed_layers = std::any_of(
-          model_args_.compress_ratios().begin(),
-          model_args_.compress_ratios().begin() + model_args_.n_layers(),
-          [](int32_t ratio) { return ratio > 0; });
-      const int64_t capacity =
-          model_args_.window_size() +
-          (metadata.use_dflash_proposal_attention
-               ? model_args_.dspark_block_size()
-               : (has_compressed_layers ? model_args_.index_topk() : 0));
-      graph_state_->shared.selected_kv = torch::empty(
-          {positions.numel() * capacity, 1, 1, model_args_.head_dim()},
-          options_);
-      graph_state_->shared.selected_lengths =
-          torch::empty({positions.numel()}, options_.dtype(torch::kInt32));
       graph_state_->shared.topk.resize(metadata.meta.num_sequences);
       graph_state_->shared.candidates.resize(metadata.meta.num_sequences);
       graph_state_->hashes.reserve(layers_.size());
@@ -166,13 +154,16 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
             positions.numel() / metadata.meta.num_sequences));
       }
     }
-    auto& tables = graph_state_->shared.block_tables;
-    tables.clear();
-    tables.reserve(metadata.multi_block_tables.size());
-    for (const auto& table : metadata.multi_block_tables) {
-      tables.emplace_back(
-          table.to(positions.device(), torch::kInt32, /*non_blocking=*/true));
-    }
+    layer::deepseek_v41::prepare_workspace(graph_state_->shared,
+                                           metadata,
+                                           model_args_,
+                                           positions.numel(),
+                                           options_);
+    layer::deepseek_v41::prepare_metadata(graph_state_->shared,
+                                          metadata,
+                                          positions,
+                                          metadata.meta.actual_num_sequences,
+                                          input.graph.kv_seq_len_capacity);
     for (auto& hash : graph_state_->hashes) {
       if (hash) {
         hash->prepare(metadata);
@@ -253,6 +244,18 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     pre.select(1, 0).fill_(1);
     layer::Csa2Context eager_shared;
     auto& shared = input.enable_graph ? graph_state_->shared : eager_shared;
+    if (!input.enable_graph) {
+      layer::deepseek_v41::prepare_metadata(
+          shared,
+          input,
+          cp_context ? cp_context->global_positions : positions,
+          input.meta.num_sequences);
+      layer::deepseek_v41::prepare_workspace(
+          shared, input, model_args_, positions.numel(), options_);
+      if (cp_context) {
+        shared.num_valid_input_rows.fill_(positions.numel());
+      }
+    }
     shared.topk.resize(input.meta.num_sequences * (cp_context ? 2 : 1));
     shared.candidates.resize(input.meta.num_sequences * (cp_context ? 2 : 1));
     std::optional<layer::PendingMHC> pending;
