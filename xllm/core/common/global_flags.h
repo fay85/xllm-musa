@@ -230,6 +230,8 @@ DECLARE_string(etcd_namespace);
 
 DECLARE_string(control_plane_shard_id);
 
+DECLARE_string(instance_pool_id);
+
 DECLARE_bool(enable_service_routing);
 
 DECLARE_double(heart_beat_interval);

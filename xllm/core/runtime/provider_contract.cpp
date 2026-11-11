@@ -36,6 +36,7 @@ limitations under the License.
 #include "core/framework/block/block.h"
 #include "core/framework/block/block_manager_pool.h"
 #include "core/framework/config/disagg_pd_config.h"
+#include "core/framework/config/distributed_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/parallel_config.h"
@@ -284,6 +285,7 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
   }
 
   proto::ProviderDescriptor descriptor;
+  descriptor.set_instance_pool_id(config.instance_pool_id);
   descriptor.set_contract_version(kNativeProviderContractVersion);
   proto::ProviderIdentity* identity = descriptor.mutable_identity();
   identity->set_engine_uid(config.engine_uid);
@@ -426,6 +428,8 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
   }
 
   proto::ProviderDescriptor profile = descriptor;
+  // Equal execution configurations share a profile across exclusive pools.
+  profile.clear_instance_pool_id();
   profile.mutable_identity()->clear_engine_uid();
   profile.mutable_endpoint()->clear_address();
   const std::optional<std::string> profile_digest =
@@ -760,6 +764,7 @@ collect_native_provider_descriptor_config(
 
   return ProviderDescriptorConfig{
       .engine_uid = instance_info.name,
+      .instance_pool_id = DistributedConfig::get_instance().instance_pool_id(),
       .api_address = instance_info.name,
       .role = *role,
       .runtime_version = runtime_version,

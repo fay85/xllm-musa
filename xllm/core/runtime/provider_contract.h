@@ -31,6 +31,8 @@ inline constexpr uint32_t kNativeProviderContractVersion = 1;
 // configuration; the builder deliberately has no environment fallbacks.
 struct ProviderDescriptorConfig {
   std::string engine_uid;
+  // Deployment identity, immutable for this Engine incarnation.
+  std::string instance_pool_id;
   std::string api_address;
   proto::EngineRole role = proto::ENGINE_ROLE_UNSPECIFIED;
   std::string runtime_version;

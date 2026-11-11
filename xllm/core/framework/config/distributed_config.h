@@ -48,6 +48,7 @@ class DistributedConfig final {
                                                     "etcd_namespace",
                                                     "control_plane_shard_id",
                                                     "enable_service_routing",
+                                                    "instance_pool_id",
                                                     "heart_beat_interval",
                                                     "etcd_ttl"}};
     return kOptionCategory;
@@ -68,6 +69,9 @@ class DistributedConfig final {
   PROPERTY(std::string, control_plane_shard_id) = "default";
 
   PROPERTY(bool, enable_service_routing) = false;
+
+  // Startup-scoped deployment membership; empty keeps unpooled registration.
+  PROPERTY(std::string, instance_pool_id) = "";
 
   PROPERTY(double, heart_beat_interval) = 0.5;
 

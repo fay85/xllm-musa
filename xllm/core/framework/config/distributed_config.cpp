@@ -47,6 +47,11 @@ DEFINE_bool(enable_service_routing,
             false,
             "Whether to use xllm service routing.");
 
+DEFINE_string(instance_pool_id,
+              "",
+              "Instance pool advertised to xllm-service. Must match the "
+              "Service pool configuration; empty keeps unpooled registration.");
+
 DEFINE_double(heart_beat_interval,
               0.5,
               "Heartbeat and membership reconcile interval in seconds.");
@@ -68,6 +73,7 @@ void DistributedConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(etcd_namespace);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(control_plane_shard_id);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_service_routing);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(instance_pool_id);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(heart_beat_interval);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(etcd_ttl);
 }
@@ -82,6 +88,7 @@ void DistributedConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(etcd_namespace);
   XLLM_CONFIG_ASSIGN_FROM_JSON(control_plane_shard_id);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_service_routing);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(instance_pool_id);
   XLLM_CONFIG_ASSIGN_FROM_JSON(heart_beat_interval);
   XLLM_CONFIG_ASSIGN_FROM_JSON(etcd_ttl);
 }
@@ -105,6 +112,8 @@ void DistributedConfig::append_config_json(
       config_json, default_config, control_plane_shard_id);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_service_routing);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, instance_pool_id);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, heart_beat_interval);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

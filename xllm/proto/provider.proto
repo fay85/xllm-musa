@@ -446,6 +446,9 @@ message ProviderDescriptor {
   SchedulerDescriptor scheduler = 8;
   repeated ProviderCapability capabilities = 9;
   string profile_digest = 10;
+  // Immutable deployment membership, independent of the execution profile.
+  // Empty denotes the legacy unpooled resource domain.
+  string instance_pool_id = 11;
 }
 
 message CanonicalRequest {
@@ -646,5 +649,4 @@ message ExecutionPlan {
   PlanResourceEstimate resource_estimate = 17;
   double score = 18;
 }
-
 
