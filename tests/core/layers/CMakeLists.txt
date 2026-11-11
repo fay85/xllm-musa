@@ -118,3 +118,21 @@ endif()
 if(USE_DCU)
   add_subdirectory(dcu)
 endif()
+
+# Runs only CPU tensors and a recording process group against the production
+# MUSA PCP receive path. GPU collectives are qualified separately.
+if(USE_MUSA)
+  cc_test(
+    NAME
+      musa_pcp_kv_wire_test
+    CPU_ONLY
+    SRCS
+      musa_pcp_kv_wire_test.cpp
+    DEPS
+      :musa_layers
+      :parallel_state
+      glog::glog
+      torch
+      GTest::gtest_main
+  )
+endif()

@@ -113,11 +113,12 @@ void send_prefix_cache_row(const torch::Tensor& cache,
                            const torch::Tensor& indices,
                            Context& context);
 
-// Posts the transfer of the preceding rank's key/value rows of one attention
-// layer.
+// Posts the transfer of projected key/value rows from the preceding rank.
+// projected_options must describe the projection's compute dtype and device,
+// not the paged cache storage: an FP8 cache still receives BF16 projected rows.
 void expect_prefix_kv(int64_t num_kv_heads,
                       int64_t head_dim,
-                      const torch::TensorOptions& options,
+                      const torch::TensorOptions& projected_options,
                       Context& context);
 
 // Writes this rank's key/value rows and every earlier rank's rows into this

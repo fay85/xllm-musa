@@ -169,10 +169,13 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     KVCache& kv_cache,
     const torch::Tensor& mrope_cos_sin) {
   if (attn_metadata.pcp_context != nullptr) {
-    // Posting before the projection overlaps the transfer with it.
+    // Transfer projected rows in the compute dtype, independently of the KV
+    // storage dtype. The norm weight uses the projection's constructor options;
+    // unlike hidden_states.values, it also exists with FP8-only norm output.
+    // Posting before the projection preserves overlap with its computation.
     musa_pcp::expect_prefix_kv(num_kv_heads_,
                                head_dim_,
-                               kv_cache.get_k_cache().options(),
+                               q_norm_->weight().options(),
                                *attn_metadata.pcp_context);
   }
   torch::Tensor qkv =
@@ -260,16 +263,15 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
       torch::Tensor k_cache = kv_cache.get_k_cache();
       torch::Tensor v_cache = kv_cache.get_v_cache();
-      kv_cache_written =
-          attn_metadata.pcp_context == nullptr &&
-          !attn_metadata.prefill_without_cache &&
-          xllm::kernel::musa::fused_qk_norm_rope_cache_supported(
-              qkv,
-              k_cache,
-              v_cache,
-              attn_metadata.slot_mapping,
-              num_kv_heads_,
-              head_dim_);
+      kv_cache_written = attn_metadata.pcp_context == nullptr &&
+                         !attn_metadata.prefill_without_cache &&
+                         xllm::kernel::musa::fused_qk_norm_rope_cache_supported(
+                             qkv,
+                             k_cache,
+                             v_cache,
+                             attn_metadata.slot_mapping,
+                             num_kv_heads_,
+                             head_dim_);
       if (kv_cache_written) {
         xllm::kernel::musa::fused_qk_norm_rope_with_cache(
             qkv,
@@ -332,12 +334,8 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     }
   }
   if (attn_metadata.pcp_context != nullptr) {
-    musa_pcp::exchange_kv(k,
-                          v,
-                          num_kv_heads_,
-                          head_dim_,
-                          kv_cache,
-                          *attn_metadata.pcp_context);
+    musa_pcp::exchange_kv(
+        k, v, num_kv_heads_, head_dim_, kv_cache, *attn_metadata.pcp_context);
     kv_cache_written = true;
   }
   torch::Tensor out;
@@ -391,7 +389,8 @@ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
       const int64_t blocks_per_head = head_dim_ / kBlock;
       const int64_t qg_blocks = q_size_ * 2 / kBlock;
       auto s_rows = scale_inv.slice(0, 0, qg_blocks);
-      auto s_3d = s_rows.view({num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
+      auto s_3d =
+          s_rows.view({num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
       auto sq = s_3d.slice(1, 0, blocks_per_head)
                     .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
       auto sg = s_3d.slice(1, blocks_per_head, 2 * blocks_per_head)

@@ -465,11 +465,16 @@ void send_prefix_cache_row(const torch::Tensor& cache,
 
 void expect_prefix_kv(int64_t num_kv_heads,
                       int64_t head_dim,
-                      const torch::TensorOptions& options,
+                      const torch::TensorOptions& projected_options,
                       Context& context) {
+  const torch::ScalarType wire_dtype = projected_options.dtype().toScalarType();
+  CHECK(wire_dtype == torch::kBFloat16 || wire_dtype == torch::kFloat16 ||
+        wire_dtype == torch::kFloat32)
+      << "PCP KV receive requires the projection compute dtype, not the cache "
+         "storage dtype";
   const int64_t first_rows = rows_of(context, /*rank=*/0);
   expect_prefix_rows(
-      {first_rows, 2 * num_kv_heads * head_dim}, options, context);
+      {first_rows, 2 * num_kv_heads * head_dim}, projected_options, context);
 }
 
 void exchange_kv(const torch::Tensor& key,
@@ -478,6 +483,12 @@ void exchange_kv(const torch::Tensor& key,
                  int64_t head_dim,
                  KVCache& kv_cache,
                  Context& context) {
+  CHECK_EQ(key.scalar_type(), value.scalar_type());
+  CHECK_EQ(key.device(), value.device());
+  CHECK(key.scalar_type() == torch::kBFloat16 ||
+        key.scalar_type() == torch::kFloat16 ||
+        key.scalar_type() == torch::kFloat32)
+      << "PCP KV sends projected rows before cache-storage conversion";
   const int64_t kv_size = num_kv_heads * head_dim;
   torch::Tensor local_kv = torch::cat(
       {key.reshape({-1, kv_size}), value.reshape({-1, kv_size})}, /*dim=*/-1);
@@ -492,7 +503,11 @@ void exchange_kv(const torch::Tensor& key,
   if (context.cp_rank == 0) {
     send_prefix_rows(local_kv, context);
   } else {
-    write_kv_rows(take_prefix_rows(context),
+    const torch::Tensor prefix_kv = take_prefix_rows(context);
+    CHECK_EQ(prefix_kv.scalar_type(), local_kv.scalar_type());
+    CHECK_EQ(prefix_kv.device(), local_kv.device());
+    CHECK_EQ(prefix_kv.size(/*dim=*/-1), 2 * kv_size);
+    write_kv_rows(prefix_kv,
                   slots_of(context, /*rank=*/0),
                   k_cache,
                   v_cache,
