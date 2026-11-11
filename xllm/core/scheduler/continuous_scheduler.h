@@ -41,6 +41,7 @@ limitations under the License.
 #include "scheduler.h"
 #include "scheduler/profile/profile_manager.h"
 #include "scheduler/request_priority_queue.h"
+#include "util/threadpool.h"
 
 namespace xllm {
 class Engine;
@@ -295,6 +296,11 @@ class ContinuousScheduler : public Scheduler {
   virtual void enqueue_ready_request(std::shared_ptr<Request> request);
   virtual void release_failed_request(const std::shared_ptr<Request>& request) {
   }
+  virtual void on_prefill_requests_completed(
+      std::vector<std::shared_ptr<Request>>& /*requests*/) {}
+  bool use_async_prefill_dp() const;
+  bool has_inflight_dp_groups() const;
+  void drain_all_inflight_dp_groups();
 
   static int64_t microseconds_to_milliseconds(int64_t microseconds);
   // i.e. round(latency / num_tokens). num_tokens must be > 0.
@@ -402,7 +408,24 @@ class ContinuousScheduler : public Scheduler {
   std::mutex pause_mutex_;
   std::condition_variable pause_cv_;
 
+  struct InflightDpSlot {
+    bool active = false;
+    bool done = false;
+    Batch batch;
+    std::vector<std::shared_ptr<Request>> requests;
+    std::vector<Sequence*> sequences;
+  };
+  std::vector<InflightDpSlot> inflight_dp_slots_;
+  std::vector<std::unique_ptr<ThreadPool>> dp_step_workers_;
+  mutable std::mutex dp_async_mutex_;
+  std::condition_variable dp_async_cv_;
+
  private:
+  void step_async_prefill_dp(const absl::Duration& timeout);
+  bool harvest_completed_dp_groups();
+  void process_completed_dp_slot(
+      std::vector<std::shared_ptr<Request>>& requests,
+      std::vector<Sequence*>& sequences);
   // Construct a SchedulerState snapshot for the policy.
   SchedulerState make_state();
 

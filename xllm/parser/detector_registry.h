@@ -19,7 +19,11 @@ limitations under the License.
 #include <functional>
 #include <memory>
 
+#if __has_include("core/common/macros.h")
+#include "core/common/macros.h"
+#else
 #include "common/macros.h"
+#endif
 #include "parser/reasoning_detector.h"
 
 namespace xllm {

@@ -45,6 +45,14 @@ class SpeculativeEngineBase : public Engine {
   // step the engine forward
   ForwardOutput step(std::vector<Batch>& batch) override;
 
+  bool supports_async_dp_step() const override {
+    return !use_draft_engine_ && engine_->supports_async_dp_step();
+  }
+
+  ForwardOutput step_dp_group(uint32_t dp_rank, Batch& batch) override {
+    return engine_->step_dp_group(dp_rank, batch);
+  }
+
   const Tokenizer* tokenizer() const override { return engine_->tokenizer(); }
 
   BlockManagerPool* block_manager_pool() const override {

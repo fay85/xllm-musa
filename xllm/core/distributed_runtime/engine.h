@@ -43,6 +43,13 @@ class Engine {
   // execute model with batch input
   virtual ForwardOutput step(std::vector<Batch>& batch) = 0;
 
+  virtual bool supports_async_dp_step() const { return false; }
+
+  virtual ForwardOutput step_dp_group(uint32_t /*dp_rank*/, Batch& /*batch*/) {
+    NOT_IMPLEMENTED();
+    return {};
+  }
+
   virtual void update_last_step_result(std::vector<Batch>& batch) = 0;
 
   // return the tokenizer

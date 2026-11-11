@@ -148,6 +148,18 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       ::xllm::KVCacheConfig::get_instance().enable_in_batch_prefix_cache();
 
   last_batch_.resize(options_.dp_size());
+  if (use_async_prefill_dp()) {
+    inflight_dp_slots_.resize(static_cast<size_t>(options_.dp_size()));
+    dp_step_workers_.reserve(static_cast<size_t>(options_.dp_size()));
+    for (int32_t dp_rank = 0; dp_rank < options_.dp_size(); ++dp_rank) {
+      dp_step_workers_.emplace_back(std::make_unique<ThreadPool>(
+          /*num_threads=*/1,
+          /*cpu_binding=*/false,
+          /*pool_name=*/"Scheduler.dp" + std::to_string(dp_rank)));
+    }
+    LOG(INFO) << "Enabled async per-DP-group prefill execution for dp_size="
+              << options_.dp_size() << ", cp_size=" << options_.cp_size();
+  }
 
   ProfileManager::Options profile_manager_options;
   profile_manager_options.dp_size(options.dp_size())
@@ -245,6 +257,8 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
 }
 
 ContinuousScheduler::~ContinuousScheduler() {
+  drain_all_inflight_dp_groups();
+  dp_step_workers_.clear();
   CHECK_EQ(prefetching_requests_.load(std::memory_order_acquire), 0u)
       << "ContinuousScheduler destroyed with pending prefetch callbacks";
   running_requests_.clear();
@@ -533,6 +547,11 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
       return pause_state_.load(std::memory_order_acquire) != PauseState::PAUSED;
     });
     return;  // Stay paused (or fall through to shutdown check on next loop)
+  }
+
+  if (use_async_prefill_dp()) {
+    step_async_prefill_dp(timeout);
+    return;
   }
 
   if (!options_.enable_schedule_overlap()) {
@@ -897,7 +916,8 @@ bool ContinuousScheduler::try_complete_pause() {
         !std::all_of(last_batch_.begin(),
                      last_batch_.end(),
                      [](const Batch& b) { return b.empty(); });
-    if (!running_requests_.empty() || last_batch_in_flight) {
+    if (!running_requests_.empty() || last_batch_in_flight ||
+        has_inflight_dp_groups()) {
       return false;  // still draining; keep stepping normally
     }
     {
@@ -910,7 +930,8 @@ bool ContinuousScheduler::try_complete_pause() {
     return true;
   }
 
-  // KEEP / ABORT: drain the in-flight overlap pipeline first.
+  // KEEP / ABORT: drain any async DP groups and overlap pipeline first.
+  drain_all_inflight_dp_groups();
   //
   // With enable_schedule_overlap, a forward batch may still be in flight on the
   // device (tracked by last_batch_). We must collect its results and let the
@@ -1166,6 +1187,261 @@ void ContinuousScheduler::abort_all_running_requests() {
 
   LOG(INFO) << "Aborted " << aborted_count
             << " requests, KV cache freed (not rescheduled)";
+}
+
+bool ContinuousScheduler::use_async_prefill_dp() const {
+  if (const char* env = std::getenv("XLLM_DISABLE_ASYNC_PREFILL_DP");
+      env != nullptr && std::string(env) == "1") {
+    return false;
+  }
+  return options_.enable_disagg_pd() &&
+         options_.instance_role().has_value() &&
+         options_.instance_role().value() == InstanceRole::PREFILL &&
+         options_.dp_size() > 1 &&
+         !options_.enable_schedule_overlap() &&
+         !options_.enable_pd_ooc() &&
+         engine_ != nullptr &&
+         engine_->supports_async_dp_step();
+}
+
+bool ContinuousScheduler::has_inflight_dp_groups() const {
+  std::lock_guard<std::mutex> lock(dp_async_mutex_);
+  return std::any_of(inflight_dp_slots_.begin(),
+                     inflight_dp_slots_.end(),
+                     [](const InflightDpSlot& slot) { return slot.active; });
+}
+
+void ContinuousScheduler::process_completed_dp_slot(
+    std::vector<std::shared_ptr<Request>>& requests,
+    std::vector<Sequence*>& sequences) {
+  refresh_sequences_from_requests(requests, sequences);
+  update_token_latency_metrics(sequences);
+
+  std::vector<std::shared_ptr<Request>> stream_requests;
+  for (auto& request : requests) {
+    if (request == nullptr || request->cancelled()) {
+      continue;
+    }
+    if (request->error_status().has_value()) {
+      release_failed_request(request);
+      continue;
+    }
+    if (request->state().stream) {
+      stream_requests.emplace_back(request);
+    }
+  }
+  if (!stream_requests.empty()) {
+    response_processor_->process_stream_requests(stream_requests);
+  }
+
+  on_prefill_requests_completed(requests);
+
+  std::vector<std::shared_ptr<Request>> finished;
+  auto state = make_state();
+  for (auto& req : requests) {
+    if (req == nullptr) {
+      continue;
+    }
+    req->update_connection_status();
+    if (req->finished() || req->cancelled()) {
+      clear_mtp_bootstrap(req.get());
+      kv_cache_manager_->deallocate(req.get());
+      finished.emplace_back(req);
+      continue;
+    }
+    policy_->handle_running_requests(req, state);
+    if (batch_mode_.enable_chunked_prefill &&
+        req->sequences()[0]->is_chunked_prefill_stage()) {
+      chunk_queue_->push(req, /*if_back=*/true);
+    } else {
+      decode_queue_->push(req, /*if_back=*/true);
+    }
+  }
+  if (!finished.empty()) {
+    response_processor_->process_completed_requests(finished);
+  }
+}
+
+bool ContinuousScheduler::harvest_completed_dp_groups() {
+  bool harvested_any = false;
+  for (size_t dp_rank = 0; dp_rank < inflight_dp_slots_.size(); ++dp_rank) {
+    std::vector<std::shared_ptr<Request>> done_requests;
+    std::vector<Sequence*> done_sequences;
+    {
+      std::lock_guard<std::mutex> lock(dp_async_mutex_);
+      auto& slot = inflight_dp_slots_[dp_rank];
+      if (!slot.active || !slot.done) {
+        continue;
+      }
+      done_requests = std::move(slot.requests);
+      done_sequences = std::move(slot.sequences);
+      slot.batch = Batch();
+      slot.active = false;
+      slot.done = false;
+    }
+    process_completed_dp_slot(done_requests, done_sequences);
+    harvested_any = true;
+  }
+  return harvested_any;
+}
+
+void ContinuousScheduler::drain_all_inflight_dp_groups() {
+  while (true) {
+    harvest_completed_dp_groups();
+    std::unique_lock<std::mutex> lock(dp_async_mutex_);
+    const bool any_active = std::any_of(
+        inflight_dp_slots_.begin(),
+        inflight_dp_slots_.end(),
+        [](const InflightDpSlot& slot) { return slot.active; });
+    if (!any_active) {
+      break;
+    }
+    dp_async_cv_.wait_for(lock, std::chrono::milliseconds(5));
+  }
+}
+
+void ContinuousScheduler::step_async_prefill_dp(const absl::Duration& timeout) {
+  const auto deadline = absl::Now() + timeout;
+  while (true) {
+    apply_cancel_requests();
+    const bool harvested = harvest_completed_dp_groups();
+
+    std::vector<bool> busy_dp_ranks(inflight_dp_slots_.size(), false);
+    size_t free_dp_count = 0;
+    {
+      std::lock_guard<std::mutex> lock(dp_async_mutex_);
+      for (size_t i = 0; i < inflight_dp_slots_.size(); ++i) {
+        busy_dp_ranks[i] = inflight_dp_slots_[i].active;
+        if (!busy_dp_ranks[i]) {
+          ++free_dp_count;
+        }
+      }
+    }
+
+    auto state = make_state();
+    state.busy_dp_ranks = busy_dp_ranks;
+    policy_->drain_request_queue(state, request_queue_);
+
+    bool launched_any = false;
+    if (free_dp_count > 0 && if_queue_not_empty()) {
+      Timer timer;
+      running_requests_.clear();
+      running_sequences_.clear();
+      running_sequences_budgets_.clear();
+
+      std::vector<std::shared_ptr<Request>> finished;
+      drain_decode_restore_waiting(finished);
+
+      ScheduleBudget budget;
+      budget.estimate_latency = profile_manager_->get_constant_overhead();
+      const int64_t dp_size = options_.dp_size();
+      const int64_t per_group_cap =
+          std::max<int64_t>(1, options_.max_tokens_per_batch());
+      budget.remaining_token_budget =
+          static_cast<size_t>(per_group_cap * static_cast<int64_t>(free_dp_count));
+      budget.remaining_seq_budget = std::max(options_.max_seqs_per_batch(), 1);
+      budget.latency_budget = options_.max_global_tpot_ms();
+      budget.num_preempted_requests = 0;
+      budget.dp_group_token_caps.assign(static_cast<size_t>(dp_size),
+                                        static_cast<size_t>(per_group_cap));
+      budget.dp_group_token_used.assign(static_cast<size_t>(dp_size), 0);
+      for (size_t i = 0; i < busy_dp_ranks.size(); ++i) {
+        if (busy_dp_ranks[i]) {
+          budget.dp_group_token_used[i] = static_cast<size_t>(per_group_cap);
+        }
+      }
+
+      policy_->schedule(state, budget, finished);
+      if (!finished.empty()) {
+        response_processor_->process_completed_requests(finished);
+      }
+
+      auto batches =
+          BatchFactory::get_instance(options_.dp_size())
+              ->create_batches(running_requests_,
+                               running_sequences_,
+                               running_sequences_budgets_,
+                               kv_cache_manager_->get_swap_block_transfer_infos());
+      const bool is_batches_empty = std::all_of(
+          batches.begin(), batches.end(), [](const Batch& b) { return b.empty(); });
+      if (!is_batches_empty) {
+        COUNTER_ADD(scheduling_latency_seconds, timer.elapsed_seconds());
+        kv_cache_manager_->transfer_blocks(batches);
+
+        std::vector<std::vector<std::shared_ptr<Request>>> reqs_by_dp(
+            static_cast<size_t>(dp_size));
+        std::vector<std::vector<Sequence*>> seqs_by_dp(
+            static_cast<size_t>(dp_size));
+        for (auto& req : running_requests_) {
+          if (req == nullptr || req->sequences().empty()) {
+            continue;
+          }
+          const int32_t r = req->sequences()[0]->dp_rank();
+          CHECK(r >= 0 && r < dp_size);
+          reqs_by_dp[r].emplace_back(req);
+          for (auto& seq : req->sequences()) {
+            if (seq != nullptr) {
+              seqs_by_dp[r].emplace_back(seq.get());
+            }
+          }
+        }
+        running_requests_.clear();
+        running_sequences_.clear();
+        running_sequences_budgets_.clear();
+
+        for (int32_t r = 0; r < dp_size; ++r) {
+          if (batches[r].empty()) {
+            continue;
+          }
+          {
+            std::lock_guard<std::mutex> lock(dp_async_mutex_);
+            auto& slot = inflight_dp_slots_[r];
+            CHECK(!slot.active) << "Attempted to launch on busy dp_rank=" << r;
+            slot.active = true;
+            slot.done = false;
+            slot.batch = std::move(batches[r]);
+            slot.requests = std::move(reqs_by_dp[r]);
+            slot.sequences = std::move(seqs_by_dp[r]);
+          }
+          dp_step_workers_[r]->schedule([this, r]() {
+            engine_->step_dp_group(static_cast<uint32_t>(r),
+                                   inflight_dp_slots_[r].batch);
+            {
+              std::lock_guard<std::mutex> lock(dp_async_mutex_);
+              inflight_dp_slots_[r].done = true;
+            }
+            dp_async_cv_.notify_one();
+          });
+          launched_any = true;
+        }
+      } else {
+        kv_cache_manager_->transfer_blocks();
+      }
+      policy_->report_metrics(
+          state, timer.elapsed_seconds(), budget.num_preempted_requests);
+    }
+
+    if (launched_any || harvested) {
+      return;
+    }
+
+    const auto now = absl::Now();
+    if (now >= deadline) {
+      return;
+    }
+    const auto wait_slice =
+        std::min(absl::Milliseconds(1), deadline - now);
+    std::unique_lock<std::mutex> lock(dp_async_mutex_);
+    const bool ready_done = std::any_of(
+        inflight_dp_slots_.begin(),
+        inflight_dp_slots_.end(),
+        [](const InflightDpSlot& s) { return s.active && s.done; });
+    if (!ready_done) {
+      dp_async_cv_.wait_for(
+          lock,
+          std::chrono::microseconds(absl::ToInt64Microseconds(wait_slice)));
+    }
+  }
 }
 
 }  // namespace xllm

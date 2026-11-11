@@ -107,6 +107,12 @@ class DisaggPDScheduler : public ContinuousScheduler {
   virtual void dispatch_requests();
   // prefill-2: for prefill send first token to decode
   virtual void prefill_send_first_generation();
+  void prefill_send_first_generation_for_requests(
+      std::vector<std::shared_ptr<Request>>& candidate_requests);
+  void on_prefill_requests_completed(
+      std::vector<std::shared_ptr<Request>>& requests) override {
+    prefill_send_first_generation_for_requests(requests);
+  }
 
   // decode-1: for decode recveive new request from prefill
   virtual bool decode_schedule(std::shared_ptr<Request>& request,
@@ -273,9 +279,12 @@ class DisaggPDScheduler : public ContinuousScheduler {
       prefill_request_queue_offline_;
 
   // use threadpool to handle prefill-completed request
-  ThreadPool prefill_threadpool_{/*num_threads=*/1,
-                                 /*cpu_binding=*/false,
-                                 /*pool_name=*/"DisaggPDScheduler.prefill"};
+  ThreadPool prefill_threadpool_{
+      /*num_threads=*/(std::getenv("XLLM_PREFILL_SEND_THREADS") != nullptr
+                           ? std::max(1, std::atoi(std::getenv("XLLM_PREFILL_SEND_THREADS")))
+                           : 1),
+      /*cpu_binding=*/false,
+      /*pool_name=*/"DisaggPDScheduler.prefill"};
 
   // Release retries must not delay FirstGeneration or local KV reclamation.
   ThreadPool reservation_release_threadpool_{

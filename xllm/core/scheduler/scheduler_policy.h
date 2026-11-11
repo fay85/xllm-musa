@@ -66,6 +66,9 @@ struct SchedulerState {
   // Flags.
   bool& last_step_prefill;
 
+  // Optional mask of DP ranks currently busy in async per-DP execution.
+  std::vector<bool> busy_dp_ranks = {};
+
   // Configuration.
   const ContinuousScheduler::Options& options;
   int32_t min_speculative_tokens_required;
@@ -137,13 +140,14 @@ class SchedulerPolicy {
                       double elapsed_seconds,
                       size_t num_preempted_requests);
 
- protected:
-  // ===== Common phases (internal) =====
-  void reset_batch_state(SchedulerState& state);
-
+ public:
   // ===== Running request state update =====
   void handle_running_requests(std::shared_ptr<Request> request,
                                SchedulerState& state);
+
+ protected:
+  // ===== Common phases (internal) =====
+  void reset_batch_state(SchedulerState& state);
 
   // Adjusts latency budget and reorders queues based on SLO urgency.
   // Default: no-op. Subclasses override for multi_slo_and_prio scheduling.

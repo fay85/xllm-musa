@@ -155,6 +155,13 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
 #endif
   const int32_t dp_size = state.options.dp_size();
   std::vector<size_t> per_dp_counts(dp_size, 0);
+  for (int32_t r = 0;
+       r < dp_size && static_cast<size_t>(r) < state.busy_dp_ranks.size();
+       ++r) {
+    if (state.busy_dp_ranks[r]) {
+      per_dp_counts[r] = cap;
+    }
+  }
   for (const auto& request : state.running_requests) {
     if (request == nullptr) {
       continue;
@@ -395,6 +402,11 @@ void SchedulerPolicy::schedule_prefill_from_queue(
                                         request->sequences()[0].get(), state)
                                   : state.kv_cache_manager->select_dp_rank();
       if (dp_rank < 0) {
+        if (request->sequences()[0]->dp_rank() >= 0) {
+          skipped.emplace_back(request);
+          queue->pop_top();
+          continue;
+        }
         break;
       }
       request->sequences()[0]->set_dp_rank(dp_rank);
@@ -422,10 +434,10 @@ void SchedulerPolicy::schedule_prefill_from_queue(
         const int32_t dp_rank =
             select_prefill_dp_rank(prefill_sequence.get(), state);
         if (dp_rank < 0) {
-          if (prefill_sequence->kv_state().has_any_blocks()) {
-            // In-flight chunked prefill whose assigned DP rank is already busy
-            // in this step: skip this request so other idle DP ranks can still
-            // schedule requests from the queue.
+          if (prefill_sequence->kv_state().has_any_blocks() ||
+              prefill_sequence->dp_rank() >= 0) {
+            // Assigned DP rank is currently busy; skip this request so idle
+            // DP ranks can schedule other waiting requests.
             break;
           }
           can_schedule = false;
@@ -1197,6 +1209,13 @@ void SchedulerPolicy::handle_unschedulable_head(
     bool blocks_exhausted) {
   if (blocks_exhausted &&
       state.kv_cache_manager->has_pending_async_block_release()) {
+    return;
+  }
+  const bool any_dp_busy = std::any_of(
+      state.busy_dp_ranks.begin(), state.busy_dp_ranks.end(), [](bool b) {
+        return b;
+      });
+  if (any_dp_busy) {
     return;
   }
   if (state.running_sequences.empty() && !queue->empty() &&

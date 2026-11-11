@@ -481,6 +481,9 @@ void DisaggPDScheduler::start_rpc_server() {
 
 void DisaggPDScheduler::step(const absl::Duration& timeout) {
   ContinuousScheduler::step(timeout);
+  if (use_async_prefill_dp()) {
+    return;
+  }
   // Send first generation token to decode instance.
   // Always check (not gated on last_step_prefill_) because chunked prefill
   // mode does not set that flag and a chunked prefill may complete at any step.
@@ -879,13 +882,24 @@ void DisaggPDScheduler::prefill_send_first_generation() {
   if (running_sequences_.size() == 0) {
     return;
   }
+  prefill_send_first_generation_for_requests(running_requests_);
+}
+
+void DisaggPDScheduler::prefill_send_first_generation_for_requests(
+    std::vector<std::shared_ptr<Request>>& candidate_requests) {
+  if (candidate_requests.empty()) {
+    return;
+  }
 
   std::vector<std::shared_ptr<Request>> requests;
   std::vector<std::shared_ptr<Request>> non_stream_requests;
-  requests.reserve(running_requests_.size());
-  non_stream_requests.reserve(running_requests_.size());
-  for (size_t i = 0; i < running_requests_.size(); ++i) {
-    auto request = running_requests_[i];
+  requests.reserve(candidate_requests.size());
+  non_stream_requests.reserve(candidate_requests.size());
+  for (size_t i = 0; i < candidate_requests.size(); ++i) {
+    auto request = candidate_requests[i];
+    if (request == nullptr) {
+      continue;
+    }
     // Check if the request is a recently completed prefill request
     if (request->sequences()[0]->num_generated_tokens() == 1) {
       if (!options_.disable_log_stats()) {
@@ -907,7 +921,7 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       if (!request->state().stream) {
         non_stream_requests.emplace_back(request);
       }
-      running_requests_[i] = nullptr;
+      candidate_requests[i] = nullptr;
     }
   }
   // call non_stream_request's callback in P instance when its prefill ends

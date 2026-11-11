@@ -1326,6 +1326,115 @@ bool LLMEngine::unlink_p2p(const std::vector<std::string>& remote_addrs) {
   return true;
 }
 
+bool LLMEngine::supports_async_dp_step() const {
+  if (worker_clients_.empty() || dp_size_ <= 1) {
+    return false;
+  }
+  if (options_.ep_size() > 1 || args_.n_routed_experts() > 0) {
+    return false;
+  }
+  if (::xllm::EPLBConfig::get_instance().enable_eplb()) {
+    return false;
+  }
+  return true;
+}
+
+ForwardInput LLMEngine::prepare_dp_group_input(uint32_t dp_rank, Batch& batch) {
+  CHECK_LT(dp_rank, dp_size_);
+  ForwardInput input =
+      batch.prepare_forward_input(args_, threadpool_.get(), cp_size_);
+  if (!encoder_cache_directories_.empty()) {
+    encoder_cache_directories_[dp_rank].plan(
+        input.input_params.multimodal.mm_data);
+  }
+  const BatchForwardType& current_batch_forward_type =
+      input.input_params.meta.batch_forward_type;
+  const int32_t local_tokens =
+      static_cast<int32_t>(input.host_token_ids().numel());
+  const int32_t local_kv_max = input.input_params.meta.kv_max_seq_len;
+  CHECK(!input.input_host_buffer_has_layout);
+  const bool shard_has_json_object =
+      !input.json_object_states.empty() ||
+      !input.json_object_state_snapshots.empty();
+  const int32_t local_is_decode =
+      (current_batch_forward_type.is_decode() &&
+       input.input_params.meta.q_max_seq_len == 1)
+          ? 1
+          : 0;
+
+  std::vector<uint64_t> generations_snapshot;
+  {
+    std::lock_guard<std::mutex> lock(dp_step_meta_mutex_);
+    const ModelEmbeddingInput& embedding = input.input_params.embedding;
+    if (dp_batch_embedding_ids_[dp_rank] != embedding.embedding_ids ||
+        dp_batch_request_ids_[dp_rank] != embedding.request_ids) {
+      dp_batch_embedding_ids_[dp_rank] = embedding.embedding_ids;
+      dp_batch_request_ids_[dp_rank] = embedding.request_ids;
+      ++dp_batch_generations_[dp_rank];
+    }
+    generations_snapshot = dp_batch_generations_;
+  }
+
+  std::vector<int32_t> dp_global_token_nums(dp_size_, 0);
+  std::vector<int32_t> dp_global_kv_max_seq_lens(dp_size_, 0);
+  std::vector<int32_t> dp_global_json_object_active(dp_size_, 0);
+  std::vector<int32_t> dp_is_decode(dp_size_, 0);
+  dp_global_token_nums[dp_rank] = local_tokens;
+  dp_global_kv_max_seq_lens[dp_rank] = local_kv_max;
+  dp_global_json_object_active[dp_rank] = shard_has_json_object ? 1 : 0;
+  dp_is_decode[dp_rank] = local_is_decode;
+
+  input.input_params.parallel.dp_global_token_nums = dp_global_token_nums;
+  input.input_params.parallel.raw_dp_global_token_nums = dp_global_token_nums;
+  input.input_params.parallel.dp_global_batch_generations =
+      std::move(generations_snapshot);
+  input.input_params.parallel.dp_global_kv_max_seq_lens =
+      dp_global_kv_max_seq_lens;
+  input.input_params.parallel.dp_global_json_object_active =
+      dp_global_json_object_active;
+  input.input_params.parallel.dp_is_decode = dp_is_decode;
+  return input;
+}
+
+ForwardOutput LLMEngine::step_dp_group(uint32_t dp_rank, Batch& batch) {
+  if (worker_clients_.empty() || batch.empty()) {
+    return {};
+  }
+  Timer timer;
+  CHECK_LT(dp_rank, dp_size_);
+  ForwardInput forward_input = prepare_dp_group_input(dp_rank, batch);
+
+  std::vector<folly::SemiFuture<std::optional<RawForwardOutput>>> futures;
+  futures.reserve(dp_local_size_);
+  const uint32_t worker_begin = dp_rank * dp_local_size_;
+  const uint32_t worker_end = worker_begin + dp_local_size_;
+  for (uint32_t worker_rank = worker_begin; worker_rank < worker_end;
+       ++worker_rank) {
+    futures.emplace_back(
+        worker_clients_[worker_rank]->step_remote_async(forward_input));
+  }
+
+  auto results = folly::collectAll(futures).get();
+  for (size_t i = 0; i < results.size(); ++i) {
+    if (!results[i].hasValue() || !results[i].value()) {
+      LOG(FATAL) << "Failed to execute model in step_dp_group, dp_rank="
+                 << dp_rank << " local_idx=" << i;
+    }
+  }
+  const auto& driver_result = results[0].value();
+  if (driver_result.value().outputs.empty() && layer_forward_interrupted_) {
+    throw ForwardInterruptedException();
+  }
+  if (driver_result.value().src_seq_idxes.size() == 0) {
+    batch.process_sample_output(driver_result.value(), false);
+  } else {
+    batch.process_beam_search_output(driver_result.value(), false);
+  }
+  batch.refresh_sequences_from_groups();
+  COUNTER_ADD(engine_latency_seconds, timer.elapsed_seconds());
+  return {};
+}
+
 ForwardOutput LLMEngine::step(std::vector<Batch>& batch) {
   if (worker_clients_.empty()) {
     // empty worker, return
