@@ -378,7 +378,28 @@ MHCPreOutput mhc_pre(const torch::Tensor& residual,
                                             &partial_mixes,
                                             &partial_squares);
     const musaStream_t stream = current_musa_stream(residual.device());
-    if (used_mate) {
+    const bool fused_shape = hc_mult == 4 && hidden_size == 4096 &&
+                             sinkhorn_repeat == 20 &&
+                             static_cast<float>(hc_pre_eps) == 1e-6f &&
+                             static_cast<float>(hc_sinkhorn_eps) == 1e-6f &&
+                             hc_post_mult_value == 2.0 &&
+                             (static_cast<float>(rms_eps) == 1e-6f ||
+                              static_cast<float>(rms_eps) == 1e-5f);
+    if (used_mate && fused_shape) {
+      CHECK(ensure_tilelang_loader());
+      const std::string uri = static_cast<float>(rms_eps) == 1e-5f
+                                  ? "mhc_pre_big_fuse_glm53_eps5_v1"
+                                  : "mhc_pre_big_fuse_glm53_eps6_v1";
+      TvmffiStreamGuard stream_guard(residual.device());
+      get_function(uri, "main")(to_ffi_tensor(partial_mixes),
+                                to_ffi_tensor(partial_squares),
+                                to_ffi_tensor(hc_scale.reshape({3})),
+                                to_ffi_tensor(hc_base.reshape({24})),
+                                to_ffi_tensor(residual_flat),
+                                to_ffi_tensor(post),
+                                to_ffi_tensor(comb.view({tokens, 16})),
+                                to_ffi_tensor(layer_input));
+    } else if (used_mate) {
       const size_t shared_bytes =
           static_cast<size_t>(mix_size + hc_mult + hc_mult * hc_mult) *
           sizeof(float);

@@ -182,6 +182,71 @@ std::vector<int64_t> selected_tokens(const Selection& selection, int64_t row) {
   return result;
 }
 
+TEST_F(GlmSparseTest, ParallelIndexPoolMatchesDecodeWithPaddingAndTailRestore) {
+  const auto opts =
+      torch::TensorOptions().device(device_).dtype(torch::kBFloat16);
+  auto q = torch::randn({20, 32, 128}, opts);
+  auto k = torch::randn({20, 128}, opts);
+  auto gates = torch::randn({20, 128}, opts);
+  auto weights = torch::randn({20, 32}, opts.dtype(torch::kFloat32));
+  auto ape = torch::randn({4, 128}, opts.dtype(torch::kFloat32));
+  auto positions = torch::tensor(
+      {0, 1, -1, 2, 3, 4, 5, -1, -1, -1, -1, -1, 6, 7, 8, 9, 10, 11, -1, -1},
+      opts.dtype(torch::kInt64));
+  auto table = torch::tensor({{1}}, opts.dtype(torch::kInt32));
+  auto parallel_cache =
+      torch::zeros({2, 64, 1, 132}, opts.dtype(torch::kUInt8));
+  auto serial_cache = torch::zeros_like(parallel_cache);
+  auto parallel_tail = torch::randn({3, 2, 4, 128}, opts);
+  auto serial_tail = parallel_tail.clone();
+  auto one = torch::tensor({0, 1}, opts.dtype(torch::kInt32));
+  for (int32_t phase = 0; phase < 2; ++phase) {
+    const int64_t start = phase == 0 ? 0 : 12;
+    const int64_t count = phase == 0 ? 12 : 8;
+    auto ids = torch::tensor({phase + 1}, opts.dtype(torch::kInt32));
+    auto read_ids = torch::tensor({1}, opts.dtype(torch::kInt32));
+    auto cu = torch::tensor({0, static_cast<int32_t>(count)},
+                            opts.dtype(torch::kInt32));
+    auto actual =
+        kernel::musa::glm5_next_indexer(q.narrow(0, start, count),
+                                        k.narrow(0, start, count),
+                                        gates.narrow(0, start, count),
+                                        weights.narrow(0, start, count),
+                                        ape,
+                                        positions.narrow(0, start, count),
+                                        cu,
+                                        ids,
+                                        read_ids,
+                                        table,
+                                        parallel_cache,
+                                        parallel_tail,
+                                        12,
+                                        2048);
+    for (int64_t offset = 0; offset < count; ++offset) {
+      const int64_t row = start + offset;
+      auto expected =
+          kernel::musa::glm5_next_indexer(q.narrow(0, row, 1),
+                                          k.narrow(0, row, 1),
+                                          gates.narrow(0, row, 1),
+                                          weights.narrow(0, row, 1),
+                                          ape,
+                                          positions.narrow(0, row, 1),
+                                          one,
+                                          ids,
+                                          offset == 0 ? read_ids : ids,
+                                          table,
+                                          serial_cache,
+                                          serial_tail,
+                                          12,
+                                          2048);
+      EXPECT_EQ(selected_tokens(actual, offset), selected_tokens(expected, 0));
+    }
+    ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+    EXPECT_TRUE(torch::equal(parallel_cache.cpu(), serial_cache.cpu()));
+    EXPECT_TRUE(torch::equal(parallel_tail.cpu(), serial_tail.cpu()));
+  }
+}
+
 TEST_F(GlmSparseTest, IndexPoolMatchesFormulaAcrossPageAndRequestBoundaries) {
   auto opts = torch::TensorOptions().device(device_).dtype(torch::kBFloat16);
   auto q = torch::randn({526, 32, 128}, opts) * 0.1;

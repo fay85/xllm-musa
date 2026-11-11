@@ -18,6 +18,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <array>
+#include <memory>
 #include <string>
 
 #include "framework/kv_cache/kv_cache.h"
@@ -34,6 +35,13 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+
+// Validate once per model invocation; standalone layer callers also use this.
+std::shared_ptr<const MusaKdaBatchMetadata> prepare_musa_kda_batch(
+    const torch::Tensor& indices,
+    const torch::Tensor& cu_seqlens,
+    int64_t tokens,
+    int64_t state_capacity);
 
 // Packs the four head-sharded projections and two replicated low-rank
 // projections into one local GEMM. Checkpoint shards may arrive in any order.
@@ -109,6 +117,8 @@ class Glm5NextLinearAttentionImpl final : public torch::nn::Module {
   ColumnParallelLinear v_conv1d_{nullptr};
   RowParallelLinear o_proj_{nullptr};
   musa::RmsNormGated o_norm_{nullptr};
+
+  torch::Tensor conv_weight_;
 
   bool o_norm_is_loaded_ = false;
 

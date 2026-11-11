@@ -22,6 +22,7 @@ limitations under the License.
 #include <numeric>
 #include <optional>
 #include <tuple>
+#include <unordered_set>
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "framework/state_dict/utils.h"
@@ -274,6 +275,13 @@ void Glm5NextLinearAttentionImpl::load_state_dict(const StateDict& state_dict) {
   load_conv_linear(q_conv1d_, state_dict, "q_conv1d");
   load_conv_linear(k_conv1d_, state_dict, "k_conv1d");
   load_conv_linear(v_conv1d_, state_dict, "v_conv1d");
+  if (!conv_weight_.defined() && q_conv1d_->is_weight_loaded() &&
+      k_conv1d_->is_weight_loaded() && v_conv1d_->is_weight_loaded()) {
+    conv_weight_ =
+        torch::cat(
+            {q_conv1d_->weight(), k_conv1d_->weight(), v_conv1d_->weight()}, 0)
+            .contiguous();
+  }
 
   StateDict o_norm_state = state_dict.get_dict_with_prefix("o_norm.");
   if (o_norm_state.size() > 0 && !o_norm_is_loaded_) {
@@ -363,6 +371,39 @@ torch::Tensor Glm5NextLinearAttentionImpl::get_linear_state_indices(
       torch::TensorOptions().dtype(torch::kInt).device(device));
 }
 
+std::shared_ptr<const MusaKdaBatchMetadata> prepare_musa_kda_batch(
+    const torch::Tensor& indices,
+    const torch::Tensor& cu_seqlens,
+    int64_t tokens,
+    int64_t state_capacity) {
+  CHECK_EQ(indices.dim(), 1);
+  CHECK_EQ(indices.scalar_type(), torch::kInt32);
+  CHECK_EQ(cu_seqlens.dim(), 1);
+  CHECK_EQ(cu_seqlens.scalar_type(), torch::kInt32);
+  CHECK_EQ(indices.numel() + 1, cu_seqlens.numel());
+  CHECK_EQ(indices.device(), cu_seqlens.device());
+  // Transfer only metadata, once, before any layer queues device work.
+  const torch::Tensor ids_host = indices.cpu().contiguous();
+  const torch::Tensor cu_host = cu_seqlens.cpu().contiguous();
+  const int32_t* ids = ids_host.data_ptr<int32_t>();
+  const int32_t* cu = cu_host.data_ptr<int32_t>();
+  CHECK_EQ(cu[0], 0);
+  CHECK_EQ(cu[indices.numel()], tokens);
+  std::unordered_set<int32_t> unique;
+  for (int64_t i = 0; i < indices.numel(); ++i) {
+    CHECK_GE(ids[i], 0);
+    CHECK_LT(ids[i], state_capacity);
+    CHECK(unique.insert(ids[i]).second) << "KDA write slots must be unique";
+    CHECK_GT(cu[i + 1], cu[i]);
+  }
+  auto result = std::make_shared<MusaKdaBatchMetadata>();
+  result->state_indices = indices.contiguous();
+  result->state_indices_long = indices.to(torch::kLong).contiguous();
+  result->state_capacity = state_capacity;
+  result->num_tokens = tokens;
+  return result;
+}
+
 int64_t Glm5NextLinearAttentionImpl::get_checkpoint_stride(
     const KVCache& kv_cache) const {
   torch::Tensor conv_cache = kv_cache.get_conv_cache();
@@ -435,40 +476,36 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   CHECK_EQ(conv_cache.device(), hidden_states.device());
   CHECK_EQ(ssm_cache.device(), hidden_states.device());
   const torch::Tensor logical_state_indices =
-      get_linear_state_indices(input_params, mixed_qkv.device());
+      attn_metadata.musa_kda_batch
+          ? attn_metadata.musa_kda_batch->state_indices
+          : get_linear_state_indices(input_params, mixed_qkv.device());
   CHECK_EQ(logical_state_indices.dim(), 1);
   CHECK_EQ(logical_state_indices.numel(), cu_seqlens.numel() - 1)
       << "linear state count must equal attention batch";
-  CHECK(logical_state_indices.ge(0).all().item<bool>());
-  CHECK(logical_state_indices.lt(conv_cache.size(0)).all().item<bool>());
-  const auto sorted_ids = std::get<0>(logical_state_indices.sort());
-  if (sorted_ids.numel() > 1) {
-    CHECK(sorted_ids.slice(0, 1)
-              .ne(sorted_ids.slice(0, 0, -1))
-              .all()
-              .item<bool>())
-        << "KDA write slots must be unique";
-  }
-  CHECK_EQ(cu_seqlens[0].item<int32_t>(), 0);
-  CHECK_EQ(cu_seqlens[-1].item<int32_t>(), num_tokens);
-  CHECK(
-      cu_seqlens.slice(0, 1).gt(cu_seqlens.slice(0, 0, -1)).all().item<bool>());
+  const auto batch = attn_metadata.musa_kda_batch
+                         ? attn_metadata.musa_kda_batch
+                         : prepare_musa_kda_batch(logical_state_indices,
+                                                  cu_seqlens,
+                                                  num_tokens,
+                                                  conv_cache.size(0));
+  CHECK_EQ(batch->num_tokens, num_tokens);
+  CHECK_LE(batch->state_capacity, conv_cache.size(0));
+  CHECK_EQ(batch->state_indices.device(), hidden_states.device());
   const int64_t checkpoint_stride = get_checkpoint_stride(kv_cache);
   CHECK_EQ(checkpoint_stride, 1)
       << "MUSA GLM5-Next KDA currently requires checkpoint_stride=1";
-  const torch::Tensor state_indices =
-      logical_state_indices.to(mixed_qkv.device(), torch::kInt32).contiguous();
-  const torch::Tensor conv_weight =
-      torch::cat(
-          {q_conv1d_->weight(), k_conv1d_->weight(), v_conv1d_->weight()},
-          /*dim=*/0)
-          .contiguous();
+  const torch::Tensor& state_indices = batch->state_indices;
+  if (!conv_weight_.defined()) {
+    conv_weight_ =
+        torch::cat(
+            {q_conv1d_->weight(), k_conv1d_->weight(), v_conv1d_->weight()}, 0)
+            .contiguous();
+  }
+  const torch::Tensor& conv_weight = conv_weight_;
   const bool is_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
 
   if (is_prefill) {
-    CHECK_EQ(num_tokens, cu_seqlens[-1].item<int64_t>())
-        << "packed KDA tokens must match q_cu_seq_lens";
     CHECK(attn_metadata.has_initial_states.defined())
         << "GLM5-Next KDA prefill requires has_initial_states";
     CHECK_EQ(attn_metadata.has_initial_states.scalar_type(), torch::kBool);
@@ -505,7 +542,7 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   beta = beta.view({1, num_tokens, local_num_heads_});
 
   torch::Tensor initial_state =
-      ssm_cache.index_select(0, state_indices.to(torch::kLong)).contiguous();
+      ssm_cache.index_select(0, batch->state_indices_long).contiguous();
   if (is_prefill) {
     const torch::Tensor valid =
         attn_metadata.has_initial_states.view({-1, 1, 1, 1});
@@ -527,9 +564,8 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
                                 initial_state,
                                 final_state,
                                 cu_seqlens);
-  ssm_cache.index_copy_(0,
-                        state_indices.to(torch::kLong),
-                        final_state.to(ssm_cache.scalar_type()));
+  ssm_cache.index_copy_(
+      0, batch->state_indices_long, final_state.to(ssm_cache.scalar_type()));
 
   core_output = core_output.squeeze(/*dim=*/0)
                     .reshape({-1, head_dim_})

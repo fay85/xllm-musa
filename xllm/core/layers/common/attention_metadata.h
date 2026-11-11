@@ -118,6 +118,14 @@ namespace musa_pcp {
 struct Context;
 }  // namespace musa_pcp
 
+// Validated once per model invocation and reused by every KDA layer.
+struct MusaKdaBatchMetadata {
+  torch::Tensor state_indices;
+  torch::Tensor state_indices_long;
+  int64_t state_capacity = 0;
+  int64_t num_tokens = 0;
+};
+
 // FA3 / FlashInfer extras used by MUSA attention and graph replay:
 // CPU host mirrors for plan updates (avoid D2H during capture) and optional
 // shared FA3 scheduler metadata across layers.
@@ -258,6 +266,7 @@ struct AttentionMetadata {
 
 #if defined(USE_MUSA)
   Fa3AttentionMetadata fa3_metadata;
+  std::shared_ptr<const MusaKdaBatchMetadata> musa_kda_batch;
   // Set only on the per-rank metadata of a context-parallel prefill.
   musa_pcp::Context* pcp_context = nullptr;
 #endif

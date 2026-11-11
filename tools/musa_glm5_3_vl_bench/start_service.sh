@@ -28,7 +28,7 @@ CALLSTACK_PRELOAD_SO="${GLM5_CALLSTACK_PRELOAD_SO:-}"
 export FLASHINFER_OPS_PATH="${GLM5_FLASHINFER_OPS_PATH:-${REPO_ROOT}/build/mate_sparse_ops}"
 OPS_BACKUP_DIR="${GLM5_OPS_BACKUP_DIR:-/opt/mate027_cache/glm5_3_mate_sparse_ops}"
 
-ensure_ops_cache() {
+ensure_sparse_ops_cache() {
   local required=(
     "prepare_kda_dtype_bf16_gate_1_varlen_1_normqk_1_seqlens_i64_arch_mp31/prepare_kda_dtype_bf16_gate_1_varlen_1_normqk_1_seqlens_i64_arch_mp31.so"
     "sparse_mla_bf16_v1_mp31_h8/sparse_mla_bf16_v1_mp31_h8.so"
@@ -57,6 +57,26 @@ ensure_ops_cache() {
   MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_kda.py" --ops-path "${FLASHINFER_OPS_PATH}" --jobs 4
   MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
   MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --ops-path "${FLASHINFER_OPS_PATH}"
+}
+
+ensure_ops_cache() {
+  ensure_sparse_ops_cache
+  # Older cache backups predate the MATE mHC finish modules. Check these even
+  # when the sparse operator cache was already complete or restored above.
+  local name
+  for name in mhc_pre_big_fuse_glm53_eps6_v1 mhc_pre_big_fuse_glm53_eps5_v1; do
+    if [[ ! -f "${FLASHINFER_OPS_PATH}/${name}/${name}.so" ]]; then
+      MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 \
+        "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
+      break
+    fi
+  done
+  for name in mhc_pre_big_fuse_glm53_eps6_v1 mhc_pre_big_fuse_glm53_eps5_v1; do
+    [[ -f "${FLASHINFER_OPS_PATH}/${name}/${name}.so" ]] || {
+      echo "Missing MATE mHC module: ${name}" >&2
+      return 1
+    }
+  done
 }
 
 PID_FILE="${LOG_DIR}/pids.txt"

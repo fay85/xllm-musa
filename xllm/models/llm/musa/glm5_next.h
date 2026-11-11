@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -94,6 +95,34 @@ class Glm5NextModelImpl final
         modified_input_params.parallel.dp_global_token_nums;
     std::replace(dp_token_nums.begin(), dp_token_nums.end(), 0, 1);
     prepare_attention_metadata(modified_input_params);
+    // Own a fresh batch descriptor even when the scheduler reuses metadata.
+    modified_input_params.attn_metadata =
+        std::make_shared<layer::AttentionMetadata>(
+            *modified_input_params.attn_metadata);
+    auto& batch_metadata = *modified_input_params.attn_metadata;
+    batch_metadata.musa_kda_batch.reset();
+    int64_t state_capacity = std::numeric_limits<int64_t>::max();
+    for (auto& cache : kv_caches) {
+      const torch::Tensor conv = cache.get_conv_cache();
+      if (conv.defined()) {
+        state_capacity = std::min(state_capacity, conv.size(0));
+      }
+    }
+    if (state_capacity != std::numeric_limits<int64_t>::max()) {
+      const auto& embedding = modified_input_params.embedding;
+      const torch::Tensor indices =
+          embedding.linear_state_indices.defined()
+              ? embedding.linear_state_indices.to(device_, torch::kInt32)
+              : torch::tensor(embedding.linear_state_ids,
+                              torch::TensorOptions()
+                                  .dtype(torch::kInt32)
+                                  .device(device_));
+      batch_metadata.musa_kda_batch =
+          layer::prepare_musa_kda_batch(indices,
+                                        batch_metadata.q_cu_seq_lens,
+                                        hidden_states.size(0),
+                                        state_capacity);
+    }
     const layer::AttentionMetadata& attn_metadata =
         *modified_input_params.attn_metadata;
 

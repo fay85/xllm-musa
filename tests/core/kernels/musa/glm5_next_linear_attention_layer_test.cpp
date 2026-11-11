@@ -25,6 +25,22 @@ limitations under the License.
 
 namespace xllm::layer {
 namespace {
+TEST(GlmKdaMetadataDeathTest, RejectsInvalidSlotsAndSequenceBoundaries) {
+  const auto ids = torch::tensor({2, 1}, torch::kInt32);
+  const auto cu = torch::tensor({0, 3, 5}, torch::kInt32);
+  EXPECT_DEATH(
+      prepare_musa_kda_batch(torch::tensor({1, 1}, torch::kInt32), cu, 5, 4),
+      "KDA write slots must be unique");
+  EXPECT_DEATH(
+      prepare_musa_kda_batch(torch::tensor({-1, 1}, torch::kInt32), cu, 5, 4),
+      "Check failed");
+  EXPECT_DEATH(prepare_musa_kda_batch(ids, cu, 5, 2), "Check failed");
+  EXPECT_DEATH(prepare_musa_kda_batch(ids, cu, 6, 4), "Check failed");
+  EXPECT_DEATH(prepare_musa_kda_batch(
+                   ids, torch::tensor({0, 5, 5}, torch::kInt32), 5, 4),
+               "Check failed");
+}
+
 TEST(GlmKdaLayerTest, PackedChunkDecodeAndSlotResetMatchFullPrefill) {
   at::detail::getMUSAHooks().initMUSA();
   torch::NoGradGuard guard;
@@ -68,7 +84,18 @@ TEST(GlmKdaLayerTest, PackedChunkDecodeAndSlotResetMatchFullPrefill) {
         torch::full({2}, initial, opts.dtype(torch::kBool));
     ModelInputParams params;
     params.embedding.linear_state_ids = {2, 1};
-    return layer->forward(x, metadata, cache, params);
+    // Compare the shared model-level descriptor against standalone validation
+    // across full prefill, chunks, decode and slot reuse below.
+    if (initial || !prefill) {
+      metadata.musa_kda_batch = prepare_musa_kda_batch(
+          torch::tensor({2, 1}, opts.dtype(torch::kInt32)),
+          metadata.q_cu_seq_lens,
+          x.size(0),
+          cache.get_conv_cache().size(0));
+    }
+    // RowParallelLinear reuses its output buffer. Retain each call's value
+    // before another chunk overwrites that storage.
+    return layer->forward(x, metadata, cache, params).clone();
   };
   auto x = torch::randn({40, 128}, opts);
   auto expected = run(x, full, {0, 19, 40}, false, true);
@@ -127,8 +154,8 @@ TEST(GlmKdaLayerTest, PackedChunkDecodeAndSlotResetMatchFullPrefill) {
     }
   }
   auto reference = linear(torch::stack(rows), "o_proj.weight");
-  EXPECT_TRUE(torch::allclose(expected.to(torch::kFloat32),
-                              reference.to(torch::kFloat32),
+  EXPECT_TRUE(torch::allclose(expected.cpu().to(torch::kFloat32),
+                              reference.cpu().to(torch::kFloat32),
                               0.04,
                               0.005));
 
@@ -153,18 +180,25 @@ TEST(GlmKdaLayerTest, PackedChunkDecodeAndSlotResetMatchFullPrefill) {
                             first.slice(0, 2, 5),
                             second.slice(0, 16, 33),
                             last.slice(0, 1, 2)});
-  EXPECT_TRUE(torch::allclose(
-      actual.to(torch::kFloat32), expected.to(torch::kFloat32), 0.03, 0.003));
+  const auto actual_cpu = actual.cpu().to(torch::kFloat32);
+  const auto expected_cpu = expected.cpu().to(torch::kFloat32);
+  const auto error = (actual_cpu - expected_cpu).abs();
+  EXPECT_TRUE(torch::allclose(actual_cpu, expected_cpu, 0.03, 0.003))
+      << "max absolute error: " << error.max().item<float>()
+      << "; elements outside tolerance: "
+      << (error > (0.003 + 0.03 * expected_cpu.abs())).sum().item<int64_t>();
   auto ids = torch::tensor({1, 2}, opts.dtype(torch::kLong));
-  EXPECT_TRUE(torch::allclose(chunk.get_ssm_cache().index_select(0, ids),
-                              full.get_ssm_cache().index_select(0, ids),
+  EXPECT_TRUE(torch::allclose(chunk.get_ssm_cache().index_select(0, ids).cpu(),
+                              full.get_ssm_cache().index_select(0, ids).cpu(),
                               0.03,
                               0.003));
-  EXPECT_TRUE(torch::equal(chunk.get_conv_cache().index_select(0, ids),
-                           full.get_conv_cache().index_select(0, ids)));
+  EXPECT_TRUE(torch::equal(chunk.get_conv_cache().index_select(0, ids).cpu(),
+                           full.get_conv_cache().index_select(0, ids).cpu()));
   auto reset = run(x, chunk, {0, 19, 40}, false, true);
-  EXPECT_TRUE(torch::allclose(
-      reset.to(torch::kFloat32), expected.to(torch::kFloat32), 0.0, 0.0));
+  EXPECT_TRUE(torch::allclose(reset.cpu().to(torch::kFloat32),
+                              expected.cpu().to(torch::kFloat32),
+                              0.0,
+                              0.0));
 }
 }  // namespace
 }  // namespace xllm::layer

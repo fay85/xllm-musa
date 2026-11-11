@@ -145,6 +145,148 @@ __global__ void update_pools(const c10::BFloat16* keys,
   }
 }
 
+__global__ void update_pools_parallel(const c10::BFloat16* keys,
+                                      const c10::BFloat16* gates,
+                                      const float* ape,
+                                      const int64_t* positions,
+                                      const int32_t* cu,
+                                      const int32_t* state_ids,
+                                      const int32_t* read_ids,
+                                      const int32_t* table,
+                                      uint8_t* cache,
+                                      const c10::BFloat16* read_tail,
+                                      int32_t* rows,
+                                      int32_t* pool_lengths,
+                                      int64_t states,
+                                      int64_t pages,
+                                      int64_t table_width) {
+  const int32_t row = blockIdx.x;
+  const int32_t lane = threadIdx.x;
+  int32_t request = 0;
+  while (cu[request + 1] <= row) {
+    ++request;
+  }
+  const int64_t state = state_ids[request];
+  const int64_t source = read_ids[request];
+  const int64_t position = positions[row];
+  const bool valid = state > 0 && state < states && position >= 0;
+  if (lane == 0) {
+    rows[row] = valid ? request : -1;
+    pool_lengths[row] = valid ? (position + 1) / 4 : 0;
+  }
+  if (!valid || position % 4 != 3) {
+    return;
+  }
+  __shared__ float shared[128];
+  float pool_keys[4];
+  float pool_gates[4];
+  for (int32_t j = 0; j < 4; ++j) {
+    const int64_t read_state = source > 0 && source < states ? source : state;
+    pool_keys[j] =
+        static_cast<float>(read_tail[read_state * 1024 + j * 128 + lane]);
+    pool_gates[j] =
+        static_cast<float>(read_tail[read_state * 1024 + 512 + j * 128 + lane]);
+    // Find the most recent write to this ring entry. Normally this reads at
+    // most four positions; padding is skipped just as in the decode kernel.
+    for (int32_t input_row = row; input_row >= cu[request]; --input_row) {
+      const int64_t input_position = positions[input_row];
+      if (input_position >= 0 && input_position % 4 == j) {
+        pool_keys[j] = static_cast<float>(keys[input_row * 128 + lane]);
+        pool_gates[j] = static_cast<float>(gates[input_row * 128 + lane]);
+        break;
+      }
+      if (input_position == 0) {
+        pool_keys[j] = 0;
+        pool_gates[j] = 0;
+        break;
+      }
+    }
+  }
+  const int64_t pool = position / 4;
+  const int64_t column = pool / 64;
+  const int64_t page =
+      column < table_width ? table[request * table_width + column] : -1;
+  if (page < 0 || page >= pages) {
+    return;
+  }
+  float logits[4];
+  float maximum = -INFINITY;
+  for (int32_t j = 0; j < 4; ++j) {
+    logits[j] = pool_gates[j] + ape[j * 128 + lane];
+    maximum = fmaxf(maximum, logits[j]);
+  }
+  float numerator = 0;
+  float denominator = 0;
+  for (int32_t j = 0; j < 4; ++j) {
+    const float probability = expf(logits[j] - maximum);
+    numerator += probability * pool_keys[j];
+    denominator += probability;
+  }
+  float value =
+      static_cast<float>(c10::BFloat16(__fdiv_rn(numerator, denominator)));
+  value = hadamard(value, shared);
+  const float scale = quant_scale(value, shared);
+  // MATE stores payload and scales in separate planes within each page.
+  uint8_t* page_data = cache + page * 64 * 132;
+  reinterpret_cast<c10::Float8_e4m3fn*>(page_data)[(pool % 64) * 128 + lane] =
+      QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
+  if (lane == 0) {
+    reinterpret_cast<float*>(page_data + 64 * 128)[pool % 64] = scale;
+  }
+}
+
+// Finalize only the request's four-entry ring after all pools read its old
+// tail.
+__global__ void update_pool_tails(const c10::BFloat16* keys,
+                                  const c10::BFloat16* gates,
+                                  const int64_t* positions,
+                                  const int32_t* cu,
+                                  const int32_t* state_ids,
+                                  const int32_t* read_ids,
+                                  const c10::BFloat16* snapshot,
+                                  c10::BFloat16* tail,
+                                  int64_t states) {
+  const int32_t request = blockIdx.x;
+  const int32_t lane = threadIdx.x;
+  const int64_t state = state_ids[request];
+  const int64_t source = read_ids[request];
+  if (state <= 0 || state >= states) {
+    return;
+  }
+  for (int32_t field = 0; field < 8; ++field) {
+    if (source > 0 && source < states && source != state) {
+      tail[state * 1024 + field * 128 + lane] =
+          snapshot[source * 1024 + field * 128 + lane];
+    }
+  }
+  // Keep the last write to each ring entry, including across padded rows.
+  int32_t written = 0;
+  for (int32_t row = cu[request + 1] - 1; row >= cu[request]; --row) {
+    const int64_t position = positions[row];
+    if (position < 0) {
+      continue;
+    }
+    const int64_t ring = position % 4;
+    if (!(written & (1 << ring))) {
+      tail[state * 1024 + ring * 128 + lane] = keys[row * 128 + lane];
+      tail[state * 1024 + 512 + ring * 128 + lane] = gates[row * 128 + lane];
+      written |= 1 << ring;
+    }
+    if (position == 0) {
+      for (int32_t j = 0; j < 4; ++j) {
+        if (!(written & (1 << j))) {
+          tail[state * 1024 + j * 128 + lane] = c10::BFloat16(0.0f);
+          tail[state * 1024 + 512 + j * 128 + lane] = c10::BFloat16(0.0f);
+        }
+      }
+      break;
+    }
+    if (written == 15) {
+      break;
+    }
+  }
+}
+
 __global__ void quantize_query(const c10::BFloat16* query,
                                const float* weights,
                                c10::Float8_e4m3fn* output,
@@ -295,22 +437,51 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
   auto pool_lengths = torch::empty({tokens}, ints);
   auto snapshot =
       read_state_ids.data_ptr() != state_ids.data_ptr() ? tail.clone() : tail;
-  update_pools<<<batch, 128, 0, stream>>>(raw_key.data_ptr<c10::BFloat16>(),
-                                          gate.data_ptr<c10::BFloat16>(),
-                                          ape.data_ptr<float>(),
-                                          positions.data_ptr<int64_t>(),
-                                          cu_seqlens.data_ptr<int32_t>(),
-                                          state_ids.data_ptr<int32_t>(),
-                                          read_state_ids.data_ptr<int32_t>(),
-                                          block_table.data_ptr<int32_t>(),
-                                          cache.data_ptr<uint8_t>(),
-                                          snapshot.data_ptr<c10::BFloat16>(),
-                                          tail.data_ptr<c10::BFloat16>(),
-                                          result.rows.data_ptr<int32_t>(),
-                                          pool_lengths.data_ptr<int32_t>(),
-                                          tail.size(0),
-                                          cache.size(0),
-                                          block_table.size(1));
+  if (tokens > batch) {
+    update_pools_parallel<<<tokens, 128, 0, stream>>>(
+        raw_key.data_ptr<c10::BFloat16>(),
+        gate.data_ptr<c10::BFloat16>(),
+        ape.data_ptr<float>(),
+        positions.data_ptr<int64_t>(),
+        cu_seqlens.data_ptr<int32_t>(),
+        state_ids.data_ptr<int32_t>(),
+        read_state_ids.data_ptr<int32_t>(),
+        block_table.data_ptr<int32_t>(),
+        cache.data_ptr<uint8_t>(),
+        snapshot.data_ptr<c10::BFloat16>(),
+        result.rows.data_ptr<int32_t>(),
+        pool_lengths.data_ptr<int32_t>(),
+        tail.size(0),
+        cache.size(0),
+        block_table.size(1));
+    update_pool_tails<<<batch, 128, 0, stream>>>(
+        raw_key.data_ptr<c10::BFloat16>(),
+        gate.data_ptr<c10::BFloat16>(),
+        positions.data_ptr<int64_t>(),
+        cu_seqlens.data_ptr<int32_t>(),
+        state_ids.data_ptr<int32_t>(),
+        read_state_ids.data_ptr<int32_t>(),
+        snapshot.data_ptr<c10::BFloat16>(),
+        tail.data_ptr<c10::BFloat16>(),
+        tail.size(0));
+  } else {
+    update_pools<<<batch, 128, 0, stream>>>(raw_key.data_ptr<c10::BFloat16>(),
+                                            gate.data_ptr<c10::BFloat16>(),
+                                            ape.data_ptr<float>(),
+                                            positions.data_ptr<int64_t>(),
+                                            cu_seqlens.data_ptr<int32_t>(),
+                                            state_ids.data_ptr<int32_t>(),
+                                            read_state_ids.data_ptr<int32_t>(),
+                                            block_table.data_ptr<int32_t>(),
+                                            cache.data_ptr<uint8_t>(),
+                                            snapshot.data_ptr<c10::BFloat16>(),
+                                            tail.data_ptr<c10::BFloat16>(),
+                                            result.rows.data_ptr<int32_t>(),
+                                            pool_lengths.data_ptr<int32_t>(),
+                                            tail.size(0),
+                                            cache.size(0),
+                                            block_table.size(1));
+  }
   check_musa_kernel_launch("GLM IndexPool update");
   const int64_t pools = (max_context + 3) / 4;
   const int64_t count = std::min<int64_t>(token_topk / 4, pools);

@@ -121,7 +121,7 @@ class MHCOperationsTest : public ::testing::Test {
 };
 
 TEST_F(MHCOperationsTest, PrePostMatchReferenceAcrossTokenCounts) {
-  const std::vector<int64_t> token_counts = {1, 2, 16, 64, 129};
+  const std::vector<int64_t> token_counts = {1, 2, 16, 64, 129, 2048};
   constexpr int64_t kHcMult = 4;
   constexpr int64_t kHidden = 4096;
   constexpr int64_t kRepeat = 20;
@@ -145,22 +145,49 @@ TEST_F(MHCOperationsTest, PrePostMatchReferenceAcrossTokenCounts) {
     expect_close(actual.post_mix, expected.post, 2e-3, 2e-3);
     expect_close(actual.comb_mix, expected.comb, 2e-3, 2e-3);
 
+    // Model config stores epsilon as float. Exercise the second exported
+    // specialization and the float-to-double dispatch boundary. Small
+    // residuals make epsilon materially affect the normalization.
+    const double model_eps = static_cast<double>(1e-5f);
+    const auto small_residual = residual * 0.001;
+    const auto small_fn = (fn_bf16 * 1000).to(torch::kFloat32);
+    const auto actual_eps5 = mhc_pre(small_residual,
+                                     small_fn,
+                                     scale,
+                                     base,
+                                     model_eps,
+                                     1e-6,
+                                     1e-6,
+                                     2.0,
+                                     kRepeat);
+    const auto expected_eps5 = reference_pre(
+        small_residual, small_fn, scale, base, model_eps, 1e-6, kRepeat);
+    expect_close(
+        actual_eps5.layer_input, expected_eps5.layer_input, 2e-5, 2e-2);
+    expect_close(actual_eps5.post_mix, expected_eps5.post, 2e-3, 2e-3);
+    expect_close(actual_eps5.comb_mix, expected_eps5.comb, 2e-3, 2e-3);
+
     torch::Tensor x = seeded(
         "x-" + std::to_string(tokens), {tokens, kHidden}, torch::kBFloat16);
     torch::Tensor output =
         mhc_post(x, residual, actual.post_mix, actual.comb_mix);
     torch::Tensor expected_output =
         (torch::einsum("tij,tih->tjh",
-                       actual.comb_mix.to(torch::kFloat32),
-                       residual.to(torch::kFloat32)) +
+                       {actual.comb_mix.to(torch::kFloat32),
+                        residual.to(torch::kFloat32)}) +
          actual.post_mix.to(torch::kFloat32) *
              x.unsqueeze(-2).to(torch::kFloat32))
             .to(torch::kBFloat16);
     expect_close(output, expected_output, 2e-2, 2e-2);
-    EXPECT_TRUE(torch::allclose(mhc_contract_mean(output).to(torch::kFloat32),
-                                output.to(torch::kFloat32).mean(-2),
-                                1e-3,
-                                1e-3));
+    EXPECT_TRUE(
+        torch::allclose(mhc_contract_mean(output).cpu().to(torch::kFloat32),
+                        output.cpu()
+                            .to(torch::kFloat32)
+                            .mean(-2)
+                            .to(torch::kBFloat16)
+                            .to(torch::kFloat32),
+                        1e-3,
+                        1e-3));
   }
 }
 
@@ -262,8 +289,8 @@ TEST_F(MHCOperationsTest, GenericMultiplicityMatchesReference) {
       mhc_post(x, residual, actual.post_mix, actual.comb_mix);
   torch::Tensor expected_output =
       (torch::einsum("...ij,...ih->...jh",
-                     actual.comb_mix.to(torch::kFloat32),
-                     residual.to(torch::kFloat32)) +
+                     {actual.comb_mix.to(torch::kFloat32),
+                      residual.to(torch::kFloat32)}) +
        actual.post_mix.to(torch::kFloat32) *
            x.unsqueeze(-2).to(torch::kFloat32))
           .to(torch::kBFloat16);
