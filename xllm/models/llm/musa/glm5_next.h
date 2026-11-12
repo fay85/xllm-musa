@@ -104,9 +104,11 @@ class Glm5NextModelImpl final
     if (!modified_input_params.attn_metadata->enable_cuda_graph ||
         !modified_input_params.attn_metadata->musa_kda_batch) {
       // Own a fresh batch descriptor even when the scheduler reuses metadata.
-      modified_input_params.attn_metadata =
-          std::make_shared<layer::AttentionMetadata>(
-              *modified_input_params.attn_metadata);
+      if (!modified_input_params.attn_metadata->enable_cuda_graph) {
+        modified_input_params.attn_metadata =
+            std::make_shared<layer::AttentionMetadata>(
+                *modified_input_params.attn_metadata);
+      }
       auto& batch_metadata = *modified_input_params.attn_metadata;
       batch_metadata.musa_kda_batch.reset();
       int64_t state_capacity = std::numeric_limits<int64_t>::max();
@@ -170,38 +172,78 @@ class Glm5NextModelImpl final
                                       ModelInputParams& params) {
     auto* graph_state = dynamic_cast<Glm5NextGraphMetadataState*>(state);
     CHECK(graph_state != nullptr);
-    CHECK(params.meta.batch_forward_type.is_decode());
     CHECK(!params.is_spec_verify);
-    CHECK_GT(kda_state_capacity_, 0);
+    const bool is_decode = params.meta.batch_forward_type.is_decode();
+    const bool is_prefill = params.meta.batch_forward_type.is_prefill() ||
+                            params.meta.batch_forward_type.is_chunked_prefill();
+    CHECK(is_decode || is_prefill);
     const auto& attention = params.attention.device;
-    const auto batch =
-        layer::prepare_musa_kda_batch(params.embedding.linear_state_indices,
-                                      attention.q_seq_lens,
-                                      positions.numel(),
-                                      kda_state_capacity_);
     if (!graph_state->metadata) {
       graph_state->metadata =
           std::make_shared<layer::AttentionMetadata>(*params.attn_metadata);
       auto& metadata = *graph_state->metadata;
       metadata.enable_cuda_graph = true;
-      metadata.is_prefill = false;
-      metadata.is_chunked_prefill = false;
-      metadata.max_query_len = 1;
-      metadata.max_seq_len =
-          layer::glm5_next_graph_context_capacity(params.meta.kv_max_seq_len);
+      metadata.is_prefill =
+          is_prefill && !params.meta.batch_forward_type.is_chunked_prefill();
+      metadata.is_chunked_prefill =
+          params.meta.batch_forward_type.is_chunked_prefill();
+      metadata.max_query_len = is_decode ? 1 : params.meta.q_max_seq_len;
+      metadata.max_seq_len = is_decode
+                                 ? layer::glm5_next_graph_context_capacity(
+                                       params.meta.kv_max_seq_len)
+                                 : params.meta.kv_max_seq_len;
       metadata.q_cu_seq_lens = attention.q_seq_lens;
+      metadata.kv_cu_seq_lens = attention.kv_seq_lens;
       metadata.block_table = attention.block_tables;
       metadata.slot_mapping = attention.new_cache_slots;
-      metadata.linear_state_indices = batch->state_indices;
+      if (params.embedding.linear_state_indices.defined()) {
+        metadata.linear_state_indices = params.embedding.linear_state_indices;
+      }
       metadata.linear_state_read_indices = torch::Tensor();
-      metadata.musa_kda_batch = batch;
+      if (params.linear_state_validity_mask_tensor.defined()) {
+        metadata.has_initial_states = params.linear_state_validity_mask_tensor;
+      }
+      if (is_decode) {
+        CHECK_GT(kda_state_capacity_, 0);
+        metadata.musa_kda_batch =
+            layer::prepare_musa_kda_batch(params.embedding.linear_state_indices,
+                                          attention.q_seq_lens,
+                                          positions.numel(),
+                                          kda_state_capacity_);
+      } else {
+        // This performs the host-side schedule construction before stream
+        // capture.  Rebuilding it from inside the captured forward would
+        // execute item()/repeat_interleave() on the host and invalidate the
+        // graph's recurrent metadata.
+        layer::AttentionMetadataBuilder::build_linear_prefill(
+            metadata,
+            /*block_size=*/64);
+      }
     } else {
-      // Captured KDA gather/scatter must keep its int64 index storage while
-      // the scheduler reassigns state slots between requests.
-      const auto& captured = graph_state->metadata->musa_kda_batch;
-      CHECK_EQ(captured->num_tokens, batch->num_tokens);
-      CHECK_EQ(captured->state_capacity, batch->state_capacity);
-      captured->state_indices_long.copy_(batch->state_indices_long);
+      auto& metadata = *graph_state->metadata;
+      metadata.q_cu_seq_lens = attention.q_seq_lens;
+      metadata.kv_cu_seq_lens = attention.kv_seq_lens;
+      metadata.block_table = attention.block_tables;
+      metadata.slot_mapping = attention.new_cache_slots;
+      if (params.linear_state_validity_mask_tensor.defined() &&
+          metadata.has_initial_states.defined()) {
+        metadata.has_initial_states.copy_(
+            params.linear_state_validity_mask_tensor);
+      }
+      if (metadata.musa_kda_batch) {
+        CHECK_GT(kda_state_capacity_, 0);
+        const auto batch =
+            layer::prepare_musa_kda_batch(params.embedding.linear_state_indices,
+                                          attention.q_seq_lens,
+                                          positions.numel(),
+                                          kda_state_capacity_);
+        const auto& captured = metadata.musa_kda_batch;
+        CHECK_EQ(captured->num_tokens, batch->num_tokens);
+        CHECK_EQ(captured->state_capacity, batch->state_capacity);
+        CHECK_EQ(captured->state_indices.data_ptr(),
+                 batch->state_indices.data_ptr());
+        captured->state_indices_long.copy_(batch->state_indices_long);
+      }
     }
     params.attn_metadata = graph_state->metadata;
   }
@@ -234,10 +276,11 @@ class Glm5NextModelImpl final
                                                  /*compute_dtype=*/"half",
                                                  /*attn_mask=*/std::nullopt,
                                                  /*device=*/device_));
-    } else if (ordinary_prefill ||
-               (!params.attn_metadata->is_spec_verify &&
-                (params.attn_metadata->is_prefill ||
-                 params.attn_metadata->is_chunked_prefill)) ||
+    } else if ((!params.attn_metadata->enable_cuda_graph &&
+                (ordinary_prefill ||
+                 (!params.attn_metadata->is_spec_verify &&
+                  (params.attn_metadata->is_prefill ||
+                   params.attn_metadata->is_chunked_prefill)))) ||
                params.attn_metadata->linear_state_read_indices.defined()) {
       params.attn_metadata =
           std::make_shared<layer::AttentionMetadata>(*params.attn_metadata);
@@ -249,7 +292,8 @@ class Glm5NextModelImpl final
     params.embedding.linear_state_read_ids = params.embedding.linear_state_ids;
     params.embedding.linear_state_read_indices =
         params.embedding.linear_state_indices;
-    if (metadata.is_prefill || metadata.is_chunked_prefill) {
+    if ((metadata.is_prefill || metadata.is_chunked_prefill) &&
+        !metadata.enable_cuda_graph) {
       layer::AttentionMetadataBuilder::build_linear_prefill(metadata,
                                                             /*block_size=*/64);
     }

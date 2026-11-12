@@ -317,8 +317,7 @@ Glm5NextMLAAttentionImpl::forward(
   CHECK_EQ(positions.device(), hidden_states.device());
   c10::DeviceGuard device_guard(hidden_states.device());
   CHECK(!kernel::musa::is_stream_capturing() ||
-        (metadata.enable_cuda_graph && !metadata.is_prefill &&
-         !metadata.is_chunked_prefill && !metadata.is_spec_verify));
+        (metadata.enable_cuda_graph && !metadata.is_spec_verify));
   CHECK(enable_indexer_ ? shared_selection == nullptr
                         : shared_selection != nullptr);
   auto main_cache = cache.get_k_cache();

@@ -18,9 +18,15 @@ MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-4096}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
 ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
-# Default to the validated C1 trace workload. Larger decode batches remain
-# eager; multi-request graph reuse still needs numerical qualification.
-MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-1}"
+PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
+ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-false}"
+MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:--1}"
+PREFILL_BATCH_WAIT_MS="${GLM5_PREFILL_BATCH_WAIT_MS:-0}"
+# Graph capture uses exact GLM5 token shapes for prefill and exact decode batch
+# shapes.  The executor enforces model-specific safety checks for unsupported
+# shapes; this limit only prevents unexpectedly large graph allocations.
+MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-4096}"
+ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-true}"
 LOG_DIR="${GLM5_LOG_DIR:-/tmp/glm5_3_flash_run}"
 WAIT_READY="${GLM5_WAIT_READY:-1}"
 WAIT_TIMEOUT_SEC="${GLM5_WAIT_TIMEOUT_SEC:-180}"
@@ -183,11 +189,14 @@ for ((r = 0; r < NNODES; ++r)); do
     --max_seqs_per_batch="${MAX_SEQS_PER_BATCH}" \
     --reasoning_parser=glm5 \
     --enable_prefix_cache=false \
-    --enable_chunked_prefill=false \
+    --enable_chunked_prefill="${ENABLE_CHUNKED_PREFILL}" \
+    --max_tokens_per_chunk_for_prefill="${MAX_TOKENS_PER_CHUNK}" \
     --enable_schedule_overlap=false \
+    --prefill_batch_wait_ms="${PREFILL_BATCH_WAIT_MS}" \
     --enable_graph="${ENABLE_GRAPH}" \
     --max_tokens_for_graph_mode="${MAX_TOKENS_FOR_GRAPH_MODE}" \
-    --enable_prefill_piecewise_graph=false \
+    --enable_prefill_piecewise_graph="${ENABLE_PREFILL_PIECEWISE_GRAPH}" \
+    --musa_prefill_graph_max_entries="${PREFILL_GRAPH_MAX_ENTRIES}" \
     --enable_shm=false \
     "${PROFILE_ARGS[@]}" \
     > "${RANK_LOG}" 2>&1 < /dev/null &

@@ -520,6 +520,85 @@ TEST_F(GlmSparseTest,
   }
 }
 
+TEST_F(GlmSparseTest, PrefillGraphPreservesPackedSequencesAndCacheWrites) {
+  namespace km = kernel::musa;
+  auto args = model_args();
+  args.index_topk(2048);
+  ProcessGroup group(0, 1, device_);
+  ParallelArgs parallel(0, 1, &group);
+  parallel.tp_group_ = &group;
+  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+  Glm5NextSparseAttention layer(args, parallel, opts);
+  layer->load_state_dict(StateDict(make_weights(args)));
+  layer->verify_loaded_weights();
+  km::TvmffiStreamOverrideGuard ffi_stream(
+      device_, reinterpret_cast<void*>(stream_.stream()));
+  auto cache = Glm5NextSparseAttentionImpl::create_cache(24, 4, opts);
+  auto reference = Glm5NextSparseAttentionImpl::create_cache(24, 4, opts);
+  // Different sequence lengths exercise packed IndexPool updates and the
+  // selection threshold. Both sequences start at position zero on each replay.
+  auto meta = metadata(0, 4101, device_);
+  meta.is_prefill = true;
+  meta.max_seq_len = 2052;
+  meta.q_cu_seq_lens =
+      torch::tensor({0, 2049, 4101}, torch::kInt32).to(device_);
+  meta.block_table = torch::arange(24, opts.dtype(torch::kInt32)).view({2, 12});
+  meta.linear_state_indices = torch::tensor({1, 2}, torch::kInt32).to(device_);
+  auto pos = torch::cat({torch::arange(2049, opts.dtype(torch::kInt64)),
+                         torch::arange(2052, opts.dtype(torch::kInt64))});
+  meta.slot_mapping = pos.clone();
+  meta.slot_mapping.narrow(0, 2049, 2052).add_(12 * 256);
+  auto input = torch::randn({4101, 64}, opts) * 0.3;
+  auto execute = [&]() { return layer->forward(pos, input, meta, cache); };
+  execute();
+  km::begin_ffi_alloc_record();
+  execute();
+  auto allocations = km::end_ffi_alloc_record();
+  stream_.synchronize();
+  meta.enable_cuda_graph = true;
+  MusaGraphHandle graph;
+  graph.capture_begin();
+  km::begin_ffi_alloc_replay(&allocations);
+  auto output = execute();
+  graph.capture_end();
+  km::end_ffi_alloc_replay();
+  for (int32_t step = 0; step < 4; ++step) {
+    input.normal_(0.0, 0.3);
+    if (step == 2) {
+      meta.linear_state_indices.copy_(
+          torch::tensor({3, 1}, torch::kInt32).to(device_));
+      meta.block_table.copy_(meta.block_table.flip({0}));
+      meta.slot_mapping.narrow(0, 0, 2049).add_(12 * 256);
+      meta.slot_mapping.narrow(0, 2049, 2052).sub_(12 * 256);
+    }
+    // Poison current-token storage before replay so the eager reference cannot
+    // accidentally hide missing writes in the captured path.
+    cache.get_k_cache().zero_();
+    cache.get_index_cache().zero_();
+    cache.get_kpool_tail().zero_();
+    reference.get_k_cache().zero_();
+    reference.get_index_cache().zero_();
+    reference.get_kpool_tail().zero_();
+    graph.replay();
+    auto replayed_output = output.first.clone();
+    auto replayed_selection = output.second.tokens.clone();
+    auto expected = layer->forward(pos, input, meta, reference);
+    stream_.synchronize();
+    EXPECT_TRUE(torch::allclose(replayed_output.cpu().to(torch::kFloat32),
+                                expected.first.cpu().to(torch::kFloat32),
+                                0.002,
+                                0.0002));
+    EXPECT_TRUE(
+        torch::equal(output.second.tokens.cpu(), expected.second.tokens.cpu()));
+    EXPECT_TRUE(
+        torch::equal(cache.get_k_cache().cpu(), reference.get_k_cache().cpu()));
+    EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
+                             reference.get_index_cache().cpu()));
+    EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
+                             reference.get_kpool_tail().cpu()));
+  }
+}
+
 // Independent dense K/V form. Projections are separate GEMMs, norms use their
 // defining formulas, and the indexer uses scalar CPU reference math.
 std::pair<torch::Tensor, std::vector<std::vector<int64_t>>> full_reference(

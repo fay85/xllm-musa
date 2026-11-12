@@ -2389,6 +2389,10 @@ bool MusaGraph::capture(CausalLM* model,
                         const c10::musa::MempoolId_t& pool,
                         std::unique_ptr<MusaMemPool> pool_owner) {
   model_ = model;
+  is_glm_graph_ = args.model_type() == "glm5_next";
+  is_glm_prefill_ =
+      is_glm_graph_ && (params.meta.batch_forward_type.is_prefill() ||
+                        params.meta.batch_forward_type.is_chunked_prefill());
   CHECK(pool_owner_ == nullptr);
   pool_owner_ = std::move(pool_owner);
   MusaMemPool* pool_ptr = pool_owner_.get();
@@ -2460,7 +2464,7 @@ bool MusaGraph::capture(CausalLM* model,
   const torch::Tensor v_cache =
       full_attention_cache ? full_attention_cache->second : torch::Tensor();
   auto graph_params_opt =
-      is_piecewise_
+      (is_piecewise_ || is_glm_prefill_)
           ? persistent_param_.update_prefill(tokens,
                                              positions,
                                              params,
@@ -2630,7 +2634,7 @@ bool MusaGraph::capture(CausalLM* model,
       recorded_ffi_allocs_ = xllm::kernel::musa::end_ffi_alloc_record();
       capture_stream.synchronize();
       LOG(INFO) << "Recorded " << recorded_ffi_allocs_.size()
-                << " Mate FFI scratch tensors for decode graph capture, "
+                << " Mate FFI scratch tensors for full graph capture, "
                    "bucket_num_tokens="
                 << bucket_num_tokens;
     }
@@ -2662,8 +2666,9 @@ bool MusaGraph::capture(CausalLM* model,
       if (s_graph_dump_directory() != nullptr) {
         graph_.enable_debug_mode();
       }
-      graph_.capture_begin(
-          pool, musaStreamCaptureModeThreadLocal, pool_ptr != nullptr);
+      graph_.capture_begin(pool,
+                           musaStreamCaptureModeThreadLocal,
+                           pool_ptr != nullptr || is_glm_prefill_);
     }
 
     if (!is_piecewise_) {
@@ -2769,6 +2774,21 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     replay_lock_guard.emplace(replay_lock);
   }
 
+  static const bool validate_glm_graph = [] {
+    const char* value = std::getenv("XLLM_GLM5_VALIDATE_GRAPH");
+    return value != nullptr && std::string(value) == "1";
+  }();
+  const bool validate = validate_glm_graph && is_glm_graph_;
+  torch::Tensor reference_hidden;
+  torch::Tensor validation_indices;
+  std::vector<IndexedTensorSnapshot> initial_state;
+  if (validate) {
+    validation_indices =
+        get_linear_state_snapshot_indices(params, persistent_param_.device());
+    initial_state =
+        snapshot_linear_attention_state(kv_cache, validation_indices);
+  }
+
   // Update persistent parameters with new input data
   const bool needs_model_graph_metadata =
       model_ != nullptr && model_->requires_graph_forward_metadata();
@@ -2815,15 +2835,18 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // repro logs and refresh_persistent_paged_kv_host_mirrors() for the
     // pointer-stability rationale).
     auto replay_params_opt =
-        persistent_param_.update(tokens,
-                                 k_cache,
-                                 v_cache,
-                                 positions,
-                                 params,
-                                 padded_num_tokens_,
-                                 /*return_capture_params=*/true,
-                                 /*update_attention_plan=*/
-                                 !needs_model_graph_metadata);
+        is_glm_prefill_
+            ? persistent_param_.update_prefill(
+                  tokens, positions, params, padded_num_tokens_, true)
+            : persistent_param_.update(tokens,
+                                       k_cache,
+                                       v_cache,
+                                       positions,
+                                       params,
+                                       padded_num_tokens_,
+                                       /*return_capture_params=*/true,
+                                       /*update_attention_plan=*/
+                                       !needs_model_graph_metadata);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
 
@@ -2894,10 +2917,9 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     }
 
     // Optional diagnostic barrier for persistent input copies. The update path
-    // runs on the caller stream while the captured graph is launched on
-    // capture_stream_; a barrier here distinguishes a stale-input race from
-    // kernel arithmetic differences. Keep it opt-in because the synchronous
-    // version is intentionally not the performance default.
+    // and replay launch both run on the current caller stream. This barrier
+    // is only a diagnostic aid; stream ordering already orders the copies
+    // before graph execution.
     static const bool s_sync_graph_inputs = [] {
       const char* env = std::getenv("XLLM_MUSA_GRAPH_SYNC_INPUTS");
       return env && std::string(env) == "1";
@@ -2936,16 +2958,14 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     }
 
     // Optional completion barrier for cross-request isolation diagnostics.
-    // The graph runs on capture_stream_, while the next scheduler request may
-    // arrive on another worker stream. Waiting here verifies whether a prior
-    // replay is still mutating shared KV/output storage when the next request
-    // starts. Keep opt-in until the performance cost is measured.
+    // TorchMUSA launches replay on the current caller stream, so synchronize
+    // that stream rather than the stream used during capture.
     static const bool s_sync_graph_outputs = [] {
       const char* env = std::getenv("XLLM_MUSA_GRAPH_SYNC_OUTPUTS");
       return env && std::string(env) == "1";
     }();
     if (s_sync_graph_outputs) {
-      capture_stream_.synchronize();
+      c10::musa::getCurrentMUSAStream(device_index_).synchronize();
     }
   }
 
@@ -2960,6 +2980,62 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   // Note: aux_hidden_states handling is done in MusaGraphExecutorImpl::run()
   // since replay() doesn't have access to options
   ModelOutput output(get_hidden_states(actual_num_tokens));
+  if (validate) {
+    // Replay first: the eager reference must not populate current-token KV
+    // before the captured graph has read/written it.
+    auto graph_hidden = output.hidden_states.clone();
+    auto graph_state =
+        snapshot_linear_attention_state(kv_cache, validation_indices);
+    restore_linear_attention_state(initial_state, validation_indices);
+    ModelInputParams eager_params = params;
+    eager_params.attn_metadata.reset();
+    reference_hidden =
+        model_->forward(tokens, positions, kv_cache, eager_params)
+            .hidden_states.clone();
+    auto actual = graph_hidden.cpu().to(torch::kFloat32);
+    auto expected = reference_hidden.cpu().to(torch::kFloat32);
+    CHECK(torch::isfinite(actual).all().item<bool>());
+    CHECK(torch::isfinite(expected).all().item<bool>());
+    const double hidden_max = (actual - expected).abs().max().item<double>();
+    double state_max = 0.0;
+    for (const auto& snapshot : graph_state) {
+      auto current = snapshot.target.index_select(0, snapshot.indices)
+                         .cpu()
+                         .to(torch::kFloat32);
+      auto reference = snapshot.rows.cpu().to(torch::kFloat32);
+      CHECK(torch::isfinite(current).all().item<bool>());
+      CHECK(torch::isfinite(reference).all().item<bool>());
+      state_max =
+          std::max(state_max, (current - reference).abs().max().item<double>());
+    }
+    restore_linear_attention_state(graph_state, validation_indices);
+    output.hidden_states.copy_(graph_hidden);
+    const auto& query_offsets = params.attention.device.q_seq_lens;
+    const torch::Tensor last_rows =
+        (query_offsets.narrow(0, 1, query_offsets.numel() - 1) - 1)
+            .to(torch::kInt64);
+    auto graph_logits = model_->logits(output.hidden_states, last_rows)
+                            .cpu()
+                            .to(torch::kFloat32);
+    auto eager_logits =
+        model_->logits(reference_hidden, last_rows).cpu().to(torch::kFloat32);
+    CHECK(torch::isfinite(graph_logits).all().item<bool>());
+    CHECK(torch::isfinite(eager_logits).all().item<bool>());
+    const int64_t argmax_changes = graph_logits.argmax(-1)
+                                       .ne(eager_logits.argmax(-1))
+                                       .sum()
+                                       .item<int64_t>();
+    std::string request_order;
+    for (const auto& request_id : params.embedding.request_ids) {
+      request_order += request_id + ",";
+    }
+    LOG(INFO) << "GLM_GRAPH_COMPARE tokens=" << actual_num_tokens
+              << " prefill=" << is_glm_prefill_ << " hidden_max=" << hidden_max
+              << " state_max=" << state_max << " logits_max="
+              << (graph_logits - eager_logits).abs().max().item<double>()
+              << " argmax_changes=" << argmax_changes
+              << " request_order=" << request_order;
+  }
   return output;
 }
 
@@ -3023,7 +3099,7 @@ MusaGraphExecutorImpl::~MusaGraphExecutorImpl() {
   // Drain submitted work before graph-owned pools and their physical pages
   // are released. Each graph destroys its handles before its logical pool.
   std::optional<c10::musa::MUSAGuard> device_guard;
-  if (!vmm_pools_.empty()) {
+  if (!vmm_pools_.empty() || !native_prefill_pools_.empty()) {
     device_guard.emplace(device_.index());
     CHECK_EQ(musaDeviceSynchronize(), musaSuccess);
   }
@@ -3056,6 +3132,14 @@ MusaGraphExecutorImpl::get_or_create_vmm_pool_state(uint32_t physical_pool_id) {
 
 std::unique_ptr<MusaMemPool> MusaGraphExecutorImpl::create_vmm_mempool(
     uint32_t physical_pool_id) {
+  // Full GLM prefill graphs register large all-reduce input allocations with
+  // legacy MUSA IPC. musaIpcGetMemHandle rejects their VMM-backed allocation
+  // base on MP31. Use native graph pools, which provide exportable
+  // allocations and keeps direct-buffer custom all-reduce inside the graph.
+  if (args_.model_type() == "glm5_next" &&
+      physical_pool_id == kPhysicalPoolIdPrefill) {
+    return nullptr;
+  }
   if (!supports_graph_vmm_pool() ||
       !::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
     return nullptr;
@@ -3086,7 +3170,7 @@ MusaGraphExecutorImpl::get_graph_memory_usage_stats() {
     stats.active_pool_bytes = usage.active_bytes;
     stats.pool_high_water_mark_bytes = usage.allocated_bytes;
 
-    if (stats.executor_total_bytes == 0) {
+    if (stats.executor_total_bytes == 0 && native_prefill_pools_.empty()) {
       const auto private_pool_usage =
           get_private_pools_memory_usage(device_.index());
       if (private_pool_usage.reserved_bytes >
@@ -3107,7 +3191,7 @@ MusaGraphExecutorImpl::get_graph_memory_usage_stats() {
       stats.pool_high_water_mark_bytes = stats.allocated_pool_bytes;
     }
 
-    if (stats.executor_total_bytes == 0) {
+    if (stats.executor_total_bytes == 0 && native_prefill_pools_.empty()) {
       const size_t allocator_reserved_bytes =
           get_allocator_reserved_bytes(device_.index());
       if (allocator_reserved_bytes > baseline_allocator_reserved_bytes_) {
@@ -3116,6 +3200,13 @@ MusaGraphExecutorImpl::get_graph_memory_usage_stats() {
       }
     }
   } else {
+    // GLM full-prefill graphs use native IPC-exportable allocations alongside
+    // VMM decode graphs. Account for both pools in the executor budget.
+    const auto native_usage =
+        get_graph_pool_memory_usage(device_.index(), graph_pool_);
+    stats.executor_total_bytes = native_usage.reserved_bytes;
+    stats.allocated_pool_bytes = native_usage.allocated_bytes;
+    stats.active_pool_bytes = native_usage.active_bytes;
     std::lock_guard<std::mutex> lock(vmm_mutex_);
     for (const auto& kv : vmm_pools_) {
       const VmmPoolState& pool_state = *kv.second;
@@ -3125,6 +3216,14 @@ MusaGraphExecutorImpl::get_graph_memory_usage_stats() {
     }
     stats.pool_high_water_mark_bytes = stats.allocated_pool_bytes;
   }
+
+  for (const auto& pool : native_prefill_pools_) {
+    const auto usage = get_graph_pool_memory_usage(device_.index(), pool);
+    stats.executor_total_bytes += usage.reserved_bytes;
+    stats.allocated_pool_bytes += usage.allocated_bytes;
+    stats.active_pool_bytes += usage.active_bytes;
+  }
+  stats.pool_high_water_mark_bytes = stats.allocated_pool_bytes;
 
   stats.persistent_param_bytes =
       persistent_param_ ? persistent_param_->get_persistent_tensor_bytes() : 0;
@@ -3297,19 +3396,22 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   const bool is_prefill = params.meta.batch_forward_type.is_prefill();
   const bool is_decode = params.meta.batch_forward_type.is_decode();
   if (args_.model_type() == "glm5_next") {
-    bool supported_decode = is_decode && !params.is_spec_verify;
-    if (supported_decode) {
+    bool supported_forward =
+        (is_decode || is_prefill ||
+         params.meta.batch_forward_type.is_chunked_prefill()) &&
+        !params.is_spec_verify;
+    if (supported_forward) {
       for (const auto& cache : kv_caches) {
         const torch::Tensor key = cache.get_k_cache();
         if (key.defined()) {
           // FP8 sparse MLA has a different scratch/capture path. Keep its
           // existing eager implementation until graph replay is validated.
-          supported_decode = key.scalar_type() == torch::kBFloat16;
+          supported_forward = key.scalar_type() == torch::kBFloat16;
           break;
         }
       }
     }
-    if (!supported_decode) {
+    if (!supported_forward) {
       COUNTER_INC(num_model_execution_total_eager);
       return model_->forward(tokens, positions, kv_caches, params);
     }
@@ -3338,8 +3440,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                               : params.meta.num_sequences;
   const bool multi_sequence_prefill = is_prefill && effective_num_sequences > 1;
 
-  // Prefill and chunked prefill replay piecewise graphs; launches that need
-  // host-side batch layout run as runners between the captured segments.
+  // GLM prefill captures the complete forward with prepared batch metadata.
+  // Other models retain attention runners between piecewise graph segments.
   if (use_prefill_piecewise_graph(n_tokens, params)) {
     const uint32_t graph_num_tokens =
         get_prefill_graph_num_tokens(n_tokens, params);
@@ -3353,14 +3455,20 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           it->second->replay(tokens, positions, kv_caches, graph_params);
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
-    auto graph =
-        std::make_unique<MusaGraph>(*persistent_param_,
-                                    device_.index(),
-                                    get_capture_stream(device_.index()),
-                                    /*is_piecewise=*/true);
+    auto graph = std::make_unique<MusaGraph>(
+        *persistent_param_,
+        device_.index(),
+        get_capture_stream(device_.index()),
+        /*is_piecewise=*/args_.model_type() != "glm5_next");
     auto pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
+    const bool glm_full_prefill = args_.model_type() == "glm5_next";
+    // A larger capture may repurpose free segments in a shared native pool.
+    // GLM keeps independently replayable exact-shape graphs, so each native
+    // pool must retain the addresses of that graph's intermediate buffers.
     const c10::musa::MempoolId_t mem_pool =
-        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
+        pool_owner != nullptr
+            ? pool_owner->id()
+            : (glm_full_prefill ? at::musa::graph_pool_handle() : graph_pool_);
     const bool capture_success = graph->capture(model_,
                                                 args_,
                                                 options_,
@@ -3372,10 +3480,12 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                                 mem_pool,
                                                 std::move(pool_owner));
     CHECK(capture_success)
-        << "Failed to capture MUSA piecewise prefill graph, num_tokens="
+        << "Failed to capture MUSA prefill graph, num_tokens="
         << graph_num_tokens << " (actual num_tokens: " << n_tokens << ")";
-    LOG(INFO) << "Lazy capturing MUSA piecewise prefill graph num_tokens="
-              << graph_num_tokens << " (actual num_tokens: " << n_tokens
+    LOG(INFO) << "Lazy capturing MUSA "
+              << (args_.model_type() == "glm5_next" ? "full" : "piecewise")
+              << " prefill graph num_tokens=" << graph_num_tokens
+              << " (actual num_tokens: " << n_tokens
               << ") num_sequences=" << effective_num_sequences << " chunked="
               << params.meta.batch_forward_type.is_chunked_prefill()
               << " retained_prefill_keys=" << prefill_graphs_.size() + 1
@@ -3383,6 +3493,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
               << ::xllm::ExecutionConfig::get_instance()
                      .musa_prefill_graph_max_entries()
               << " done";
+    if (glm_full_prefill) {
+      native_prefill_pools_.emplace_back(mem_pool);
+    }
     log_graph_memory_after_capture();
     auto& stored = prefill_graphs_[graph_key];
     stored = std::move(graph);
@@ -3748,8 +3861,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
-  if (forward_type.is_chunked_prefill() && num_sequences > 1 &&
-      !params.embedding.linear_state_ids.empty()) {
+  if (args_.model_type() != "glm5_next" && forward_type.is_chunked_prefill() &&
+      num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
     return false;
   }
   const int64_t bucket_num_tokens =
@@ -3779,6 +3892,13 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
 uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
     uint32_t num_tokens,
     const ModelInputParams& params) const {
+  // GLM5's KDA prefill updates a recurrent row for every token.  Padding a
+  // captured graph would therefore advance the row with synthetic tokens and
+  // corrupt the next decode step.  Use exact token shapes until a device-side
+  // padded-row mask is implemented for causal_conv1d_prefill.
+  if (args_.model_type() == "glm5_next") {
+    return num_tokens;
+  }
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
@@ -3799,7 +3919,7 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
     const ModelInputParams& params) const {
   const std::vector<int32_t>& q_seq_lens = params.attention.host.q_seq_lens;
   std::vector<int32_t> key;
-  key.reserve(q_seq_lens.size() + 3);
+  key.reserve(q_seq_lens.size() + 4);
   key.emplace_back(
       static_cast<int32_t>(get_prefill_graph_num_tokens(num_tokens, params)));
   key.emplace_back(params.meta.batch_forward_type.is_chunked_prefill() ? 1 : 0);
@@ -3811,8 +3931,12 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
   key.emplace_back(num_sequences == 1 ? 1 : 0);
   // Multi-sequence Qwen3.5 GDN lays out its padded per-sequence inputs from
   // the host query lengths, so each length layout is captured separately.
-  if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
+  if ((num_sequences > 1 || args_.model_type() == "glm5_next") &&
+      !params.embedding.linear_state_ids.empty()) {
     key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
+  }
+  if (args_.model_type() == "glm5_next") {
+    key.emplace_back(params.meta.kv_max_seq_len);
   }
   return key;
 }

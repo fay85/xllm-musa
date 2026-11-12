@@ -391,6 +391,8 @@ class MusaGraph final {
 
   // Prefill graphs are captured as segments separated by attention runners.
   bool is_piecewise_ = false;
+  bool is_glm_graph_ = false;
+  bool is_glm_prefill_ = false;
 
   uint32_t padded_num_tokens_ = 0;
   uint32_t captured_actual_tokens_ = 0;
@@ -519,6 +521,7 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // executor is intentional. If concurrent calls are introduced in the future,
   // this assumption must be revisited.
   c10::musa::MempoolId_t graph_pool_;
+  std::vector<c10::musa::MempoolId_t> native_prefill_pools_;
 
   // Get bucket num_tokens for given num_tokens.
   // Decode: 1/2/4/8 then multiples of 16, or exact when no_padding is enabled.

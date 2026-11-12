@@ -284,5 +284,90 @@ TEST(GlmKdaLayerTest, DecodeGraphReplaysWithChangingInputsAndStateSlots) {
                                 0.00001));
   }
 }
+TEST(GlmKdaLayerTest, PrefillGraphPreservesPackedStateAndDynamicValidity) {
+  namespace km = kernel::musa;
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard no_grad;
+  torch::manual_seed(53);
+  const torch::Device device(torch::kPrivateUse1, 0);
+  auto stream = c10::musa::getStreamFromPool(false, 0);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  km::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  auto opts = torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  ProcessGroup group(0, 1, device);
+  ParallelArgs parallel(0, 1, &group);
+  parallel.tp_group_ = &group;
+  ModelArgs args;
+  args.hidden_size(128)
+      .linear_num_key_heads(2)
+      .linear_num_value_heads(2)
+      .linear_key_head_dim(128)
+      .linear_value_head_dim(128)
+      .linear_conv_kernel_dim(4)
+      .rms_norm_eps(1e-5);
+  Glm5NextKDA layer(args, QuantArgs(), parallel, opts);
+  for (auto& parameter : layer->named_parameters()) {
+    parameter.value().normal_(0.0, 0.1);
+  }
+  auto conv = torch::randn({4, 768, 3}, opts);
+  auto ssm = torch::randn({4, 2, 128, 128}, opts.dtype(torch::kFloat32));
+  KVCache cache(LinearAttentionKVCacheTensors{conv.clone(), ssm.clone()});
+  KVCache reference(LinearAttentionKVCacheTensors{conv.clone(), ssm.clone()});
+  auto restore = [&]() {
+    cache.get_conv_cache().copy_(conv);
+    cache.get_ssm_cache().copy_(ssm);
+  };
+  auto input = torch::randn({7, 128}, opts);
+  auto ids = torch::tensor({1, 2}, opts.dtype(torch::kInt32));
+  AttentionMetadata metadata{};
+  metadata.enable_cuda_graph = true;
+  metadata.is_prefill = true;
+  metadata.has_initial_states = torch::zeros({2}, opts.dtype(torch::kBool));
+  metadata.q_cu_seq_lens = torch::tensor({0, 3, 7}, opts.dtype(torch::kInt32));
+  metadata.musa_kda_batch =
+      prepare_musa_kda_batch(ids, metadata.q_cu_seq_lens, 7, 4);
+  ModelInputParams params;
+  params.embedding.linear_state_indices = ids;
+  auto execute = [&]() {
+    return layer->forward(input, metadata, cache, params);
+  };
+  execute();
+  restore();
+  km::begin_ffi_alloc_record();
+  execute();
+  auto allocations = km::end_ffi_alloc_record();
+  restore();
+  stream.synchronize();
+  MusaGraphHandle graph;
+  graph.capture_begin();
+  km::begin_ffi_alloc_replay(&allocations);
+  auto output = execute();
+  graph.capture_end();
+  km::end_ffi_alloc_replay();
+  restore();
+  for (int64_t step = 0; step < 12; ++step) {
+    input.normal_(0.0, 0.3);
+    metadata.has_initial_states.copy_(torch::tensor(
+        {step % 2 != 0, step % 3 != 0}, opts.dtype(torch::kBool)));
+    if (step == 6) {
+      ids.copy_(torch::tensor({3, 1}, opts.dtype(torch::kInt32)));
+      metadata.musa_kda_batch->state_indices_long.copy_(ids);
+    }
+    auto expected = layer->forward(input, metadata, reference, params).clone();
+    graph.replay();
+    stream.synchronize();
+    EXPECT_TRUE(torch::allclose(output.cpu().to(torch::kFloat32),
+                                expected.cpu().to(torch::kFloat32),
+                                0.002,
+                                0.0002));
+    EXPECT_TRUE(torch::equal(cache.get_conv_cache().cpu(),
+                             reference.get_conv_cache().cpu()));
+    EXPECT_TRUE(torch::allclose(cache.get_ssm_cache().cpu(),
+                                reference.get_ssm_cache().cpu(),
+                                0.0001,
+                                0.00001));
+  }
+}
 }  // namespace
 }  // namespace xllm::layer

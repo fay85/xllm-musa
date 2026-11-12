@@ -423,8 +423,8 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   c10::DeviceGuard device_guard(hidden_states.device());
   CHECK(!kernel::musa::is_stream_capturing() ||
         (attn_metadata.enable_cuda_graph && attn_metadata.musa_kda_batch &&
-         !attn_metadata.is_prefill && !attn_metadata.is_chunked_prefill))
-      << "KDA capture requires prepared ordinary-decode metadata";
+         !attn_metadata.is_spec_verify && !attn_metadata.is_mixed))
+      << "KDA capture requires prepared graph metadata";
   CHECK(!attn_metadata.is_spec_verify && !input_params.is_spec_verify &&
         !attn_metadata.is_mixed)
       << "KDA does not support speculative or mixed batches";

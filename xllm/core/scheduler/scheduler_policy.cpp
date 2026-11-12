@@ -107,11 +107,13 @@ void restore_skipped_requests(
 // MUSA piecewise prefill graphs cover one sequence of a model with linear
 // attention: multi-sequence GDN prefill rows keep their exact host layout and
 // run eager. One prefill sequence per batch lets every chunk replay a graph;
-// decode batching is unaffected.
+// decode batching is unaffected. GLM uses full graphs keyed by packed query
+// lengths and supports multiple prefill sequences.
 bool limit_prefill_to_one_sequence(const SchedulerState& state) {
   const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   return execution_config.enable_graph() &&
          execution_config.enable_prefill_piecewise_graph() &&
+         state.model_args.model_type() != "glm5_next" &&
          has_linear_attention_layers(state.model_args);
 }
 
@@ -560,23 +562,25 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
   if (has_linear_attention_layers(state.model_args) &&
       state.enable_prefix_cache &&
       seq->num_tokens() > 3 * max_tokens_per_chunk &&
-      kv_cache_tokens_num >= 3 * max_tokens_per_chunk &&
-      remaining_in_seq > 0) {
-    const size_t block_size =
-        static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+      kv_cache_tokens_num >= 3 * max_tokens_per_chunk && remaining_in_seq > 0) {
+    const size_t block_size = static_cast<size_t>(
+        std::max<int32_t>(1, state.kv_cache_manager->block_size()));
     const size_t cp_align =
-        static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) * block_size;
-    const size_t fine_stride =
-        std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
+        static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) *
+        block_size;
+    const size_t fine_stride = std::max<size_t>(
+        cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
     const size_t next_fine_boundary =
         ((kv_cache_tokens_num / fine_stride) + 1) * fine_stride;
     if (next_fine_boundary < seq->num_tokens()) {
-      num_tokens = std::min(num_tokens, next_fine_boundary - kv_cache_tokens_num);
+      num_tokens =
+          std::min(num_tokens, next_fine_boundary - kv_cache_tokens_num);
     } else if (seq->num_tokens() > cp_align) {
       const size_t last_cp_boundary =
           ((seq->num_tokens() - 1) / cp_align) * cp_align;
       if (last_cp_boundary > kv_cache_tokens_num) {
-        num_tokens = std::min(num_tokens, last_cp_boundary - kv_cache_tokens_num);
+        num_tokens =
+            std::min(num_tokens, last_cp_boundary - kv_cache_tokens_num);
       }
     }
   }
