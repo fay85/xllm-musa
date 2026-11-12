@@ -1,0 +1,37 @@
+{
+  "status": "ACCEPTED_SPEED_OPTIMIZATION",
+  "at": "2026-11-12T21:45:02.247692+08:00",
+  "source_parent": "3ddc7ba59006c9cbb63d2acef5ed8a7fc84a974a",
+  "binary_sha256": "a900faaffe6ebf986f08c5bfbf043ad11b036338363da4a8fb5f5f21efdafd42",
+  "performance": {
+    "256": {
+      "TTFT_ms_reduction_percent": -0.2930149537607729,
+      "TPOT_ms_reduction_percent": 37.476497335862334,
+      "E2E_s_reduction_percent": 36.9297786366788,
+      "output_tps_increase_percent": 58.55343114136507,
+      "identical_requests": true
+    },
+    "2048": {
+      "TTFT_ms_reduction_percent": -2.9032330475645463,
+      "TPOT_ms_reduction_percent": 39.52113908453053,
+      "E2E_s_reduction_percent": 36.27563472624499,
+      "output_tps_increase_percent": 56.925847076557986,
+      "identical_requests": true
+    }
+  },
+  "accepted_policy": {
+    "P_TP_CUSTOM": false,
+    "P_EP_CUSTOM": false,
+    "P_CACHE_REUSE": false,
+    "P_PREFILL_FFI_SYNC": true,
+    "D_TP_CUSTOM": true,
+    "D_EP_CUSTOM": true,
+    "D_CACHE_REUSE": true,
+    "D_SWA_FUSED_READ": true,
+    "D_SHARED_EXPERT_TP": true,
+    "D_MODEL_NONDEFAULT_STREAM": true
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "tight_removable_p": null,
+  "T14_complete": false
+}

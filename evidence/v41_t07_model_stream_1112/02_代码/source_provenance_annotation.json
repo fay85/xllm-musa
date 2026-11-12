@@ -1,0 +1,6 @@
+{
+  "source_parent": "26994a8548a55ac216d1d12eae97332f99375899",
+  "included_accepted_shared_tp_source": "3ddc7ba59006c9cbb63d2acef5ed8a7fc84a974a",
+  "additional_feature": "MODEL_NONDEFAULT_STREAM",
+  "correction": "Inherited human purpose string in immutable CPU source_manifest incorrectly said no shared candidate changes; E21 intentionally includes accepted shared-expert TP. Actual file hashes and same-ELF AB are authoritative. Original build manifest preserved."
+}

@@ -1,0 +1,6 @@
+{
+  "initial_output": "06_图表/AFTER_D0",
+  "initial_status": "UI_LOAD_TIMEOUT",
+  "successful_retry": "06_图表/AFTER_D0_retry2",
+  "method": "Copied exact successfully loaded OFF browser assets to a fresh profile; same verified pftrace, no model rerun"
+}

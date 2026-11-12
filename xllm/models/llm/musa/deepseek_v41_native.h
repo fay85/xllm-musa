@@ -35,6 +35,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
 #include "core/layers/musa/deepseek_v41/text_model.h"
+#include "core/platform/musa_model_compute_stream.h"
 #include "core/util/env_var.h"
 #include "models/llm/musa/deepseek_v41_checkpoint.h"
 #include "models/model_registry.h"
@@ -227,6 +228,14 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       return ModelOutput();
     }
     torch::DeviceGuard guard(device());
+    std::optional<MusaModelComputeStream> model_stream;
+    if (util::get_bool_env("XLLM_DSV41_MODEL_NONDEFAULT_STREAM", false)) {
+      model_stream.emplace(device());
+      LOG_FIRST_N(INFO, 1)
+          << "Native V4.1 model forward on a valid nondefault stream, "
+             "with explicit input/output fences and output storage "
+             "registration";
+    }
     std::optional<kernel::musa::TvmffiPreparationSyncGuard> ffi_sync;
     if (tokens.numel() > 1 &&
         util::get_bool_env("XLLM_DSV41_PREFILL_FFI_SYNC", false)) {
@@ -307,15 +316,20 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                 .flatten(1);
       }
     }
-    return ModelOutput(model_->forward(tokens,
-                                       positions,
-                                       caches,
-                                       swa_table,
-                                       ratio1_table,
-                                       ratio2_table,
-                                       context_length,
-                                       engram_rows,
-                                       mask));
+    torch::Tensor hidden = model_->forward(tokens,
+                                           positions,
+                                           caches,
+                                           swa_table,
+                                           ratio1_table,
+                                           ratio2_table,
+                                           context_length,
+                                           engram_rows,
+                                           mask);
+    if (model_stream.has_value()) {
+      model_stream->record_output(hidden);
+      model_stream->finish();
+    }
+    return ModelOutput(hidden);
   }
 
   torch::Tensor logits(const torch::Tensor& hidden,

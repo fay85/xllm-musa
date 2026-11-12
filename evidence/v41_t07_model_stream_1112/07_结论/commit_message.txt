@@ -1,0 +1,34 @@
+统一D端原生模型计算流，两组TPOT降至77.34和74.81ms
+
+家明，我在共享专家TP8等累计最优上，发现MATE/TVM FFI与Torch默认流
+每step反复做跨流event交接。我为D端完整forward指定有效非默认Torch流，
+入口同步输入、出口同步完成并恢复原流，同时登记输出storage的消费者流。
+Torch、MATE和本地kernel使用同一计算流，保留必要完成语义。
+原生C++模型、MUSA计算；未更改权重精度、模型方程或P/D并行。
+
+同一ELF，仅切换D端MODEL_NONDEFAULT_STREAM；P固定显式FFI同步。
+P/D各8卡，TP8/EP8、eager、C1、chunk256；官方EvalScope各1暖+5正式：
+256/256：TPOT123.70→77.34ms，E2E32.006→20.186s，
+端到端输出7.998→12.682token/s，TTFT463.30→464.65ms。
+2048/256：TPOT123.70→74.81ms，E2E34.156→21.766s，
+端到端输出7.495→11.762token/s，TTFT2612.97→2688.83ms。
+TPOT下降37.48%/39.52%；TTFT未改善，如实保留全部样本。
+20次正式请求全部成功，实际输入/输出token数合格，无prefix命中或缩短输出。
+
+实际前后各16rank trace和ELF/回溯核验通过：8个D rank每step都少400次
+EventRecord和400次StreamWaitEvent，mm、kernel launch及80次TP/EP归约不变。
+D0主要Torch与MATE工作从两条计算流集中到同一有效流。
+入口COUNT仍550，是调用次数，不是CPU时间；重profiler区间不替代正式TPOT。
+不能把少400个API的CPU duration直接解释成全部46ms收益；
+严格关键路径上限和兑现率未知，不宣称60%SOL。
+
+18个原生流边界/真实MATE/消费者生命周期检查严格相等，两道计算题均通过。
+仅通过基础功能检查，未完成模型精度验收。
+10对正式自由生成有8对文本相同、2对不同，按要求记录、不调查、不复测。
+没有API/MathQA或前缀logits验收。32个角色进程生命周期正常exit0。
+
+原始官方报告、SQLite、流检查、实际Perfetto图与完整trace收据：
+evidence/v41_t07_model_stream_1112；完整大trace仍在SJ共享盘，收据列路径与SHA。
+本机一次Perfetto加载超时后只重渲染同一trace，未重跑推理。
+后续继续累计最优上的Gate缓存、Graph/投影、chunk/CED、前缀/多请求/DSpark至T14。
+不提MR，不操作其他容器、重启或驱动。

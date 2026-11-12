@@ -24,6 +24,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/text_model.h"
 #include "core/layers/musa/deepseek_v41/token_cache.h"
 #include "core/layers/musa/deepseek_v41/w4a8_experts.h"
+#include "core/platform/musa_model_compute_stream.h"
 #include "core/platform/torch_profiler.h"
 #include "core/runtime/py_musa_kernel_bindings.h"
 #include "models/llm/musa/deepseek_v41_checkpoint.h"
@@ -138,6 +139,52 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def("combine",
            &NativeHyperConnection::combine,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def(
+      "v41_shared_on_model_stream",
+      [](torch::Tensor input,
+         torch::Tensor gate,
+         torch::Tensor up,
+         torch::Tensor down,
+         double limit,
+         bool quantize) {
+        CHECK(input.device().type() == torch::kPrivateUse1);
+        xllm::MusaModelComputeStream stream(input.device());
+        xllm::layer::DeepseekV41SharedMlp mlp(
+            std::move(gate), std::move(up), std::move(down), limit, quantize);
+        torch::Tensor result = mlp.forward(input);
+        stream.record_output(result);
+        stream.finish();
+        return result;
+      },
+      pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def(
+      "v41_mhc_on_model_stream",
+      [](torch::Tensor residual,
+         torch::Tensor carried_pre,
+         torch::Tensor fn,
+         torch::Tensor scale,
+         torch::Tensor base,
+         std::string directory) {
+        CHECK(residual.device().type() == torch::kPrivateUse1);
+        xllm::MusaModelComputeStream stream(residual.device());
+        xllm::layer::DeepseekV41HyperConnection hc(std::move(fn),
+                                                   std::move(scale),
+                                                   std::move(base),
+                                                   /*iterations=*/20,
+                                                   /*norm_eps=*/1e-6,
+                                                   /*eps=*/1e-6,
+                                                   std::move(directory));
+        auto result = hc.prepare(residual, carried_pre);
+        for (const torch::Tensor& output : {std::get<0>(result),
+                                            std::get<1>(result),
+                                            std::get<2>(result),
+                                            std::get<3>(result)}) {
+          stream.record_output(output);
+        }
+        stream.finish();
+        return result;
+      },
+      pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeSharedMlp = xllm::layer::DeepseekV41SharedMlp;
   pybind11::class_<NativeSharedMlp>(module, "NativeV41SharedMlp")
       .def(
