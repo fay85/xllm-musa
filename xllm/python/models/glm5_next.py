@@ -116,12 +116,12 @@ def _compact_kpool_triton_query_len(
 # (= kv_len / index_kpool): 8 GiB at 32K context, 16 GiB at 64K — beyond the
 # activation headroom and a hard device OOM mid prefill.
 _SCORES_SLAB_CAP_BYTES = int(1.5 * 1024**3)
+from scripts.logger import logger
 from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear
 from xllm.python.layers.moe_parallel import TokenParallelLayout, dp_gather_tokens, reduce_and_scatter
 from xllm.python.layers.qlinear import QLinear, QLinearWeightLoader
 from xllm.python.models.aux_hidden_capture import AuxHiddenCapture
-from scripts.logger import logger
 
 # Warn once per process: Glm5NextIndexer is built once per layer.
 _fused_kpool_warned = False
@@ -296,7 +296,6 @@ class Glm5NextConfig:
     enable_eplb: bool = False
     expert_parallel_degree: int = 0
     enable_mega_moe: bool = False
-    enable_fused_mc2: bool = False
     # KDA context-parallel prefill switch (the --enable_kda_cp engine gflag,
     # forwarded via the model config dict; the two-pass scheme is the only
     # shipped implementation, so the default is true).
@@ -418,7 +417,6 @@ class Glm5NextConfig:
             enable_eplb=bool(pick("enable_eplb", default=False)),
             expert_parallel_degree=degree,
             enable_mega_moe=bool(pick("enable_mega_moe", default=False)),
-            enable_fused_mc2=bool(pick("enable_fused_mc2", default=False)),
             enable_kda_cp=bool(pick("enable_kda_cp", default=True)),
             mega_moe_context=pick("mega_moe_context", default=None),
             mega_moe_ccl_buffer_size=int(pick("mega_moe_ccl_buffer_size", default=0)),
@@ -451,8 +449,6 @@ class Glm5NextConfig:
                 raise ValueError("GLM MegaMoE requires positive communication capacities")
             if self.swiglu_limit > torch.finfo(torch.float32).max:
                 raise ValueError("GLM MegaMoE SwiGLU clamp limit must fit float32")
-        if self.enable_fused_mc2:
-            raise ValueError("GLM-5.3-Flash ordinary EP does not support enable_fused_mc2")
         for name in ("tp", "ep", "dp", "cp", "moe_tp"):
             size = getattr(self, f"{name}_size")
             rank = getattr(self, f"{name}_rank")
@@ -1224,9 +1220,7 @@ class Glm5NextIndexer(nn.Module):
         # the slice below (the output width differs when tail selection is off).
         expected_kernel_width = self.topk + self.index_kpool - 1
         if indices.shape[-1] != expected_kernel_width:
-            raise ValueError(
-                f"pool_key_indexer returned width {indices.shape[-1]}, expected {expected_kernel_width}"
-            )
+            raise ValueError(f"pool_key_indexer returned width {indices.shape[-1]}, expected {expected_kernel_width}")
         output_width = self.topk_output_width
         if valid_rows is None:
             # Preserve the existing unpadded and graph execution paths.

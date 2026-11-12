@@ -120,7 +120,6 @@ def test_router_fp32_preserves_expert_input_dtype(
         {"moe_tp_size": 2},
         {"ep_rank": 1},
         {"enable_mega_moe": True},
-        {"enable_fused_mc2": True},
         {"enable_eplb": True},
         {"n_routed_experts": 7},
         {"tp_rank": -1},
@@ -305,27 +304,19 @@ def test_speculative_rows_use_eplv2_routing(monkeypatch: pytest.MonkeyPatch) -> 
     routed.assert_called_once()
 
 
-def test_pd_decode_dflash2_flags_accept_eplv2_without_fused_mc2() -> None:
-    for rank in range(8):
-        cfg = glm5_next.Glm5NextConfig.from_dict(
-            {
-                "hidden_size": 8,
-                "moe_intermediate_size": 16,
-                "n_routed_experts": 8,
-                "num_experts_per_tok": 2,
-                "tp_size": 8,
-                "tp_rank": rank,
-                "ep_size": 8,
-                "ep_rank": rank,
-                "moe_tp_size": 1,
-                "moe_tp_rank": 0,
-                "expert_parallel_degree": 2,
-                "enable_fused_mc2": False,
-                "num_speculative_tokens": 7,
-                "layers_to_capture": (0, 3),
-            }
-        )
-        assert (cfg.expert_parallel_degree, cfg.ep_size, cfg.num_speculative_tokens) == (2, 8, 7)
+def test_config_ignores_native_fused_mc2_key() -> None:
+    config = {
+        "hidden_size": 8,
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 8,
+        "num_experts_per_tok": 2,
+        "tp_size": 8,
+        "ep_size": 8,
+        "moe_tp_size": 1,
+        "expert_parallel_degree": 2,
+    }
+    expected = glm5_next.Glm5NextConfig.from_dict(config)
+    assert glm5_next.Glm5NextConfig.from_dict({**config, "enable_fused_mc2": True}) == expected
 
 
 def test_tp_route_keeps_main_unified_w8a8_path(monkeypatch: pytest.MonkeyPatch) -> None:
