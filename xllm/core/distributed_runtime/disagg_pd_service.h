@@ -75,7 +75,7 @@ class DisaggPDService : public proto::DisaggPDService {
                     proto::AttemptControlResponse* response,
                     ::google::protobuf::Closure* done) override;
 
-  void CancelRequest(::google::protobuf::RpcController* controller,
+  void CancelAttempt(::google::protobuf::RpcController* controller,
                      const proto::AttemptControlRequest* request,
                      proto::AttemptControlResponse* response,
                      ::google::protobuf::Closure* done) override;

@@ -1,0 +1,210 @@
+{
+  "status": "PASS_NATIVE_MATE_SPARSE_H8",
+  "results": [
+    {
+      "rows": 1,
+      "width": 63,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.002230120124295354,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.45297999382019044,
+      "mate_gpu_ms": 0.16166399717330932,
+      "speedup": 2.8019843733950265,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 1,
+      "width": 128,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0023795776069164276,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.45009598731994627,
+      "mate_gpu_ms": 0.1300480008125305,
+      "speedup": 3.4609988966210867,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 1,
+      "width": 384,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0022623406257480383,
+        "max_abs": 0.001953125
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.4084280014038086,
+      "mate_gpu_ms": 0.1272800087928772,
+      "speedup": 3.208893566847906,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 17,
+      "width": 63,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.002193775959312916,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.4053040027618408,
+      "mate_gpu_ms": 0.15693600177764894,
+      "speedup": 2.5826069109119154,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 17,
+      "width": 128,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.002181603340432048,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.39128000736236573,
+      "mate_gpu_ms": 0.12063599824905395,
+      "speedup": 3.243476350687339,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 17,
+      "width": 384,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0021199192851781845,
+        "max_abs": 0.001953125
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.415071964263916,
+      "mate_gpu_ms": 0.12490800619125367,
+      "speedup": 3.3230212931937766,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 128,
+      "width": 63,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0021861025597900152,
+        "max_abs": 0.0078125
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.40017199516296387,
+      "mate_gpu_ms": 0.15230000019073486,
+      "speedup": 2.6275245874051434,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 128,
+      "width": 128,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0022021038457751274,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.7778439998626709,
+      "mate_gpu_ms": 0.12331199645996094,
+      "speedup": 6.307934525374704,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 128,
+      "width": 384,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.002162325894460082,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 2.9231840133666993,
+      "mate_gpu_ms": 0.1260119915008545,
+      "speedup": 23.19766538525722,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 256,
+      "width": 63,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0021896548569202423,
+        "max_abs": 0.0078125
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 0.761847972869873,
+      "mate_gpu_ms": 0.15155599117279053,
+      "speedup": 5.026841677286663,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 256,
+      "width": 128,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0022062361240386963,
+        "max_abs": 0.0078125
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 1.4916719436645507,
+      "mate_gpu_ms": 0.12198799848556519,
+      "speedup": 12.228022118430445,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 256,
+      "width": 384,
+      "heads": 8,
+      "head_dim": 512,
+      "kv_rows": 1024,
+      "error": {
+        "relative_rms": 0.0021572927944362164,
+        "max_abs": 0.00390625
+      },
+      "all_invalid_exact_zero": true,
+      "reference_gpu_ms": 4.863787841796875,
+      "mate_gpu_ms": 0.1494439959526062,
+      "speedup": 32.54588992213075,
+      "warmups": 2,
+      "repeats": 10
+    }
+  ],
+  "scope": "native sparse class, Q/KV BF16 carrier and invalid masks; not full-model or CED equivalence"
+}

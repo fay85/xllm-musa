@@ -1,0 +1,101 @@
+{
+  "status": "PASS_ACTUAL_8_RANK_NATIVE_40_LAYERS_EACH",
+  "at": "2026-11-12T09:27:24.695582+08:00",
+  "host": "sj9",
+  "container": "xiaopang1112_v41_prefill_sj9",
+  "image_id": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+  "binary_sha256": "5dec7bad2087d42fae7c0eb7a23a2ffe5ee64555310b7793edd84047a7508799",
+  "processes": [
+    {
+      "host_pid": 27945,
+      "rank": 0,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27950,
+      "rank": 1,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27956,
+      "rank": 2,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27962,
+      "rank": 3,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27968,
+      "rank": 4,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27978,
+      "rank": 5,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27986,
+      "rank": 6,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    },
+    {
+      "host_pid": 27993,
+      "rank": 7,
+      "exe": "/work/artifacts/native_stage_h/bin/xllm"
+    }
+  ],
+  "logs": [
+    {
+      "rank": 0,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 1,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 2,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 3,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 4,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 5,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 6,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    },
+    {
+      "rank": 7,
+      "loaded_layers": 40,
+      "nonempty_pull_records": 0,
+      "nonempty_remote_cluster_ids": []
+    }
+  ],
+  "scope": "Actual live executables, native40layersTP8EP8, full official2group performance terminalPASS. PDnonempty pull counts reported separately, not inferred fromzero-region success."
+}

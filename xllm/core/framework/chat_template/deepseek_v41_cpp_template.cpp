@@ -906,6 +906,29 @@ std::optional<std::string> DeepseekV41CppTemplate::apply(
     stage = "sort_tool_results_by_call_order";
     normalized = sort_tool_results_by_call_order(normalized);
 
+    // Explicit assistant-prefix continuation maps to the official encoder's
+    // wo_eos flag. Default chat rendering is unchanged. This permits true
+    // same-token-prefix diagnostics through the normal Chat/V2 protocol.
+    stage = "continue_final_message";
+    if (chat_template_kwargs.contains("continue_final_message")) {
+      const auto& option = chat_template_kwargs["continue_final_message"];
+      if (!option.is_boolean()) {
+        LOG(ERROR) << "continue_final_message must be a boolean";
+        return std::nullopt;
+      }
+      if (option.get<bool>()) {
+        if (normalized.empty() ||
+            normalized.back().value("role", "") != kRoleAssistant ||
+            thinking_mode == kThinkingModeThinking || has_images ||
+            !json_tools.empty() || normalized.back().contains("tool_calls")) {
+          LOG(ERROR) << "continue_final_message requires a final plain-text "
+                        "assistant message in chat mode without images/tools";
+          return std::nullopt;
+        }
+        normalized.back()["wo_eos"] = true;
+      }
+    }
+
     // drop_thinking = last msg is user
     bool drop_thinking = false;
     if (!normalized.empty()) {

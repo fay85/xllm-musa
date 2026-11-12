@@ -1,0 +1,51 @@
+{
+  "configuration": "StageH / stage_h_formal_v2, progress logging=1, MCCL tracebuffer65536, profilerOFF",
+  "groups": {
+    "256": {
+      "Test Duration (s)": 263.5725,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.019,
+      "Avg Latency (s)": 52.7143,
+      "Avg Input Tokens": 256.0,
+      "Output Throughput (tok/s)": 4.8563,
+      "Total Throughput (tok/s)": 9.7127,
+      "Avg TTFT (ms)": 395.1,
+      "Avg TPOT (ms)": 205.17,
+      "Avg ITL (ms)": 205.17,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0,
+      "KV Cache Hit Rate (%)": 0.0
+    },
+    "2048": {
+      "Test Duration (s)": 276.1583,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.0181,
+      "Avg Latency (s)": 55.2314,
+      "Avg Input Tokens": 2048.0,
+      "Output Throughput (tok/s)": 4.635,
+      "Total Throughput (tok/s)": 41.7152,
+      "Avg TTFT (ms)": 2413.25,
+      "Avg TPOT (ms)": 207.13,
+      "Avg ITL (ms)": 208.77,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0,
+      "KV Cache Hit Rate (%)": 0.0,
+      "Avg Decoded Tok/Iter": 1.0049,
+      "Spec. Accept Rate": 0.0049
+    }
+  },
+  "raw_archive_sha256": "bef6175eed1b6a55ed56fc51404ed362d0751f7b42ab5ff213c506d0deb8d8d0",
+  "raw_archive_bytes": 691253
+}

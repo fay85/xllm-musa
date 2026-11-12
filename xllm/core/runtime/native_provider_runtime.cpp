@@ -35,7 +35,10 @@ limitations under the License.
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/kv_cache/deepseek_v4_cache_policy.h"
 #include "core/platform/platform.h"
+#include "core/runtime/deepseek_v41_execution_contract.h"
+#include "core/util/utils.h"
 
 namespace xllm {
 namespace {
@@ -113,6 +116,16 @@ std::string kv_layout_contract(const ModelArgs& args,
                                bool include_block_size) {
   std::string contract;
   append_contract_value(args.model_type(), &contract);
+  if (dsv41_original_attention_qdq_enabled(
+          util::is_deepseek_v41_model_type(args.model_type()))) {
+    append_contract_value("v41-original-attention-qdq-bf16-carrier-v1",
+                          &contract);
+  }
+  const std::string execution_contract = deepseek_v41_execution_contract(
+      util::is_deepseek_v41_model_type(args.model_type()));
+  if (!execution_contract.empty()) {
+    append_contract_value(execution_contract, &contract);
+  }
   append_contract_value(args.dtype(), &contract);
   append_numeric_contract_value(args.n_layers(), &contract);
   append_numeric_contract_value(args.n_heads(), &contract);
@@ -132,21 +145,6 @@ std::string kv_layout_contract(const ModelArgs& args,
     append_numeric_contract_value(ratio, &contract);
   }
   return contract;
-}
-
-std::vector<std::string> cache_groups(
-    const BlockManagerPool::Options& options) {
-  if (options.manager_types().empty()) {
-    return {"group:" + std::to_string(cache_group_id(BlockType::KV))};
-  }
-  std::vector<std::string> groups;
-  groups.reserve(options.manager_types().size());
-  for (size_t index = 0; index < options.manager_types().size(); ++index) {
-    const BlockType block_type =
-        static_cast<BlockType>(options.manager_types()[index]);
-    groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
-  }
-  return groups;
 }
 
 std::string head_shard_mapping_contract(const ModelArgs& args,
@@ -180,6 +178,23 @@ std::string scheduler_policy_contract(const SchedulerConfig& scheduler) {
 }
 
 }  // namespace
+
+std::vector<std::string> native_provider_cache_groups(
+    const BlockManagerPool& block_manager_pool) {
+  // manager_types encodes the allocator implementation (plain or sliding),
+  // not BlockType. Read the actual composite leaves so C1/C2 and optional
+  // recurrent/embedding state keep their distinct transfer identities.
+  const auto utilization =
+      block_manager_pool.block_utilization_by_type_per_dp();
+  CHECK(!utilization.empty());
+  std::vector<std::string> groups;
+  groups.reserve(utilization.front().size());
+  for (const auto& [block_type, usage] : utilization.front()) {
+    groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
+  }
+  std::sort(groups.begin(), groups.end());
+  return groups;
+}
 
 std::optional<NativeProviderDescriptorConfig>
 collect_native_provider_descriptor_config(
@@ -312,7 +327,7 @@ collect_native_provider_descriptor_config(
       .hash_seed = kv_cache.xxh3_128bits_seed(),
       .logical_kv_bytes_per_token =
           block_manager_pool.options().logical_kv_bytes_per_token(),
-      .cache_groups = cache_groups(block_manager_pool.options()),
+      .cache_groups = native_provider_cache_groups(block_manager_pool),
       .head_shard_mapping_contract = head_shard_mapping_contract(
           model_args, tp, dp, cp, static_cast<uint32_t>(kv_split_size)),
       .connector = connector,

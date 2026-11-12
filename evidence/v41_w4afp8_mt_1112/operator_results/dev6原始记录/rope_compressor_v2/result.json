@@ -1,0 +1,473 @@
+{
+  "status": "PASS_ROPE_AND_COMPRESSOR",
+  "rope": [
+    {
+      "rows": 1,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 1,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.1020359992980957,
+      "native_gpu_ms": 0.008671999722719193
+    },
+    {
+      "rows": 1,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 1,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 1,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.094240003824234,
+      "native_gpu_ms": 0.009067999571561814
+    },
+    {
+      "rows": 1,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 1,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 1,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.08973599672317505,
+      "native_gpu_ms": 0.008695999532938004
+    },
+    {
+      "rows": 1,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 17,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 17,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.09215199947357178,
+      "native_gpu_ms": 0.009487999975681305
+    },
+    {
+      "rows": 17,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 17,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 17,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.09557999968528748,
+      "native_gpu_ms": 0.012375999242067337
+    },
+    {
+      "rows": 17,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 17,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 17,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.10063999891281128,
+      "native_gpu_ms": 0.009495999664068222
+    },
+    {
+      "rows": 17,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 128,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 128,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.1119920015335083,
+      "native_gpu_ms": 0.010152000188827514
+    },
+    {
+      "rows": 128,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 128,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 128,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.10957599878311157,
+      "native_gpu_ms": 0.068996000289917
+    },
+    {
+      "rows": 128,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 128,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 128,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.11151599884033203,
+      "native_gpu_ms": 0.01802799999713898
+    },
+    {
+      "rows": 128,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 256,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 256,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.11888400316238404,
+      "native_gpu_ms": 0.010779999941587449
+    },
+    {
+      "rows": 256,
+      "heads": 1,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 256,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 256,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.15413999557495117,
+      "native_gpu_ms": 0.13883999586105347
+    },
+    {
+      "rows": 256,
+      "heads": 32,
+      "dimension": 128,
+      "group": 32,
+      "e4m3_scale": false,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 256,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 0.001,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    },
+    {
+      "rows": 256,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 1.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": 0.11180800199508667,
+      "native_gpu_ms": 0.030315998196601867
+    },
+    {
+      "rows": 256,
+      "heads": 1,
+      "dimension": 512,
+      "group": 16,
+      "e4m3_scale": true,
+      "amplitude": 64.0,
+      "bitwise_equal": true,
+      "reference_gpu_ms": null,
+      "native_gpu_ms": null
+    }
+  ],
+  "compressor": [
+    {
+      "dimension": 128,
+      "ratio": 1,
+      "chunks": [
+        1,
+        16,
+        1,
+        31,
+        64,
+        1,
+        143
+      ],
+      "rows": 257,
+      "relative_rms": 0.0,
+      "positions_exact": true,
+      "reference_gpu_ms": 0.16602400541305543,
+      "native_gpu_ms": 0.06172800064086914
+    },
+    {
+      "dimension": 128,
+      "ratio": 2,
+      "chunks": [
+        1,
+        16,
+        1,
+        31,
+        64,
+        1,
+        143
+      ],
+      "rows": 257,
+      "relative_rms": 0.0,
+      "positions_exact": true
+    },
+    {
+      "dimension": 512,
+      "ratio": 1,
+      "chunks": [
+        1,
+        16,
+        1,
+        31,
+        64,
+        1,
+        143
+      ],
+      "rows": 257,
+      "relative_rms": 1.0802793440234382e-05,
+      "positions_exact": true,
+      "reference_gpu_ms": 0.1601199984550476,
+      "native_gpu_ms": 0.060996001958847045
+    },
+    {
+      "dimension": 512,
+      "ratio": 2,
+      "chunks": [
+        1,
+        16,
+        1,
+        31,
+        64,
+        1,
+        143
+      ],
+      "rows": 257,
+      "relative_rms": 7.207579983514734e-06,
+      "positions_exact": true
+    }
+  ],
+  "compressed_scale_saturation": "PASS",
+  "scope": "native operators and chunk-state equivalence; not full-model accuracy"
+}

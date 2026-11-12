@@ -674,7 +674,7 @@ Dsv4KVCacheEstimateCost estimate_dsv41_kv_cache_cost(
       cache_cost.swa_count * cache_cost.swa_bytes_per_block;
 
   const DeepSeekV4CachePolicy cache_policy =
-      get_dsv4_cache_policy(options.dtype);
+      get_dsv4_cache_policy(options.dtype, /*is_v41=*/true);
   const int64_t index_scale_bytes =
       cache_policy.has_indexer_cache_scale ? cache_policy.scale_dtype_size : 0;
   const int64_t bytes_per_token_block =

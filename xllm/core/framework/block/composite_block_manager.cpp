@@ -613,7 +613,7 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
   // but the rolling SWA pool still needs this pre-growth reclamation.
   if (leaves_.find(BlockType::SWA) != leaves_.end()) {
     cache_full_blocks_for_sequence(seq);
-    release_out_of_window_for_sequence(seq);
+    release_out_of_window_for_sequence(seq, kv_state);
   }
 
   // Fan out growth. Each leaf returns its newly allocated blocks (or nullopt
@@ -660,7 +660,26 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
   }
   staged.clear();
   cache_full_blocks_for_sequence(seq);
+  release_out_of_window_for_sequence(seq, kv_state);
   return true;
+}
+
+void CompositeBlockManager::release_out_of_window_for_sequence(Sequence* seq) {
+  if (seq == nullptr) {
+    return;
+  }
+  release_out_of_window_for_sequence(seq, seq->kv_state());
+}
+
+void CompositeBlockManager::release_out_of_window_for_sequence(
+    Sequence* seq,
+    KVCacheState& kv_state) {
+  if (seq == nullptr) {
+    return;
+  }
+  for (auto& [type, entry] : leaves_) {
+    entry.leaf->release_out_of_window(seq, kv_state);
+  }
 }
 
 void CompositeBlockManager::deallocate_for_sequence(Sequence* seq) {

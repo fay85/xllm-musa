@@ -51,9 +51,8 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import unicodedata
 import weakref
+from functools import lru_cache
 from typing import Any, Callable, Sequence
 
 import torch
@@ -73,7 +72,6 @@ ENGRAM_IMAGE_PAD_ID = 129265
 # Signed-sqrt clamp of the gate input (reference kernel clamp_value).
 _ENGRAM_GATE_CLAMP = 1e-6
 
-_WHITESPACE_RE = re.compile(r"[ \t\r\n]+")
 # Private-use char so a token that is exactly one space survives Strip().
 _SENTINEL = "\ue000"
 
@@ -237,6 +235,26 @@ def compute_hash_multipliers(
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=1)
+def _reference_text_normalizer() -> Callable[[str], str]:
+    """Use the training tokenizer's Unicode rules, not Python approximations."""
+    from tokenizers import Regex, normalizers
+
+    normalizer = normalizers.Sequence(
+        [
+            normalizers.NFKC(),
+            normalizers.NFD(),
+            normalizers.StripAccents(),
+            normalizers.Lowercase(),
+            normalizers.Replace(Regex(r"[ \t\r\n]+"), " "),
+            normalizers.Replace(Regex(r"^ $"), _SENTINEL),
+            normalizers.Strip(),
+            normalizers.Replace(_SENTINEL, " "),
+        ]
+    )
+    return normalizer.normalize_str
+
+
 def normalize_token_text(text: str) -> str:
     """The reference normalization chain (engram.py ``build_compressed_token_map``).
 
@@ -244,15 +262,7 @@ def normalize_token_text(text: str) -> str:
     space -> protect a lone space with a sentinel -> strip -> restore the
     space. Tokens that normalize alike collapse onto one compressed id.
     """
-    s = unicodedata.normalize("NFKC", text)
-    s = unicodedata.normalize("NFD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = s.lower()
-    s = _WHITESPACE_RE.sub(" ", s)
-    if s == " ":
-        s = _SENTINEL
-    s = s.strip()
-    return s.replace(_SENTINEL, " ")
+    return _reference_text_normalizer()(text)
 
 
 def build_compressed_token_map_from_texts(
@@ -356,7 +366,9 @@ def build_engram_hash_state(
     if tokenizer_vocab != vocab_size:
         raise ValueError(f"tokenizer vocab size {tokenizer_vocab} does not match config vocab_size {vocab_size}")
 
-    token_texts = tokenizer.decode_batch([[token_id] for token_id in range(vocab_size)])
+    token_texts = tokenizer.decode_batch(
+        [[token_id] for token_id in range(vocab_size)], skip_special_tokens=False
+    )
     lookup, compressed = build_compressed_token_map_from_texts(token_texts, id_to_token=tokenizer.id_to_token)
     if compressed != compressed_vocab:
         raise ValueError(
@@ -1739,6 +1751,10 @@ class Engram(nn.Module):
         # rotated (h_rot) while q/k/wkv-K are in the original basis, so the
         # gate dot uses h_rot @ Q.T. None on unrotated checkpoints.
         self.register_buffer("gate_unrotate", gate_unrotate, persistent=False)
+        from xllm.python.kernels_musa.engram import select_engram_gate
+
+        self._musa_gate = select_engram_gate(device, dtype, hidden_size, hc_mult,
+                                              rms_norm_eps, gate_unrotate is not None)
         self._staged_rows: torch.Tensor | None = None
         # Offload: this rank's host-gathered block, staged by the runner outside
         # the graph. The TP all-gather stays in-graph (gather_heads below).
@@ -1918,6 +1934,8 @@ class Engram(nn.Module):
         """
         rows = self.embed(hash_ids, num_tokens=hidden_states.shape[0]).to(self.wkv.weight.dtype)
         kv = self.wkv(rows.flatten(-2))
+        if self._musa_gate is not None:
+            return self._musa_gate(hidden_states, kv, self.q_weight, self.k_weight, token_mask)
         num_tokens, hc_mult, dim = hidden_states.shape
         keys = kv[:, : hc_mult * dim].view(num_tokens, hc_mult, dim).float()
         value = kv[:, hc_mult * dim :].float()

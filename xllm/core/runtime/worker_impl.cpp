@@ -23,6 +23,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "core/runtime/json_object_output_rows.h"
 #if defined(USE_NPU)
@@ -1713,6 +1714,14 @@ void WorkerImpl::execute_cuda_block_copy_kernel(
 
 folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
     const ForwardInput& input) {
+  const bool diagnostic_progress =
+      context_.get_model_args().model_type() == "deepseek_v41" &&
+      std::getenv("XLLM_DSV41_DIAGNOSTIC_PROGRESS") != nullptr &&
+      input.token_ids.numel() > 1;
+  if (diagnostic_progress) {
+    LOG(INFO) << "V41_DIAGNOSTIC prepare begin batch="
+              << input.input_params.meta.batch_id;
+  }
   ForwardInput input_on_device;
 
   prepare_work_before_execute(input, input_on_device);
@@ -1720,17 +1729,30 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
   folly::Promise<std::optional<ForwardOutput>> promise;
   auto future = promise.getSemiFuture();
   threadpool_.schedule([this,
+                        diagnostic_progress,
                         input = std::move(input_on_device),
                         promise = std::move(promise)]() mutable {
+    if (diagnostic_progress) {
+      LOG(INFO) << "V41_DIAGNOSTIC compute entered batch="
+                << input.input_params.meta.batch_id;
+    }
     set_hierarchy_layer_synchronizer(input.input_params);
 
     // run the model on the given input in working thread
     if (!enable_schedule_overlap()) {
       auto output = this->step(input);
+      if (diagnostic_progress) {
+        LOG(INFO) << "V41_DIAGNOSTIC compute returned batch="
+                  << input.input_params.meta.batch_id;
+      }
       if (output.has_value()) {
         output->is_graph_warmup = input.input_params.meta.is_graph_warmup;
       }
       promise.setValue(std::move(output));
+      if (diagnostic_progress) {
+        LOG(INFO) << "V41_DIAGNOSTIC promise posted batch="
+                  << input.input_params.meta.batch_id;
+      }
     } else {
       if (input.token_ids.numel() > 0 &&
           input.input_params.meta.batch_forward_type.has_decode()) {

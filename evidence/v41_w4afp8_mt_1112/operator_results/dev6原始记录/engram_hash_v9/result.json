@@ -1,0 +1,1093 @@
+{
+  "status": "PASS_PAGED_ENGRAM_HASH",
+  "metadata_sha256": "df7e7ded3dc14c3d3d54883a54a535c7b39ea85335bf31b1bbdca93f7eff9d81",
+  "cases": [
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 0,
+      "rows": 512,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 0,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 1,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 2,
+      "rows": 15,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 17,
+      "rows": 128,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 145,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 146,
+      "rows": 33,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 179,
+      "rows": 256,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 435,
+      "rows": 77,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 159,
+      "rows": 1,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 160,
+      "rows": 17,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 177,
+      "rows": 128,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 305,
+      "rows": 256,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 63,
+      "rows": 0,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 63,
+      "rows": 1,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 64,
+      "rows": 17,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 81,
+      "rows": 33,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 0,
+      "rows": 512,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 0,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 1,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 2,
+      "rows": 15,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 17,
+      "rows": 128,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 145,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 146,
+      "rows": 33,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 179,
+      "rows": 256,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 435,
+      "rows": 77,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 159,
+      "rows": 1,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 160,
+      "rows": 17,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 177,
+      "rows": 128,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 305,
+      "rows": 256,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 63,
+      "rows": 0,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 63,
+      "rows": 1,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 64,
+      "rows": 17,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int32",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 81,
+      "rows": 33,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 0,
+      "rows": 512,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 0,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 1,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 2,
+      "rows": 15,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 17,
+      "rows": 128,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 145,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 146,
+      "rows": 33,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 179,
+      "rows": 256,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 435,
+      "rows": 77,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 159,
+      "rows": 1,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 160,
+      "rows": 17,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 177,
+      "rows": 128,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 305,
+      "rows": 256,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 63,
+      "rows": 0,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 63,
+      "rows": 1,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 64,
+      "rows": 17,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        2,
+        0,
+        3,
+        1
+      ],
+      "start": 81,
+      "rows": 33,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 0,
+      "rows": 512,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 0,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 1,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 2,
+      "rows": 15,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 17,
+      "rows": 128,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 145,
+      "rows": 1,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 146,
+      "rows": 33,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 179,
+      "rows": 256,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 435,
+      "rows": 77,
+      "lookback": null,
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 159,
+      "rows": 1,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 160,
+      "rows": 17,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 177,
+      "rows": 128,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 305,
+      "rows": 256,
+      "lookback": [
+        [
+          17,
+          -1,
+          129264
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 63,
+      "rows": 0,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 63,
+      "rows": 1,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 64,
+      "rows": 17,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    },
+    {
+      "dtype": "torch.int64",
+      "pages": [
+        3,
+        -1,
+        0,
+        3
+      ],
+      "start": 81,
+      "rows": 33,
+      "lookback": [
+        [
+          31
+        ]
+      ],
+      "hash_mask_history_exact": true
+    }
+  ],
+  "timings": [
+    {
+      "rows": 1,
+      "reference_gpu_ms": 1.9756999969482423,
+      "native_gpu_ms": 0.03340000212192536,
+      "speedup": 59.15269076139664,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 17,
+      "reference_gpu_ms": 1.9114238739013671,
+      "native_gpu_ms": 0.03439199924468994,
+      "speedup": 55.57757373457977,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 128,
+      "reference_gpu_ms": 4.155780029296875,
+      "native_gpu_ms": 0.036564001441001893,
+      "speedup": 113.65769241647318,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 256,
+      "reference_gpu_ms": 1.8602119445800782,
+      "native_gpu_ms": 0.039403998851776124,
+      "speedup": 47.20870974485448,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 512,
+      "reference_gpu_ms": 5.768188095092773,
+      "native_gpu_ms": 0.04701600074768066,
+      "speedup": 122.68563900295842,
+      "warmups": 2,
+      "repeats": 10
+    }
+  ],
+  "scope": "hash+mask+history with real tokenizer metadata and independent CPU integer oracle; not full-model accuracy"
+}

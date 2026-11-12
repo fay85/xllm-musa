@@ -1,0 +1,16 @@
+{
+  "status": "PASS_2048_INPUT_SHORT_ANSWER",
+  "expected": "56",
+  "content": "56",
+  "finish_reason": "stop",
+  "usage": {
+    "prompt_tokens": 2048,
+    "completion_tokens": 2,
+    "total_tokens": 2050,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "elapsed_s": 3.3020885046571493,
+  "scope": "single long multi-chunk correctness request; max_tokens16, not formal 2048/256 performance or full accuracy"
+}

@@ -1,0 +1,41 @@
+{
+  "status": "PASS_CPU_REAL_NATIVE_STACK_AND_KINETO_RECORD_ID",
+  "stack_definitions": 12,
+  "native_frames": 174,
+  "record_count": 12,
+  "matched_external_ids": 12,
+  "trace_external_ids": 12,
+  "sample_matches": [
+    {
+      "kind": "record",
+      "record_id": 2,
+      "name": "aten::empty",
+      "torch_thread": 1,
+      "os_thread": 14471,
+      "begin_steady_ns": 2647208645209994,
+      "end_steady_ns": 2647208646762982,
+      "stack_id": 0
+    },
+    {
+      "kind": "record",
+      "record_id": 3,
+      "name": "aten::fill_",
+      "torch_thread": 1,
+      "os_thread": 14471,
+      "begin_steady_ns": 2647208653553277,
+      "end_steady_ns": 2647208673638757,
+      "stack_id": 1
+    },
+    {
+      "kind": "record",
+      "record_id": 1,
+      "name": "aten::ones",
+      "torch_thread": 1,
+      "os_thread": 14471,
+      "begin_steady_ns": 2647208643726683,
+      "end_steady_ns": 2647208679857714,
+      "stack_id": 2
+    }
+  ],
+  "scope": "CPU self-test of actual native unwinding and Kineto ID correlation; serving model/GPU trace not yet validated"
+}

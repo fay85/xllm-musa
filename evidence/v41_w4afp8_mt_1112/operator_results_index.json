@@ -1,0 +1,172 @@
+[
+  {
+    "path": "operator_results/dev6原始记录/engram_hash_v9/result.json",
+    "status": "PASS_PAGED_ENGRAM_HASH",
+    "source": "04_数值验证/dev6原始记录/engram_hash_v9/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/w4a8_numeric_v5_cpp_loader/result.json",
+    "status": "PASS_TWO_EXPERT_GPU_REGRESSION",
+    "source": "04_数值验证/dev6原始记录/w4a8_numeric_v5_cpp_loader/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/wo_a_profile_v1/wo_a.json",
+    "status": "PASS_REAL_WO_A_M1",
+    "source": "04_数值验证/dev6原始记录/wo_a_profile_v1/wo_a.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/wo_a_profile_v1/profile/result.json",
+    "status": "PASS_SERVING_CPP_PROFILER_GPU_AND_REAL_NATIVE_STACK",
+    "source": "04_数值验证/dev6原始记录/wo_a_profile_v1/profile/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/engram_hash_v10/result.json",
+    "status": "PASS_PAGED_ENGRAM_HASH",
+    "source": "04_数值验证/dev6原始记录/engram_hash_v10/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/indexer_topk_v2/result.json",
+    "status": "PASS_NATIVE_INDEXER_RADIX_TOPK",
+    "source": "04_数值验证/dev6原始记录/indexer_topk_v2/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/w4a8_numeric_v4_contiguous_oracle/result.json",
+    "status": "PASS_TWO_EXPERT_GPU_REGRESSION",
+    "source": "04_数值验证/dev6原始记录/w4a8_numeric_v4_contiguous_oracle/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/pair_pool_v1/result.json",
+    "status": "PASS_PAGED_PAIR_POOL",
+    "source": "04_数值验证/dev6原始记录/pair_pool_v1/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/mhc_native_v1/result.json",
+    "status": "PASS_REAL_WEIGHT_MHC_PRENORM_LAYER",
+    "source": "04_数值验证/dev6原始记录/mhc_native_v1/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/rope_compressor_v2/result.json",
+    "status": "PASS_ROPE_AND_COMPRESSOR",
+    "source": "04_数值验证/dev6原始记录/rope_compressor_v2/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/indexer_aot_v1/result.json",
+    "status": "PASS_NATIVE_INDEXER_AOT",
+    "source": "04_数值验证/dev6原始记录/indexer_aot_v1/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/native_cpp_stack_cpu_v1/result.json",
+    "status": "PASS_CPU_REAL_NATIVE_STACK_AND_KINETO_RECORD_ID",
+    "source": "04_数值验证/dev6原始记录/native_cpp_stack_cpu_v1/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/correctness/indexer_topk_v2/result.json",
+    "status": "PASS_NATIVE_INDEXER_RADIX_TOPK",
+    "source": "04_数值验证/dev6原始记录/correctness/indexer_topk_v2/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/engram_gather_v1/result.json",
+    "status": "PASS_NATIVE_FUSED_ENGRAM_GATHER",
+    "source": "04_数值验证/dev6原始记录/engram_gather_v1/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/sparse_mate_safe_v2/result.json",
+    "status": "PASS_NATIVE_MATE_SPARSE_H8",
+    "source": "04_数值验证/dev6原始记录/sparse_mate_safe_v2/result.json"
+  },
+  {
+    "path": "operator_results/dev6原始记录/rms_norm_v1/result.json",
+    "status": "PASS_NATIVE_MUSA_RMSNORM",
+    "source": "04_数值验证/dev6原始记录/rms_norm_v1/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_c_pd_basic/questions/result.json",
+    "status": "PASS_TWO_ARITHMETIC_QUESTIONS_ONLY",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_c_pd_basic/questions/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_f_long/result.json",
+    "status": "PASS_2048_INPUT_SHORT_ANSWER",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_f_long/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_d_pd_basic/questions/result.json",
+    "status": "PASS_TWO_ARITHMETIC_QUESTIONS_ONLY",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_d_pd_basic/questions/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_target_sj10/pair_pool.json",
+    "status": "PASS_PAGED_PAIR_POOL",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_target_sj10/pair_pool.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_target_sj10/engram_hash.json",
+    "status": "PASS_PAGED_ENGRAM_HASH",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_target_sj10/engram_hash.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_target_sj10/engram_gather.json",
+    "status": "PASS_NATIVE_FUSED_ENGRAM_GATHER",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_target_sj10/engram_gather.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_long/question/result.json",
+    "status": "PASS_2048_INPUT_SHORT_ANSWER",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_long/question/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_f_target_sj10/wo_a.json",
+    "status": "PASS_REAL_WO_A_M1",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_f_target_sj10/wo_a.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_f_target_sj10/profile/result.json",
+    "status": "PASS_SERVING_CPP_PROFILER_GPU_AND_REAL_NATIVE_STACK",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_f_target_sj10/profile/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_f_target_sj9/wo_a.json",
+    "status": "PASS_REAL_WO_A_M1",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_f_target_sj9/wo_a.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_f_target_sj9/profile/result.json",
+    "status": "PASS_SERVING_CPP_PROFILER_GPU_AND_REAL_NATIVE_STACK",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_f_target_sj9/profile/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_target_sj9/pair_pool.json",
+    "status": "PASS_PAGED_PAIR_POOL",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_target_sj9/pair_pool.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_target_sj9/engram_hash.json",
+    "status": "PASS_PAGED_ENGRAM_HASH",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_target_sj9/engram_hash.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_target_sj9/engram_gather.json",
+    "status": "PASS_NATIVE_FUSED_ENGRAM_GATHER",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_target_sj9/engram_gather.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/dense_decode_specialized_v3/result.json",
+    "status": "PASS_REAL_WEIGHT_DENSE_BLOCK32_NATIVE_AOT",
+    "source": "04_数值验证/SJ原始记录/correctness/dense_decode_specialized_v3/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/dense_block32_aot_v1/result.json",
+    "status": "PASS_REAL_WEIGHT_DENSE_BLOCK32_NATIVE_AOT",
+    "source": "04_数值验证/SJ原始记录/correctness/dense_block32_aot_v1/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_e_pd_basic/questions/result.json",
+    "status": "PASS_TWO_ARITHMETIC_QUESTIONS_ONLY",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_e_pd_basic/questions/result.json"
+  },
+  {
+    "path": "operator_results/SJ原始记录/correctness/stage_f_pd_basic/questions/result.json",
+    "status": "PASS_TWO_ARITHMETIC_QUESTIONS_ONLY",
+    "source": "04_数值验证/SJ原始记录/correctness/stage_f_pd_basic/questions/result.json"
+  }
+]

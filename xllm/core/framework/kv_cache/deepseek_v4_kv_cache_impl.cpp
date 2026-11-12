@@ -212,8 +212,9 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
   const int64_t c128_physical_dim = geometry.c128_physical_dim();
   const int64_t n_heads = 1;
   const int64_t index_n_heads = 1;
-  const DeepSeekV4CachePolicy cache_policy =
-      get_dsv4_cache_policy(create_options.dtype());
+  const DeepSeekV4CachePolicy cache_policy = get_dsv4_cache_policy(
+      create_options.dtype(),
+      util::is_deepseek_v41_model_type(create_options.model_type()));
 
   // Host tensor shape: device per-block dims with a layer dimension inserted at
   // index 1, i.e. [host_block_count, layer_count, ...per_block_dims].
@@ -494,8 +495,9 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
           ? compress_ratios[static_cast<size_t>(layer_idx)]
           : 1;
 
-  const DeepSeekV4CachePolicy cache_policy =
-      get_dsv4_cache_policy(create_options.dtype());
+  const DeepSeekV4CachePolicy cache_policy = get_dsv4_cache_policy(
+      create_options.dtype(),
+      util::is_deepseek_v41_model_type(create_options.model_type()));
   const std::shared_ptr<KVCacheTensorAllocator> tensor_allocator =
       create_options.tensor_allocator();
 

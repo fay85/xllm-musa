@@ -1,0 +1,132 @@
+{
+  "status": "PASS_REAL_WEIGHT_DENSE_BLOCK32_NATIVE_AOT",
+  "results": [
+    {
+      "projection": "layers.0.attn.wq_a",
+      "tp_rank": 0,
+      "tp": 1,
+      "weight_shape": [
+        1280,
+        5120
+      ],
+      "rows": 1,
+      "relative_rms": 0.001621203264221549,
+      "max_abs": 0.014996528625488281,
+      "native_aot_gpu_ms": 0.047523999214172365,
+      "reference_qdq_bf16_gpu_ms": 0.038675999641418456,
+      "speedup": 0.8138203914009976,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n1280_k5120"
+    },
+    {
+      "projection": "layers.0.attn.wkv",
+      "tp_rank": 0,
+      "tp": 1,
+      "weight_shape": [
+        512,
+        5120
+      ],
+      "rows": 1,
+      "relative_rms": 0.001767752575688064,
+      "max_abs": 0.014719009399414062,
+      "native_aot_gpu_ms": 0.04393199980258942,
+      "reference_qdq_bf16_gpu_ms": 0.03450399935245514,
+      "speedup": 0.7853956001889407,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n512_k5120"
+    },
+    {
+      "projection": "layers.0.attn.wq_b",
+      "tp_rank": 0,
+      "tp": 8,
+      "weight_shape": [
+        4096,
+        1280
+      ],
+      "rows": 1,
+      "relative_rms": 0.0016851898981258273,
+      "max_abs": 0.008100032806396484,
+      "native_aot_gpu_ms": 0.040759998559951785,
+      "reference_qdq_bf16_gpu_ms": 0.03461999893188476,
+      "speedup": 0.8493621235281446,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n4096_k1280"
+    },
+    {
+      "projection": "layers.0.attn.wo_b",
+      "tp_rank": 0,
+      "tp": 8,
+      "weight_shape": [
+        5120,
+        1024
+      ],
+      "rows": 1,
+      "relative_rms": 0.0016667734598740935,
+      "max_abs": 0.007456064224243164,
+      "native_aot_gpu_ms": 0.04825599789619446,
+      "reference_qdq_bf16_gpu_ms": 0.03513999879360199,
+      "speedup": 0.7281996088692051,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n5120_k1024"
+    },
+    {
+      "projection": "layers.0.ffn.shared_experts.w1",
+      "tp_rank": 0,
+      "tp": 1,
+      "weight_shape": [
+        2304,
+        5120
+      ],
+      "rows": 1,
+      "relative_rms": 0.0016195829957723618,
+      "max_abs": 0.014360427856445312,
+      "native_aot_gpu_ms": 0.0791920006275177,
+      "reference_qdq_bf16_gpu_ms": 0.04161199927330017,
+      "speedup": 0.5254571035403391,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n2304_k5120"
+    },
+    {
+      "projection": "layers.0.ffn.shared_experts.w3",
+      "tp_rank": 0,
+      "tp": 1,
+      "weight_shape": [
+        2304,
+        5120
+      ],
+      "rows": 1,
+      "relative_rms": 0.00167238584253937,
+      "max_abs": 0.015530109405517578,
+      "native_aot_gpu_ms": 0.08087599873542786,
+      "reference_qdq_bf16_gpu_ms": 0.04243600070476532,
+      "speedup": 0.524704502798012,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n2304_k5120"
+    },
+    {
+      "projection": "layers.0.ffn.shared_experts.w2",
+      "tp_rank": 0,
+      "tp": 1,
+      "weight_shape": [
+        5120,
+        2304
+      ],
+      "rows": 1,
+      "relative_rms": 0.0016139104263857007,
+      "max_abs": 0.007653236389160156,
+      "native_aot_gpu_ms": 0.0637880027294159,
+      "reference_qdq_bf16_gpu_ms": 0.034132000803947446,
+      "speedup": 0.5350849586674304,
+      "warmups": 2,
+      "repeats": 10,
+      "library_directory": "/work/build/dense_decode_specialized_v2/m1_n5120_k2304"
+    }
+  ],
+  "scope": "7 real layer0 projections, TP slices; not full-model or PD accuracy"
+}

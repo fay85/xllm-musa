@@ -1,0 +1,267 @@
+{
+  "status": "PASS_TWO_EXPERT_GPU_REGRESSION",
+  "native_checkpoint_loader_matches_independent_loader": true,
+  "fixture_sha256": "418cba10417f5a8d61a4be8dcfc5921f228a19922727e30611e50172ea92bc4c",
+  "gemm_sha256": "6757da6f4806d6249ff7f5882feb8424b645dbabf32265ae8881e79625f424dc",
+  "native_module": "/work/build/artifacts/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+  "native_module_sha256": "4f316f36179b7268a7ff8cbf60c6844af4a4576c186aaa8d122748d462f8d153",
+  "epoch": 1794424867.7055454,
+  "results": [
+    {
+      "diagnostic_sync": false,
+      "combine_error": {
+        "max_abs": 4.76837158203125e-07,
+        "relative_rms": 3.2589628773394e-08
+      },
+      "rows": 1,
+      "hidden": 5120,
+      "intermediate": 2304,
+      "local_experts": 2,
+      "topk": 2,
+      "stage_errors": [
+        {
+          "expert": 0,
+          "gate_up": {
+            "max_abs": 7.62939453125e-06,
+            "relative_rms": 7.457796868948208e-08
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          }
+        },
+        {
+          "expert": 1,
+          "gate_up": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          }
+        }
+      ],
+      "routed_error": {
+        "max_abs": 0.0020246505737304688,
+        "relative_rms": 1.3952294466434978e-05
+      },
+      "native_gpu_event_ms": 0.12647600173950196,
+      "timing_warmups": 2,
+      "timing_repeats": 10
+    },
+    {
+      "diagnostic_sync": false,
+      "combine_error": {
+        "max_abs": 1.9073486328125e-06,
+        "relative_rms": 3.0596471134458625e-08
+      },
+      "rows": 17,
+      "hidden": 5120,
+      "intermediate": 2304,
+      "local_experts": 2,
+      "topk": 2,
+      "stage_errors": [
+        {
+          "expert": 0,
+          "gate_up": {
+            "max_abs": 0.0078125,
+            "relative_rms": 3.4910921385744587e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.00390625,
+            "relative_rms": 9.160266927210614e-06
+          }
+        },
+        {
+          "expert": 1,
+          "gate_up": {
+            "max_abs": 0.0078125,
+            "relative_rms": 3.534897405188531e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.015625,
+            "relative_rms": 5.16535401402507e-05
+          }
+        }
+      ],
+      "routed_error": {
+        "max_abs": 0.020075082778930664,
+        "relative_rms": 5.182614040677436e-05
+      },
+      "native_gpu_event_ms": 0.1265399932861328,
+      "timing_warmups": 2,
+      "timing_repeats": 10
+    },
+    {
+      "diagnostic_sync": false,
+      "combine_error": {
+        "max_abs": 1.9073486328125e-06,
+        "relative_rms": 2.6779650497132934e-08
+      },
+      "rows": 128,
+      "hidden": 5120,
+      "intermediate": 2304,
+      "local_experts": 2,
+      "topk": 2,
+      "stage_errors": [
+        {
+          "expert": 0,
+          "gate_up": {
+            "max_abs": 0.015625,
+            "relative_rms": 6.927926006028429e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.03125,
+            "relative_rms": 7.528546848334372e-05
+          }
+        },
+        {
+          "expert": 1,
+          "gate_up": {
+            "max_abs": 0.015625,
+            "relative_rms": 7.786955393385142e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.03125,
+            "relative_rms": 4.7906996769597754e-05
+          }
+        }
+      ],
+      "routed_error": {
+        "max_abs": 0.043064117431640625,
+        "relative_rms": 0.00029364851070567966
+      },
+      "native_gpu_event_ms": 0.21571199893951415,
+      "timing_warmups": 2,
+      "timing_repeats": 10
+    },
+    {
+      "diagnostic_sync": false,
+      "combine_error": {
+        "max_abs": 1.9073486328125e-06,
+        "relative_rms": 2.5224629496278794e-08
+      },
+      "rows": 256,
+      "hidden": 5120,
+      "intermediate": 2304,
+      "local_experts": 2,
+      "topk": 2,
+      "stage_errors": [
+        {
+          "expert": 0,
+          "gate_up": {
+            "max_abs": 0.03125,
+            "relative_rms": 7.964203541632742e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.03125,
+            "relative_rms": 6.305464921751991e-05
+          }
+        },
+        {
+          "expert": 1,
+          "gate_up": {
+            "max_abs": 0.015625,
+            "relative_rms": 6.847277836641297e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.03125,
+            "relative_rms": 5.403926843428053e-05
+          }
+        }
+      ],
+      "routed_error": {
+        "max_abs": 0.0669403076171875,
+        "relative_rms": 0.0007612852496095002
+      },
+      "native_gpu_event_ms": 0.2627840042114258,
+      "timing_warmups": 2,
+      "timing_repeats": 10
+    },
+    {
+      "diagnostic_sync": false,
+      "combine_error": {
+        "max_abs": 1.9073486328125e-06,
+        "relative_rms": 2.593521486460304e-08
+      },
+      "rows": 512,
+      "hidden": 5120,
+      "intermediate": 2304,
+      "local_experts": 2,
+      "topk": 2,
+      "stage_errors": [
+        {
+          "expert": 0,
+          "gate_up": {
+            "max_abs": 0.03125,
+            "relative_rms": 6.219457281986251e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.03125,
+            "relative_rms": 5.114301893627271e-05
+          }
+        },
+        {
+          "expert": 1,
+          "gate_up": {
+            "max_abs": 0.03125,
+            "relative_rms": 7.168056617956609e-05
+          },
+          "swiglu_quant": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "down": {
+            "max_abs": 0.03125,
+            "relative_rms": 5.909976243856363e-05
+          }
+        }
+      ],
+      "routed_error": {
+        "max_abs": 0.07580947875976562,
+        "relative_rms": 0.0005956931272521615
+      },
+      "native_gpu_event_ms": 0.4552720069885254,
+      "timing_warmups": 2,
+      "timing_repeats": 10
+    }
+  ],
+  "scope": "two real experts and local permutation/quantization/GEMM/combine; not full-model, EP collective, PD or serving validation"
+}

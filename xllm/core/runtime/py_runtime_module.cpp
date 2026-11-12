@@ -32,6 +32,10 @@ limitations under the License.
 #include "models/llm/py_causal_lm.h"
 #include "platform/layer_synchronizer.h"
 
+#if defined(USE_MUSA)
+#include "core/runtime/py_musa_kernel_bindings.h"
+#endif
+
 #if defined(USE_NPU)
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
@@ -55,6 +59,9 @@ bool is_unconstrained_greedy(const ModelSamplingInput& input) {
 }
 
 void register_xllm_runtime_module(py::module_& m) {
+#if defined(USE_MUSA)
+  register_musa_kernel_bindings(m);
+#endif
   py::class_<SamplingParameters>(m, "SamplingParameters")
       .def_readonly("all_greedy_sample", &SamplingParameters::all_greedy_sample)
       .def_readwrite("selected_token_idxes",

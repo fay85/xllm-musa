@@ -1,0 +1,410 @@
+{
+  "status": "PASS_NATIVE_FUSED_ENGRAM_GATHER",
+  "results": [
+    {
+      "rows": 1,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true,
+      "reference_gpu_ms": 0.5602720260620118,
+      "native_gpu_ms": 0.010332000255584717,
+      "speedup": 54.226869164000455,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 1,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true,
+      "reference_gpu_ms": 0.5255199909210205,
+      "native_gpu_ms": 0.023259998857975007,
+      "speedup": 22.59329392618774,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 17,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true,
+      "reference_gpu_ms": 0.4844679832458496,
+      "native_gpu_ms": 0.021483999490737916,
+      "speedup": 22.550176630506403,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 128,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true,
+      "reference_gpu_ms": 0.49038000106811525,
+      "native_gpu_ms": 0.020848000049591066,
+      "speedup": 23.521680732043844,
+      "warmups": 2,
+      "repeats": 10
+    },
+    {
+      "rows": 256,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": false,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 1,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 17,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 128,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 0,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 9,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int32",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    },
+    {
+      "rows": 256,
+      "head_start": 21,
+      "local_heads": 3,
+      "dtype": "torch.int64",
+      "edge_scales": true,
+      "exact_cpu_reference_including_nan": true
+    }
+  ],
+  "scope": "GPU-sharded local lookup, CPU original-format oracle; not full table bandwidth or full-model accuracy"
+}

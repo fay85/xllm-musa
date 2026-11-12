@@ -15,6 +15,8 @@ cc_library(
     model_registry.h
     speech_model.h
     models.h
+    $<$<BOOL:${USE_MUSA}>:llm/musa/deepseek_v41_native.h>
+    $<$<BOOL:${USE_MUSA}>:llm/musa/deepseek_v41_checkpoint.h>
     dit/utils/lanczos_resample.h
     $<$<BOOL:${USE_NPU}>:dit/utils/dit_block_weight_manager.h>
     py_model_helper.h

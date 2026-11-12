@@ -1,0 +1,15 @@
+{
+  "binary_sha256": "5dec7bad2087d42fae7c0eb7a23a2ffe5ee64555310b7793edd84047a7508799",
+  "datasets": {
+    "256": {
+      "sha256": "c3d7cb38060a2f81b228b83d8939e1a682480e9ab26a2c5a2df29ca66dadbc51",
+      "requests": 6
+    },
+    "2048": {
+      "sha256": "c97324fa9af05314bb20d5052bccede6f1f85e8a3eceb02b52f5787958683c94",
+      "requests": 6
+    }
+  },
+  "tokenizer_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+  "protocol": "C1 eager, each group one warmup then five measured, ignore_eos256"
+}

@@ -118,21 +118,25 @@ def _create_attention_backend(
 ) -> AttentionBackend:
     config = config or {}
     model_type = config.get("model_type", "")
-    # DeepSeek-V4.1 is NPU-only: reject on any other platform before the generic
-    # CUDA/NPU backend selection can return a backend it must not run on.
-    if model_type == "deepseek_v41" and not current_platform.is_npu():
+    musa_v41 = model_type == "deepseek_v41" and current_platform.is_musa()
+    if musa_v41 and (
+        acl_graph_enabled
+        or config.get("enable_graph", False)
+        or _resolve_graph_backend(config) not in _DISABLED_GRAPH_BACKENDS
+    ):
+        raise NotImplementedError("DeepSeek-V4.1 MUSA currently requires eager execution")
+    if model_type == "deepseek_v41" and not (current_platform.is_npu() or musa_v41):
         raise NotImplementedError(
-            f"DeepSeek-V4.1 runs on NPU only; no attention backend available for device type '{device.type}'"
+            f"DeepSeek-V4.1 has no attention backend for device type '{device.type}'"
         )
-    if _is_deepseek_v4_model_type(model_type) and current_platform.is_npu():
+    if _is_deepseek_v4_model_type(model_type) and (current_platform.is_npu() or musa_v41):
         # The DSpark draft is a V4.1-family model (its classes live in
         # xllm/python/models/deepseek_v41_dspark.py and reuse the V4.1 decoder),
         # so it needs the same CSA2 backend as the deepseek_v41 target. The C++
         # side routes --model_impl=python drafts to this name.
         if model_type in ("deepseek_v41", "deepseek_v41_dspark"):
-            # The V4.1 CSA2 backend is NPU-only; its pure-torch reference tail
-            # runs eagerly on NPU, and the decode ACL-graph path can route
-            # its indexer chain through the official QLI v3 op.
+            # MUSA uses the pure-torch eager CSA2 path. The optional fused
+            # NPU QLI/SMLA operators and ACL graphs remain device-gated.
             from xllm.python.attention.csa2_attention import Csa2AttentionBackend
             from xllm.python.models.deepseek_v41 import _detect_v41_quant_mode
 

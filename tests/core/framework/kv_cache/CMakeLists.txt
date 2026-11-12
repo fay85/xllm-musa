@@ -76,3 +76,13 @@ cc_test(
     GTest::gtest_main
 )
 target_link_libraries(linear_state_restore_test PUBLIC Python::Python)
+
+if(USE_MUSA)
+  cc_test(
+    NAME deepseek_v41_original_cache_test
+    CPU_ONLY
+    SRCS deepseek_v41_original_cache_test.cpp
+    DEPS :kv_cache :kv_cache_estimation GTest::gtest_main
+  )
+  target_link_libraries(deepseek_v41_original_cache_test PUBLIC Python::Python)
+endif()

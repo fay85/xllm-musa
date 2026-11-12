@@ -8,6 +8,7 @@ cc_library(
     options.h
     native_provider_contract.h
     native_provider_runtime.h
+    deepseek_v41_execution_contract.h
     decode_graph_bucket.h
     forward_params.h
     dit_forward_params.h

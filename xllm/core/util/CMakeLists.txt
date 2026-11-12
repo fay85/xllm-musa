@@ -12,6 +12,7 @@ cc_library(
     concurrentqueue.h
     cpu_affinity.h
     env_var.h
+    folly_bthread_compat.h
     hash_util.h
     http_downloader.h
     json_reader.h

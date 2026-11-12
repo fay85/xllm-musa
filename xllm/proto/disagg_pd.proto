@@ -413,5 +413,6 @@ service DisaggPDService {
   rpc EnsureLink(EnsureLinkRequest) returns (EnsureLinkResult) {}
   rpc DrainLink(DrainLinkRequest) returns (EnsureLinkResult) {}
   rpc QueryRequest(AttemptControlRequest) returns (AttemptControlResponse) {}
-  rpc CancelRequest(AttemptControlRequest) returns (AttemptControlResponse) {}
+  // Attempt-scoped Native V2 control must not overload the legacy RPC name.
+  rpc CancelAttempt(AttemptControlRequest) returns (AttemptControlResponse) {}
 }

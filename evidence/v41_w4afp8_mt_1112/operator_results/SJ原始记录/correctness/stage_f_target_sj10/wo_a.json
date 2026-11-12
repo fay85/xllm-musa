@@ -1,0 +1,391 @@
+{
+  "status": "PASS_REAL_WO_A_M1",
+  "fixture_sha256": "f5dd59a034a1faa84c971937ad7a41265e96d5708dd70d59c19eeccfaa82af75",
+  "cases": [
+    {
+      "amplitude": 0.001,
+      "sample": 0,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 1,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 2,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 3,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 4,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0003583416691981256
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 5,
+      "native_relative_rms": 7.057242012997733e-10,
+      "einsum_relative_rms": 1.5525932539617315e-08
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 6,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 7,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 8,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 9,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 10,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 11,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 12,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.00020353737636469305
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 13,
+      "native_relative_rms": 7.416567360252202e-09,
+      "einsum_relative_rms": 4.449940416151321e-09
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 14,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 15,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 16,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 17,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 18,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 0.001,
+      "sample": 19,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 0,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 1,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 2.4975533960969187e-05
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 2,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 3,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 9.916409180732444e-05
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 4,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 5,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 6,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 7,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 8,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 9,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.00010402026236988604
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 10,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 11,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 12,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 13,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0003886126505676657
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 14,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 15,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 16,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 17,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 18,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 1.0,
+      "sample": 19,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 1.5827411061763996e-06
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 0,
+      "native_relative_rms": 1.598094604560174e-05,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 1,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 6.635731551796198e-05
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 2,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 3,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 4,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 5,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 6,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 7,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 8,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 9.475606930209324e-07
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 9,
+      "native_relative_rms": 3.83892574973288e-06,
+      "einsum_relative_rms": 5.429060820461018e-06
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 10,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 11,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 12,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 13,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 14,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 15,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 16,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 17,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 18,
+      "native_relative_rms": 0.0,
+      "einsum_relative_rms": 0.0
+    },
+    {
+      "amplitude": 100.0,
+      "sample": 19,
+      "native_relative_rms": 1.562450961500872e-05,
+      "einsum_relative_rms": 1.562450961500872e-05
+    }
+  ],
+  "zero_exact": true,
+  "timings": [
+    {
+      "trial": 0,
+      "einsum_gpu_ms": 0.056028800010681154,
+      "native_gpu_ms": 0.02149719953536987,
+      "warmups": 10,
+      "repeats": 100
+    },
+    {
+      "trial": 1,
+      "einsum_gpu_ms": 0.056840400695800784,
+      "native_gpu_ms": 0.02027679920196533,
+      "warmups": 10,
+      "repeats": 100
+    },
+    {
+      "trial": 2,
+      "einsum_gpu_ms": 0.05682120323181152,
+      "native_gpu_ms": 0.02015399932861328,
+      "warmups": 10,
+      "repeats": 100
+    }
+  ],
+  "scope": "one projection TP8 rank0 actual weights; CPU FP32 oracle with BF16 boundary, not whole-model speedup"
+}

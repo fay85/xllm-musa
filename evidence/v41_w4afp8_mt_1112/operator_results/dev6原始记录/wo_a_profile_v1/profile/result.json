@@ -1,0 +1,11 @@
+{
+  "status": "PASS_SERVING_CPP_PROFILER_GPU_AND_REAL_NATIVE_STACK",
+  "trace": "/work/correctness/wo_a_profile_v1/profile/xllm_rank0_69_1794439741627.pt.trace.json",
+  "sidecar": "/work/correctness/wo_a_profile_v1/profile/native_cpp_stacks_69.jsonl",
+  "matched_record_ids": 46,
+  "semantic_ranges": 1,
+  "gpu_kernels": 7,
+  "native_module_frames": 4,
+  "module_sha256": "a4842fdd6af6b2f5453739071619a66ef19dc39f1acae0a61f3d97dce065014b",
+  "scope": "exact serving start/stop hook on native C2 GPU forward, actual PCs resolved to C++ forward; full-model16rank trace still separate"
+}

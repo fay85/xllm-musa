@@ -163,6 +163,9 @@ ffi::Array<ffi::Tensor> to_ffi_array_tensors(
 ffi::Optional<ffi::Array<ffi::Tensor>> to_ffi_optional_array_tensors(
     const std::optional<std::vector<torch::Tensor>>& optional);
 
+ffi::Function get_function_from_file(const std::string& so_path,
+                                     const std::string& func_name);
+
 ffi::Module get_module(const std::string& uri);
 
 ffi::Function get_function(const std::string& uri,

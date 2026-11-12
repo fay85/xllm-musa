@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -64,6 +65,7 @@ class TorchProfiler {
 
   mutable std::mutex mutex_;
   bool running_ = false;
+  bool native_stack_running_ = false;
 };
 
 }  // namespace xllm

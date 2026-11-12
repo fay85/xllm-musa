@@ -152,6 +152,9 @@ void configure_deepseek_v4_dspark_args(ModelArgs& args,
   args.dspark_use_native_sas(
       KernelConfig::get_instance().enable_dspark_native_sas() &&
       !python_v41_draft);
+#else
+  args.dspark_use_native_sas(false);
+#endif
   args.draft_query_uses_decode(args.dspark_use_native_sas() ||
                                python_v41_draft);
   args.enable_confidence_head(options.enable_adaptive_speculative_decode());

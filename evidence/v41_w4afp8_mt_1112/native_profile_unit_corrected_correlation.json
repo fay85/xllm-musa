@@ -1,0 +1,24 @@
+{
+  "status": "PASS_3_UNIT_TRACES_EXACT_RECORD_FUNCTION_ID_NAME_THREAD",
+  "results": [
+    {
+      "source": "04_数值验证/dev6原始记录/wo_a_profile_v1/profile/native_cpp_stacks_69.jsonl",
+      "matched_exact_name_and_os_thread": 46,
+      "semantic_compressor_entries": 1,
+      "gpu_pair_pool_kernel": true
+    },
+    {
+      "source": "04_数值验证/SJ原始记录/correctness/stage_f_target_sj10/profile/native_cpp_stacks_25351.jsonl",
+      "matched_exact_name_and_os_thread": 46,
+      "semantic_compressor_entries": 1,
+      "gpu_pair_pool_kernel": true
+    },
+    {
+      "source": "04_数值验证/SJ原始记录/correctness/stage_f_target_sj9/profile/native_cpp_stacks_25358.jsonl",
+      "matched_exact_name_and_os_thread": 46,
+      "semantic_compressor_entries": 1,
+      "gpu_pair_pool_kernel": true
+    }
+  ],
+  "note": "rechecked original saved traces; no numerical/GPU rerun needed because only offline correlation corrected. Real PCs and resolvedCompressorforward unchanged."
+}

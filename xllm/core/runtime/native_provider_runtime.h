@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "core/runtime/native_provider_contract.h"
 
@@ -25,6 +26,10 @@ namespace xllm {
 class BlockManagerPool;
 class Engine;
 struct InstanceInfo;
+
+// Return deterministic transfer identities from the pool's actual leaves.
+std::vector<std::string> native_provider_cache_groups(
+    const BlockManagerPool& block_manager_pool);
 
 // Collects immutable Native V2 inputs from the loaded runtime. A null result
 // with an empty error means the registration uses a legacy-compatible mode not

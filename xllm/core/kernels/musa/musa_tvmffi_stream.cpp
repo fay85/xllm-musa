@@ -1084,10 +1084,12 @@ ffi::Optional<ffi::Array<ffi::Tensor>> to_ffi_optional_array_tensors(
       to_ffi_array_tensors(optional.value()));
 }
 
-ffi::Module get_module(const std::string& uri) {
+namespace {
+
+ffi::Module load_module_from_file(const std::string& so_file_path) {
   static thread_local std::unordered_map<std::string, ffi::Module> module_cache;
 
-  auto it = module_cache.find(uri);
+  auto it = module_cache.find(so_file_path);
   if (it != module_cache.end()) {
     return it->second;
   }
@@ -1099,11 +1101,31 @@ ffi::Module get_module(const std::string& uri) {
   CHECK(ensure_tilelang_loader())
       << "TileLang MUSA FFI loader unavailable; set XLLM_TILELANG_LIB to "
          "libtilelang.so before loading Mate/FlashInfer ops (uri="
-      << uri << ")";
-  std::string so_file_path = path_to_uri_so_lib(uri);
+      << so_file_path << ")";
   auto mod = ffi::Module::LoadFromFile(so_file_path);
-  module_cache.emplace(uri, mod);
+  module_cache.emplace(so_file_path, mod);
   return mod;
+}
+
+}  // namespace
+
+ffi::Module get_module(const std::string& uri) {
+  return load_module_from_file(path_to_uri_so_lib(uri));
+}
+
+ffi::Function get_function_from_file(const std::string& so_path,
+                                     const std::string& func_name) {
+  static thread_local std::unordered_map<std::string, ffi::Function> functions;
+  const std::string key = so_path + "|" + func_name;
+  auto it = functions.find(key);
+  if (it != functions.end()) {
+    return it->second;
+  }
+  auto function = load_module_from_file(so_path)->GetFunction(func_name);
+  CHECK(function.defined())
+      << "TVM function missing: " << func_name << " in " << so_path;
+  functions.emplace(key, function.value());
+  return function.value();
 }
 
 ffi::Function get_function(const std::string& uri,

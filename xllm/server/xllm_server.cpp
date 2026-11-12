@@ -27,6 +27,7 @@ limitations under the License.
 #include "core/framework/config/distributed_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/util/folly_bthread_compat.h"
 #include "health_reporter.h"
 
 namespace xllm {
@@ -118,7 +119,10 @@ bool configure_generic_server(brpc::Server* server,
 }
 }  // namespace
 
-XllmServer::XllmServer() { butil::AtExitManager exit_manager; }
+XllmServer::XllmServer() {
+  initialize_folly_bthread_compatibility();
+  butil::AtExitManager exit_manager;
+}
 
 XllmServer::~XllmServer() {
   stop();

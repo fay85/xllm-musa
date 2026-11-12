@@ -17,7 +17,7 @@
 Faithful port of the official reference implementation
 (``/weights/DeepSeek/DeepSeek-V4.1-Flash/inference/model.py``; semantics
 spec: ``docs/deepseek_v41_reference_semantics.md``). The forward is pure
-torch and NPU-only (there is no CPU/CUDA attention backend); the reference
+torch, with an eager MUSA path (there is no CPU/CUDA attention backend); the reference
 dequant numerics are preserved by the inlined helpers at the bottom of
 this file (device-agnostic, unit-tested on CPU; ue8m0 decode, FP8 block
 dequant, MXFP4 dequant):
@@ -42,7 +42,8 @@ dequant, MXFP4 dequant):
     experts and one shared expert.
   * ``DeepseekV41ForCausalLM`` -- checkpoint-mode-aware construction and
     loading: ``fp8`` (official FP8-block/MXFP4 release, dequantized to bf16
-    at load), ``ascend`` (W8A8 export, existing kernel path) and ``none``.
+    at load on NPU; MUSA retains packed MXFP4 experts and dequantizes active
+    experts on GPU), ``ascend`` (NPU W8A8 export) and ``none`` (NPU).
 
 Vision and the DSpark draft model are out of scope here; their checkpoint
 tensors are simply not consumed. Engram IS implemented
@@ -66,6 +67,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from scripts.logger import logger
+from xllm.python.kernels_musa.attention_quant import select_attention_quant
+from xllm.python.kernels_musa.dense_quant import select_original_fp8_dense, share_original_fp8_input
 from xllm.python import kernels
 from xllm.python.distributed import (
     engram_all_gather_object,
@@ -74,6 +77,10 @@ from xllm.python.distributed import (
     init_engram_dp_group,
     world_topology,
 )
+from xllm.python.kernels_musa.fp4 import FP4Linear, select_fp4_decode, select_fp4_linear
+from xllm.python.kernels_musa.gating import select_gate
+from xllm.python.kernels_musa.hyper_connection import select_hyper_connection_ops
+from xllm.python.kernels_musa.shared_swiglu import SharedActivation, select_shared_swiglu
 from xllm.python.layers.attention import Attention
 from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
@@ -1204,6 +1211,9 @@ class DeepseekV41HyperConnection(nn.Module):
         self.hc_eps = cfg.hc_eps
         self.norm_eps = cfg.rms_norm_eps
         self.sinkhorn_iters = cfg.hc_sinkhorn_iters
+        self._musa_hc_ops = select_hyper_connection_ops(
+            device, dtype, self.hc_mult, self.sinkhorn_iters, self.hc_eps
+        )
         # Two-state hc_pre decision is static (hc_mult + dtype/device +
         # op registration) and taken once here so the forward stays
         # branch-free with respect to tensor values.
@@ -1251,6 +1261,8 @@ class DeepseekV41HyperConnection(nn.Module):
         flattened = x.flatten(-2).float()
         rsqrt = torch.rsqrt(flattened.square().mean(-1, keepdim=True) + self.norm_eps)
         mixes = self._project_mixes(flattened, hc_fn) * rsqrt
+        if self._musa_hc_ops.metadata is not None:
+            return self._musa_hc_ops.metadata(mixes, hc_scale, hc_base)
         return _hc_split_sinkhorn(mixes, hc_scale, hc_base, self.hc_mult, self.sinkhorn_iters, self.hc_eps)
 
     def hc_pre_fused(
@@ -1289,6 +1301,8 @@ class DeepseekV41HyperConnection(nn.Module):
 
     def hc_pre(self, x: torch.Tensor, pre_mix: torch.Tensor) -> torch.Tensor:
         """Collapse the hc copies: ``sum_j pre[j] * x[j]`` (model.py:957-960)."""
+        if self._musa_hc_ops.pre is not None:
+            return self._musa_hc_ops.pre(x, pre_mix)
         # A fixed FP32 order avoids token-count-dependent BF16 rounding.
         contributions = (pre_mix.unsqueeze(-1) * x.float()).unbind(dim=-2)
         y = contributions[0]
@@ -1305,6 +1319,8 @@ class DeepseekV41HyperConnection(nn.Module):
     ) -> torch.Tensor:
         """Expand back: ``out[j] = post[j] * x + sum_k comb[k, j] * res[k]``
         (i.e. ``out = x * post + comb^T @ residual``)."""
+        if self._musa_hc_ops.post is not None:
+            return self._musa_hc_ops.post(x, residual, post, comb)
         if _hc_post_fused_supported(x, residual, post, comb, self.hc_mult):
             # The kernel expects [bs, seq, ...] 4D operands. It consumes the
             # natural [out, in] comb as comb^T @ residual, so no transpose is
@@ -1434,6 +1450,7 @@ class DeepseekV41Attention(Attention):
             nn.Parameter(torch.zeros(num_heads, dtype=torch.float32, device=device)),
         )
         self.attn_sink_loaded = False
+        self._attention_quant = select_attention_quant(device, dtype)
         # Q/KV projections.
         self.q_a_proj = _make_v41_linear(cfg.hidden_size, cfg.q_lora_rank, quant_mode, dtype, device)
         self.q_a_layernorm = DeepseekV41RMSNorm(cfg.q_lora_rank, cfg.rms_norm_eps, dtype, device)
@@ -1569,6 +1586,8 @@ class DeepseekV41Attention(Attention):
         # SWA KV path: kv_norm -> RoPE over the whole post-RoPE vector
         # (model.py:700-720). The KV stays in bf16, aligned with vllm-ascend.
         kv = apply_interleaved_rope(kv, positions, cos_sin_cache)
+        if self._attention_quant is not None:
+            kv = self._attention_quant.fp8(kv)
         self._csa2_ctx = Csa2LayerContext(
             x=hidden,
             qr=qr,
@@ -1587,6 +1606,8 @@ class DeepseekV41Attention(Attention):
         if cp_context is not None:
             attn_out = cp_context.restore_tp_heads(attn_out)
         # O path: grouped LoRA projection (model.py:783-789).
+        if self._attention_quant is not None:
+            attn_out = self._attention_quant.fp8(attn_out)
         out = attn_out.view(num_tokens, self.n_local_groups, -1)
         wo_a = self.o_a_proj.weight.view(self.n_local_groups, self.o_lora_rank, -1)
         o_low = torch.einsum("tgd,grd->tgr", out, wo_a)
@@ -1662,13 +1683,19 @@ class DeepseekV41TorchMLP(nn.Module):
     ) -> None:
         super().__init__()
         self.swiglu_limit = cfg.swiglu_limit
+        self._shared_activation = select_shared_swiglu(device, dtype, self.swiglu_limit)
         inter = cfg.moe_intermediate_size
         self.w1 = nn.Linear(cfg.hidden_size, inter, bias=False, dtype=dtype, device=device)
         self.w3 = nn.Linear(cfg.hidden_size, inter, bias=False, dtype=dtype, device=device)
         self.w2 = nn.Linear(inter, cfg.hidden_size, bias=False, dtype=dtype, device=device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return _swiglu_clamped(x, self.w1(x), self.w3(x), self.w2, self.swiglu_limit, None)
+        pair = share_original_fp8_input(x, self.w1, self.w3)
+        gate, up = pair if pair is not None else (self.w1(x), self.w3(x))
+        return _swiglu_clamped(
+            x, gate, up, self.w2, self.swiglu_limit, None,
+            shared_activation=self._shared_activation,
+        )
 
 
 def _swiglu_clamped(
@@ -1678,12 +1705,20 @@ def _swiglu_clamped(
     w2: nn.Module,
     limit: float,
     route_weight: torch.Tensor | None,
+    *,
+    shared_activation: SharedActivation | None = None,
 ) -> torch.Tensor:
     """Reference Expert.forward (model.py:841-851).
 
     The up branch clamps both sides, the gate branch only from above; the
     routing weight (when given) multiplies the hidden before w2.
     """
+    if shared_activation is not None:
+        if route_weight is not None:
+            raise ValueError("The shared SwiGLU kernel cannot round before routing-weight multiplication")
+        if x.dtype != torch.bfloat16:
+            raise ValueError("The fused shared SwiGLU output contract requires a BF16 down projection")
+        return w2(shared_activation(gate_proj, up_proj))
     gate = gate_proj.float()
     up = up_proj.float()
     if 0.0 < limit < 1_000_000.0:
@@ -1711,6 +1746,7 @@ class DeepseekV41MoE(nn.Module):
         layer_id: int,
         dtype: torch.dtype,
         device: torch.device,
+        packed_fp4: bool = False,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -1719,7 +1755,10 @@ class DeepseekV41MoE(nn.Module):
         self.n_routed_experts = cfg.n_routed_experts
         self.routed_scaling = cfg.routed_scaling_factor
         self.norm_topk_prob = cfg.norm_topk_prob
+        self._musa_gate = select_gate(device, cfg.n_routed_experts, cfg.n_activated_experts,
+                                      cfg.norm_topk_prob, cfg.routed_scaling_factor)
         self.swiglu_limit = cfg.swiglu_limit
+        self._shared_activation = select_shared_swiglu(device, dtype, self.swiglu_limit)
         self.image_token_id = cfg.image_token_id
         self.gate = nn.Linear(cfg.hidden_size, cfg.n_routed_experts, bias=False, dtype=dtype, device=device)
         self.e_score_correction_bias = nn.Parameter(
@@ -1733,6 +1772,11 @@ class DeepseekV41MoE(nn.Module):
         self.gate_bias_vl_loaded = False
         inter = cfg.moe_intermediate_size
         hidden = cfg.hidden_size
+        self.packed_fp4 = packed_fp4
+        self._musa_fp4_linear = select_fp4_linear(device, dtype, packed_fp4, dequant_fp4_group)
+        self._musa_fp4_decode = select_fp4_decode(device, dtype, packed_fp4)
+        if packed_fp4 and (hidden % 32 or inter % 32):
+            raise ValueError("Packed MXFP4 experts require dimensions divisible by 32")
         # EP: every rank holds only its slice of the routed experts
         # (mirrors C++ FusedMoEImpl and DeepseekV4MoE). The forward
         # accumulates only the local expert slice and all-reduces the routed
@@ -1747,41 +1791,63 @@ class DeepseekV41MoE(nn.Module):
         self.ep_size = ep_size
         self.num_experts_per_rank = cfg.n_routed_experts // ep_size
         self.start_expert_id = ep_rank * self.num_experts_per_rank
-        # Stacked dequantized experts (fp8 mode dequantizes at load).
+        # The MUSA eager path retains the original checkpoint bytes. Only an
+        # active local expert is dequantized, on its GPU, immediately before
+        # its GEMMs. Expanding every expert at load would exceed TP8 capacity.
+        expert_dtype = torch.uint8 if packed_fp4 else dtype
+        packed_divisor = 2 if packed_fp4 else 1
         self.experts_w1 = nn.Parameter(
-            torch.empty(self.num_experts_per_rank, inter, hidden, dtype=dtype, device=device),
+            torch.empty(
+                self.num_experts_per_rank, inter, hidden // packed_divisor, dtype=expert_dtype, device=device
+            ),
             requires_grad=False,
         )
         self.experts_w2 = nn.Parameter(
-            torch.empty(self.num_experts_per_rank, hidden, inter, dtype=dtype, device=device),
+            torch.empty(
+                self.num_experts_per_rank, hidden, inter // packed_divisor, dtype=expert_dtype, device=device
+            ),
             requires_grad=False,
         )
         self.experts_w3 = nn.Parameter(
-            torch.empty(self.num_experts_per_rank, inter, hidden, dtype=dtype, device=device),
+            torch.empty(
+                self.num_experts_per_rank, inter, hidden // packed_divisor, dtype=expert_dtype, device=device
+            ),
             requires_grad=False,
         )
+        if packed_fp4:
+            for name, out_dim, in_dim in (("w1", inter, hidden), ("w2", hidden, inter), ("w3", inter, hidden)):
+                self.register_buffer(
+                    f"experts_{name}_scale",
+                    torch.empty(self.num_experts_per_rank, out_dim, in_dim // 32, dtype=torch.uint8, device=device),
+                )
         # One shared expert every token goes through (no routing weight).
         self.shared_w1 = nn.Linear(hidden, inter, bias=False, dtype=dtype, device=device)
         self.shared_w2 = nn.Linear(inter, hidden, bias=False, dtype=dtype, device=device)
         self.shared_w3 = nn.Linear(hidden, inter, bias=False, dtype=dtype, device=device)
 
-    def _selection_logits(
-        self,
-        x: torch.Tensor,
-        input_ids: torch.Tensor | None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """fp32 sqrtsoftplus scores and the bias-steered selection logits.
+    def _expert_weight(self, name: str, local_slot: int) -> torch.Tensor:
+        weight = getattr(self, f"experts_{name}")[local_slot]
+        if not self.packed_fp4:
+            return weight
+        scale = getattr(self, f"experts_{name}_scale")[local_slot]
+        return dequant_fp4_group(weight, scale)
 
-        The selection bias picks experts but never scales them (noaux_tc);
-        tokens inside image spans use ``gate.bias_vl`` instead of
-        ``gate.bias`` -- a per-token modality switch (model.py:809-823).
-        """
-        scores = F.linear(x.float(), self.gate.weight.float())
-        scores = F.softplus(scores).sqrt()
+    def _routing_logits_and_bias(
+        self, x: torch.Tensor, input_ids: torch.Tensor | None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = F.linear(x.float(), self.gate.weight.float())
         bias = self.e_score_correction_bias
         if input_ids is not None and self.gate_bias_vl_loaded:
             image_mask = input_ids.reshape(-1) == self.image_token_id
-            bias = torch.where(image_mask.unsqueeze(-1), self.gate_bias_vl, self.e_score_correction_bias)
+            bias = torch.where(image_mask.unsqueeze(-1), self.gate_bias_vl, bias)
+        return logits, bias
+
+    def _selection_logits(
+        self, x: torch.Tensor, input_ids: torch.Tensor | None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Correction bias selects experts; only original scores weight them."""
+        logits, bias = self._routing_logits_and_bias(x, input_ids)
+        scores = F.softplus(logits).sqrt()
         return scores + bias, scores
 
     def forward(
@@ -1799,14 +1865,37 @@ class DeepseekV41MoE(nn.Module):
             hidden = post_norm(hidden)
         shape = hidden.shape
         x = hidden.reshape(-1, self.cfg.hidden_size)
-        logits, scores = self._selection_logits(x, input_ids)
-        # The bias picks experts but does not scale them.
-        indices = logits.topk(self.topk, dim=-1).indices
-        weights = scores.gather(1, indices)
-        if self.norm_topk_prob and self.topk > 1:
-            weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        weights = weights * self.routed_scaling
-        # This is the fp8/none serving path, not just a CPU reference.
+        if self._musa_gate is not None:
+            logits, bias = self._routing_logits_and_bias(x, input_ids)
+            weights, indices = self._musa_gate(logits, bias)
+        else:
+            logits, scores = self._selection_logits(x, input_ids)
+            # The bias picks experts but does not scale them.
+            indices = logits.topk(self.topk, dim=-1).indices
+            weights = scores.gather(1, indices)
+            if self.norm_topk_prob and self.topk > 1:
+                weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+            weights = weights * self.routed_scaling
+        if self._musa_fp4_decode is not None and x.size(0) <= 8:
+            y = self._musa_fp4_decode(
+                x, indices, weights,
+                self.experts_w1, self.experts_w1_scale,
+                self.experts_w3, self.experts_w3_scale,
+                self.experts_w2, self.experts_w2_scale,
+                self.start_expert_id, self.swiglu_limit,
+            )
+        else:
+            y = self._local_experts(x, indices, weights)
+        if self.ep_size > 1:
+            from xllm.python import distributed as _distributed
+
+            _distributed.moe_ep_all_reduce(y)
+        y += self._shared_forward(x).float()
+        return y.type_as(x).view(shape)
+
+    def _local_experts(
+        self, x: torch.Tensor, indices: torch.Tensor, weights: torch.Tensor
+    ) -> torch.Tensor:
         # Sort local routes once instead of scanning all routes for each expert.
         # Only active experts launch GEMMs; keep ascending expert order for the
         # fp32 accumulation, and stable token order within each expert.
@@ -1830,25 +1919,52 @@ class DeepseekV41MoE(nn.Module):
         for local_slot, count in segments:
             rows = sorted_rows[offset : offset + count]
             expert_input = x[rows]
-            expert_out = _swiglu_clamped(
-                expert_input,
-                F.linear(expert_input, self.experts_w1[local_slot]),
-                F.linear(expert_input, self.experts_w3[local_slot]),
-                _StackedLinear(self.experts_w2, local_slot),
-                self.swiglu_limit,
-                sorted_weights[offset : offset + count],
-            )
+            if self._musa_fp4_linear is not None:
+                linear = self._musa_fp4_linear
+                gate = linear(expert_input, self.experts_w1[local_slot], self.experts_w1_scale[local_slot])
+                up = linear(expert_input, self.experts_w3[local_slot], self.experts_w3_scale[local_slot])
+                down = _PackedFP4Linear(linear, self.experts_w2[local_slot], self.experts_w2_scale[local_slot])
+                expert_out = _swiglu_clamped(
+                    expert_input, gate, up, down, self.swiglu_limit,
+                    sorted_weights[offset : offset + count],
+                )
+            else:
+                w1 = self._expert_weight("w1", local_slot)
+                w3 = self._expert_weight("w3", local_slot)
+                w2 = self._expert_weight("w2", local_slot)
+                expert_out = _swiglu_clamped(
+                    expert_input,
+                    F.linear(expert_input, w1),
+                    F.linear(expert_input, w3),
+                    _StackedLinear(w2.unsqueeze(0), 0),
+                    self.swiglu_limit,
+                    sorted_weights[offset : offset + count],
+                )
+                del w1, w2, w3
             y.index_add_(0, rows, expert_out.float())
             offset += count
-        if self.ep_size > 1:
-            from xllm.python import distributed as _distributed
-
-            _distributed.moe_ep_all_reduce(y)
-        y += self._shared_forward(x).float()
-        return y.type_as(x).view(shape)
+        return y
 
     def _shared_forward(self, x: torch.Tensor) -> torch.Tensor:
-        return _swiglu_clamped(x, self.shared_w1(x), self.shared_w3(x), self.shared_w2, self.swiglu_limit, None)
+        pair = share_original_fp8_input(x, self.shared_w1, self.shared_w3)
+        gate, up = pair if pair is not None else (self.shared_w1(x), self.shared_w3(x))
+        return _swiglu_clamped(
+            x, gate, up, self.shared_w2, self.swiglu_limit, None,
+            shared_activation=self._shared_activation,
+        )
+
+
+class _PackedFP4Linear(nn.Module):
+    """Keep route-weight multiplication before BF16 cast and down-input QDQ."""
+
+    def __init__(self, linear: FP4Linear, weight: torch.Tensor, scales: torch.Tensor) -> None:
+        super().__init__()
+        self._linear = linear
+        self._weight = weight
+        self._scales = scales
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self._linear(x, self._weight, self._scales)
 
 
 class _StackedLinear(nn.Module):
@@ -2509,7 +2625,13 @@ class DeepseekV41DecoderLayer(nn.Module):
         elif quant_mode == V41_QUANT_ASCEND:
             self.mlp = DeepseekV41W8A8MoE(cfg, layer_id, dtype, device)
         else:
-            self.mlp = DeepseekV41MoE(cfg, layer_id, dtype, device)
+            self.mlp = DeepseekV41MoE(
+                cfg,
+                layer_id,
+                dtype,
+                device,
+                packed_fp4=device.type == "musa" and quant_mode == V41_QUANT_FP8,
+            )
 
     def forward(
         self,
@@ -2602,6 +2724,11 @@ class DeepseekV41Model(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.quant_mode = quant_mode
+        from xllm.python.models.deepseek_v41_numeric_audit import create_numeric_audit
+
+        self._numeric_audit = create_numeric_audit(device, cfg.tp_rank)
+        if self._numeric_audit is not None and cfg.enable_swa_bounded_replay:
+            raise ValueError('Numeric audit does not support lossy SWA bounded replay')
         self.csa2_plan = CSA2LayerPlan.build(
             cfg.n_layers,
             cfg.compress_ratios,
@@ -3050,6 +3177,12 @@ class DeepseekV41Model(nn.Module):
         else:
             self._build_dsa_metadata_for_forward(backend, metadata, positions)
 
+        from xllm.python.models.deepseek_v41_token_audit import record_token_inputs
+
+        record_token_inputs(input_ids, positions, metadata, self.cfg.tp_rank, graph_mode)
+        if self._numeric_audit is not None:
+            self._numeric_audit.begin(input_ids, positions, metadata.dsa_metadata.seq_lens_q, graph_mode)
+
         # Engram: compute the n-gram hashes once, on the full token stream,
         # before the layer loop; each engram layer then pre-gathers its rows.
         engram_hashes: torch.Tensor | None = None
@@ -3126,10 +3259,15 @@ class DeepseekV41Model(nn.Module):
                 engram_hashes,
                 engram_mask,
             )
+            if self._numeric_audit is not None:
+                self._numeric_audit.record_layer(layer_id, hidden, pre_mix)
             record_layer_event(layer_id)
         # Final merge: the learned weighted sum with the LAST block's ffn_pre.
         merged = self.layers[-1].hc.hc_pre(hidden, pre_mix)
-        return aux_capture.finalize(self.norm(merged), aux_hidden_buffer)
+        final_hidden = self.norm(merged)
+        if self._numeric_audit is not None:
+            self._numeric_audit.finish(final_hidden)
+        return aux_capture.finalize(final_hidden, aux_hidden_buffer)
 
 
 class _PlainRotaryEmbedding(nn.Module):
@@ -3412,6 +3550,13 @@ class DeepseekV41ForCausalLM(PyModelBase):
         self.quant_mode = _detect_v41_quant_mode(config)
         dtype = self.resolve_dtype(config.get("dtype") or config.get("torch_dtype"))
         device = torch.device(config.get("device", "npu:0"))
+        if device.type == "musa":
+            if self.quant_mode != V41_QUANT_FP8 or dtype != torch.bfloat16:
+                raise NotImplementedError(
+                    "DeepSeek-V4.1 MUSA requires the official FP8/MXFP4 checkpoint and BF16 compute"
+                )
+            if int(config.get("num_speculative_tokens", 0)) != 0:
+                raise NotImplementedError("DeepSeek-V4.1 MUSA speculative decoding is not validated")
         self.model = DeepseekV41Model(self.cfg, dtype, device, self.quant_mode, config)
         tp = self.cfg.tp_size
         self.lm_head = ColumnParallelLinear(
@@ -3447,6 +3592,13 @@ class DeepseekV41ForCausalLM(PyModelBase):
                 self.vision_cfg.downsample_ratio,
                 out_dim,
             )
+
+    def compute_logits(self, hidden: torch.Tensor,
+                       selected_idxes: torch.Tensor | None) -> torch.Tensor:
+        logits = super().compute_logits(hidden, selected_idxes)
+        if self.model._numeric_audit is not None:
+            self.model._numeric_audit.record_logits(logits, selected_idxes, hidden)
+        return logits
 
     # -- multimodal encode ------------------------------------------------------
 
@@ -3644,6 +3796,10 @@ class DeepseekV41ForCausalLM(PyModelBase):
             if shard_dim is not None:
                 weight = loader.shard(weight, dim=shard_dim)
             loader.copy_in(param_prefix + ".weight", weight)
+            if is_fp8 and not param_prefix.endswith("self_attn.o_a_proj"):
+                # wo_a uses a grouped einsum and the explicit post-attention
+                # QDQ boundary; its module.forward is not executed.
+                self._adapt_loaded_fp8_dense(param_prefix)
 
         loader.copy_in(
             "model.embed_tokens.weight",
@@ -3738,6 +3894,15 @@ class DeepseekV41ForCausalLM(PyModelBase):
         loader.copy_in("model.norm.weight", loader.load_tensor("norm.weight"))
         self._load_lm_head(loader)
 
+    def _adapt_loaded_fp8_dense(self, param_prefix: str) -> None:
+        """Preserve input rounding only for projections loaded as FP8."""
+        parent_name, child_name = param_prefix.rsplit(".", 1)
+        parent = self.get_submodule(parent_name)
+        module = self.get_submodule(param_prefix)
+        adapted = select_original_fp8_dense(module)
+        if adapted is not module:
+            setattr(parent, child_name, adapted)
+
     def _load_torch_moe(
         self,
         loader: W8A8WeightLoader,
@@ -3764,6 +3929,21 @@ class DeepseekV41ForCausalLM(PyModelBase):
                 ("w3", mlp.experts_w3),
             ):
                 prefix = ck + f"ffn.experts.{expert}.{name}"
+                if mlp.packed_fp4:
+                    if not is_fp8:
+                        raise ValueError("Packed MXFP4 storage requires the original fp8/MXFP4 checkpoint")
+                    weight = loader.load_tensor(prefix + ".weight")
+                    scale = loader.load_tensor(prefix + ".scale")
+                    if weight.element_size() != 1 or scale.element_size() != 1:
+                        raise ValueError(f"Invalid packed MXFP4 storage for {prefix}")
+                    if weight.shape != param.data[local_slot].shape:
+                        raise ValueError(f"Packed MXFP4 weight shape mismatch for {prefix}")
+                    target_scale = getattr(mlp, f"experts_{name}_scale")[local_slot]
+                    if scale.shape != target_scale.shape:
+                        raise ValueError(f"Packed MXFP4 scale shape mismatch for {prefix}")
+                    param.data[local_slot].copy_(weight.view(torch.uint8))
+                    target_scale.copy_(scale.view(torch.uint8))
+                    continue
                 if is_fp8:
                     weight = dequant_fp4_group(
                         loader.load_tensor(prefix + ".weight"),
@@ -3787,6 +3967,8 @@ class DeepseekV41ForCausalLM(PyModelBase):
             else:
                 weight = loader.load_tensor(prefix + ".weight")
             loader.copy_in(pm + f"mlp.{module_name}.weight", weight)
+            if is_fp8:
+                self._adapt_loaded_fp8_dense(pm + f"mlp.{module_name}")
 
     def _load_engram_torch(
         self,
@@ -3828,6 +4010,8 @@ class DeepseekV41ForCausalLM(PyModelBase):
         else:
             wkv = loader.load_tensor(ck + "engram.wkv.weight")
         loader.copy_in(pm + "engram.wkv.weight", wkv)
+        if is_fp8:
+            self._adapt_loaded_fp8_dense(pm + "engram.wkv")
         loader.copy_in(pm + "engram.q_weight", loader.load_tensor(ck + "engram.q_weight"))
         loader.copy_in(pm + "engram.k_weight", loader.load_tensor(ck + "engram.k_weight"))
 

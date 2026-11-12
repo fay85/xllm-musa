@@ -7,6 +7,7 @@ cc_library(
     deepseek_v4_cache_policy.h
   DEPS
     torch
+    glog::glog
 )
 
 cc_library(

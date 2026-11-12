@@ -133,3 +133,41 @@ def test_merged_attn_quant_bitwise_equivalence(monkeypatch: pytest.MonkeyPatch) 
     second = proj.forward_quantized(merged_i8, merged_pt)
     assert len(quant_calls) == 0
     assert torch.equal(merged, second)
+
+
+@pytest.mark.parametrize("capacity", [129, 260, 1024])
+def test_original_candidate_ties_are_prefix_capacity_invariant(capacity: int) -> None:
+    visible = torch.tensor([26, 129, 0])
+    score = torch.zeros(3, capacity)
+    score.masked_fill_(torch.arange(capacity) >= visible.unsqueeze(-1), float("-inf"))
+    selected = csa2._select_candidate_blocks(score, visible, 2, 4, stable_ties=True)
+    expected = torch.zeros_like(selected)
+    expected[0, :4] = True
+    expected[0, 24:28] = True
+    expected[1, :4] = True
+    expected[1, 128:min(132, capacity)] = True
+    assert torch.equal(selected, expected)
+    # The untouched -inf tail never contributes a candidate block.
+    assert not bool(selected[2].any())
+
+
+def test_original_candidate_stable_selection_preserves_distinct_scores() -> None:
+    score = torch.tensor([[1., 2., -1., 3., 8., 7., 6., 5., -2., -3.]])
+    visible = torch.tensor([10])
+    stable = csa2._select_candidate_blocks(score, visible, 2, 4, stable_ties=True)
+    legacy = csa2._select_candidate_blocks(score, visible, 2, 4)
+    assert torch.equal(stable, legacy)
+
+
+@pytest.mark.parametrize("device", ["cpu", "musa"])
+def test_original_candidate_unreachable_blocks_stay_negative_infinite(device: str) -> None:
+    if device == "musa" and (not hasattr(torch, "musa") or not torch.musa.is_available()):
+        pytest.skip("MUSA unavailable")
+    score = torch.full((3, 17), float("-inf"), device=device)
+    score[0, :6] = torch.arange(6, device=device)
+    score[1, :13] = 0
+    visible = torch.tensor([6, 13, 0], device=device)
+    selected = csa2._select_candidate_blocks(score, visible, 2, 16, stable_ties=True)
+    expected = torch.zeros_like(selected)
+    expected[:2, :16] = True
+    assert torch.equal(selected, expected)

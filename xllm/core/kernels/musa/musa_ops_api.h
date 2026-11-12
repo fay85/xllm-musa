@@ -239,6 +239,14 @@ void fa3_decode_scheduler_metadata(const torch::Device& device,
                                    int64_t num_splits,
                                    torch::Tensor& metadata);
 
+// Ordinary weighted RMSNorm is implemented beside the Gemma kernel in
+// gemma_norm.cu. Its native MUSA declaration must not live only in the CUDA
+// compatibility namespace below.
+void rms_norm(torch::Tensor output,
+              torch::Tensor input,
+              torch::Tensor weight,
+              double eps);
+
 void gemma_rms_norm(torch::Tensor output,
                     torch::Tensor input,
                     torch::Tensor weight,
@@ -334,9 +342,8 @@ void rescore_top_logits(const torch::Tensor& input,
 // returns the first one, which muDNN does not guarantee.
 bool row_argmax_supported(const torch::Tensor& input);
 
-torch::Tensor row_argmax(
-    const torch::Tensor& input,
-    const torch::Tensor& column_ids = torch::Tensor());
+torch::Tensor row_argmax(const torch::Tensor& input,
+                         const torch::Tensor& column_ids = torch::Tensor());
 
 void register_compact_vocab_column_ids(const torch::Tensor& compact_logits,
                                        const torch::Tensor& column_ids);

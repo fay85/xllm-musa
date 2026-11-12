@@ -1,0 +1,5 @@
+{
+  "status": "PASS_ALL_FOUR_PHASES_EXACT_NATIVE_TOKEN_COUNTS",
+  "finished_at": "2026-11-12T09:22:52.392816+08:00",
+  "note": "Warmups excluded. Raw SQLite, streaming responses, command and request identities retained."
+}

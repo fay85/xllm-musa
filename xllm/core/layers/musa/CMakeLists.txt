@@ -24,6 +24,21 @@ set(_MUSA_LAYERS_HDRS
   deepseek_v4/dsa_metadata_builder_musa.h
   deepseek_v4/deepseek_v4_gate.h
   deepseek_v4/deepseek_v4_moe.h
+  deepseek_v41/hyper_connection.h
+  deepseek_v41/profile_range.h
+  deepseek_v41/engram_injection.h
+    deepseek_v41/feed_forward.h
+  deepseek_v41/attention_projection.h
+    deepseek_v41/paged_attention.h
+    deepseek_v41/moe.h
+    deepseek_v41/request_metadata.h
+    deepseek_v41/text_model.h
+    deepseek_v41/decoder.h
+    deepseek_v41/attention.h
+    deepseek_v41/indexer.h
+    deepseek_v41/token_cache.h
+    deepseek_v41/compressor.h
+    deepseek_v41/csa2_attention.h
 )
 set(_MUSA_LAYERS_SRCS
   attention.cpp
