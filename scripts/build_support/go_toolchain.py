@@ -15,6 +15,7 @@
 
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 import platform
@@ -93,7 +94,7 @@ def _get_archive_checksum(filename: str) -> str:
                 for archive in release["files"]:
                     if archive["filename"] == filename and re.fullmatch(r"[0-9a-f]{64}", archive["sha256"]):
                         return archive["sha256"]
-        except (OSError, ValueError, KeyError, TypeError) as error:
+        except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException) as error:
             logger.warning(f"Failed to read Go release metadata from {mirror}: {error}")
     raise RuntimeError(f"Cannot find an official SHA256 checksum for {filename}")
 
@@ -110,7 +111,7 @@ def _download_archive(filename: str, destination: Path) -> None:
             if digest.hexdigest() != checksum:
                 raise ValueError("Go archive SHA256 mismatch")
             return
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, http.client.HTTPException) as error:
             logger.warning(f"Failed to download Go from {mirror}: {error}")
     raise RuntimeError(f"Failed to download and verify {filename} from all mirrors")
 

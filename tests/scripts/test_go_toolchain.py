@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -112,6 +113,8 @@ class GoToolchainTest(unittest.TestCase):
 
             def probe(binary: str, version: str) -> str | None:
                 go_root = Path(binary).parent.parent
+                if not go_root.is_relative_to(root):
+                    return None
                 if (go_root / "bin/go").is_file() and not (go_root / "src/internal/abi/map_swiss.go").exists():
                     return str(go_root)
                 return None
@@ -120,7 +123,23 @@ class GoToolchainTest(unittest.TestCase):
                 self.assertEqual(filename, "go1.26.10.linux-arm64.tar.gz")
                 shutil.copyfile(tarball, destination)
 
+            original_is_file = Path.is_file
+            original_exists = Path.exists
+
+            def is_file(path: Path) -> bool:
+                # Simulate a usable host Go independently of what the CI image contains.
+                if path == Path("/usr/local/go/bin/go"):
+                    return True
+                return original_is_file(path)
+
+            def exists(path: Path) -> bool:
+                if path == Path("/usr/local/go/src/internal/abi/map_swiss.go"):
+                    return False
+                return original_exists(path)
+
             with (
+                mock.patch.object(Path, "is_file", autospec=True, side_effect=is_file),
+                mock.patch.object(Path, "exists", autospec=True, side_effect=exists),
                 mock.patch.dict(
                     os.environ, {"XDG_CACHE_HOME": temp_dir, "PATH": "/usr/bin", "GOROOT": str(image_root)}
                 ),
@@ -187,6 +206,70 @@ class GoToolchainTest(unittest.TestCase):
             go, "urlopen", side_effect=[io.BytesIO(b"<html>"), io.BytesIO(json.dumps(metadata).encode())]
         ):
             self.assertEqual(go._get_archive_checksum(filename), "a" * 64)
+
+    def test_archive_http_protocol_errors_try_next_mirror(self) -> None:
+        content = b"verified archive"
+        for error in (http.client.IncompleteRead(b"partial", 10), http.client.BadStatusLine("bad status")):
+            for stage in ("open", "read"):
+                with self.subTest(error=type(error).__name__, stage=stage), tempfile.TemporaryDirectory() as temp_dir:
+                    broken_response = mock.MagicMock()
+                    broken_response.__enter__.return_value = broken_response
+                    broken_response.read.side_effect = [b"partial archive", error]
+                    first_response = error if stage == "open" else broken_response
+                    destination = Path(temp_dir) / "go.tar.gz"
+                    with (
+                        mock.patch.object(
+                            go, "_get_archive_checksum", return_value=hashlib.sha256(content).hexdigest()
+                        ),
+                        mock.patch.object(go, "urlopen", side_effect=[first_response, io.BytesIO(content)]) as download,
+                    ):
+                        go._download_archive("go1.26.10.linux-arm64.tar.gz", destination)
+                        self.assertEqual(destination.read_bytes(), content)
+                        self.assertEqual(
+                            [call.args[0] for call in download.call_args_list],
+                            [f"{mirror}go1.26.10.linux-arm64.tar.gz" for mirror in go._GO_DOWNLOAD_MIRRORS[:2]],
+                        )
+                        if stage == "read":
+                            broken_response.__exit__.assert_called_once()
+
+    def test_metadata_http_protocol_errors_try_next_mirror(self) -> None:
+        filename = "go1.26.10.linux-arm64.tar.gz"
+        metadata = [{"files": [{"filename": filename, "sha256": "a" * 64}]}]
+        for error in (http.client.IncompleteRead(b"partial", 10), http.client.BadStatusLine("bad status")):
+            for stage in ("open", "read"):
+                with self.subTest(error=type(error).__name__, stage=stage):
+                    broken_response = mock.MagicMock()
+                    broken_response.__enter__.return_value = broken_response
+                    broken_response.read.side_effect = error
+                    first_response = error if stage == "open" else broken_response
+                    with mock.patch.object(
+                        go, "urlopen", side_effect=[first_response, io.BytesIO(json.dumps(metadata).encode())]
+                    ) as download:
+                        self.assertEqual(go._get_archive_checksum(filename), "a" * 64)
+                        self.assertEqual(
+                            [call.args[0] for call in download.call_args_list],
+                            [f"{mirror}?mode=json&include=all" for mirror in go._GO_DOWNLOAD_MIRRORS[:2]],
+                        )
+                        if stage == "read":
+                            broken_response.__exit__.assert_called_once()
+
+    def test_all_archive_protocol_failures_raise_runtime_error(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            mock.patch.object(go, "_get_archive_checksum", return_value="0" * 64),
+            mock.patch.object(go, "urlopen", side_effect=http.client.BadStatusLine("bad status")) as download,
+            self.assertRaisesRegex(RuntimeError, "from all mirrors"),
+        ):
+            go._download_archive("go1.26.10.linux-arm64.tar.gz", Path(temp_dir) / "go.tar.gz")
+        self.assertEqual(download.call_count, len(go._GO_DOWNLOAD_MIRRORS))
+
+    def test_all_metadata_protocol_failures_raise_runtime_error(self) -> None:
+        with (
+            mock.patch.object(go, "urlopen", side_effect=http.client.IncompleteRead(b"partial", 10)) as download,
+            self.assertRaisesRegex(RuntimeError, "official SHA256"),
+        ):
+            go._get_archive_checksum("go1.26.10.linux-arm64.tar.gz")
+        self.assertEqual(download.call_count, 2)
 
     def test_unsafe_archive_members_are_rejected_before_extraction(self) -> None:
         for name, member_type in (
