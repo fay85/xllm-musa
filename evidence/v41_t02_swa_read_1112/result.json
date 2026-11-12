@@ -1,0 +1,35 @@
+{
+  "status": "ACCEPTED_SPEED_OPTIMIZATION",
+  "at": "2026-11-12T20:37:37.166566+08:00",
+  "source_parent": "70a8e060e5495b63c7a880984682acdd2e0fe606",
+  "binary_sha256": "3adb9a58adbc5830a8104a27a1dc62933eee49f11b4b44b9aba092fb8989aaf9",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "performance": {
+    "256": {
+      "TTFT_ms_reduction_percent": -6.005667127452474,
+      "TPOT_ms_reduction_percent": 12.290130449929237,
+      "E2E_s_reduction_percent": 12.076243835048672,
+      "output_tps_increase_percent": 13.734904378280621,
+      "identical_requests": true
+    },
+    "2048": {
+      "TTFT_ms_reduction_percent": -1.173088508065523,
+      "TPOT_ms_reduction_percent": 12.175649149180767,
+      "E2E_s_reduction_percent": 11.291355001711256,
+      "output_tps_increase_percent": 12.728584685211985,
+      "identical_requests": true
+    }
+  },
+  "accepted_policy": {
+    "P_TP_CUSTOM": false,
+    "P_EP_CUSTOM": false,
+    "P_CACHE_REUSE": false,
+    "P_PREFILL_FFI_SYNC": true,
+    "D_TP_CUSTOM": true,
+    "D_EP_CUSTOM": true,
+    "D_CACHE_REUSE": true,
+    "D_SWA_FUSED_READ": true
+  },
+  "tight_removable_p": null,
+  "T14_complete": false
+}

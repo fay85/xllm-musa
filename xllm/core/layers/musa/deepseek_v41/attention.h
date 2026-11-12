@@ -50,6 +50,7 @@ struct DeepseekV41AttentionConfig {
   double scale = 1.0;
   bool original_fp8_activation = true;
   bool decode_cache_read_reuse = false;
+  bool decode_fused_swa_read = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
 };
@@ -237,14 +238,17 @@ class DeepseekV41Attention final {
         DeepseekV41PagedAttention(cache.swa,
                                   config_.window,
                                   config_.scale,
-                                  config_.sparse_library_path)
-            .forward(query,
-                     current_kv,
-                     swa_table,
-                     context_length,
-                     weights_.sink,
-                     compressed,
-                     picks);
+                                  config_.sparse_library_path,
+                                  /*single_token_scatter=*/true,
+                                  config_.decode_fused_swa_read)
+            .forward_with_positions(query,
+                                    current_kv,
+                                    swa_table,
+                                    context_length,
+                                    weights_.sink,
+                                    compressed,
+                                    picks,
+                                    positions);
     return projection_.project_output(attention, positions, rope_table);
   }
 

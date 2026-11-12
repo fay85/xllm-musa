@@ -29,6 +29,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model_context.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/rotary_embedding_util.h"
 #include "core/layers/musa/deepseek_v41/engram_embedding.h"
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
@@ -225,6 +226,14 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       return ModelOutput();
     }
     torch::DeviceGuard guard(device());
+    std::optional<kernel::musa::TvmffiPreparationSyncGuard> ffi_sync;
+    if (tokens.numel() > 1 &&
+        util::get_bool_env("XLLM_DSV41_PREFILL_FFI_SYNC", false)) {
+      ffi_sync.emplace();
+      LOG_FIRST_N(INFO, 1)
+          << "Native V4.1 prefill uses explicit FFI preparation sync";
+    }
+
     CHECK_EQ(tokens.device(), device());
     CHECK_EQ(positions.device(), device());
     // ModelInputParams::to intentionally keeps these page-ID tables on CPU
@@ -425,6 +434,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     attention.candidate_block_size = args_.candidate_block_size();
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
+    attention.decode_fused_swa_read =
+        util::get_bool_env("XLLM_DSV41_DECODE_FUSED_SWA_READ", false);
     attention.decode_cache_read_reuse =
         util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false);
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();

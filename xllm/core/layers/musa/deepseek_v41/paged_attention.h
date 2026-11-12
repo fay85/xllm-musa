@@ -15,8 +15,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 
+#include "core/kernels/musa/deepseek_v41_swa_decode_read.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/csa2_attention.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
@@ -33,10 +35,12 @@ class DeepseekV41PagedAttention final {
                             int64_t window,
                             double scale,
                             std::string sparse_library_path = {},
-                            bool single_token_scatter = true)
+                            bool single_token_scatter = true,
+                            bool fused_decode_read = false)
       : cache_(std::move(cache)),
         window_(window),
         single_token_scatter_(single_token_scatter),
+        fused_decode_read_(fused_decode_read),
         attention_(scale, 32 * 1024 * 1024, std::move(sparse_library_path)) {
     CHECK(cache_.defined());
     CHECK(cache_.device().type() == torch::kPrivateUse1);
@@ -56,6 +60,27 @@ class DeepseekV41PagedAttention final {
                         const torch::Tensor& sink,
                         const std::optional<torch::Tensor>& compressed_kv,
                         const std::optional<torch::Tensor>& compressed_picks) {
+    CHECK(!fused_decode_read_)
+        << "Fused read requires explicit query positions";
+    return forward_with_positions(query,
+                                  current_kv,
+                                  block_table,
+                                  context_length,
+                                  sink,
+                                  compressed_kv,
+                                  compressed_picks,
+                                  torch::Tensor{});
+  }
+
+  torch::Tensor forward_with_positions(
+      const torch::Tensor& query,
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      int64_t context_length,
+      const torch::Tensor& sink,
+      const std::optional<torch::Tensor>& compressed_kv,
+      const std::optional<torch::Tensor>& compressed_picks,
+      const torch::Tensor& query_positions) {
     const DeepseekV41ProfileRange range("V41/Attention/SWA_sparse_and_commit");
     CHECK(query.defined() && current_kv.defined() && block_table.defined());
     CHECK_EQ(query.device(), cache_.device());
@@ -78,6 +103,16 @@ class DeepseekV41PagedAttention final {
     torch::DeviceGuard guard(cache_.device());
     if (query.size(0) == 0) {
       return torch::empty_like(query);
+    }
+    if (fused_decode_read_ && query.size(0) == 1) {
+      auto [rows, picks, slot] = prepare_decode_read(current_kv,
+                                                     block_table,
+                                                     query_positions,
+                                                     compressed_kv,
+                                                     compressed_picks);
+      const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+      commit(slot, current_kv);
+      return result;
     }
     const int64_t previous = context_length - query.size(0);
     const auto indices_options =
@@ -128,6 +163,18 @@ class DeepseekV41PagedAttention final {
   }
 
  private:
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> prepare_decode_read(
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      const torch::Tensor& positions,
+      const std::optional<torch::Tensor>& compressed,
+      const std::optional<torch::Tensor>& picks) const {
+    const DeepseekV41ProfileRange range(
+        "V41/Attention/SWA_decode_read_metadata");
+    return kernel::musa::deepseek_v41_swa_decode_read(
+        cache_, current_kv, block_table, positions, window_, compressed, picks);
+  }
+
   torch::Tensor physical_slots(const torch::Tensor& table,
                                const torch::Tensor& positions,
                                bool padding_read) const {
@@ -170,6 +217,7 @@ class DeepseekV41PagedAttention final {
   torch::Tensor cache_;
   int64_t window_;
   bool single_token_scatter_;
+  bool fused_decode_read_ = false;
   DeepseekV41SparseAttention attention_;
 };
 

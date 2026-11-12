@@ -1,0 +1,31 @@
+融合Decode的SWA读取与索引，两组TPOT再降12.29%和12.18%
+
+家明，我在D端TP/EP custom和压缩缓存复用的累计基线上，
+把q1每层反复做的页地址、窗口gather、mask、候选拼接和commit slot整理
+合为一个MUSA kernel；仍调用原有MATE Sparse Attention，保持先读后写。
+这是xLLM原生C++/MUSA读侧包装优化，不改变模型量化或Attention数学。
+
+P/D各8卡，TP8/EP8，eager、C1、chunk256；同一ELF仅切换D端融合开关。
+P两边保持相同的显式FFI同步设置。官方EvalScope各1暖+5正式：
+256/256：TPOT 143.55→125.91ms，E2E 37.038→32.565s，
+输出6.912→7.861token/s；TTFT 432.99→458.99ms，回退26.00ms。
+2048/256：TPOT 143.73→126.23ms，E2E 39.253→34.821s，
+输出6.522→7.352token/s；TTFT 2600.32→2630.82ms，回退30.50ms。
+两组输出吞吐提高13.73%/12.73%；所有20次正式请求成功且实际token数有效。
+保留全部样本和TTFT回退，不把重profiler的时间当正式TPOT。
+
+352个读取/索引与44个完整Attention基本检查严格相等；两模式都答4.2和56。
+仅通过基础功能检查，未完成模型精度验收。本轮不做API/MathQA或前缀logits门槛。
+前后各16rank trace全部SHA/40层/真实C++回溯关联通过。
+D0同一q1/kv263窗口：index_select 259→139，arange 260→20，
+where 374→138，窗口内完整GPU kernel 5222→3757。
+每个D rank都有40次新SWA整理；入口COUNT从510增到550不是CPU耗时变多。
+严格可消除全局上限未知，不报一个伪精确兑现率或60%SOL。
+
+原始正式报告、SQLite、算子检查、图及trace收据：
+evidence/v41_t02_swa_read_1112；完整大trace留SJ共享盘，收据有路径和SHA。
+全部32个模型进程生命周期正常退出0，本项未强杀、重启或改驱动。
+P显式FFI同步还通过10次2048/8稳定性诊断，但不能据此宣称根因修复。
+
+后续继续共享专家、投影、较大分段Graph及CED到T14的剩余项。
+单独W4A8局部Graph含输入复制后更慢，未晋级；不提MR。

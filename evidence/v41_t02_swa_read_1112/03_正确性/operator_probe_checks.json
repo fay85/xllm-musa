@@ -1,0 +1,4033 @@
+{
+  "status": "PASS_SWA_FUSED_READ_AND_DEFERRED_COMMIT",
+  "read_cases": [
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 128,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int32",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": false,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 0,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 31,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 32,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 127,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 128,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 129,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 255,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 256,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 257,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": null,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 0,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 3,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    },
+    {
+      "kind": "read_metadata",
+      "width": 512,
+      "dtype": "torch.int64",
+      "other_stream": true,
+      "position": 1024,
+      "compressed_rows": 128,
+      "rows_picks_slot_exact": true,
+      "cache_read_only": true
+    }
+  ],
+  "attention_cases": [
+    {
+      "position": 0,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 0,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 31,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 31,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 32,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 32,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 127,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 127,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 128,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 128,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 129,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 129,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 255,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 255,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 256,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 256,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 257,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 257,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1024,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1024,
+      "table": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 0,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 0,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 31,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 31,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 32,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 32,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 127,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 127,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 128,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 128,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 129,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 129,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 255,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 255,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 256,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 256,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 257,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 257,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1024,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": false,
+      "output_cache_exact": true
+    },
+    {
+      "position": 1024,
+      "table": [
+        -1,
+        1,
+        4,
+        2
+      ],
+      "compressed": true,
+      "output_cache_exact": true
+    }
+  ],
+  "alternating_micro_ms": [
+    {
+      "old": 0.8981773376464843,
+      "fused": 0.21244932810465494
+    },
+    {
+      "fused": 0.21458266576131185,
+      "old": 0.8137506484985352
+    },
+    {
+      "old": 0.8050186793009441,
+      "fused": 0.2162559986114502
+    },
+    {
+      "fused": 0.20753466288248698,
+      "old": 0.8145186742146809
+    }
+  ],
+  "old_ms": 0.8141346613566081,
+  "fused_ms": 0.2135159969329834,
+  "timing_scope": "MUSA event interval includes enqueue gaps, not full-model performance",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

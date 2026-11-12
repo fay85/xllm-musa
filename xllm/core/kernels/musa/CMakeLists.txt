@@ -12,6 +12,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_kernel_utils.h
   musa_fp8_quant_utils.cuh
   deepseek_v41_attention_quant.h
+  deepseek_v41_swa_decode_read.h
   deepseek_v41_engram_gate.h
   deepseek_v41_engram_gather.h
   deepseek_v41_engram_hash.h
@@ -100,6 +101,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   deepseek_v41_gate_topk.cu
   deepseek_v41_engram_gate.cu
   deepseek_v41_attention_quant.cu
+  deepseek_v41_swa_decode_read.cu
   deepseek_v41_fp4.cu
   deepseek_v41_partition_gemm.cpp
   deepseek_v41_w4a8.cu
