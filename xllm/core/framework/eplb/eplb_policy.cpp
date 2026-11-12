@@ -491,11 +491,13 @@ std::vector<int64_t> GreedyEplbPolicy::compute_balanced_pack_host(
   for (int64_t i = 0; i < num_experts; ++i) {
     sorted_indices[static_cast<size_t>(i)] = i;
   }
-  std::sort(
-      sorted_indices.begin(), sorted_indices.end(), [&](int64_t a, int64_t b) {
-        return updated_weights[static_cast<size_t>(a)] >
-               updated_weights[static_cast<size_t>(b)];
-      });
+  const std::vector<int64_t>& sort_weights = updated_weights;
+  std::sort(sorted_indices.begin(),
+            sorted_indices.end(),
+            [&sort_weights](int64_t a, int64_t b) {
+              return sort_weights[static_cast<size_t>(a)] >
+                     sort_weights[static_cast<size_t>(b)];
+            });
 
   for (int64_t expert_id : sorted_indices) {
     const int32_t target = min_loaded_device_with_capacity();

@@ -242,7 +242,25 @@ void active(ActivationParams& params) {
 #elif defined(USE_NPU)
   params.output = npu::active(params.input, params.act_mode);
 #elif defined(USE_MUSA)
-  musa::active(params.output, params.input, params.act_mode, params.is_gated);
+  if (params.is_gated) {
+    musa::active(params.output, params.input, params.act_mode, true);
+    return;
+  }
+  CHECK(params.input.defined()) << "MUSA activation input is undefined";
+  CHECK(params.input.scalar_type() == torch::kFloat16 ||
+        params.input.scalar_type() == torch::kBFloat16 ||
+        params.input.scalar_type() == torch::kFloat32)
+      << "Ungated MUSA activation supports FP16, BF16 and FP32";
+  if (params.act_mode == "silu") {
+    params.output = torch::silu(params.input);
+  } else if (params.act_mode == "gelu") {
+    params.output = torch::gelu(params.input);
+  } else if (params.act_mode == "gelu_tanh" ||
+             params.act_mode == "gelu_pytorch_tanh") {
+    params.output = torch::gelu(params.input, /*approximate=*/"tanh");
+  } else {
+    LOG(FATAL) << "Unsupported ungated MUSA activation: " << params.act_mode;
+  }
 #elif defined(USE_CUDA) || defined(USE_DCU)
   cuda::act_and_mul(params.output, params.input, params.act_mode);
 #elif defined(USE_ILU)

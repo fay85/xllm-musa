@@ -86,7 +86,7 @@ TEST(MMDataEncoderHandoffTest, RestoresIndependentModalityMasksInChunk) {
   EncoderOutputScatterVisitor scatter(encoded);
   ASSERT_TRUE(batch.foreach (scatter));
   ASSERT_TRUE(scatter.finish());
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
   const std::vector<int32_t> kv_lens{5};
   const std::vector<int32_t> q_lens{3};
 #else

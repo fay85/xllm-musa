@@ -29,7 +29,11 @@ limitations under the License.
 #include <torch/library.h>
 #include <torch/torch.h>
 
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_ops_api.h"
+#else
 #include "core/kernels/cuda/cuda_ops_api.h"
+#endif
 #if defined(USE_CUDA)
 #include <c10/cuda/CUDAStream.h>
 
@@ -79,7 +83,11 @@ torch::Tensor silu_and_mul(const torch::Tensor& input) {
       << "silu_and_mul: last dim must be even, got " << input.sizes();
   sizes.back() /= 2;
   auto out = torch::empty(sizes, input.options());
+#if defined(USE_MUSA)
+  xllm::kernel::musa::active(out, input, "silu", /*is_gated=*/true);
+#else
   xllm::kernel::cuda::act_and_mul(out, input, "silu");
+#endif
   return out;
 }
 
@@ -93,6 +101,7 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
       logits, topk, renormalize, std::nullopt, scoring_func);
 }
 
+#if !defined(USE_MUSA)
 torch::Tensor cutlass_fused_moe(const torch::Tensor& input,
                                 const torch::Tensor& token_selected_experts,
                                 const torch::Tensor& token_final_scales,
@@ -117,6 +126,7 @@ torch::Tensor cutlass_fused_moe(const torch::Tensor& input,
                                                /*cluster_size=*/1,
                                                /*cluster_rank=*/0);
 }
+#endif
 
 // Qwen3 fused q/k RMSNorm (on head_dim) + RoPE. `qkv` is [num_tokens,
 // (nq+nk+nv)*head_dim]. IN-PLACE: q/k slices are normalized+roped in `qkv`, v
@@ -133,7 +143,11 @@ torch::Tensor fused_qk_norm_rope(torch::Tensor& qkv,
                                  const torch::Tensor& cos_sin_cache,
                                  bool interleaved,
                                  const torch::Tensor& position_ids) {
+#if defined(USE_MUSA)
+  xllm::kernel::musa::fused_qk_norm_rope(qkv,
+#else
   xllm::kernel::cuda::fused_qk_norm_rope(qkv,
+#endif
                                          num_heads_q,
                                          num_heads_k,
                                          num_heads_v,
@@ -272,11 +286,13 @@ TORCH_LIBRARY(xllm_ops, m) {
   m.def(
       "moe_fused_topk(Tensor gating_output, int topk, bool renormalize, str "
       "scoring_func) -> (Tensor, Tensor)");
+#if !defined(USE_MUSA)
   m.def(
       "cutlass_fused_moe(Tensor input, Tensor token_selected_experts, Tensor "
       "token_final_scales, Tensor fc1_expert_weights, Tensor "
       "fc2_expert_weights, int tp_size, int tp_rank, int ep_size, int ep_rank) "
       "-> Tensor");
+#endif
   m.def(
       "fused_qk_norm_rope(Tensor(a!) qkv, int num_heads_q, int num_heads_k, "
       "int "
@@ -285,6 +301,7 @@ TORCH_LIBRARY(xllm_ops, m) {
   m.def(
       "reshape_paged_cache(Tensor slot_mapping, Tensor keys, Tensor values, "
       "Tensor(a!) key_cache, Tensor(b!) value_cache) -> Tensor");
+#if !defined(USE_MUSA)
   m.def(
       "update_decode_graph_metadata(Tensor tokens, Tensor positions, Tensor "
       "slot_mapping, Tensor kv_seq_lens, Tensor paged_kv_indptr, Tensor "
@@ -293,14 +310,21 @@ TORCH_LIBRARY(xllm_ops, m) {
       "dst_kv_seq_lens, Tensor(e!) dst_kv_seq_lens_delta, Tensor(f!) "
       "dst_paged_kv_indptr, Tensor(g!) dst_paged_kv_indices, Tensor(h!) "
       "dst_paged_kv_last_page_len, int padded_num_tokens) -> Tensor(a!)");
+#endif
 }
 
+#if defined(USE_MUSA)
+TORCH_LIBRARY_IMPL(xllm_ops, PrivateUse1, m) {
+#else
 TORCH_LIBRARY_IMPL(xllm_ops, CUDA, m) {
+#endif
   m.impl("rms_norm", TORCH_FN(xllm::rms_norm));
   m.impl("fused_add_rms_norm", TORCH_FN(xllm::fused_add_rms_norm));
   m.impl("silu_and_mul", TORCH_FN(xllm::silu_and_mul));
   m.impl("moe_fused_topk", TORCH_FN(xllm::moe_fused_topk));
+#if !defined(USE_MUSA)
   m.impl("cutlass_fused_moe", TORCH_FN(xllm::cutlass_fused_moe));
+#endif
   m.impl("fused_qk_norm_rope", TORCH_FN(xllm::fused_qk_norm_rope));
   m.impl("reshape_paged_cache", TORCH_FN(xllm::reshape_paged_cache_op));
 #if defined(USE_CUDA)

@@ -19,7 +19,6 @@ limitations under the License.
 
 #include <mutex>
 #include <shared_mutex>
-#include <tuple>
 #include <utility>
 
 namespace xllm {
@@ -92,13 +91,11 @@ std::optional<uint64_t> LoRARegistry::register_adapter(const LoRARequest& req) {
   name_to_id_[req.lora_name] = id;
   LoRARequest stored = req;
   stored.lora_int_id = id;
-  // Entry holds std::atomic so its copy/move assignments are deleted; a
-  // map assignment (operator[] + move-assign) cannot compile. Construct
-  // the node in place via piecewise emplace instead (#506 CI).
-  id_to_entry_.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(id),
-      std::forward_as_tuple(stored, /*pin_count=*/0, /*unloading=*/false));
+  // Construct the atomic-containing entry in place without requiring
+  // parenthesized aggregate initialization from the device compiler.
+  auto [entry_it, inserted] = id_to_entry_.try_emplace(id);
+  CHECK(inserted);
+  entry_it->second.req = std::move(stored);
   LOG(INFO) << "[LoRARegistry] registered '" << req.lora_name << "' id=" << id
             << " path=" << req.lora_path;
   // Notify the observability layer of the new adapter binding.

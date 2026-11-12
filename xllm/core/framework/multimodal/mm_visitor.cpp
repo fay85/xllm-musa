@@ -57,7 +57,7 @@ std::pair<int32_t, int32_t> compute_emb_range(int32_t start_pos,
 
 std::vector<int32_t> normalize_to_per_seq_lens(
     const std::vector<int32_t>& seq_lens) {
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
   return seq_lens;
 #else
   // Other backends pass cumulative sequence lengths.

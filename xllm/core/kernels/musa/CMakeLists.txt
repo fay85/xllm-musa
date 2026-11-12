@@ -97,6 +97,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_ops_api.h
   musa_tvmffi_stream.h
   gdn_ops.h
+  mrope.h
   llm_decode_metadata_update.h
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_sigmoid_kernels.cuh
@@ -111,10 +112,12 @@ set(_TORCH_MUSA_KERNEL_SRCS
   gemma_norm.cu
   activation.cu
   rope.cu
+  mrope.cu
   gdn_state_commit.cu
   ../cuda/block_copy.cu
   ../cuda/norm.cu
   ../cuda/reshape_paged_cache.cu
+  ../cuda/cuda_ops_library.cpp
   ../cuda/moe/moe_fused_topk.cu
   random_sample.cpp
   rejection_sample.cu

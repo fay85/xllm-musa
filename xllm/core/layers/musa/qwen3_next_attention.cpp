@@ -20,6 +20,7 @@ limitations under the License.
 #include <cmath>
 #include <tuple>
 
+#include "core/kernels/musa/mrope.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/util/env_var.h"
 
@@ -253,7 +254,21 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
       auto k_3d = k.view({T, num_kv_heads_, head_dim_});
       k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
 
-      rotary_emb_->forward(positions, q, k);
+      // Multimodal positions contain temporal, height and width rows. The
+      // ordinary partial rotary kernel consumes one position per token.
+      if (positions.dim() == 2 && positions.size(0) == 3) {
+        xllm::kernel::musa::partial_mrope_embedding(
+            positions,
+            q,
+            k,
+            rotary_emb_->get_cos_sin_cache(),
+            head_dim_,
+            rotary_dim_,
+            mrope_section_,
+            is_interleaved_);
+      } else {
+        rotary_emb_->forward(positions, q, k);
+      }
     }
   }
   torch::Tensor out =
@@ -283,6 +298,27 @@ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
         {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
         0);
     qg_rows.copy_(reordered);
+    // The FP8 scale blocks must follow the same Q/G row permutation as the
+    // checkpoint weights, otherwise each row uses another head's scale.
+    torch::Tensor scale_inv = qkv_proj_->weight_scale_inv();
+    if (scale_inv.defined() && scale_inv.numel() > 0 &&
+        qkv_proj_->is_weight_scale_inv_loaded()) {
+      constexpr int64_t kBlock = 128;
+      CHECK_EQ(head_dim_ % kBlock, 0)
+          << "Q/G scale reorder requires head_dim % 128 == 0";
+      const int64_t blocks_per_head = head_dim_ / kBlock;
+      const int64_t qg_blocks = q_size_ * 2 / kBlock;
+      torch::Tensor scale_rows = scale_inv.slice(/*dim=*/0, 0, qg_blocks);
+      torch::Tensor scale_heads =
+          scale_rows.view({num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
+      torch::Tensor q_scales =
+          scale_heads.slice(/*dim=*/1, 0, blocks_per_head)
+              .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
+      torch::Tensor gate_scales =
+          scale_heads.slice(/*dim=*/1, blocks_per_head, 2 * blocks_per_head)
+              .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
+      scale_rows.copy_(torch::cat({q_scales, gate_scales}, /*dim=*/0));
+    }
     qkv_weight_reordered_ = true;
   }
 

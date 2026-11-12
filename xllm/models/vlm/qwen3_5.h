@@ -36,6 +36,8 @@ limitations under the License.
 #if defined(USE_NPU)
 #include "models/llm/qwen3_5.h"
 #include "models/vlm/npu/qwen3_vl.h"
+#elif defined(USE_MUSA)
+#include "models/vlm/qwen3_vl.h"
 #elif defined(USE_MLU) || defined(USE_DCU)
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/rms_norm.h"
@@ -46,7 +48,7 @@ limitations under the License.
 #endif
 
 namespace xllm {
-#if !defined(USE_NPU)
+#if !defined(USE_NPU) && !defined(USE_MUSA)
 
 namespace detail {
 
@@ -206,7 +208,7 @@ class Qwen3_5ForCausalLMImpl : public LlmForCausalLMImplBase<Qwen3_5Model> {
 };
 TORCH_MODULE(Qwen3_5ForCausalLM);
 
-#endif  // !defined(USE_NPU)
+#endif  // !defined(USE_NPU) && !defined(USE_MUSA)
 
 #if defined(USE_NPU)
 using Qwen3_5_VisionTransformer = npu::model::Qwen3_VisionTransformer;
@@ -358,8 +360,8 @@ REGISTER_MODEL_ARGS(qwen3_5_moe, [&] {
           std::unordered_set<int32_t>({args->eos_token_id(), 248046}));
 });
 
-// Text-only model registrations. On NPU these are handled by llm/qwen3_5.h.
-#if !defined(USE_NPU)
+// NPU and MUSA text-only registrations are provided by llm/qwen3_5.h.
+#if !defined(USE_NPU) && !defined(USE_MUSA)
 // qwen3_5 without vision config (text-only serving).
 // Model args are already registered by the VLM registration above.
 REGISTER_CAUSAL_MODEL_WITH_VARNAME(qwen3_5_lm, qwen3_5, Qwen3_5ForCausalLM);
@@ -401,7 +403,7 @@ REGISTER_MODEL_ARGS(qwen3_5_moe_text, [&] {
   SET_ARG(stop_token_ids,
           std::unordered_set<int32_t>({args->eos_token_id(), 248046}));
 });
-#endif  // !defined(USE_NPU)
+#endif  // !defined(USE_NPU) && !defined(USE_MUSA)
 
 #undef LOAD_QWEN3_5_VISION_ARGS
 #undef LOAD_QWEN3_5_COMMON_ARGS

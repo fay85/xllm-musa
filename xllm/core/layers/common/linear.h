@@ -230,6 +230,14 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   bool is_weight_scale_loaded() const { return weight_scale_is_loaded_; }
   bool is_weight_offset_loaded() const { return weight_offset_is_loaded_; }
 
+#if defined(USE_MUSA)
+  // Block-FP8 checkpoint scales are distinct from W8A8 weight_scale.
+  torch::Tensor weight_scale_inv() const { return weight_scale_inv_; }
+  bool is_weight_scale_inv_loaded() const {
+    return weight_scale_inv_is_loaded_;
+  }
+#endif
+
   // Get FP8 input scale for fused RMSNorm+FP8 quantization
   // For QKV, returns max of Q/K/V scales (per-tensor)
   std::optional<torch::Tensor> get_input_scale() const;

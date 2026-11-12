@@ -54,4 +54,4 @@ ScopeGuard(Fun&&) -> ScopeGuard<std::decay_t<Fun>>;
 
 // Declares a ScopeGuard object with the given callback.
 // Example: SCOPE_GUARD([&]{...});
-#define SCOPE_GUARD xllm::ScopeGuard SAFE_CONCAT(scope_guard, __LINE__)
+#define SCOPE_GUARD auto SAFE_CONCAT(scope_guard, __LINE__) = xllm::ScopeGuard
