@@ -214,18 +214,14 @@ LinearStateInputRows get_host_linear_state_rows(
   }
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
-#if defined(USE_MUSA)
   // MUSA carries cumulative query lengths. Graph bucket padding appends rows
   // without changing meta.num_sequences, so the leading zero is the format
   // discriminator; the logical sequence count is not.
   const bool has_leading_zero =
-      !host_q_seq_lens.empty() && host_q_seq_lens.front() == 0;
-#else
-  const bool has_leading_zero =
       !host_q_seq_lens.empty() && host_q_seq_lens.front() == 0 &&
-      host_q_seq_lens.size() ==
-          static_cast<size_t>(input_params.meta.num_sequences + 1);
-#endif
+      (Platform::is_musa() ||
+       host_q_seq_lens.size() ==
+           static_cast<size_t>(input_params.meta.num_sequences + 1));
   int64_t query_row_count = static_cast<int64_t>(
       has_leading_zero ? host_q_seq_lens.size() - 1 : host_q_seq_lens.size());
   if (query_row_count == 0) {
@@ -258,17 +254,16 @@ LinearStateInputRows get_host_linear_state_rows(
   CHECK(!cached_tokens.empty())
       << "linear-state input requires host kv cache token counts";
   int64_t active_rows = query_row_count;
-#if defined(USE_MUSA)
-  // Decode graph padding has query rows for the bucket but recurrent-state
-  // metadata only for real sequences. Spec-verify intentionally expands each
-  // logical row, so retain its repeated-row mask behavior.
-  const int64_t cached_row_count = static_cast<int64_t>(cached_tokens.size());
-  if (!input_params.is_spec_verify &&
-      input_params.meta.batch_forward_type.is_decode() &&
-      query_row_count > cached_row_count) {
-    active_rows = cached_row_count;
+  if constexpr (Platform::is_musa()) {
+    // Graph padding adds query rows but recurrent state only covers real
+    // sequences. Spec-verify retains the intentionally expanded row mask.
+    const int64_t cached_row_count = static_cast<int64_t>(cached_tokens.size());
+    if (!input_params.is_spec_verify &&
+        input_params.meta.batch_forward_type.is_decode() &&
+        query_row_count > cached_row_count) {
+      active_rows = cached_row_count;
+    }
   }
-#endif
   return {cached_tokens, active_rows, /*empty_shard=*/false};
 }
 #endif
@@ -419,15 +414,15 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
   compute_stream_ = device_.current_stream();
   sampler_ = std::make_unique<Sampler>();
 
-#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_MUSA) && \
-    !defined(USE_DCU)
-  if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel()) {
-    LOG(WARNING)
-        << "enable_block_copy_kernel is only supported on NPU/CUDA/MUSA/DCU; "
-           "forcing enable_block_copy_kernel=false.";
-    ::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel(false);
+  if constexpr (!Platform::is_npu() && !Platform::is_cuda() &&
+                !Platform::is_musa() && !Platform::is_dcu()) {
+    if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel()) {
+      LOG(WARNING)
+          << "enable_block_copy_kernel is only supported on NPU/CUDA/MUSA/DCU; "
+             "forcing enable_block_copy_kernel=false.";
+      ::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel(false);
+    }
   }
-#endif
 
 #if defined(USE_NPU)
   if (options_.enable_graph() && options_.enable_speculative_decode() &&
@@ -1701,16 +1696,12 @@ void WorkerImpl::refresh_cuda_block_copy_runtime_state() {
   if (!key_cache.defined() || !value_cache.defined()) {
     return;
   }
-#if defined(USE_MUSA)
-  if (!key_cache.device().is_privateuseone() ||
-      !value_cache.device().is_privateuseone()) {
+  constexpr torch::DeviceType kCacheDeviceType =
+      Platform::is_musa() ? torch::kPrivateUse1 : torch::kCUDA;
+  if (key_cache.device().type() != kCacheDeviceType ||
+      value_cache.device().type() != kCacheDeviceType) {
     return;
   }
-#else
-  if (!key_cache.is_cuda() || !value_cache.is_cuda()) {
-    return;
-  }
-#endif
 
   CHECK(key_cache.is_contiguous())
       << "CUDA block copy kernel expects contiguous key cache";
@@ -1727,12 +1718,8 @@ void WorkerImpl::refresh_cuda_block_copy_runtime_state() {
     auto layer_k_cache = kv_cache.get_k_cache();
     auto layer_v_cache = kv_cache.get_v_cache();
     CHECK(layer_k_cache.defined() && layer_v_cache.defined());
-#if defined(USE_MUSA)
-    CHECK(layer_k_cache.device().is_privateuseone() &&
-          layer_v_cache.device().is_privateuseone());
-#else
-    CHECK(layer_k_cache.is_cuda() && layer_v_cache.is_cuda());
-#endif
+    CHECK(layer_k_cache.device().type() == kCacheDeviceType &&
+          layer_v_cache.device().type() == kCacheDeviceType);
     CHECK(layer_k_cache.is_contiguous());
     CHECK(layer_v_cache.is_contiguous());
     CHECK(layer_k_cache.scalar_type() == cache_dtype);

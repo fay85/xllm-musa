@@ -1566,6 +1566,31 @@ TEST_F(HostKVCacheConfigTest, AcceptsFractalNzPoolWithoutTransferFolding) {
   EXPECT_FALSE(validate_host_cache_options(options).has_value());
 }
 
+TEST(KVCacheTest, ConvCacheUsesValueHeadDimension) {
+  KVCacheCapacity capacity;
+  capacity.n_blocks(8).block_size(16).num_linear_state_blocks(4);
+  ModelArgs model_args;
+  model_args.model_type("qwen3_5_text")
+      .n_layers(1)
+      .n_heads(4)
+      .n_kv_heads(2)
+      .head_dim(4)
+      .full_attention_interval(2)
+      .linear_conv_kernel_dim(4)
+      .linear_num_key_heads(2)
+      .linear_num_value_heads(4)
+      .linear_key_head_dim(2)
+      .linear_value_head_dim(3);
+  for (const int64_t world_size : {1, 2}) {
+    const KVCacheShape shape(capacity, model_args, world_size);
+    const int64_t conv_dim = 20 / world_size;
+    const std::vector<int64_t> expected =
+        Platform::is_musa() ? std::vector<int64_t>{4, conv_dim, 3}
+                            : std::vector<int64_t>{4, 3, conv_dim};
+    EXPECT_EQ(shape.conv_cache_shape(), expected);
+  }
+}
+
 #if !defined(USE_NPU)
 TEST(KVCacheTest,
      HostLinearCacheUsesChunkCapacityOnPrefillAndTwiceHbmOnDecode) {

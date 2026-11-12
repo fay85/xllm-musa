@@ -19,6 +19,7 @@ limitations under the License.
 #include <optional>
 #include <vector>
 
+#include "core/platform/platform.h"
 #include "framework/kv_cache/kv_cache_utils.h"
 #include "framework/model/model_args.h"
 
@@ -40,6 +41,8 @@ struct MlaPackedC8Layout {
 
 class KVCacheShape final {
  public:
+  static constexpr int64_t kConvHistoryAxis = Platform::is_musa() ? 2 : 1;
+
   KVCacheShape() = default;
 
   KVCacheShape(const KVCacheCapacity& kv_cache_cap,

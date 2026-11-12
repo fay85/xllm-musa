@@ -60,17 +60,13 @@ inline uint64_t align_up(uint64_t value, uint64_t alignment) {
 
 inline bool supports_contiguous_forward_input_buffer(
     const torch::Device& device) {
-#if defined(USE_CUDA)
-  return device.type() == torch::kCUDA;
-#elif defined(USE_MLU) || defined(USE_MUSA)
-  return device.type() == torch::kPrivateUse1;
-#elif defined(USE_NPU)
-  (void)device;
-  return true;
-#else
-  (void)device;
-  return false;
-#endif
+  if constexpr (Platform::is_cuda()) {
+    return device.type() == torch::kCUDA;
+  } else if constexpr (Platform::is_mlu() || Platform::is_musa()) {
+    return device.type() == torch::kPrivateUse1;
+  } else {
+    return Platform::is_npu();
+  }
 }
 
 bool try_to_device_from_input_host_buffer(const ForwardInput& input,

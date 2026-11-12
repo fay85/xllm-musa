@@ -1,0 +1,32 @@
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#pragma once
+
+#include <ATen/Dispatch.h>
+
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
+#define DISPATCH_CASE_FLOATING_TYPES(...)              \
+  AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
+  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)  \
+  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
+#define DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
+#define DISPATCH_CASE_HALF_TYPES(...)                 \
+  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
+  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
+#define DISPATCH_HALF_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, DISPATCH_CASE_HALF_TYPES(__VA_ARGS__))
+// NOLINTEND(cppcoreguidelines-macro-usage)

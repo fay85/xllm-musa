@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "framework/kv_cache/linear_state_restore.h"
+#include "core/framework/kv_cache/linear_state_restore.h"
 
 #include <glog/logging.h>
 
@@ -21,6 +21,7 @@ limitations under the License.
 #include <limits>
 
 #include "core/common/constants.h"
+#include "core/framework/kv_cache/kv_cache_shape.h"
 
 namespace xllm {
 
@@ -89,14 +90,18 @@ void copy_linear_state_row(const KVCache& kv_cache,
   ssm_cache[static_cast<int64_t>(write_id) * stride + accepted_row].copy_(
       ssm_cache[static_cast<int64_t>(read_id) * stride + accepted_row]);
 
-  const int64_t history_len =
-      conv_history_len > 0 ? conv_history_len : conv_cache.size(1);
-  CHECK_LE(accepted_row + history_len, conv_cache.size(1))
+  const torch::Tensor write_conv_state = conv_cache.select(0, write_id);
+  const torch::Tensor read_conv_state = conv_cache.select(0, read_id);
+  // Selecting a slot removes dimension 0, shifting the history axis by one.
+  constexpr int64_t kSlotHistoryAxis = KVCacheShape::kConvHistoryAxis - 1;
+  const int64_t history_len = conv_history_len > 0
+                                  ? conv_history_len
+                                  : write_conv_state.size(kSlotHistoryAxis);
+  CHECK_LE(accepted_row + history_len, write_conv_state.size(kSlotHistoryAxis))
       << "accepted linear-state row exceeds the conv history";
-  conv_cache.select(0, write_id)
-      .narrow(0, accepted_row, history_len)
+  write_conv_state.narrow(kSlotHistoryAxis, accepted_row, history_len)
       .copy_(
-          conv_cache.select(0, read_id).narrow(0, accepted_row, history_len));
+          read_conv_state.narrow(kSlotHistoryAxis, accepted_row, history_len));
 }
 
 void copy_linear_state_slot(std::vector<KVCache>& kv_caches,

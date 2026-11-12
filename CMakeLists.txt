@@ -312,6 +312,13 @@ if(USE_MUSA)
   set(CMAKE_CUDA_COMPILER "${_XLLM_MCC_WRAPPER}" CACHE FILEPATH
       "MUSA device compiler for CUDA-compatible sources" FORCE)
   project("xllm" LANGUAGES C CXX CUDA)
+  # mcc_wrapper supports Clang-style dependency files.
+  set(CMAKE_DEPFILE_FLAGS_CUDA "-MD -MT <DEP_TARGET> -MF <DEP_FILE>")
+  if((NOT DEFINED CMAKE_DEPENDS_USE_COMPILER OR CMAKE_DEPENDS_USE_COMPILER)
+      AND CMAKE_GENERATOR MATCHES "Makefiles|WMake")
+    set(CMAKE_CUDA_DEPFILE_FORMAT gcc)
+    set(CMAKE_CUDA_DEPENDS_USE_COMPILER TRUE)
+  endif()
   add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Wno-c++11-narrowing>)
 elseif(USE_CUDA)
   project("xllm" LANGUAGES C CXX CUDA)

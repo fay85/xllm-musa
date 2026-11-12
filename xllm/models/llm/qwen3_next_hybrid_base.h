@@ -38,6 +38,7 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
+#include "core/platform/platform.h"
 #include "models/llm/lora_bootstrap.h"
 #if defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
@@ -146,22 +147,28 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     metadata_build_options.materialize_linear_state_validity =
         !input_params.enable_graph;
 #endif
+    // Graph replay requires the persistent tensor addresses supplied by the
+    // executor; rebuilding from the request would discard those buffers.
+    const bool use_prepared_metadata =
+        Platform::is_musa() && input_params.attn_metadata &&
+        input_params.attn_metadata->enable_cuda_graph;
+    layer::AttentionMetadata attn_metadata;
+    if (use_prepared_metadata) {
+      attn_metadata = *input_params.attn_metadata;
+    } else {
+      std::optional<torch::Tensor> attn_mask;
+      if constexpr (!Platform::is_musa()) {
+        attn_mask = build_attention_mask(input_params);
+      }
+      attn_metadata =
+          layer::AttentionMetadataBuilder::build(*attention_input,
+                                                 model_args_.enable_mla(),
+                                                 attn_mask,
+                                                 /*device=*/device_,
+                                                 metadata_build_options);
+    }
 #if defined(USE_MUSA)
-    layer::AttentionMetadata attn_metadata =
-        layer::AttentionMetadataBuilder::build(*attention_input,
-                                               model_args_.enable_mla(),
-                                               /*attn_mask=*/std::nullopt,
-                                               /*device=*/device_,
-                                               metadata_build_options);
     attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
-#else
-    layer::AttentionMetadata attn_metadata =
-        layer::AttentionMetadataBuilder::build(
-            *attention_input,
-            model_args_.enable_mla(),
-            build_attention_mask(input_params),
-            /*device=*/device_,
-            metadata_build_options);
 #endif
     const int32_t num_tokens = static_cast<int32_t>(tokens.size(0));
     const auto& batch_forward_type = input_params.meta.batch_forward_type;
@@ -285,18 +292,15 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
 
  protected:
   torch::Tensor build_attention_mask(const ModelInputParams& input_params) {
-#if defined(USE_NPU) || defined(USE_MLU)
+    if (input_params.graph.attn_mask.defined()) {
+      return input_params.graph.attn_mask;
+    }
     // NPU and MLU hybrid attention do not consume attn_metadata.attn_mask:
     // their full-attention kernels handle causality internally, and linear
     // attention needs no mask. Avoid quadratic allocations for long contexts,
     // including MTP decode graph capture. Preserve an explicit graph buffer.
-    if (input_params.graph.attn_mask.defined()) {
-      return input_params.graph.attn_mask;
-    }
-    return torch::Tensor();
-#else
-    if (input_params.graph.attn_mask.defined()) {
-      return input_params.graph.attn_mask;
+    if constexpr (Platform::is_npu() || Platform::is_mlu()) {
+      return torch::Tensor();
     }
     max_seq_len_ = std::max(input_params.meta.kv_max_seq_len, max_seq_len_);
     const bool use_append_mask =
@@ -323,7 +327,6 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
                                      device_));
     }
     return torch::cat(req_mask_vec, 0);
-#endif
   }
 
   ModelArgs model_args_;

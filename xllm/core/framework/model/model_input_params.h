@@ -43,6 +43,7 @@ limitations under the License.
 #include "core/framework/model/model_sampling_input.h"
 #include "core/framework/model/mtp_topk_state.h"
 #include "core/framework/multimodal/mm_batch_data.h"
+#include "core/platform/platform.h"
 #include "framework/batch/batch_forward_type.h"
 #include "framework/parallel_state/npu_cp_plan.h"
 #include "framework/parallel_state/npu_dp_ep_padding.h"
@@ -400,11 +401,11 @@ struct AttentionDeviceInput {
     AttentionDeviceInput out;
     out.q_seq_lens = safe_to(q_seq_lens, device, true);
     out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
-#if !defined(USE_CUDA) && !defined(USE_MUSA)
-    out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
-#else
-    out.q_cu_seq_lens = q_cu_seq_lens;
-#endif
+    if constexpr (Platform::is_cuda() || Platform::is_musa()) {
+      out.q_cu_seq_lens = q_cu_seq_lens;
+    } else {
+      out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
+    }
     out.new_cache_slots = safe_to(new_cache_slots, device, true);
     out.block_tables = safe_to(block_tables, device, true);
     out.paged_kv_indptr = safe_to(paged_kv_indptr, device);
@@ -1108,9 +1109,9 @@ struct ModelInputParams {
     params.use_dflash_proposal_attention = use_dflash_proposal_attention;
     params.num_accepted_tokens = safe_to(num_accepted_tokens, device, true);
     params.num_accepted_tokens_host = num_accepted_tokens_host;
-#if defined(USE_MUSA)
-    params.attn_metadata = attn_metadata;
-#endif
+    if constexpr (Platform::is_musa()) {
+      params.attn_metadata = attn_metadata;
+    }
     params.mtp_topk_state =
         mtp_topk_state == nullptr ? nullptr : mtp_topk_state->to(device);
     for (const auto& table : multi_block_tables) {

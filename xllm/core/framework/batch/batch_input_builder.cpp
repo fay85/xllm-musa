@@ -31,12 +31,12 @@ limitations under the License.
 #include "common/global_flags.h"
 #include "common/metrics.h"
 #include "core/framework/block/block.h"
-#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
+#include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/multimodal/mm_visitor.h"
 #include "framework/model/model_args.h"
 #include "framework/model/model_input_params.h"
@@ -581,10 +581,10 @@ void BatchInputBuilder::process_sequences_multithreaded() {
     thread_state.num_computed_tokens.reserve(sequences_per_thread);
     thread_state.is_prefilling.reserve(sequences_per_thread);
     thread_state.kv_cache_tokens_nums.reserve(sequences_per_thread);
-#if defined(USE_NPU) || defined(USE_MUSA)
-    thread_state.seq_lens.reserve(sequences_per_thread);
-    thread_state.q_seq_lens.reserve(sequences_per_thread);
-#endif
+    if constexpr (Platform::is_npu() || Platform::is_musa()) {
+      thread_state.seq_lens.reserve(sequences_per_thread);
+      thread_state.q_seq_lens.reserve(sequences_per_thread);
+    }
     thread_state.embedding_ids.reserve(sequences_per_thread);
     thread_state.linear_state_ids.reserve(sequences_per_thread);
     thread_state.linear_state_read_ids.reserve(sequences_per_thread);
@@ -673,10 +673,10 @@ void BatchInputBuilder::process_sequences_multithreaded() {
   state_.num_computed_tokens.reserve(total_seqs);
   state_.is_prefilling.reserve(total_seqs);
   state_.kv_cache_tokens_nums.reserve(total_seqs);
-#if defined(USE_NPU) || defined(USE_MUSA)
-  state_.seq_lens.reserve(total_seqs);
-  state_.q_seq_lens.reserve(total_seqs);
-#endif
+  if constexpr (Platform::is_npu() || Platform::is_musa()) {
+    state_.seq_lens.reserve(total_seqs);
+    state_.q_seq_lens.reserve(total_seqs);
+  }
   state_.embedding_ids.reserve(total_seqs);
   state_.linear_state_ids.reserve(total_seqs);
   state_.linear_state_read_ids.reserve(total_seqs);
@@ -773,24 +773,25 @@ void BatchInputBuilder::process_sequences_multithreaded() {
     state_.is_prefilling.insert(state_.is_prefilling.end(),
                                 state.is_prefilling.begin(),
                                 state.is_prefilling.end());
-#if defined(USE_NPU)
-    state_.seq_lens.insert(
-        state_.seq_lens.end(), state.seq_lens.begin(), state.seq_lens.end());
-    state_.q_seq_lens.insert(state_.q_seq_lens.end(),
-                             state.q_seq_lens.begin(),
-                             state.q_seq_lens.end());
-#elif defined(USE_MUSA) || defined(USE_MLU) || defined(USE_CUDA) || \
-    defined(USE_ILU) || defined(USE_DCU)
-    int32_t seq_len_offset = state_.seq_lens.back();
-    // skip the first element which is 0
-    for (size_t i = 1; i < state.seq_lens.size(); ++i) {
-      state_.seq_lens.emplace_back(state.seq_lens[i] + seq_len_offset);
+    if constexpr (Platform::is_npu()) {
+      state_.seq_lens.insert(
+          state_.seq_lens.end(), state.seq_lens.begin(), state.seq_lens.end());
+      state_.q_seq_lens.insert(state_.q_seq_lens.end(),
+                               state.q_seq_lens.begin(),
+                               state.q_seq_lens.end());
+    } else if constexpr (Platform::is_musa() || Platform::is_mlu() ||
+                         Platform::is_cuda() || Platform::is_ilu() ||
+                         Platform::is_dcu()) {
+      const int32_t seq_len_offset = state_.seq_lens.back();
+      // Skip the leading zero when concatenating cumulative lengths.
+      for (size_t i = 1; i < state.seq_lens.size(); ++i) {
+        state_.seq_lens.emplace_back(state.seq_lens[i] + seq_len_offset);
+      }
+      const int32_t q_seq_len_offset = state_.q_seq_lens.back();
+      for (size_t i = 1; i < state.q_seq_lens.size(); ++i) {
+        state_.q_seq_lens.emplace_back(state.q_seq_lens[i] + q_seq_len_offset);
+      }
     }
-    int32_t q_seq_len_offset = state_.q_seq_lens.back();
-    for (size_t i = 1; i < state.q_seq_lens.size(); ++i) {
-      state_.q_seq_lens.emplace_back(state.q_seq_lens[i] + q_seq_len_offset);
-    }
-#endif
     // adapter_ids is per-sequence and layout-independent: append verbatim on
     // every backend (see single-sequence path above).
     state_.adapter_ids.insert(state_.adapter_ids.end(),
@@ -1447,8 +1448,9 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   input_params.attention.device.paged_kv_indices = paged_kv_indices_cpu;
   input_params.attention.device.paged_kv_last_page_len =
       paged_kv_last_page_len_cpu;
-  // Seed common AttentionMetadata FA3 host mirrors for graph/plan updates.
+  // This carries FA3 host mirrors, not an executor-prepared graph plan.
   auto attn_metadata = std::make_shared<layer::AttentionMetadata>();
+  attn_metadata->enable_cuda_graph = false;
   attn_metadata->fa3_metadata.paged_kv_indptr_host = paged_kv_indptr_cpu;
   attn_metadata->fa3_metadata.paged_kv_indices_host = paged_kv_indices_cpu;
   attn_metadata->fa3_metadata.paged_kv_last_page_len_host =
@@ -1599,7 +1601,7 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
         [](const ConstraintState& state) { return state.initialized(); });
     if (has_json_object_state) {
       install_filter_bitmask(forward_input.sampling_params,
-                            forward_input.json_object_states);
+                             forward_input.json_object_states);
       forward_input.sample_sequence_ids = std::move(sample_sequence_ids);
       forward_input.sample_prior_output_rows =
           std::move(sample_prior_output_rows);
@@ -1635,15 +1637,17 @@ void BatchInputBuilder::process_swap_block_infos(ForwardInput& forward_input) {
               [](const BlockTransferInfo& a, const BlockTransferInfo& b) {
                 return a.src_block_id < b.src_block_id;
               });
-#if defined(USE_CUDA) || defined(USE_MUSA)
-    input_params.block_copy.swap_blocks.insert(
-        input_params.block_copy.swap_blocks.end(),
-        swap_blocks.begin(),
-        swap_blocks.end());
+    constexpr bool kDetectOverlap = Platform::is_cuda() || Platform::is_musa();
+    if constexpr (kDetectOverlap) {
+      input_params.block_copy.swap_blocks.insert(
+          input_params.block_copy.swap_blocks.end(),
+          swap_blocks.begin(),
+          swap_blocks.end());
+    }
     const BlockCopyKernelInputData kernel_input =
         build_block_copy_kernel_input_data(swap_blocks,
-                                           /*detect_overlap=*/true);
-    if (!kernel_input.has_overlap) {
+                                           /*detect_overlap=*/kDetectOverlap);
+    if (!kDetectOverlap || !kernel_input.has_overlap) {
       input_params.block_copy.src_block_indices =
           build_pinned_int_tensor(kernel_input.src_indices);
       input_params.block_copy.dst_block_indices =
@@ -1651,17 +1655,6 @@ void BatchInputBuilder::process_swap_block_infos(ForwardInput& forward_input) {
       input_params.block_copy.cum_sum =
           build_pinned_int_tensor(kernel_input.cum_sum);
     }
-#else
-    const BlockCopyKernelInputData kernel_input =
-        build_block_copy_kernel_input_data(swap_blocks,
-                                           /*detect_overlap=*/false);
-    input_params.block_copy.src_block_indices =
-        build_pinned_int_tensor(kernel_input.src_indices);
-    input_params.block_copy.dst_block_indices =
-        build_pinned_int_tensor(kernel_input.dst_indices);
-    input_params.block_copy.cum_sum =
-        build_pinned_int_tensor(kernel_input.cum_sum);
-#endif
   } else {
     input_params.block_copy.swap_blocks.insert(
         input_params.block_copy.swap_blocks.end(),

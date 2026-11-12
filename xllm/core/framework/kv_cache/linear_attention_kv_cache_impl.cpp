@@ -74,15 +74,10 @@ LinearAttentionKVCacheImpl::LinearAttentionKVCacheImpl(
   host_page_aligned_regions_.reserve(2);
   std::vector<int64_t> host_conv_shape = device_conv_shape;
   host_conv_shape[0] = host_linear_count;
-#if defined(USE_MUSA)
-  constexpr int64_t kConvHistoryAxis = 2;
-#else
-  constexpr int64_t kConvHistoryAxis = 1;
-#endif
   constexpr int64_t kCommittedConvRows = 3;
-  CHECK_GT(host_conv_shape.size(), kConvHistoryAxis);
-  CHECK_GE(host_conv_shape[kConvHistoryAxis], kCommittedConvRows);
-  host_conv_shape[kConvHistoryAxis] = kCommittedConvRows;
+  CHECK_GT(host_conv_shape.size(), KVCacheShape::kConvHistoryAxis);
+  CHECK_GE(host_conv_shape[KVCacheShape::kConvHistoryAxis], kCommittedConvRows);
+  host_conv_shape[KVCacheShape::kConvHistoryAxis] = kCommittedConvRows;
   host_conv_shape.insert(host_conv_shape.begin() + 1, layer_count);
   create_host_tensor(host_conv_shape,
                      create_options.dtype(),
@@ -137,19 +132,15 @@ BlockTypeTensorMap LinearAttentionKVCacheImpl::get_block_type_tensors(
   }
 
   constexpr int64_t kCommittedConvRows = 3;
-#if defined(USE_MUSA)
-  constexpr int64_t kConvHistoryAxis = 2;
-#else
-  constexpr int64_t kConvHistoryAxis = 1;
-#endif
-  CHECK_GT(conv_it->second.dim(), kConvHistoryAxis);
-  const int64_t conv_history_rows = conv_it->second.size(kConvHistoryAxis);
+  CHECK_GT(conv_it->second.dim(), KVCacheShape::kConvHistoryAxis);
+  const int64_t conv_history_rows =
+      conv_it->second.size(KVCacheShape::kConvHistoryAxis);
   CHECK_GE(conv_history_rows, kCommittedConvRows);
   CHECK_LE(checkpoint_row,
            static_cast<size_t>(conv_history_rows - kCommittedConvRows))
       << "LINEAR checkpoint row selects rows outside the device cache: "
       << "checkpoint_row=" << checkpoint_row;
-  conv_it->second = conv_it->second.narrow(kConvHistoryAxis,
+  conv_it->second = conv_it->second.narrow(KVCacheShape::kConvHistoryAxis,
                                            static_cast<int64_t>(checkpoint_row),
                                            kCommittedConvRows);
 

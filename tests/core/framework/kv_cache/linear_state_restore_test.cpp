@@ -13,12 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "framework/kv_cache/linear_state_restore.h"
+#include "core/framework/kv_cache/linear_state_restore.h"
 
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <vector>
+
+#include "core/platform/platform.h"
 
 namespace xllm {
 namespace {
@@ -157,6 +159,44 @@ TEST(LinearStateRestoreTest, CopiesSingleCheckpointLayout) {
   restore_linear_state_slot(cache.kv_caches, 2, 1);
   EXPECT_TRUE(torch::equal(cache.conv_cache, expected_conv));
   EXPECT_TRUE(torch::equal(cache.ssm_cache, expected_ssm));
+}
+
+TEST(LinearStateRestoreTest, CopiesAcceptedCheckpointAlongHistoryAxis) {
+  torch::Tensor conv_cache =
+      torch::arange(4 * 8 * 3, torch::kFloat32).reshape({4, 8, 3});
+  torch::Tensor expected_conv = conv_cache.clone();
+  expected_conv[2].slice(0, 1, 3).copy_(expected_conv[1].slice(0, 1, 3));
+  if constexpr (Platform::is_musa()) {
+    conv_cache = conv_cache.transpose(1, 2).contiguous();
+    expected_conv = expected_conv.transpose(1, 2).contiguous();
+  }
+  const torch::Tensor ssm_cache =
+      torch::arange(4 * 3 * 2 * 2, torch::kFloat32).reshape({12, 2, 2});
+  torch::Tensor expected_ssm = ssm_cache.clone();
+  expected_ssm[7].copy_(expected_ssm[4]);
+  std::vector<KVCache> caches;
+  caches.emplace_back(LinearAttentionKVCacheTensors{conv_cache, ssm_cache});
+  std::vector<int64_t> validity_mask = {0};
+
+  restore_linear_state_slots(caches,
+                             /*write_ids=*/{2},
+                             /*read_ids=*/{1},
+                             validity_mask,
+                             /*reads_distinct_state=*/false,
+                             /*accepted_rows=*/{1},
+                             /*conv_history_len=*/2);
+
+  EXPECT_EQ(validity_mask, std::vector<int64_t>({1}));
+  EXPECT_TRUE(torch::equal(conv_cache, expected_conv));
+  EXPECT_TRUE(torch::equal(ssm_cache, expected_ssm));
+  EXPECT_DEATH(restore_linear_state_slots(caches,
+                                          /*write_ids=*/{2},
+                                          /*read_ids=*/{1},
+                                          validity_mask,
+                                          /*reads_distinct_state=*/false,
+                                          /*accepted_rows=*/{1},
+                                          /*conv_history_len=*/8),
+               "exceeds the conv history");
 }
 
 TEST(LinearStateRestoreTest, SameSlotRestorePreservesState) {

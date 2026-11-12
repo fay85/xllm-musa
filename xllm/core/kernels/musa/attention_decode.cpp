@@ -29,6 +29,11 @@ namespace {
 
 constexpr int32_t kFa3TileM = 32;
 constexpr int32_t kFa3TileN = 64;
+// Prefill metadata already used one split on main. MATE executes and combines
+// the metadata's split count; a forward heuristic may enlarge accumulator
+// capacity without enabling more splits. Keep both calls consistent. Decode
+// uses the heuristic (0) in both metadata and forward instead.
+constexpr int64_t kFa3PrefillNumSplits = 1;
 
 const char* fa3_metadata_uri(int64_t gqa_ratio) {
   CHECK(gqa_ratio == 6 || gqa_ratio == 8)
@@ -378,7 +383,7 @@ torch::Tensor fa3_prefill_scheduler_metadata(const torch::Device& device,
                          static_cast<int64_t>(window_size_right),
                          none_tensor(),
                          to_ffi_tensor(metadata),
-                         /*num_splits=*/static_cast<int64_t>(1),
+                         /*num_splits=*/kFa3PrefillNumSplits,
                          static_cast<int64_t>(kFa3TileM),
                          static_cast<int64_t>(kFa3TileN),
                          /*mp_margin=*/static_cast<int64_t>(0));
@@ -481,7 +486,7 @@ void fa3_prefill_paged(const torch::Tensor& query,
       /*attention_chunk=*/static_cast<int64_t>(0),
       /*softcap=*/0.0,
       /*mp_margin=*/static_cast<int64_t>(0),
-      /*num_splits=*/static_cast<int64_t>(1),
+      /*num_splits=*/kFa3PrefillNumSplits,
       to_ffi_tensor(scheduler_metadata),
       none_tensor(),  // learnable_sink
       to_ffi_tensor(output),

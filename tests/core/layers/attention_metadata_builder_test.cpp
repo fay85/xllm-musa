@@ -24,6 +24,7 @@ limitations under the License.
 #include "core/framework/model/model_input_params.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/platform/device.h"
+#include "core/platform/platform.h"
 #if defined(USE_NPU)
 #include "core/layers/npu_torch/fused_infer_attention_utils.h"
 #endif
@@ -276,13 +277,15 @@ TEST(AttentionMetadataBuilderTest, MaterializesColdMaskForDummyShard) {
                                       torch::Device(torch::kCPU));
 
   ASSERT_TRUE(metadata.is_dummy);
+  if constexpr (Platform::is_npu() || Platform::is_musa()) {
+    EXPECT_EQ(metadata.q_seq_lens_vec, std::vector<int32_t>({1}));
+    EXPECT_EQ(metadata.kv_seq_lens_vec, std::vector<int32_t>({1}));
+  } else {
+    EXPECT_EQ(metadata.q_seq_lens_vec, std::vector<int32_t>({0, 1}));
+    EXPECT_EQ(metadata.kv_seq_lens_vec, std::vector<int32_t>({0, 1}));
+  }
 #if defined(USE_NPU)
-  EXPECT_EQ(metadata.q_seq_lens_vec, std::vector<int32_t>({1}));
-  EXPECT_EQ(metadata.kv_seq_lens_vec, std::vector<int32_t>({1}));
   EXPECT_EQ(metadata.q_cu_seq_lens_host_vec, std::vector<int64_t>({0, 1}));
-#else
-  EXPECT_EQ(metadata.q_seq_lens_vec, std::vector<int32_t>({0, 1}));
-  EXPECT_EQ(metadata.kv_seq_lens_vec, std::vector<int32_t>({0, 1}));
 #endif
   EXPECT_TRUE(
       torch::equal(metadata.q_seq_lens, torch::tensor({1}, torch::kInt32)));
@@ -401,55 +404,100 @@ TEST(AttentionMetadataBuilderTest, PreservesMaterializedDummyQueryGeometry) {
 
 #if defined(USE_MUSA)
 TEST(AttentionMetadataBuilderTest, BuildsMusaMetadataWithCommonBuilder) {
-  ModelInputParams params;
-  params.meta.batch_forward_type = BatchForwardType::DECODE;
-  params.meta.num_sequences = 2;
-  params.meta.q_max_seq_len = 1;
-  params.meta.kv_max_seq_len = 7;
-  params.attention.host.q_seq_lens = {1, 1};
-  params.attention.host.kv_seq_lens = {3, 7};
+  for (const BatchForwardType type : {BatchForwardType::PREFILL,
+                                      BatchForwardType::CHUNKED_PREFILL,
+                                      BatchForwardType::DECODE}) {
+    SCOPED_TRACE(type.value());
+    ModelInputParams params;
+    params.meta.batch_forward_type = type;
+    params.meta.num_sequences = 2;
+    params.meta.q_max_seq_len = 1;
+    params.meta.kv_max_seq_len = 7;
+    params.attention.host.q_seq_lens = {1, 1};
+    params.attention.host.kv_seq_lens = {3, 7};
 
-  const torch::TensorOptions options =
-      torch::TensorOptions().dtype(torch::kInt64).device(torch::kCPU);
-  params.attention.device.q_seq_lens = torch::tensor({1, 1}, options);
-  params.attention.device.kv_seq_lens = torch::tensor({3, 7}, options);
-  params.attention.device.q_cu_seq_lens = torch::tensor({1, 2}, options);
-  params.attention.device.block_tables =
-      torch::tensor({{0, -1}, {1, 2}}, options);
-  params.attention.device.paged_kv_indptr = torch::tensor({0, 1, 3}, options);
-  params.attention.device.paged_kv_indices = torch::tensor({0, 1, 2}, options);
-  params.attention.device.paged_kv_last_page_len =
-      torch::tensor({3, 7}, options);
+    const torch::TensorOptions options =
+        torch::TensorOptions().dtype(torch::kInt64).device(torch::kCPU);
+    params.attention.device.q_seq_lens = torch::tensor({1, 1}, options);
+    params.attention.device.kv_seq_lens = torch::tensor({3, 7}, options);
+    params.attention.device.q_cu_seq_lens = torch::tensor({1, 2}, options);
+    params.attention.device.block_tables =
+        torch::tensor({{0, -1}, {1, 2}}, options);
+    params.attention.device.paged_kv_indptr = torch::tensor({0, 1, 3}, options);
+    params.attention.device.paged_kv_indices =
+        torch::tensor({0, 1, 2}, options);
+    params.attention.device.paged_kv_last_page_len =
+        torch::tensor({3, 7}, options);
 
-  params.attn_metadata = std::make_shared<AttentionMetadata>();
-  params.attn_metadata->fa3_metadata.share_fa3_scheduler_metadata = true;
-  params.attn_metadata->fa3_metadata.fa3_scheduler_metadata =
-      torch::tensor({4, 3, 2, 1}, options);
+    params.attn_metadata = std::make_shared<AttentionMetadata>();
+    params.attn_metadata->fa3_metadata.share_fa3_scheduler_metadata = true;
+    params.attn_metadata->fa3_metadata.fa3_scheduler_metadata =
+        torch::tensor({4, 3, 2, 1}, options);
 
-  AttentionMetadata metadata =
-      AttentionMetadataBuilder::build(params, /*enable_mla=*/false);
+    AttentionMetadata metadata =
+        AttentionMetadataBuilder::build(params, /*enable_mla=*/false);
 
-  EXPECT_TRUE(torch::equal(metadata.q_cu_seq_lens,
-                           torch::tensor({0, 1, 2}, torch::kInt32)));
-  EXPECT_TRUE(torch::equal(metadata.kv_cu_seq_lens,
-                           torch::tensor({0, 3, 10}, torch::kInt32)));
-  EXPECT_TRUE(
-      torch::equal(metadata.q_seq_lens, torch::tensor({1, 1}, torch::kInt32)));
-  EXPECT_TRUE(
-      torch::equal(metadata.kv_seq_lens, torch::tensor({3, 7}, torch::kInt32)));
-  EXPECT_EQ(metadata.block_table.scalar_type(), torch::kInt32);
-  EXPECT_EQ(metadata.fa3_metadata.paged_kv_indptr_host.device(),
-            torch::Device(torch::kCPU));
-  EXPECT_EQ(metadata.fa3_metadata.paged_kv_indptr_host.scalar_type(),
-            torch::kInt32);
-  EXPECT_EQ(metadata.fa3_metadata.paged_kv_indices_host.scalar_type(),
-            torch::kInt32);
-  EXPECT_EQ(metadata.fa3_metadata.paged_kv_last_page_len_host.scalar_type(),
-            torch::kInt32);
-  EXPECT_TRUE(metadata.fa3_metadata.share_fa3_scheduler_metadata);
-  EXPECT_TRUE(
-      torch::equal(metadata.fa3_metadata.fa3_scheduler_metadata,
-                   params.attn_metadata->fa3_metadata.fa3_scheduler_metadata));
+    EXPECT_TRUE(torch::equal(metadata.q_cu_seq_lens,
+                             torch::tensor({0, 1, 2}, torch::kInt32)));
+    EXPECT_TRUE(torch::equal(metadata.kv_cu_seq_lens,
+                             torch::tensor({0, 3, 10}, torch::kInt32)));
+    EXPECT_TRUE(torch::equal(metadata.q_seq_lens,
+                             torch::tensor({1, 1}, torch::kInt32)));
+    EXPECT_TRUE(torch::equal(metadata.kv_seq_lens,
+                             torch::tensor({3, 7}, torch::kInt32)));
+    EXPECT_EQ(metadata.q_cu_seq_lens.scalar_type(), torch::kInt32);
+    EXPECT_EQ(metadata.kv_cu_seq_lens.scalar_type(), torch::kInt32);
+    EXPECT_EQ(metadata.block_table.scalar_type(), torch::kInt32);
+    if (metadata.is_causal) {
+      ASSERT_TRUE(metadata.qo_indptr.has_value());
+      EXPECT_EQ(metadata.qo_indptr->device(), options.device());
+      EXPECT_TRUE(torch::equal(*metadata.qo_indptr, metadata.q_cu_seq_lens));
+    }
+    EXPECT_EQ(metadata.fa3_metadata.paged_kv_indptr_host.device(),
+              torch::Device(torch::kCPU));
+    EXPECT_EQ(metadata.fa3_metadata.paged_kv_indptr_host.scalar_type(),
+              torch::kInt32);
+    EXPECT_EQ(metadata.fa3_metadata.paged_kv_indices_host.scalar_type(),
+              torch::kInt32);
+    EXPECT_EQ(metadata.fa3_metadata.paged_kv_last_page_len_host.scalar_type(),
+              torch::kInt32);
+    EXPECT_TRUE(metadata.fa3_metadata.share_fa3_scheduler_metadata);
+    EXPECT_TRUE(torch::equal(
+        metadata.fa3_metadata.fa3_scheduler_metadata,
+        params.attn_metadata->fa3_metadata.fa3_scheduler_metadata));
+
+    params.meta.num_sequences = 0;
+    params.execution_batch.num_tokens = 2;
+    const AttentionMetadata padded =
+        AttentionMetadataBuilder::build(params, /*enable_mla=*/false);
+    EXPECT_TRUE(padded.is_dummy);
+    EXPECT_TRUE(torch::equal(padded.q_cu_seq_lens, metadata.q_cu_seq_lens));
+    EXPECT_TRUE(torch::equal(padded.kv_cu_seq_lens, metadata.kv_cu_seq_lens));
+    EXPECT_EQ(padded.q_seq_lens_vec, metadata.q_seq_lens_vec);
+    EXPECT_EQ(padded.kv_seq_lens_vec, metadata.kv_seq_lens_vec);
+
+    ModelInputParams dummy_params;
+    dummy_params.meta.batch_forward_type = type;
+    const AttentionMetadata dummy =
+        AttentionMetadataBuilder::build(dummy_params,
+                                        /*enable_mla=*/false,
+                                        /*attn_mask=*/{},
+                                        torch::Device(torch::kCPU));
+    EXPECT_TRUE(dummy.is_dummy);
+    EXPECT_EQ(dummy.q_seq_lens_vec, std::vector<int32_t>({1}));
+    EXPECT_EQ(dummy.kv_seq_lens_vec, std::vector<int32_t>({1}));
+    EXPECT_EQ(dummy.q_cu_seq_lens.scalar_type(), torch::kInt32);
+    EXPECT_EQ(dummy.kv_cu_seq_lens.scalar_type(), torch::kInt32);
+    EXPECT_TRUE(torch::equal(dummy.q_cu_seq_lens,
+                             torch::tensor({0, 1}, torch::kInt32)));
+    EXPECT_TRUE(torch::equal(dummy.kv_cu_seq_lens,
+                             torch::tensor({0, 1}, torch::kInt32)));
+    if (dummy.is_causal) {
+      ASSERT_TRUE(dummy.qo_indptr.has_value());
+      EXPECT_EQ(dummy.qo_indptr->device(), torch::Device(torch::kCPU));
+      EXPECT_TRUE(torch::equal(*dummy.qo_indptr, dummy.q_cu_seq_lens));
+    }
+  }
 }
 #endif
 

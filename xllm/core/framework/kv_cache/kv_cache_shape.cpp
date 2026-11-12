@@ -525,25 +525,21 @@ void KVCacheShape::init_conv_cache_shape(const KVCacheCapacity& kv_cache_cap,
       get_local_head_count(model_args.linear_num_key_heads(), world_size);
   const int64_t local_linear_v_head_count =
       get_local_head_count(model_args.linear_num_value_heads(), world_size);
+  const int64_t conv_dim =
+      model_args.linear_key_head_dim() * local_linear_k_head_count * 2 +
+      model_args.linear_value_head_dim() * local_linear_v_head_count;
   const int64_t conv_state_len = kv_cache_cap.linear_conv_state_len() > 0
                                      ? kv_cache_cap.linear_conv_state_len()
                                      : model_args.linear_conv_kernel_dim() - 1;
 
-#if defined(USE_MUSA)
-  // MUSA causal-conv kernels consume [num_blocks, dim, state_len]. Keep the
-  // framework cache layout identical to the kernel contract.
-  conv_cache_shape_ = std::vector<int64_t>{
-      kv_cache_cap.num_linear_state_blocks(),
-      model_args.linear_key_head_dim() * local_linear_k_head_count * 2 +
-          model_args.linear_value_head_dim() * local_linear_v_head_count,
-      conv_state_len};
-#else
-  conv_cache_shape_ = std::vector<int64_t>{
-      kv_cache_cap.num_linear_state_blocks(),
-      conv_state_len,
-      model_args.linear_key_head_dim() * local_linear_k_head_count * 2 +
-          model_args.linear_key_head_dim() * local_linear_v_head_count};
-#endif
+  if constexpr (kConvHistoryAxis == 2) {
+    // Causal-conv kernels consume [num_blocks, dim, state_len].
+    conv_cache_shape_ = std::vector<int64_t>{
+        kv_cache_cap.num_linear_state_blocks(), conv_dim, conv_state_len};
+  } else {
+    conv_cache_shape_ = std::vector<int64_t>{
+        kv_cache_cap.num_linear_state_blocks(), conv_state_len, conv_dim};
+  }
 }
 
 void KVCacheShape::init_ssm_cache_shape(const KVCacheCapacity& kv_cache_cap,
@@ -553,20 +549,20 @@ void KVCacheShape::init_ssm_cache_shape(const KVCacheCapacity& kv_cache_cap,
       get_local_head_count(model_args.linear_num_value_heads(), world_size);
   const int64_t checkpoint_stride =
       std::max<int64_t>(kv_cache_cap.linear_ssm_checkpoint_stride(), 1);
-#if defined(USE_MUSA)
-  // Mate prefill and fused decode persist MUSA SSM states as [V, K].
-  ssm_cache_shape_ = std::vector<int64_t>{
-      kv_cache_cap.num_linear_state_blocks() * checkpoint_stride,
-      local_linear_v_head_count,
-      model_args.linear_value_head_dim(),
-      model_args.linear_key_head_dim()};
-#else
-  ssm_cache_shape_ = std::vector<int64_t>{
-      kv_cache_cap.num_linear_state_blocks() * checkpoint_stride,
-      local_linear_v_head_count,
-      model_args.linear_key_head_dim(),
-      model_args.linear_value_head_dim()};
-#endif
+  if constexpr (Platform::is_musa()) {
+    // Mate prefill and fused decode persist SSM states as [V, K].
+    ssm_cache_shape_ = std::vector<int64_t>{
+        kv_cache_cap.num_linear_state_blocks() * checkpoint_stride,
+        local_linear_v_head_count,
+        model_args.linear_value_head_dim(),
+        model_args.linear_key_head_dim()};
+  } else {
+    ssm_cache_shape_ = std::vector<int64_t>{
+        kv_cache_cap.num_linear_state_blocks() * checkpoint_stride,
+        local_linear_v_head_count,
+        model_args.linear_key_head_dim(),
+        model_args.linear_value_head_dim()};
+  }
 }
 
 void KVCacheShape::apply_device_layout(const ModelArgs& model_args) {

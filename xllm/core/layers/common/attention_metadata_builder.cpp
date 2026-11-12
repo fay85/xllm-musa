@@ -27,6 +27,7 @@ limitations under the License.
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/rec_config.h"
+#include "core/platform/platform.h"
 #include "framework/model/model_args.h"
 #include "framework/model/model_input_params.h"
 #include "layers/common/attention_metadata.h"
@@ -164,14 +165,10 @@ void populate_fa3_attention_metadata(
     }
     kv_cu_is_cumulative = true;
   }
-  attn_metadata.kv_cu_seq_lens = to_int32_contiguous(kv_cu_seq_lens);
-  if (attn_metadata.kv_cu_seq_lens.defined() && !kv_cu_is_cumulative) {
-    attn_metadata.kv_cu_seq_lens =
-        torch::cat({torch::zeros({1}, attn_metadata.kv_cu_seq_lens.options()),
-                    torch::cumsum(attn_metadata.kv_cu_seq_lens, 0)},
-                   0)
-            .contiguous();
+  if (kv_cu_seq_lens.defined() && !kv_cu_is_cumulative) {
+    kv_cu_seq_lens = prepend_zero(torch::cumsum(kv_cu_seq_lens, 0));
   }
+  attn_metadata.kv_cu_seq_lens = to_int32_contiguous(kv_cu_seq_lens);
 
   if (!attn_metadata.fa3_metadata.paged_kv_indptr_host.defined()) {
     attn_metadata.fa3_metadata.paged_kv_indptr_host =
@@ -364,19 +361,17 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.unshared_plan_info = std::make_shared<PlanInfo>();
 #endif
 
-#if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_NPU) || \
-    defined(USE_MLU)
-  // Use explicit attn_mask if provided; otherwise fall back to
-  // graph_buffer.attn_mask (e.g. Qwen2_5_VL sets graph_buffer.attn_mask for
-  // LongCat text encoding)
-  std::optional<torch::Tensor> mask_to_use = attn_mask;
-  if (!mask_to_use.has_value() && params.graph.attn_mask.defined()) {
-    mask_to_use = params.graph.attn_mask;
+  if constexpr (Platform::is_cuda() || Platform::is_dcu() ||
+                Platform::is_npu() || Platform::is_mlu()) {
+    // Use the explicit mask or the prepared graph mask, when available.
+    std::optional<torch::Tensor> mask_to_use = attn_mask;
+    if (!mask_to_use.has_value() && params.graph.attn_mask.defined()) {
+      mask_to_use = params.graph.attn_mask;
+    }
+    if (mask_to_use.has_value()) {
+      attn_metadata.attn_mask = mask_to_use.value();
+    }
   }
-  if (mask_to_use.has_value()) {
-    attn_metadata.attn_mask = mask_to_use.value();
-  }
-#endif
 
 #if defined(USE_NPU)
   attn_metadata.acl_graph_task_update_context =
@@ -455,12 +450,13 @@ AttentionMetadata build_attention_metadata(
   // MLA-family MLU paths require per-sequence q/kv lengths during prefill.
   if (!attn_metadata.is_prefill || enable_mla) {
     attn_metadata.block_table = params.attention.device.block_tables;
-#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_MUSA)
-    attn_metadata.kv_seq_lens =
-        torch::diff(params.attention.device.kv_seq_lens);  // kv seqlens
-    attn_metadata.q_seq_lens =
-        torch::diff(params.attention.device.q_seq_lens);  // q seqlens
-#endif
+    if constexpr (!Platform::is_npu() && !Platform::is_cuda() &&
+                  !Platform::is_musa()) {
+      attn_metadata.kv_seq_lens =
+          torch::diff(params.attention.device.kv_seq_lens);  // kv seqlens
+      attn_metadata.q_seq_lens =
+          torch::diff(params.attention.device.q_seq_lens);  // q seqlens
+    }
   }
 #if defined(USE_NPU)
   // NPU path uses per-sequence lengths (not cumulative), so no diff.
@@ -487,10 +483,12 @@ AttentionMetadata build_attention_metadata(
   }
 #endif
 
+  // Empty shards may retain materialized multi-token query geometry.
+  const bool use_fixed_dummy = params.meta.q_max_seq_len == 0;
   attn_metadata.is_dummy =
-      params.meta.q_max_seq_len == 0 ||
+      use_fixed_dummy ||
       (params.meta.num_sequences == 0 && params.execution_batch.num_tokens > 0);
-  if (params.meta.q_max_seq_len == 0) {
+  if (use_fixed_dummy) {
     torch::TensorOptions options =
         int32_options_like(params.attention.device.new_cache_slots,
                            params.attention.device.q_seq_lens);
@@ -511,16 +509,18 @@ AttentionMetadata build_attention_metadata(
     attn_metadata.paged_kv_indptr = torch::arange(2, options);
     attn_metadata.paged_kv_indices = torch::zeros({1}, options);
     attn_metadata.paged_kv_last_page_len = torch::ones({1}, options);
-#if defined(USE_NPU)
-    // NPU keeps these host vectors as one length per sequence.  Keep the
-    // dummy row consistent with normal NPU batches; the *_cu_seq_lens tensors
+    // These backends keep host vectors as one length per sequence. Keep the
+    // dummy row consistent with normal batches; the *_cu_seq_lens tensors
     // above carry the cumulative representation.
-    attn_metadata.q_seq_lens_vec = {1};
-    attn_metadata.kv_seq_lens_vec = {1};
+    if constexpr (Platform::is_npu() || Platform::is_musa()) {
+      attn_metadata.q_seq_lens_vec = {1};
+      attn_metadata.kv_seq_lens_vec = {1};
+    } else {
+      attn_metadata.q_seq_lens_vec = {0, 1};
+      attn_metadata.kv_seq_lens_vec = {0, 1};
+    }
+#if defined(USE_NPU)
     attn_metadata.q_cu_seq_lens_host_vec = {0, 1};
-#else
-    attn_metadata.q_seq_lens_vec = {0, 1};
-    attn_metadata.kv_seq_lens_vec = {0, 1};
 #endif
     attn_metadata.block_table = torch::zeros({1, 1}, options);
     attn_metadata.max_query_len = 1;
@@ -540,20 +540,23 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
 #if defined(USE_MUSA)
-  populate_fa3_attention_metadata(attn_metadata, params, attn_mask);
+  // Fixed dummy tensors are already canonical; preserve their geometry.
+  if (!use_fixed_dummy) {
+    populate_fa3_attention_metadata(attn_metadata, params, attn_mask);
+  }
 #endif
 
 #if defined(USE_CUDA)
   if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph) {
     attn_metadata.qo_indptr = attn_metadata.q_cu_seq_lens.to(torch::kCUDA);
   }
-#elif defined(USE_MUSA)
-  if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph &&
-      attn_metadata.q_cu_seq_lens.defined()) {
-    attn_metadata.qo_indptr =
-        attn_metadata.q_cu_seq_lens.to(torch::kPrivateUse1);
-  }
 #endif
+  if constexpr (Platform::is_musa()) {
+    if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph &&
+        attn_metadata.q_cu_seq_lens.defined()) {
+      attn_metadata.qo_indptr = attn_metadata.q_cu_seq_lens;
+    }
+  }
 
 #if defined(USE_ILU)
   attn_metadata.block_table = params.attention.device.block_tables;

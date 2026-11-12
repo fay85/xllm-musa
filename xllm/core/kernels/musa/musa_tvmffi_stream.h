@@ -27,6 +27,8 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "core/kernels/scalar_type_dispatch.h"
+
 namespace ffi = tvm::ffi;
 
 namespace xllm::kernel::musa {
@@ -107,12 +109,6 @@ class TvmffiStreamGuard final {
   bool needs_sync_ = false;
   bool uses_event_handoff_ = false;
 };
-
-#define DISPATCH_CASE_HALF_TYPES(...)                 \
-  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
-#define DISPATCH_HALF_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, DISPATCH_CASE_HALF_TYPES(__VA_ARGS__))
 
 std::string path_to_uri_so_lib(const std::string& uri);
 
