@@ -32,6 +32,16 @@ namespace xllm::kernel::musa {
 // Reads all three source strides; no intermediate contiguous BF16 tensor.
 torch::Tensor query_cast_fp8_e4m3(const torch::Tensor& query);
 
+// Gather and dequantize active FP8 E4M3 paged KV blocks of a single sequence
+// into contiguous BF16 paged scratch buffers + an identity page table.
+// Graph-capture safe: grid size depends only on static tensor shapes while
+// live block count is read on-device from seqused_k[0].
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+dequant_fp8_paged_kv_to_bf16(const torch::Tensor& k_cache,
+                             const torch::Tensor& v_cache,
+                             const torch::Tensor& page_table,
+                             const torch::Tensor& seqused_k);
+
 // Replaces negative dst entries with indexed values from src.
 void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,

@@ -14,11 +14,102 @@ limitations under the License.
 ==============================================================================*/
 
 #include <c10/cuda/CUDAStream.h>
+#if defined(USE_MUSA)
+#include <c10/util/BFloat16.h>
+#include <c10/util/Float8_e4m3fn.h>
+#include <musa_fp8.h>
+#endif
+
+#include <cstdint>
+#include <type_traits>
 
 #include "core/kernels/cuda/cuda_ops_api.h"
 #include "core/kernels/cuda/device_utils.cuh"
 
 namespace xllm::kernel::cuda {
+
+namespace {
+
+template <typename SourceT, typename CacheT>
+__device__ __forceinline__ CacheT convert_paged_cache_elem(SourceT v) {
+  if constexpr (std::is_same_v<SourceT, CacheT>) {
+    return v;
+  } else {
+    return static_cast<CacheT>(static_cast<float>(v));
+  }
+}
+
+#if defined(USE_MUSA)
+__device__ __forceinline__ uint32_t
+fix_fp8_e4m3_exception_bytes(uint32_t result, uint64_t input_bits) {
+  const uint32_t value0 = static_cast<uint32_t>(input_bits) & 0xffffu;
+  const uint32_t value1 = static_cast<uint32_t>(input_bits >> 16) & 0xffffu;
+  const uint32_t value2 = static_cast<uint32_t>(input_bits >> 32) & 0xffffu;
+  const uint32_t value3 = static_cast<uint32_t>(input_bits >> 48);
+  const uint32_t mask0 = (value0 & 0x7fffu) > 0x43e8u ? 0xffu : 0u;
+  const uint32_t mask1 = (value1 & 0x7fffu) > 0x43e8u ? 0xff00u : 0u;
+  const uint32_t mask2 = (value2 & 0x7fffu) > 0x43e8u ? 0xff0000u : 0u;
+  const uint32_t mask3 = (value3 & 0x7fffu) > 0x43e8u ? 0xff000000u : 0u;
+  const uint32_t mask = mask0 | mask1 | mask2 | mask3;
+  const uint32_t sign0 =
+      (value0 & 0x7fffu) > 0x7f80u ? 0u : ((value0 >> 8) & 0x80u);
+  const uint32_t sign1 =
+      (value1 & 0x7fffu) > 0x7f80u ? 0u : ((value1 >> 8) & 0x80u);
+  const uint32_t sign2 =
+      (value2 & 0x7fffu) > 0x7f80u ? 0u : ((value2 >> 8) & 0x80u);
+  const uint32_t sign3 =
+      (value3 & 0x7fffu) > 0x7f80u ? 0u : ((value3 >> 8) & 0x80u);
+  const uint32_t nan_bytes = (sign0 | 0x7fu) | ((sign1 | 0x7fu) << 8) |
+                             ((sign2 | 0x7fu) << 16) | ((sign3 | 0x7fu) << 24);
+  return (result & ~mask) | (nan_bytes & mask);
+}
+
+__global__ void XLLM_KERNEL_ATTR(256) reshape_paged_cache_bf16_to_fp8_vec4_kernel(
+    const int* __restrict__ slot_ids,
+    const c10::BFloat16* __restrict__ keys,
+    const c10::BFloat16* __restrict__ values,
+    c10::Float8_e4m3fn* __restrict__ key_cache,
+    c10::Float8_e4m3fn* __restrict__ value_cache,
+    int64_t k_stride,
+    int64_t v_stride,
+    int64_t row_elems) {
+  const int64_t bid = blockIdx.x;
+  const int64_t slot_id = slot_ids[bid];
+  if (slot_id < 0) {
+    return;
+  }
+  const int64_t dst_base = slot_id * row_elems;
+  const int64_t k_base = bid * k_stride;
+  const int64_t v_base = bid * v_stride;
+  for (int64_t vec_i = threadIdx.x; vec_i * 4 < row_elems; vec_i += blockDim.x) {
+    const int64_t off = vec_i * 4;
+    const uint64_t k_bits = *reinterpret_cast<const uint64_t*>(keys + k_base + off);
+    const uint64_t v_bits = *reinterpret_cast<const uint64_t*>(values + v_base + off);
+    const uint32_t kl = static_cast<uint32_t>(k_bits);
+    const uint32_t ku = static_cast<uint32_t>(k_bits >> 32);
+    const uint32_t vl = static_cast<uint32_t>(v_bits);
+    const uint32_t vu = static_cast<uint32_t>(v_bits >> 32);
+    const float4 kf = make_float4(__uint_as_float(kl << 16),
+                                  __uint_as_float(kl & 0xffff0000u),
+                                  __uint_as_float(ku << 16),
+                                  __uint_as_float(ku & 0xffff0000u));
+    const float4 vf = make_float4(__uint_as_float(vl << 16),
+                                  __uint_as_float(vl & 0xffff0000u),
+                                  __uint_as_float(vu << 16),
+                                  __uint_as_float(vu & 0xffff0000u));
+    const uint32_t kp = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(kf, __MT_SATFINITE, __MT_E4M3));
+    const uint32_t vp = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(vf, __MT_SATFINITE, __MT_E4M3));
+    *reinterpret_cast<uint32_t*>(key_cache + dst_base + off) =
+        fix_fp8_e4m3_exception_bytes(kp, k_bits);
+    *reinterpret_cast<uint32_t*>(value_cache + dst_base + off) =
+        fix_fp8_e4m3_exception_bytes(vp, v_bits);
+  }
+}
+#endif
+
+}  // namespace
 
 template <typename SourceT, typename CacheT = SourceT>
 __global__ void XLLM_KERNEL_ATTR(1024) reshape_paged_cache_kernel(
@@ -57,8 +148,8 @@ __global__ void XLLM_KERNEL_ATTR(1024) reshape_paged_cache_kernel(
     // which dim within head to write to
     const int head_offset = i % head_dim;
     const int64_t dst_idx = head_base_idx + head_idx * head_dim + head_offset;
-    key_cache[dst_idx] = static_cast<CacheT>(keys[k_src_idx]);
-    value_cache[dst_idx] = static_cast<CacheT>(values[v_src_idx]);
+    key_cache[dst_idx] = convert_paged_cache_elem<SourceT, CacheT>(keys[k_src_idx]);
+    value_cache[dst_idx] = convert_paged_cache_elem<SourceT, CacheT>(values[v_src_idx]);
   }
 }
 
@@ -72,6 +163,9 @@ void reshape_paged_cache(
   CHECK(keys.stride(-1) == 1 && keys.stride(-2) == keys.size(-1));
   CHECK(values.stride(-1) == 1 && values.stride(-2) == values.size(-1));
   const int64_t n_tokens = keys.size(-3);
+  if (n_tokens <= 0) {
+    return;
+  }
   const int64_t n_kv_heads = keys.size(-2);
   const int64_t head_dim = keys.size(-1);
   const int64_t block_size = key_cache.size(-3);
@@ -108,6 +202,38 @@ void reshape_paged_cache(
   const int64_t n = n_kv_heads * head_dim;
   dim3 grid(n_tokens);
   dim3 block(std::min<int>(n, 1024));
+#if defined(USE_MUSA)
+  if (convert_to_fp8 &&
+      keys.scalar_type() == torch::kBFloat16 &&
+      key_cache.scalar_type() == torch::kFloat8_e4m3fn &&
+      key_cache.is_contiguous() && value_cache.is_contiguous() &&
+      n % 4 == 0 && k_stride % 4 == 0 && v_stride % 4 == 0 &&
+      reinterpret_cast<uintptr_t>(keys.data_ptr<c10::BFloat16>()) %
+              (sizeof(c10::BFloat16) * 4) ==
+          0 &&
+      reinterpret_cast<uintptr_t>(values.data_ptr<c10::BFloat16>()) %
+              (sizeof(c10::BFloat16) * 4) ==
+          0 &&
+      reinterpret_cast<uintptr_t>(key_cache.data_ptr<c10::Float8_e4m3fn>()) %
+              4 ==
+          0 &&
+      reinterpret_cast<uintptr_t>(value_cache.data_ptr<c10::Float8_e4m3fn>()) %
+              4 ==
+          0) {
+    dim3 vec_block(std::min<int>(static_cast<int>(n / 4), 256));
+    reshape_paged_cache_bf16_to_fp8_vec4_kernel
+        <<<grid, vec_block, 0, c10::cuda::getCurrentCUDAStream()>>>(
+            slot_ids.data_ptr<int>(),
+            keys.data_ptr<c10::BFloat16>(),
+            values.data_ptr<c10::BFloat16>(),
+            key_cache.data_ptr<c10::Float8_e4m3fn>(),
+            value_cache.data_ptr<c10::Float8_e4m3fn>(),
+            k_stride,
+            v_stride,
+            n);
+    return;
+  }
+#endif
 #define DISPATCH_PAGED_CACHE_TYPES(TYPE, NAME, ...)                          \
   AT_DISPATCH_SWITCH(                                                        \
       TYPE,                                                                  \

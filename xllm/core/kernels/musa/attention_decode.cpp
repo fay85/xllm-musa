@@ -163,6 +163,25 @@ bool use_fa3_paged_prefill_kernel(int64_t gqa_ratio, int32_t batch_size) {
   return available && gqa_ratio == 6 && fa3_metadata_num_warps(batch_size) == 1;
 }
 
+bool use_fp8_paged_prefill_bf16_scratch(int64_t gqa_ratio,
+                                        int32_t batch_size,
+                                        torch::ScalarType kv_dtype) {
+  if (!fa3_is_fp8_kv(kv_dtype)) {
+    return false;
+  }
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_FP8_PREFILL_BF16_FA3");
+    return env == nullptr || std::string(env) != "0";
+  }();
+  // On MP31 (head_dim=256, page_size=64), FP8 paged FA3 falls back to LSU KV
+  // loads and single-stage SMEM V-transpose (>2.2x slower than TME BF16 paged
+  // FA3 on compute-bound prefill). Dequantizing active pages to a reusable BF16
+  // scratch buffer and running TME BF16 FA3 eliminates the prefill regression
+  // while keeping FP8 KV storage, capacity, transfer, and decode acceleration.
+  return enabled && batch_size == 1 &&
+         use_fa3_paged_prefill_kernel(gqa_ratio, batch_size);
+}
+
 int64_t fa3_metadata_numel(int32_t batch_size) {
   const int64_t rounded_batch =
       ((static_cast<int64_t>(batch_size) + 3) / 4) * 4;
@@ -730,7 +749,11 @@ torch::Tensor fa3_prefill_scheduler_metadata(
       torch::empty({fa3_metadata_numel(batch_size)}, options);
 
   TvmffiStreamGuard stream_guard(device);
-  const bool fp8_kv = fa3_is_fp8_kv(kv_dtype);
+  const torch::ScalarType effective_kv_dtype =
+      use_fp8_paged_prefill_bf16_scratch(gqa_ratio, batch_size, kv_dtype)
+          ? torch::kBFloat16
+          : kv_dtype;
+  const bool fp8_kv = fa3_is_fp8_kv(effective_kv_dtype);
   if (fp8_kv && gqa_ratio != 6) {
     LOG(FATAL) << "FP8 KV FA3 metadata is built for GQA 6 head 256";
   }
@@ -741,7 +764,7 @@ torch::Tensor fa3_prefill_scheduler_metadata(
       paged_prefill_kernel
           ? std::string(fp8_kv ? kFa3Fp8PagedPrefillMetadataUriGqa6
                                : kFa3PagedPrefillMetadataUriGqa6)
-          : fa3_metadata_uri(gqa_ratio, batch_size, kv_dtype);
+          : fa3_metadata_uri(gqa_ratio, batch_size, effective_kv_dtype);
   const int32_t tile_m =
       paged_prefill_kernel ? kFa3PagedPrefillTileM : kFa3TileM;
   const int32_t tile_n = fp8_kv ? kFa3Fp8TileN : kFa3TileN;
@@ -830,15 +853,29 @@ void fa3_prefill_paged(const torch::Tensor& query,
   CHECK_EQ(scheduler_metadata.numel(), fa3_metadata_numel(batch_size));
   CHECK_GT(max_seqlen_q, 0);
 
+  const bool bf16_scratch_prefill = use_fp8_paged_prefill_bf16_scratch(
+      gqa_ratio, batch_size, k_cache.scalar_type());
+  const bool effective_fp8_kv = fp8_kv && !bf16_scratch_prefill;
   const bool paged_prefill_kernel =
       use_fa3_paged_prefill_kernel(gqa_ratio, batch_size) ||
-      (fp8_kv && gqa_ratio == 6 && fa3_metadata_num_warps(batch_size) == 1);
-  torch::Tensor query_kernel =
-      fa3_kernel_query(query, k_cache, v_cache, gqa_ratio);
+      (effective_fp8_kv && gqa_ratio == 6 &&
+       fa3_metadata_num_warps(batch_size) == 1);
+  torch::Tensor k_kernel = k_cache;
+  torch::Tensor v_kernel = v_cache;
+  torch::Tensor page_table_kernel = page_table;
+  torch::Tensor query_kernel;
+  if (bf16_scratch_prefill) {
+    CHECK_EQ(query.scalar_type(), torch::kBFloat16);
+    query_kernel = query.is_contiguous() ? query : query.contiguous();
+    std::tie(k_kernel, v_kernel, page_table_kernel) =
+        dequant_fp8_paged_kv_to_bf16(k_cache, v_cache, page_table, seqused_k);
+  } else {
+    query_kernel = fa3_kernel_query(query, k_cache, v_cache, gqa_ratio);
+  }
   CHECK(query_kernel.is_contiguous())
       << "fa3_prefill_paged: converted query must be contiguous";
   const std::string uri =
-      fp8_kv
+      effective_fp8_kv
           ? (paged_prefill_kernel ? std::string(kFa3Fp8PagedPrefillFwdUriGqa6)
                                   : std::string(kFa3Fp8DecodeFwdUriGqa6))
           : (paged_prefill_kernel ? std::string(kFa3PagedPrefillFwdUriGqa6)
@@ -847,8 +884,8 @@ void fa3_prefill_paged(const torch::Tensor& query,
 
   auto fwd_result =
       get_function(uri, uri)(to_ffi_tensor(query_kernel),
-                             to_ffi_tensor(k_cache),
-                             to_ffi_tensor(v_cache),
+                             to_ffi_tensor(k_kernel),
+                             to_ffi_tensor(v_kernel),
                              none_tensor(),  // k_new
                              none_tensor(),  // v_new
                              none_tensor(),  // q_v
@@ -859,7 +896,7 @@ void fa3_prefill_paged(const torch::Tensor& query,
                              to_ffi_tensor(seqused_k),
                              static_cast<int64_t>(max_seqlen_q),
                              none_int(),  // max_seqlen_k
-                             to_ffi_tensor(page_table),
+                             to_ffi_tensor(page_table_kernel),
                              none_tensor(),  // kv_batch_idx
                              none_tensor(),  // leftpad_k
                              none_tensor(),  // rotary_cos
