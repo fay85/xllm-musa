@@ -28,7 +28,7 @@ import urllib.request
 
 
 HERE = Path(__file__).resolve().parent
-EXPECTED_ENGINE_MD5 = "4201d1dc45da88f9fa54773f3448615f"
+EXPECTED_ENGINE_MD5 = "a4aa70e00d80ce07ce7f6909ee37cedf"
 DEFAULT_BUNDLE = "/workspace/ttft_delivery_1110/release/xllm_ttft_fix_1110"
 DEFAULT_WORK = "/workspace/topology_sweep_1110"
 # Below the ephemeral range 32768-60999. Ports inside that range lose the bind
@@ -210,7 +210,7 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
             "--block_size=64", f'--max_concurrent_requests={plan["concurrency"]}', "--max_seqs_per_batch=16",
             "--max_encoder_cache_size=1024", "--tool_call_parser=qwen3_coder", "--enable_graph_vmm_pool=true",
             f'--enable_disagg_pd={str(plan["mode"] == "pd").lower()}', "--enable_native_service_adapter=true",
-            "--kv_cache_transfer_mode=PULL", "--kv_cache_dtype=auto", "--kv_split_size=1",
+            "--kv_cache_transfer_mode=PULL", f'--kv_cache_dtype={os.environ.get("TOPOLOGY_KV_CACHE_DTYPE", "fp8_e4m3")}', "--kv_split_size=1",
             f'--etcd_addr={etcd_host}:{plan["port_bases"]["etcd_client"]}',
             "--vmodule=disagg_pd_scheduler=1", "--usercode_in_pthread=true",
             f'--draft_model={env["MODEL"]}', "--speculative_algorithm=MTP", "--num_speculative_tokens=3",
@@ -220,7 +220,7 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
             f'--port={p["http"]}', f'--master_node_addr={env["HOST"]}:{p["tcpstore"]}',
             f'--transfer_listen_port={p["transfer"]}', f'--disagg_pd_port={p["pd"]}',
             f'--max_memory_utilization={"0.85" if decode else "0.9"}',
-            f'--max_linear_state_cache_slots={12 if decode else 32}',
+            f'--max_linear_state_cache_slots={int(os.environ.get("TOPOLOGY_DECODE_LINEAR_SLOTS", "20")) if decode else 32}',
             f'--max_tokens_per_batch={32768 if decode else 10240}',
             f'--max_tokens_per_chunk_for_prefill={2048 if decode else int(os.environ.get("TOPOLOGY_PREFILL_CHUNK", "8192"))}',
             f'--max_tokens_for_graph_mode={4096 if decode else int(os.environ.get("TOPOLOGY_PREFILL_GRAPH_TOKENS", "8192"))}', f'--enable_prefill_piecewise_graph={str(not decode).lower()}']
@@ -238,8 +238,9 @@ def engine_command(rank, plan, env, etcd_host="127.0.0.1"):
                  "MC_MAX_RPC_PORT": str(p["mooncake_max"]),
                  "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "180",
                  "XLLM_PREFILL_SEND_THREADS": os.environ.get("XLLM_PREFILL_SEND_THREADS", "4")}
-    if os.environ.get("XLLM_DISABLE_ASYNC_PREFILL_DP"):
-        overrides["XLLM_DISABLE_ASYNC_PREFILL_DP"] = os.environ["XLLM_DISABLE_ASYNC_PREFILL_DP"]
+    for passthrough in ("XLLM_DISABLE_ASYNC_PREFILL_DP", "XLLM_FP8_PREFILL_BF16_FA3", "XLLM_FP8_PREFILL_SCRATCH_BLOCKS"):
+        if os.environ.get(passthrough):
+            overrides[passthrough] = os.environ[passthrough]
     return {**rank, "argv": argv, "env_overrides": overrides}
 
 

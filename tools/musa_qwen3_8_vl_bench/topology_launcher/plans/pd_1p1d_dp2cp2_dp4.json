@@ -1,7 +1,7 @@
 {
   "topology_name": "pd_1p1d_dp2cp2_dp4",
   "mode": "pd",
-  "concurrency": 24,
+  "concurrency": 32,
   "benchmark_concurrency": 8,
   "groups": [
     {
