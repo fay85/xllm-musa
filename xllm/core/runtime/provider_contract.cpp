@@ -782,7 +782,7 @@ collect_native_provider_descriptor_config(
       .ep = static_cast<uint32_t>(parallel.ep_size()),
       .cp = cp,
       .super_node_id =
-          util::get_optional_string_env("SUPER_POD_ID").value_or(""),
+          util::get_optional_string_env("EA_SUPER_POD_ID").value_or(""),
       .kv_layout_contract = kv_layout_contract(model_args,
                                                block_manager_pool.options(),
                                                /*include_block_size=*/true),

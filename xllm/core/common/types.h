@@ -271,7 +271,7 @@ struct InstanceInfo {
   // DEFAULT/PREFILL/DECODE/MIX
   std::string type = "";
   // Physical Ascend super-pod id. Empty is a wildcard (engine opts out of cross
-  // super-node isolation). Registration copies the SUPER_POD_ID value that
+  // super-node isolation). Registration copies the EA_SUPER_POD_ID value that
   // descriptor.topology.super_node_id publishes, so the top-level etcd/RPC
   // field and the provider descriptor agree.
   std::string super_node_id = "";
