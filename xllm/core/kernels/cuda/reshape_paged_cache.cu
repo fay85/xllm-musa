@@ -75,14 +75,32 @@ void reshape_paged_cache(
   const int64_t n_kv_heads = keys.size(-2);
   const int64_t head_dim = keys.size(-1);
   const int64_t block_size = key_cache.size(-3);
+  bool materialize_cache_dtype = true;
+#if defined(USE_MUSA)
+  // Fuse equal-dtype MUSA projections. Preserve the legacy conversion path
+  // for mixed source dtypes instead of narrowing the shared operator API.
+  materialize_cache_dtype = keys.scalar_type() != values.scalar_type();
+#endif
+  if (materialize_cache_dtype &&
+      (key_cache.scalar_type() != keys.scalar_type() ||
+       value_cache.scalar_type() != values.scalar_type())) {
+    CHECK(key_cache.scalar_type() == torch::kFloat8_e4m3fn ||
+          key_cache.scalar_type() == torch::kFloat8_e5m2)
+        << "paged cache dtype conversion only supports FP8 storage";
+    CHECK_EQ(value_cache.scalar_type(), key_cache.scalar_type());
+    keys = keys.to(key_cache.scalar_type());
+    values = values.to(value_cache.scalar_type());
+  }
   CHECK_EQ(keys.scalar_type(), values.scalar_type());
   CHECK_EQ(key_cache.scalar_type(), value_cache.scalar_type());
+#if defined(USE_MUSA)
   const bool convert_to_fp8 = key_cache.scalar_type() != keys.scalar_type();
   if (convert_to_fp8) {
     CHECK(key_cache.scalar_type() == torch::kFloat8_e4m3fn ||
           key_cache.scalar_type() == torch::kFloat8_e5m2)
         << "paged cache dtype conversion only supports FP8 storage";
   }
+#endif
   // Keep source strides: projection views can interleave K/V with Q and gates.
   // The scatter converts directly into cache storage without temporary tensors.
   const int64_t k_stride = keys.stride(-3);
@@ -99,6 +117,7 @@ void reshape_paged_cache(
           AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)            \
               AT_DISPATCH_CASE(at::ScalarType::Float8_e4m3fn, __VA_ARGS__)   \
                   AT_DISPATCH_CASE(at::ScalarType::Float8_e5m2, __VA_ARGS__))
+#if defined(USE_MUSA)
   if (convert_to_fp8) {
     AT_DISPATCH_SWITCH(
         key_cache.scalar_type(),
@@ -138,7 +157,9 @@ void reshape_paged_cache(
                         block_size);
               });
         }));
-  } else {
+  } else
+#endif
+  {
     DISPATCH_PAGED_CACHE_TYPES(
         keys.scalar_type(), "reshape_paged_cache_kernel", [&] {
           reshape_paged_cache_kernel<scalar_t>
