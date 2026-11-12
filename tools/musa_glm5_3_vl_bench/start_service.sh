@@ -17,6 +17,10 @@ NNODES="${GLM5_NNODES:-8}"
 MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-4096}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
+ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
+# Default to the validated C1 trace workload. Larger decode batches remain
+# eager; multi-request graph reuse still needs numerical qualification.
+MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-1}"
 LOG_DIR="${GLM5_LOG_DIR:-/tmp/glm5_3_flash_run}"
 WAIT_READY="${GLM5_WAIT_READY:-1}"
 WAIT_TIMEOUT_SEC="${GLM5_WAIT_TIMEOUT_SEC:-180}"
@@ -181,7 +185,9 @@ for ((r = 0; r < NNODES; ++r)); do
     --enable_prefix_cache=false \
     --enable_chunked_prefill=false \
     --enable_schedule_overlap=false \
-    --enable_graph=false \
+    --enable_graph="${ENABLE_GRAPH}" \
+    --max_tokens_for_graph_mode="${MAX_TOKENS_FOR_GRAPH_MODE}" \
+    --enable_prefill_piecewise_graph=false \
     --enable_shm=false \
     "${PROFILE_ARGS[@]}" \
     > "${RANK_LOG}" 2>&1 < /dev/null &

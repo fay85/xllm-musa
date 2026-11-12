@@ -660,6 +660,19 @@ class Glm5NextForConditionalGenerationImpl final
       : Qwen3VLForConditionalGenerationBase<Glm5NextVisionTransformer,
                                             Glm5NextForCausalLM>(context) {}
 
+  bool requires_graph_forward_metadata() { return true; }
+
+  std::unique_ptr<ModelGraphMetadataState>
+  create_graph_forward_metadata_state() {
+    return language_model_->create_graph_forward_metadata_state();
+  }
+
+  void prepare_graph_forward_metadata(ModelGraphMetadataState* state,
+                                      const torch::Tensor& positions,
+                                      ModelInputParams& params) {
+    language_model_->prepare_graph_forward_metadata(state, positions, params);
+  }
+
   torch::Tensor get_input_embeddings(const torch::Tensor input_ids,
                                      const ModelInputParams& input_params) {
     if (!input_ids.defined() || input_ids.numel() == 0) {

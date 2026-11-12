@@ -381,7 +381,6 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                            int64_t token_topk) {
   CHECK(query.device().is_privateuseone());
   XLLMDeviceGuard device_guard(query.device());
-  CHECK(!is_stream_capturing());
   check_tensor(query, query, torch::kBFloat16);
   check_tensor(raw_key, query, torch::kBFloat16);
   check_tensor(gate, query, torch::kBFloat16);

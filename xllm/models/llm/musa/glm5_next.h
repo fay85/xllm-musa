@@ -27,6 +27,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/model/model_output.h"
 #include "core/framework/model_context.h"
@@ -36,10 +37,15 @@ limitations under the License.
 #include "core/layers/common/rms_norm.h"
 #include "core/layers/common/word_embedding.h"
 #include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
+#include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
 #include "models/llm/llm_model_base.h"
 #include "models/model_registry.h"
 
 namespace xllm::musa::model {
+
+struct Glm5NextGraphMetadataState final : ModelGraphMetadataState {
+  std::shared_ptr<layer::AttentionMetadata> metadata;
+};
 
 class Glm5NextModelImpl final
     : public LlmModelImplBase<layer::Glm5NextDecoderLayer> {
@@ -95,33 +101,37 @@ class Glm5NextModelImpl final
         modified_input_params.parallel.dp_global_token_nums;
     std::replace(dp_token_nums.begin(), dp_token_nums.end(), 0, 1);
     prepare_attention_metadata(modified_input_params);
-    // Own a fresh batch descriptor even when the scheduler reuses metadata.
-    modified_input_params.attn_metadata =
-        std::make_shared<layer::AttentionMetadata>(
-            *modified_input_params.attn_metadata);
-    auto& batch_metadata = *modified_input_params.attn_metadata;
-    batch_metadata.musa_kda_batch.reset();
-    int64_t state_capacity = std::numeric_limits<int64_t>::max();
-    for (auto& cache : kv_caches) {
-      const torch::Tensor conv = cache.get_conv_cache();
-      if (conv.defined()) {
-        state_capacity = std::min(state_capacity, conv.size(0));
+    if (!modified_input_params.attn_metadata->enable_cuda_graph ||
+        !modified_input_params.attn_metadata->musa_kda_batch) {
+      // Own a fresh batch descriptor even when the scheduler reuses metadata.
+      modified_input_params.attn_metadata =
+          std::make_shared<layer::AttentionMetadata>(
+              *modified_input_params.attn_metadata);
+      auto& batch_metadata = *modified_input_params.attn_metadata;
+      batch_metadata.musa_kda_batch.reset();
+      int64_t state_capacity = std::numeric_limits<int64_t>::max();
+      for (auto& cache : kv_caches) {
+        const torch::Tensor conv = cache.get_conv_cache();
+        if (conv.defined()) {
+          state_capacity = std::min(state_capacity, conv.size(0));
+        }
       }
-    }
-    if (state_capacity != std::numeric_limits<int64_t>::max()) {
-      const auto& embedding = modified_input_params.embedding;
-      const torch::Tensor indices =
-          embedding.linear_state_indices.defined()
-              ? embedding.linear_state_indices.to(device_, torch::kInt32)
-              : torch::tensor(embedding.linear_state_ids,
-                              torch::TensorOptions()
-                                  .dtype(torch::kInt32)
-                                  .device(device_));
-      batch_metadata.musa_kda_batch =
-          layer::prepare_musa_kda_batch(indices,
-                                        batch_metadata.q_cu_seq_lens,
-                                        hidden_states.size(0),
-                                        state_capacity);
+      if (state_capacity != std::numeric_limits<int64_t>::max()) {
+        const auto& embedding = modified_input_params.embedding;
+        const torch::Tensor indices =
+            embedding.linear_state_indices.defined()
+                ? embedding.linear_state_indices.to(device_, torch::kInt32)
+                : torch::tensor(embedding.linear_state_ids,
+                                torch::TensorOptions()
+                                    .dtype(torch::kInt32)
+                                    .device(device_));
+        batch_metadata.musa_kda_batch =
+            layer::prepare_musa_kda_batch(indices,
+                                          batch_metadata.q_cu_seq_lens,
+                                          hidden_states.size(0),
+                                          state_capacity);
+      }
+      kda_state_capacity_ = state_capacity;
     }
     const layer::AttentionMetadata& attn_metadata =
         *modified_input_params.attn_metadata;
@@ -153,6 +163,47 @@ class Glm5NextModelImpl final
     CHECK(!pending_mhc.has_value());
     hidden_states = kernel::musa::mhc_contract_mean(hidden_states);
     return ModelOutput(std::get<0>(norm_->forward(hidden_states)));
+  }
+
+  void prepare_graph_forward_metadata(ModelGraphMetadataState* state,
+                                      const torch::Tensor& positions,
+                                      ModelInputParams& params) {
+    auto* graph_state = dynamic_cast<Glm5NextGraphMetadataState*>(state);
+    CHECK(graph_state != nullptr);
+    CHECK(params.meta.batch_forward_type.is_decode());
+    CHECK(!params.is_spec_verify);
+    CHECK_GT(kda_state_capacity_, 0);
+    const auto& attention = params.attention.device;
+    const auto batch =
+        layer::prepare_musa_kda_batch(params.embedding.linear_state_indices,
+                                      attention.q_seq_lens,
+                                      positions.numel(),
+                                      kda_state_capacity_);
+    if (!graph_state->metadata) {
+      graph_state->metadata =
+          std::make_shared<layer::AttentionMetadata>(*params.attn_metadata);
+      auto& metadata = *graph_state->metadata;
+      metadata.enable_cuda_graph = true;
+      metadata.is_prefill = false;
+      metadata.is_chunked_prefill = false;
+      metadata.max_query_len = 1;
+      metadata.max_seq_len =
+          layer::glm5_next_graph_context_capacity(params.meta.kv_max_seq_len);
+      metadata.q_cu_seq_lens = attention.q_seq_lens;
+      metadata.block_table = attention.block_tables;
+      metadata.slot_mapping = attention.new_cache_slots;
+      metadata.linear_state_indices = batch->state_indices;
+      metadata.linear_state_read_indices = torch::Tensor();
+      metadata.musa_kda_batch = batch;
+    } else {
+      // Captured KDA gather/scatter must keep its int64 index storage while
+      // the scheduler reassigns state slots between requests.
+      const auto& captured = graph_state->metadata->musa_kda_batch;
+      CHECK_EQ(captured->num_tokens, batch->num_tokens);
+      CHECK_EQ(captured->state_capacity, batch->state_capacity);
+      captured->state_indices_long.copy_(batch->state_indices_long);
+    }
+    params.attn_metadata = graph_state->metadata;
   }
 
   void load_state_dict(const StateDict& state_dict) override {
@@ -206,6 +257,7 @@ class Glm5NextModelImpl final
 
   torch::Device device_;
   int64_t hc_mult_ = 4;
+  int64_t kda_state_capacity_ = 0;
   torch::nn::ModuleList blocks_{nullptr};
 };
 TORCH_MODULE(Glm5NextModel);
@@ -217,6 +269,19 @@ class Glm5NextForCausalLMImpl final
       : LlmForCausalLMImplBase<Glm5NextModel>(context) {}
 
   bool is_hybrid_linear_attention() { return true; }
+
+  bool requires_graph_forward_metadata() { return true; }
+
+  std::unique_ptr<ModelGraphMetadataState>
+  create_graph_forward_metadata_state() {
+    return std::make_unique<Glm5NextGraphMetadataState>();
+  }
+
+  void prepare_graph_forward_metadata(ModelGraphMetadataState* state,
+                                      const torch::Tensor& positions,
+                                      ModelInputParams& params) {
+    model_->prepare_graph_forward_metadata(state, positions, params);
+  }
 
   void load_model(std::unique_ptr<ModelLoader> loader,
                   std::string prefix = "model.") override {

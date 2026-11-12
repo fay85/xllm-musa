@@ -33,7 +33,10 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache_estimation.h"
 #include "core/framework/kv_cache/kv_cache_shape.h"
 #include "core/framework/kv_cache/kv_cache_utils.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
+#include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
+#include "core/platform/musa_graph_handle.h"
 
 namespace xllm::layer {
 namespace {
@@ -401,6 +404,120 @@ AttentionMetadata metadata(int64_t start,
   meta.linear_state_indices = torch::tensor({1}, torch::kInt32).to(device);
   meta.max_seq_len = start + count;
   return meta;
+}
+
+TEST(GlmGraphPolicyTest, ContextGrowthSelectsNewGraphWithoutPaddingStateRows) {
+  EXPECT_EQ(glm5_next_graph_context_capacity(2048), 4096);
+  EXPECT_EQ(glm5_next_graph_key(1, 2048), glm5_next_graph_key(1, 4096));
+  EXPECT_NE(glm5_next_graph_key(1, 4096), glm5_next_graph_key(1, 4097));
+  EXPECT_NE(glm5_next_graph_key(1, 4097), glm5_next_graph_key(2, 4097));
+  EXPECT_EQ(glm5_next_graph_context_capacity(1048576), 1048576);
+}
+
+TEST_F(GlmSparseTest,
+       DecodeGraphMatchesEagerAcrossTopkPageAndStateSlotBoundaries) {
+  namespace km = kernel::musa;
+  auto args = model_args();
+  args.index_topk(2048);
+  auto weights = make_weights(args);
+  ProcessGroup group(0, 1, device_);
+  ParallelArgs parallel(0, 1, &group);
+  parallel.tp_group_ = &group;
+  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+  Glm5NextSparseAttention layer(args, parallel, opts);
+  layer->load_state_dict(StateDict(weights));
+  layer->verify_loaded_weights();
+  km::TvmffiStreamOverrideGuard ffi_stream(
+      device_, reinterpret_cast<void*>(stream_.stream()));
+  // Exercise both sides of the 2048-token selection threshold and a new
+  // context bucket. Each graph must use fresh positions, pages and state IDs.
+  for (int64_t batch_size : {1, 2}) {
+    for (int64_t start : {2044, 4092}) {
+      auto cache =
+          Glm5NextSparseAttentionImpl::create_cache(32 * batch_size, 4, opts);
+      auto reference =
+          Glm5NextSparseAttentionImpl::create_cache(32 * batch_size, 4, opts);
+      auto meta = metadata(0, start, device_);
+      meta.block_table =
+          torch::arange(32 * batch_size, opts.dtype(torch::kInt32))
+              .view({batch_size, 32});
+      meta.q_cu_seq_lens =
+          torch::arange(batch_size + 1, opts.dtype(torch::kInt32)) * start;
+      meta.linear_state_indices =
+          torch::arange(1, batch_size + 1, opts.dtype(torch::kInt32));
+      auto page_offsets =
+          torch::arange(batch_size, opts.dtype(torch::kInt64)) * 8192;
+      auto history_positions =
+          torch::arange(start, opts.dtype(torch::kInt64)).repeat({batch_size});
+      meta.slot_mapping =
+          history_positions + page_offsets.repeat_interleave(start);
+      auto history = torch::randn({start * batch_size, 64}, opts) * 0.3;
+      layer->forward(history_positions, history, meta, cache);
+      reference.get_k_cache().copy_(cache.get_k_cache());
+      reference.get_index_cache().copy_(cache.get_index_cache());
+      reference.get_kpool_tail().copy_(cache.get_kpool_tail());
+      auto saved_tail = cache.get_kpool_tail().clone();
+      auto input = torch::randn({batch_size, 64}, opts) * 0.3;
+      auto pos = torch::full({batch_size}, start, opts.dtype(torch::kInt64));
+      meta.q_cu_seq_lens =
+          torch::arange(batch_size + 1, opts.dtype(torch::kInt32));
+      meta.slot_mapping = pos + page_offsets;
+      meta.max_seq_len = start < 2048 ? 4096 : 8192;
+      meta.enable_cuda_graph = true;
+      auto execute = [&]() { return layer->forward(pos, input, meta, cache); };
+      execute();
+      cache.get_kpool_tail().copy_(saved_tail);
+      km::begin_ffi_alloc_record();
+      execute();
+      auto allocations = km::end_ffi_alloc_record();
+      cache.get_kpool_tail().copy_(saved_tail);
+      stream_.synchronize();
+      MusaGraphHandle graph;
+      graph.capture_begin();
+      km::begin_ffi_alloc_replay(&allocations);
+      auto output = execute();
+      graph.capture_end();
+      km::end_ffi_alloc_replay();
+      cache.get_kpool_tail().copy_(saved_tail);
+      for (int64_t step = 0; step < 10; ++step) {
+        input.normal_(0.0, 0.3);
+        pos.fill_(start + step);
+        meta.slot_mapping.copy_(pos + page_offsets);
+        if (step == 5) {
+          // Restore both a new slot and a reassigned slot without losing either
+          // request's tail. Replay must use the new IDs for both rows.
+          auto new_ids =
+              (batch_size == 1 ? torch::tensor({3}, torch::kInt64)
+                               : torch::tensor({3, 1}, torch::kInt64))
+                  .to(device_);
+          auto old_ids = meta.linear_state_indices.to(torch::kInt64);
+          cache.get_kpool_tail().index_copy_(
+              0, new_ids, cache.get_kpool_tail().index_select(0, old_ids));
+          reference.get_kpool_tail().index_copy_(
+              0, new_ids, reference.get_kpool_tail().index_select(0, old_ids));
+          meta.linear_state_indices.copy_(new_ids);
+        }
+        auto expected = layer->forward(pos, input, meta, reference);
+        auto expected_output = expected.first.clone();
+        auto expected_selection = expected.second.tokens.clone();
+        graph.replay();
+        stream_.synchronize();
+        EXPECT_TRUE(torch::allclose(output.first.cpu().to(torch::kFloat32),
+                                    expected_output.cpu().to(torch::kFloat32),
+                                    0.002,
+                                    0.0002))
+            << start << ":" << step;
+        EXPECT_TRUE(
+            torch::equal(output.second.tokens.cpu(), expected_selection.cpu()));
+        EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
+                                 reference.get_kpool_tail().cpu()));
+        EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
+                                 reference.get_index_cache().cpu()));
+        EXPECT_TRUE(torch::equal(cache.get_k_cache().cpu(),
+                                 reference.get_k_cache().cpu()));
+      }
+    }
+  }
 }
 
 // Independent dense K/V form. Projections are separate GEMMs, norms use their

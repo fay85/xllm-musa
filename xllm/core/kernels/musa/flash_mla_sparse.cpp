@@ -79,8 +79,6 @@ torch::Tensor sparse_mla_bf16(const torch::Tensor& query,
   if (query.size(0) == 0) {
     return output;
   }
-  CHECK(!is_stream_capturing())
-      << "Sparse MLA currently requires eager execution";
   CHECK(ensure_tilelang_loader());
   auto function =
       get_function("sparse_mla_bf16_v1_mp31_h" + std::to_string(heads), "main");

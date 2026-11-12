@@ -44,6 +44,7 @@ limitations under the License.
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_policy.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
+#include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/platform/musa_vmm_capture_pool.h"
@@ -550,6 +551,11 @@ std::vector<IndexedTensorSnapshot> snapshot_linear_attention_state(
   std::vector<IndexedTensorSnapshot> snapshots;
   snapshots.reserve(kv_caches.size() * 2);
   for (KVCache& kv_cache : kv_caches) {
+    torch::Tensor tail = kv_cache.get_kpool_tail();
+    if (tail.defined() && tail.numel() > 0) {
+      snapshots.emplace_back(IndexedTensorSnapshot{
+          tail, torch::index_select(tail, /*dim=*/0, indices), indices});
+    }
     torch::Tensor conv_cache = kv_cache.get_conv_cache();
     if (conv_cache.defined() && conv_cache.numel() > 0) {
       snapshots.emplace_back(IndexedTensorSnapshot{
@@ -1753,6 +1759,12 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
     kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences + 1)
         .zero_();
+    if (args_.model_type() == "glm5_next") {
+      CHECK_EQ(graph_slot_tokens, actual_num_tokens);
+      persistent_new_cache_slots_.narrow(0, 0, actual_num_tokens)
+          .copy_(params.attention.device.new_cache_slots,
+                 /*non_blocking=*/true);
+    }
   }
 
   if (!is_rec_multi_round_mode() &&
@@ -1780,7 +1792,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                /*non_blocking=*/true);
   }
 
-  if (update_attention_plan) {
+  if (update_attention_plan || args_.model_type() == "glm5_next") {
     // Copy block table data. In rec multi-round, block_tables may already be
     // expanded to batch_size * beam_width rows while num_sequences still tracks
     // the logical request count. Use the tensor's real row count here.
@@ -3284,6 +3296,24 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   torch::NoGradGuard no_grad;
   const bool is_prefill = params.meta.batch_forward_type.is_prefill();
   const bool is_decode = params.meta.batch_forward_type.is_decode();
+  if (args_.model_type() == "glm5_next") {
+    bool supported_decode = is_decode && !params.is_spec_verify;
+    if (supported_decode) {
+      for (const auto& cache : kv_caches) {
+        const torch::Tensor key = cache.get_k_cache();
+        if (key.defined()) {
+          // FP8 sparse MLA has a different scratch/capture path. Keep its
+          // existing eager implementation until graph replay is validated.
+          supported_decode = key.scalar_type() == torch::kBFloat16;
+          break;
+        }
+      }
+    }
+    if (!supported_decode) {
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, params);
+    }
+  }
 
   // Diagnostic correctness mode: a captured DeepSeek graph owns model-private
   // graph metadata/state carriers. Re-capturing at each new prefill isolates
@@ -3465,7 +3495,11 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     return result;
   }
 
-  uint32_t bucket_num_tokens = get_bucket_num_tokens(n_tokens);
+  // KDA and KPool update live state rows: ordinary GLM decode has no dummy
+  // rows, so use an exact batch shape instead of padding state slot IDs.
+  uint32_t bucket_num_tokens = args_.model_type() == "glm5_next"
+                                   ? n_tokens
+                                   : get_bucket_num_tokens(n_tokens);
   const char* stable_multi_graph_env =
       std::getenv("XLLM_DSV4_STABLE_MULTI_GRAPH_SEQUENCES");
   const bool stable_multi_graph_sequences =
@@ -3604,8 +3638,12 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           });
       bucket_num_tokens = sequences * width;
     }
-    const uint32_t graph_shape_key = dsv4_graph_shape_key(
-        bucket_num_tokens, n_tokens, args_, options_, graph_params);
+    const uint32_t graph_shape_key =
+        args_.model_type() == "glm5_next"
+            ? layer::glm5_next_graph_key(bucket_num_tokens,
+                                         params.meta.kv_max_seq_len)
+            : dsv4_graph_shape_key(
+                  bucket_num_tokens, n_tokens, args_, options_, graph_params);
 
     // Check if captured graph exists for this bucket num_tokens
     auto it = graphs_.find(graph_shape_key);

@@ -122,7 +122,6 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   CHECK_EQ(q.scalar_type(), torch::kBFloat16);
   CHECK(q.device().is_privateuseone());
   c10::DeviceGuard device_guard(q.device());
-  CHECK(!kernel::musa::is_stream_capturing());
   CHECK(q.size(1) == 8 || q.size(1) == 16 || q.size(1) == 32 ||
         q.size(1) == 64);
   CHECK_EQ(latent.sizes(), torch::IntArrayRef({q.size(0), 512}));
@@ -136,6 +135,8 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   CHECK(cache.is_contiguous());
   CHECK_EQ(cache.device(), q.device());
   const bool fp8 = cache.scalar_type() == torch::kUInt8;
+  CHECK(!fp8 || !kernel::musa::is_stream_capturing())
+      << "FP8 sparse MLA capture is not supported";
   CHECK(fp8 || cache.scalar_type() == q.scalar_type());
   CHECK_EQ(cache.size(2), 1);
   CHECK_EQ(cache.size(3), fp8 ? 528 : 512);
