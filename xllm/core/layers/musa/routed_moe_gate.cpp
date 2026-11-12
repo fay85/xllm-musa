@@ -22,6 +22,7 @@ limitations under the License.
 #include <cstdlib>
 #include <string>
 
+#include "core/kernels/musa/moe_route_post.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
@@ -225,16 +226,8 @@ std::tuple<torch::Tensor, torch::Tensor> RoutedMoeGateImpl::select_experts(
                                             /*dim=*/-1,
                                             /*largest=*/true,
                                             /*sorted=*/false));
-    auto function = km::get_function("glm53_moe_route_post_v3", "run");
-    {
-      km::TvmffiStreamGuard stream_guard(router_logits.device());
-      function(km::to_ffi_tensor(weights),
-               km::to_ffi_tensor(ids),
-               km::to_ffi_tensor(routing_scores),
-               km::to_ffi_tensor(selected),
-               renormalize_,
-               route_scale_);
-    }
+    km::moe_route_post(
+        routing_scores, selected, weights, ids, renormalize_, route_scale_);
     validate_fused_sigmoid_gate(
         router_logits, bias_, weights, ids, renormalize_, route_scale_);
     return {weights, ids};

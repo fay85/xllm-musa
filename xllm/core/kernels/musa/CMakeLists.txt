@@ -7,6 +7,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 
 set(_TORCH_MUSA_KERNEL_HDRS
   musa_ops_api.h
+  moe_route_post.h
   skinny_gemm.cuh
   mrope.h
   musa_kernel_utils.h
@@ -68,6 +69,8 @@ set(_TORCH_MUSA_KERNEL_SRCS
   ../cuda/moe/moe_combine.cu
   # MUSA-only indexed combine for expert-major GEMM output.
   moe_combine_indexed.cu
+  # GLM sigmoid routing postprocessing, linked directly into the MUSA backend.
+  moe_route_post.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
   # BF16 GEMM for small-row, small-column projections
