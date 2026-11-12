@@ -1,0 +1,14 @@
+[
+  {
+    "host": "sj9",
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/profiling/stage_h_baseline_256_8/sj9_raw.tar.gz",
+    "bytes": 27618595,
+    "sha256": "3d6ab3fb4c49f7bbaf693104083db9e2a3845114ba0f930c8980f355300fc0fa"
+  },
+  {
+    "host": "sj10",
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/profiling/stage_h_baseline_256_8/sj10_raw.tar.gz",
+    "bytes": 162357869,
+    "sha256": "e7130a3b2200d139c862d9003a6e1cc0824bc06f3eb165a8d031078a6116e25b"
+  }
+]

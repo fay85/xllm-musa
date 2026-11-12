@@ -1,0 +1,200 @@
+
+@Ph⁄9¢6
+4xllm.native_cpp.RecordFunction_entry_backtrace.COUNT
+'P‚"Native C++ / ATen thread 59340
+P‚GPU kernel stream 0
+ò@ê°’¥®±∞PZä"2218018RExternal id"2219168RRecord function id"2trueRfinished"2218017REv IdxHX≤user_annotation∫V41/Attention/SWA_commit
+æ@ê°’¥®±∞P∫Ø
+í¡Ãœ*ê
+ﬁ
+…std::thread::_State_impl<std::thread::_Invoker<std::tuple<xllm::ThreadPool::ThreadPool(unsigned long, folly::Function<void ()>, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::$_1> > >::_M_run()threadpool.cpp:?
+ä
+áxllm::ThreadPool::internal_loop(unsigned long, std::shared_ptr<folly::Function<void ()> >, std::shared_ptr<xllm::BlockingCounter>, int)
+≤
+úvoid folly::detail::function::FunctionTraits<void ()>::callBig<xllm::WorkerImpl::step_async(xllm::ForwardInput const&)::$_3>(folly::detail::function::Data&)worker_impl.cpp:?
+6
+4xllm::LLMWorkerImpl::step(xllm::ForwardInput const&)
+m
+kxllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)
+ú
+ôxllm::Executor::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+ü
+úxllm::VlmExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+†
+ùxllm::BaseExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+≠
+™xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+Ö
+Çxllm::layer::DeepseekV41TextModel::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&)
+ˆ
+Ûxllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)
+ˇ
+¸xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)
+»
+≈xllm::layer::DeepseekV41PagedAttention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)
+V
+Txllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)
+â
+Üxllm::layer::DeepseekV41ProfileRange::DeepseekV41ProfileRange(std::basic_string_view<char, std::char_traits<char> >, long, long, long)Jâ8Real native semantic-scope entries (COUNT, not CPU time)	2KActual libc backtrace at RecordFunction entry; one count per semantic scopeX
+É@√ÿ’¥®±∞PZv"2218019RExternal id"2219169RRecord function id"2trueRfinished"2218018REv IdxHX≤cpu_op∫aten::argsort
+Ä@Ô∫÷¥®±∞PZs"2218020RExternal id"2219170RRecord function id"2trueRfinished"2218019REv IdxHX≤cpu_op∫
+aten::sort
+Å@›í◊¥®±∞PZt"2218021RExternal id"2219171RRecord function id"2trueRfinished"2218020REv IdxHX≤cpu_op∫aten::empty
+@÷ÿ◊¥®±∞PZHX
+Å@îüÿ¥®±∞PZt"2218022RExternal id"2219172RRecord function id"2trueRfinished"2218021REv IdxHX≤cpu_op∫aten::empty
+@˚◊ÿ¥®±∞PZHX
+É@∫£Ÿ¥®±∞PZv"2218023RExternal id"2219173RRecord function id"2trueRfinished"2218022REv IdxHX≤cpu_op∫aten::resize_
+@“ÆŸ¥®±∞PZHX
+É@ïÚŸ¥®±∞PZv"2218024RExternal id"2219174RRecord function id"2trueRfinished"2218023REv IdxHX≤cpu_op∫aten::resize_
+@ˆ˙Ÿ¥®±∞PZHX
+Ÿ@Ïè‰¥®±∞PZÀ"24807629543509104Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488562Rcorrelation"20Rregisters per thread"212Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫Ævoid musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)
+@ƒ∑‰¥®±∞PZHX
+Ù@ÃÜÂ¥®±∞PZÊ"24807629543516725Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488564Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+@¨íÂ¥®±∞PZHX
+@¢©Â¥®±∞PZHX
+@ºøÂ¥®±∞PZHX
+ü@î…Â¥®±∞PZë"24807629543526569Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488566Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@Ñ¯Â¥®±∞PZHX
+à@ç˚Â¥®±∞PZ{"2218025RExternal id"2219175RRecord function id"2trueRfinished"2218024REv IdxHX≤cpu_op∫aten::index_select
+õ@ƒˇÂ¥®±∞PZç"24807629543535812Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488569Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@¸»Ê¥®±∞PZHX
+Ù@Ñ“Ê¥®±∞PZÊ"24807629543543353Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488572Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+Å@€ËÊ¥®±∞PZt"2218026RExternal id"2219176RRecord function id"2trueRfinished"2218025REv IdxHX≤cpu_op∫aten::empty
+@ÏÌÊ¥®±∞PZHX
+ü@§ˆÊ¥®±∞PZë"24807629543549141Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488574Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@ÃôÁ¥®±∞PZHX
+õ@‹°Á¥®±∞PZç"24807629543555981Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488577Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@ÇªÁ¥®±∞PZHX
+@ƒ€Á¥®±∞PZHX
+Ù@¸„Á¥®±∞PZÊ"24807629543561679Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488580Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+@ÏçË¥®±∞PZHX
+ü@ƒ°Ë¥®±∞PZë"24807629543568269Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488582Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@¶ßË¥®±∞PZHX
+@Ï”Ë¥®±∞PZHX
+~@±„Ë¥®±∞PZq"2218027RExternal id"2219177RRecord function id"2trueRfinished"2218026REv IdxHX≤cpu_op∫aten::ge
+õ@‘ÔË¥®±∞PZç"24807629543574398Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488585Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@µπÈ¥®±∞PZHX
+Ù@≠ƒÈ¥®±∞PZÊ"24807629543580226Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488588Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+Ü@ñ…È¥®±∞PZy"2218028RExternal id"2219178RRecord function id"2trueRfinished"2218027REv IdxHX≤cpu_op∫aten::empty_like
+@ΩÂÈ¥®±∞PZHX
+ü@ïÔÈ¥®±∞PZë"24807629543586905Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488590Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@≈ñÍ¥®±∞PZHX
+Å@êôÍ¥®±∞PZt"2218029RExternal id"2219179RRecord function id"2trueRfinished"2218028REv IdxHX≤cpu_op∫aten::empty
+õ@•üÍ¥®±∞PZç"24807629543593124Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488593Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@Ì÷Í¥®±∞PZHX
+@ı‡Í¥®±∞PZHX
+@Í‚Í¥®±∞PZHX
+Ù@›ÚÍ¥®±∞PZÊ"24807629543600054Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488596Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+@çöÎ¥®±∞PZHX
+ü@ï£Î¥®±∞PZë"24807629543606353Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488598Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@ı…Î¥®±∞PZHX
+~@Ω◊Î¥®±∞PZq"2218030RExternal id"2219180RRecord function id"2trueRfinished"2218029REv IdxHX≤cpu_op∫aten::to
+õ@µ€Î¥®±∞PZç"24807629543612221Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488601Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@ŒﬂÎ¥®±∞PZHX
+@›°Ï¥®±∞PZHX
+Ä@ù§Ï¥®±∞PZs"2218031RExternal id"2219181RRecord function id"2trueRfinished"2218030REv IdxHX≤cpu_op∫
+aten::item
+Ù@≠¨Ï¥®±∞PZÊ"24807629543618561Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488604Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+@≈÷Ï¥®±∞PZHX
+ü@ùÍÏ¥®±∞PZë"24807629543624910Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488606Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+ê@¡Ï¥®±∞PZÇ"2218032RExternal id"2219182RRecord function id"2trueRfinished"2218031REv IdxHX≤cpu_op∫aten::_local_scalar_dense
+@´˝Ï¥®±∞PZHX
+@øÜÌ¥®±∞PZHX
+@≠ïÌ¥®±∞PZHX
+õ@˝üÌ¥®±∞PZç"24807629543631709Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488609Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@‘‡Ì¥®±∞PZHX
+Ù@›ÈÌ¥®±∞PZÊ"24807629543638199Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488612Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+@çåÓ¥®±∞PZHX
+ü@ïïÓ¥®±∞PZë"24807629543643236Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488614Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@¬ñÓ¥®±∞PZHX
+@Ω∏Ó¥®±∞PZHX
+õ@ù¡Ó¥®±∞PZç"24807629543650536Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488617Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+~@®”Ó¥®±∞PZq"2218033RExternal id"2219183RRecord function id"2trueRfinished"2218032REv IdxHX≤cpu_op∫aten::lt
+@î˛Ó¥®±∞PZHX
+Ù@≠èÔ¥®±∞PZÊ"24807629543656405Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488620Rcorrelation"20Rregisters per thread"21040Rshared memory"20.016667Rblocks per SM"20.266667Rwarps per SM"2	[1, 1, 1]Rgrid"2[512, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫«void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)
+Ü@˚¢Ô¥®±∞PZy"2218034RExternal id"2219184RRecord function id"2trueRfinished"2218033REv IdxHX≤cpu_op∫aten::empty_like
+@Ö∑Ô¥®±∞PZHX
+ü@Ì√Ô¥®±∞PZë"24807629543663585Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488622Rcorrelation"20Rregisters per thread"2140Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Úvoid musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)
+@ùÎÔ¥®±∞PZHX
+Å@é˛Ô¥®±∞PZt"2218035RExternal id"2219185RRecord function id"2trueRfinished"2218034REv IdxHX≤cpu_op∫aten::empty
+õ@≈ª¥®±∞PZç"24807629543669163Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488625Rcorrelation"20Rregisters per thread"216400Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ïvoid musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)
+@ﬁ⁄¥®±∞PZHX
+@°Á¥®±∞PZHX
+@ΩáÒ¥®±∞PZHX
+´@ÌöÒ¥®±∞PZù"24807629543721968Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488644Rcorrelation"20Rregisters per thread"212Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[16, 64, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ävoid at::native::(anonymous namespace)::IndexSelectKernel<long, long>(long*, long*, long*, long, long, long, long, unsigned int)
+@Œ∑Ò¥®±∞PZHX
+~@Ï≈Ò¥®±∞PZq"2218036RExternal id"2219186RRecord function id"2trueRfinished"2218035REv IdxHX≤cpu_op∫aten::to
+ç@˝ Ò¥®±∞PZˇ"24807629543817975Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488667Rcorrelation"20Rregisters per thread"212Rshared memory"20.133333Rblocks per SM"20.533333Rwarps per SM"2	[8, 1, 1]Rgrid"2[128, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫‚void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)
+@ûœÒ¥®±∞PZHX
+@›ÒÒ¥®±∞PZHX
+Ä@ØéÚ¥®±∞PZs"2218037RExternal id"2219187RRecord function id"2trueRfinished"2218036REv IdxHX≤cpu_op∫
+aten::item
+ê@√ÂÚ¥®±∞PZÇ"2218038RExternal id"2219188RRecord function id"2trueRfinished"2218037REv IdxHX≤cpu_op∫aten::_local_scalar_dense
+@ŒÛÚ¥®±∞PZHX
+@˙˙Ú¥®±∞PZHX
+@ÓÎÛ¥®±∞PZHX
+á@÷ÆÙ¥®±∞PZz"2218039RExternal id"2219189RRecord function id"2trueRfinished"2218038REv IdxHX≤cpu_op∫aten::logical_and
+á@¨Ñı¥®±∞PZz"2218040RExternal id"2219190RRecord function id"2trueRfinished"2218039REv IdxHX≤cpu_op∫aten::result_type
+@∫ùı¥®±∞PZHX
+~@∏‹ı¥®±∞PZq"2218041RExternal id"2219191RRecord function id"2trueRfinished"2218040REv IdxHX≤cpu_op∫aten::to
+@æ‰ı¥®±∞PZHX
+~@í¢ˆ¥®±∞PZq"2218042RExternal id"2219192RRecord function id"2trueRfinished"2218041REv IdxHX≤cpu_op∫aten::to
+@÷™ˆ¥®±∞PZHX
+Å@’Ûˆ¥®±∞PZt"2218043RExternal id"2219193RRecord function id"2trueRfinished"2218042REv IdxHX≤cpu_op∫aten::empty
+@∆µ˜¥®±∞PZHX
+ç@’Í˜¥®±∞PZˇ"24807629543912160Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488689Rcorrelation"20Rregisters per thread"212Rshared memory"20.133333Rblocks per SM"20.533333Rwarps per SM"2	[8, 1, 1]Rgrid"2[128, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫‚void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)
+@çå¯¥®±∞PZHX
+@Â‰¯¥®±∞PZHX
+Å@£ù˙¥®±∞PZt"2218044RExternal id"2219194RRecord function id"2trueRfinished"2218043REv IdxHX≤cpu_op∫aten::index
+é@çÙ˙¥®±∞PZÄ"24807629543990401Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488712Rcorrelation"20Rregisters per thread"212Rshared memory"20.133333Rblocks per SM"20.533333Rwarps per SM"2	[8, 1, 1]Rgrid"2[128, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫„void musa::dnn::unary::kernel_unary<bool, musa::dnn::unary::AndOp, bool, bool, bool, 128>(bool*, bool const*, unsigned long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)
+É@∆õ˚¥®±∞PZv"2218045RExternal id"2219195RRecord function id"2trueRfinished"2218044REv IdxHX≤cpu_op∫aten::nonzero
+@’ß˚¥®±∞PZHX
+Å@ëå¸¥®±∞PZt"2218046RExternal id"2219196RRecord function id"2trueRfinished"2218045REv IdxHX≤cpu_op∫aten::empty
+@öÃ¸¥®±∞PZHX
+Å@Ñ¢˝¥®±∞PZt"2218047RExternal id"2219197RRecord function id"2trueRfinished"2218046REv IdxHX≤cpu_op∫aten::empty
+@◊ﬂ˝¥®±∞PZHX
+£@œìñµ®±∞PZï"24807629544092808Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488750Rcorrelation"20Rregisters per thread"28464Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫ıvoid musa::dnn::ScanPartSumKernel<bool, long, long, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long, long, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 1>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, long)
+@ˇ”ñµ®±∞PZHX
+π@ßÌñµ®±∞PZ´"24807629544099217Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488751Rcorrelation"20Rregisters per thread"212Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[1024, 1, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫çvoid musa::dnn::(anonymous namespace)::AddBaseSumFusedNonzero<long, long, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::FastDivmodU32, 1>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, void*, void*, long, int, int)
+@èòóµ®±∞PZHX
+@ç†ôµ®±∞PZHX
+Ç@≠Üöµ®±∞PZu"2218048RExternal id"2219198RRecord function id"2trueRfinished"2218047REv IdxHX≤cpu_op∫aten::select
+Ü@˙Èöµ®±∞PZy"2218049RExternal id"2219199RRecord function id"2trueRfinished"2218048REv IdxHX≤cpu_op∫aten::as_strided
+@»Äõµ®±∞PZHX
+@Ëäõµ®±∞PZHX
+Ü@Í‚õµ®±∞PZy"2218050RExternal id"2219200RRecord function id"2trueRfinished"2218049REv IdxHX≤cpu_op∫aten::as_strided
+@òÔõµ®±∞PZHX
+É@∞∫úµ®±∞PZv"2218051RExternal id"2219201RRecord function id"2trueRfinished"2218050REv IdxHX≤cpu_op∫aten::reshape
+Ä@ˇåùµ®±∞PZs"2218052RExternal id"2219202RRecord function id"2trueRfinished"2218051REv IdxHX≤cpu_op∫
+aten::view
+@Ó†ùµ®±∞PZHX
+@î©ùµ®±∞PZHX
+@öÃûµ®±∞PZHX
+Ä@ª†üµ®±∞PZs"2218053RExternal id"2219203RRecord function id"2trueRfinished"2218052REv IdxHX≤cpu_op∫
+aten::view
+@ï üµ®±∞PZHX
+à@¬ˇüµ®±∞PZ{"2218054RExternal id"2219204RRecord function id"2trueRfinished"2218053REv IdxHX≤cpu_op∫aten::index_select
+Å@ÌŒ†µ®±∞PZt"2218055RExternal id"2219205RRecord function id"2trueRfinished"2218054REv IdxHX≤cpu_op∫aten::empty
+@ƒí°µ®±∞PZHX
+@¬ˆ°µ®±∞PZHX
+à@Ùª¢µ®±∞PZ{"2218056RExternal id"2219206RRecord function id"2trueRfinished"2218055REv IdxHX≤cpu_op∫aten::index_select
+Å@µÉ£µ®±∞PZt"2218057RExternal id"2219207RRecord function id"2trueRfinished"2218056REv IdxHX≤cpu_op∫aten::empty
+@¬Œ£µ®±∞PZHX
+@π¸§µ®±∞PZHX
+á@µ∂•µ®±∞PZz"2218058RExternal id"2219208RRecord function id"2trueRfinished"2218057REv IdxHX≤cpu_op∫aten::index_copy_
+Ü@ õ¶µ®±∞PZy"2218059RExternal id"2219209RRecord function id"2trueRfinished"2218058REv IdxHX≤cpu_op∫aten::as_strided
+@ã¨¶µ®±∞PZHX
+Ü@‹Ë¶µ®±∞PZy"2218060RExternal id"2219210RRecord function id"2trueRfinished"2218059REv IdxHX≤cpu_op∫aten::as_strided
+@˛Û¶µ®±∞PZHX
+@Ñ‡ßµ®±∞PZHX
+@éé®µ®±∞PZHX
+˜
+@ê≥∂µ®±∞PZÈ
+"24807629544612369Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488764Rcorrelation"20Rregisters per thread"212Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[4, 256, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ãvoid at::native::(anonymous namespace)::IndexVectorizedKernel<at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#1}, at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#2}>(long, long, long, int, at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#1}, at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#2})
+@ÿ∂µ®±∞PZHX
+´@Ää∑µ®±∞PZù"24807629544665976Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488783Rcorrelation"20Rregisters per thread"212Rshared memory"20.016667Rblocks per SM"20.533333Rwarps per SM"2	[1, 1, 1]Rgrid"2[16, 64, 1]Rblock"21Rest. achieved occupancy %HX≤kernel∫Ävoid at::native::(anonymous namespace)::IndexSelectKernel<long, long>(long*, long*, long*, long, long, long, long, unsigned int)
+@¯®∑µ®±∞PZHX
+◊@ÿ∂∑µ®±∞PZ…"24807629544705282Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488802Rcorrelation"20Rregisters per thread"212Rshared memory"20.066667Rblocks per SM"22.133333Rwarps per SM"2	[4, 1, 1]Rgrid"2[16, 64, 1]Rblock"22Rest. achieved occupancy %HX≤kernel∫¨void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)
+@π”∑µ®±∞PZHX
+“@Ÿåªµ®±∞PZƒ"24807629544762183Rqueued"20Rdevice"21Rcontext"20Rstream"2	465488810Rcorrelation"20Rregisters per thread"212Rshared memory"20.016667Rblocks per SM"20.066667Rwarps per SM"2	[1, 1, 1]Rgrid"2[128, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫ßvoid at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})
+@©Áªµ®±∞PZHX

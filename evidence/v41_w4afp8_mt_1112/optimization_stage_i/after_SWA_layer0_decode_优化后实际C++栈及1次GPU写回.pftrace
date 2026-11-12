@@ -1,0 +1,41 @@
+
+@Ph⁄9¢6
+4xllm.native_cpp.RecordFunction_entry_backtrace.COUNT
+&P‚!Native C++ / ATen thread 2254
+P‚GPU kernel stream 0
+ò@àÒ–‰–ı±PZä"2207938RExternal id"2209088RRecord function id"2trueRfinished"2207937REv IdxHX≤user_annotation∫V41/Attention/SWA_commit
+º@àÒ–‰–ı±P∫≠
+öŒ*ê
+ﬁ
+…std::thread::_State_impl<std::thread::_Invoker<std::tuple<xllm::ThreadPool::ThreadPool(unsigned long, folly::Function<void ()>, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::$_1> > >::_M_run()threadpool.cpp:?
+ä
+áxllm::ThreadPool::internal_loop(unsigned long, std::shared_ptr<folly::Function<void ()> >, std::shared_ptr<xllm::BlockingCounter>, int)
+≤
+úvoid folly::detail::function::FunctionTraits<void ()>::callBig<xllm::WorkerImpl::step_async(xllm::ForwardInput const&)::$_3>(folly::detail::function::Data&)worker_impl.cpp:?
+6
+4xllm::LLMWorkerImpl::step(xllm::ForwardInput const&)
+m
+kxllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)
+ú
+ôxllm::Executor::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+ü
+úxllm::VlmExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+†
+ùxllm::BaseExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+≠
+™xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)
+Ö
+Çxllm::layer::DeepseekV41TextModel::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&)
+ˆ
+Ûxllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)
+ˇ
+¸xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)
+»
+≈xllm::layer::DeepseekV41PagedAttention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)
+V
+Txllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)
+â
+Üxllm::layer::DeepseekV41ProfileRange::DeepseekV41ProfileRange(std::basic_string_view<char, std::char_traits<char> >, long, long, long)Jâ8Real native semantic-scope entries (COUNT, not CPU time)	2KActual libc backtrace at RecordFunction entry; one count per semantic scopeX
+@£¬—‰–ı±PZHX
+≥@¥õ‚‰–ı±PZ•"24814374890152538Rqueued"20Rdevice"21Rcontext"20Rstream"2	432870542Rcorrelation"20Rregisters per thread"24Rshared memory"20.016667Rblocks per SM"20.133333Rwarps per SM"2	[1, 1, 1]Rgrid"2[256, 1, 1]Rblock"20Rest. achieved occupancy %HX≤kernel∫âvoid xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)
+@Ãª‚‰–ı±PZHX

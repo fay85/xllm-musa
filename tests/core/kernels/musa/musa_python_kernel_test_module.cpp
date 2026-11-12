@@ -222,9 +222,13 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def("project_output",
            &NativeAttentionProjection::project_output,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def("deepseek_v4_scatter_single_cache_native",
+             &xllm::kernel::musa::deepseek_v4_scatter_single_cache_native,
+             pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativePagedAttention = xllm::layer::DeepseekV41PagedAttention;
   pybind11::class_<NativePagedAttention>(module, "NativeV41PagedAttention")
       .def(pybind11::init<torch::Tensor, int64_t, double>())
+      .def(pybind11::init<torch::Tensor, int64_t, double, std::string, bool>())
       .def("forward",
            &NativePagedAttention::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());

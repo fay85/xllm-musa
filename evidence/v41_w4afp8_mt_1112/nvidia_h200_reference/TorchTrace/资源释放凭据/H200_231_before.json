@@ -1,0 +1,43 @@
+{
+  "container": "xiaopang1112_v41_cuda_prefill_h200231",
+  "id": "23231158e26edc99bfd3ae7e8e577b328468e66101036396607d53eb10fc0510",
+  "labels": {
+    "ai.sglang.build.commit": "297e54fd105e974cdf401e5b4d20253a22c16f90",
+    "ai.sglang.build.url": "https://github.com/sgl-project/sglang/actions/runs/40978390987",
+    "ai.sglang.image.tag": "lmsysorg/sglang:v0.5.23",
+    "com.nvidia.cudnn.version": "9.14.0.64-1",
+    "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+    "org.opencontainers.image.revision": "297e54fd105e974cdf401e5b4d20253a22c16f90",
+    "org.opencontainers.image.source": "https://github.com/sgl-project/sglang",
+    "org.opencontainers.image.url": "https://github.com/sgl-project/sglang/actions/runs/40978390987",
+    "org.opencontainers.image.version": "lmsysorg/sglang:v0.5.23",
+    "owner": "xiaopang",
+    "task": "20261112-v41-cuda-reference"
+  },
+  "state": {
+    "Status": "running",
+    "Running": true,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 1433976,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-12T00:27:40.098348352Z",
+    "FinishedAt": "0001-01-01T00:00:00Z"
+  },
+  "image": "sha256:f3a303d4028dc4597e312c96ada28fa19509f46559601a94e89dc630ac1ef152",
+  "own_gpu_pids": [
+    1435228,
+    1435287,
+    1435400,
+    1435490,
+    1435678,
+    1435768,
+    1435946,
+    1436211
+  ],
+  "gpu_processes": "1435228, GPU-01d2e73a-dfd0-3e53-c537-b4a990fe63a0, 68330\n1573805, GPU-01d2e73a-dfd0-3e53-c537-b4a990fe63a0, 44350\n1435287, GPU-92d68af4-f630-edce-dd48-2125efbde720, 69078\n1574358, GPU-92d68af4-f630-edce-dd48-2125efbde720, 44350\n1435400, GPU-760f71c0-ec94-b437-fa74-5b84f3fcf522, 69078\n1573601, GPU-760f71c0-ec94-b437-fa74-5b84f3fcf522, 44350\n1435490, GPU-5388ef94-5ba3-c82d-02ee-1a18143120ac, 69078\n1573047, GPU-5388ef94-5ba3-c82d-02ee-1a18143120ac, 40376\n1435678, GPU-3c6c0162-a9b5-1feb-28c3-3ad8004aed65, 69078\n1435768, GPU-c3bd38c4-f60c-1a8c-a7ae-77f5af87aa7f, 69078\n1574558, GPU-c3bd38c4-f60c-1a8c-a7ae-77f5af87aa7f, 44350\n1435946, GPU-485997c1-4cdd-c818-4a52-5abaf668f7ff, 69078\n1573456, GPU-485997c1-4cdd-c818-4a52-5abaf668f7ff, 44350\n1436211, GPU-49944635-50b7-b3da-6f25-5e7cdcfebfc8, 68598\n1574232, GPU-49944635-50b7-b3da-6f25-5e7cdcfebfc8, 44350\n",
+  "at": "2026-11-12T02:52:12.129689+00:00"
+}

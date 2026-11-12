@@ -1,0 +1,22 @@
+{
+  "status": "RENDERED_REAL_INTERVALS_AND_NATIVE_ENTRY_COUNT_WITH_PERFETTO_UI",
+  "trace": "/home/xiaopang/\u684c\u9762/Albert\u5206\u4eab/20261021\u4ecexllm\u5f00\u59cb/\u738b\u5bb6\u660e/20261111\u540e\u7eed\u63a8\u8fdbCpp\u5427/\u4ee5sglang_mt\u5de5\u4f5c\u4e3a\u6bcd\u672c\u53bb\u505a/06_trace\u4e0e\u4f18\u5316/\u4f18\u5316\u540eSWA\u6696\u6001Trace/sj9_\u4f18\u5316\u540e\u6b63\u5f0f\u6696\u6001\u771f\u5b9eC++\u6808\u4e0eGPU.pftrace",
+  "output_sha256": "2e882677e50d37e71c2fc679cad2107a47d4e84a2a5d3fce38f7ce3c3e104140",
+  "native_entry_samples": 500,
+  "selected_cpu_interval": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=256/kv=256",
+    "pid": 62768,
+    "tid": 64612,
+    "ts": 3597227791110.337,
+    "dur": 7221743.261,
+    "args": {
+      "External id": 1,
+      "Record function id": 155,
+      "finished": true,
+      "Ev Idx": 0
+    }
+  },
+  "boundary": "Entry counts identify real C++ callers; widths are not CPU-time samples. CPU/GPU interval timings are copied from the actual Kineto trace."
+}

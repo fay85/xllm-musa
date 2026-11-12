@@ -1,0 +1,43 @@
+{
+  "container": "xiaopang1112_v41_cuda_decode_h200232",
+  "id": "dc5fc8259da1856258abae1d8008368cf938e1f3b4a69c5ca4242998cc04bf24",
+  "labels": {
+    "ai.sglang.build.commit": "297e54fd105e974cdf401e5b4d20253a22c16f90",
+    "ai.sglang.build.url": "https://github.com/sgl-project/sglang/actions/runs/40978390987",
+    "ai.sglang.image.tag": "lmsysorg/sglang:v0.5.23",
+    "com.nvidia.cudnn.version": "9.14.0.64-1",
+    "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+    "org.opencontainers.image.revision": "297e54fd105e974cdf401e5b4d20253a22c16f90",
+    "org.opencontainers.image.source": "https://github.com/sgl-project/sglang",
+    "org.opencontainers.image.url": "https://github.com/sgl-project/sglang/actions/runs/40978390987",
+    "org.opencontainers.image.version": "lmsysorg/sglang:v0.5.23",
+    "owner": "xiaopang",
+    "task": "20261112-v41-cuda-reference"
+  },
+  "state": {
+    "Status": "running",
+    "Running": true,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 3852160,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-12T00:27:40.612270828Z",
+    "FinishedAt": "0001-01-01T00:00:00Z"
+  },
+  "image": "sha256:f3a303d4028dc4597e312c96ada28fa19509f46559601a94e89dc630ac1ef152",
+  "own_gpu_pids": [
+    3853877,
+    3853882,
+    3853885,
+    3853891,
+    3853896,
+    3853901,
+    3853908,
+    3853916
+  ],
+  "gpu_processes": "3853877, GPU-cbe9c89d-449e-7d09-f696-efdf228fafb5, 68072\n3853882, GPU-db72c569-c38e-12f1-c899-71fc959a581d, 68270\n3853885, GPU-9674dcc2-9bcd-99a9-6b1f-f8ef6a6dbb1b, 68270\n3853891, GPU-788a3197-82a0-7ba6-89f4-5bfeef78b8da, 68270\n3853896, GPU-4f63d2f7-d4da-025e-f5fd-5da311068754, 68268\n3853901, GPU-7e89f6e3-e9fd-5a0e-6040-cea967b4e315, 68268\n3853908, GPU-9f7defb1-4111-3e28-5ff7-d870c9045383, 68270\n3853916, GPU-59a7398e-a730-1284-c621-65adbc8bddf3, 67790\n",
+  "at": "2026-11-12T02:52:12.053726+00:00"
+}

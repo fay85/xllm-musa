@@ -1,0 +1,464 @@
+{
+  "status": "PASS_8_RANKS_DOMINANT_MEMORY_GPU_EQUALS_RANK",
+  "host": "sj9",
+  "at": "2026-11-12T11:55:59.191890+08:00",
+  "processes": [
+    {
+      "host_pid": 41087,
+      "rank": 0,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66935
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 47
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41087,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 0
+    },
+    {
+      "host_pid": 41088,
+      "rank": 1,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66935
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41088,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 1
+    },
+    {
+      "host_pid": 41089,
+      "rank": 2,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66935
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41089,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 2
+    },
+    {
+      "host_pid": 41090,
+      "rank": 3,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 47
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 47
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66935
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41090,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 3
+    },
+    {
+      "host_pid": 41091,
+      "rank": 4,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66935
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41091,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 4
+    },
+    {
+      "host_pid": 41092,
+      "rank": 5,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66641
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41092,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 5
+    },
+    {
+      "host_pid": 41093,
+      "rank": 6,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 47
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66915
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41093,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        }
+      ],
+      "dominant_gpu": 6
+    },
+    {
+      "host_pid": 41094,
+      "rank": 7,
+      "exe": "/work/artifacts/native_stage_i/bin/xllm",
+      "actual_exe_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f",
+      "all_gpu_contexts": [
+        {
+          "gpu": 0,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 1,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 2,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 3,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 4,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 5,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 6,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 48
+        },
+        {
+          "gpu": 7,
+          "host_pid": 41094,
+          "name": "...artifacts/native_stage_i/bin/xllm",
+          "mib": 66935
+        }
+      ],
+      "dominant_gpu": 7
+    }
+  ],
+  "boundary": "One process has small peer/MCCL contexts on multiple cards; preserve all rows, never collapse PID to last GPU row. Dominant allocation and actual Kineto device IDs prove placement."
+}

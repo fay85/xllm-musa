@@ -1,0 +1,41 @@
+{
+  "status": "PASS_OWN_CONTAINER_STOPPED_AND_OWN_GPU_CONTEXTS_RELEASED",
+  "container": "xiaopang1112_v41_cuda_prefill_h200231",
+  "container_id": "23231158e26edc99bfd3ae7e8e577b328468e66101036396607d53eb10fc0510",
+  "command": [
+    "docker",
+    "stop",
+    "--time=120",
+    "xiaopang1112_v41_cuda_prefill_h200231"
+  ],
+  "exit": 0,
+  "stdout": "Flag --time has been deprecated, use --timeout instead\nxiaopang1112_v41_cuda_prefill_h200231\n",
+  "stderr": "",
+  "container_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-12T00:27:40.098348352Z",
+    "FinishedAt": "2026-11-12T02:52:25.45047483Z"
+  },
+  "own_gpu_pids_before": [
+    1435228,
+    1435287,
+    1435400,
+    1435490,
+    1435678,
+    1435768,
+    1435946,
+    1436211
+  ],
+  "gpu_processes_after": "1573805, GPU-01d2e73a-dfd0-3e53-c537-b4a990fe63a0, 44350\n1574358, GPU-92d68af4-f630-edce-dd48-2125efbde720, 44350\n1573601, GPU-760f71c0-ec94-b437-fa74-5b84f3fcf522, 44350\n1577877, GPU-5388ef94-5ba3-c82d-02ee-1a18143120ac, 10452\n1577546, GPU-3c6c0162-a9b5-1feb-28c3-3ad8004aed65, 26016\n1574558, GPU-c3bd38c4-f60c-1a8c-a7ae-77f5af87aa7f, 44350\n1573456, GPU-485997c1-4cdd-c818-4a52-5abaf668f7ff, 44350\n1574232, GPU-49944635-50b7-b3da-6f25-5e7cdcfebfc8, 44350\n",
+  "gpu_memory_after": "0, NVIDIA H200, 44359, 143771, 98\n1, NVIDIA H200, 44359, 143771, 99\n2, NVIDIA H200, 44359, 143771, 99\n3, NVIDIA H200, 11017, 143771, 0\n4, NVIDIA H200, 26619, 143771, 13\n5, NVIDIA H200, 44359, 143771, 99\n6, NVIDIA H200, 44359, 143771, 99\n7, NVIDIA H200, 44359, 143771, 99\n",
+  "trace_validation_status": "PASS_32_FULL_GZIP_CRC_JSON_CPU_GPU_REAL_PYTHON_STACKS_40LAYERS_TP8_BOTH_SCENES",
+  "at": "2026-11-12T02:52:25.961614+00:00"
+}

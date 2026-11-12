@@ -1,3 +1,5 @@
+> 后续状态更新（2026-11-12）：本文件保留第一阶段基线记录；小范围优化及两组复测已完成，见 [StageI图文报告](optimization_stage_i/README.md)，H200参考与显存释放见 [NVIDIA记录](nvidia_h200_reference/H200首轮原版1017同Token测速说明.md)。H20 GPU任务已由用户延期。
+
 # 我用交付版 W4AFP8-mt 权重完成的原生 C++ V4.1 基线
 
 本次基于共同仓库`1103-merged-dev`的`0cfd82700e164e8aa7951064b652925dd6b24d18`，在个人分支`xiaopangV41FlashCppFromSglangtoXllm`接入V4.1文本推理。共同分支地址：https://github.com/fay85/xllm-musa/tree/xiaopangV41FlashCppFromSglangtoXllm 。本阶段没有创建MR/PR。这里是第一阶段的算子与完整测速记录，后续基于trace的一处小范围优化会单独提交。

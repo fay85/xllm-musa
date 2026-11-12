@@ -1,0 +1,23 @@
+{
+  "source": "2048_H200_231_rank0_first_forward.json.gz",
+  "source_sha256": "74a6699868f57bc9c79e7e078adb54798cf73ec48e83ebb0fb6be330fa85869f",
+  "output": "Perfetto_2048_H200_231_\u4fdd\u7559\u5b9e\u9645\u65f6\u95f4\u548c\u8c03\u7528\u6808.json",
+  "output_sha256": "234dcbfe99108cfc5e4a06fa3aeebd2ca27db8681bf424093195391cd4e8e23a",
+  "actual_layer_count": 40,
+  "perfetto_import_errors": [],
+  "gpu_display_mapping": [
+    {
+      "original_stream_tid": 136,
+      "display_lane": 0,
+      "display_tid": 1013600,
+      "events": 2377
+    },
+    {
+      "original_stream_tid": 136,
+      "display_lane": 1,
+      "display_tid": 1013601,
+      "events": 676
+    }
+  ],
+  "time_semantics": "Keep all original event timestamps/durations/arguments, only split overlapping GPU intervals into labelled display lanes; these are not new real CUDA streams."
+}

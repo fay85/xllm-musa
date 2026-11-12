@@ -304,6 +304,12 @@ void deepseek_v4_scatter_cache(torch::Tensor cache,
                                torch::Tensor slot_ids,
                                torch::Tensor values);
 
+// Single-row equal-width cache update on the native torch_musa stream.
+// Reuses the V4 scatter kernel; negative/out-of-range slots are ignored.
+void deepseek_v4_scatter_single_cache_native(const torch::Tensor& cache,
+                                             const torch::Tensor& slot,
+                                             const torch::Tensor& value);
+
 void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                 torch::Tensor slot_ids,
                                 torch::Tensor values);

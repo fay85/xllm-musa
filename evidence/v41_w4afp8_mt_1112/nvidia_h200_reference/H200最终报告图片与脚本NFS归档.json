@@ -1,0 +1,6 @@
+{
+  "node": "H200_232",
+  "exit": 0,
+  "stdout": "{\"status\": \"PASS_FINAL_H200_REPORT_IMAGES_AND_REPRO_SCRIPTS_SHA\", \"archive\": \"/data/NFS_Storage/xiaopang/20261112_v41_cuda_reference/reports/H200_trace_final/h200_trace_final_report.tar.gz\", \"bytes\": 28886322, \"sha256\": \"63371b504a57c18ebb02bcbe66c4ab68e7579fb342e25fadee8c5a164be70596\"}\n",
+  "stderr": ""
+}

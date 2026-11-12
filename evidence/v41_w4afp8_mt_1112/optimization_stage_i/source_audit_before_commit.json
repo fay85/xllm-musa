@@ -1,0 +1,1221 @@
+{
+  "status": "PASS_FROZEN_CPP_AND_CMAKE_MATCH_WORKING_TREE",
+  "snapshot_files": 168,
+  "compiled_cpp_cmake_files": 108,
+  "differences": [
+    {
+      "path": "tools/musa_deepseek_v41/build_sparse_mate.py",
+      "snapshot_sha256": "e4ece84f323be7fe14bad7c9427ecd15e8fc8c2eacb60e6bab407af3a45e3fb2",
+      "working_tree_sha256": "905e25b1241cd03ca70f29e2aae9b343b4618a1014bd3252af633936ba26305d",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/extract_w4a8_fixture.py",
+      "snapshot_sha256": "bff27bbb669498420573e5f5cd0f2155b8ee9e75cc64d46cbefc0389248bc1bf",
+      "working_tree_sha256": "13952499ca68e1b5f615bfc5fe107c084c761412c517116ee1fd5298cf64da0f",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/inspect_w4afp8_checkpoint.py",
+      "snapshot_sha256": "aa6faca8b833a8bed56f5a9f02ab60b1441dcb4d02bd3ff6e4799c578f5e2d8d",
+      "working_tree_sha256": "9d0d54175a1b86c745a68d0a968bf1f8b04abfe70bfe8db367095df1ea3405a4",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_indexer_topk.py",
+      "snapshot_sha256": "106142c1c6c4fe10c9f0a413211e28365e6e3d8468d630ef1225b79410e48f38",
+      "working_tree_sha256": "9c58125476c5bd53821ac1c43888fc08b942c717981aeb03476e8082885e0df3",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_native_cpp_profile.py",
+      "snapshot_sha256": "db0e263a73b7650bb0c44986869006ccfd2d07099b0be961c6bb32e03d1e8931",
+      "working_tree_sha256": "a27b9e5d15a04f2c64927ce6e76869afc3d8cc573c7b30c4112ba16225d41b70",
+      "match": false,
+      "compiled_cpp_cmake": false
+    }
+  ],
+  "all_files": [
+    {
+      "path": "CMakeLists.txt",
+      "snapshot_sha256": "20370bbbfead6b2a6c1de87c63da9baa5be11ca3fd7112fbc86ccb2edb509e7d",
+      "working_tree_sha256": "20370bbbfead6b2a6c1de87c63da9baa5be11ca3fd7112fbc86ccb2edb509e7d",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "cmake/cargo_library.cmake",
+      "snapshot_sha256": "7585e89156e2fc50bc4b132544fc65f47aaa474175dbd880212d827878fd7726",
+      "working_tree_sha256": "7585e89156e2fc50bc4b132544fc65f47aaa474175dbd880212d827878fd7726",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "cmake/prebuilt_rust_bindings.cmake",
+      "snapshot_sha256": "d130843aee1a787f21e30b1a5b61a02af4e256fa2afaa336b4d35a1ba37d2a59",
+      "working_tree_sha256": "d130843aee1a787f21e30b1a5b61a02af4e256fa2afaa336b4d35a1ba37d2a59",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "scripts/ninja_guard/ninja",
+      "snapshot_sha256": "20491b1a69ad6e60b5ede06612734eeca9969cde699268e5e31e976c292a3c35",
+      "working_tree_sha256": "20491b1a69ad6e60b5ede06612734eeca9969cde699268e5e31e976c292a3c35",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "scripts/ninja_safe.sh",
+      "snapshot_sha256": "9feff714645045eb10986c48146148fc52c441186377a96941bd899710f47b69",
+      "working_tree_sha256": "9feff714645045eb10986c48146148fc52c441186377a96941bd899710f47b69",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/core/framework/chat_template/deepseek_v41_cpp_template_test.cpp",
+      "snapshot_sha256": "09bebcacc00784b6174d08d352d08c4d4437d1e002cc7590a1dbb8034dfbfbc6",
+      "working_tree_sha256": "09bebcacc00784b6174d08d352d08c4d4437d1e002cc7590a1dbb8034dfbfbc6",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/framework/kv_cache/CMakeLists.txt",
+      "snapshot_sha256": "231555abcf8a1900f78f86762930fe6ae71898b61f419606c6f28aa65a43c0ef",
+      "working_tree_sha256": "231555abcf8a1900f78f86762930fe6ae71898b61f419606c6f28aa65a43c0ef",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/framework/kv_cache/deepseek_v41_original_cache_test.cpp",
+      "snapshot_sha256": "3900e3d6a8b573362b0787ecb00b1d1355b0c5ab64867420cba7825e542a4aae",
+      "working_tree_sha256": "3900e3d6a8b573362b0787ecb00b1d1355b0c5ab64867420cba7825e542a4aae",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/kernels/musa/CMakeLists.txt",
+      "snapshot_sha256": "e190d9c8363fe731203000641d12a17edb2e01dea05254e7c10eec4c3a57b726",
+      "working_tree_sha256": "e190d9c8363fe731203000641d12a17edb2e01dea05254e7c10eec4c3a57b726",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/kernels/musa/musa_python_kernel_test_module.cpp",
+      "snapshot_sha256": "f5aad66df63cd4aa11b95a9a30f5835f36c63ec180dad8aa945fdb38ebf0163a",
+      "working_tree_sha256": "f5aad66df63cd4aa11b95a9a30f5835f36c63ec180dad8aa945fdb38ebf0163a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/runtime/CMakeLists.txt",
+      "snapshot_sha256": "c752ead084cbaf264d4c065854e5bf163cee2e9cfd68969991eb76cac649d9e0",
+      "working_tree_sha256": "c752ead084cbaf264d4c065854e5bf163cee2e9cfd68969991eb76cac649d9e0",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/runtime/native_provider_cache_groups_test.cpp",
+      "snapshot_sha256": "c852ca2639e5b362d47fe9bc110a5c7273de204b1519d022b4cc9381c3da5565",
+      "working_tree_sha256": "c852ca2639e5b362d47fe9bc110a5c7273de204b1519d022b4cc9381c3da5565",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/runtime/xservice_client_lifecycle_test.cpp",
+      "snapshot_sha256": "2ee91a8a7b5b6ecbcec53e15c0eba33dc9f4d7dd9302880d64a14d2c032b278d",
+      "working_tree_sha256": "2ee91a8a7b5b6ecbcec53e15c0eba33dc9f4d7dd9302880d64a14d2c032b278d",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/util/CMakeLists.txt",
+      "snapshot_sha256": "22976c11761f4bbae05811a930072e9f31fef595a2de7383418cbe2f33a4e2e5",
+      "working_tree_sha256": "22976c11761f4bbae05811a930072e9f31fef595a2de7383418cbe2f33a4e2e5",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/core/util/folly_bthread_compat_test.cpp",
+      "snapshot_sha256": "25c33cc5ed9cd19993cb750b00cd08202cf9f07c76cb694b60ee910bd5f0269d",
+      "working_tree_sha256": "25c33cc5ed9cd19993cb750b00cd08202cf9f07c76cb694b60ee910bd5f0269d",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tests/data/deepseek_v41_fp4/README.md",
+      "snapshot_sha256": "63ac368db9b4d2f609a61b45a15a6e7c518d142218edd52db0d84cbb14d543f6",
+      "working_tree_sha256": "63ac368db9b4d2f609a61b45a15a6e7c518d142218edd52db0d84cbb14d543f6",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/data/deepseek_v41_fp4/bf16_halfway_minimal.pt",
+      "snapshot_sha256": "6a6b5517defa39d30f5b4cb99a27b9085debc5d10ec20441582fba61b4319a2b",
+      "working_tree_sha256": "6a6b5517defa39d30f5b4cb99a27b9085debc5d10ec20441582fba61b4319a2b",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_chunked_prefill.py",
+      "snapshot_sha256": "8d05b696f4c2c4c05644dccec3f26d63cdc8ab49cde716419700f3312ee52639",
+      "working_tree_sha256": "8d05b696f4c2c4c05644dccec3f26d63cdc8ab49cde716419700f3312ee52639",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_dense_quant.py",
+      "snapshot_sha256": "770be7b368c510115f0ec36a88e7d8984dbf0a331be12665c35cde557abd85ff",
+      "working_tree_sha256": "770be7b368c510115f0ec36a88e7d8984dbf0a331be12665c35cde557abd85ff",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_engram.py",
+      "snapshot_sha256": "eda4620e6c402dc62f53d7c4ce3f80914235f4bdc95f674ccb586b7f0f5bebb4",
+      "working_tree_sha256": "eda4620e6c402dc62f53d7c4ce3f80914235f4bdc95f674ccb586b7f0f5bebb4",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_engram_gate_selection.py",
+      "snapshot_sha256": "45795a9d3cfbea7f7f248403a5400888be71519aed600735da8c503d8958bcaa",
+      "working_tree_sha256": "45795a9d3cfbea7f7f248403a5400888be71519aed600735da8c503d8958bcaa",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_indexer_quant.py",
+      "snapshot_sha256": "f9e1736649c6ed988d51e5fc67e53d130871edf19eb7015040b76f358c600eaa",
+      "working_tree_sha256": "f9e1736649c6ed988d51e5fc67e53d130871edf19eb7015040b76f358c600eaa",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_model.py",
+      "snapshot_sha256": "be225eb3dc46a2419df5c0e647fc5e50a24664ebe3117a516412a095d759153f",
+      "working_tree_sha256": "be225eb3dc46a2419df5c0e647fc5e50a24664ebe3117a516412a095d759153f",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_musa_shared_swiglu.py",
+      "snapshot_sha256": "44d0bb9148ef25c0c21f8f5161bcc8630f505da5edfb610e66edf26652e2afbe",
+      "working_tree_sha256": "44d0bb9148ef25c0c21f8f5161bcc8630f505da5edfb610e66edf26652e2afbe",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_numeric_audit.py",
+      "snapshot_sha256": "209047b3bb32ec3464d783e56a6ceb596c538b4a9e2e807894936e4a56e62cdf",
+      "working_tree_sha256": "209047b3bb32ec3464d783e56a6ceb596c538b4a9e2e807894936e4a56e62cdf",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_packed_experts.py",
+      "snapshot_sha256": "ac4ebc6b224953cae4680b9d274d5b7ed2afe0934c21957f21d49a0c9c86f8c1",
+      "working_tree_sha256": "ac4ebc6b224953cae4680b9d274d5b7ed2afe0934c21957f21d49a0c9c86f8c1",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_rms_norm.py",
+      "snapshot_sha256": "e8a2a923baf89a8c3d8320721c255a4a7335db3ecdedcce528caf9a4c36e8d18",
+      "working_tree_sha256": "e8a2a923baf89a8c3d8320721c255a4a7335db3ecdedcce528caf9a4c36e8d18",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_token_audit.py",
+      "snapshot_sha256": "314af9f6351906d0c89f02fd5a23247cf0dbb3cd1a1ce050d5800c9c5c16318e",
+      "working_tree_sha256": "314af9f6351906d0c89f02fd5a23247cf0dbb3cd1a1ce050d5800c9c5c16318e",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_cpp_stack_preload.py",
+      "snapshot_sha256": "6c1ab606d689e64642474fef0756766bede0168daacb60e8cb0e8b0f178db8dd",
+      "working_tree_sha256": "6c1ab606d689e64642474fef0756766bede0168daacb60e8cb0e8b0f178db8dd",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_engram_gather_aot.py",
+      "snapshot_sha256": "75c55025223efc00180488791354dc0012d7a75b8eeabab40168773f7cea4613",
+      "working_tree_sha256": "75c55025223efc00180488791354dc0012d7a75b8eeabab40168773f7cea4613",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_engram_hash_aot.py",
+      "snapshot_sha256": "ee0dcf35ff2d6079c9be99fcc9ecc766a2c7eaeb2e18b67fa84272fb51ee909e",
+      "working_tree_sha256": "ee0dcf35ff2d6079c9be99fcc9ecc766a2c7eaeb2e18b67fa84272fb51ee909e",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_indexer_aot.py",
+      "snapshot_sha256": "d7dfd1154b1de85ec5ad994ae08b18ab7a179ee71f914a8f900ddff80f2251ed",
+      "working_tree_sha256": "d7dfd1154b1de85ec5ad994ae08b18ab7a179ee71f914a8f900ddff80f2251ed",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_sparse_mate.py",
+      "snapshot_sha256": "e4ece84f323be7fe14bad7c9427ecd15e8fc8c2eacb60e6bab407af3a45e3fb2",
+      "working_tree_sha256": "905e25b1241cd03ca70f29e2aae9b343b4618a1014bd3252af633936ba26305d",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_w4a8_mate.py",
+      "snapshot_sha256": "5a0e72333401a1c3c0f4dc5d97218876f2a18080fe82a4408779086e79d202a8",
+      "working_tree_sha256": "5a0e72333401a1c3c0f4dc5d97218876f2a18080fe82a4408779086e79d202a8",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/diagnose_route_aggregation.py",
+      "snapshot_sha256": "d49d4d367456a27d9793f62b2cd623957a01ce933ae0ee74733f3a1dc4becd65",
+      "working_tree_sha256": "d49d4d367456a27d9793f62b2cd623957a01ce933ae0ee74733f3a1dc4becd65",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/diagnose_w4a8_gemm.py",
+      "snapshot_sha256": "48cb20a767429d61e3e4c22e70d532f72b8933004e5e8fc963f8028541d62465",
+      "working_tree_sha256": "48cb20a767429d61e3e4c22e70d532f72b8933004e5e8fc963f8028541d62465",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/extract_w4a8_fixture.py",
+      "snapshot_sha256": "bff27bbb669498420573e5f5cd0f2155b8ee9e75cc64d46cbefc0389248bc1bf",
+      "working_tree_sha256": "13952499ca68e1b5f615bfc5fe107c084c761412c517116ee1fd5298cf64da0f",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/inspect_w4afp8_checkpoint.py",
+      "snapshot_sha256": "aa6faca8b833a8bed56f5a9f02ab60b1441dcb4d02bd3ff6e4799c578f5e2d8d",
+      "working_tree_sha256": "9d0d54175a1b86c745a68d0a968bf1f8b04abfe70bfe8db367095df1ea3405a4",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/native_cpp_stack_preload.cpp",
+      "snapshot_sha256": "cee29cb02b6c2a80151e4dbdb0744faa79040bd8caeb10e81b45746238eaf22a",
+      "working_tree_sha256": "cee29cb02b6c2a80151e4dbdb0744faa79040bd8caeb10e81b45746238eaf22a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/prepare_wo_a_fixture.py",
+      "snapshot_sha256": "483789f114f04c9ae9823dd96263fa467d3de3f69a89ea542223102985b8696b",
+      "working_tree_sha256": "483789f114f04c9ae9823dd96263fa467d3de3f69a89ea542223102985b8696b",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/run_long_pd_gate.py",
+      "snapshot_sha256": "fd10f0881793ddd8f38528bdae2733760d2e12a44d2ef66996025a4518eac972",
+      "working_tree_sha256": "fd10f0881793ddd8f38528bdae2733760d2e12a44d2ef66996025a4518eac972",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_engram_gather.py",
+      "snapshot_sha256": "a900da2b5dac55945769bd9cf882cfbcf6504203204e8f645d7c9e18c10198ad",
+      "working_tree_sha256": "a900da2b5dac55945769bd9cf882cfbcf6504203204e8f645d7c9e18c10198ad",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_engram_hash.py",
+      "snapshot_sha256": "c732e8c9d9664b9f9045d58beb30fa407e90e1df6ac268f0f64e5e7b98ceacf7",
+      "working_tree_sha256": "c732e8c9d9664b9f9045d58beb30fa407e90e1df6ac268f0f64e5e7b98ceacf7",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_indexer_aot.py",
+      "snapshot_sha256": "032daf5b674047ff1c9d9dc7eb65859d22796deb189619608db00b3f74b283bc",
+      "working_tree_sha256": "032daf5b674047ff1c9d9dc7eb65859d22796deb189619608db00b3f74b283bc",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_indexer_topk.py",
+      "snapshot_sha256": "106142c1c6c4fe10c9f0a413211e28365e6e3d8468d630ef1225b79410e48f38",
+      "working_tree_sha256": "9c58125476c5bd53821ac1c43888fc08b942c717981aeb03476e8082885e0df3",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_mhc_mate.py",
+      "snapshot_sha256": "6238ae058055944927505d7cebaf35b6b76831bb1eb4a2033022006cb16c337c",
+      "working_tree_sha256": "6238ae058055944927505d7cebaf35b6b76831bb1eb4a2033022006cb16c337c",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_native_cpp_profile.py",
+      "snapshot_sha256": "db0e263a73b7650bb0c44986869006ccfd2d07099b0be961c6bb32e03d1e8931",
+      "working_tree_sha256": "a27b9e5d15a04f2c64927ce6e76869afc3d8cc573c7b30c4112ba16225d41b70",
+      "match": false,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_native_rms_norm.py",
+      "snapshot_sha256": "f82541e1e975ac1c418fbd28d1aeba92b6f761024ffcfa279ffcffdebd559471",
+      "working_tree_sha256": "f82541e1e975ac1c418fbd28d1aeba92b6f761024ffcfa279ffcffdebd559471",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_native_sparse_mate.py",
+      "snapshot_sha256": "d3d89fc9d4d35e73c809b8c438c22674cfc43195ba78992a3d7e19c8ca2a6348",
+      "working_tree_sha256": "d3d89fc9d4d35e73c809b8c438c22674cfc43195ba78992a3d7e19c8ca2a6348",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_pair_pool.py",
+      "snapshot_sha256": "66ac5830ace1c165da821cd68fb6f227627827a014f9bb0fd0ae2077a6545c5c",
+      "working_tree_sha256": "66ac5830ace1c165da821cd68fb6f227627827a014f9bb0fd0ae2077a6545c5c",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_rope_compressor.py",
+      "snapshot_sha256": "c3d47129d65a988693ed7fa74452e6d08a5f50baa4dfb63735c2e93f5f45a928",
+      "working_tree_sha256": "c3d47129d65a988693ed7fa74452e6d08a5f50baa4dfb63735c2e93f5f45a928",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_swa_single_scatter.py",
+      "snapshot_sha256": "5923e25bf8bc90a1482e5803ab704d09177654fc4ea35012ef15c1c8170040f4",
+      "working_tree_sha256": "5923e25bf8bc90a1482e5803ab704d09177654fc4ea35012ef15c1c8170040f4",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_w4a8_experts.py",
+      "snapshot_sha256": "8855a664494f5462859eae343b7b60920c2443ec406ef49d8d6a71144ea8dc42",
+      "working_tree_sha256": "8855a664494f5462859eae343b7b60920c2443ec406ef49d8d6a71144ea8dc42",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_wo_a_m1.py",
+      "snapshot_sha256": "90aae55a34cb572ae374726189059eee09730633066ac3d024780eb0acd1d331",
+      "working_tree_sha256": "90aae55a34cb572ae374726189059eee09730633066ac3d024780eb0acd1d331",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/api_service/chat_service_impl.cpp",
+      "snapshot_sha256": "8a01e8923ceb698d0d001c7ce6e3f2797a34bc953a54f7eb0cd5b56209b3c0a3",
+      "working_tree_sha256": "8a01e8923ceb698d0d001c7ce6e3f2797a34bc953a54f7eb0cd5b56209b3c0a3",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/distributed_runtime/disagg_pd_service.cpp",
+      "snapshot_sha256": "09964fb98883cac0c96917071ab3b73f5dcf4710c1735ed70850ca43a6a09850",
+      "working_tree_sha256": "09964fb98883cac0c96917071ab3b73f5dcf4710c1735ed70850ca43a6a09850",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/distributed_runtime/disagg_pd_service.h",
+      "snapshot_sha256": "62d2e28f2b9b7f66e31072d8a23b94964e953e1cbb67a0f365c2a542465065fc",
+      "working_tree_sha256": "62d2e28f2b9b7f66e31072d8a23b94964e953e1cbb67a0f365c2a542465065fc",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/distributed_runtime/llm_master.cpp",
+      "snapshot_sha256": "4009f1eb3536018d4f3dee7b114752584eb7c5a20ad773bcadb980cddbd4311b",
+      "working_tree_sha256": "4009f1eb3536018d4f3dee7b114752584eb7c5a20ad773bcadb980cddbd4311b",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/distributed_runtime/speculative_engine.h",
+      "snapshot_sha256": "fc589606159094e28071ae008c47c225cd8f4eb1d947436bfa3c56dec06e0faf",
+      "working_tree_sha256": "fc589606159094e28071ae008c47c225cd8f4eb1d947436bfa3c56dec06e0faf",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/block_manager.h",
+      "snapshot_sha256": "f3db866f364ab08b0a7de1d0a6f24e568e82acdf6d3922581b9c768533c0aa8b",
+      "working_tree_sha256": "f3db866f364ab08b0a7de1d0a6f24e568e82acdf6d3922581b9c768533c0aa8b",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/composite_block_manager.cpp",
+      "snapshot_sha256": "2b8e10f5b018cb66552742110dee093fb02b211afe91fd2721145907c884d01e",
+      "working_tree_sha256": "2b8e10f5b018cb66552742110dee093fb02b211afe91fd2721145907c884d01e",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/composite_block_manager.h",
+      "snapshot_sha256": "fad72aee507a480f95bfb4ee138b9cedb307bb7517fd6302bdc406452734dd84",
+      "working_tree_sha256": "fad72aee507a480f95bfb4ee138b9cedb307bb7517fd6302bdc406452734dd84",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/concurrent_block_manager_impl.cpp",
+      "snapshot_sha256": "6f57ccbdd185fb4f1481198c9a368ba9b208308e3a2ff6b610e330f9b79af93a",
+      "working_tree_sha256": "6f57ccbdd185fb4f1481198c9a368ba9b208308e3a2ff6b610e330f9b79af93a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/concurrent_block_manager_impl.h",
+      "snapshot_sha256": "838f5e332187d15df6e6b9ce121b76e1c91565317cf5ea23bf1aec15e6c70985",
+      "working_tree_sha256": "838f5e332187d15df6e6b9ce121b76e1c91565317cf5ea23bf1aec15e6c70985",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/musa/deepseek_v4_prefix_cache_policy.cpp",
+      "snapshot_sha256": "7013f24cd988f3e7e7255e2bedb8e3502c2413a00a8dcd9fd264d2c28ee38c4f",
+      "working_tree_sha256": "7013f24cd988f3e7e7255e2bedb8e3502c2413a00a8dcd9fd264d2c28ee38c4f",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/block/sliding_window_block_manager.h",
+      "snapshot_sha256": "04d434e7bb6d600eff010e0b7fe4a8f32b6f787616a2b543ab4aa667575fa392",
+      "working_tree_sha256": "04d434e7bb6d600eff010e0b7fe4a8f32b6f787616a2b543ab4aa667575fa392",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/chat_template/deepseek_v41_cpp_template.cpp",
+      "snapshot_sha256": "cf44efda8f000695e37ea123aa79b55edec646b01a7ff95127d339110cca863f",
+      "working_tree_sha256": "cf44efda8f000695e37ea123aa79b55edec646b01a7ff95127d339110cca863f",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/kv_cache/CMakeLists.txt",
+      "snapshot_sha256": "9f2b70ca4f36bd938699796b8fc850d0bca09d5e467efa7afe44f75c64815965",
+      "working_tree_sha256": "9f2b70ca4f36bd938699796b8fc850d0bca09d5e467efa7afe44f75c64815965",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/kv_cache/deepseek_v4_cache_policy.h",
+      "snapshot_sha256": "8818a579779229f3a1d985b5ba8ab09aae994a29f7bcfdc0e0ef69aaa9442075",
+      "working_tree_sha256": "8818a579779229f3a1d985b5ba8ab09aae994a29f7bcfdc0e0ef69aaa9442075",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/kv_cache/deepseek_v4_kv_cache_impl.cpp",
+      "snapshot_sha256": "6b0ef73716ddb0de7091b6356f44ae39df931b7728843dc6d5a8b007351c144e",
+      "working_tree_sha256": "6b0ef73716ddb0de7091b6356f44ae39df931b7728843dc6d5a8b007351c144e",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/framework/kv_cache/kv_cache_estimation.cpp",
+      "snapshot_sha256": "9f6ba9518394d647730accbc5287c37085627a2c4b173af41a23335fa61bd270",
+      "working_tree_sha256": "9f6ba9518394d647730accbc5287c37085627a2c4b173af41a23335fa61bd270",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/CMakeLists.txt",
+      "snapshot_sha256": "93178f6ef5dd20823c3f223813e0da3b8062c00a2b4f5b482cea50d449cd2ce8",
+      "working_tree_sha256": "93178f6ef5dd20823c3f223813e0da3b8062c00a2b4f5b482cea50d449cd2ce8",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_attention_quant.cu",
+      "snapshot_sha256": "d03a516f6b3e221ff9cd076b703a89dd0736dcea78b1eacd1b275930e8c9d5a3",
+      "working_tree_sha256": "d03a516f6b3e221ff9cd076b703a89dd0736dcea78b1eacd1b275930e8c9d5a3",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_attention_quant.h",
+      "snapshot_sha256": "698255c7b9a9e4e645c83ef4a514022ee961cf7b913af7a2a9c509091947a845",
+      "working_tree_sha256": "698255c7b9a9e4e645c83ef4a514022ee961cf7b913af7a2a9c509091947a845",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_decode_moe.cu",
+      "snapshot_sha256": "8a8b5c6346647a3d238f8ddabb5c67e0c81636ac8e83d8ab124d9761b8025722",
+      "working_tree_sha256": "8a8b5c6346647a3d238f8ddabb5c67e0c81636ac8e83d8ab124d9761b8025722",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp",
+      "snapshot_sha256": "a99714abc24a018b31aeae3e6da3010a5db42ec7edaf05f2917cc0ded36d185d",
+      "working_tree_sha256": "a99714abc24a018b31aeae3e6da3010a5db42ec7edaf05f2917cc0ded36d185d",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_dense_block32.h",
+      "snapshot_sha256": "6de7dcddbf073068819bd1213a9a7a4239ae7e600516b3098cb6356f81c8dd47",
+      "working_tree_sha256": "6de7dcddbf073068819bd1213a9a7a4239ae7e600516b3098cb6356f81c8dd47",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_engram_gate.cu",
+      "snapshot_sha256": "53ddf6064e60da08629e0914364b1709d6b86a5b265a51781b4e4828eca312e4",
+      "working_tree_sha256": "53ddf6064e60da08629e0914364b1709d6b86a5b265a51781b4e4828eca312e4",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_engram_gate.h",
+      "snapshot_sha256": "d6c1082bc05af5773384c117a0e68eb7c2e370c1afaae620b42e187e69eb585a",
+      "working_tree_sha256": "d6c1082bc05af5773384c117a0e68eb7c2e370c1afaae620b42e187e69eb585a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_engram_gather.cpp",
+      "snapshot_sha256": "65debdde8d0c6fb57f90417386b64d029826c3858fa45bb05187f3136290a06e",
+      "working_tree_sha256": "65debdde8d0c6fb57f90417386b64d029826c3858fa45bb05187f3136290a06e",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_engram_gather.h",
+      "snapshot_sha256": "d0407fbde28c6d876a8222952dfe8ff99ce3ea0fcb508411b02f84e32329fe98",
+      "working_tree_sha256": "d0407fbde28c6d876a8222952dfe8ff99ce3ea0fcb508411b02f84e32329fe98",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_engram_hash.cpp",
+      "snapshot_sha256": "f8691eedb2e17841003145af6f94bdc7b12186f41e038dae6d1fc6e7e7b16f3e",
+      "working_tree_sha256": "f8691eedb2e17841003145af6f94bdc7b12186f41e038dae6d1fc6e7e7b16f3e",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_engram_hash.h",
+      "snapshot_sha256": "9793d07d4e746761744785e691737c1bf3bf45328eb40e2f9f8722ae40bc7496",
+      "working_tree_sha256": "9793d07d4e746761744785e691737c1bf3bf45328eb40e2f9f8722ae40bc7496",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_fp4.cu",
+      "snapshot_sha256": "308a7d54da975907e04dd19a6b781c1c804cf36194b7cbb591a87c9a73874a67",
+      "working_tree_sha256": "308a7d54da975907e04dd19a6b781c1c804cf36194b7cbb591a87c9a73874a67",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_fp4_accum.cuh",
+      "snapshot_sha256": "c4d63f96819f62c30528013d74037ac520df3cb648f859253190f6b7f4c44214",
+      "working_tree_sha256": "c4d63f96819f62c30528013d74037ac520df3cb648f859253190f6b7f4c44214",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_gate_topk.cu",
+      "snapshot_sha256": "42332fcdfac819b3dfb62b99bb6e63d84189d7a3069cea6e4e90e53f489f164b",
+      "working_tree_sha256": "42332fcdfac819b3dfb62b99bb6e63d84189d7a3069cea6e4e90e53f489f164b",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_indexer_score.cpp",
+      "snapshot_sha256": "e7cd500bf73a8430f06bf4b0437abe14d8eebc1dc5d7a9898a6e55418b6d4823",
+      "working_tree_sha256": "e7cd500bf73a8430f06bf4b0437abe14d8eebc1dc5d7a9898a6e55418b6d4823",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_indexer_score.h",
+      "snapshot_sha256": "579112c10992a8d178826e276d9c861464cafa94a6411dccdff69c13be79f09a",
+      "working_tree_sha256": "579112c10992a8d178826e276d9c861464cafa94a6411dccdff69c13be79f09a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.cpp",
+      "snapshot_sha256": "1b8b8e75255a8c6fc5084c208043c339954f032814fea53dc3050f7692ea3e2a",
+      "working_tree_sha256": "1b8b8e75255a8c6fc5084c208043c339954f032814fea53dc3050f7692ea3e2a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.h",
+      "snapshot_sha256": "8f3a3bc78008cfb8222e20de71cb67c7fa77bcab33ab079b8366dbffc614ab12",
+      "working_tree_sha256": "8f3a3bc78008cfb8222e20de71cb67c7fa77bcab33ab079b8366dbffc614ab12",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_pair_pool.cu",
+      "snapshot_sha256": "c305ecebdb0f5854653319986df55a48bd63629b01a62efe1a414b8826e0b62c",
+      "working_tree_sha256": "c305ecebdb0f5854653319986df55a48bd63629b01a62efe1a414b8826e0b62c",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_pair_pool.h",
+      "snapshot_sha256": "c54fe02a238aa8aa67c69d63f591edf83e8db0cb753e278bb46e298936e4c434",
+      "working_tree_sha256": "c54fe02a238aa8aa67c69d63f591edf83e8db0cb753e278bb46e298936e4c434",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_partition_gemm.cpp",
+      "snapshot_sha256": "49226f177736fc9548241cf8f9d69f705b6b6e5ce9e7981b6e8c8a741e62a2e6",
+      "working_tree_sha256": "49226f177736fc9548241cf8f9d69f705b6b6e5ce9e7981b6e8c8a741e62a2e6",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_sparse_attention.cpp",
+      "snapshot_sha256": "dc506b1b3443e4751311ad729dcf7dff33c618f58ef92036540c67622a730d95",
+      "working_tree_sha256": "dc506b1b3443e4751311ad729dcf7dff33c618f58ef92036540c67622a730d95",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_sparse_attention.h",
+      "snapshot_sha256": "5147dd39207073e669b619da8c9f378475143c9a8fd8b20633d4cb2d5aa26d58",
+      "working_tree_sha256": "5147dd39207073e669b619da8c9f378475143c9a8fd8b20633d4cb2d5aa26d58",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_w4a8.cu",
+      "snapshot_sha256": "07af11c52dfabbff63e8709aca8f56f5f691dbed82da035d756856224736a981",
+      "working_tree_sha256": "07af11c52dfabbff63e8709aca8f56f5f691dbed82da035d756856224736a981",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_w4a8.h",
+      "snapshot_sha256": "b350c51d16df36949e0bde7b5f7f70ddaa4208e8f573ef3e339cf9442fdc010a",
+      "working_tree_sha256": "b350c51d16df36949e0bde7b5f7f70ddaa4208e8f573ef3e339cf9442fdc010a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_w4a8_gemm.cpp",
+      "snapshot_sha256": "bb8c29057ba428e44944167f7187362f01fb1c245c24c0b1e0ac9a58e3fbdecb",
+      "working_tree_sha256": "bb8c29057ba428e44944167f7187362f01fb1c245c24c0b1e0ac9a58e3fbdecb",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v4_dsa_cache_ops.cu",
+      "snapshot_sha256": "bba9b98368157941ea7044cb8ce99d0fa6adccc489ed93102266fc503661fefb",
+      "working_tree_sha256": "bba9b98368157941ea7044cb8ce99d0fa6adccc489ed93102266fc503661fefb",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v4_wo_a_m1.cu",
+      "snapshot_sha256": "3c3c3bafff391e664b6578c416ad26e2725a10c5a57cff38fb8d609db8d35dc1",
+      "working_tree_sha256": "3c3c3bafff391e664b6578c416ad26e2725a10c5a57cff38fb8d609db8d35dc1",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/musa_aot_kernel.cpp",
+      "snapshot_sha256": "502d59dbb0ba57ef0d7c9272037b9533b21c0bc65e52e9b8c517cc7f92f8a222",
+      "working_tree_sha256": "502d59dbb0ba57ef0d7c9272037b9533b21c0bc65e52e9b8c517cc7f92f8a222",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/musa_aot_kernel.h",
+      "snapshot_sha256": "7143edbcef0e81c4aa4be7abdefe9f524d83be58f7a0be8c67718164d50cfac5",
+      "working_tree_sha256": "7143edbcef0e81c4aa4be7abdefe9f524d83be58f7a0be8c67718164d50cfac5",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/musa_dsv4_ops_api.h",
+      "snapshot_sha256": "79734a097a375511f51dd870c56d5a38ae22d71e0c1516fe072316e6b8b5bc74",
+      "working_tree_sha256": "79734a097a375511f51dd870c56d5a38ae22d71e0c1516fe072316e6b8b5bc74",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/musa_ops_api.h",
+      "snapshot_sha256": "2b934a59b451842fc95c3c05a9d824cdf90dbdc9057a4fbb0328eb13c3301436",
+      "working_tree_sha256": "2b934a59b451842fc95c3c05a9d824cdf90dbdc9057a4fbb0328eb13c3301436",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/musa_tvmffi_stream.cpp",
+      "snapshot_sha256": "c89ddbfdb394050ddac9c5d011e5cda0d9e1e4ce3d5c3bede88defd7104a45fa",
+      "working_tree_sha256": "c89ddbfdb394050ddac9c5d011e5cda0d9e1e4ce3d5c3bede88defd7104a45fa",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/musa_tvmffi_stream.h",
+      "snapshot_sha256": "b0802b51bff84c9eab74f7c7ef6faaddb0d29a15e1dd77a461d2ab6a614756ad",
+      "working_tree_sha256": "b0802b51bff84c9eab74f7c7ef6faaddb0d29a15e1dd77a461d2ab6a614756ad",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/CMakeLists.txt",
+      "snapshot_sha256": "3af1409532a2f4ea9b66bccc290401e11913bb5b72747d7836e458a589aca866",
+      "working_tree_sha256": "3af1409532a2f4ea9b66bccc290401e11913bb5b72747d7836e458a589aca866",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention.h",
+      "snapshot_sha256": "3544687e01abcddd5ffef54bd571f09850ad5fd65bca82f4ae829b291a40c8e4",
+      "working_tree_sha256": "3544687e01abcddd5ffef54bd571f09850ad5fd65bca82f4ae829b291a40c8e4",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+      "snapshot_sha256": "e9c7f05bb066f763652605799fd411fa14e3451c708cb837ae1bd76df8c44b97",
+      "working_tree_sha256": "e9c7f05bb066f763652605799fd411fa14e3451c708cb837ae1bd76df8c44b97",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/compressor.h",
+      "snapshot_sha256": "134a4ec021871dcd9f77ad3a6ef47642b09967729692ea5990ccb1d43c1af080",
+      "working_tree_sha256": "134a4ec021871dcd9f77ad3a6ef47642b09967729692ea5990ccb1d43c1af080",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/csa2_attention.h",
+      "snapshot_sha256": "f30b2515bd31c591ea539c77a50a6dbe71bbb4b59dff86644ba1211156d98e04",
+      "working_tree_sha256": "f30b2515bd31c591ea539c77a50a6dbe71bbb4b59dff86644ba1211156d98e04",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/decoder.h",
+      "snapshot_sha256": "8930e611e76376657b2d16cdf1e3f45ca74f876b7d29701387a1cc5473638d2b",
+      "working_tree_sha256": "8930e611e76376657b2d16cdf1e3f45ca74f876b7d29701387a1cc5473638d2b",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/engram_embedding.h",
+      "snapshot_sha256": "a8c8f70d6e31b27209e57a4edbfc1f9bf302d4a7f6d29cf4db113864849f0b96",
+      "working_tree_sha256": "a8c8f70d6e31b27209e57a4edbfc1f9bf302d4a7f6d29cf4db113864849f0b96",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/engram_hash.h",
+      "snapshot_sha256": "cdff0ccb8130a82e1d2c69cac2f20e529b75ee306634083c3ef7bfa838a4bc06",
+      "working_tree_sha256": "cdff0ccb8130a82e1d2c69cac2f20e529b75ee306634083c3ef7bfa838a4bc06",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/engram_injection.h",
+      "snapshot_sha256": "7d1033c0a726f479b53bd020ac813d6d00ce0857a41c1cf0559854b4c8e39fc0",
+      "working_tree_sha256": "7d1033c0a726f479b53bd020ac813d6d00ce0857a41c1cf0559854b4c8e39fc0",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/feed_forward.h",
+      "snapshot_sha256": "e7379344a30b4e053a8bd62b1d6ea38682dc37668f0d42a512aa4c486f07d2f9",
+      "working_tree_sha256": "e7379344a30b4e053a8bd62b1d6ea38682dc37668f0d42a512aa4c486f07d2f9",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/hyper_connection.h",
+      "snapshot_sha256": "a8aa8bfe2b8fcceb548478a6a6fb6e267a04c6a9f796d0f76c91d218ca9ef47a",
+      "working_tree_sha256": "a8aa8bfe2b8fcceb548478a6a6fb6e267a04c6a9f796d0f76c91d218ca9ef47a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/indexer.h",
+      "snapshot_sha256": "f301d7e8af77375e366f107793b5098cc9f7524f80f1f6ec97c8c782132d93f4",
+      "working_tree_sha256": "f301d7e8af77375e366f107793b5098cc9f7524f80f1f6ec97c8c782132d93f4",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/moe.h",
+      "snapshot_sha256": "cb354a704c6891a32e54215759f999d514332c0c016faf55037261f8ba3ed444",
+      "working_tree_sha256": "cb354a704c6891a32e54215759f999d514332c0c016faf55037261f8ba3ed444",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/paged_attention.h",
+      "snapshot_sha256": "89ccec83ee7495aec280cd563731f7c4761bc93ec5aa806c410ad1d0cb944741",
+      "working_tree_sha256": "89ccec83ee7495aec280cd563731f7c4761bc93ec5aa806c410ad1d0cb944741",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/profile_range.h",
+      "snapshot_sha256": "91eb30cb2eacb8b153a17fb102088c5859d77d02fac91889a37fbec65e10159f",
+      "working_tree_sha256": "91eb30cb2eacb8b153a17fb102088c5859d77d02fac91889a37fbec65e10159f",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/request_metadata.h",
+      "snapshot_sha256": "4ecdb1080007be018f60bccacd41f1e2bf8d744fa2d9864c7fad0f943f4536f1",
+      "working_tree_sha256": "4ecdb1080007be018f60bccacd41f1e2bf8d744fa2d9864c7fad0f943f4536f1",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/rms_norm.h",
+      "snapshot_sha256": "92829dd28e68d00c9a3b172b9e59ce099f2aa44358133414a685f11c57f068a1",
+      "working_tree_sha256": "92829dd28e68d00c9a3b172b9e59ce099f2aa44358133414a685f11c57f068a1",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/text_model.h",
+      "snapshot_sha256": "5e806caaf88a67b2ee097d574c15da985ad810ad2fdf6ef3cf717e7ca733efb7",
+      "working_tree_sha256": "5e806caaf88a67b2ee097d574c15da985ad810ad2fdf6ef3cf717e7ca733efb7",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/token_cache.h",
+      "snapshot_sha256": "4b26056d5d017ccf4cfd5ffb0f15a68d8a4ab31bc62193e04249cbc0691116e8",
+      "working_tree_sha256": "4b26056d5d017ccf4cfd5ffb0f15a68d8a4ab31bc62193e04249cbc0691116e8",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/w4a8_experts.h",
+      "snapshot_sha256": "73e132432c24c5837ab79e24a8e8cb215bfcf6c7e742e88daa5de8fc7d3d9c88",
+      "working_tree_sha256": "73e132432c24c5837ab79e24a8e8cb215bfcf6c7e742e88daa5de8fc7d3d9c88",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/platform/torch_profiler.cpp",
+      "snapshot_sha256": "b37da3fb9cdd3e3332bd6a9ca1ebdb850b2e8905cf6448d187515e4c092923f5",
+      "working_tree_sha256": "b37da3fb9cdd3e3332bd6a9ca1ebdb850b2e8905cf6448d187515e4c092923f5",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/platform/torch_profiler.h",
+      "snapshot_sha256": "8494f91513891026e43f9cb090f8ececc263b7b9685cc7fd6595c985f362da17",
+      "working_tree_sha256": "8494f91513891026e43f9cb090f8ececc263b7b9685cc7fd6595c985f362da17",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/CMakeLists.txt",
+      "snapshot_sha256": "cd5f4c8e24c2e5de58c597d0c46ad4a732feb63313754fa58e5ee05ebf06e374",
+      "working_tree_sha256": "cd5f4c8e24c2e5de58c597d0c46ad4a732feb63313754fa58e5ee05ebf06e374",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/deepseek_v41_execution_contract.h",
+      "snapshot_sha256": "08819cfab01c510d69002473dabc1b31247d80647aa7f3a0ab1334d65ffc8025",
+      "working_tree_sha256": "08819cfab01c510d69002473dabc1b31247d80647aa7f3a0ab1334d65ffc8025",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/draft_model_config.cpp",
+      "snapshot_sha256": "daac2b762582c79db3c53ea90610cc79a4f111ebaafaa198b3cf76cf9b1fc681",
+      "working_tree_sha256": "daac2b762582c79db3c53ea90610cc79a4f111ebaafaa198b3cf76cf9b1fc681",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/native_provider_runtime.cpp",
+      "snapshot_sha256": "457993e1e63074212526c4dc149576fd4c57edd5b760bfca927b7ca2e88b4bb1",
+      "working_tree_sha256": "457993e1e63074212526c4dc149576fd4c57edd5b760bfca927b7ca2e88b4bb1",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/native_provider_runtime.h",
+      "snapshot_sha256": "e9518e929fa1ae0a61b649c4c5c944d8211b926f409f69d3b6d23c1632a2cb04",
+      "working_tree_sha256": "e9518e929fa1ae0a61b649c4c5c944d8211b926f409f69d3b6d23c1632a2cb04",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/py_executor_impl.cpp",
+      "snapshot_sha256": "a61513a6f1ed9500ecd7a88158a5482d7057567400d90e44a5afdad907bafd4a",
+      "working_tree_sha256": "a61513a6f1ed9500ecd7a88158a5482d7057567400d90e44a5afdad907bafd4a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/py_musa_kernel_bindings.h",
+      "snapshot_sha256": "c153d5b369e9f9d3b46adfae00e96ccfedbf69b40bfd54f361ff1f273da39dd4",
+      "working_tree_sha256": "c153d5b369e9f9d3b46adfae00e96ccfedbf69b40bfd54f361ff1f273da39dd4",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/py_runtime_module.cpp",
+      "snapshot_sha256": "33430278be2493af03c9b2dcf9d56db0f0c2a8ee91a725bebb5fb3b6840d369b",
+      "working_tree_sha256": "33430278be2493af03c9b2dcf9d56db0f0c2a8ee91a725bebb5fb3b6840d369b",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/worker_impl.cpp",
+      "snapshot_sha256": "57433fca34945f6c86435879d5edde52126e8925f742a6b014b861601d30d40d",
+      "working_tree_sha256": "57433fca34945f6c86435879d5edde52126e8925f742a6b014b861601d30d40d",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/xservice_client.cpp",
+      "snapshot_sha256": "86ffbc31285bcddc58788b0ba2a8f856244448136c46a2093e745c0117b57012",
+      "working_tree_sha256": "86ffbc31285bcddc58788b0ba2a8f856244448136c46a2093e745c0117b57012",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/runtime/xservice_client.h",
+      "snapshot_sha256": "0de26211f4b748c222363ac2b990078a540a22b3948f88c1c3edd03e1c8f99d6",
+      "working_tree_sha256": "0de26211f4b748c222363ac2b990078a540a22b3948f88c1c3edd03e1c8f99d6",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/util/CMakeLists.txt",
+      "snapshot_sha256": "b6e7705549a69a10ca7599f09a8954260011c3218f17aaa69a983a669317aa2a",
+      "working_tree_sha256": "b6e7705549a69a10ca7599f09a8954260011c3218f17aaa69a983a669317aa2a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/core/util/folly_bthread_compat.h",
+      "snapshot_sha256": "211661cde8ef3b28b0d7682a6db0087fba5621060c4198e755f5ec5a10593229",
+      "working_tree_sha256": "211661cde8ef3b28b0d7682a6db0087fba5621060c4198e755f5ec5a10593229",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/models/CMakeLists.txt",
+      "snapshot_sha256": "a6fd5b1ed9b3662ce36200e5a1def5a6e472d98b6e91916099a457c27c703d4a",
+      "working_tree_sha256": "a6fd5b1ed9b3662ce36200e5a1def5a6e472d98b6e91916099a457c27c703d4a",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/models/llm/deepseek_v41.h",
+      "snapshot_sha256": "d1b97fadd01539cd3b6e5fa6630516b756deb17ab57d2b7814231df6e05c1810",
+      "working_tree_sha256": "d1b97fadd01539cd3b6e5fa6630516b756deb17ab57d2b7814231df6e05c1810",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_checkpoint.h",
+      "snapshot_sha256": "2328f45e458dc92c76e768fa9cb70da8c73e268072eeaa520261143cd0862d71",
+      "working_tree_sha256": "2328f45e458dc92c76e768fa9cb70da8c73e268072eeaa520261143cd0862d71",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "snapshot_sha256": "6610afdb6b42be888ee42fc0e66d6acc72ec0e01bf191b8ae4f3296c69f6464e",
+      "working_tree_sha256": "6610afdb6b42be888ee42fc0e66d6acc72ec0e01bf191b8ae4f3296c69f6464e",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/models/model_registry.cpp",
+      "snapshot_sha256": "af3cba895e31c3d1694d274a2765fb70867ed2d0e2a3019b8bd23ae48e933e7c",
+      "working_tree_sha256": "af3cba895e31c3d1694d274a2765fb70867ed2d0e2a3019b8bd23ae48e933e7c",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/models/models.h",
+      "snapshot_sha256": "5f328213ce0d6f5860fb05d3d4117fa697d6c3e97325c328b3b77b097502e6f2",
+      "working_tree_sha256": "5f328213ce0d6f5860fb05d3d4117fa697d6c3e97325c328b3b77b097502e6f2",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/proto/disagg_pd.proto",
+      "snapshot_sha256": "7be5fda36e63c4c256b52405fd96d8e30c5e0b7a527dcef1cd9e2053727c3494",
+      "working_tree_sha256": "7be5fda36e63c4c256b52405fd96d8e30c5e0b7a527dcef1cd9e2053727c3494",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/__init__.py",
+      "snapshot_sha256": "f523869b24b54df40d4d903451b5a8ce0a8569d10369b9450625d3085329a78c",
+      "working_tree_sha256": "f523869b24b54df40d4d903451b5a8ce0a8569d10369b9450625d3085329a78c",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/attention/csa2_attention.py",
+      "snapshot_sha256": "5331db782b53ce761c68feba57ff552345ac79a5cb1bafab1c73c28aa26a9b0b",
+      "working_tree_sha256": "5331db782b53ce761c68feba57ff552345ac79a5cb1bafab1c73c28aa26a9b0b",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/distributed/collectives.py",
+      "snapshot_sha256": "80ad51536140c7f4bd90e4ea51fb7c1a1706a53f2ea06c747abfa35cef602a23",
+      "working_tree_sha256": "80ad51536140c7f4bd90e4ea51fb7c1a1706a53f2ea06c747abfa35cef602a23",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/__init__.py",
+      "snapshot_sha256": "4f527386e3bb56b643b8b386d16f2432c6f8d5a46ebe8a9570fa4fcb3b49ec50",
+      "working_tree_sha256": "4f527386e3bb56b643b8b386d16f2432c6f8d5a46ebe8a9570fa4fcb3b49ec50",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/attention_quant.py",
+      "snapshot_sha256": "13711f60dd3aaa17dd60fb5ce3b677ab6c950a0d7ec36e196f758f801b8951a6",
+      "working_tree_sha256": "13711f60dd3aaa17dd60fb5ce3b677ab6c950a0d7ec36e196f758f801b8951a6",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/dense_quant.py",
+      "snapshot_sha256": "75d5f5d47c59816a25af475edb9489c03204637c31aac6f0064ec09c85ac6ba3",
+      "working_tree_sha256": "75d5f5d47c59816a25af475edb9489c03204637c31aac6f0064ec09c85ac6ba3",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/engram.py",
+      "snapshot_sha256": "d41d1e17ef394dc873890548a0a825de50b269e230127bca86515d9f846888b8",
+      "working_tree_sha256": "d41d1e17ef394dc873890548a0a825de50b269e230127bca86515d9f846888b8",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/fp4.py",
+      "snapshot_sha256": "ab2e57f10de6628b1b5cdf3e0f45d347c011e765db22927be4bb414a1212b7d6",
+      "working_tree_sha256": "ab2e57f10de6628b1b5cdf3e0f45d347c011e765db22927be4bb414a1212b7d6",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/gating.py",
+      "snapshot_sha256": "1e8d9bf751e65f45ce46d19bcbb131ae66100ed26a20c524284afb9e4ac0b0b5",
+      "working_tree_sha256": "1e8d9bf751e65f45ce46d19bcbb131ae66100ed26a20c524284afb9e4ac0b0b5",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/hyper_connection.py",
+      "snapshot_sha256": "4acacae1d7a5ad1f0693f3daadf8fb4abce8120bb252eb025172c72f3d5349f2",
+      "working_tree_sha256": "4acacae1d7a5ad1f0693f3daadf8fb4abce8120bb252eb025172c72f3d5349f2",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/rotary.py",
+      "snapshot_sha256": "3927f9a6c12d76056230fcf9567e8ebe92d7f458bed3ed357e538841fa2f2d8c",
+      "working_tree_sha256": "3927f9a6c12d76056230fcf9567e8ebe92d7f458bed3ed357e538841fa2f2d8c",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/kernels_musa/shared_swiglu.py",
+      "snapshot_sha256": "e96bf9bd02ea71857a2eb27426bf5c27326bfbcb0738a06b21e1b8b08e411429",
+      "working_tree_sha256": "e96bf9bd02ea71857a2eb27426bf5c27326bfbcb0738a06b21e1b8b08e411429",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/model_executor/executor.py",
+      "snapshot_sha256": "b0c00f49d832dc279717eced8a73283e1739e0d15bab333d3f9f1f3f40456b20",
+      "working_tree_sha256": "b0c00f49d832dc279717eced8a73283e1739e0d15bab333d3f9f1f3f40456b20",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/model_platform_support.py",
+      "snapshot_sha256": "3e1fd222f16965978cd940e1101d35d9d9f64e0a13f39bcc2072ced24b59fde7",
+      "working_tree_sha256": "3e1fd222f16965978cd940e1101d35d9d9f64e0a13f39bcc2072ced24b59fde7",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41.py",
+      "snapshot_sha256": "726c4a05028fc5cd5b71f4c0ef5db426defbb245417eb715783c5d2612352b02",
+      "working_tree_sha256": "726c4a05028fc5cd5b71f4c0ef5db426defbb245417eb715783c5d2612352b02",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41_engram.py",
+      "snapshot_sha256": "069272bab95e1aef52483d89810ba38ab1595e8d940a1d8ca2a6ecb989d7af64",
+      "working_tree_sha256": "069272bab95e1aef52483d89810ba38ab1595e8d940a1d8ca2a6ecb989d7af64",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41_numeric_audit.py",
+      "snapshot_sha256": "b6da4c56a224e5120d9a3760a70556c21df1fa530feadb12b21711bb07919d23",
+      "working_tree_sha256": "b6da4c56a224e5120d9a3760a70556c21df1fa530feadb12b21711bb07919d23",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41_token_audit.py",
+      "snapshot_sha256": "f305460a40be6198d91376d05be1cb79138783c8f91c90e6307b76ca8ffe26aa",
+      "working_tree_sha256": "f305460a40be6198d91376d05be1cb79138783c8f91c90e6307b76ca8ffe26aa",
+      "match": true,
+      "compiled_cpp_cmake": false
+    },
+    {
+      "path": "xllm/server/xllm_server.cpp",
+      "snapshot_sha256": "a7ff0b5265aaa4368544b4cdd8cba7f0397a25edbeaf133810410e8b68407eee",
+      "working_tree_sha256": "a7ff0b5265aaa4368544b4cdd8cba7f0397a25edbeaf133810410e8b68407eee",
+      "match": true,
+      "compiled_cpp_cmake": true
+    },
+    {
+      "path": "xllm/xllm.cpp",
+      "snapshot_sha256": "1178945d590379c3933a66f8b6295b1ceb2cc8b17bd6df0c86e0c6919bd8cc1e",
+      "working_tree_sha256": "1178945d590379c3933a66f8b6295b1ceb2cc8b17bd6df0c86e0c6919bd8cc1e",
+      "match": true,
+      "compiled_cpp_cmake": true
+    }
+  ],
+  "boundary": "Offline build/analysis helpers can be formatted or extended after frozen compilation. Actual compiled C++/CMake sources must match exactly."
+}

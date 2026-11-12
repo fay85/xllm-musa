@@ -1,6 +1,6 @@
 # C++ 路线算子覆盖、有效选路及交付版差异
 
-更新时间：2026-11-12 07:48，北京时间。本文覆盖文本 C1/eager、P/D 各 TP8 的当前实现；正式性能仍在运行，不提前填结果。
+更新时间：2026-11-12，StageI正式性能与前后trace验收完成。本文覆盖文本 C1/eager、P/D 各 TP8 的当前实现；完整数据见 `optimization_stage_i/README.md`。
 
 ## 实现身份与判断标准
 
@@ -31,7 +31,8 @@
 | Engram hash/history | `engram_hash.h`、`deepseek_v41_engram_hash.*` | int64 hash、真实目标Tokenizer映射；先读整段history，再提交最后写入，避免ring覆盖提前破坏lookback | 每目标机68例，独立CPU参考的hash/mask/history精确相同；新Tokenizer压缩词表99092 |
 | Engram注入 | `engram_injection.h`、`deepseek_v41_engram_gate.*` | GPU门控、norm、投影及残差注入；与hash/lookup合用；无CPU计算替代 | 继承原生数值测试及本轮完整问答；未宣称完整评测集精度 |
 | 输出低秩投影 wo_a | `attention_projection.h` 调用已有 `deepseek_v4_wo_a_m1` | 复用家明/1103已存在的单token GEMV；M1/G1/4096→1024 才选，其他形状仍用已定义BF16 einsum；QDQ顺序不改 | 真实layer0 TP8 rank0权重60例，最大相对RMS0.003175%；DEV及双SJ通过，局部约0.055→0.020ms |
-| P/D缓存与跨层复用 | `request_metadata.h`、`token_cache.h`、`paged_attention.h`、framework/kv_cache、disagg_pd_service | SWA、压缩KV/Indexer状态、Engram lookback等按mapping group交给Mooncake；共享source层及TopK按forward生命周期传递 | StageE D八rank每题非空pull，40层/54 regions；2048多块输入126 regions；F正在同条件运行 |
+| SWA单token写回 | `paged_attention.h`、`deepseek_v4_dsa_cache_ops.cu` | 单行复用已有scatter kernel，显式native MUSA current stream；多行stable latest-wins不变 | 双SJ各60项逐位回归；同场景每commit 35→1 kernel；完整两组正式复测 |
+| P/D缓存与跨层复用 | `request_metadata.h`、`token_cache.h`、`paged_attention.h`、framework/kv_cache、disagg_pd_service | SWA、压缩KV/Indexer状态、Engram lookback等按mapping group交给Mooncake；共享source层及TopK按forward生命周期传递 | StageI双端16个实际exe SHA匹配；每rank40层/TP8/EP8；D每rank至少15条非空pull；两组正式性能通过 |
 
 上述 MATE 扩展产物使用交付镜像中对应源码/头文件离线编译；服务基础镜像仍是 `xllm:1102-dev` 的 Torch/MUSA2.9.1、MATE0.2.7、TVM-FFI0.1.11.post1+musa.1。没有把整个环境静默替换成所谓“最新MATE”，也没有依靠在线 Python JIT 才能生成生产算子。具体so/mubin和构建命令、编译头文件、SHA在运行包manifest和原始构建日志中。
 
@@ -62,4 +63,4 @@
 - Engram hash失败：我方Triton ASTSource signature dict顺序错误，加上cache hash不区分顺序，导致错误ABI和旧产物复用；修正离线有序签名与局部cache key后68类通过。不是MUSA整数store硬件缺陷。
 - EvalScope首个暖机失败：我方给了根URL，工具自动补错API路径。改为完整`/v1/chat/completions`；失败记录保留，正式测量另建v2目录。
 
-当前这些问题都已在我方解决，没有据此向外部索要资源。尚未完成的是完整正式性能、生产40层trace及一次小范围优化归因、对应commit、08:00后的NVIDIA对照及SOL说明。不能提前写成整个任务已经完成。
+当前这些问题都已在我方解决，没有据此向外部索要资源。现已完成两组正式性能、双端40层/16rank真实trace、单token SWA写回优化及同条件复测；第一提交已推送，第二提交收录优化证据。H200原版1017参考与Torch/Perfetto完成，231/232我方容器正常停止；H20 GPU任务按用户要求延期。SOL暂无测算表，按用户确认记录方法/参数，不宣称已达到60%。2048固定prompt下输出不完全重复、默认无progress配置下长输入通信超时仍需后续隔离，详见新报告。

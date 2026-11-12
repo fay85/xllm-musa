@@ -1,0 +1,17 @@
+{
+  "roles": {
+    "sj9": {
+      "rank_commands_and_env_equal_except_artifact_run_names": true,
+      "binary_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f"
+    },
+    "sj10": {
+      "rank_commands_and_env_equal_except_artifact_run_names": true,
+      "binary_sha256": "cd39003d62f4940f9870038804a22788059589316dd27b4276ee4a34e26e5c0f"
+    }
+  },
+  "changed_frozen_payloads_only": [
+    "bin/xllm",
+    "lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so"
+  ],
+  "unchanged_mate_aot_and_helper_payloads": 30
+}

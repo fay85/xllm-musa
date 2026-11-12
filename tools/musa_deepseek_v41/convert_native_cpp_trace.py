@@ -55,6 +55,10 @@ def main() -> None:
     parser.add_argument("--resolved-symbols", type=Path, required=True)
     parser.add_argument("--binary-sha256", required=True)
     parser.add_argument("--step", choices=("first", "last"), required=True)
+    parser.add_argument(
+        "--scope", help="Optional actual CPU semantic scope within the chosen step"
+    )
+    parser.add_argument("--scope-index", type=int, default=0)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
@@ -63,9 +67,29 @@ def main() -> None:
     if len(args.binary_sha256) != 64:
         raise ValueError("Supply the SHA256 of the binary used for symbolization")
     events = json.loads(args.trace.read_text())["traceEvents"]
-    steps = [row for row in events if row.get("name", "").startswith("V41/step/")]
+    steps = [
+        row
+        for row in events
+        if row.get("ph") == "X"
+        and row.get("cat") in ("cpu_op", "user_annotation")
+        and row.get("name", "").startswith("V41/step/")
+    ]
     step = steps[0 if args.step == "first" else -1]
     begin, end = step["ts"], step["ts"] + step["dur"]
+    selected_scope = None
+    if args.scope:
+        candidates = [
+            row
+            for row in events
+            if row.get("ph") == "X"
+            and row.get("cat") in ("cpu_op", "user_annotation")
+            and row.get("name") == args.scope
+            and row.get("tid") == step["tid"]
+            and begin <= row["ts"]
+            and row["ts"] + row["dur"] <= end + 0.001
+        ]
+        selected_scope = candidates[args.scope_index]
+        begin, end = selected_scope["ts"], selected_scope["ts"] + selected_scope["dur"]
     selected = [
         row
         for row in events
@@ -78,6 +102,36 @@ def main() -> None:
             or "kernel" in row.get("cat", "").lower()
         )
     ]
+    if selected_scope is not None:
+        # A native async launch may complete after its CPU scope has returned.
+        # Link through the actual runtime correlation instead of inventing a
+        # nearby GPU interval or truncating it to the CPU duration.
+        correlations = {
+            row["args"]["correlation"]
+            for row in events
+            if row.get("ph") == "X"
+            and (
+                row.get("cat", "").endswith("_runtime")
+                or row.get("cat") == "cuda_driver"
+            )
+            and row.get("tid") == selected_scope["tid"]
+            and begin <= row["ts"]
+            and row["ts"] + row.get("dur", 0) <= end + 0.001
+            and row.get("args", {}).get("correlation") is not None
+        }
+        gpu = [
+            row
+            for row in events
+            if row.get("ph") == "X"
+            and "kernel" in row.get("cat", "").lower()
+            and row.get("args", {}).get("correlation") in correlations
+        ]
+        if not gpu:
+            raise ValueError("No GPU kernel linked to the actual CPU semantic scope")
+        selected = [
+            row for row in selected if row.get("cat") in ("cpu_op", "user_annotation")
+        ]
+        selected += gpu
     symbols = json.loads(args.resolved_symbols.read_text())
     trace = proto.Trace()
     defaults = trace.packet.add()
@@ -189,6 +243,12 @@ def main() -> None:
         "symbols_sha256": _sha(args.resolved_symbols),
         "symbolization_binary_sha256": args.binary_sha256,
         "selected_step": step,
+        "selected_scope": selected_scope,
+        "gpu_selection": (
+            "runtime correlation for scope"
+            if selected_scope
+            else "within full step window"
+        ),
         "actual_intervals": len(selected),
         "native_entry_samples": count,
         "output_sha256": _sha(args.output),

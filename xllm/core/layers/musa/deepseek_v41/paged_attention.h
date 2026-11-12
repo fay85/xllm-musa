@@ -17,6 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <string>
 #include <utility>
 
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/csa2_attention.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 
@@ -31,9 +32,11 @@ class DeepseekV41PagedAttention final {
   DeepseekV41PagedAttention(torch::Tensor cache,
                             int64_t window,
                             double scale,
-                            std::string sparse_library_path = {})
+                            std::string sparse_library_path = {},
+                            bool single_token_scatter = true)
       : cache_(std::move(cache)),
         window_(window),
+        single_token_scatter_(single_token_scatter),
         attention_(scale, 32 * 1024 * 1024, std::move(sparse_library_path)) {
     CHECK(cache_.defined());
     CHECK(cache_.device().type() == torch::kPrivateUse1);
@@ -141,6 +144,13 @@ class DeepseekV41PagedAttention final {
 
   void commit(const torch::Tensor& slots, const torch::Tensor& values) {
     const DeepseekV41ProfileRange range("V41/Attention/SWA_commit");
+    // A single update has no duplicate slots to order. Keep the original
+    // stable latest-wins path for prefill chunks, which may wrap the ring.
+    if (single_token_scatter_ && slots.numel() == 1) {
+      kernel::musa::deepseek_v4_scatter_single_cache_native(
+          cache_, slots, values);
+      return;
+    }
     const torch::Tensor order =
         torch::argsort(slots, /*stable=*/true, /*dim=*/0, /*descending=*/false);
     const torch::Tensor sorted = slots.index_select(0, order);
@@ -159,6 +169,7 @@ class DeepseekV41PagedAttention final {
 
   torch::Tensor cache_;
   int64_t window_;
+  bool single_token_scatter_;
   DeepseekV41SparseAttention attention_;
 };
 

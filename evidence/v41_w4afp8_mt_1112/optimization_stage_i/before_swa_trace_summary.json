@@ -1,0 +1,51 @@
+{
+  "status": "PASS_ACTUAL_RUNTIME_CORRELATION_FOR_EVERY_SWA_COMMIT",
+  "trace": "/work/profiling/stage_h_baseline_256_8/raw/sj10/xllm_rank0_57490_1794447527011.pt.trace.json",
+  "scope_count": 280,
+  "median_cpu_scope_us": 1078.75,
+  "cpu_scope_us_sum": 543778.8790000005,
+  "gpu_kernel_count": 9800,
+  "gpu_kernel_us_sum": 60519.263999999996,
+  "cpu_op_counts": {
+    "aten::argsort": 280,
+    "aten::sort": 280,
+    "aten::empty": 2800,
+    "aten::resize_": 560,
+    "aten::index_select": 840,
+    "aten::ge": 280,
+    "aten::empty_like": 560,
+    "aten::to": 1120,
+    "aten::item": 560,
+    "aten::_local_scalar_dense": 560,
+    "aten::lt": 280,
+    "aten::logical_and": 280,
+    "aten::result_type": 280,
+    "aten::index": 280,
+    "aten::nonzero": 280,
+    "aten::select": 280,
+    "aten::as_strided": 1120,
+    "aten::reshape": 280,
+    "aten::view": 560,
+    "aten::index_copy_": 280
+  },
+  "runtime_call_counts": {
+    "musaLaunchKernel": 9800,
+    "musaMemcpyAsync": 280
+  },
+  "gpu_kernel_counts": {
+    "void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<long, unsigned long, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)": 2240,
+    "void musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)": 2240,
+    "void musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<long, long, unsigned long, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)": 2240,
+    "void musa::dnn::ScanPartSumKernel<bool, long, long, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long, long, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 1>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, long)": 280,
+    "void musa::dnn::(anonymous namespace)::AddBaseSumFusedNonzero<long, long, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::FastDivmodU32, 1>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, void*, void*, long, int, int)": 280,
+    "void at::native::(anonymous namespace)::IndexVectorizedKernel<at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#1}, at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#2}>(long, long, long, int, at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#1}, at::native::(anonymous namespace)::GPUIndexKernel<long, 1, true, 3, false, (at::native::(anonymous namespace)::IndexKernelIOType)0>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(unsigned int, unsigned int, unsigned int)#2})": 280,
+    "void at::native::(anonymous namespace)::IndexSelectKernel<long, long>(long*, long*, long*, long, long, long, long, unsigned int)": 560,
+    "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": 280,
+    "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)": 280,
+    "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})": 280,
+    "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": 280,
+    "void musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)": 280,
+    "void musa::dnn::unary::kernel_unary<bool, musa::dnn::unary::AndOp, bool, bool, bool, 128>(bool*, bool const*, unsigned long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": 280
+  },
+  "interpretation": "Observed profiled durations include instrumentation overhead; not a formal TPOT estimate. GPU links use runtime correlation, not External id directly."
+}

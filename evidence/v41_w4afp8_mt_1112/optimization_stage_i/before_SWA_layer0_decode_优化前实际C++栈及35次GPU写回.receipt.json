@@ -1,0 +1,47 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "5dc3d2293d87a51d837f14ba3b3dda656d8d51b7a5351f4c679c8fb111c3f315",
+  "native_stacks_sha256": "22e75a7b5c514e24aee8b50517ca6b41781e2f82b208714e5127344fec2c0a8c",
+  "symbols_sha256": "d8cacc623c4171d81c934e361ea2f9c78cd341a38bf59567a8600fd822bc0cb3",
+  "symbolization_binary_sha256": "5dec7bad2087d42fae7c0eb7a23a2ffe5ee64555310b7793edd84047a7508799",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=1/kv=263",
+    "pid": 57490,
+    "tid": 59340,
+    "ts": 3590500417442.465,
+    "dur": 588155.166,
+    "args": {
+      "External id": 217247,
+      "Record function id": 218397,
+      "finished": true,
+      "Ev Idx": 217246
+    }
+  },
+  "selected_scope": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/Attention/SWA_commit",
+    "pid": 57490,
+    "tid": 59340,
+    "ts": 3590500428107.92,
+    "dur": 1357.438,
+    "args": {
+      "External id": 218018,
+      "Record function id": 219168,
+      "finished": true,
+      "Ev Idx": 218017
+    }
+  },
+  "gpu_selection": "runtime correlation for scope",
+  "actual_intervals": 78,
+  "native_entry_samples": 1,
+  "output_sha256": "d8d3818c189609582afaf3a2c9d54caa8940e670b021072e8ea0860e177d7f4a",
+  "verification": {
+    "slices": 78,
+    "native_entry_samples": 1,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

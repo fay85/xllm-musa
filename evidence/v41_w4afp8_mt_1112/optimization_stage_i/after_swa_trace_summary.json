@@ -1,0 +1,17 @@
+{
+  "status": "PASS_ACTUAL_RUNTIME_CORRELATION_FOR_EVERY_SWA_COMMIT",
+  "trace": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/06_trace与优化/优化后SWA暖态Trace/selected_raw/sj10/xllm_rank0_410_1794454272297.pt.trace.json",
+  "scope_count": 280,
+  "median_cpu_scope_us": 10.314,
+  "cpu_scope_us_sum": 3671.9900000000002,
+  "gpu_kernel_count": 280,
+  "gpu_kernel_us_sum": 1287.7649999999996,
+  "cpu_op_counts": {},
+  "runtime_call_counts": {
+    "musaLaunchKernel": 280
+  },
+  "gpu_kernel_counts": {
+    "void xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)": 280
+  },
+  "interpretation": "Observed profiled durations include instrumentation overhead; not a formal TPOT estimate. GPU links use runtime correlation, not External id directly."
+}

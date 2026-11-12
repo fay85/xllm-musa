@@ -1,0 +1,136 @@
+{
+  "256": {
+    "official_summary": {
+      "Test Duration (s)": 172.6077,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.029,
+      "Avg Latency (s)": 34.5212,
+      "Avg Input Tokens": 256.0,
+      "Output Throughput (tok/s)": 7.4157,
+      "Total Throughput (tok/s)": 14.8313,
+      "Avg TTFT (ms)": 651.44,
+      "Avg TPOT (ms)": 132.82,
+      "Avg ITL (ms)": 133.34,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0
+    },
+    "requests": [
+      {
+        "success": 1,
+        "input": 256,
+        "output": 256,
+        "latency_s": 34.18571205344051,
+        "ttft_s": 0.18055385537445545,
+        "tpot_ms": 133.35356156104336
+      },
+      {
+        "success": 1,
+        "input": 256,
+        "output": 256,
+        "latency_s": 36.18931717053056,
+        "ttft_s": 2.3526525078341365,
+        "tpot_ms": 132.6928025988095
+      },
+      {
+        "success": 1,
+        "input": 256,
+        "output": 256,
+        "latency_s": 34.065261878073215,
+        "ttft_s": 0.2493467414751649,
+        "tpot_ms": 132.61143190822764
+      },
+      {
+        "success": 1,
+        "input": 256,
+        "output": 256,
+        "latency_s": 34.053392224013805,
+        "ttft_s": 0.23671541642397642,
+        "tpot_ms": 132.61441885329344
+      },
+      {
+        "success": 1,
+        "input": 256,
+        "output": 256,
+        "latency_s": 34.112231850624084,
+        "ttft_s": 0.237914327532053,
+        "tpot_ms": 132.8404608748707
+      }
+    ],
+    "median_latency_s": 34.112231850624084,
+    "median_ttft_ms": 237.914327532053,
+    "median_tpot_ms": 132.6928025988095
+  },
+  "2048": {
+    "official_summary": {
+      "Test Duration (s)": 194.4808,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.0257,
+      "Avg Latency (s)": 38.895,
+      "Avg Input Tokens": 2048.0,
+      "Output Throughput (tok/s)": 6.5816,
+      "Total Throughput (tok/s)": 59.2346,
+      "Avg TTFT (ms)": 5050.42,
+      "Avg TPOT (ms)": 132.72,
+      "Avg ITL (ms)": 133.25,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0
+    },
+    "requests": [
+      {
+        "success": 1,
+        "input": 2048,
+        "output": 256,
+        "latency_s": 35.33515407331288,
+        "ttft_s": 1.453838256187737,
+        "tpot_ms": 132.86790516519665
+      },
+      {
+        "success": 1,
+        "input": 2048,
+        "output": 256,
+        "latency_s": 35.438029646873474,
+        "ttft_s": 1.6308721620589495,
+        "tpot_ms": 132.57708817574323
+      },
+      {
+        "success": 1,
+        "input": 2048,
+        "output": 256,
+        "latency_s": 35.388237530365586,
+        "ttft_s": 1.5533377453684807,
+        "tpot_ms": 132.68588150979258
+      },
+      {
+        "success": 1,
+        "input": 2048,
+        "output": 256,
+        "latency_s": 35.427088554017246,
+        "ttft_s": 1.6206999002024531,
+        "tpot_ms": 132.57407315221488
+      },
+      {
+        "success": 1,
+        "input": 2048,
+        "output": 256,
+        "latency_s": 52.8865309106186,
+        "ttft_s": 18.993348811753094,
+        "tpot_ms": 132.91443960339416
+      }
+    ],
+    "median_latency_s": 35.427088554017246,
+    "median_ttft_ms": 1620.6999002024531,
+    "median_tpot_ms": 132.68588150979258
+  }
+}

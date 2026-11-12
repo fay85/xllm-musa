@@ -1,0 +1,41 @@
+{
+  "status": "PASS_OWN_CONTAINER_STOPPED_AND_OWN_GPU_CONTEXTS_RELEASED",
+  "container": "xiaopang1112_v41_cuda_decode_h200232",
+  "container_id": "dc5fc8259da1856258abae1d8008368cf938e1f3b4a69c5ca4242998cc04bf24",
+  "command": [
+    "docker",
+    "stop",
+    "--time=120",
+    "xiaopang1112_v41_cuda_decode_h200232"
+  ],
+  "exit": 0,
+  "stdout": "Flag --time has been deprecated, use --timeout instead\nxiaopang1112_v41_cuda_decode_h200232\n",
+  "stderr": "",
+  "container_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-12T00:27:40.612270828Z",
+    "FinishedAt": "2026-11-12T02:52:21.304166376Z"
+  },
+  "own_gpu_pids_before": [
+    3853877,
+    3853882,
+    3853885,
+    3853891,
+    3853896,
+    3853901,
+    3853908,
+    3853916
+  ],
+  "gpu_processes_after": "",
+  "gpu_memory_after": "0, NVIDIA H200, 0, 143771, 0\n1, NVIDIA H200, 0, 143771, 0\n2, NVIDIA H200, 0, 143771, 0\n3, NVIDIA H200, 0, 143771, 0\n4, NVIDIA H200, 0, 143771, 0\n5, NVIDIA H200, 0, 143771, 0\n6, NVIDIA H200, 0, 143771, 0\n7, NVIDIA H200, 0, 143771, 0\n",
+  "trace_validation_status": "PASS_32_FULL_GZIP_CRC_JSON_CPU_GPU_REAL_PYTHON_STACKS_40LAYERS_TP8_BOTH_SCENES",
+  "at": "2026-11-12T02:52:21.828434+00:00"
+}

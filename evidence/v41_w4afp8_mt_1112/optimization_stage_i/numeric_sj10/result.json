@@ -1,0 +1,621 @@
+{
+  "status": "PASS_NATIVE_SINGLE_SWA_STREAM_ORDER_AND_RING_SEMANTICS",
+  "device": "MTT S5000",
+  "cases": [
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": -65,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": -1,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": 0,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": 17,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": 47,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": 48,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": false,
+      "slot": 100,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": -65,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": -1,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": 0,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": 17,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": 47,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": 48,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 128,
+      "nondefault_stream": true,
+      "slot": 100,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": -65,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": -1,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": 0,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": 17,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": 47,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": 48,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": false,
+      "slot": 100,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": -65,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": -1,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": 0,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": 17,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": 47,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": 48,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "raw_scatter",
+      "dimension": 512,
+      "nondefault_stream": true,
+      "slot": 100,
+      "cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 0,
+      "context": 0,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 17,
+      "context": 17,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 18,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 19,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 65,
+      "context": 84,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 85,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 86,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 87,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 0,
+      "context": 0,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 17,
+      "context": 17,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 18,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 19,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 65,
+      "context": 84,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 85,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 86,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 87,
+      "table": [
+        2,
+        0
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 0,
+      "context": 0,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 17,
+      "context": 17,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 18,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 19,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 65,
+      "context": 84,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 85,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 86,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 87,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": false,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 0,
+      "context": 0,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 17,
+      "context": 17,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 18,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 19,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 65,
+      "context": 84,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 85,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 86,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    },
+    {
+      "kind": "complete_paged_attention",
+      "rows": 1,
+      "context": 87,
+      "table": [
+        -1,
+        1
+      ],
+      "nondefault_stream": true,
+      "output_and_cache_bitwise_exact": true
+    }
+  ],
+  "timing_scope": "complete M1 paged attention, GPU events, 3 warmup/20 repeats",
+  "alternating_timing_samples": [
+    {
+      "original": 1.0562360763549805,
+      "original_cpu_stat": {
+        "before": "usage_usec 54700957965\nuser_usec 37868625403\nsystem_usec 16832332561\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701028597\nuser_usec 37868673677\nsystem_usec 16832354920\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      },
+      "single_scatter": 0.672435998916626,
+      "single_scatter_cpu_stat": {
+        "before": "usage_usec 54701028880\nuser_usec 37868673873\nsystem_usec 16832355007\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701076801\nuser_usec 37868712677\nsystem_usec 16832364123\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      }
+    },
+    {
+      "single_scatter": 0.6724239826202393,
+      "single_scatter_cpu_stat": {
+        "before": "usage_usec 54701077024\nuser_usec 37868712832\nsystem_usec 16832364192\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701124778\nuser_usec 37868751520\nsystem_usec 16832373257\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      },
+      "original": 1.0350960731506347,
+      "original_cpu_stat": {
+        "before": "usage_usec 54701125003\nuser_usec 37868751676\nsystem_usec 16832373326\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701194081\nuser_usec 37868808567\nsystem_usec 16832385513\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      }
+    },
+    {
+      "original": 1.0275140762329102,
+      "original_cpu_stat": {
+        "before": "usage_usec 54701194239\nuser_usec 37868808676\nsystem_usec 16832385562\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701262941\nuser_usec 37868869372\nsystem_usec 16832393568\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      },
+      "single_scatter": 0.6610700130462647,
+      "single_scatter_cpu_stat": {
+        "before": "usage_usec 54701263099\nuser_usec 37868869482\nsystem_usec 16832393617\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701310971\nuser_usec 37868910754\nsystem_usec 16832400217\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      }
+    },
+    {
+      "single_scatter": 0.6616000175476074,
+      "single_scatter_cpu_stat": {
+        "before": "usage_usec 54701311179\nuser_usec 37868910898\nsystem_usec 16832400281\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701358068\nuser_usec 37868942421\nsystem_usec 16832415646\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      },
+      "original": 1.0376959800720216,
+      "original_cpu_stat": {
+        "before": "usage_usec 54701358321\nuser_usec 37868942596\nsystem_usec 16832415724\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701427738\nuser_usec 37869002849\nsystem_usec 16832424889\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      }
+    },
+    {
+      "original": 0.9984620094299317,
+      "original_cpu_stat": {
+        "before": "usage_usec 54701427907\nuser_usec 37869002966\nsystem_usec 16832424941\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701496868\nuser_usec 37869062590\nsystem_usec 16832434277\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      },
+      "single_scatter": 0.6326020240783692,
+      "single_scatter_cpu_stat": {
+        "before": "usage_usec 54701497318\nuser_usec 37869062901\nsystem_usec 16832434416\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n",
+        "after": "usage_usec 54701543661\nuser_usec 37869101865\nsystem_usec 16832441796\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\n"
+      }
+    }
+  ],
+  "old_complete_ms": 1.0350960731506347,
+  "new_complete_ms": 0.6616000175476074,
+  "complete_speedup": 1.5645345309806482,
+  "boundary": "microbenchmark is not full-model TTFT/TPOT; prefill path unchanged"
+}
