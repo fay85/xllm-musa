@@ -1,0 +1,338 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t02_cache_read_probe_v1",
+  "bytes": 3113,
+  "sha256": "aa9145cbcf720acbb3601df297f3a627fa92daafd7afe6545dbd9903cd0c47c5",
+  "checks": {
+    "status": "PASS_NATIVE_GPU_READ_VIEW_BASIC_CHECKS",
+    "cases": [
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 0,
+        "capacity": 0,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 1,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 127,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 128,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 129,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 255,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 256,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int32",
+        "committed": 257,
+        "capacity": 384,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 0,
+        "capacity": 0,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 1,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 127,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 128,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 129,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 255,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 256,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 128,
+        "table_dtype": "torch.int64",
+        "committed": 257,
+        "capacity": 384,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 0,
+        "capacity": 0,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 1,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 127,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 128,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 129,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 255,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 256,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int32",
+        "committed": 257,
+        "capacity": 384,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 0,
+        "capacity": 0,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 1,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 127,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 128,
+        "capacity": 128,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 129,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 255,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 256,
+        "capacity": 256,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      },
+      {
+        "width": 512,
+        "table_dtype": "torch.int64",
+        "committed": 257,
+        "capacity": 384,
+        "bitwise_reference": true,
+        "repeat_same_storage": true,
+        "new_view_observes_commit": true,
+        "padding_nan_removed": true
+      }
+    ],
+    "case_count": 32,
+    "contract": "Read-only source within one forward. New FULL publication or token/request must discard the old view.",
+    "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+  },
+  "result": {
+    "exit_code": 0,
+    "finished_at": "2026-11-12T18:43:53.392222+08:00",
+    "no_signals": true
+  }
+}

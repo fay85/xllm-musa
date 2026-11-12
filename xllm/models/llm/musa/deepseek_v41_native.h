@@ -425,6 +425,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     attention.candidate_block_size = args_.candidate_block_size();
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
+    attention.decode_cache_read_reuse =
+        util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false);
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     config.hc_epsilon = args_.hc_eps();
     config.mhc_prenorm_directory = mhc_path_;

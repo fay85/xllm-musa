@@ -1,0 +1,28 @@
+复用Decode跨层只读压缩缓存，两组TPOT再降1.79%和3.02%
+
+家明，我在D端TP/EP custom累计基线上完成了压缩缓存重复gather的优化。
+同一次forward、同一Full来源层只materialize一次，后续层复用只读Tensor；
+每次来源发布或新forward清空，不跨token/请求复用，不缓存Query或Top-K。
+原生C++处理生命周期，实际算子仍在MUSA GPU；Prefill不改。
+
+同一ELF开关对照，C1 eager、P/D各8卡、TP8/EP8；官方EvalScope一暖五正式：
+256/256：TPOT 146.53→143.90ms，E2E 37.723→37.162s，
+输出6.786→6.889token/s；TTFT 357.83→466.86ms出现回退。
+2048/256：TPOT 148.58→144.10ms，E2E 40.256→39.147s，
+输出6.359→6.539token/s；TTFT 2367.07→2401.13ms出现回退。
+两组输出吞吐增加1.51%/2.83%。不删除TTFT慢点，不声称改善TTFT。
+全部20次正式请求成功、实际输入/输出token数有效、请求哈希一致。
+
+32个真实C++/GPU页缓存基本检查通过，覆盖空缓存、页边界、NaN padding、
+重复读取及新commit；两模式都回答4.2和56。仅通过基础功能检查，
+未完成模型精度验收。本轮不做API/MathQA/固定前缀数值门槛。
+
+前后各16rank实际trace全部SHA/层数/C++回溯关联通过。
+每个D rank单步gather从46降到8，D0 index_select减少76次，
+选中窗口内完整GPU kernel 5654→5246。减少重复映射、gather和mask，
+不能把82.6%的gather调用下降当作全模型收益。理论可消除上限仍未知。
+原始正式日志、算子检查、图和trace收据见evidence/v41_t02_cache_reuse_1112；
+完整大trace留SJ共享盘。两模式rank均正常退出0，未强杀或改驱动。
+
+这只完成T02的缓存复用子项，SWA读侧metadata融合尚未完成。
+下一步在累计最优上测mHC尾部融合，再继续MoE、Graph及T14范围内任务；不提MR。

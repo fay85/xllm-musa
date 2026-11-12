@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <torch/utils.h>
 
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 #include "core/layers/musa/deepseek_v41/profile_range.h"
@@ -102,6 +103,42 @@ class DeepseekV41TokenCache final {
   }
 
   torch::Tensor cache_;
+};
+
+// A read-only snapshot for one published source within one model forward.
+// The owner must discard it before publishing a different source or advancing
+// the request/token. It never caches across a scheduler update or a PD import.
+// Materialization stays lazy because REUSE does not consume indexer keys.
+class DeepseekV41TokenCacheReadView final {
+ public:
+  DeepseekV41TokenCacheReadView(torch::Tensor cache,
+                                torch::Tensor table,
+                                int64_t committed,
+                                int64_t capacity)
+      : cache_(std::move(cache)),
+        table_(std::move(table)),
+        committed_(committed),
+        capacity_(capacity) {
+    CHECK_GE(committed_, 0);
+    CHECK_GE(capacity_, committed_);
+  }
+
+  const torch::Tensor& materialize() {
+    if (!values_.has_value()) {
+      const DeepseekV41ProfileRange range(
+          "V41/Attention/compressed_cache_materialize");
+      values_ =
+          DeepseekV41TokenCache(cache_).gather(table_, committed_, capacity_);
+    }
+    return *values_;
+  }
+
+ private:
+  torch::Tensor cache_;
+  torch::Tensor table_;
+  int64_t committed_;
+  int64_t capacity_;
+  std::optional<torch::Tensor> values_;
 };
 
 }  // namespace xllm::layer

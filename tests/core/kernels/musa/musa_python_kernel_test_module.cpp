@@ -291,6 +291,12 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def("gather",
            &NativeTokenCache::gather,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  using NativeTokenReadView = xllm::layer::DeepseekV41TokenCacheReadView;
+  pybind11::class_<NativeTokenReadView>(module, "NativeV41TokenCacheReadView")
+      .def(pybind11::init<torch::Tensor, torch::Tensor, int64_t, int64_t>())
+      .def("materialize",
+           &NativeTokenReadView::materialize,
+           pybind11::call_guard<pybind11::gil_scoped_release>());
   using AttentionMode = xllm::layer::DeepseekV41AttentionMode;
   pybind11::enum_<AttentionMode>(module, "NativeV41AttentionMode")
       .value("SWA", AttentionMode::SWA)

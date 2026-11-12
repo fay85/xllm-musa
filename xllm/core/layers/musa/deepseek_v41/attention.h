@@ -49,6 +49,7 @@ struct DeepseekV41AttentionConfig {
   double epsilon = 1e-20;
   double scale = 1.0;
   bool original_fp8_activation = true;
+  bool decode_cache_read_reuse = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
 };
@@ -80,6 +81,9 @@ struct DeepseekV41AttentionRuntime {
   torch::Tensor key_table;
   torch::Tensor index;
   torch::Tensor index_table;
+  std::optional<DeepseekV41TokenCacheReadView> key_read;
+  std::optional<DeepseekV41TokenCacheReadView> index_read;
+  int64_t materialized_committed = -1;
   int64_t topk_layer = -1;
   torch::Tensor topk;
   int64_t candidates_layer = -1;
@@ -166,12 +170,25 @@ class DeepseekV41Attention final {
       CHECK_EQ(shared.source_layer, config_.source_layer);
       CHECK_EQ(shared.ratio, config_.ratio);
       const int64_t committed = context_length / config_.ratio;
+      const bool reuse_read =
+          config_.decode_cache_read_reuse && hidden.size(0) == 1;
+      if (reuse_read) {
+        if (!shared.key_read.has_value()) {
+          shared.key_read.emplace(
+              shared.key, shared.key_table, committed, committed);
+          shared.index_read.emplace(
+              shared.index, shared.index_table, committed, committed);
+          shared.materialized_committed = committed;
+        }
+        CHECK_EQ(shared.materialized_committed, committed);
+      }
       if (indexer_) {
         auto [index_query, head_weights] =
             indexer_->prepare_query(hidden, qr, positions, rope_table);
         const torch::Tensor keys =
-            DeepseekV41TokenCache(shared.index)
-                .gather(shared.index_table, committed, committed);
+            reuse_read ? shared.index_read->materialize()
+                       : DeepseekV41TokenCache(shared.index)
+                             .gather(shared.index_table, committed, committed);
         const torch::Tensor scores = indexer_->score(index_query,
                                                      keys,
                                                      head_weights,
@@ -204,8 +221,10 @@ class DeepseekV41Attention final {
         CHECK(shared.topk.defined());
       }
       CHECK_EQ(shared.topk.size(0), hidden.size(0));
-      compressed = DeepseekV41TokenCache(shared.key)
-                       .gather(shared.key_table, committed, committed);
+      compressed = reuse_read
+                       ? shared.key_read->materialize()
+                       : DeepseekV41TokenCache(shared.key)
+                             .gather(shared.key_table, committed, committed);
       const int64_t padding = config_.index_topk - shared.topk.size(1);
       CHECK_GE(padding, 0);
       // Fixed pick width matches the Python reduction even for zero capacity.
@@ -264,6 +283,11 @@ class DeepseekV41Attention final {
                                                   /*e4m3_scale=*/true);
     DeepseekV41TokenCache(cache.key).commit(
         values, torch::floor_divide(starts, config_.ratio), key_table);
+    // Source publication invalidates all materialized read views. Runtime
+    // itself is a forward-local object, so no token/request can inherit them.
+    shared.key_read.reset();
+    shared.index_read.reset();
+    shared.materialized_committed = -1;
     shared.key = cache.key;
     shared.key_table = key_table;
     shared.index = cache.index;
