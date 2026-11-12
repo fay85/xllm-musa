@@ -309,8 +309,53 @@ if(USE_MUSA)
       "This build directory uses mcc_wrapper as the host C++ compiler. "
       "Configure MUSA in a fresh build directory with a host C++ compiler.")
   endif()
-  set(CMAKE_CUDA_COMPILER "${_XLLM_MCC_WRAPPER}" CACHE FILEPATH
-      "MUSA device compiler for CUDA-compatible sources" FORCE)
+  set(XLLM_MUSA_HOST_CXX_COMPILER "" CACHE FILEPATH
+      "Host C++ compiler for a mixed host/MCC MUSA build")
+  if(NOT XLLM_MUSA_HOST_CXX_COMPILER)
+    find_program(_XLLM_MUSA_AUTO_HOST_CXX NAMES clang++-20 NO_CACHE)
+    if(NOT _XLLM_MUSA_AUTO_HOST_CXX)
+      message(FATAL_ERROR
+        "MUSA builds require a modern host C++ compiler. Install clang++-20 "
+        "or set -DXLLM_MUSA_HOST_CXX_COMPILER=/path/to/host-compiler.")
+    endif()
+    set(XLLM_MUSA_HOST_CXX_COMPILER "${_XLLM_MUSA_AUTO_HOST_CXX}"
+        CACHE FILEPATH "Host C++ compiler for a mixed host/MCC MUSA build" FORCE)
+  endif()
+  if(XLLM_MUSA_HOST_CXX_COMPILER)
+    find_program(_XLLM_MUSA_HOST_CXX_PATH
+                 NAMES "${XLLM_MUSA_HOST_CXX_COMPILER}" REQUIRED)
+    set(XLLM_MUSA_HOST_CLANG_ABI_COMPAT "14" CACHE STRING
+        "Clang ABI compatibility version matching the MUSA/PyTorch libraries")
+    execute_process(COMMAND "${_XLLM_MUSA_HOST_CXX_PATH}" --version
+                    OUTPUT_VARIABLE _XLLM_MUSA_HOST_VERSION
+                    RESULT_VARIABLE _XLLM_MUSA_HOST_VERSION_RESULT)
+    if(NOT _XLLM_MUSA_HOST_VERSION_RESULT EQUAL 0)
+      message(FATAL_ERROR "Cannot run the selected MUSA host C++ compiler")
+    endif()
+    set(_XLLM_MUSA_HOST_IS_CLANG "0")
+    if(_XLLM_MUSA_HOST_VERSION MATCHES "[Cc]lang")
+      set(_XLLM_MUSA_HOST_IS_CLANG "1")
+    endif()
+    foreach(_XLLM_MUSA_FORCE_MCC IN ITEMS 0 1)
+      if(_XLLM_MUSA_FORCE_MCC)
+        set(_XLLM_MUSA_DRIVER "${CMAKE_BINARY_DIR}/musa-device-compiler")
+        set(CMAKE_CUDA_COMPILER "${_XLLM_MUSA_DRIVER}" CACHE FILEPATH
+            "SDK compiler for MUSA device code" FORCE)
+      else()
+        set(_XLLM_MUSA_DRIVER "${CMAKE_BINARY_DIR}/musa-cxx-compiler")
+        set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_DRIVER}" CACHE FILEPATH
+            "Host/MUSA C++ compiler driver" FORCE)
+      endif()
+      configure_file("${CMAKE_CURRENT_LIST_DIR}/cmake/musa_compiler.sh.in"
+                     "${_XLLM_MUSA_DRIVER}" @ONLY)
+      file(CHMOD "${_XLLM_MUSA_DRIVER}"
+           PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                       GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    endforeach()
+  else()
+    set(CMAKE_CXX_COMPILER "${_XLLM_MCC_WRAPPER}" CACHE FILEPATH
+        "C++ compiler for the MUSA compatibility path" FORCE)
+  endif()
   project("xllm" LANGUAGES C CXX CUDA)
   # mcc_wrapper supports Clang-style dependency files.
   set(CMAKE_DEPFILE_FLAGS_CUDA "-MD -MT <DEP_TARGET> -MF <DEP_FILE>")
@@ -644,7 +689,7 @@ endif()
 
 if(USE_MUSA)
   add_definitions(-DUSE_MUSA)
-  add_compile_definitions(TORCH_CUDA=1)
+  add_compile_definitions(TORCH_CUDA=1 CCCL_DISABLE_NVFP8_SUPPORT)
   list(APPEND CMAKE_MODULE_PATH "${MUSA_PATH}/cmake")
   find_package(MUSA REQUIRED)
   # MUSA builds use the FlashInfer/Mate TVM-FFI path; MTTOplib is not needed.
@@ -707,6 +752,7 @@ if(USE_MUSA)
       ${MUSA_INCLUDE_DIRS}
       ${TorchMusa_INCLUDE_DIRS}
       ${tvm_ffi_INCLUDE_DIR}
+      ${_PYTHON_PLATLIB}
       ${MUSA_PATH}/include
       ${_TORCH_MUSA_ROOT}/share/torch_musa_codegen
       ${_TORCH_MUSA_ROOT}/share/generated_cuda_compatible/include
@@ -730,6 +776,11 @@ if(USE_MUSA)
   )
   set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -O3)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=parentheses")
+  if(XLLM_MUSA_HOST_CXX_COMPILER)
+    # Toolkit discovery may reset this cache entry to its legacy wrapper.
+    set(CMAKE_CUDA_COMPILER "${CMAKE_BINARY_DIR}/musa-device-compiler"
+        CACHE FILEPATH "SDK compiler for MUSA device code" FORCE)
+  endif()
 elseif(USE_CUDA)
   message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")
   add_definitions(-DUSE_CUDA)

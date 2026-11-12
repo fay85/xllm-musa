@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Copyright 2026 The xLLM Authors.
+# Licensed under the Apache License, Version 2.0.
+set -euo pipefail
+
+host_compiler="@_XLLM_MUSA_HOST_CXX_PATH@"
+mcc_wrapper="@_XLLM_MCC_WRAPPER@"
+force_mcc="@_XLLM_MUSA_FORCE_MCC@"
+host_is_clang="@_XLLM_MUSA_HOST_IS_CLANG@"
+clang_abi_compat="@XLLM_MUSA_HOST_CLANG_ABI_COMPAT@"
+compile=false
+objects=false
+musa=false
+language=false
+
+for arg in "$@"; do
+  if $language; then
+    case "$arg" in musa|cuda) musa=true ;; esac
+    language=false
+  fi
+  case "$arg" in
+    -c|-E|-S) compile=true ;;
+    -x) language=true ;;
+    -xmusa|-xcuda|-fplugin=*libMusaMapping.so) musa=true ;;
+    *.mu|*.cu) musa=true ;;
+    */core/runtime/executor_impl_factory.cpp|*cuda_graph*.cpp) musa=true ;;
+    *.o|*.obj|*.a|*.so) objects=true ;;
+  esac
+done
+
+# Source-only compiler identification and --version use the real host compiler.
+# The SDK wrapper retains its MUSA library mapping for final object-file links.
+# Errexit propagates failures before legacy wrapper tails can return zero.
+if [[ "$force_mcc" == "1" ]] || $musa || { $objects && ! $compile; }; then
+  if ! $compile; then
+    # Clang CMake emits linker inputs as -Xlinker pairs. Normalize these
+    # before the SDK wrapper groups archives, keeping each input atomic.
+    original=("$@")
+    link_args=()
+    for ((i = 0; i < ${#original[@]}; ++i)); do
+      if [[ "${original[i]}" == "-Xlinker" ]]; then
+        if ((i + 1 >= ${#original[@]})); then
+          printf '%s\n' 'missing argument after -Xlinker' >&2
+          exit 2
+        fi
+        link_args+=("-Wl,${original[i + 1]}")
+        i=$((i + 1))
+      else
+        link_args+=("${original[i]}")
+      fi
+    done
+    exec bash -e "$mcc_wrapper" "${link_args[@]}"
+  fi
+  exec bash -e "$mcc_wrapper" "$@"
+fi
+host_args=()
+for arg in "$@"; do
+  # This GCC-only suppression is also stripped by the SDK wrapper.
+  [[ "$arg" == "-Wno-format-truncation" ]] || host_args+=("$arg")
+done
+if [[ "$host_is_clang" == "1" && -n "$clang_abi_compat" ]]; then
+  host_args+=("-fclang-abi-compat=$clang_abi_compat")
+fi
+exec "$host_compiler" "${host_args[@]}"
