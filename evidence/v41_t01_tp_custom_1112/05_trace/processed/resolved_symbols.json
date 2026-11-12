@@ -1,0 +1,178 @@
+{
+  "5633246": [
+    "xllm::Executor::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "5713042": [
+    "xllm::BaseExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "5743522": [
+    "xllm::VlmExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "6371450": [
+    "void folly::detail::function::FunctionTraits<void ()>::callBig<xllm::WorkerImpl::step_async(xllm::ForwardInput const&)::$_3>(folly::detail::function::Data&)",
+    "worker_impl.cpp:?"
+  ],
+  "6617821": [
+    "xllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)",
+    "??:?"
+  ],
+  "6620290": [
+    "xllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)",
+    "??:?"
+  ],
+  "6627654": [
+    "xllm::LLMWorkerImpl::step(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "8072478": [
+    "xllm::ThreadPool::internal_loop(unsigned long, std::shared_ptr<folly::Function<void ()> >, std::shared_ptr<xllm::BlockingCounter>, int)",
+    "??:?"
+  ],
+  "8082864": [
+    "std::thread::_State_impl<std::thread::_Invoker<std::tuple<xllm::ThreadPool::ThreadPool(unsigned long, folly::Function<void ()>, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::$_1> > >::_M_run()",
+    "threadpool.cpp:?"
+  ],
+  "15175364": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15177515": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15181226": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15185555": [
+    "xllm::DeepseekV41NativeCausalLM::logits(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15202575": [
+    "xllm::layer::DeepseekV41ProfileRange::DeepseekV41ProfileRange(std::basic_string_view<char, std::char_traits<char> >, long, long, long, long, long)",
+    "??:?"
+  ],
+  "15225433": [
+    "xllm::layer::DeepseekV41TextModel::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15225716": [
+    "xllm::layer::DeepseekV41TextModel::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15255302": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15255411": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15255694": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15256157": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15256365": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15256429": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15256541": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15264444": [
+    "xllm::layer::DeepseekV41HyperConnection::prepare(at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15271287": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15271567": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15271804": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15273970": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15275340": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15277850": [
+    "xllm::layer::DeepseekV41HyperConnection::combine(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15283279": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15283463": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15284178": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15292004": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15292153": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15292724": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15298039": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15319951": [
+    "xllm::layer::DeepseekV41PagedAttention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15328684": [
+    "xllm::layer::DeepseekV41PagedAttention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15352119": [
+    "xllm::layer::DeepseekV41Compressor::forward(at::Tensor const&, long, at::Tensor const&)",
+    "??:?"
+  ],
+  "15369855": [
+    "xllm::layer::DeepseekV41TokenCache::commit(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15399819": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15409164": [
+    "xllm::layer::DeepseekV41W4A8Experts::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15420063": [
+    "xllm::layer::DeepseekV41TextModel::logits(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ]
+}

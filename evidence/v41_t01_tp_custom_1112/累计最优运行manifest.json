@@ -1,0 +1,48 @@
+{
+  "status": "ACCEPTED_SPEED_BASELINE",
+  "accuracy_label": "仅通过基础功能检查，未完成模型精度验收",
+  "accepted_at": "2026-11-12T18:07:32.683147+08:00",
+  "model": "/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt",
+  "model_revision": "a41b72782c27dbd505c84c13fcefaabb1fe2f273",
+  "topology": "SJ9 P8 + SJ10 D8; each host AttentionTP8/expertEP8; same8physicalGPUs",
+  "mode": "eager,C1,chunk256,prefixoff,overlapoff,MTPoff",
+  "binary": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t01_decode_tp_ar/bin/xllm",
+  "binary_sha256": "20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489",
+  "policy": {
+    "P": {
+      "XLLM_MUSA_ENABLE_TP_CUSTOM_AR": "0"
+    },
+    "D": {
+      "XLLM_MUSA_ENABLE_TP_CUSTOM_AR": "1"
+    },
+    "Attention q1": "custom BF16 D only",
+    "MoE_EP": "MCCL FP32; shared expert addedonceafterreduce"
+  },
+  "source_files_sha256": {
+    "xllm/core/layers/musa/deepseek_v41/decoder.h": "db20ec1d03a7f02001597e3254b0c76a2e9d8f8a89364e34d2fca445ea3bcd76",
+    "xllm/models/llm/musa/deepseek_v41_native.h": "bc835987b36ce4d6d5d39f6b872dab352df30d8f31741ada0000bb3f1cdffb38"
+  },
+  "runtime_configs": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/runs/t01_donly_custom_v1/{sj9,sj10}/role_config.json",
+  "formal_performance": {
+    "256": {
+      "status": "PASS_5_FORMAL_EXACT_NATIVE_COUNTS",
+      "TTFT_ms": 433.58751479536295,
+      "TPOT_ms": 162.73001427378725,
+      "E2E_s": 41.92974115461111,
+      "QPS_from_mean_request_latency": 0.023849419826194842,
+      "output_tps_from_mean_request_latency": 6.1054514755058795
+    },
+    "2048": {
+      "status": "PASS_5_FORMAL_EXACT_NATIVE_COUNTS",
+      "TTFT_ms": 2355.858961865306,
+      "TPOT_ms": 164.3115867528261,
+      "E2E_s": 44.25531358383596,
+      "QPS_from_mean_request_latency": 0.0225961566876174,
+      "output_tps_from_mean_request_latency": 5.784616112030054
+    }
+  },
+  "before": "../ToDoList_4/t01_off_v1",
+  "strict_removable_global_upper_bound": "unknown",
+  "TTFT_tradeoff": "Short client mean354.11→433.59ms; retain all points. Same-request Pstage~299ms both; residual outsideP/D boundaries, root cause unproven. Not a TTFT improvement claim.",
+  "next": "EP custom basiccheck then independent formalAB; core scope continues throughT14"
+}

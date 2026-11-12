@@ -21,6 +21,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <utility>
 #include <vector>
 
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/process_group.h"
 #include "core/layers/musa/deepseek_v41/attention.h"
 #include "core/layers/musa/deepseek_v41/engram_injection.h"
@@ -37,6 +38,7 @@ struct DeepseekV41DecoderConfig {
   int64_t sinkhorn_iterations = 20;
   double hc_epsilon = 1e-6;
   std::string mhc_prenorm_directory;
+  bool decode_tp_custom_allreduce = false;
 };
 
 struct DeepseekV41DecoderWeights {
@@ -131,7 +133,22 @@ class DeepseekV41Decoder final {
           /*context=*/-1,
           /*payload_bytes=*/static_cast<int64_t>(attn_output.nbytes()),
           /*group_size=*/attention_group_->world_size());
-      attention_group_->allreduce(attn_output);
+      if (config_.decode_tp_custom_allreduce && attn_output.size(0) == 1) {
+        // Selection follows the existing all-rank TP policy. The native
+        // custom collective returns separate storage; consume that result.
+        // Prefill and the routed-expert FP32 reduction keep their MCCL path.
+        std::optional<torch::Tensor> reduced =
+            musa_allreduce_tp_custom(attention_group_, attn_output);
+        CHECK(reduced.has_value())
+            << "Selected native V4.1 decode TP custom reduction is unsupported";
+        attn_output = std::move(reduced.value());
+        LOG_FIRST_N(INFO, 1)
+            << "Native V4.1 decode Attention TP backend=custom, group_size="
+            << attention_group_->world_size()
+            << ", bytes=" << attn_output.nbytes();
+      } else {
+        attention_group_->allreduce(attn_output);
+      }
     }
     residual =
         attention_hc_.combine(attn_output, residual, attn_post, attn_comb);

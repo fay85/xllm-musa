@@ -1,0 +1,14 @@
+{
+  "actual_binary_sha256": "20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489",
+  "source_sha256": {
+    "xllm/core/layers/musa/deepseek_v41/decoder.h": "db20ec1d03a7f02001597e3254b0c76a2e9d8f8a89364e34d2fca445ea3bcd76",
+    "xllm/models/llm/musa/deepseek_v41_native.h": "bc835987b36ce4d6d5d39f6b872dab352df30d8f31741ada0000bb3f1cdffb38"
+  },
+  "formatted_with": "20.1.6",
+  "accepted_runtime_policy": {
+    "P": "XLLM_MUSA_ENABLE_TP_CUSTOM_AR=0",
+    "D": "XLLM_MUSA_ENABLE_TP_CUSTOM_AR=1"
+  },
+  "scope": "Exact candidate source bytes as compiled and tested, not a new source implementation",
+  "accuracy_label": "仅通过基础功能检查，未完成模型精度验收"
+}

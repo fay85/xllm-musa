@@ -1,0 +1,10 @@
+{
+  "before_run": "t01_off_v1",
+  "source_experiment": "../ToDoList_4",
+  "source_binary_sha256": "20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489",
+  "P_custom": "0",
+  "D_custom": "0",
+  "reuse_reason": "Same ELF/dependencies/token IDs/cache/ports; both formal cases passed today. Preserve all original points, do not replace by best round.",
+  "full_ab_v1_failure": "CUSTOM P1 D1 failed long-prefill; not accepted baseline.",
+  "after": "P0 D1, one predeclared isolation attempt; not repeated sampling until success"
+}

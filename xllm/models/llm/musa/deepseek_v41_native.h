@@ -34,6 +34,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
 #include "core/layers/musa/deepseek_v41/text_model.h"
+#include "core/util/env_var.h"
 #include "models/llm/musa/deepseek_v41_checkpoint.h"
 #include "models/model_registry.h"
 
@@ -402,6 +403,11 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     config.hc_epsilon = args_.hc_eps();
     config.mhc_prenorm_directory = mhc_path_;
+    // MusaCustomAllReduce checks this policy across all TP ranks during
+    // communicator construction. Keep one consistent selector rather than
+    // adding an independent model flag that could disagree between ranks.
+    config.decode_tp_custom_allreduce =
+        util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true);
     config.attention.sparse_library_path = sparse_path_;
     config.attention.indexer_score_directory = indexer_aot_path_;
     auto& moe = config.moe;

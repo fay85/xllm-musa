@@ -1,0 +1,22 @@
+{
+  "status": "RENDERED_REAL_INTERVALS_AND_NATIVE_ENTRY_COUNT_WITH_PERFETTO_UI",
+  "trace": "\u738b\u5bb6\u660e/20261111\u540e\u7eed\u63a8\u8fdbCpp\u5427/\u4ee5sglang_mt\u5de5\u4f5c\u4e3a\u6bcd\u672c\u53bb\u505a/20261112\u65b0\u7684\u5f00\u59cb/ToDoList_5/05_trace/processed/sj10_last_step_actual.pftrace",
+  "output_sha256": "4728b93bdcca4447569bb44475a1dce7fe14bb1cddbcb33aa1b0c8b6aca02089",
+  "native_entry_samples": 540,
+  "selected_cpu_interval": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=1/kv=263",
+    "pid": 12584,
+    "tid": 14436,
+    "ts": 3620194223806.751,
+    "dur": 500912.235,
+    "args": {
+      "External id": 207407,
+      "Record function id": 208557,
+      "finished": true,
+      "Ev Idx": 207406
+    }
+  },
+  "boundary": "Entry counts identify real C++ callers; widths are not CPU-time samples. CPU/GPU interval timings are copied from the actual Kineto trace."
+}
