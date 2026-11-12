@@ -446,6 +446,40 @@ def _build_mooncake_runtime_archive(
     return archive_path
 
 
+def _stage_cann90_aicpu_alias(vendor_root: str, cann_tag: str) -> None:
+    """Keep CANN 9.0's math AICPU lookup inside the staged math vendor.
+
+    Older xllm_ops exports name the SMLA CPU library ``libtransformer`` in
+    both the binary and JSON, but CANN 9.0 resolves ``libmath`` at launch.
+    A relative alias preserves those exports without changing shared CANN
+    files or borrowing the unrelated custom_transformer CPU implementation.
+    """
+    if not cann_tag.startswith("cann9.0."):
+        return
+    cpu_root = os.path.join(vendor_root, "custom_xllm_math", "op_impl", "cpu")
+    config_path = os.path.join(cpu_root, "config", "cust_aicpu_kernel.json")
+    if not os.path.isfile(config_path):
+        return
+    with open(config_path, encoding="utf-8") as config_file:
+        config = json.load(config_file)
+    metadata = config.get("SmlaVaMetadata", {}).get("opInfo", {})
+    source_name = "libtransformer_aicpu_kernels.so"
+    if metadata.get("kernelSo") != source_name:
+        return
+
+    library_dir = os.path.join(cpu_root, "aicpu_kernel", "impl")
+    alias_path = os.path.join(library_dir, "libmath_aicpu_kernels.so")
+    if os.path.lexists(alias_path):
+        if not os.path.isfile(alias_path):
+            raise RuntimeError(f"CANN 9.0 math AICPU library is not a readable file: {alias_path}")
+        return
+    source_path = os.path.join(library_dir, source_name)
+    if not os.path.isfile(source_path):
+        raise RuntimeError(f"SmlaVaMetadata CPU library is missing from its own vendor: {source_path}")
+    os.symlink(source_name, alias_path)
+    logger.info(f"Staged CANN 9.0 math AICPU compatibility alias: {alias_path} -> {source_name}")
+
+
 def _stage_vendors_archive(base_dir: str, output_dir: str, device: str) -> str:
     """Repack the whole installed ``opp/vendors`` tree consumed by deployment.
 
@@ -470,11 +504,13 @@ def _stage_vendors_archive(base_dir: str, output_dir: str, device: str) -> str:
         )
 
     ops_dir = os.path.join(base_dir, "third_party", "xllm_ops")
-    archive_name = f"vendors-{_git_short_hash(ops_dir)}-{_cann_tag()}-{get_cpu_arch()}-{_chip_tag(device)}.tar.gz"
+    cann_tag = _cann_tag()
+    archive_name = f"vendors-{_git_short_hash(ops_dir)}-{cann_tag}-{get_cpu_arch()}-{_chip_tag(device)}.tar.gz"
     staging_root = os.path.join(output_dir, "vendors")
     if os.path.isdir(staging_root):
         shutil.rmtree(staging_root)
     shutil.copytree(vendor_root, staging_root, symlinks=True)
+    _stage_cann90_aicpu_alias(staging_root, cann_tag)
 
     archive_path = os.path.join(output_dir, archive_name)
     _reset_archive(archive_path)

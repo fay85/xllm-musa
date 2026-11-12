@@ -14,6 +14,7 @@
 """xllm release pack assembled at the end of bdist_wheel."""
 
 import hashlib
+import json
 import os
 import shutil
 import stat
@@ -305,6 +306,82 @@ class ReleasePackTest(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "custom_transformer"),
             ):
                 self.pack._stage_vendors_archive(root, output_dir, "npu")
+
+    def _write_smla_cpu_vendor(self, root: str) -> tuple[str, str]:
+        """Create distinct CPU implementations to catch cross-vendor aliases."""
+        vendor = os.path.join(root, "custom_xllm_math", "op_impl", "cpu")
+        library = os.path.join(vendor, "aicpu_kernel", "impl", "libtransformer_aicpu_kernels.so")
+        _write(library, "math CPU implementation")
+        config = {"SmlaVaMetadata": {"opInfo": {"kernelSo": "libtransformer_aicpu_kernels.so"}}}
+        _write(os.path.join(vendor, "config", "cust_aicpu_kernel.json"), json.dumps(config))
+        transformer = os.path.join(root, "custom_transformer", "op_impl", "cpu", "aicpu_kernel", "impl")
+        _write(os.path.join(transformer, "libtransformer_aicpu_kernels.so"), "different transformer implementation")
+        return library, os.path.join(os.path.dirname(library), "libmath_aicpu_kernels.so")
+
+    def test_cann90_aicpu_alias_uses_only_matching_math_library(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            library, alias = self._write_smla_cpu_vendor(root)
+            before = _sha256(library)
+            self.pack._stage_cann90_aicpu_alias(root, "cann9.0.0")
+            self.assertTrue(os.path.islink(alias))
+            self.assertEqual(os.readlink(alias), "libtransformer_aicpu_kernels.so")
+            self.assertEqual(_sha256(alias), before)
+            self.assertEqual(_sha256(library), before)
+            self.pack._stage_cann90_aicpu_alias(root, "cann9.0.0")
+            self.assertEqual(_sha256(alias), before)
+
+    def test_cann90_aicpu_alias_preserves_existing_library(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            _, alias = self._write_smla_cpu_vendor(root)
+            _write(alias, "newer canonical math CPU implementation")
+            before = _sha256(alias)
+            self.pack._stage_cann90_aicpu_alias(root, "cann9.0.0")
+            self.assertFalse(os.path.islink(alias))
+            self.assertEqual(_sha256(alias), before)
+
+    def test_cann90_aicpu_alias_rejects_missing_source_and_broken_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            library, alias = self._write_smla_cpu_vendor(root)
+            os.remove(library)
+            with self.assertRaisesRegex(RuntimeError, "missing from its own vendor"):
+                self.pack._stage_cann90_aicpu_alias(root, "cann9.0.0")
+            _write(library, "math CPU implementation")
+            os.symlink("missing.so", alias)
+            with self.assertRaisesRegex(RuntimeError, "not a readable file"):
+                self.pack._stage_cann90_aicpu_alias(root, "cann9.0.0")
+
+    def test_cann90_aicpu_alias_does_not_modify_other_cann_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            _, alias = self._write_smla_cpu_vendor(root)
+            self.pack._stage_cann90_aicpu_alias(root, "cann9.1.0")
+            self.assertFalse(os.path.lexists(alias))
+
+    def test_vendors_archive_keeps_aicpu_alias_without_mutating_installed_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            opp_root = os.path.join(root, "opp")
+            vendor_root = os.path.join(opp_root, "vendors")
+            library, alias = self._write_smla_cpu_vendor(vendor_root)
+            _write(os.path.join(vendor_root, "config.ini"), "load_priority=custom_xllm_math,custom_transformer\n")
+            output_dir = os.path.join(root, "out")
+            os.makedirs(output_dir)
+            original_hash = _sha256(library)
+            with (
+                mock.patch.dict(os.environ, {"ASCEND_OPP_PATH": opp_root}, clear=False),
+                mock.patch.object(self.pack, "_git_short_hash", return_value="ops1234"),
+                mock.patch.object(self.pack, "_cann_tag", return_value="cann9.0.0"),
+                mock.patch.object(self.pack, "get_cpu_arch", return_value="arm"),
+                mock.patch.object(self.pack, "_chip_tag", return_value="a3"),
+            ):
+                archive = self.pack._stage_vendors_archive(root, output_dir, "npu")
+            self.assertFalse(os.path.lexists(alias))
+            self.assertEqual(_sha256(library), original_hash)
+            relative = "vendors/custom_xllm_math/op_impl/cpu/aicpu_kernel/impl/"
+            with tarfile.open(archive, "r:gz") as packed:
+                member = packed.getmember(relative + "libmath_aicpu_kernels.so")
+                self.assertTrue(member.issym())
+                self.assertEqual(member.linkname, "libtransformer_aicpu_kernels.so")
+                self.assertEqual(packed.extractfile(member).read(), b"math CPU implementation")
+            self._assert_sha256_sidecar(output_dir, os.path.basename(archive))
 
     def test_cann_tag_uses_full_version_info(self) -> None:
         with tempfile.TemporaryDirectory() as root:
