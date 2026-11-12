@@ -8,11 +8,11 @@ import sysconfig
 from pathlib import Path
 
 from scripts.build_support.env import set_npu_envs
+from scripts.build_support.go_toolchain import ensure_go_toolchain
 from scripts.logger import logger
 
 _MOONCAKE_DEPENDENCIES_COMMAND = "bash dependencies.sh -y"
 _MSGPACK_CXX_REPO_URL_DEFAULT = "https://gitcode.com/msgpack/msgpack-c.git"
-_MOONCAKE_GO_BIN_DIR = "/usr/local/go/bin"
 _GO_DEFAULT_PROXY = "https://proxy.golang.org,direct"
 _MOONCAKE_GO_PROXY = "https://goproxy.cn|https://goproxy.io|direct"
 
@@ -327,44 +327,6 @@ def _get_mooncake_go_version(mooncake_source_dir: str) -> str | None:
     return None
 
 
-def _get_go_version(go_binary: str) -> str | None:
-    ok, output, _ = _run_command([go_binary, "version"], check=False)
-    if not ok:
-        return None
-
-    for token in output.split():
-        if token.startswith("go") and token[2:3].isdigit():
-            return token[2:]
-    return None
-
-
-def _get_installed_go_version() -> str | None:
-    return _get_go_version("go")
-
-
-def _export_mooncake_go_path(mooncake_source_dir: str) -> None:
-    required_version = _get_mooncake_go_version(mooncake_source_dir)
-    if required_version is None or _get_installed_go_version() == required_version:
-        return
-
-    go_binary = os.path.join(_MOONCAKE_GO_BIN_DIR, "go")
-    if not os.path.isfile(go_binary) or not os.access(go_binary, os.X_OK):
-        return
-    if _get_go_version(go_binary) != required_version:
-        return
-
-    path_entries = [path for path in os.environ.get("PATH", "").split(os.pathsep) if path]
-    updated_path_entries = [
-        _MOONCAKE_GO_BIN_DIR,
-        *(path for path in path_entries if path != _MOONCAKE_GO_BIN_DIR),
-    ]
-    if updated_path_entries == path_entries:
-        return
-
-    os.environ["PATH"] = os.pathsep.join(updated_path_entries)
-    logger.info(f"✅ Export Mooncake Go toolchain to PATH: {_MOONCAKE_GO_BIN_DIR}")
-
-
 def _export_mooncake_go_proxy() -> None:
     if os.environ.get("GOPROXY"):
         return
@@ -378,11 +340,6 @@ def _export_mooncake_go_proxy() -> None:
 
     os.environ["GOPROXY"] = _MOONCAKE_GO_PROXY
     logger.info(f"Export Mooncake GOPROXY to environment: {_MOONCAKE_GO_PROXY}")
-
-
-def _is_mooncake_go_ready(mooncake_source_dir: str) -> bool:
-    required_version = _get_mooncake_go_version(mooncake_source_dir)
-    return required_version is not None and _get_installed_go_version() == required_version
 
 
 def _ensure_git_safe_directory_or_exit(directory: str) -> None:
@@ -533,22 +490,28 @@ def _ensure_prebuild_dependencies_installed(
     if os.path.isfile(os.path.join(mooncake_source_dir, "mooncake-common", "FindYLT.cmake")):
         dependency_files.pop("yalantinglibs", None)
     missing_dependencies = _collect_missing_dependencies(dependency_files)
-    _export_mooncake_go_path(mooncake_source_dir)
-    go_ready = _is_mooncake_go_ready(mooncake_source_dir)
-    if force_install or missing_dependencies or not go_ready:
+    required_go_version = _get_mooncake_go_version(mooncake_source_dir)
+    if required_go_version is None:
+        logger.error("Failed to determine the required Mooncake Go version")
+        exit(1)
+    try:
+        # Select Go before dependencies.sh, so its installer never overlays the image's Go.
+        ensure_go_toolchain(required_go_version)
+    except (OSError, ValueError, RuntimeError) as error:
+        logger.error(f"Failed to prepare Mooncake Go {required_go_version}: {error}")
+        exit(1)
+
+    if force_install or missing_dependencies:
         if force_install:
             logger.info("ℹ️ Forcing Mooncake dependency installation because --deps was specified.")
         else:
-            missing_names = sorted(missing_dependencies)
-            if not go_ready:
-                missing_names.append("Mooncake Go toolchain")
-            logger.info(f"ℹ️ Missing third-party dependencies: {', '.join(missing_names)}. Running dependencies.sh ...")
+            logger.info(
+                f"ℹ️ Missing third-party dependencies: {', '.join(sorted(missing_dependencies))}. Running dependencies.sh ..."
+            )
         _run_dependencies_script_or_exit(script_path)
 
         missing_dependencies = _collect_missing_dependencies(dependency_files)
-        _export_mooncake_go_path(mooncake_source_dir)
-        go_ready = _is_mooncake_go_ready(mooncake_source_dir)
-        if missing_dependencies or not go_ready:
+        if missing_dependencies:
             logger.error("❌ Some third-party dependencies are still missing after running dependencies.sh:")
             manual_commands = _mooncake_dependency_manual_commands(mooncake_source_dir)
             for name in sorted(missing_dependencies):
@@ -556,9 +519,6 @@ def _ensure_prebuild_dependencies_installed(
                 for file_path in missing_dependencies[name]:
                     logger.error(f"     missing file: {file_path}")
                     manual_commands.append(f"test -f {file_path}")
-            if not go_ready:
-                logger.error("   - Mooncake Go toolchain")
-                manual_commands.append("go version")
             _print_manual_check_commands(manual_commands)
             exit(1)
 

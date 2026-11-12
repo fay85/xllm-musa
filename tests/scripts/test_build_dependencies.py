@@ -85,9 +85,9 @@ class BuildDependenciesTest(unittest.TestCase):
                     self.subTest(repo_url=repo_url, script_succeeds=script_succeeds),
                     mock.patch.dict(os.environ, environment, clear=True),
                     mock.patch.object(utils, "_run_shell_command", return_value=script_succeeds),
-                    mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
-                    mock.patch.object(utils, "_export_mooncake_go_path"),
-                    mock.patch.object(utils, "_is_mooncake_go_ready", return_value=False),
+                    mock.patch.object(utils, "_get_required_dependency_files", return_value={"test": ["/missing"]}),
+                    mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.26.10"),
+                    mock.patch.object(utils, "ensure_go_toolchain"),
                     mock.patch.object(utils, "_print_manual_check_commands") as manual,
                 ):
                     with self.assertRaises(SystemExit):
@@ -95,14 +95,13 @@ class BuildDependenciesTest(unittest.TestCase):
 
                     effective_repo_url = repo_url or utils._MSGPACK_CXX_REPO_URL_DEFAULT
                     self.assertEqual(os.environ["MSGPACK_CXX_REPO_URL"], effective_repo_url)
-                    manual.assert_called_once()
                     commands = manual.call_args.args[0]
                     self.assertEqual(shlex.split(commands[0]), ["cd", "/repo with spaces/third_party/Mooncake"])
                     self.assertEqual(
                         shlex.split(commands[1]),
                         [f"MSGPACK_CXX_REPO_URL={effective_repo_url}", "bash", "dependencies.sh", "-y"],
                     )
-                    self.assertEqual(commands[2:], ["go version"] if script_succeeds else [])
+                    self.assertEqual(commands[2:], ["test -f /missing"] if script_succeeds else [])
 
     def test_prebuild_skips_installed_mooncake_dependencies(self) -> None:
         with (
@@ -110,97 +109,50 @@ class BuildDependenciesTest(unittest.TestCase):
             mock.patch.object(utils, "_run_command", return_value=(True, utils._GO_DEFAULT_PROXY, "")),
             mock.patch.object(utils, "_run_shell_command") as run,
             mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
-            mock.patch.object(utils, "_export_mooncake_go_path"),
-            mock.patch.object(utils, "_is_mooncake_go_ready", return_value=True),
-            mock.patch.object(utils, "_export_cmake_prefix_paths"),
-        ):
-            utils._ensure_prebuild_dependencies_installed(
-                "/repo",
-            )
-            self.assertEqual(os.environ["GOPROXY"], utils._MOONCAKE_GO_PROXY)
-
-        run.assert_not_called()
-
-    def test_prebuild_installs_missing_go_toolchain(self) -> None:
-        with (
-            mock.patch.object(utils, "_run_shell_command", return_value=True) as run,
-            mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
-            mock.patch.object(utils, "_export_mooncake_go_path"),
-            mock.patch.object(utils, "_export_mooncake_go_proxy"),
-            mock.patch.object(utils, "_is_mooncake_go_ready", side_effect=[False, True]),
-            mock.patch.object(utils, "_export_cmake_prefix_paths"),
-        ):
-            utils._ensure_prebuild_dependencies_installed(
-                "/repo",
-            )
-
-        run.assert_called_once_with(
-            "bash dependencies.sh -y",
-            cwd="/repo/third_party/Mooncake",
-            passthrough_output=True,
-        )
-
-    def test_prebuild_exports_newly_installed_go_toolchain(self) -> None:
-        with (
-            mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
-            mock.patch.object(utils, "_is_mooncake_go_ready", side_effect=[False, True]),
-            mock.patch.object(utils, "_run_dependencies_script_or_exit"),
-            mock.patch.object(utils, "_export_mooncake_go_path") as export_go_path,
-            mock.patch.object(utils, "_export_mooncake_go_proxy") as export_go_proxy,
+            mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.26.10"),
+            mock.patch.object(utils, "ensure_go_toolchain") as ensure_go,
             mock.patch.object(utils, "_export_cmake_prefix_paths"),
         ):
             utils._ensure_prebuild_dependencies_installed("/repo")
+            self.assertEqual(os.environ["GOPROXY"], utils._MOONCAKE_GO_PROXY)
+            ensure_go.assert_called_once_with("1.26.10")
+        run.assert_not_called()
 
-        self.assertEqual(export_go_path.call_count, 2)
-        export_go_proxy.assert_called_once_with()
-
-    def test_export_mooncake_go_path_prepends_install_directory(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            go_binary = os.path.join(temp_dir, "go")
-            open(go_binary, "w", encoding="utf-8").close()
-            os.chmod(go_binary, 0o755)
-
-            with (
-                mock.patch.object(utils, "_MOONCAKE_GO_BIN_DIR", temp_dir),
-                mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.25.9"),
-                mock.patch.object(utils, "_get_installed_go_version", return_value=None),
-                mock.patch.object(utils, "_get_go_version", return_value="1.25.9"),
-                mock.patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}),
-            ):
-                utils._export_mooncake_go_path("/repo/third_party/Mooncake")
-
-                self.assertEqual(os.environ["PATH"].split(os.pathsep)[0], temp_dir)
-
-    def test_export_mooncake_go_path_preserves_matching_path_toolchain(self) -> None:
-        original_path = "/opt/go1.25.9/bin:/usr/bin:/bin"
+    def test_go_is_selected_before_dependencies_script(self) -> None:
+        calls = mock.Mock()
         with (
-            mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.25.9"),
-            mock.patch.object(utils, "_get_installed_go_version", return_value="1.25.9"),
-            mock.patch.object(utils, "_get_go_version") as get_go_version,
-            mock.patch.dict(os.environ, {"PATH": original_path}),
+            mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
+            mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.26.10"),
+            mock.patch.object(utils, "ensure_go_toolchain", calls.go),
+            mock.patch.object(utils, "_run_dependencies_script_or_exit", calls.dependencies),
+            mock.patch.object(utils, "_export_mooncake_go_proxy"),
+            mock.patch.object(utils, "_export_cmake_prefix_paths"),
         ):
-            utils._export_mooncake_go_path("/repo/third_party/Mooncake")
+            utils._ensure_prebuild_dependencies_installed("/repo", force_install=True)
+        self.assertEqual(calls.mock_calls, [mock.call.go("1.26.10"), mock.call.dependencies("/repo")])
 
-            self.assertEqual(os.environ["PATH"], original_path)
-            get_go_version.assert_not_called()
+    def test_go_preparation_failure_stops_before_dependencies_script(self) -> None:
+        with (
+            mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
+            mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.26.10"),
+            mock.patch.object(utils, "ensure_go_toolchain", side_effect=RuntimeError("broken toolchain")),
+            mock.patch.object(utils, "_run_dependencies_script_or_exit") as dependencies,
+        ):
+            with self.assertRaises(SystemExit):
+                utils._ensure_prebuild_dependencies_installed("/repo")
+            dependencies.assert_not_called()
 
-    def test_export_mooncake_go_path_rejects_stale_install(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            go_binary = os.path.join(temp_dir, "go")
-            open(go_binary, "w", encoding="utf-8").close()
-            os.chmod(go_binary, 0o755)
-            original_path = "/opt/go1.24.0/bin:/usr/bin:/bin"
-
-            with (
-                mock.patch.object(utils, "_MOONCAKE_GO_BIN_DIR", temp_dir),
-                mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.25.9"),
-                mock.patch.object(utils, "_get_installed_go_version", return_value="1.24.0"),
-                mock.patch.object(utils, "_get_go_version", return_value="1.23.0"),
-                mock.patch.dict(os.environ, {"PATH": original_path}),
-            ):
-                utils._export_mooncake_go_path("/repo/third_party/Mooncake")
-
-                self.assertEqual(os.environ["PATH"], original_path)
+    def test_missing_go_pin_stops_before_dependencies_script(self) -> None:
+        with (
+            mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
+            mock.patch.object(utils, "_get_mooncake_go_version", return_value=None),
+            mock.patch.object(utils, "ensure_go_toolchain") as ensure_go,
+            mock.patch.object(utils, "_run_dependencies_script_or_exit") as dependencies,
+        ):
+            with self.assertRaises(SystemExit):
+                utils._ensure_prebuild_dependencies_installed("/repo")
+            ensure_go.assert_not_called()
+            dependencies.assert_not_called()
 
     def test_export_mooncake_go_proxy_replaces_default_proxy(self) -> None:
         for environment in ({}, {"GOPROXY": ""}):
@@ -253,9 +205,9 @@ class BuildDependenciesTest(unittest.TestCase):
         with (
             mock.patch.object(utils, "_run_shell_command", return_value=True) as run,
             mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
-            mock.patch.object(utils, "_export_mooncake_go_path"),
+            mock.patch.object(utils, "ensure_go_toolchain"),
+            mock.patch.object(utils, "_get_mooncake_go_version", return_value="1.26.10"),
             mock.patch.object(utils, "_export_mooncake_go_proxy"),
-            mock.patch.object(utils, "_is_mooncake_go_ready", return_value=True),
             mock.patch.object(utils, "_export_cmake_prefix_paths"),
         ):
             utils._ensure_prebuild_dependencies_installed(
