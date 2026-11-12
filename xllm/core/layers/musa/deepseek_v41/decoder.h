@@ -26,6 +26,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/engram_injection.h"
 #include "core/layers/musa/deepseek_v41/hyper_connection.h"
 #include "core/layers/musa/deepseek_v41/moe.h"
+#include "core/layers/musa/deepseek_v41/profile_range.h"
 #include "core/layers/musa/deepseek_v41/rms_norm.h"
 
 namespace xllm::layer {
@@ -123,6 +124,13 @@ class DeepseekV41Decoder final {
                            context_length,
                            shared);
     if (attention_group_ != nullptr && attention_group_->world_size() > 1) {
+      const DeepseekV41ProfileRange reduction_range(
+          "V41/Attention/TP_allreduce",
+          /*layer=*/-1,
+          /*tokens=*/attn_output.size(0),
+          /*context=*/-1,
+          /*payload_bytes=*/static_cast<int64_t>(attn_output.nbytes()),
+          /*group_size=*/attention_group_->world_size());
       attention_group_->allreduce(attn_output);
     }
     residual =

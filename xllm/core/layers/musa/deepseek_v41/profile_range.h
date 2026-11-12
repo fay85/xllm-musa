@@ -10,6 +10,8 @@ SPDX-License-Identifier: Apache-2.0
 #include <string>
 #include <string_view>
 
+#include "core/layers/musa/deepseek_v41/light_timing.h"
+
 namespace xllm::layer {
 
 // A real native RecordFunction scope, captured by Kineto and the optional
@@ -19,7 +21,10 @@ class DeepseekV41ProfileRange final {
   explicit DeepseekV41ProfileRange(std::string_view name,
                                    int64_t layer = -1,
                                    int64_t tokens = -1,
-                                   int64_t context = -1) {
+                                   int64_t context = -1,
+                                   int64_t payload_bytes = -1,
+                                   int64_t group_size = -1)
+      : light_timing_(name, layer, tokens, context, payload_bytes, group_size) {
     if (!record_.isActive()) {
       return;
     }
@@ -37,6 +42,8 @@ class DeepseekV41ProfileRange final {
   }
 
  private:
+  DeepseekV41LightTiming light_timing_;
+
   // The name must outlive RecordFunction's end callback.
   std::string name_;
   torch::RecordFunction record_{torch::RecordScope::USER_SCOPE};

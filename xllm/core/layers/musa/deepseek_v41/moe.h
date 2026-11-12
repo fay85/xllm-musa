@@ -160,7 +160,13 @@ class DeepseekV41Moe final {
       routed = local_experts(input, indices, route_weights);
     }
     if (ep_group_ != nullptr && ep_group_->world_size() > 1) {
-      const DeepseekV41ProfileRange reduction_range("V41/MoE/EP_allreduce");
+      const DeepseekV41ProfileRange reduction_range(
+          "V41/MoE/EP_allreduce",
+          /*layer=*/-1,
+          /*tokens=*/routed.size(0),
+          /*context=*/-1,
+          /*payload_bytes=*/static_cast<int64_t>(routed.nbytes()),
+          /*group_size=*/ep_group_->world_size());
       ep_group_->allreduce(routed);
     }
     // Shared output is replicated in this baseline and must not be included

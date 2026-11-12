@@ -1,0 +1,7 @@
+{
+  "mode": "HOST",
+  "archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_2/01_\u57fa\u7ebf/HOST_server_raw.tar.gz",
+  "bytes": 501455,
+  "sha256": "c0cc9c769ff56866c87dbfa46b12465444f10ef365cb25ea9e93d467b42b0c13",
+  "status": "16_RANK_NORMAL_EXIT0_CONFIG_AND_SERVER_LOGS"
+}

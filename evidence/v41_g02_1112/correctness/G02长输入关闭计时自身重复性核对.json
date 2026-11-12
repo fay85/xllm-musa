@@ -1,0 +1,56 @@
+{
+  "OFF": {
+    "request_hashes": [
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c"
+    ],
+    "output_content_hashes": [
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e",
+      "38675939c67d1a3240603a58bf98c726ae237a9a0ea0bfdc3d1f1d2bca1275a9",
+      "9b05385c07efd09347fdba8b37d3bccd35f2477232e0b85dc86fe6ba910878a7",
+      "23f5a770b935049fea0e956ddb13600a0803ccfaac5ff858ffaa590e302e76d9",
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e"
+    ],
+    "unique_requests": 1,
+    "unique_outputs": 4
+  },
+  "HOST": {
+    "request_hashes": [
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c"
+    ],
+    "output_content_hashes": [
+      "5e212d7764e7bc5344b773706abe16b3de4d4dfab699e2d2cabfe446d9cd9c35",
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e",
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e",
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e",
+      "be399d6b7187ebff7c254f1afb49a47a3a2173858cb9d464326d9f4710d28d9a"
+    ],
+    "unique_requests": 1,
+    "unique_outputs": 3
+  },
+  "DEVICE": {
+    "request_hashes": [
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c",
+      "f2cf3cae86784d0f5a77d22ce49edca93fccc6d8e44dac7cf02189e68fda395c"
+    ],
+    "output_content_hashes": [
+      "aa97b124e6ef68864c9b1652ad1c18abc3fdc9e3f8691e0cabf935a009ea78e1",
+      "4a543c63b55b44974d0d0200c2970151abe92cff879570ffda619e211ac2cf37",
+      "de8f4417377b6ce902b502c4f6928e286b6f302592b61d918abe562dec557abc",
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e",
+      "1d1a574432751789db63605bebbaa5bf8997062d79b640702920de2f32c1427e"
+    ],
+    "unique_requests": 1,
+    "unique_outputs": 4
+  }
+}

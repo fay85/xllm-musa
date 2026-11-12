@@ -1,0 +1,18 @@
+{
+  "256": {
+    "matched_all8rank_root_steps": 79,
+    "max_rank_gpu_root_median_ms": 176.011,
+    "mean_rank_host_root_median_ms": 152.02035362499998,
+    "official_mode_tpot_ms": 179.7693577043566,
+    "official_off_tpot_ms": 179.32469823196823,
+    "limits": "Different summaries/stream spans, not a proof that all difference is removable serving overhead."
+  },
+  "2048": {
+    "matched_all8rank_root_steps": 80,
+    "max_rank_gpu_root_median_ms": 178.22050000000002,
+    "mean_rank_host_root_median_ms": 153.6160639375,
+    "official_mode_tpot_ms": 181.11292206554435,
+    "official_off_tpot_ms": 180.81202640691225,
+    "limits": "Different summaries/stream spans, not a proof that all difference is removable serving overhead."
+  }
+}
