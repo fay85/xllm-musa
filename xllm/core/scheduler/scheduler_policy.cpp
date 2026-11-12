@@ -616,14 +616,12 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
         std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
     const size_t next_fine_boundary =
         ((kv_cache_tokens_num / fine_stride) + 1) * fine_stride;
-    if (next_fine_boundary < seq->num_tokens()) {
+    // Only split at next_fine_boundary when at least one full fine_stride
+    // remains afterward; slicing a short unique tail into tiny memory-bound
+    // steps (or splitting at last_cp_boundary) re-reads all weights and KV
+    // without creating reusable prefix state.
+    if (next_fine_boundary + fine_stride <= seq->num_tokens()) {
       num_tokens = std::min(num_tokens, next_fine_boundary - kv_cache_tokens_num);
-    } else if (seq->num_tokens() > cp_align) {
-      const size_t last_cp_boundary =
-          ((seq->num_tokens() - 1) / cp_align) * cp_align;
-      if (last_cp_boundary > kv_cache_tokens_num) {
-        num_tokens = std::min(num_tokens, last_cp_boundary - kv_cache_tokens_num);
-      }
     }
   }
 

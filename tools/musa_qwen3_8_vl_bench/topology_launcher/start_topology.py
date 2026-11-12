@@ -28,7 +28,7 @@ import urllib.request
 
 
 HERE = Path(__file__).resolve().parent
-EXPECTED_ENGINE_MD5 = "a4aa70e00d80ce07ce7f6909ee37cedf"
+EXPECTED_ENGINE_MD5 = "1ec351697f550155ae228d43c3a668a7"
 DEFAULT_BUNDLE = "/workspace/ttft_delivery_1110/release/xllm_ttft_fix_1110"
 DEFAULT_WORK = "/workspace/topology_sweep_1110"
 # Below the ephemeral range 32768-60999. Ports inside that range lose the bind

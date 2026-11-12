@@ -44,6 +44,10 @@ class VLMEngine : public Engine {
 
   ForwardOutput step(std::vector<Batch>& batch) override;
 
+  bool supports_async_dp_step() const override;
+
+  ForwardOutput step_dp_group(uint32_t dp_rank, Batch& batch) override;
+
   const runtime::Options& options() const { return options_; }
 
   runtime::DecodeGraphWarmupConfig decode_graph_warmup_config() const override;
@@ -62,6 +66,7 @@ class VLMEngine : public Engine {
   KVCacheCapacity estimate_kv_cache_capacity();
   bool allocate_kv_cache(const KVCacheCapacity& kv_cache_cap);
   std::vector<ForwardInput> prepare_inputs(std::vector<Batch>& batch);
+  ForwardInput prepare_dp_group_input(uint32_t dp_rank, Batch& batch);
   void setup_workers(const runtime::Options& options);
   void process_group_test();
 

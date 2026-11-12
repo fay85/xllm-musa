@@ -46,7 +46,7 @@ class SpeculativeEngineBase : public Engine {
   ForwardOutput step(std::vector<Batch>& batch) override;
 
   bool supports_async_dp_step() const override {
-    return !use_draft_engine_ && engine_->supports_async_dp_step();
+    return engine_->supports_async_dp_step();
   }
 
   ForwardOutput step_dp_group(uint32_t dp_rank, Batch& batch) override {
