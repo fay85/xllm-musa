@@ -20,6 +20,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <utility>
 #include <vector>
 
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/process_group.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
@@ -33,6 +34,7 @@ struct DeepseekV41MoeConfig {
   DeepseekV41ExpertFormat expert_format = DeepseekV41ExpertFormat::ORIGINAL_FP4;
   bool dense = false;
   bool original_fp8_activation = true;
+  bool decode_ep_custom_allreduce = false;
   int64_t first_expert = 0;
   int64_t topk = 6;
   int64_t image_token_id = 129264;
@@ -167,7 +169,19 @@ class DeepseekV41Moe final {
           /*context=*/-1,
           /*payload_bytes=*/static_cast<int64_t>(routed.nbytes()),
           /*group_size=*/ep_group_->world_size());
-      ep_group_->allreduce(routed);
+      if (config_.decode_ep_custom_allreduce && input.size(0) == 1) {
+        CHECK_EQ(routed.scalar_type(), torch::kFloat32);
+        std::optional<torch::Tensor> reduced =
+            musa_allreduce_tp_custom(ep_group_, routed);
+        CHECK(reduced.has_value())
+            << "Selected native V4.1 decode EP custom reduction is unsupported";
+        routed = std::move(reduced.value());
+        LOG_FIRST_N(INFO, 1)
+            << "Native V4.1 decode routed EP backend=custom, group_size="
+            << ep_group_->world_size() << ", bytes=" << routed.nbytes();
+      } else {
+        ep_group_->allreduce(routed);
+      }
     }
     // Shared output is replicated in this baseline and must not be included
     // in the EP sum. FP32 routed+shared accumulation rounds to BF16 once.

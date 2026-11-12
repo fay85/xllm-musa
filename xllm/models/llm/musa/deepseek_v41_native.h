@@ -139,6 +139,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK(!model_);
     torch::DeviceGuard guard(device());
     torch::NoGradGuard no_grad;
+    initialize_decode_ep_policy();
     DeepseekV41Checkpoint checkpoint(
         loader->get_state_dicts(),
         options_,
@@ -339,6 +340,30 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   }
 
  private:
+  void initialize_decode_ep_policy() {
+    const bool enabled =
+        util::get_bool_env("XLLM_DSV41_DECODE_EP_CUSTOM_AR", false);
+    // Every TP rank votes, including disabled ranks. A mismatched selector
+    // must fail before mixing MCCL with custom collectives during forward.
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local = torch::tensor({static_cast<int32_t>(enabled)},
+                                                options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], static_cast<int32_t>(enabled))
+            << "Native V4.1 decode EP policy differs across TP ranks";
+      }
+    }
+    CHECK(!enabled ||
+          (tp_size() > 1 && ep_size() == tp_size() &&
+           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true)))
+        << "Decode EP custom requires the enabled full-world TP communicator";
+    decode_ep_custom_allreduce_ = enabled;
+  }
+
   ProcessGroup* expert_reduction_group() const {
     // This C1/DP1/CP1 model already requires TP to span the complete world.
     // When EP also spans that world, both reductions have identical members
@@ -411,6 +436,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     config.attention.sparse_library_path = sparse_path_;
     config.attention.indexer_score_directory = indexer_aot_path_;
     auto& moe = config.moe;
+    moe.decode_ep_custom_allreduce = decode_ep_custom_allreduce_;
     moe.expert_format = expert_format_;
     moe.w4a8_so_path = w4a8_path_;
     moe.dense =
@@ -645,6 +671,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   // Framework-owned groups live through the model worker.
   ProcessGroup* tp_group_;
   ProcessGroup* ep_group_;
+  bool decode_ep_custom_allreduce_ = false;
   std::string bmm_path_;
   std::string w4a8_path_;
   std::string mhc_path_;

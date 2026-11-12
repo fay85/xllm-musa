@@ -1,0 +1,32 @@
+{
+  "status": "ACCEPTED_SPEED_OPTIMIZATION",
+  "at": "2026-11-12T18:52:15.283977+08:00",
+  "source_parent": "799a93b2c807c264dfdcaa1c3c8414e9956f0993",
+  "binary_sha256": "ef2cbf5b6afadd17f104d63a2e393f65a09c59424a148122c51a2def371c55fb",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "accepted_policy": {
+    "P_TP_CUSTOM": false,
+    "P_EP_CUSTOM": false,
+    "D_TP_CUSTOM": true,
+    "D_EP_CUSTOM": true
+  },
+  "tight_removable_p": null,
+  "performance": {
+    "256": {
+      "TTFT_ms_reduction_percent": 0.07712140441573645,
+      "TPOT_ms_reduction_percent": 9.718423094229866,
+      "E2E_s_reduction_percent": 9.626606493191725,
+      "output_tps_increase_percent": 10.652036091204774,
+      "identical_requests": true
+    },
+    "2048": {
+      "TTFT_ms_reduction_percent": 7.117263535343099,
+      "TPOT_ms_reduction_percent": 9.883742533701845,
+      "E2E_s_reduction_percent": 9.722452609377363,
+      "output_tps_increase_percent": 10.769513450901824,
+      "identical_requests": true
+    }
+  },
+  "trace_all_rank_validation": "32 ranks over two modes PASS",
+  "figures": "Both exact traces converted/TraceProcessor verified, Perfetto timelines and native COUNT flames rendered; actual images visually inspected"
+}
