@@ -61,6 +61,16 @@ int64_t kv_cache_dtype_size(const std::string& kv_cache_dtype,
 int64_t kv_slot_size(const ModelArgs& model_args,
                      const KVCacheEstimateOptions& options,
                      int64_t cache_dtype_size) {
+  if (Platform::is_musa() && model_args.model_type() == "glm5_next") {
+    CHECK(options.kv_cache_dtype == "auto" ||
+          options.kv_cache_dtype == "fp8_e4m3")
+        << "GLM MUSA supports BF16 or inline E4M3 KV cache";
+    if (options.kv_cache_dtype == "fp8_e4m3") {
+      CHECK_EQ(model_args.kv_lora_rank(), 512);
+      CHECK_EQ(model_args.qk_rope_head_dim(), 0);
+      return 512 + 4 * sizeof(float);
+    }
+  }
   if (model_args.enable_mla()) {
     // SFA C8 packed layout: one byte tensor holding [int8 nope] + [bf16 rope]
     // + [fp32 tile scale]; K == V so no separate value cache is counted. The
@@ -152,7 +162,10 @@ IndexCacheFootprint estimate_index_cache_footprint(
 
 int64_t scale_slot_size(const ModelArgs& model_args,
                         const KVCacheEstimateOptions& options) {
-  if (options.kv_cache_dtype == "auto") {
+  if (options.kv_cache_dtype == "auto" ||
+      (Platform::is_musa() && model_args.model_type() == "glm5_next" &&
+       options.kv_cache_dtype == "fp8_e4m3")) {
+    // GLM E4M3 stores its four FP32 scales inside the 528-byte record.
     return 0;
   }
   if (model_args.enable_mla()) {

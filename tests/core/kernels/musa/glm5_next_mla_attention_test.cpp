@@ -36,6 +36,8 @@ limitations under the License.
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
 #include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
+#include "core/layers/musa/musa_mega_moe.h"
+#include "core/layers/musa/routed_moe_gate.h"
 #include "core/platform/musa_graph_handle.h"
 
 namespace xllm::layer {
@@ -416,186 +418,201 @@ TEST(GlmGraphPolicyTest, ContextGrowthSelectsNewGraphWithoutPaddingStateRows) {
 
 TEST_F(GlmSparseTest,
        DecodeGraphMatchesEagerAcrossTopkPageAndStateSlotBoundaries) {
-  namespace km = kernel::musa;
-  auto args = model_args();
-  args.index_topk(2048);
-  auto weights = make_weights(args);
-  ProcessGroup group(0, 1, device_);
-  ParallelArgs parallel(0, 1, &group);
-  parallel.tp_group_ = &group;
-  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
-  Glm5NextSparseAttention layer(args, parallel, opts);
-  layer->load_state_dict(StateDict(weights));
-  layer->verify_loaded_weights();
-  km::TvmffiStreamOverrideGuard ffi_stream(
-      device_, reinterpret_cast<void*>(stream_.stream()));
-  // Exercise both sides of the 2048-token selection threshold and a new
-  // context bucket. Each graph must use fresh positions, pages and state IDs.
-  for (int64_t batch_size : {1, 2}) {
-    for (int64_t start : {2044, 4092}) {
-      auto cache =
-          Glm5NextSparseAttentionImpl::create_cache(32 * batch_size, 4, opts);
-      auto reference =
-          Glm5NextSparseAttentionImpl::create_cache(32 * batch_size, 4, opts);
-      auto meta = metadata(0, start, device_);
-      meta.block_table =
-          torch::arange(32 * batch_size, opts.dtype(torch::kInt32))
-              .view({batch_size, 32});
-      meta.q_cu_seq_lens =
-          torch::arange(batch_size + 1, opts.dtype(torch::kInt32)) * start;
-      meta.linear_state_indices =
-          torch::arange(1, batch_size + 1, opts.dtype(torch::kInt32));
-      auto page_offsets =
-          torch::arange(batch_size, opts.dtype(torch::kInt64)) * 8192;
-      auto history_positions =
-          torch::arange(start, opts.dtype(torch::kInt64)).repeat({batch_size});
-      meta.slot_mapping =
-          history_positions + page_offsets.repeat_interleave(start);
-      auto history = torch::randn({start * batch_size, 64}, opts) * 0.3;
-      layer->forward(history_positions, history, meta, cache);
-      reference.get_k_cache().copy_(cache.get_k_cache());
-      reference.get_index_cache().copy_(cache.get_index_cache());
-      reference.get_kpool_tail().copy_(cache.get_kpool_tail());
-      auto saved_tail = cache.get_kpool_tail().clone();
-      auto input = torch::randn({batch_size, 64}, opts) * 0.3;
-      auto pos = torch::full({batch_size}, start, opts.dtype(torch::kInt64));
-      meta.q_cu_seq_lens =
-          torch::arange(batch_size + 1, opts.dtype(torch::kInt32));
-      meta.slot_mapping = pos + page_offsets;
-      meta.max_seq_len = start < 2048 ? 4096 : 8192;
-      meta.enable_cuda_graph = true;
-      auto execute = [&]() { return layer->forward(pos, input, meta, cache); };
-      execute();
-      cache.get_kpool_tail().copy_(saved_tail);
-      km::begin_ffi_alloc_record();
-      execute();
-      auto allocations = km::end_ffi_alloc_record();
-      cache.get_kpool_tail().copy_(saved_tail);
-      stream_.synchronize();
-      MusaGraphHandle graph;
-      graph.capture_begin();
-      km::begin_ffi_alloc_replay(&allocations);
-      auto output = execute();
-      graph.capture_end();
-      km::end_ffi_alloc_replay();
-      cache.get_kpool_tail().copy_(saved_tail);
-      for (int64_t step = 0; step < 10; ++step) {
-        input.normal_(0.0, 0.3);
-        pos.fill_(start + step);
-        meta.slot_mapping.copy_(pos + page_offsets);
-        if (step == 5) {
-          // Restore both a new slot and a reassigned slot without losing either
-          // request's tail. Replay must use the new IDs for both rows.
-          auto new_ids =
-              (batch_size == 1 ? torch::tensor({3}, torch::kInt64)
-                               : torch::tensor({3, 1}, torch::kInt64))
-                  .to(device_);
-          auto old_ids = meta.linear_state_indices.to(torch::kInt64);
-          cache.get_kpool_tail().index_copy_(
-              0, new_ids, cache.get_kpool_tail().index_select(0, old_ids));
-          reference.get_kpool_tail().index_copy_(
-              0, new_ids, reference.get_kpool_tail().index_select(0, old_ids));
-          meta.linear_state_indices.copy_(new_ids);
-        }
-        auto expected = layer->forward(pos, input, meta, reference);
-        auto expected_output = expected.first.clone();
-        auto expected_selection = expected.second.tokens.clone();
-        graph.replay();
+  for (bool fp8_cache : {false, true}) {
+    SCOPED_TRACE(fp8_cache);
+    namespace km = kernel::musa;
+    auto args = model_args();
+    args.index_topk(2048);
+    auto weights = make_weights(args);
+    ProcessGroup group(0, 1, device_);
+    ParallelArgs parallel(0, 1, &group);
+    parallel.tp_group_ = &group;
+    auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+    Glm5NextSparseAttention layer(args, parallel, opts);
+    layer->load_state_dict(StateDict(weights));
+    layer->verify_loaded_weights();
+    km::TvmffiStreamOverrideGuard ffi_stream(
+        device_, reinterpret_cast<void*>(stream_.stream()));
+    // Exercise both sides of the 2048-token selection threshold and a new
+    // context bucket. Each graph must use fresh positions, pages and state IDs.
+    for (int64_t batch_size : {1, 2}) {
+      for (int64_t start : {2044, 4092}) {
+        auto cache = Glm5NextSparseAttentionImpl::create_cache(
+            32 * batch_size, 4, opts, fp8_cache);
+        auto reference = Glm5NextSparseAttentionImpl::create_cache(
+            32 * batch_size, 4, opts, fp8_cache);
+        auto meta = metadata(0, start, device_);
+        meta.block_table =
+            torch::arange(32 * batch_size, opts.dtype(torch::kInt32))
+                .view({batch_size, 32});
+        meta.q_cu_seq_lens =
+            torch::arange(batch_size + 1, opts.dtype(torch::kInt32)) * start;
+        meta.linear_state_indices =
+            torch::arange(1, batch_size + 1, opts.dtype(torch::kInt32));
+        auto page_offsets =
+            torch::arange(batch_size, opts.dtype(torch::kInt64)) * 8192;
+        auto history_positions = torch::arange(start, opts.dtype(torch::kInt64))
+                                     .repeat({batch_size});
+        meta.slot_mapping =
+            history_positions + page_offsets.repeat_interleave(start);
+        auto history = torch::randn({start * batch_size, 64}, opts) * 0.3;
+        layer->forward(history_positions, history, meta, cache);
+        reference.get_k_cache().copy_(cache.get_k_cache());
+        reference.get_index_cache().copy_(cache.get_index_cache());
+        reference.get_kpool_tail().copy_(cache.get_kpool_tail());
+        auto saved_tail = cache.get_kpool_tail().clone();
+        auto input = torch::randn({batch_size, 64}, opts) * 0.3;
+        auto pos = torch::full({batch_size}, start, opts.dtype(torch::kInt64));
+        meta.q_cu_seq_lens =
+            torch::arange(batch_size + 1, opts.dtype(torch::kInt32));
+        meta.slot_mapping = pos + page_offsets;
+        meta.max_seq_len = start < 2048 ? 4096 : 8192;
+        meta.enable_cuda_graph = true;
+        auto execute = [&]() {
+          return layer->forward(pos, input, meta, cache);
+        };
+        execute();
+        cache.get_kpool_tail().copy_(saved_tail);
+        km::begin_ffi_alloc_record();
+        execute();
+        auto allocations = km::end_ffi_alloc_record();
+        cache.get_kpool_tail().copy_(saved_tail);
         stream_.synchronize();
-        EXPECT_TRUE(torch::allclose(output.first.cpu().to(torch::kFloat32),
-                                    expected_output.cpu().to(torch::kFloat32),
-                                    0.002,
-                                    0.0002))
-            << start << ":" << step;
-        EXPECT_TRUE(
-            torch::equal(output.second.tokens.cpu(), expected_selection.cpu()));
-        EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
-                                 reference.get_kpool_tail().cpu()));
-        EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
-                                 reference.get_index_cache().cpu()));
-        EXPECT_TRUE(torch::equal(cache.get_k_cache().cpu(),
-                                 reference.get_k_cache().cpu()));
+        MusaGraphHandle graph;
+        graph.capture_begin();
+        km::begin_ffi_alloc_replay(&allocations);
+        auto output = execute();
+        graph.capture_end();
+        km::end_ffi_alloc_replay();
+        cache.get_kpool_tail().copy_(saved_tail);
+        for (int64_t step = 0; step < 10; ++step) {
+          input.normal_(0.0, 0.3);
+          pos.fill_(start + step);
+          meta.slot_mapping.copy_(pos + page_offsets);
+          if (step == 5) {
+            // Restore both a new slot and a reassigned slot without losing
+            // either request's tail. Replay must use the new IDs for both rows.
+            auto new_ids =
+                (batch_size == 1 ? torch::tensor({3}, torch::kInt64)
+                                 : torch::tensor({3, 1}, torch::kInt64))
+                    .to(device_);
+            auto old_ids = meta.linear_state_indices.to(torch::kInt64);
+            cache.get_kpool_tail().index_copy_(
+                0, new_ids, cache.get_kpool_tail().index_select(0, old_ids));
+            reference.get_kpool_tail().index_copy_(
+                0,
+                new_ids,
+                reference.get_kpool_tail().index_select(0, old_ids));
+            meta.linear_state_indices.copy_(new_ids);
+          }
+          auto expected = layer->forward(pos, input, meta, reference);
+          auto expected_output = expected.first.clone();
+          auto expected_selection = expected.second.tokens.clone();
+          graph.replay();
+          stream_.synchronize();
+          EXPECT_TRUE(torch::allclose(output.first.cpu().to(torch::kFloat32),
+                                      expected_output.cpu().to(torch::kFloat32),
+                                      0.002,
+                                      0.0002))
+              << start << ":" << step;
+          EXPECT_TRUE(torch::equal(output.second.tokens.cpu(),
+                                   expected_selection.cpu()));
+          EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
+                                   reference.get_kpool_tail().cpu()));
+          EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
+                                   reference.get_index_cache().cpu()));
+          EXPECT_TRUE(torch::equal(cache.get_k_cache().cpu(),
+                                   reference.get_k_cache().cpu()));
+        }
       }
     }
   }
 }
 
 TEST_F(GlmSparseTest, PrefillGraphPreservesPackedSequencesAndCacheWrites) {
-  namespace km = kernel::musa;
-  auto args = model_args();
-  args.index_topk(2048);
-  ProcessGroup group(0, 1, device_);
-  ParallelArgs parallel(0, 1, &group);
-  parallel.tp_group_ = &group;
-  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
-  Glm5NextSparseAttention layer(args, parallel, opts);
-  layer->load_state_dict(StateDict(make_weights(args)));
-  layer->verify_loaded_weights();
-  km::TvmffiStreamOverrideGuard ffi_stream(
-      device_, reinterpret_cast<void*>(stream_.stream()));
-  auto cache = Glm5NextSparseAttentionImpl::create_cache(24, 4, opts);
-  auto reference = Glm5NextSparseAttentionImpl::create_cache(24, 4, opts);
-  // Different sequence lengths exercise packed IndexPool updates and the
-  // selection threshold. Both sequences start at position zero on each replay.
-  auto meta = metadata(0, 4101, device_);
-  meta.is_prefill = true;
-  meta.max_seq_len = 2052;
-  meta.q_cu_seq_lens =
-      torch::tensor({0, 2049, 4101}, torch::kInt32).to(device_);
-  meta.block_table = torch::arange(24, opts.dtype(torch::kInt32)).view({2, 12});
-  meta.linear_state_indices = torch::tensor({1, 2}, torch::kInt32).to(device_);
-  auto pos = torch::cat({torch::arange(2049, opts.dtype(torch::kInt64)),
-                         torch::arange(2052, opts.dtype(torch::kInt64))});
-  meta.slot_mapping = pos.clone();
-  meta.slot_mapping.narrow(0, 2049, 2052).add_(12 * 256);
-  auto input = torch::randn({4101, 64}, opts) * 0.3;
-  auto execute = [&]() { return layer->forward(pos, input, meta, cache); };
-  execute();
-  km::begin_ffi_alloc_record();
-  execute();
-  auto allocations = km::end_ffi_alloc_record();
-  stream_.synchronize();
-  meta.enable_cuda_graph = true;
-  MusaGraphHandle graph;
-  graph.capture_begin();
-  km::begin_ffi_alloc_replay(&allocations);
-  auto output = execute();
-  graph.capture_end();
-  km::end_ffi_alloc_replay();
-  for (int32_t step = 0; step < 4; ++step) {
-    input.normal_(0.0, 0.3);
-    if (step == 2) {
-      meta.linear_state_indices.copy_(
-          torch::tensor({3, 1}, torch::kInt32).to(device_));
-      meta.block_table.copy_(meta.block_table.flip({0}));
-      meta.slot_mapping.narrow(0, 0, 2049).add_(12 * 256);
-      meta.slot_mapping.narrow(0, 2049, 2052).sub_(12 * 256);
-    }
-    // Poison current-token storage before replay so the eager reference cannot
-    // accidentally hide missing writes in the captured path.
-    cache.get_k_cache().zero_();
-    cache.get_index_cache().zero_();
-    cache.get_kpool_tail().zero_();
-    reference.get_k_cache().zero_();
-    reference.get_index_cache().zero_();
-    reference.get_kpool_tail().zero_();
-    graph.replay();
-    auto replayed_output = output.first.clone();
-    auto replayed_selection = output.second.tokens.clone();
-    auto expected = layer->forward(pos, input, meta, reference);
+  for (bool fp8_cache : {false, true}) {
+    SCOPED_TRACE(fp8_cache);
+    namespace km = kernel::musa;
+    auto args = model_args();
+    args.index_topk(2048);
+    ProcessGroup group(0, 1, device_);
+    ParallelArgs parallel(0, 1, &group);
+    parallel.tp_group_ = &group;
+    auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+    Glm5NextSparseAttention layer(args, parallel, opts);
+    layer->load_state_dict(StateDict(make_weights(args)));
+    layer->verify_loaded_weights();
+    km::TvmffiStreamOverrideGuard ffi_stream(
+        device_, reinterpret_cast<void*>(stream_.stream()));
+    auto cache =
+        Glm5NextSparseAttentionImpl::create_cache(24, 4, opts, fp8_cache);
+    auto reference =
+        Glm5NextSparseAttentionImpl::create_cache(24, 4, opts, fp8_cache);
+    // Different sequence lengths exercise packed IndexPool updates and the
+    // selection threshold. Both sequences start at position zero on each
+    // replay.
+    auto meta = metadata(0, 4101, device_);
+    meta.is_prefill = true;
+    meta.max_seq_len = 2052;
+    meta.q_cu_seq_lens =
+        torch::tensor({0, 2049, 4101}, torch::kInt32).to(device_);
+    meta.block_table =
+        torch::arange(24, opts.dtype(torch::kInt32)).view({2, 12});
+    meta.linear_state_indices =
+        torch::tensor({1, 2}, torch::kInt32).to(device_);
+    auto pos = torch::cat({torch::arange(2049, opts.dtype(torch::kInt64)),
+                           torch::arange(2052, opts.dtype(torch::kInt64))});
+    meta.slot_mapping = pos.clone();
+    meta.slot_mapping.narrow(0, 2049, 2052).add_(12 * 256);
+    auto input = torch::randn({4101, 64}, opts) * 0.3;
+    auto execute = [&]() { return layer->forward(pos, input, meta, cache); };
+    execute();
+    km::begin_ffi_alloc_record();
+    execute();
+    auto allocations = km::end_ffi_alloc_record();
     stream_.synchronize();
-    EXPECT_TRUE(torch::allclose(replayed_output.cpu().to(torch::kFloat32),
-                                expected.first.cpu().to(torch::kFloat32),
-                                0.002,
-                                0.0002));
-    EXPECT_TRUE(
-        torch::equal(output.second.tokens.cpu(), expected.second.tokens.cpu()));
-    EXPECT_TRUE(
-        torch::equal(cache.get_k_cache().cpu(), reference.get_k_cache().cpu()));
-    EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
-                             reference.get_index_cache().cpu()));
-    EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
-                             reference.get_kpool_tail().cpu()));
+    meta.enable_cuda_graph = true;
+    MusaGraphHandle graph;
+    graph.capture_begin();
+    km::begin_ffi_alloc_replay(&allocations);
+    auto output = execute();
+    graph.capture_end();
+    km::end_ffi_alloc_replay();
+    for (int32_t step = 0; step < 4; ++step) {
+      input.normal_(0.0, 0.3);
+      if (step == 2) {
+        meta.linear_state_indices.copy_(
+            torch::tensor({3, 1}, torch::kInt32).to(device_));
+        meta.block_table.copy_(meta.block_table.flip({0}));
+        meta.slot_mapping.narrow(0, 0, 2049).add_(12 * 256);
+        meta.slot_mapping.narrow(0, 2049, 2052).sub_(12 * 256);
+      }
+      // Poison current-token storage before replay so the eager reference
+      // cannot accidentally hide missing writes in the captured path.
+      cache.get_k_cache().zero_();
+      cache.get_index_cache().zero_();
+      cache.get_kpool_tail().zero_();
+      reference.get_k_cache().zero_();
+      reference.get_index_cache().zero_();
+      reference.get_kpool_tail().zero_();
+      graph.replay();
+      auto replayed_output = output.first.clone();
+      auto replayed_selection = output.second.tokens.clone();
+      auto expected = layer->forward(pos, input, meta, reference);
+      stream_.synchronize();
+      EXPECT_TRUE(torch::allclose(replayed_output.cpu().to(torch::kFloat32),
+                                  expected.first.cpu().to(torch::kFloat32),
+                                  0.002,
+                                  0.0002));
+      EXPECT_TRUE(torch::equal(output.second.tokens.cpu(),
+                               expected.second.tokens.cpu()));
+      EXPECT_TRUE(torch::equal(cache.get_k_cache().cpu(),
+                               reference.get_k_cache().cpu()));
+      EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
+                               reference.get_index_cache().cpu()));
+      EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
+                               reference.get_kpool_tail().cpu()));
+    }
   }
 }
 
@@ -1225,188 +1242,489 @@ TEST_F(GlmSparseTest,
 }
 
 TEST_F(GlmSparseTest, EngineKVCacheAndSharedSelectionCrossLayerForward) {
-  constexpr int64_t hidden = 256;
-  constexpr int64_t moe_inter = 128;
-  auto args = model_args(8, hidden, 512);
-  args.model_type("glm5_next");
-  args.n_layers(2);
-  args.enable_mla(true);
-  args.hc_mult(4);
-  args.hc_sinkhorn_iters(20);
-  args.hc_eps(1e-6f);
-  args.rms_norm_eps(1e-5f);
-  args.hidden_act("silu");
-  args.intermediate_size(512);
-  args.moe_intermediate_size(moe_inter);
+  for (bool fp8_cache : {false, true}) {
+    SCOPED_TRACE(fp8_cache);
+    constexpr int64_t hidden = 256;
+    constexpr int64_t moe_inter = 128;
+    auto args = model_args(8, hidden, 512);
+    args.model_type("glm5_next");
+    args.n_layers(2);
+    args.enable_mla(true);
+    args.hc_mult(4);
+    args.hc_sinkhorn_iters(20);
+    args.hc_eps(1e-6f);
+    args.rms_norm_eps(1e-5f);
+    args.hidden_act("silu");
+    args.intermediate_size(512);
+    args.moe_intermediate_size(moe_inter);
+    args.n_routed_experts(288);
+    args.num_experts_per_tok(8);
+    args.n_shared_experts(1);
+    args.routed_scaling_factor(2.5f);
+    args.norm_topk_prob(true);
+    args.n_group(1);
+    args.topk_group(1);
+    args.scoring_func("sigmoid");
+    args.topk_method("noaux_tc");
+    args.swiglu_limit(10.0f);
+    args.layer_types(
+        {"deepseek_sparse_attention", "deepseek_sparse_attention"});
+    args.mlp_layer_types({"dense", "dense"});
+    args.indexer_types({"full", "shared"});
+
+    KVCacheEstimateOptions est_options;
+    est_options.dtype = torch::kBFloat16;
+    est_options.kv_cache_dtype = fp8_cache ? "fp8_e4m3" : "auto";
+    est_options.cache_size_in_bytes = 64LL * 1024 * 1024;
+    est_options.block_size = 256;
+    est_options.world_size = 1;
+    est_options.n_local_kv_heads = 1;
+    est_options.max_seqs_per_batch = 2;
+    est_options.kpool_layout = KPoolCacheLayout::COMPRESSED_WITH_TAIL;
+
+    const KVCacheCapacity capacity =
+        estimate_kv_cache_capacity(args, est_options);
+    EXPECT_EQ(capacity.num_full_attention_layers(), 2);
+    EXPECT_EQ(capacity.slot_size(), fp8_cache ? 528 : 1024);
+    EXPECT_EQ(capacity.scale_slot_size(), 0);
+    EXPECT_EQ(capacity.num_indexer_layers(), 1);
+    EXPECT_EQ(capacity.kpool_tail_len(), 4);
+    EXPECT_EQ(capacity.index_block_size(), 64 * 132);
+
+    const KVCacheShape shape(capacity, args, /*world_size=*/1);
+    ASSERT_TRUE(shape.has_index_cache_shape());
+    ASSERT_TRUE(shape.has_kpool_tail_shape());
+    EXPECT_EQ(shape.key_cache_shape()[1], 256);
+    EXPECT_EQ(shape.key_cache_shape()[2], 1);
+    EXPECT_EQ(shape.key_cache_shape()[3], fp8_cache ? 528 : 512);
+    EXPECT_TRUE(shape.value_cache_shape().empty());
+    EXPECT_EQ(shape.index_cache_shape()[1], 64);
+    EXPECT_EQ(shape.index_cache_shape()[2], 1);
+    EXPECT_EQ(shape.index_cache_shape()[3], 132);
+    EXPECT_EQ(shape.kpool_tail_shape()[1], 2);
+    EXPECT_EQ(shape.kpool_tail_shape()[2], 4);
+    EXPECT_EQ(shape.kpool_tail_shape()[3], 128);
+
+    KVCacheCreateOptions create_options;
+    create_options.device(device_)
+        .dtype(torch::kBFloat16)
+        .num_layers(2)
+        .layer_types(args.layer_types())
+        .model_type(args.model_type())
+        .enable_lighting_indexer(true)
+        .indexer_cache_enabled_layers(
+            resolve_indexer_cache_enabled_layers(args, args.n_layers()));
+
+    KVCache cache_layer0(shape, create_options, /*layer_id=*/0);
+    KVCache cache_layer1(shape, create_options, /*layer_id=*/1);
+    EXPECT_TRUE(cache_layer0.get_k_cache().defined());
+    EXPECT_TRUE(cache_layer0.get_index_cache().defined());
+    EXPECT_EQ(cache_layer0.get_index_cache().scalar_type(), torch::kUInt8);
+    EXPECT_TRUE(cache_layer0.get_kpool_tail().defined());
+    EXPECT_EQ(cache_layer0.get_kpool_tail().scalar_type(), torch::kBFloat16);
+    EXPECT_TRUE(cache_layer1.get_k_cache().defined());
+    EXPECT_FALSE(cache_layer1.get_index_cache().defined());
+    EXPECT_FALSE(cache_layer1.get_kpool_tail().defined());
+
+    ProcessGroup group(0, 1, device_);
+    ParallelArgs parallel(0, 1, &group);
+    parallel.tp_group_ = &group;
+    const auto opts =
+        torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+    ModelContext context(parallel, args, QuantArgs(), opts);
+    Glm5NextDecoderLayer layer0(context, /*layer_id=*/0);
+    Glm5NextDecoderLayer layer1(context, /*layer_id=*/1);
+
+    const int64_t mix_size = args.hc_mult() * (args.hc_mult() + 2);
+    auto make_layer_weights = [&](bool include_indexer) {
+      auto base = make_weights(args);
+      Weights weights;
+      for (const auto& [k, v] : base) {
+        if (!include_indexer && k.rfind("indexer.", 0) == 0) {
+          continue;
+        }
+        weights["self_attn." + k] = v;
+      }
+      weights["input_layernorm.weight"] =
+          torch::ones({hidden}, torch::kBFloat16);
+      weights["post_attention_layernorm.weight"] =
+          torch::ones({hidden}, torch::kBFloat16);
+      for (const std::string& prefix : {"attn_hc_pre.", "ffn_hc_pre."}) {
+        weights[prefix + "hc_fn"] =
+            torch::randn({mix_size, args.hc_mult() * hidden},
+                         torch::kBFloat16) *
+            0.01f;
+        weights[prefix + "hc_base"] =
+            torch::randn({mix_size}, torch::kFloat32) * 0.05f;
+        weights[prefix + "hc_scale"] =
+            torch::randn({3}, torch::kFloat32) * 0.05f;
+      }
+      weights["mlp.gate_proj.weight"] =
+          torch::randn({512, hidden}, torch::kBFloat16) * 0.02f;
+      weights["mlp.up_proj.weight"] =
+          torch::randn({512, hidden}, torch::kBFloat16) * 0.02f;
+      weights["mlp.down_proj.weight"] =
+          torch::randn({hidden, 512}, torch::kBFloat16) * 0.02f;
+      return weights;
+    };
+
+    layer0->load_state_dict(
+        StateDict(make_layer_weights(/*include_indexer=*/true)));
+    layer0->verify_loaded_weights();
+    layer1->load_state_dict(
+        StateDict(make_layer_weights(/*include_indexer=*/false)));
+    layer1->verify_loaded_weights();
+
+    auto x_prefill = torch::randn({5, 4, hidden}, opts) * 0.1f;
+    auto pos_prefill = torch::arange(5, opts.dtype(torch::kInt64));
+    std::optional<torch::Tensor> residual;
+    std::optional<PendingMHC> pending_mhc;
+    Selection shared_selection;
+    ModelInputParams prefill_params;
+    prefill_params.meta.batch_forward_type = BatchForwardType::PREFILL;
+    auto meta_prefill = metadata(0, 5, device_);
+
+    x_prefill = layer0->forward(x_prefill,
+                                residual,
+                                pos_prefill,
+                                meta_prefill,
+                                cache_layer0,
+                                prefill_params,
+                                &pending_mhc,
+                                /*is_last_layer=*/false,
+                                &shared_selection);
+    EXPECT_TRUE(shared_selection.lengths.defined());
+    auto out_prefill = layer1->forward(x_prefill,
+                                       residual,
+                                       pos_prefill,
+                                       meta_prefill,
+                                       cache_layer1,
+                                       prefill_params,
+                                       &pending_mhc,
+                                       /*is_last_layer=*/true,
+                                       &shared_selection);
+    ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+    EXPECT_TRUE(torch::isfinite(out_prefill.cpu()).all().item<bool>());
+
+    auto x_decode = torch::randn({1, 4, hidden}, opts) * 0.1f;
+    auto pos_decode = torch::tensor({5}, opts.dtype(torch::kInt64));
+    ModelInputParams decode_params;
+    decode_params.meta.batch_forward_type = BatchForwardType::DECODE;
+    auto meta_decode = metadata(5, 1, device_);
+    Selection decode_shared_selection;
+    x_decode = layer0->forward(x_decode,
+                               residual,
+                               pos_decode,
+                               meta_decode,
+                               cache_layer0,
+                               decode_params,
+                               &pending_mhc,
+                               /*is_last_layer=*/false,
+                               &decode_shared_selection);
+    auto out_decode = layer1->forward(x_decode,
+                                      residual,
+                                      pos_decode,
+                                      meta_decode,
+                                      cache_layer1,
+                                      decode_params,
+                                      &pending_mhc,
+                                      /*is_last_layer=*/true,
+                                      &decode_shared_selection);
+    ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+    EXPECT_TRUE(torch::isfinite(out_decode.cpu()).all().item<bool>());
+  }
+}
+
+TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
+  auto args = model_args();
+  args.hidden_size(288);
   args.n_routed_experts(288);
   args.num_experts_per_tok(8);
-  args.n_shared_experts(1);
-  args.routed_scaling_factor(2.5f);
-  args.norm_topk_prob(true);
+  args.n_activated_experts(8);
   args.n_group(1);
   args.topk_group(1);
   args.scoring_func("sigmoid");
   args.topk_method("noaux_tc");
-  args.swiglu_limit(10.0f);
-  args.layer_types({"deepseek_sparse_attention", "deepseek_sparse_attention"});
-  args.mlp_layer_types({"dense", "dense"});
-  args.indexer_types({"full", "shared"});
-
-  KVCacheEstimateOptions est_options;
-  est_options.dtype = torch::kBFloat16;
-  est_options.kv_cache_dtype = "auto";
-  est_options.cache_size_in_bytes = 64LL * 1024 * 1024;
-  est_options.block_size = 256;
-  est_options.world_size = 1;
-  est_options.n_local_kv_heads = 1;
-  est_options.max_seqs_per_batch = 2;
-  est_options.kpool_layout = KPoolCacheLayout::COMPRESSED_WITH_TAIL;
-
-  const KVCacheCapacity capacity =
-      estimate_kv_cache_capacity(args, est_options);
-  EXPECT_EQ(capacity.num_full_attention_layers(), 2);
-  EXPECT_EQ(capacity.num_indexer_layers(), 1);
-  EXPECT_EQ(capacity.kpool_tail_len(), 4);
-  EXPECT_EQ(capacity.index_block_size(), 64 * 132);
-
-  const KVCacheShape shape(capacity, args, /*world_size=*/1);
-  ASSERT_TRUE(shape.has_index_cache_shape());
-  ASSERT_TRUE(shape.has_kpool_tail_shape());
-  EXPECT_EQ(shape.key_cache_shape()[1], 256);
-  EXPECT_EQ(shape.key_cache_shape()[2], 1);
-  EXPECT_EQ(shape.key_cache_shape()[3], 512);
-  EXPECT_TRUE(shape.value_cache_shape().empty());
-  EXPECT_EQ(shape.index_cache_shape()[1], 64);
-  EXPECT_EQ(shape.index_cache_shape()[2], 1);
-  EXPECT_EQ(shape.index_cache_shape()[3], 132);
-  EXPECT_EQ(shape.kpool_tail_shape()[1], 2);
-  EXPECT_EQ(shape.kpool_tail_shape()[2], 4);
-  EXPECT_EQ(shape.kpool_tail_shape()[3], 128);
-
-  KVCacheCreateOptions create_options;
-  create_options.device(device_)
-      .dtype(torch::kBFloat16)
-      .num_layers(2)
-      .layer_types(args.layer_types())
-      .model_type(args.model_type())
-      .enable_lighting_indexer(true)
-      .indexer_cache_enabled_layers(
-          resolve_indexer_cache_enabled_layers(args, args.n_layers()));
-
-  KVCache cache_layer0(shape, create_options, /*layer_id=*/0);
-  KVCache cache_layer1(shape, create_options, /*layer_id=*/1);
-  EXPECT_TRUE(cache_layer0.get_k_cache().defined());
-  EXPECT_TRUE(cache_layer0.get_index_cache().defined());
-  EXPECT_EQ(cache_layer0.get_index_cache().scalar_type(), torch::kUInt8);
-  EXPECT_TRUE(cache_layer0.get_kpool_tail().defined());
-  EXPECT_EQ(cache_layer0.get_kpool_tail().scalar_type(), torch::kBFloat16);
-  EXPECT_TRUE(cache_layer1.get_k_cache().defined());
-  EXPECT_FALSE(cache_layer1.get_index_cache().defined());
-  EXPECT_FALSE(cache_layer1.get_kpool_tail().defined());
-
-  ProcessGroup group(0, 1, device_);
-  ParallelArgs parallel(0, 1, &group);
-  parallel.tp_group_ = &group;
-  const auto opts =
-      torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
-  ModelContext context(parallel, args, QuantArgs(), opts);
-  Glm5NextDecoderLayer layer0(context, /*layer_id=*/0);
-  Glm5NextDecoderLayer layer1(context, /*layer_id=*/1);
-
-  const int64_t mix_size = args.hc_mult() * (args.hc_mult() + 2);
-  auto make_layer_weights = [&](bool include_indexer) {
-    auto base = make_weights(args);
-    Weights weights;
-    for (const auto& [k, v] : base) {
-      if (!include_indexer && k.rfind("indexer.", 0) == 0) {
-        continue;
+  args.norm_topk_prob(true);
+  args.routed_scaling_factor(2.5);
+  auto opts = torch::TensorOptions().dtype(torch::kFloat32).device(device_);
+  RoutedMoeGate gate(args, QuantArgs(), opts);
+  Weights weights;
+  weights["weight"] = torch::eye(288, torch::kFloat32);
+  weights["e_score_correction_bias"] =
+      torch::randn({288}, torch::kFloat32) * 0.1;
+  gate->load_state_dict(StateDict(weights));
+  gate->verify_loaded_weights();
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device_, reinterpret_cast<void*>(stream_.stream()));
+  for (int64_t rows : {1, 2, 16, 2048}) {
+    auto input = torch::randn({rows, 288}, opts);
+    setenv("XLLM_GLM5_FUSED_GATE", "1", 1);
+    gate->forward(input, false);
+    stream_.synchronize();
+    MusaGraphHandle graph;
+    graph.capture_begin();
+    auto captured = gate->forward(input, false);
+    graph.capture_end();
+    for (int32_t step = 0; step < 5; ++step) {
+      if (step < 2) {
+        input.normal_();
+      } else {
+        input.fill_(step == 2 ? -60.0 : (step == 3 ? -1000.0 : 1000.0));
       }
-      weights["self_attn." + k] = v;
+      graph.replay();
+      auto actual_weights = std::get<0>(captured).cpu();
+      auto actual_ids = std::get<1>(captured).cpu().to(torch::kInt64);
+      setenv("XLLM_GLM5_FUSED_GATE", "0", 1);
+      auto reference = gate->forward(input, false);
+      auto expected_weights = std::get<0>(reference).cpu();
+      auto expected_ids = std::get<1>(reference).cpu().to(torch::kInt64);
+      EXPECT_TRUE(torch::equal(actual_ids, expected_ids));
+      auto actual_dense = torch::zeros({rows, 288});
+      auto expected_dense = torch::zeros_like(actual_dense);
+      actual_dense.scatter_(1, actual_ids, actual_weights);
+      expected_dense.scatter_(1, expected_ids, expected_weights);
+      EXPECT_TRUE(torch::equal(actual_dense.ne(0), expected_dense.ne(0)));
+      EXPECT_TRUE(torch::allclose(actual_dense, expected_dense, 1e-6, 1e-7));
+      EXPECT_TRUE(torch::isfinite(actual_weights).all().item<bool>());
+      EXPECT_TRUE(torch::allclose(
+          actual_weights.sum(-1), expected_weights.sum(-1), 1e-6, 1e-7));
     }
-    weights["input_layernorm.weight"] = torch::ones({hidden}, torch::kBFloat16);
-    weights["post_attention_layernorm.weight"] =
-        torch::ones({hidden}, torch::kBFloat16);
-    for (const std::string& prefix : {"attn_hc_pre.", "ffn_hc_pre."}) {
-      weights[prefix + "hc_fn"] =
-          torch::randn({mix_size, args.hc_mult() * hidden}, torch::kBFloat16) *
-          0.01f;
-      weights[prefix + "hc_base"] =
-          torch::randn({mix_size}, torch::kFloat32) * 0.05f;
-      weights[prefix + "hc_scale"] = torch::randn({3}, torch::kFloat32) * 0.05f;
+  }
+  // One-ULP choice margin: the old exp2/reciprocal sigmoid reverses the
+  // ordering of experts 7 and 8 (0.499999881 versus 0.500000119).
+  auto near_tie = torch::zeros({1, 288}, opts);
+  near_tie.select(1, 7).fill_(3.664468765258789);
+  near_tie.select(1, 8).fill_(1.7978020906448364);
+  auto edge_bias = torch::full({288}, -10.0, opts);
+  edge_bias.narrow(0, 0, 7).fill_(1.0);
+  edge_bias[7].fill_(-0.4750221371650696);
+  edge_bias[8].fill_(-0.3578811287879944);
+  gate->named_parameters()["bias"].copy_(edge_bias);
+  setenv("XLLM_GLM5_FUSED_GATE", "0", 1);
+  auto expected = gate->forward(near_tie, false);
+  EXPECT_TRUE(std::get<1>(expected).cpu().eq(7).any().item<bool>());
+  setenv("XLLM_GLM5_FUSED_GATE", "1", 1);
+  gate->forward(near_tie, false);
+  stream_.synchronize();
+  MusaGraphHandle near_tie_graph;
+  near_tie_graph.capture_begin();
+  auto actual = gate->forward(near_tie, false);
+  near_tie_graph.capture_end();
+  near_tie_graph.replay();
+  EXPECT_TRUE(torch::equal(std::get<0>(std::get<1>(actual).sort(-1)).cpu(),
+                           std::get<0>(std::get<1>(expected).sort(-1)).cpu()));
+  EXPECT_FALSE(std::get<1>(actual).cpu().eq(8).any().item<bool>());
+  // Exact ties must retain muDNN's selected IDs AND their original order.
+  // MATE top-k chooses different experts even with identical input scores.
+  for (int64_t rows : {1, 2048}) {
+    auto tied_input = torch::zeros({rows, 288}, opts);
+    gate->named_parameters()["bias"].zero_();
+    for (bool boundary_only : {false, true}) {
+      if (boundary_only) {
+        edge_bias.fill_(-10.0);
+        edge_bias.narrow(0, 0, 7).fill_(1.0);
+        edge_bias.narrow(0, 7, 2).zero_();
+        gate->named_parameters()["bias"].copy_(edge_bias);
+      }
+      setenv("XLLM_GLM5_FUSED_GATE", "0", 1);
+      auto reference = gate->forward(tied_input, false);
+      setenv("XLLM_GLM5_FUSED_GATE", "1", 1);
+      gate->forward(tied_input, false);
+      stream_.synchronize();
+      MusaGraphHandle tied_graph;
+      tied_graph.capture_begin();
+      auto result = gate->forward(tied_input, false);
+      tied_graph.capture_end();
+      tied_graph.replay();
+      EXPECT_TRUE(torch::equal(std::get<1>(result).cpu(),
+                               std::get<1>(reference).cpu()));
+      EXPECT_TRUE(torch::allclose(
+          std::get<0>(result).cpu(), std::get<0>(reference).cpu(), 1e-6, 1e-7));
     }
-    weights["mlp.gate_proj.weight"] =
-        torch::randn({512, hidden}, torch::kBFloat16) * 0.02f;
-    weights["mlp.up_proj.weight"] =
-        torch::randn({512, hidden}, torch::kBFloat16) * 0.02f;
-    weights["mlp.down_proj.weight"] =
-        torch::randn({hidden, 512}, torch::kBFloat16) * 0.02f;
-    return weights;
+  }
+  unsetenv("XLLM_GLM5_FUSED_GATE");
+}
+
+TEST_F(GlmSparseTest, MegaMoeEp8WorkerPreservesClampOwnershipAndReplay) {
+  const char* rank_text = std::getenv("XLLM_GLM_MEGA_RANK");
+  if (rank_text == nullptr) {
+    GTEST_SKIP() << "Requires eight-process MegaMoE launcher";
+  }
+  const int32_t rank = std::stoi(rank_text);
+  const torch::Device device(torch::kPrivateUse1, rank);
+  c10::musa::MUSAGuard device_guard(device);
+  const auto stream = c10::musa::getStreamFromPool(false, rank);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  auto group =
+      create_process_group(rank,
+                           rank,
+                           std::vector<int32_t>{0, 1, 2, 3, 4, 5, 6, 7},
+                           8,
+                           8,
+                           29961,
+                           "127.0.0.1",
+                           "glm_mega_ep",
+                           device);
+  auto workspace = MusaMegaMoe::acquire(group.get());
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  {
+    setenv("XLLM_GLM5_MEGA_MOE", "1", 1);
+    auto args = model_args(64, 4096, 1536);
+    args.model_type("glm5_next");
+    args.n_routed_experts(288);
+    args.num_experts_per_tok(8);
+    args.moe_intermediate_size(2048);
+    args.n_shared_experts(0);
+    ParallelArgs parallel(rank, 8, group.get());
+    parallel.tp_group_ = group.get();
+    QuantArgs quant;
+    quant.quant_method("fp8");
+    RoutedMoe moe(args, quant, parallel, opts);
+    Weights unowned;
+    unowned["experts." + std::to_string(((rank + 1) % 8) * 36) +
+            ".gate_proj.weight"] =
+        torch::ones({2048, 4096}, torch::kFloat8_e4m3fn);
+    moe->load_state_dict(StateDict(unowned));
+    EXPECT_FALSE(moe->named_parameters().contains("w13"));
+    EXPECT_FALSE(moe->named_parameters().contains("w2"));
+    unsetenv("XLLM_GLM5_MEGA_MOE");
+  }
+  // Constant matrices give an independent closed-form reference and force
+  // gate>10/up>10, so silently dropping the clamp cannot pass this test.
+  auto gate =
+      torch::full({36, 2048, 4096}, 1.0, opts.dtype(torch::kFloat8_e4m3fn));
+  auto up = torch::ones_like(gate);
+  auto w13 = torch::cat({gate, up}, 1);
+  auto s13 = torch::ones({36, 32, 32}, opts.dtype(torch::kFloat32));
+  s13.narrow(1, 0, 16).fill_(1.0 / 256);
+  s13.narrow(1, 16, 16).fill_(1.0 / 1024);
+  std::tie(w13, s13) = MusaMegaMoe::transform_gate_up(w13, s13);
+  gate = torch::Tensor();
+  up = torch::Tensor();
+  auto w2 =
+      torch::full({36, 4096, 2048}, 1.0, opts.dtype(torch::kFloat8_e4m3fn));
+  // Each destination rank has a distinct expert scale, exposing missing or
+  // duplicated remote contributions as well as route weighting errors.
+  auto s2 = torch::full({36, 32, 16},
+                        static_cast<float>(rank + 1) / (8 * 2048),
+                        opts.dtype(torch::kFloat32));
+  for (int64_t tokens : {1, 9, 2048, 4096, 4092, 2048}) {
+    SCOPED_TRACE(tokens);
+    LOG(INFO) << "GLM_MEGA_SHAPE tokens=" << tokens;
+    auto input = torch::ones({tokens, 4096}, opts);
+    auto ids = (torch::arange(8, opts.dtype(torch::kInt32)) * 36)
+                   .unsqueeze(0)
+                   .repeat({tokens, 1});
+    auto weights =
+        torch::full({tokens, 8}, 2.5 / 8, opts.dtype(torch::kFloat32));
+    auto execute = [&]() {
+      return workspace->forward(input, ids, weights, w13, s13, w2, s2, 10.0);
+    };
+    auto eager = execute();
+    group->allreduce(eager);
+    stream.synchronize();
+    MusaGraphHandle graph;
+    graph.capture_begin();
+    auto output = execute();
+    graph.capture_end();
+    for (float value : {0.5f, 1.0f, 4.0f, 1.0f}) {
+      input.fill_(value);
+      graph.replay();
+      auto combined = output.clone();
+      group->allreduce(combined);
+      auto expected = execute();
+      group->allreduce(expected);
+      stream.synchronize();
+      EXPECT_TRUE(torch::equal(combined.cpu(), expected.cpu()))
+          << "input=" << value << " max_difference="
+          << (combined.cpu().to(torch::kFloat32) -
+              expected.cpu().to(torch::kFloat32))
+                 .abs()
+                 .max()
+                 .item<float>();
+      const double clipped_gate = std::min(16.0 * value, 10.0);
+      const double clipped_up = std::min(4.0 * value, 10.0);
+      const double activation =
+          clipped_gate / (1.0 + std::exp(-clipped_gate)) * clipped_up;
+      const double expected_scalar = activation * 2.5 * 4.5 / 8;
+      EXPECT_TRUE(torch::allclose(combined.cpu().to(torch::kFloat32),
+                                  torch::full({tokens, 4096}, expected_scalar),
+                                  0.04,
+                                  0.02))
+          << "tokens=" << tokens << " input=" << value
+          << " actual=" << combined.cpu()[0][0].item<float>()
+          << " expected=" << expected_scalar;
+    }
+  }
+  // Check quantized dispatch and nonuniform block scales against independent
+  // BF16 matrix operations. Each rank owns a different nonzero local expert.
+  torch::manual_seed(1700 + rank);
+  const int64_t local_expert = 5 + 3 * rank;
+  auto float_opts = opts.dtype(torch::kFloat32);
+  auto make_quantized = [&](int64_t rows, int64_t cols) {
+    auto scales =
+        torch::rand({rows / 128, cols / 128}, float_opts) * 0.002 + 0.001;
+    auto expanded = scales.repeat_interleave(128, 0).repeat_interleave(128, 1);
+    auto quantized = (torch::randn({rows, cols}, float_opts) * 0.02 / expanded)
+                         .to(torch::kFloat8_e4m3fn);
+    auto reference =
+        (quantized.to(torch::kFloat32) * expanded).to(torch::kBFloat16);
+    return std::make_tuple(quantized, scales, reference);
   };
-
-  layer0->load_state_dict(
-      StateDict(make_layer_weights(/*include_indexer=*/true)));
-  layer0->verify_loaded_weights();
-  layer1->load_state_dict(
-      StateDict(make_layer_weights(/*include_indexer=*/false)));
-  layer1->verify_loaded_weights();
-
-  auto x_prefill = torch::randn({5, 4, hidden}, opts) * 0.1f;
-  auto pos_prefill = torch::arange(5, opts.dtype(torch::kInt64));
-  std::optional<torch::Tensor> residual;
-  std::optional<PendingMHC> pending_mhc;
-  Selection shared_selection;
-  ModelInputParams prefill_params;
-  prefill_params.meta.batch_forward_type = BatchForwardType::PREFILL;
-  auto meta_prefill = metadata(0, 5, device_);
-
-  x_prefill = layer0->forward(x_prefill,
-                              residual,
-                              pos_prefill,
-                              meta_prefill,
-                              cache_layer0,
-                              prefill_params,
-                              &pending_mhc,
-                              /*is_last_layer=*/false,
-                              &shared_selection);
-  EXPECT_TRUE(shared_selection.lengths.defined());
-  auto out_prefill = layer1->forward(x_prefill,
-                                     residual,
-                                     pos_prefill,
-                                     meta_prefill,
-                                     cache_layer1,
-                                     prefill_params,
-                                     &pending_mhc,
-                                     /*is_last_layer=*/true,
-                                     &shared_selection);
-  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
-  EXPECT_TRUE(torch::isfinite(out_prefill.cpu()).all().item<bool>());
-
-  auto x_decode = torch::randn({1, 4, hidden}, opts) * 0.1f;
-  auto pos_decode = torch::tensor({5}, opts.dtype(torch::kInt64));
-  ModelInputParams decode_params;
-  decode_params.meta.batch_forward_type = BatchForwardType::DECODE;
-  auto meta_decode = metadata(5, 1, device_);
-  Selection decode_shared_selection;
-  x_decode = layer0->forward(x_decode,
-                             residual,
-                             pos_decode,
-                             meta_decode,
-                             cache_layer0,
-                             decode_params,
-                             &pending_mhc,
-                             /*is_last_layer=*/false,
-                             &decode_shared_selection);
-  auto out_decode = layer1->forward(x_decode,
-                                    residual,
-                                    pos_decode,
-                                    meta_decode,
-                                    cache_layer1,
-                                    decode_params,
-                                    &pending_mhc,
-                                    /*is_last_layer=*/true,
-                                    &decode_shared_selection);
-  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
-  EXPECT_TRUE(torch::isfinite(out_decode.cpu()).all().item<bool>());
+  auto [gate_q, gate_s, gate_ref] = make_quantized(2048, 4096);
+  auto [up_q, up_s, up_ref] = make_quantized(2048, 4096);
+  auto [down_q, down_s, down_ref] = make_quantized(4096, 2048);
+  {
+    auto raw = torch::zeros_like(w13);
+    auto scales = torch::ones({36, 32, 32}, float_opts);
+    raw[local_expert].narrow(0, 0, 2048).copy_(gate_q);
+    raw[local_expert].narrow(0, 2048, 2048).copy_(up_q);
+    scales[local_expert].narrow(0, 0, 16).copy_(gate_s);
+    scales[local_expert].narrow(0, 16, 16).copy_(up_s);
+    std::tie(w13, s13) = MusaMegaMoe::transform_gate_up(raw, scales);
+  }
+  w2[local_expert].copy_(down_q);
+  s2[local_expert].copy_(down_s);
+  for (int64_t tokens : {1, 9, 2048}) {
+    SCOPED_TRACE(tokens);
+    torch::manual_seed(1800 + tokens);
+    auto input =
+        torch::randn({tokens, 4096}, torch::kBFloat16).to(device) * 0.5;
+    auto expert_ranks = torch::arange(8, opts.dtype(torch::kInt32));
+    auto ids = (expert_ranks * 39 + 5).unsqueeze(0).repeat({tokens, 1});
+    auto weights = (torch::arange(1, 9, float_opts) * (2.5 / 36))
+                       .unsqueeze(0)
+                       .repeat({tokens, 1});
+    auto actual =
+        workspace->forward(input, ids, weights, w13, s13, w2, s2, 10.0);
+    group->allreduce(actual);
+    auto gate_result =
+        torch::matmul(input, gate_ref.t()).to(torch::kFloat32).clamp_max(10.0);
+    auto up_result =
+        torch::matmul(input, up_ref.t()).to(torch::kFloat32).clamp(-10.0, 10.0);
+    auto activation =
+        (torch::silu(gate_result) * up_result).to(torch::kBFloat16);
+    auto reference = torch::matmul(activation, down_ref.t());
+    reference.mul_((rank + 1) * (2.5 / 36));
+    group->allreduce(reference);
+    stream.synchronize();
+    auto actual_fp32 = actual.cpu().to(torch::kFloat32).flatten();
+    auto expected_fp32 = reference.cpu().to(torch::kFloat32).flatten();
+    EXPECT_TRUE(torch::isfinite(actual_fp32).all().item<bool>());
+    const double relative_l2 =
+        ((actual_fp32 - expected_fp32).norm() / expected_fp32.norm())
+            .item<double>();
+    const double cosine = ((actual_fp32 * expected_fp32).sum() /
+                           (actual_fp32.norm() * expected_fp32.norm()))
+                              .item<double>();
+    LOG(INFO) << "GLM_MEGA_REFERENCE tokens=" << tokens
+              << " relative_l2=" << relative_l2 << " cosine=" << cosine;
+    EXPECT_LT(relative_l2, 0.08);
+    EXPECT_GT(cosine, 0.995);
+  }
 }
 }  // namespace
 }  // namespace xllm::layer

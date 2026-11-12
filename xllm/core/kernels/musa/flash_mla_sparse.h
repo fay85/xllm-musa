@@ -34,7 +34,8 @@ torch::Tensor sparse_mla_bf16(const torch::Tensor& query,
 
 // GLM inline FP8 NoPE cache: [P,page_size,1,528] bytes, containing 512 E4M3
 // values and four FP32 group-128 scales. Q [B,1,H,512] BF16, indices
-// [B,1,1,K] int32, lengths [B] int32. Eager MP31 single-query decode only.
+// [B,1,1,K] int32, lengths [B] int32. MP31 single-query decode, including graph
+// replay.
 torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
                                   const torch::Tensor& cache,
                                   const torch::Tensor& indices,

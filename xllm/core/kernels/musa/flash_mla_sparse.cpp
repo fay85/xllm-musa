@@ -133,7 +133,6 @@ torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
   }
   CHECK(std::isfinite(scale) && scale > 0);
   c10::musa::MUSAGuard device_guard(query.device());
-  CHECK(!is_stream_capturing());
   musaDeviceProp properties{};
   CHECK_EQ(musaGetDeviceProperties(&properties, query.device().index()),
            musaSuccess);

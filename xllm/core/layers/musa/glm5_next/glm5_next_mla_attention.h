@@ -105,7 +105,7 @@ using Glm5NextSparseAttention = Glm5NextMLAAttention;
 // Cache is BF16 [P,page_size,1,512] or inline FP8 uint8 [P,page_size,1,528].
 // For FP8 each row becomes an independent single-query decode item. The caller
 // supplies valid unique write slots [T] int64, or -1 for padded input rows.
-// All inputs are device tensors. This entry currently requires eager MP31.
+// All inputs are device tensors. Supports eager and graph execution on MP31.
 inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
                                              const torch::Tensor& latent,
                                              const torch::Tensor& w_k,
@@ -135,8 +135,6 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   CHECK(cache.is_contiguous());
   CHECK_EQ(cache.device(), q.device());
   const bool fp8 = cache.scalar_type() == torch::kUInt8;
-  CHECK(!fp8 || !kernel::musa::is_stream_capturing())
-      << "FP8 sparse MLA capture is not supported";
   CHECK(fp8 || cache.scalar_type() == q.scalar_type());
   CHECK_EQ(cache.size(2), 1);
   CHECK_EQ(cache.size(3), fp8 ? 528 : 512);

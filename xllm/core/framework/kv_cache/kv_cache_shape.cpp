@@ -396,10 +396,14 @@ void KVCacheShape::init_key_cache_shape(const KVCacheCapacity& kv_cache_cap,
       return;
     }
 #endif
-    key_cache_shape_ = std::vector<int64_t>{kv_cache_cap.n_blocks(),
-                                            kv_cache_cap.block_size(),
-                                            1,
-                                            model_args.kv_lora_rank()};
+    key_cache_shape_ = std::vector<int64_t>{
+        kv_cache_cap.n_blocks(),
+        kv_cache_cap.block_size(),
+        1,
+        (Platform::is_musa() && model_args.model_type() == "glm5_next" &&
+         kv_cache_cap.slot_size() == 528)
+            ? 528
+            : model_args.kv_lora_rank()};
     return;
   }
 

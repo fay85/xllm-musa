@@ -3404,9 +3404,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       for (const auto& cache : kv_caches) {
         const torch::Tensor key = cache.get_k_cache();
         if (key.defined()) {
-          // FP8 sparse MLA has a different scratch/capture path. Keep its
-          // existing eager implementation until graph replay is validated.
-          supported_forward = key.scalar_type() == torch::kBFloat16;
+          supported_forward =
+              key.scalar_type() == torch::kBFloat16 ||
+              (key.scalar_type() == torch::kUInt8 && key.size(-1) == 528);
           break;
         }
       }

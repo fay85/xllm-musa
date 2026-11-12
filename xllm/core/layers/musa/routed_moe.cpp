@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/musa_fp8_linear.h"
+#include "core/layers/musa/musa_mega_moe.h"
 
 namespace xllm::kernel::musa {
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
@@ -432,6 +433,19 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
         {kPrefillCustomAllreduceWorkspaceTokens, hidden_size_}, options_);
   }
 
+  if (model_args.model_type() == "glm5_next" &&
+      env_flag_enabled("XLLM_GLM5_MEGA_MOE", /*default_value=*/true)) {
+    CHECK_EQ(world_size, 8);
+    CHECK_EQ(ep_size, 1);
+    CHECK_EQ(num_total_experts_, 288);
+    CHECK_EQ(hidden_size_, 4096);
+    CHECK_EQ(intermediate_size_, 2048);
+    CHECK_EQ(topk_, 8);
+    num_experts_per_rank_ = num_total_experts_ / world_size;
+    start_expert_id_ = tp_pg_->rank() * num_experts_per_rank_;
+    local_intermediate_size_ = intermediate_size_;
+    mega_moe_ = MusaMegaMoe::acquire(tp_pg_);
+  }
   if (n_shared_experts_ > 0) {
     shared_experts_ = register_module(
         "shared_experts",
@@ -492,7 +506,8 @@ void RoutedMoeImpl::ensure_fp8_expert_storage() {
     w13_fp8_scale_ = register_parameter(
         "w13_fp8_scale",
         torch::empty({num_experts_per_rank_,
-                      (local_intermediate_size_ * 2 + 127) / 128,
+                      mega_moe_ ? local_intermediate_size_ / 32
+                                : (local_intermediate_size_ * 2 + 127) / 128,
                       (hidden_size_ + 127) / 128},
                      scale_options),
         /*requires_grad=*/false);
@@ -695,8 +710,19 @@ bool RoutedMoeImpl::try_load_quantized_experts(
       packed_vec.emplace_back(torch::cat({w1_list[idx], w3_list[idx]}, 0));
       scale_vec.emplace_back(torch::cat({s1_list[idx], s3_list[idx]}, 0));
     }
-    w13.copy_(torch::stack(packed_vec).to(w13.device()));
-    s13.copy_(torch::stack(scale_vec).to(s13.device()));
+    if (mega_moe_) {
+      CHECK(!packed_fp4);
+      // Transform checkpoint tensors before H2D. Concurrent layer loading
+      // must not retain both TP-style and interleaved EP GPU weights or
+      // allocate a second full device tensor for the copy.
+      auto transformed = MusaMegaMoe::transform_gate_up(
+          torch::stack(packed_vec), torch::stack(scale_vec));
+      w13.copy_(transformed.first);
+      s13.copy_(transformed.second);
+    } else {
+      w13.copy_(torch::stack(packed_vec).to(w13.device()));
+      s13.copy_(torch::stack(scale_vec).to(s13.device()));
+    }
     w13_loaded = true;
     w1_list.clear();
     w3_list.clear();
@@ -707,8 +733,13 @@ bool RoutedMoeImpl::try_load_quantized_experts(
   if (!w2_loaded && all_tensors_defined(w2_list) &&
       all_tensors_defined(s2_list)) {
     ensure_storage();
-    w2_storage.copy_(torch::stack(w2_list).to(w2_storage.device()));
-    s2.copy_(torch::stack(s2_list).to(s2.device()));
+    if (mega_moe_) {
+      w2_storage.copy_(torch::stack(w2_list));
+      s2.copy_(torch::stack(s2_list));
+    } else {
+      w2_storage.copy_(torch::stack(w2_list).to(w2_storage.device()));
+      s2.copy_(torch::stack(s2_list).to(s2.device()));
+    }
     w2_loaded = true;
     w2_list.clear();
     s2_list.clear();
@@ -1012,11 +1043,13 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
 
   const bool disable_fp8_gemv =
       env_flag_enabled("XLLM_MUSA_MOE_DISABLE_FP8_GEMV", false);
-  const bool use_fp8_gemv =
-      !disable_fp8_gemv && input_params.meta.batch_forward_type.is_decode() &&
-      input_2d.size(0) > 0 && input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
-      fp8_experts_loaded();
-  if (!use_fp8_gemv && weights_2d.scalar_type() != input_2d.scalar_type()) {
+  const bool use_fp8_gemv = !mega_moe_ && !disable_fp8_gemv &&
+                            input_params.meta.batch_forward_type.is_decode() &&
+                            input_2d.size(0) > 0 &&
+                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
+                            fp8_experts_loaded();
+  if (!mega_moe_ && !use_fp8_gemv &&
+      weights_2d.scalar_type() != input_2d.scalar_type()) {
     weights_2d = weights_2d.to(input_2d.dtype());
   }
   CHECK_EQ(weights_2d.size(0), input_2d.size(0))
@@ -1025,6 +1058,22 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
       << "RoutedMoe topk_ids token count mismatch.";
 
   torch::Tensor output;
+  if (mega_moe_) {
+    CHECK(fp8_experts_loaded());
+    CHECK(!skip_tp_allreduce);
+    output = mega_moe_->forward(
+        input_2d,
+        ids_2d,
+        weights_2d,
+        w13_fp8_,
+        w13_fp8_scale_,
+        w2_fp8_,
+        w2_fp8_scale_,
+        swiglu_limit_,
+        input_2d.size(0) <= kFp8GemvWorkspaceTokens
+            ? fp8_gemv_output_workspace_.narrow(0, 0, input_2d.size(0))
+            : torch::Tensor());
+  }
   if (use_fp8_gemv) {
     output = forward_fp8_gemv(input_2d, ids_2d, weights_2d);
   }
@@ -1144,8 +1193,22 @@ void RoutedMoeImpl::load_experts(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;
   }
-  const int64_t rank = tp_pg_->rank();
-  const int64_t world_size = tp_pg_->world_size();
+  const int64_t rank = mega_moe_ ? 0 : tp_pg_->rank();
+  const int64_t world_size = mega_moe_ ? 1 : tp_pg_->world_size();
+
+  if (mega_moe_) {
+    // A checkpoint shard can contain only experts owned by another rank.
+    // That is not evidence of a dense checkpoint: do not allocate BF16
+    // expert storage before this rank's FP8 tensors arrive.
+    if (!try_load_fp8_experts(state_dict,
+                              {"gate_proj.", "up_proj."},
+                              "down_proj.",
+                              rank,
+                              world_size)) {
+      try_load_fp8_experts(state_dict, {"w1.", "w3."}, "w2.", rank, world_size);
+    }
+    return;
+  }
 
   std::vector<std::string> prefixes = {"gate_proj.", "up_proj."};
   bool saw_packed_fp4 = try_load_packed_fp4_experts(

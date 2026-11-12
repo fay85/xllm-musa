@@ -120,6 +120,8 @@ custom AR 在 decode 合计 500.7 ms（约 71.5 ms/步），平均 832 µs/次�
 
 ### P1：MegaMoE、路由融合与 FP8 decode
 
+**2026-11-12 实施记录：** 后续代码修改、数值边界修复、八卡验证和 A/B 性能结果集中在 [P1 实施报告](../p1_moe_fp8_results/REPORT.md)。最终结果：路由后处理融合的 C1 TPOT 下降约 3.0%；FP8 主 KV 单 token 字节减少 48.4%，但 2K 延迟没有额外收益；MegaMoE 低并发 decode 更慢。后续按用户要求将 MegaMoE 改为默认开启，`XLLM_GLM5_MEGA_MOE=0` 可显式关闭。另修复了 VLM 漏传 KV dtype 导致 FP8 未实际生效的问题。下面保留原 trace 的判断与实验依据，不能将历史未接入状态当作当前代码状态。
+
 MATE MegaMoE 需要 intranode group≤8、完整专家按 EP 分配、对称 IPC buffer、FP8 dispatch、权重转换，hidden/intermediate 128 对齐，topk≤32。模型 hidden4096/intermediate2048/experts288/topk8 表面满足整除约束。当前 RoutedMoe 以 TP shard 的 intermediate 权重布局运行；把其换成 EP8 的完整专家权重、处理 replicated token 的 ownership，才有可能使用 MegaMoE，不能仅替换一个 GEMM 调用。
 
 实验先保留 attention TP8，只改变专家并行与通信；检查 shared expert、sigmoid noaux routing、correction bias、归一化、routed_scaling_factor=2.5、SwiGLU clamp=10 是否完全一致。特别避免 8 个 TP rank 把同一 token 重复当作 8 个独立 token dispatch。导出 stage1/2/3、IPC buffer/runtime utils 与 weight-transform，确认 C++ 可调用和实际加载符号。当前 Python API 存在不代表 xLLM 有开关可直接开启。

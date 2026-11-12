@@ -235,10 +235,15 @@ KVCacheTensors create_kv_cache_tensors(
     tensors.value_cache = tensors.key_cache;
   }
 #else
-  tensors.key_cache = alloc_cache_tensor(KVCacheTensorRole::KEY,
-                                         kv_cache_shape.key_cache_shape(),
-                                         create_options.dtype(),
-                                         create_options);
+  // The serialized shape carries the inline E4M3 record including its scales.
+  const bool glm_inline_fp8 = Platform::is_musa() &&
+                              create_options.model_type() == "glm5_next" &&
+                              kv_cache_shape.key_cache_shape().back() == 528;
+  tensors.key_cache = alloc_cache_tensor(
+      KVCacheTensorRole::KEY,
+      kv_cache_shape.key_cache_shape(),
+      glm_inline_fp8 ? torch::kUInt8 : create_options.dtype(),
+      create_options);
 
   // deepseek_v3 model has no value cache on mlu device
   if (!kv_cache_shape.value_cache_shape().empty()) {

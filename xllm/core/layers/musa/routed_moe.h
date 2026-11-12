@@ -33,6 +33,7 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+class MusaMegaMoe;
 
 class RoutedMoeSharedExpertImpl final : public torch::nn::Module {
  public:
@@ -148,6 +149,7 @@ class RoutedMoeImpl final : public torch::nn::Module {
   torch::TensorOptions options_;
   ProcessGroup* tp_pg_ = nullptr;
   ProcessGroup* ep_pg_ = nullptr;
+  std::shared_ptr<MusaMegaMoe> mega_moe_;
 
   RoutedMoeSharedExpert shared_experts_{nullptr};
   torch::nn::Linear shared_expert_gate_{nullptr};

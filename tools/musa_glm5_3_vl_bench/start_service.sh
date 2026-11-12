@@ -18,6 +18,9 @@ MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-4096}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
 ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
+KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-auto}"
+# GLM MegaMoE is enabled by default; set 0 to select the original TP experts.
+export XLLM_GLM5_MEGA_MOE="${XLLM_GLM5_MEGA_MOE:-1}"
 PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
 ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-false}"
 MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:--1}"
@@ -45,6 +48,7 @@ ensure_sparse_ops_cache() {
     "sparse_mla_nope_fp8_v1_mp31_h8_splits64/sparse_mla_nope_fp8_v1_mp31_h8_splits64.so"
     "glm_kpool_score_v1/glm_kpool_score_v1.so"
     "gemm_ops/gemm_ops.so"
+    "glm53_moe_route_post_v3/glm53_moe_route_post_v3.so"
   )
   local missing=0
   for rel in "${required[@]}"; do
@@ -59,11 +63,13 @@ ensure_sparse_ops_cache() {
   mkdir -p "${FLASHINFER_OPS_PATH}"
   if [[ -d "${OPS_BACKUP_DIR}" ]]; then
     cp -rf "${OPS_BACKUP_DIR}"/* "${FLASHINFER_OPS_PATH}/"
+    MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_moe.py" --ops-path "${FLASHINFER_OPS_PATH}"
     return 0
   fi
   [[ -d /opt/mate027_cache/.cache/mate/0.2.7/mp31/cached_ops ]] && cp -rn /opt/mate027_cache/.cache/mate/0.2.7/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
   [[ -d /opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops ]] && cp -rf /opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
   [[ -d /opt/mate027_cache/mp31/cached_ops_jd_k8d ]] && cp -rf /opt/mate027_cache/mp31/cached_ops_jd_k8d/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
+  MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_moe.py" --ops-path "${FLASHINFER_OPS_PATH}"
   MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_kda.py" --ops-path "${FLASHINFER_OPS_PATH}" --jobs 4
   MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
   MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --ops-path "${FLASHINFER_OPS_PATH}"
@@ -71,6 +77,10 @@ ensure_sparse_ops_cache() {
 
 ensure_ops_cache() {
   ensure_sparse_ops_cache
+  if [[ "${XLLM_GLM5_MEGA_MOE}" != "0" ]]; then
+    MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
+      python3 "${SCRIPT_DIR}/compile_musa_mega_moe.py" --ops-path "${FLASHINFER_OPS_PATH}"
+  fi
   # Older cache backups predate the MATE mHC finish modules. Check these even
   # when the sparse operator cache was already complete or restored above.
   local name
@@ -194,6 +204,7 @@ for ((r = 0; r < NNODES; ++r)); do
     --enable_schedule_overlap=false \
     --prefill_batch_wait_ms="${PREFILL_BATCH_WAIT_MS}" \
     --enable_graph="${ENABLE_GRAPH}" \
+    --kv_cache_dtype="${KV_CACHE_DTYPE}" \
     --max_tokens_for_graph_mode="${MAX_TOKENS_FOR_GRAPH_MODE}" \
     --enable_prefill_piecewise_graph="${ENABLE_PREFILL_PIECEWISE_GRAPH}" \
     --musa_prefill_graph_max_entries="${PREFILL_GRAPH_MAX_ENTRIES}" \

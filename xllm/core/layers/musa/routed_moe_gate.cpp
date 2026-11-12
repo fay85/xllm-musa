@@ -37,6 +37,48 @@ torch::Tensor renormalize_topk_weights(const torch::Tensor& topk_weights) {
   return topk_weights * denom.reciprocal();
 }
 
+void validate_fused_sigmoid_gate(const torch::Tensor& logits,
+                                 const torch::Tensor& bias,
+                                 const torch::Tensor& weights,
+                                 const torch::Tensor& ids,
+                                 bool renormalize,
+                                 double route_scale) {
+  static const bool enabled = []() {
+    const char* value = std::getenv("XLLM_GLM5_VALIDATE_GATE");
+    return value != nullptr && std::string(value) == "1";
+  }();
+  if (!enabled || kernel::musa::is_stream_capturing()) {
+    return;
+  }
+  auto scores = torch::sigmoid(logits);
+  auto reference_ids = std::get<1>(torch::topk(scores + bias,
+                                               ids.size(1),
+                                               /*dim=*/-1,
+                                               /*largest=*/true,
+                                               /*sorted=*/false));
+  auto reference_weights = scores.gather(-1, reference_ids);
+  if (renormalize) {
+    reference_weights = renormalize_topk_weights(reference_weights);
+  }
+  reference_weights.mul_(route_scale);
+  auto expected =
+      torch::zeros_like(scores).scatter_(1, reference_ids, reference_weights);
+  auto actual =
+      torch::zeros_like(scores).scatter_(1, ids.to(torch::kInt64), weights);
+  const int64_t changed_rows = std::get<0>(ids.to(torch::kInt64).sort(-1))
+                                   .ne(std::get<0>(reference_ids.sort(-1)))
+                                   .any(-1)
+                                   .sum()
+                                   .item<int64_t>();
+  const double max_error = (actual - expected).abs().max().item<double>();
+  LOG(INFO) << "GLM_GATE_COMPARE tokens=" << logits.size(0)
+            << " changed_rows=" << changed_rows << " mixture_max=" << max_error;
+  CHECK(torch::isfinite(actual).all().item<bool>());
+  CHECK_EQ(changed_rows, 0);
+  CHECK_LE(max_error, 1e-5)
+      << "Fused sigmoid routing disagrees with the reference";
+}
+
 }  // namespace
 
 RoutedMoeGateImpl::RoutedMoeGateImpl(const ModelContext& context,
@@ -161,6 +203,42 @@ std::tuple<torch::Tensor, torch::Tensor> RoutedMoeGateImpl::select_experts(
     const std::optional<torch::Tensor>& input_ids) const {
   torch::Tensor scores;
   const int64_t norm_type = score_func_to_norm_type(scoring_func_);
+  const char* fused_gate_env = std::getenv("XLLM_GLM5_FUSED_GATE");
+  const bool use_fused_gate =
+      fused_gate_env == nullptr || std::string(fused_gate_env) != "0";
+  // Preserve muDNN sigmoid and top-k, including tied expert selection and
+  // order. Fuse only gather, normalization, scaling and index conversion.
+  // Correction bias affects selection, never the mixture weights.
+  if (use_fused_gate && norm_type == 1 && !hash_layer_ && bias_is_loaded_ &&
+      topk_method_ == "noaux_tc" && n_routed_experts_ == 288 &&
+      num_expert_group_ == 1 && top_k_ == 8) {
+    namespace km = kernel::musa;
+    auto weights = torch::empty({router_logits.size(0), top_k_},
+                                router_logits.options().dtype(torch::kFloat32));
+    auto ids =
+        torch::empty_like(weights, weights.options().dtype(torch::kInt32));
+    CHECK(router_logits.is_contiguous());
+    CHECK_EQ(router_logits.scalar_type(), torch::kFloat32);
+    auto routing_scores = torch::sigmoid(router_logits);
+    auto selected = std::get<1>(torch::topk(routing_scores + bias_,
+                                            top_k_,
+                                            /*dim=*/-1,
+                                            /*largest=*/true,
+                                            /*sorted=*/false));
+    auto function = km::get_function("glm53_moe_route_post_v3", "run");
+    {
+      km::TvmffiStreamGuard stream_guard(router_logits.device());
+      function(km::to_ffi_tensor(weights),
+               km::to_ffi_tensor(ids),
+               km::to_ffi_tensor(routing_scores),
+               km::to_ffi_tensor(selected),
+               renormalize_,
+               route_scale_);
+    }
+    validate_fused_sigmoid_gate(
+        router_logits, bias_, weights, ids, renormalize_, route_scale_);
+    return {weights, ids};
+  }
   if (norm_type == 0) {
     scores = torch::softmax(router_logits, -1);
   } else if (norm_type == 1) {
