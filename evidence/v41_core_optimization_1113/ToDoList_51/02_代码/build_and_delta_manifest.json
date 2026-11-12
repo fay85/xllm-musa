@@ -1,0 +1,94 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_mhc_small_batch_build_v1/relay_deltas.tar",
+  "bytes": 24678400,
+  "sha256": "0dad3e29576c2fc6b510aa235710c862f129749ab9ea515c5291b2b656525ab0",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-13T01:41:47.010775+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+        "bytes": 342514440,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_mhc_small_batch/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42600800,
+          "sha256": "378e5282abbf55d9555ab27049edef57abc970d5d2db3a7f5f8efd50e1065485"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+        "source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/hyper_connection.h": "a11580239c31fc501a83a7a9bb14041201d6dfab6a0e2c7792eae6b6f2591b20"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "previous_build": "new_start_t14_draft_cache_build_v1",
+        "purpose": "Optional existing MHC fusion for2..8rows; q1 accepted path unchanged; default off; batch performance pending"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 21334540,
+        "sha256": "02dbd0e3e61fc7ffff996e4d366949da90acc385be32b2d9ef5f948c43fd5c37",
+        "base_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+        "target_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+        "target_bytes": 342514440
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 3323402,
+        "sha256": "d05c11c9bc9c7210d040bbecccb68980021be26dce0d337c23841c2a27bdf719",
+        "base_sha256": "ed860e3d06af639852df0469f170de992e891fba404f8f81e89e56c6b4f69dfa",
+        "target_sha256": "378e5282abbf55d9555ab27049edef57abc970d5d2db3a7f5f8efd50e1065485",
+        "target_bytes": 42600800
+      }
+    ]
+  }
+}

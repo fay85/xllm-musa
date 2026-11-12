@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_model_stream_stream_v1_small_evidence.tar.gz",
+  "bytes": 543246,
+  "sha256": "7b099b8c260a5f2cf1f2c3318493c3c22c26cbce80002c44f711ce7651ca7074",
+  "run": "t07_model_stream_stream_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

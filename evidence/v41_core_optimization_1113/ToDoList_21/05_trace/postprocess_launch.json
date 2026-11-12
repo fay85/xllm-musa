@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 53972, \"purpose\": \"CPU-only actual trace audit after formal phases and local timing probes finished\"}\n",
+  "stderr": ""
+}

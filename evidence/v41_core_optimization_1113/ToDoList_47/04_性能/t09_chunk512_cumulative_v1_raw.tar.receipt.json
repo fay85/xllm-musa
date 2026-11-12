@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t09_chunk512_cumulative_v1_small_evidence.tar.gz",
+  "bytes": 460760,
+  "sha256": "a14126f67d7765f7eedd966e7f078c7db19c5eed4f813d7e88b6162122dc5630",
+  "run": "t09_chunk512_cumulative_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

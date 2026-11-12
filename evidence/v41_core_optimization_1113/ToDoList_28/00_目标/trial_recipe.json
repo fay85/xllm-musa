@@ -1,0 +1,17 @@
+{
+  "task": "T11",
+  "mode": "P_PREFIX",
+  "run": "t11_prefill_prefix_v1",
+  "baseline_experiment": "ToDoList_47",
+  "baseline_run": "t09_chunk512_cumulative_v1",
+  "artifact": "native_t14_draft_cache",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "host_env": {},
+  "host_args": {
+    "sj9": {
+      "enable_prefix_cache": "true"
+    }
+  },
+  "state": "FROZEN_CURRENT_LONG_PREFILL_BEST; progress1 retained; CED/spec/batch off; prefix warm workload separate",
+  "baseline_receipt": "result.json"
+}

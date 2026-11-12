@@ -1,0 +1,35 @@
+{
+  "status": "ACCEPTED_SPEED_OPTIMIZATION",
+  "at": "2026-11-12T19:30:55.994863+08:00",
+  "source_parent": "5ace65a370ba0d62c568311b7e09f98f24f2f283",
+  "binary_sha256": "3e54a4bb6c4ccfd9e5cc5e298a82f6cea7c173019911592c436e80763295b2c7",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "performance": {
+    "256": {
+      "TTFT_ms_reduction_percent": -30.469554833677194,
+      "TPOT_ms_reduction_percent": 1.7916558470519428,
+      "E2E_s_reduction_percent": 1.4856352305454679,
+      "output_tps_increase_percent": 1.5080391920733405,
+      "identical_requests": true
+    },
+    "2048": {
+      "TTFT_ms_reduction_percent": -1.438928396042738,
+      "TPOT_ms_reduction_percent": 3.015407638723766,
+      "E2E_s_reduction_percent": 2.7534879554546365,
+      "output_tps_increase_percent": 2.8314516351942265,
+      "identical_requests": true
+    }
+  },
+  "accepted_policy": {
+    "P_TP_CUSTOM": false,
+    "P_EP_CUSTOM": false,
+    "P_CACHE_REUSE": false,
+    "D_TP_CUSTOM": true,
+    "D_EP_CUSTOM": true,
+    "D_CACHE_REUSE": true
+  },
+  "remaining_T02": "SWA read-side page/metadata fusion",
+  "tight_removable_p": null,
+  "source_commit": "70a8e060e5495b63c7a880984682acdd2e0fe606",
+  "source_commit_url": "https://github.com/fay85/xllm-musa/commit/70a8e060e5495b63c7a880984682acdd2e0fe606"
+}

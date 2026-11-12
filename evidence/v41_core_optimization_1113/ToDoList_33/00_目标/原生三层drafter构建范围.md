@@ -1,0 +1,7 @@
+# 原生三层 DSpark 计算主体
+
+沿用T14查询块与已接受上下文写回；三层纯SWA decoder复用现有MATE mHC、W4A8专家和普通投影，保留shifted pre_mix在层间传递。main_proj将target37/38/39进入层前的四路残差平均后拼接的3H投影到H，再main_norm并为每个draft层写入已接受context。query块从anchor+noise词嵌入起步，三层计算后按最后ffn_pre collapse和norm得到draft hidden，交给词表head。
+
+当前先构建并做组件数值/缓存检查，尚未挂入CausalLM factory、Markov/confidence及serving speculative worker；没有正式MTP性能结果。实际mt checkpoint的main_proj是FP8+UE8M0，加载时需要使用现有dense解码，不能照Python注释当成BF16原始文件。
+
+仅通过基础功能检查，未完成模型精度验收。

@@ -1,0 +1,1 @@
+["docker", "exec", "-d", "-w", "/work/repos/xllm-musa", "xiaopang1112_v41_decode_sj10", "bash", "/work/scripts/launch_t06_packed_shared_recheck_packed_v1_sj10.sh"]

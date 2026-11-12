@@ -1,0 +1,5 @@
+{
+  "at": "2026-11-13T02:24:58.102517+08:00",
+  "stage": "failed_no_automatic_restart",
+  "error": "RuntimeError({'exit_status': 1, 'stdout': '', 'stderr': 'Traceback (most recent call last):\\n  File \"<stdin>\", line 1, in <module>\\nAssertionError\\n'})"
+}

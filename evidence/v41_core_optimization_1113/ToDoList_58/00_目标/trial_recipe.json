@@ -1,0 +1,37 @@
+{
+  "task": "T14",
+  "mode": "DSPARK_NO_PROGRESS",
+  "run": "t14_dspark_no_progress_v1",
+  "baseline_experiment": "ToDoList_57",
+  "baseline_receipt": "result.json",
+  "baseline_run": "t07_disable_progress_cumulative_v1",
+  "artifact": "native_t14_draft_cache",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "host_env": {
+    "sj9": {
+      "XLLM_DSV41_DSPARK_NATIVE": "1"
+    },
+    "sj10": {
+      "XLLM_DSV41_DSPARK_NATIVE": "1"
+    }
+  },
+  "host_args": {
+    "sj9": {
+      "num_speculative_tokens": 5
+    },
+    "sj10": {
+      "num_speculative_tokens": 5
+    }
+  },
+  "state": "PREPARED; serial after CED; production-debug-log isolation",
+  "host_append_args": {
+    "sj9": [
+      "--speculative_algorithm=DSpark",
+      "--draft_model=/work/artifacts/model_view_w4afp8_mt_1017"
+    ],
+    "sj10": [
+      "--speculative_algorithm=DSpark",
+      "--draft_model=/work/artifacts/model_view_w4afp8_mt_1017"
+    ]
+  }
+}

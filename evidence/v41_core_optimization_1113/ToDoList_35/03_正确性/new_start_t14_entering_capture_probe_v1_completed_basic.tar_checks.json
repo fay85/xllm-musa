@@ -1,0 +1,51 @@
+{
+  "status": "PASS_TARGET_ENTERING_RESIDUAL_CAPTURE",
+  "cases": [
+    {
+      "width": 1,
+      "nondefault": false,
+      "ordered_capture_ids": [
+        2,
+        0
+      ],
+      "entering_residual_mean_and_slot_order_exact": true,
+      "SWA_caches_exact": true,
+      "final_hidden_relative_rms": 0.0
+    },
+    {
+      "width": 5,
+      "nondefault": false,
+      "ordered_capture_ids": [
+        2,
+        0
+      ],
+      "entering_residual_mean_and_slot_order_exact": true,
+      "SWA_caches_exact": true,
+      "final_hidden_relative_rms": 0.0
+    },
+    {
+      "width": 1,
+      "nondefault": true,
+      "ordered_capture_ids": [
+        2,
+        0
+      ],
+      "entering_residual_mean_and_slot_order_exact": true,
+      "SWA_caches_exact": true,
+      "final_hidden_relative_rms": 0.0
+    },
+    {
+      "width": 5,
+      "nondefault": true,
+      "ordered_capture_ids": [
+        2,
+        0
+      ],
+      "entering_residual_mean_and_slot_order_exact": true,
+      "SWA_caches_exact": true,
+      "final_hidden_relative_rms": 0.0
+    }
+  ],
+  "scope": "Three-layer actual MATE sparse/mHC/W4A8 component fixture, caller capture order and entering-vs-exiting residual checked; this is not full target/spec serving validation.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

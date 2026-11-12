@@ -1,0 +1,97 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_draft_query_build_v1/relay_deltas.tar",
+  "bytes": 4382720,
+  "sha256": "c21a1ff0a86c58d014f02b091a15d5164669c4b834894d095bd7f11fa9668bfc",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T22:26:44.923582+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "469f91430e496d1ff7b24d7b76d282547878a945f3bca42b037e82d080619fa3",
+        "bytes": 342324384,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_draft_query/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42583960,
+          "sha256": "b1479087aebceb88212462d89d751d316009a38c3071bbcc5fe6ab5987d215b0"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+        "source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/paged_attention.h": "28376ae639e3ba31e739a30c848d35734846c16011a3c1daf4c3aa3c8ccce107",
+          "xllm/core/layers/musa/deepseek_v41/attention_projection.h": "b9cdf233d366325419c387ecdb778f7bbc019e2a69c8d94327dd4f6d115c3989",
+          "xllm/core/layers/musa/deepseek_v41/attention.h": "46363369923124c5b270058150d83e1b23ae038f49bb28fa5016ebbf2fa9cbaa",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "1ad0f01e69eb50db93767974a7bc634eaf19cd6faaab411ca3f68e8384aa97e2"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "previous_build": "new_start_t12_batched_native_build_v2",
+        "purpose": "Optional native noncausal DSpark SWA query block and accepted target context injection; proposals do not mutate accepted ring; not yet full draft/target integration"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 41552,
+        "sha256": "2916d78a761b004340ee4844a1245e21fdb0f2d65f9ca62be878f078e6c1cdcc",
+        "base_sha256": "cea5f04237000ad85fe7be7d652d060a6628e231c1dd03e3a7a7c8c2d5e0be5c",
+        "target_sha256": "469f91430e496d1ff7b24d7b76d282547878a945f3bca42b037e82d080619fa3",
+        "target_bytes": 342324384
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4324613,
+        "sha256": "2902b8b5b64aa76a111458fbe79d0e85184a74e7ab86efeaac1da6e7d87e822a",
+        "base_sha256": "bc2bc85da8b372acff3d4302df4827b1f9281fb353a7eaa1d1205d00ba4529e8",
+        "target_sha256": "b1479087aebceb88212462d89d751d316009a38c3071bbcc5fe6ab5987d215b0",
+        "target_bytes": 42583960
+      }
+    ]
+  }
+}

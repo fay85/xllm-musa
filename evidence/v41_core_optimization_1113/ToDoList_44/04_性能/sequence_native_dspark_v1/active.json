@@ -1,0 +1,5 @@
+{
+  "at": "2026-11-13T01:02:41.546990+08:00",
+  "stage": "failed_no_automatic_restart",
+  "error": "AssertionError({'terminal': True, 'result': {'at': '2026-11-13T01:02:35.773734+08:00', 'exit_code': 1}, 'status': None, 'trace': None})"
+}

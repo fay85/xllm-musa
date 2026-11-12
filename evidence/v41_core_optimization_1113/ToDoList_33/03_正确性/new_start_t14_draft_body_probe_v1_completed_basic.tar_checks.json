@@ -1,0 +1,151 @@
+{
+  "status": "PASS_NATIVE_THREE_LAYER_DSPARK_BODY_BASIC",
+  "cases": [
+    {
+      "nondefault": false,
+      "previous": 0,
+      "anchor": 11,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": false,
+      "previous": 0,
+      "anchor": 29,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 7.629021183674922e-07,
+      "max_abs": 0.0001220703125
+    },
+    {
+      "nondefault": false,
+      "previous": 129,
+      "anchor": 11,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 1.1924278453534498e-08,
+      "max_abs": 1.9073486328125e-06
+    },
+    {
+      "nondefault": false,
+      "previous": 129,
+      "anchor": 29,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 2.9802880163742884e-09,
+      "max_abs": 4.76837158203125e-07
+    },
+    {
+      "nondefault": false,
+      "previous": 257,
+      "anchor": 11,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 1.6859432960814047e-08,
+      "max_abs": 1.9073486328125e-06
+    },
+    {
+      "nondefault": false,
+      "previous": 257,
+      "anchor": 29,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 4.8829620936885476e-05,
+      "max_abs": 0.0078125
+    },
+    {
+      "nondefault": true,
+      "previous": 0,
+      "anchor": 11,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": true,
+      "previous": 0,
+      "anchor": 29,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 7.629021183674922e-07,
+      "max_abs": 0.0001220703125
+    },
+    {
+      "nondefault": true,
+      "previous": 129,
+      "anchor": 11,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": true,
+      "previous": 129,
+      "anchor": 29,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 2.6655458285063105e-08,
+      "max_abs": 3.814697265625e-06
+    },
+    {
+      "nondefault": true,
+      "previous": 257,
+      "anchor": 11,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 4.768302375168787e-08,
+      "max_abs": 7.62939453125e-06
+    },
+    {
+      "nondefault": true,
+      "previous": 257,
+      "anchor": 29,
+      "block_width": 5,
+      "layers": 3,
+      "context_projection_exact": true,
+      "cache_unchanged_by_proposals": true,
+      "vocabulary_head_exact": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    }
+  ],
+  "scope": "Single GPU slice geometry with real layer0 HC and two W4A8 expert fixture, synthetic dense projection/embedding/head. Actual MATE sparse/HC/W4A8. This is not TP8 full checkpoint or target/speculative serving validation.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

@@ -1,0 +1,141 @@
+{
+  "status": "PASS_ALL8_D_SAME124_ROWS_ACTUAL_Q4_AND_NORMALIZED_KERNEL_COUNTS",
+  "rows": {
+    "off": [
+      {
+        "rank": 0,
+        "all_gpu_kernels": 438880,
+        "per_D_row": 3539.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 1,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 2,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 3,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 4,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 5,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 6,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 7,
+        "all_gpu_kernels": 438632,
+        "per_D_row": 3537.3548387096776,
+        "selected_step": "V41/step/q=1/kv=287",
+        "selected_mm": 349,
+        "selected_fused_prenorm": 80
+      }
+    ],
+    "after": [
+      {
+        "rank": 0,
+        "all_gpu_kernels": 194456,
+        "per_D_row": 1568.1935483870968,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 1,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 2,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 3,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 4,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 5,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 6,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      },
+      {
+        "rank": 7,
+        "all_gpu_kernels": 194390,
+        "per_D_row": 1567.6612903225807,
+        "selected_step": "V41/step/q=4/kv=287",
+        "selected_mm": 430,
+        "selected_fused_prenorm": 80
+      }
+    ]
+  },
+  "before_full_mm": 43400,
+  "after_full_mm": 14007,
+  "denominator": "124 actual D rows for4 requests output32 each;4 first P tokens excluded",
+  "counts_not_time": true
+}

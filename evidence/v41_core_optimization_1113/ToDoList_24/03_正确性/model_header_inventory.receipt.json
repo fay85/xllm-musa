@@ -1,0 +1,32 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t13_t14_header_inventory_v1.json.gz",
+  "bytes": 405070,
+  "sha256": "0178d29530c73e0932b5b417e6c550bdd1148b9b846009746b057e49326c7c96",
+  "groups": {
+    "other": {
+      "storage_bytes": 7854587328,
+      "tensors": 1510,
+      "logical_elements": 7152192624
+    },
+    "embedding_or_head": {
+      "storage_bytes": 2647654400,
+      "tensors": 2,
+      "logical_elements": 1323827200
+    },
+    "draft": {
+      "storage_bytes": 7932876936,
+      "tensors": 3553,
+      "logical_elements": 7537310946
+    },
+    "engram": {
+      "storage_bytes": 203073076240,
+      "tensors": 12,
+      "logical_elements": 203072994320
+    },
+    "experts": {
+      "storage_bytes": 288777922560,
+      "tensors": 138240,
+      "logical_elements": 276037678080
+    }
+  }
+}

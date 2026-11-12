@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 58004, \"command\": [\"zstd\", \"-q\", \"-f\", \"--long=29\", \"--patch-from=/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_stage_i/bin/xllm\", \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_g02_build/xllm\", \"-o\", \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_g02_build/xllm.zstpatch\"], \"binary_sha256\": \"320f465d5099d87573854fa1c6f1da39cbc077787952f739ae63ea15cbc2a67e\", \"bytes\": 342160696}\n",
+  "stderr": ""
+}

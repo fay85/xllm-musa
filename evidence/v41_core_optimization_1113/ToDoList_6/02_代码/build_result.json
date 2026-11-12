@@ -1,0 +1,21 @@
+{
+  "exit_code": 0,
+  "finished_at": "2026-11-12T18:15:40.955940+08:00",
+  "binary_build_output": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/build/artifacts/xllm",
+  "sha256": "ef2cbf5b6afadd17f104d63a2e393f65a09c59424a148122c51a2def371c55fb",
+  "bytes": 342173584,
+  "dry_run_command": [
+    "docker",
+    "exec",
+    "-w",
+    "/work/repos/xllm-musa",
+    "xiaopang1112_v41_w4a8_build_dev6",
+    "bash",
+    "scripts/ninja_safe.sh",
+    "build/cmake.linux-x86_64-cpython-310",
+    "-n",
+    "xllm"
+  ],
+  "dry_run_stdout": "ninja: Entering directory `/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310'\n[1/2] Linking CXX static library xllm/models/libmodels.a\n[2/2] Linking CXX executable /work/build/artifacts/xllm\n",
+  "packaging_correction": "Compile succeeded; copy location corrected from cmake/xllm directory to configured R/build/artifacts/xllm. Original launcher error retained; no full rebuild."
+}

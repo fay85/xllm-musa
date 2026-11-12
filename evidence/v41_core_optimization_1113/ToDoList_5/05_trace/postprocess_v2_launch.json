@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 27870, \"log\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/scripts/t01_donly_postprocess_v2.log\", \"scope\": \"CPU offline, existing exact raw traces; no model rerun\"}\n",
+  "stderr": ""
+}

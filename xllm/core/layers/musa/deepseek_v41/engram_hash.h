@@ -194,6 +194,11 @@ class DeepseekV41EngramHash final {
     return {output, dead.logical_not()};
   }
 
+  const torch::Tensor& history() const {
+    CHECK(history_.defined());
+    return history_;
+  }
+
  private:
   void check_asset(const torch::Tensor& value) const {
     CHECK(value.defined());

@@ -1,0 +1,21 @@
+{
+  "task": "T07",
+  "mode": "NO_PROGRESS_LOG",
+  "run": "t07_disable_progress_cumulative_v1",
+  "baseline_experiment": "ToDoList_47",
+  "baseline_receipt": "result.json",
+  "baseline_run": "t09_chunk512_cumulative_v1",
+  "artifact": "native_t14_draft_cache",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "host_env": {},
+  "host_args": {},
+  "state": "PREPARED; serial after CED; production-debug-log isolation",
+  "host_unset_env": {
+    "sj9": [
+      "XLLM_DSV41_DIAGNOSTIC_PROGRESS"
+    ],
+    "sj10": [
+      "XLLM_DSV41_DIAGNOSTIC_PROGRESS"
+    ]
+  }
+}

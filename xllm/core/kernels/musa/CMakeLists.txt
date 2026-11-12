@@ -13,6 +13,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_fp8_quant_utils.cuh
   deepseek_v41_attention_quant.h
   deepseek_v41_swa_decode_read.h
+  deepseek_v41_decoder_graph_inputs.h
   deepseek_v41_engram_gate.h
   deepseek_v41_engram_gather.h
   deepseek_v41_engram_hash.h
@@ -102,11 +103,13 @@ set(_TORCH_MUSA_KERNEL_SRCS
   deepseek_v41_engram_gate.cu
   deepseek_v41_attention_quant.cu
   deepseek_v41_swa_decode_read.cu
+  deepseek_v41_decoder_graph_inputs.cu
   deepseek_v41_fp4.cu
   deepseek_v41_partition_gemm.cpp
   deepseek_v41_w4a8.cu
   deepseek_v41_w4a8_gemm.cpp
   deepseek_v41_mhc_prenorm.cpp
+  deepseek_v41_mhc_prenorm_reduce.cu
   musa_aot_kernel.cpp
   deepseek_v41_dense_block32.cpp
   deepseek_v41_indexer_score.cpp

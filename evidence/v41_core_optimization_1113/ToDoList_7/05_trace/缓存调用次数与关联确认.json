@@ -1,0 +1,31 @@
+{
+  "off": {
+    "status": "PASS_ALL_16_RANK_TRACE_SHA_CPU_GPU_NATIVE_PC_CORRELATION",
+    "ranks": 16,
+    "selected_step": "V41/step/q=1/kv=263",
+    "cpu_counts": {
+      "aten::index_select": 335,
+      "aten::arange": 336,
+      "aten::where": 450,
+      "V41/Attention/compressed_cache_commit": 8,
+      "V41/Attention/compressed_cache_gather": 46
+    },
+    "gpu_count": 5654,
+    "native_entries": 3787
+  },
+  "reuse": {
+    "status": "PASS_ALL_16_RANK_TRACE_SHA_CPU_GPU_NATIVE_PC_CORRELATION",
+    "ranks": 16,
+    "selected_step": "V41/step/q=1/kv=263",
+    "cpu_counts": {
+      "aten::index_select": 259,
+      "aten::arange": 260,
+      "aten::where": 374,
+      "V41/Attention/compressed_cache_commit": 8,
+      "V41/Attention/compressed_cache_materialize": 8,
+      "V41/Attention/compressed_cache_gather": 8
+    },
+    "gpu_count": 5246,
+    "native_entries": 3577
+  }
+}

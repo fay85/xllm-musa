@@ -1,0 +1,16 @@
+{
+  "task": "T06",
+  "mode": "PACK_QKV",
+  "run": "t06_packed_qkv_cumulative_v1",
+  "baseline_experiment": "ToDoList_38",
+  "baseline_run": "t03_mhc_integrated_mhc_v1",
+  "artifact": "native_t14_native_block",
+  "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "host_env": {
+    "sj10": {
+      "XLLM_DSV41_DECODE_PACKED_QKV": "1"
+    }
+  },
+  "host_args": {},
+  "state": "PREPARED_NOT_RUN; baseline must be updated to latest accepted before launch"
+}

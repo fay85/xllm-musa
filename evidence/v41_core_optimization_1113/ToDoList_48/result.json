@@ -1,0 +1,49 @@
+{
+  "status": "SMALL_MIXED_CED_EFFECT_NOT_PROMOTED",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": -9.52613557620835,
+      "TPOT_ms_change_percent": 1.7191005325265296,
+      "E2E_s_change_percent": 1.4500075077805263,
+      "output_tps_change_percent": -1.4292827998749202
+    },
+    "2048": {
+      "TTFT_ms_change_percent": -9.130779364973973,
+      "TPOT_ms_change_percent": -1.2203838519434185,
+      "E2E_s_change_percent": -1.8603707602861674,
+      "output_tps_change_percent": 1.8956366298695349
+    }
+  },
+  "valid_after_formal_requests": 10,
+  "after_normal_rank_exits": 16,
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e48_trace_analysis_v1.tar.zst",
+    "bytes": 7087989,
+    "sha256": "21c9521289c1e1bf44d686a775b38df45920f72d05eabcbdf7ffab6102b13835",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_draft_cache/bin/xllm",
+      "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t09_chunk512_cumulative_v1_raw_trace.tar.zst",
+          "bytes": 133776043,
+          "sha256": "f14d474a56c39f713df24d0d426104b452c0ecda010c4a114826752d4a149e46"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t10_ced128_cumulative_v1_raw_trace.tar.zst",
+          "bytes": 133960594,
+          "sha256": "598c48c7e568db996d10c27a600d0358c51751399362b60bb213e2e2fdb30490"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794506770.3240836
+    }
+  },
+  "scope": "Resumed only existing CPU artifact transfer; no model restart or duplicate test",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "reason": "TTFT lower both, E2E short+1.45% long-1.86%; changed late-SWA bounded replay policy not demonstrated model-equivalent; retain explicit optional implementation without default enable",
+  "default_bounded_replay": "0"
+}

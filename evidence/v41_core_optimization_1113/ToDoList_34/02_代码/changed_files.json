@@ -1,0 +1,10 @@
+{
+  "existing": [
+    "xllm/models/models.h",
+    "xllm/models/CMakeLists.txt",
+    "xllm/core/runtime/draft_model_config.cpp"
+  ],
+  "new": [
+    "xllm/models/llm/musa/deepseek_v41_dspark_native.h"
+  ]
+}

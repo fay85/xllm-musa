@@ -1,0 +1,6 @@
+[
+  "xllm/core/layers/musa/deepseek_v41/paged_attention.h",
+  "xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+  "xllm/core/layers/musa/deepseek_v41/attention.h",
+  "tests/core/kernels/musa/musa_python_kernel_test_module.cpp"
+]

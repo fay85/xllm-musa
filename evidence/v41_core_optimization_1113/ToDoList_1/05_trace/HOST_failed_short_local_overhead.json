@@ -1,0 +1,40 @@
+{
+  "status": "SHORT_ONLY_VALID_MAPPING_LONG_RUN_FAILED",
+  "baseline": "OFF NFS run; no added long gate",
+  "overall_tpot_change": -2.740468244677441e-05,
+  "affected_ITL_mean_change": 0.0011319409705768655,
+  "affected_ITL_median_change": 0.0009642993444165526,
+  "per_request": [
+    {
+      "request_index": 0,
+      "roots": 128,
+      "affected_intervals": 32,
+      "mean_relative_change": 0.0017820452313846054
+    },
+    {
+      "request_index": 1,
+      "roots": 128,
+      "affected_intervals": 31,
+      "mean_relative_change": 0.004015871580237951
+    },
+    {
+      "request_index": 2,
+      "roots": 120,
+      "affected_intervals": 30,
+      "mean_relative_change": 0.0016952689830625589
+    },
+    {
+      "request_index": 3,
+      "roots": 128,
+      "affected_intervals": 32,
+      "mean_relative_change": 0.0007062529800223247
+    },
+    {
+      "request_index": 4,
+      "roots": 128,
+      "affected_intervals": 32,
+      "mean_relative_change": -0.0024144030894908478
+    }
+  ],
+  "limitation": "Partial coverage evidence only; long input failed so G02 not accepted."
+}

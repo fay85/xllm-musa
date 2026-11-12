@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t11_prefill_prefix_v1_small_evidence.tar.gz",
+  "bytes": 403469,
+  "sha256": "872c0b9a980e16217827a3549a5bef17d45ab18ad38a33d6aac95ba9395d69db",
+  "run": "t11_prefill_prefix_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

@@ -22,6 +22,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/deepseek_v41_mhc_prenorm.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
+#include "core/util/env_var.h"
 
 namespace xllm::layer {
 
@@ -36,14 +37,16 @@ class DeepseekV41HyperConnection final {
                              int64_t iterations,
                              double norm_eps,
                              double eps,
-                             std::string mate_prenorm_directory = {})
+                             std::string mate_prenorm_directory = {},
+                             bool decode_fused_prenorm_reduce = false)
       : fn_(std::move(fn)),
         scale_(std::move(scale)),
         base_(std::move(base)),
         iterations_(iterations),
         norm_eps_(norm_eps),
         eps_(eps),
-        mate_prenorm_directory_(std::move(mate_prenorm_directory)) {
+        mate_prenorm_directory_(std::move(mate_prenorm_directory)),
+        decode_fused_prenorm_reduce_(decode_fused_prenorm_reduce) {
     CHECK(fn_.defined() && scale_.defined() && base_.defined());
     CHECK(fn_.device().type() == torch::kPrivateUse1);
     CHECK_EQ(fn_.scalar_type(), torch::kFloat32);
@@ -82,8 +85,21 @@ class DeepseekV41HyperConnection final {
     const torch::Tensor packed = residual.contiguous();
     torch::Tensor mixes;
     if (!mate_prenorm_directory_.empty()) {
-      mixes = kernel::musa::deepseek_v41_mhc_prenorm(
-          packed.flatten(1), fn_, mate_prenorm_directory_, norm_eps_);
+      // The operator is validated for multiple rows, but keep that policy
+      // separately selectable from the accepted single-token fast path.
+      static const bool small_batch_fusion =
+          util::get_bool_env("XLLM_DSV41_MHC_SMALL_BATCH_FUSION", false);
+      const int64_t rows = packed.size(0);
+      const bool fuse_rows =
+          rows == 1 || (small_batch_fusion && rows > 1 && rows <= 8);
+      if (decode_fused_prenorm_reduce_ && fuse_rows) {
+        const DeepseekV41ProfileRange reduce_range("V41/mHC/fused_prenorm");
+        mixes = kernel::musa::deepseek_v41_mhc_prenorm_fused(
+            packed.flatten(1), fn_, mate_prenorm_directory_, norm_eps_);
+      } else {
+        mixes = kernel::musa::deepseek_v41_mhc_prenorm(
+            packed.flatten(1), fn_, mate_prenorm_directory_, norm_eps_);
+      }
     } else {
       // Explicit reference mode, selected at construction; never an exception
       // fallback from a failed MATE invocation.
@@ -154,6 +170,7 @@ class DeepseekV41HyperConnection final {
   double norm_eps_;
   double eps_;
   std::string mate_prenorm_directory_;
+  bool decode_fused_prenorm_reduce_ = false;
 };
 
 }  // namespace xllm::layer

@@ -1,0 +1,84 @@
+{
+  "off": {
+    "status": "PASS_ALL_16_RANK_TRACE_SHA_CPU_GPU_NATIVE_PC_CORRELATION",
+    "rank_count": 16,
+    "sj9": {
+      "selected_step": "V41/step/q=256/kv=256",
+      "communication_kernels": {
+        "imcclDevKernel_AllReduce_Sum_bf16_RING_SIMPLE(imcclDevKernelArgsStorage<4096ul>)": 40,
+        "imcclDevKernel_AllReduce_Sum_f32_RING_SIMPLE(imcclDevKernelArgsStorage<4096ul>)": 40,
+        "imcclDevKernel_AllGather_RING_SIMPLE(imcclDevKernelArgsStorage<4096ul>)": 3
+      },
+      "scope_counts": {
+        "V41/Attention/TP_allreduce/q=256": 40,
+        "V41/MoE/EP_allreduce/q=256": 40
+      },
+      "runtime_api_counts": {
+        "musaStreamIsCapturing": 40,
+        "musaEventRecord": 200,
+        "musaStreamWaitEvent": 80,
+        "musaStreamGetCaptureInfo_v2": 40,
+        "musaGetFuncBySymbol": 40
+      }
+    },
+    "sj10": {
+      "selected_step": "V41/step/q=1/kv=263",
+      "communication_kernels": {
+        "void vllm::cross_device_reduce_1stage<__mt_bfloat16, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, __mt_bfloat16*, int, int)": 39,
+        "imcclDevKernel_AllReduce_Sum_f32_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 39,
+        "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 3
+      },
+      "scope_counts": {
+        "V41/Attention/TP_allreduce/q=1": 40,
+        "V41/MoE/EP_allreduce/q=1": 40
+      },
+      "runtime_api_counts": {
+        "musaStreamIsCapturing": 40,
+        "musaEventRecord": 200,
+        "musaStreamWaitEvent": 80,
+        "musaStreamGetCaptureInfo_v2": 40,
+        "musaGetFuncBySymbol": 40
+      }
+    }
+  },
+  "custom": {
+    "status": "PASS_ALL_16_RANK_TRACE_SHA_CPU_GPU_NATIVE_PC_CORRELATION",
+    "rank_count": 16,
+    "sj9": {
+      "selected_step": "V41/step/q=256/kv=256",
+      "communication_kernels": {
+        "imcclDevKernel_AllReduce_Sum_bf16_RING_SIMPLE(imcclDevKernelArgsStorage<4096ul>)": 40,
+        "imcclDevKernel_AllReduce_Sum_f32_RING_SIMPLE(imcclDevKernelArgsStorage<4096ul>)": 40,
+        "imcclDevKernel_AllGather_RING_SIMPLE(imcclDevKernelArgsStorage<4096ul>)": 3
+      },
+      "scope_counts": {
+        "V41/Attention/TP_allreduce/q=256": 40,
+        "V41/MoE/EP_allreduce/q=256": 40
+      },
+      "runtime_api_counts": {
+        "musaStreamIsCapturing": 40,
+        "musaEventRecord": 200,
+        "musaStreamWaitEvent": 80,
+        "musaStreamGetCaptureInfo_v2": 40,
+        "musaGetFuncBySymbol": 40
+      }
+    },
+    "sj10": {
+      "selected_step": "V41/step/q=1/kv=263",
+      "communication_kernels": {
+        "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 3,
+        "void vllm::cross_device_reduce_1stage<__mt_bfloat16, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, __mt_bfloat16*, int, int)": 39,
+        "void vllm::cross_device_reduce_1stage<float, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, float*, int, int)": 39
+      },
+      "scope_counts": {
+        "V41/Attention/TP_allreduce/q=1": 40,
+        "V41/MoE/EP_allreduce/q=1": 40
+      },
+      "runtime_api_counts": {
+        "musaStreamIsCapturing": 80,
+        "musaMemcpyAsync": 40,
+        "musaLaunchKernel": 40
+      }
+    }
+  }
+}

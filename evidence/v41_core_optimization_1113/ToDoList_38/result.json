@@ -1,0 +1,28 @@
+{
+  "status": "ACCEPTED_SPEED_OPTIMIZATION",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": -5.772521350635918,
+      "TPOT_ms_change_percent": -10.512100839165884,
+      "E2E_s_change_percent": -10.410386831830998,
+      "output_tps_change_percent": 11.62008235518288
+    },
+    "2048": {
+      "TTFT_ms_change_percent": 0.8663159110575025,
+      "TPOT_ms_change_percent": -13.134177540632376,
+      "E2E_s_change_percent": -11.454455060702296,
+      "output_tps_change_percent": 12.936229675422828
+    }
+  },
+  "valid_formal_requests": 20,
+  "normal_rank_exits": 32,
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "at": "2026-11-13T00:31:50.972101+08:00",
+  "trace_audit": "05_trace/all8_fused_path_effect.json",
+  "source_patch": "ToDoList_43/02_代码/source_delta_vs_best_4411.patch",
+  "source_patch_sha256": "5ec51874f45ccd10de61e02a843e0c9bfe795b458ed1d3b266444805def27829",
+  "accepted_at": "2026-11-13T00:38:29.745899+08:00",
+  "critical_path_limit": "Actual trace confirms 400 fewer kernels per step on all 8 decode ranks; no tight critical-path fraction or SOL attainment claimed."
+}

@@ -1,0 +1,39 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "c1d6845aa920600ee86d4c1bbefd5a38aa1864db3def5c9f863d32d8932e0daf",
+  "native_stacks_sha256": "0ab6d51fae5d25e2ed3319eaed4cba44ffc993bbc93bf56e55a798291bbad224",
+  "symbols_sha256": "668cbd5ad24d52abd66f58ba115f6d983d847919192f7395302e9573353c9fce",
+  "symbolization_binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=256/kv=2048",
+    "pid": 41252,
+    "tid": 43096,
+    "ts": 3648442824893.702,
+    "dur": 865868.529,
+    "args": {
+      "External id": 267629,
+      "Record function id": 268532,
+      "finished": true,
+      "Ev Idx": 267628
+    }
+  },
+  "selected_scope": {
+    "name": "Actual captured CPU/GPU interval envelope (view only)",
+    "ts": 3648430146745.399,
+    "dur": 13694008.218261719,
+    "derived_view_only": true,
+    "not_inserted_as_trace_event": true
+  },
+  "gpu_selection": "runtime correlation for scope",
+  "actual_intervals": 365884,
+  "native_entry_samples": 4321,
+  "output_sha256": "e425a1035a046da48180dbde11b08eed686ea72ed5f99e884f81196ceb116f51",
+  "verification": {
+    "slices": 365884,
+    "native_entry_samples": 4321,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

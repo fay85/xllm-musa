@@ -1,0 +1,52 @@
+{
+  "status": "HEADER_AND_LOADER_CAPACITY_ANALYSIS_COMPLETE_NO_ALTERNATIVE_SERVING_RUN",
+  "same_16_GPU_budget": true,
+  "main_n_experts": 384,
+  "routed_runtime_total_bytes": 280284364800,
+  "engram_embedding_packed_total_bytes": 202758032400,
+  "embedding_head_total_bytes": 2647654400,
+  "configurations": [
+    {
+      "TP": 8,
+      "EP": 8,
+      "mean_lower_bound_per_rank_GiB": 56.541763665154576,
+      "capacity_GiB": 80,
+      "exceeds_capacity": false,
+      "scope": "Immutable routed INT4 + runtime BF16 scale; two Engram packed FP8 tables and byte scales; BF16 input/output embeddings only. Excludes all Attention/shared/mHC weights, KV cache, activations, allocator/communication and temporary loading peaks."
+    },
+    {
+      "TP": 4,
+      "EP": 8,
+      "mean_lower_bound_per_rank_GiB": 80.45413279905915,
+      "capacity_GiB": 80,
+      "exceeds_capacity": true,
+      "scope": "Immutable routed INT4 + runtime BF16 scale; two Engram packed FP8 tables and byte scales; BF16 input/output embeddings only. Excludes all Attention/shared/mHC weights, KV cache, activations, allocator/communication and temporary loading peaks."
+    },
+    {
+      "TP": 8,
+      "EP": 4,
+      "mean_lower_bound_per_rank_GiB": 89.17115819640458,
+      "capacity_GiB": 80,
+      "exceeds_capacity": true,
+      "scope": "Immutable routed INT4 + runtime BF16 scale; two Engram packed FP8 tables and byte scales; BF16 input/output embeddings only. Excludes all Attention/shared/mHC weights, KV cache, activations, allocator/communication and temporary loading peaks."
+    },
+    {
+      "TP": 4,
+      "EP": 4,
+      "mean_lower_bound_per_rank_GiB": 113.08352733030915,
+      "capacity_GiB": 80,
+      "exceeds_capacity": true,
+      "scope": "Immutable routed INT4 + runtime BF16 scale; two Engram packed FP8 tables and byte scales; BF16 input/output embeddings only. Excludes all Attention/shared/mHC weights, KV cache, activations, allocator/communication and temporary loading peaks."
+    },
+    {
+      "TP": 2,
+      "EP": 8,
+      "mean_lower_bound_per_rank_GiB": 128.2788710668683,
+      "capacity_GiB": 80,
+      "exceeds_capacity": true,
+      "scope": "Immutable routed INT4 + runtime BF16 scale; two Engram packed FP8 tables and byte scales; BF16 input/output embeddings only. Excludes all Attention/shared/mHC weights, KV cache, activations, allocator/communication and temporary loading peaks."
+    }
+  ],
+  "not_general_impossibility": "Applies to current sharding/placement only. Moving Engram ownership to a different group, offload, new compression or more GPUs would change assumptions and requires separate implementation/testing.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

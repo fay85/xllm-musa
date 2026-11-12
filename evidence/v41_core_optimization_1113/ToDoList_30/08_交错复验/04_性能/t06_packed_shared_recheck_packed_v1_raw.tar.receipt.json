@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t06_packed_shared_recheck_packed_v1_small_evidence.tar.gz",
+  "bytes": 542078,
+  "sha256": "77b519fba3097240f2ea3d47408ce44a92dc5c9e21e8c319e9d907885ecc3a2f",
+  "run": "t06_packed_shared_recheck_packed_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

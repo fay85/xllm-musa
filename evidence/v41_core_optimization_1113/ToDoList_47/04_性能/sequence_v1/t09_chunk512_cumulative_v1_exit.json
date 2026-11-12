@@ -1,0 +1,38 @@
+[
+  {
+    "terminal": true,
+    "result": {
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "control_exit": null,
+      "stopping": true,
+      "automatic_kill": false
+    }
+  },
+  {
+    "terminal": true,
+    "result": {
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "control_exit": 0,
+      "stopping": true,
+      "automatic_kill": false
+    }
+  }
+]

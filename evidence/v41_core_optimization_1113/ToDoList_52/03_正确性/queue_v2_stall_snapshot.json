@@ -1,0 +1,257 @@
+[
+  {
+    "host": "sj9",
+    "at": "2026-11-13T02:44:26.491481+08:00",
+    "status": {
+      "at": "2026-11-13T02:44:26.013032+08:00",
+      "pids": [
+        11935,
+        11936,
+        11937,
+        11938,
+        11939,
+        11940,
+        11941,
+        11942
+      ],
+      "exit_codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "stopping": false
+    },
+    "result": null,
+    "logs": {
+      "0": {
+        "last_progress": [
+          "I20261113 02:39:11.750240 13779 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758792 13779 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758805 13779 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767094 13779 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [
+          "E20261113 02:35:11.539426 11935 comm_channel.cpp:105] Hello request failed: [E2001][10.121.32.7:37049]Server is not initialized",
+          "E20261113 02:36:33.433813 11935 xllm_server_registry.cpp:55] Server DisaggPDServer0 doesn't exist.",
+          "E20261113 02:39:11.769409 18773 scheduler_policy.cpp:1527] Request prompt is too long, no enough memory to schedule a single sequence."
+        ],
+        "tail": [
+          "I20261113 02:39:11.769496 18742 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-vGdc7rHD86MPu9iYJmTyDw, x-request-id: 01a1d10e-7dea-72fd-b41c-6e872df4aa7b, outcome: failure, status_code: 5",
+          "I20261113 02:39:11.769536 18742 request.cpp:619] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-vGdc7rHD86MPu9iYJmTyDw, x-request-id: 01a1d10e-7dea-72fd-b41c-6e872df4aa7b, sequence: 0, outcome: failure, status_code: 5, status_msg: No enough memory to schedule single sequence, prompt_tokens: 2048, max_tokens: 256, temperature: 0",
+          "I20261113 02:39:11.769881 18765 disagg_pd_scheduler.cpp:192] Decode reservation release, request_id=chatcmpl-12481178814234374860-vGdc7rHD86MPu9iYJmTyDw, peer=10.121.32.9:32200, result=1, attempt=1"
+        ]
+      },
+      "1": {
+        "last_progress": [
+          "I20261113 02:39:11.750125 13871 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758652 13871 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758665 13871 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767099 13871 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758652 13871 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758665 13871 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767099 13871 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      },
+      "2": {
+        "last_progress": [
+          "I20261113 02:39:11.750109 13783 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758638 13783 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758651 13783 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767136 13783 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758638 13783 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758651 13783 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767136 13783 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      },
+      "3": {
+        "last_progress": [
+          "I20261113 02:39:11.750141 13864 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758669 13864 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758682 13864 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767149 13864 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758669 13864 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758682 13864 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767149 13864 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      },
+      "4": {
+        "last_progress": [
+          "I20261113 02:39:11.750283 13875 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758778 13875 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758790 13875 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767040 13875 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758778 13875 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758790 13875 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767040 13875 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      },
+      "5": {
+        "last_progress": [
+          "I20261113 02:39:11.750140 13846 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758878 13846 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758890 13846 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767132 13846 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758878 13846 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758890 13846 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767132 13846 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      },
+      "6": {
+        "last_progress": [
+          "I20261113 02:39:11.750294 13825 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758846 13825 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758858 13825 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767302 13825 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758846 13825 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758858 13825 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767302 13825 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      },
+      "7": {
+        "last_progress": [
+          "I20261113 02:39:11.750334 13804 text_model.h:194] V41_DIAGNOSTIC layer begin index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758857 13804 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758872 13804 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767271 13804 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.758857 13804 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=38 q=512 kv=2048",
+          "I20261113 02:39:11.758872 13804 text_model.h:194] V41_DIAGNOSTIC layer begin index=39 q=512 kv=2048",
+          "I20261113 02:39:11.767271 13804 text_model.h:222] V41_DIAGNOSTIC layer enqueued index=39 q=512 kv=2048"
+        ]
+      }
+    },
+    "GMI": "Fri Nov 13 02:44:26 2026\n---------------------------------------------------------------------\n    zjlab-gmi:2.3.3              Driver Version:3.3.8-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    X10000               |00000000:03:00.0    |100%  67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    X10000               |00000000:24:00.0    |100%  67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    X10000               |00000000:44:00.0    |100%  67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    X10000               |00000000:63:00.0    |81%   67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    X10000               |00000000:83:00.0    |81%   67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    X10000               |00000000:a3:00.0    |100%  67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    X10000               |00000000:c3:00.0    |81%   67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    X10000               |00000000:e3:00.0    |81%   67712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\nID   PID           Process name                           GPU Memory\n                                                               Usage\n+-------------------------------------------------------------------+\n0    37674         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n0    37675         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    37676         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    37677         ...s/native_mhc_small_batch/bin/xllm        47MiB\n0    37678         ...s/native_mhc_small_batch/bin/xllm        49MiB\n0    37679         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    37680         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    37681         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n1    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    37675         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n1    37676         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    37677         ...s/native_mhc_small_batch/bin/xllm        47MiB\n1    37678         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    37679         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    37680         ...s/native_mhc_small_batch/bin/xllm        47MiB\n1    37681         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n2    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    37675         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    37676         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n2    37677         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    37678         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    37679         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    37680         ...s/native_mhc_small_batch/bin/xllm        47MiB\n2    37681         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n3    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    37675         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    37676         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    37677         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n3    37678         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    37679         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    37680         ...s/native_mhc_small_batch/bin/xllm        47MiB\n3    37681         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n4    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    37675         ...s/native_mhc_small_batch/bin/xllm        47MiB\n4    37676         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    37677         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    37678         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n4    37679         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    37680         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    37681         ...s/native_mhc_small_batch/bin/xllm        47MiB\n+-------------------------------------------------------------------+\n5    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    37675         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    37676         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    37677         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    37678         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    37679         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n5    37680         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    37681         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n6    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    37675         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    37676         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    37677         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    37678         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    37679         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    37680         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n6    37681         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n7    37674         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    37675         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    37676         ...s/native_mhc_small_batch/bin/xllm        47MiB\n7    37677         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    37678         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    37679         ...s/native_mhc_small_batch/bin/xllm        47MiB\n7    37680         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    37681         ...s/native_mhc_small_batch/bin/xllm     67383MiB\n---------------------------------------------------------------------\n"
+  },
+  {
+    "host": "sj10",
+    "at": "2026-11-13T02:44:25.982210+08:00",
+    "status": {
+      "at": "2026-11-13T02:44:24.008567+08:00",
+      "pids": [
+        64249,
+        64250,
+        64251,
+        64252,
+        64253,
+        64254,
+        64255,
+        64256
+      ],
+      "exit_codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "stopping": false
+    },
+    "result": null,
+    "logs": {
+      "0": {
+        "last_progress": [],
+        "last_errors": [
+          "E20261113 02:35:12.418017 64249 comm_channel.cpp:105] Hello request failed: [E2001][10.121.32.9:45419]Server is not initialized",
+          "E20261113 02:36:34.127802 64249 xllm_server_registry.cpp:55] Server DisaggPDServer0 doesn't exist."
+        ],
+        "tail": [
+          "I20261113 02:39:11.772835  3641 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.003736, move_ms=2e-05, success=true",
+          "I20261113 02:39:28.396021  5877 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-ewM2ZtFEZrbzaf7npmV4NM, x-request-id: 01a1d10e-7dea-761a-a0b3-58a8a24aba76, outcome: success, status_code: 0",
+          "I20261113 02:39:28.396068  5877 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-ewM2ZtFEZrbzaf7npmV4NM, x-request-id: 01a1d10e-7dea-761a-a0b3-58a8a24aba76, sequence: 0, finish_reason: length, prompt_tokens: 2048, generated_tokens: 256, queue_to_batch: 1444.2ms, ttft: 1439.0ms, total_latency: 18067.2ms, avg tpot: 65.2ms, generation speed: 15.4 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+        ]
+      },
+      "1": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.771795  3636 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.003235, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.771941  3634 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.003265, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772071  3636 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.003385, move_ms=4e-05, success=true"
+        ]
+      },
+      "2": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.772199  3649 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.006199, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772346  3647 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005398, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772485  3649 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.004526, move_ms=3e-05, success=true"
+        ]
+      },
+      "3": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.772446  3642 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005498, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772603  3637 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.00651, move_ms=4e-05, success=true",
+          "I20261113 02:39:11.772802  3642 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.004176, move_ms=3e-05, success=true"
+        ]
+      },
+      "4": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.772745  3645 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.00707, move_ms=4.1e-05, success=true",
+          "I20261113 02:39:11.772902  3638 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005709, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.773068  3645 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.004967, move_ms=3e-05, success=true"
+        ]
+      },
+      "5": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.772593  3646 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.007051, move_ms=4e-05, success=true",
+          "I20261113 02:39:11.772765  3640 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005628, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772902  3646 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005858, move_ms=3e-05, success=true"
+        ]
+      },
+      "6": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.772742  3644 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005037, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772902  3639 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.004837, move_ms=2e-05, success=true",
+          "I20261113 02:39:11.773039  3644 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005077, move_ms=4e-05, success=true"
+        ]
+      },
+      "7": {
+        "last_progress": [],
+        "last_errors": [],
+        "tail": [
+          "I20261113 02:39:11.772477  3648 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:16266, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005277, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772634  3643 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15333, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.004967, move_ms=3e-05, success=true",
+          "I20261113 02:39:11.772800  3648 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:16803, mapping_groups=3, layers=40, regions=0, packed_regions=0, bind_ms=0.005408, move_ms=3e-05, success=true"
+        ]
+      }
+    },
+    "GMI": "Fri Nov 13 02:44:25 2026\n---------------------------------------------------------------------\n    zjlab-gmi:2.3.3              Driver Version:3.3.8-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    X10000               |00000000:03:00.0    |81%   69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    X10000               |00000000:24:00.0    |81%   69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    X10000               |00000000:44:00.0    |100%  69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    X10000               |00000000:63:00.0    |81%   69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |37C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    X10000               |00000000:83:00.0    |81%   69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    X10000               |00000000:a3:00.0    |81%   69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    X10000               |00000000:c3:00.0    |81%   69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    X10000               |00000000:e3:00.0    |100%  69294MiB(81920MiB)\n     Physical      P0     |16x(16x)            |34C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\nID   PID           Process name                           GPU Memory\n                                                               Usage\n+-------------------------------------------------------------------+\n0    39845         ...s/native_mhc_small_batch/bin/xllm     68965MiB\n0    39846         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    39848         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    39849         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n0    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n1    39845         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    39846         ...s/native_mhc_small_batch/bin/xllm     68966MiB\n1    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    39848         ...s/native_mhc_small_batch/bin/xllm        47MiB\n1    39849         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n1    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n2    39845         ...s/native_mhc_small_batch/bin/xllm        47MiB\n2    39846         ...s/native_mhc_small_batch/bin/xllm        47MiB\n2    39847         ...s/native_mhc_small_batch/bin/xllm     68966MiB\n2    39848         ...s/native_mhc_small_batch/bin/xllm        47MiB\n2    39849         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n2    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n3    39845         ...s/native_mhc_small_batch/bin/xllm        47MiB\n3    39846         ...s/native_mhc_small_batch/bin/xllm        47MiB\n3    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    39848         ...s/native_mhc_small_batch/bin/xllm     68965MiB\n3    39849         ...s/native_mhc_small_batch/bin/xllm        47MiB\n3    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n3    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n4    39845         ...s/native_mhc_small_batch/bin/xllm        47MiB\n4    39846         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    39848         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    39849         ...s/native_mhc_small_batch/bin/xllm     68965MiB\n4    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n4    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n5    39845         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    39846         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    39848         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    39849         ...s/native_mhc_small_batch/bin/xllm        47MiB\n5    39850         ...s/native_mhc_small_batch/bin/xllm     68966MiB\n5    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n5    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n6    39845         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    39846         ...s/native_mhc_small_batch/bin/xllm        47MiB\n6    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    39848         ...s/native_mhc_small_batch/bin/xllm        47MiB\n6    39849         ...s/native_mhc_small_batch/bin/xllm        47MiB\n6    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n6    39851         ...s/native_mhc_small_batch/bin/xllm     68965MiB\n6    39852         ...s/native_mhc_small_batch/bin/xllm        48MiB\n+-------------------------------------------------------------------+\n7    39845         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    39846         ...s/native_mhc_small_batch/bin/xllm        47MiB\n7    39847         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    39848         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    39849         ...s/native_mhc_small_batch/bin/xllm        47MiB\n7    39850         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    39851         ...s/native_mhc_small_batch/bin/xllm        48MiB\n7    39852         ...s/native_mhc_small_batch/bin/xllm     68966MiB\n---------------------------------------------------------------------\n"
+  }
+]

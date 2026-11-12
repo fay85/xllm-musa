@@ -1,0 +1,164 @@
+[
+  {
+    "input_tokens": 256,
+    "request_sha256": "11754d980c3430524e5d5954e01020d9a3cb3c1c8ab5bd443807322aebfae940",
+    "positions": [
+      {
+        "index": 0,
+        "same_prefix": true,
+        "off_token_id": 100987,
+        "custom_token_id": 100987,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.0
+      },
+      {
+        "index": 1,
+        "same_prefix": true,
+        "off_token_id": 6331,
+        "custom_token_id": 6331,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.75
+      },
+      {
+        "index": 2,
+        "same_prefix": true,
+        "off_token_id": 10087,
+        "custom_token_id": 10087,
+        "same_selected_token": true,
+        "common_top5_tokens": 4,
+        "max_abs_logprob_diff_common_top5": 1.5
+      },
+      {
+        "index": 3,
+        "same_prefix": true,
+        "off_token_id": 7531,
+        "custom_token_id": 7531,
+        "same_selected_token": true,
+        "common_top5_tokens": 4,
+        "max_abs_logprob_diff_common_top5": 1.9964580535888672
+      },
+      {
+        "index": 4,
+        "same_prefix": true,
+        "off_token_id": 26170,
+        "custom_token_id": 26170,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.625
+      },
+      {
+        "index": 5,
+        "same_prefix": true,
+        "off_token_id": 1754,
+        "custom_token_id": 1754,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 1.4876422882080078
+      },
+      {
+        "index": 6,
+        "same_prefix": true,
+        "off_token_id": 436,
+        "custom_token_id": 436,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.7498960494995117
+      },
+      {
+        "index": 7,
+        "same_prefix": true,
+        "off_token_id": 15170,
+        "custom_token_id": 15170,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.39405107498168945
+      }
+    ],
+    "scope": "Public API top-5 normalized logprobs, not raw/full-vocabulary logits. Compare only positions with identical preceding token IDs.",
+    "all_8_generated_tokens_identical": true,
+    "status": "OBSERVED_COMMON_PREFIX_RECORDED"
+  },
+  {
+    "input_tokens": 2048,
+    "request_sha256": "a52fbff6bb837d8f92f9e66e2aa4949c159e236a21b16947aa75dd69488b5daf",
+    "positions": [
+      {
+        "index": 0,
+        "same_prefix": true,
+        "off_token_id": 100987,
+        "custom_token_id": 100987,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.7499980926513672
+      },
+      {
+        "index": 1,
+        "same_prefix": true,
+        "off_token_id": 6331,
+        "custom_token_id": 6331,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 1.2498035430908203
+      },
+      {
+        "index": 2,
+        "same_prefix": true,
+        "off_token_id": 10087,
+        "custom_token_id": 10087,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 1.125
+      },
+      {
+        "index": 3,
+        "same_prefix": true,
+        "off_token_id": 7531,
+        "custom_token_id": 7531,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 2.1608283519744873
+      },
+      {
+        "index": 4,
+        "same_prefix": true,
+        "off_token_id": 26170,
+        "custom_token_id": 26170,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 1.25
+      },
+      {
+        "index": 5,
+        "same_prefix": true,
+        "off_token_id": 1754,
+        "custom_token_id": 1754,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 1.74969482421875
+      },
+      {
+        "index": 6,
+        "same_prefix": true,
+        "off_token_id": 436,
+        "custom_token_id": 436,
+        "same_selected_token": true,
+        "common_top5_tokens": 5,
+        "max_abs_logprob_diff_common_top5": 0.4697844982147217
+      },
+      {
+        "index": 7,
+        "same_prefix": true,
+        "off_token_id": 15170,
+        "custom_token_id": 15170,
+        "same_selected_token": true,
+        "common_top5_tokens": 4,
+        "max_abs_logprob_diff_common_top5": 0.39187610149383545
+      }
+    ],
+    "scope": "Public API top-5 normalized logprobs, not raw/full-vocabulary logits. Compare only positions with identical preceding token IDs.",
+    "all_8_generated_tokens_identical": true,
+    "status": "OBSERVED_COMMON_PREFIX_RECORDED"
+  }
+]

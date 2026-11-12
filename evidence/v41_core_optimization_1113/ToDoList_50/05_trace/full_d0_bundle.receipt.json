@@ -1,0 +1,48 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e50_full_d0_v1.tar.zst",
+  "bytes": 23058356,
+  "sha256": "4c5f87ce24c3233d8b62c4b11b419093d04edec71e61ca7fbefa4b2650c2e642",
+  "originals": [
+    {
+      "mode": "off",
+      "original": {
+        "role": "sj10",
+        "path": "/work/new_start_t14_native_cache_off_v1/trace/raw/sj10/native_cpp_stacks_7865.jsonl",
+        "bytes": 36187659,
+        "sha256": "a834703cf0217cd387e4372904d978e324830a9fdff2fd0654d3dda29d0cf1ae"
+      },
+      "extracted": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e50_full_d0_v1/off/native_cpp_stacks_7865.jsonl"
+    },
+    {
+      "mode": "off",
+      "original": {
+        "role": "sj10",
+        "path": "/work/new_start_t14_native_cache_off_v1/trace/raw/sj10/xllm_rank0_7865_1794504621498.pt.trace.json",
+        "bytes": 72975924,
+        "sha256": "38cea91d1004b3e8cd5c99b42101962fbfeee71b5e1d904d80068d70abaff8e2"
+      },
+      "extracted": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e50_full_d0_v1/off/xllm_rank0_7865_1794504621498.pt.trace.json"
+    },
+    {
+      "mode": "after",
+      "original": {
+        "role": "sj10",
+        "path": "/work/new_start_t14_native_cache_dspark_v1/trace/raw/sj10/native_cpp_stacks_63153.jsonl",
+        "bytes": 84409835,
+        "sha256": "82833eccea93b547a5047f928886f15f66b2c6c8f078fe33e2e433c150bba2f1"
+      },
+      "extracted": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e50_full_d0_v1/after/native_cpp_stacks_63153.jsonl"
+    },
+    {
+      "mode": "after",
+      "original": {
+        "role": "sj10",
+        "path": "/work/new_start_t14_native_cache_dspark_v1/trace/raw/sj10/xllm_rank0_63153_1794504197408.pt.trace.json",
+        "bytes": 136421729,
+        "sha256": "105c5de7d9bdaf7cfb1c4bb020d0180385ba883c849bf5c0d0e9fc032f423287"
+      },
+      "extracted": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e50_full_d0_v1/after/xllm_rank0_63153_1794504197408.pt.trace.json"
+    }
+  ],
+  "scope": "Exact original entire D0 capture, OFF and DSpark; no cropped window or synthetic trace events"
+}

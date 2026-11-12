@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-12T17:16:22.288746+08:00\", \"operation\": \"read_only_recheck_no_signal\", \"pids\": [{\"pid\": 6897, \"exists\": false}, {\"pid\": 6898, \"exists\": false}, {\"pid\": 6899, \"exists\": false}, {\"pid\": 6900, \"exists\": false}, {\"pid\": 6901, \"exists\": false}, {\"pid\": 6902, \"exists\": false}, {\"pid\": 6903, \"exists\": false}]}\n",
+  "stderr": ""
+}

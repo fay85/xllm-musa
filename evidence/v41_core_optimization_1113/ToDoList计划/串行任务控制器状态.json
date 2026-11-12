@@ -1,0 +1,102 @@
+{
+  "at": "2026-11-13T03:28:12.378907+08:00",
+  "stage": "all_bounded_model_trials_finished_wait_CPU_reports",
+  "controller_pid": 1904844,
+  "CPU_evidence_children": [
+    {
+      "experiment": 52,
+      "pid": 1911795,
+      "command": [
+        "python3",
+        "/tmp/finish_single_concurrency_control.py",
+        "--experiment",
+        "52",
+        "--run",
+        "t12_queued_c2_final_v3"
+      ],
+      "log": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261112新的开始/ToDoList_52/04_性能/离线证据收集器.log"
+    },
+    {
+      "experiment": 53,
+      "pid": 1918414,
+      "command": [
+        "python3",
+        "/tmp/finish_cumulative_trial.py",
+        "--experiment",
+        "53",
+        "--run",
+        "t12_batched_c2_final_v1",
+        "--before",
+        "t12_queued_c2_final_v3",
+        "--before-experiment",
+        "52",
+        "--trace-input-tokens",
+        "256",
+        "--artifact",
+        "native_mhc_small_batch",
+        "--sha",
+        "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe"
+      ],
+      "log": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261112新的开始/ToDoList_53/04_性能/离线证据收集器.log"
+    },
+    {
+      "experiment": 54,
+      "pid": 1925963,
+      "command": [
+        "python3",
+        "/tmp/finish_cumulative_trial.py",
+        "--experiment",
+        "54",
+        "--run",
+        "t12_batched_c2_mhc_v1",
+        "--before",
+        "t12_batched_c2_final_v1",
+        "--before-experiment",
+        "53",
+        "--trace-input-tokens",
+        "256",
+        "--artifact",
+        "native_mhc_small_batch",
+        "--sha",
+        "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe"
+      ],
+      "log": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261112新的开始/ToDoList_54/04_性能/离线证据收集器.log"
+    },
+    {
+      "experiment": 55,
+      "pid": 1935382,
+      "command": [
+        "python3",
+        "/tmp/finish_single_concurrency_control.py",
+        "--experiment",
+        "55",
+        "--run",
+        "t12_queued_c4_final_v1"
+      ],
+      "log": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261112新的开始/ToDoList_55/04_性能/离线证据收集器.log"
+    },
+    {
+      "experiment": 56,
+      "pid": 1943024,
+      "command": [
+        "python3",
+        "/tmp/finish_cumulative_trial.py",
+        "--experiment",
+        "56",
+        "--run",
+        "t12_batched_c4_final_v1",
+        "--before",
+        "t12_queued_c4_final_v1",
+        "--before-experiment",
+        "55",
+        "--trace-input-tokens",
+        "256",
+        "--artifact",
+        "native_mhc_small_batch",
+        "--sha",
+        "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe"
+      ],
+      "log": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261112新的开始/ToDoList_56/04_性能/离线证据收集器.log"
+    }
+  ]
+}

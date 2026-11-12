@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"ports\": {\"etcd_peer\": 31178, \"etcd\": 31179, \"router_http\": 31180, \"router_rpc\": 31181, \"coordinator_http\": 31182, \"coordinator_rpc\": 31183}, \"/livez\": {\"code\": 200, \"body\": \"{\\\"status\\\":\\\"live\\\"}\"}, \"/readyz\": {\"code\": 200, \"body\": \"{\\\"status\\\":\\\"ready\\\",\\\"reason\\\":\\\"READY\\\"}\"}, \"/v1/models\": {\"code\": 200, \"body\": \"{\\\"object\\\":\\\"list\\\",\\\"data\\\":[{\\\"id\\\":\\\"deepseek-v4.1-flash-1017-w4afp8-mt\\\",\\\"object\\\":\\\"model\\\",\\\"owned_by\\\":\\\"xllm-service\\\"}]}\"}, \"client_exit\": {\"at\": \"2026-11-12T14:58:56.076683+08:00\", \"exit_code\": 1}}\n",
+  "stderr": ""
+}

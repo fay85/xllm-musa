@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "34359738368\nFilesystem      Size  Used Avail Use% Mounted on\nshm              32G  384K   32G   1% /dev/shm\noverlay          13T  1.4T   11T  12% /\n",
+  "stderr": ""
+}

@@ -51,6 +51,7 @@ limitations under the License.
 #include "framework/parallel_state/npu_rank_table_env.h"
 #endif
 #include "core/platform/device_name_utils.h"
+#include "core/util/env_var.h"
 #include "framework/kv_cache/layerwise_split_layout.h"
 #include "framework/model/model_args.h"
 #include "framework/request/request.h"
@@ -444,10 +445,11 @@ std::optional<std::string> validate_model_cp(const Options& options,
   if (Platform::is_musa()) {
     // VLM+disagg_pd also runs under LLMEngine (see Master ctor), so CP is OK
     // without speculative decoding when MTP is off.
-    const bool llm_engine_target =
-        engine_type == EngineType::LLM || engine_type == EngineType::SSM ||
-        ((engine_type == EngineType::VLMSSM || engine_type == EngineType::VLM) &&
-         options.enable_disagg_pd());
+    const bool llm_engine_target = engine_type == EngineType::LLM ||
+                                   engine_type == EngineType::SSM ||
+                                   ((engine_type == EngineType::VLMSSM ||
+                                     engine_type == EngineType::VLM) &&
+                                    options.enable_disagg_pd());
     if (!llm_engine_target) {
       return "MUSA CP supports only LLM-engine generation: text, or VLM under "
              "disaggregated PD (with or without speculative decoding)";
@@ -686,27 +688,21 @@ Master::Master(const Options& options, EngineType type)
         options_.num_speculative_tokens() > 0 ||
         !options_.draft_model_path().value_or("").empty();
     if (v41_speculative_requested) {
-      // Timing: ModelConfig is populated from the deployment config
-      // (flags/JSON) before master validation runs and before any
-      // engine/worker is constructed, so the singleton reads here are safe.
-      // Split so a failure names the misconfigured leg: the implementation
-      // first, then the algorithm. The second gate is the shared
-      // is_v41_python_dspark_spec pairing (also consumed by the speculative
-      // engine's defense-in-depth check); with the python leg asserted above
-      // it fails only on the algorithm leg. When both legs are misconfigured
-      // only the first error surfaces on purpose: fixing the reported
-      // implementation leg reruns this validation and then names the
-      // algorithm leg.
       const std::string model_impl = ModelConfig::get_instance().model_impl();
-      CHECK(ModelConfig::is_python_model_impl(model_impl))
-          << "DeepSeek-V4.1 does not support speculative decoding on the "
-             "native model executor: the grouped KV (C1/C2) is not "
-             "implemented in the native speculative path.";
-      CHECK(SpeculativeConfig::is_v41_python_dspark_spec(
-          model_impl, options_.speculative_algorithm()))
-          << "DeepSeek-V4.1 does not support speculative decoding except "
-             "for the DSpark algorithm: the grouped KV (C1/C2) is not "
-             "implemented in the other speculative paths.";
+      const bool native_musa =
+          Platform::is_musa() &&
+          util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+      CHECK(SpeculativeConfig::is_v41_dspark_spec(
+          model_impl, options_.speculative_algorithm(), native_musa))
+          << "V4.1 requires Python DSpark or explicit native MUSA DSpark";
+      if (native_musa && model_impl == "native") {
+        CHECK_GT(options_.num_speculative_tokens(), 0);
+        CHECK_LE(options_.num_speculative_tokens(), 5);
+        CHECK_EQ(options_.dp_size(), 1);
+        CHECK_EQ(options_.cp_size(), 1);
+        CHECK_EQ(options_.max_seqs_per_batch(), 1);
+        CHECK(!options_.enable_graph());
+      }
     }
   }
   const std::optional<std::string> speculative_error =

@@ -1,0 +1,230 @@
+{
+  "at": "2026-11-13T03:14:53.875840+08:00",
+  "experiment": 38,
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_38/05_trace/已核验交互Perfetto_8d9883bc003f9a15.tar.zst",
+  "bytes": 8289671,
+  "sha256": "cdf20323eec915b83b3306392c9873b98a5cfcde15a7d68c590ed1d8b6a7d693",
+  "files": [
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/custom_sj10_last_step.pftrace",
+      "bytes": 10026845,
+      "sha256": "e32890950b18e491dda0810f864c1821c523fdc4ebb45d008a56b40789986815"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/custom_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "389e283da7f3b7eab1feaa1a2b8bff51e2f2bd6a832c837647dfc7417e176115"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 10046499,
+      "sha256": "9013ec0f66509405718dafe91899d959c08323de4ea7aea328a5553283d0d384"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "1b4f82a6fe9130933430a118c3e66fb9f45f18b5ef7c3aae947f11f089719132"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 9869773,
+      "sha256": "6ed68983ef91979e3a6674cd2a3d1a73f3017f5b70b0e21d6d62570eddd9ccca"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "0ab9ecd1eca770500d06a1f752e508c97140ba54f0d4cb1955a0a802e116eed1"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/reuse_sj10_last_step.pftrace",
+      "bytes": 9228979,
+      "sha256": "84e1d6b194bba71b67082b37a4cdc48021bd97427310099646cf2e3a108ecd2c"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/reuse_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "04163c14cf0a85014a8facdcf5370ac4645d8e6e3a95af7acfb06b4509ea652b"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_swa_read_1112/05_trace/fused_sj10_last_step.pftrace",
+      "bytes": 7275084,
+      "sha256": "fd46bcaf4db9882a5a2c2e1c3cfe1a3b987f0ba57e088264b3ecc8be37238a52"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_swa_read_1112/05_trace/fused_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "08dd30f1a6693bddd5bd72cd6e280991a1a26217d745a96b7adac835090d85a2"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_swa_read_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 9216149,
+      "sha256": "d3b7b1eb73d54e38deb189156bcfbaa42ccfec620ceb029a462416b788fb717a"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_swa_read_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1147,
+      "sha256": "02a1e4acf4e990521f2c8bdfe05df3ba32c66532eff25e939400986c03de48cd"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t04_shared_tp_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 7243395,
+      "sha256": "85cba50d17132346cba01000b2476a86eb71b1346a46eb91a64d2dd7deb11300"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t04_shared_tp_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "4c7758803e14c0aad20f4e3576ea1c6e561c66c2925100a7afda3b862baa01ba"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t04_shared_tp_1112/05_trace/tp_sj10_last_step.pftrace",
+      "bytes": 7282453,
+      "sha256": "9fadc78e815f2dfa053538030ec9e59c002e69fbca6660ac72131f504be9d768"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t04_shared_tp_1112/05_trace/tp_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "3b62d5d55dd69760f730025ad3ed28fea1479cddd8d14dc67bbdae7882cfed53"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t07_model_stream_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 7282453,
+      "sha256": "59e4754ad8628fc8838dd4dc6e7809a341ea72413b44f406584ea46b5422eb0f"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t07_model_stream_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "3e4b98c30a6ec33802ab69ae72ac8b0c4d4ef957d9a01169a239a5070e552386"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t07_model_stream_1112/05_trace/stream_sj10_last_step.pftrace",
+      "bytes": 7356744,
+      "sha256": "a1409c2bfb46ac68723862a9ac4f1343c71f3ed9a87f37d642ac202d36b14c5f"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t07_model_stream_1112/05_trace/stream_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "9e241aa65a0dff5393c7ae212a88fee1f10c03ad48c41c839f43b58c98020e62"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/after_SWA_layer0_decode_优化后实际C++栈及1次GPU写回.pftrace",
+      "bytes": 3902,
+      "sha256": "7d9dd9d73c2c0d8963df32b5b09eba5cb822360336924d9859fa68962bea9558"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/after_SWA_layer0_decode_优化后实际C++栈及1次GPU写回.receipt.json",
+      "bytes": 1439,
+      "sha256": "03a281c99efbbf1e26bcff65b0ef1386e1c50b0ecfe5a596fca4478135abd021"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/before_SWA_layer0_decode_优化前实际C++栈及35次GPU写回.pftrace",
+      "bytes": 30932,
+      "sha256": "d8d3818c189609582afaf3a2c9d54caa8940e670b021072e8ea0860e177d7f4a"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/before_SWA_layer0_decode_优化前实际C++栈及35次GPU写回.receipt.json",
+      "bytes": 1448,
+      "sha256": "9a4b2466de38288032bcbaa7d0715e7ba0d0de0552bd8247c31894951cd3adf9"
+    },
+    {
+      "path": "05_trace/mhc_mhc_prepare_aten_entries.pftrace",
+      "bytes": 36198,
+      "sha256": "149658df595dc284aa313dbb4268bb565f03e0250a4d5741df7f3d4aadf0b319"
+    },
+    {
+      "path": "05_trace/mhc_mhc_prepare_aten_entries.receipt.json",
+      "bytes": 1571,
+      "sha256": "ea02141e3dbf3b04336140e2c2d86c5651b32cdc6f3050463108ec356e202430"
+    },
+    {
+      "path": "05_trace/mhc_mhc_prepare_aten_named_entries.pftrace",
+      "bytes": 36063,
+      "sha256": "d8b57bb29d3ffcbf69ffc4c79f363bcb23b28dce4d1e0c940f4da1d6c699e449"
+    },
+    {
+      "path": "05_trace/mhc_mhc_prepare_aten_named_entries.receipt.json",
+      "bytes": 1571,
+      "sha256": "011b38de1d97832856ed0e561858a389c9cb0260dc23e9c6fe660e03ca56e56d"
+    },
+    {
+      "path": "05_trace/mhc_processed/mhc_mhc_prepare_first.pftrace",
+      "bytes": 9555,
+      "sha256": "dc489dc32cc1c61bfa5a59ddee990d31081874b00b9aef87e13d9c460fef9fa0"
+    },
+    {
+      "path": "05_trace/mhc_processed/mhc_mhc_prepare_first.receipt.json",
+      "bytes": 1438,
+      "sha256": "71d8c9ba2913795297de9084c8ec6c63b52967b8697eeb8c3de38e1b61b6599c"
+    },
+    {
+      "path": "05_trace/mhc_processed/mhc_sj10_last_step.pftrace",
+      "bytes": 7212862,
+      "sha256": "97d06393f0ede4921afe89305107ac3c940ff8729a1812321732911cc9fc4e31"
+    },
+    {
+      "path": "05_trace/mhc_processed/mhc_sj10_last_step.receipt.json",
+      "bytes": 1148,
+      "sha256": "9047bfac4fdcf5429fabf72494a8f1a9b7c3ae8098a8d3ad268a80e18b86f186"
+    },
+    {
+      "path": "05_trace/mhc_processed/off_mhc_prepare_first.pftrace",
+      "bytes": 13600,
+      "sha256": "a7088fe70b0f0999655a454cdc2011af5fe546136abb173a9bcb168191a75d32"
+    },
+    {
+      "path": "05_trace/mhc_processed/off_mhc_prepare_first.receipt.json",
+      "bytes": 1435,
+      "sha256": "ff474dc5e383422436097bd5221fb1c84336dc3c6c17ba09ffc6afd6821aa2f3"
+    },
+    {
+      "path": "05_trace/mhc_processed/off_sj10_last_step.pftrace",
+      "bytes": 7521658,
+      "sha256": "9194fc2341bdcf31c82d1ba609b6763115008a2160cfaee43d333d1c392271e2"
+    },
+    {
+      "path": "05_trace/mhc_processed/off_sj10_last_step.receipt.json",
+      "bytes": 1147,
+      "sha256": "b7d1ea47e8927e679205f37f9ffef79fd844264bf49f505677a33d17503ac235"
+    },
+    {
+      "path": "05_trace/off_mhc_prepare_aten_entries.pftrace",
+      "bytes": 109600,
+      "sha256": "8d52507f2c8626bd795748d23ab50899d970887568807eb8aa1943108807998a"
+    },
+    {
+      "path": "05_trace/off_mhc_prepare_aten_entries.receipt.json",
+      "bytes": 1568,
+      "sha256": "06f30e83e6b686faa65da0f82fbbce35da102d0762cc3577adcb0a13ba13249a"
+    },
+    {
+      "path": "05_trace/off_mhc_prepare_aten_named_entries.pftrace",
+      "bytes": 109120,
+      "sha256": "67a40b05e2e7b76264ca2280eeac1c2f8c5ae4c6ff6299ee55456dcf2610c4b9"
+    },
+    {
+      "path": "05_trace/off_mhc_prepare_aten_named_entries.receipt.json",
+      "bytes": 1568,
+      "sha256": "6357de46fd93e4983b3b09cc1e682e7e84c42174675ce85b67ccb4b28e1b44c8"
+    },
+    {
+      "path": "05_trace/off_prepare_default_compatibility.pftrace",
+      "bytes": 13600,
+      "sha256": "a7088fe70b0f0999655a454cdc2011af5fe546136abb173a9bcb168191a75d32"
+    },
+    {
+      "path": "05_trace/off_prepare_default_compatibility.receipt.json",
+      "bytes": 1505,
+      "sha256": "f11b6883a7460d14d9bcbe1c272d69bff248fd145fb96ce8260154cd91277ef9"
+    },
+    {
+      "path": "05_trace/off_prepare_default_compatibility2.pftrace",
+      "bytes": 13600,
+      "sha256": "a7088fe70b0f0999655a454cdc2011af5fe546136abb173a9bcb168191a75d32"
+    },
+    {
+      "path": "05_trace/off_prepare_default_compatibility2.receipt.json",
+      "bytes": 1505,
+      "sha256": "f11b6883a7460d14d9bcbe1c272d69bff248fd145fb96ce8260154cd91277ef9"
+    }
+  ],
+  "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+}

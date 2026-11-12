@@ -1,0 +1,25 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e50_trace_analysis_v1.tar.zst",
+  "bytes": 7044439,
+  "sha256": "918dfab724926eff337517607a9dbf9fb6190d19e9eb12d6e6a9b420d4e629fa",
+  "receipt": {
+    "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+    "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_draft_cache/bin/xllm",
+    "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+    "raw_archives": {
+      "off": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_native_cache_off_v1_raw_trace.tar.zst",
+        "bytes": 83648186,
+        "sha256": "0b3f77afb4c5df11a4147b6397d6b7cfe64708daf529ec1c724a7107eb93537c"
+      },
+      "after": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_native_cache_dspark_v1_raw_trace.tar.zst",
+        "bytes": 135520177,
+        "sha256": "794bb81c36dcccbc0bb20ae135f8c766d78d1b004ac319dfc8dfa4799153e169"
+      }
+    },
+    "symbols": 86,
+    "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+    "finished_at": 1794504799.7368088
+  }
+}

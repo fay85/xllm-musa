@@ -1,0 +1,10 @@
+{
+  "status": "PASS_GENERATED_PAYLOAD_SYNTAX",
+  "modes": [
+    "OFF",
+    "HOST",
+    "DEVICE"
+  ],
+  "payloads": 9,
+  "note": "No remote mutation in this check; generated clients parsed too."
+}

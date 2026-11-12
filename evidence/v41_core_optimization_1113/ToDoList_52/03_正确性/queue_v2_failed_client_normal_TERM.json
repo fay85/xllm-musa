@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"exit\": 0, \"stdout\": \"{\\\"normal_TERM_children\\\": [{\\\"pid\\\": 6135, \\\"start_ticks\\\": \\\"486884886\\\", \\\"signal\\\": \\\"SIGTERM\\\"}, {\\\"pid\\\": 5917, \\\"start_ticks\\\": \\\"486871646\\\", \\\"signal\\\": \\\"SIGTERM\\\"}]}\\n\", \"stderr\": \"\"}\n",
+  "stderr": ""
+}

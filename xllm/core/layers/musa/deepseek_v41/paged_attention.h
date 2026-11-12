@@ -81,6 +81,27 @@ class DeepseekV41PagedAttention final {
       const std::optional<torch::Tensor>& compressed_kv,
       const std::optional<torch::Tensor>& compressed_picks,
       const torch::Tensor& query_positions) {
+    return forward_with_window_floor(query,
+                                     current_kv,
+                                     block_table,
+                                     context_length,
+                                     sink,
+                                     compressed_kv,
+                                     compressed_picks,
+                                     query_positions,
+                                     /*window_floor=*/0);
+  }
+
+  torch::Tensor forward_with_window_floor(
+      const torch::Tensor& query,
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      int64_t context_length,
+      const torch::Tensor& sink,
+      const std::optional<torch::Tensor>& compressed_kv,
+      const std::optional<torch::Tensor>& compressed_picks,
+      const torch::Tensor& query_positions,
+      int64_t window_floor) {
     const DeepseekV41ProfileRange range("V41/Attention/SWA_sparse_and_commit");
     CHECK(query.defined() && current_kv.defined() && block_table.defined());
     CHECK_EQ(query.device(), cache_.device());
@@ -99,12 +120,15 @@ class DeepseekV41PagedAttention final {
           block_table.scalar_type() == torch::kInt64);
     CHECK_GE(block_table.size(1) * cache_.size(1), window_);
     CHECK_GE(context_length, query.size(0));
+    CHECK_GE(window_floor, 0);
+    CHECK_LE(window_floor, context_length - query.size(0));
     CHECK_EQ(compressed_kv.has_value(), compressed_picks.has_value());
     torch::DeviceGuard guard(cache_.device());
     if (query.size(0) == 0) {
       return torch::empty_like(query);
     }
     if (fused_decode_read_ && query.size(0) == 1) {
+      CHECK_EQ(window_floor, 0) << "Bounded replay is a prefill-only path";
       auto [rows, picks, slot] = prepare_decode_read(current_kv,
                                                      block_table,
                                                      query_positions,
@@ -132,8 +156,8 @@ class DeepseekV41PagedAttention final {
         torch::arange(query.size(0), indices_options) + previous;
     const torch::Tensor desired = positions.unsqueeze(-1) - window_ + 1 +
                                   torch::arange(window_, indices_options);
-    torch::Tensor picks =
-        torch::where(desired.ge(0), desired - previous + window_, -1);
+    torch::Tensor picks = torch::where(
+        desired.ge(window_floor), desired - previous + window_, -1);
     if (compressed_kv.has_value()) {
       const torch::Tensor& compressed = compressed_kv.value();
       const torch::Tensor& extra = compressed_picks.value();
@@ -160,6 +184,75 @@ class DeepseekV41PagedAttention final {
     commit(physical_slots(block_table, positions, /*padding_read=*/false),
            current_kv);
     return result;
+  }
+
+  // DSpark queries share one left-context window and see the entire anchor /
+  // noise block non-causally. Proposals must never write into accepted history.
+  torch::Tensor forward_draft_block(const torch::Tensor& query,
+                                    const torch::Tensor& current_kv,
+                                    const torch::Tensor& block_table,
+                                    int64_t previous_context,
+                                    const torch::Tensor& sink) {
+    const DeepseekV41ProfileRange range("V41/DSpark/noncausal_SWA");
+    CHECK(query.defined() && current_kv.defined() && block_table.defined());
+    CHECK_EQ(query.device(), cache_.device());
+    CHECK_EQ(current_kv.device(), cache_.device());
+    CHECK_EQ(block_table.device(), cache_.device());
+    CHECK_EQ(query.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(current_kv.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(query.dim(), 3);
+    CHECK_EQ(query.size(2), cache_.size(2));
+    CHECK_EQ(current_kv.sizes(),
+             torch::IntArrayRef({query.size(0), cache_.size(2)}));
+    CHECK_GT(query.size(0), 0);
+    CHECK_LE(query.size(0), 8);
+    CHECK_EQ(block_table.dim(), 2);
+    CHECK_EQ(block_table.size(0), 1);
+    CHECK_GT(block_table.size(1), 0);
+    CHECK(block_table.scalar_type() == torch::kInt32 ||
+          block_table.scalar_type() == torch::kInt64);
+    CHECK_GE(block_table.size(1) * cache_.size(1), window_);
+    CHECK_GE(previous_context, 0);
+    torch::DeviceGuard guard(cache_.device());
+    const torch::Tensor ring_positions =
+        torch::arange(window_, cache_.options().dtype(torch::kInt64)) +
+        previous_context - window_;
+    const torch::Tensor gathered =
+        cache_.view({-1, cache_.size(2)})
+            .index_select(0,
+                          physical_slots(block_table,
+                                         ring_positions.clamp_min(0),
+                                         /*padding_read=*/true));
+    const torch::Tensor ring =
+        torch::where(ring_positions.ge(0).unsqueeze(-1), gathered, 0);
+    const torch::Tensor rows = torch::cat({ring, current_kv}, 0);
+    const torch::Tensor positions =
+        torch::cat({ring_positions,
+                    torch::arange(query.size(0), ring_positions.options()) +
+                        previous_context},
+                   0);
+    const torch::Tensor columns =
+        torch::arange(rows.size(0), ring_positions.options());
+    const torch::Tensor picks = torch::where(positions.ge(0), columns, -1)
+                                    .unsqueeze(0)
+                                    .expand({query.size(0), rows.size(0)})
+                                    .contiguous();
+    return attention_.forward(query, rows, picks, sink);
+  }
+
+  void commit_draft_context(const torch::Tensor& slots,
+                            const torch::Tensor& values) {
+    CHECK(slots.defined() && values.defined());
+    CHECK_EQ(slots.device(), cache_.device());
+    CHECK_EQ(values.device(), cache_.device());
+    CHECK_EQ(slots.dim(), 1);
+    CHECK(slots.scalar_type() == torch::kInt32 ||
+          slots.scalar_type() == torch::kInt64);
+    CHECK_EQ(values.scalar_type(), cache_.scalar_type());
+    CHECK_EQ(values.sizes(),
+             torch::IntArrayRef({slots.size(0), cache_.size(2)}));
+    torch::DeviceGuard guard(cache_.device());
+    commit(slots.to(torch::kInt64), values);
   }
 
  private:

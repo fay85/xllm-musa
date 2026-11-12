@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"exit\": 0, \"stdout\": \"\", \"stderr\": \"I20261112 15:02:03.242791 14689 run_basic_pd_gate.py:120] Basic PD question1 answer='4.2' expected=4.2 pass=True\\nI20261112 15:02:03.889989 14689 run_basic_pd_gate.py:120] Basic PD question2 answer='56' expected=56 pass=True\\n\"}\n",
+  "stderr": ""
+}

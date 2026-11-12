@@ -1,0 +1,436 @@
+{
+  "count": 86,
+  "bytes": 4446259,
+  "files": [
+    {
+      "path": "00_当前基线与范围.md",
+      "bytes": 5820,
+      "sha256": "824f59e3dfefe75988ffa4bbfc815d93a7e5544de608957cd183ac99c47ad930"
+    },
+    {
+      "path": "01_来源核验与可借鉴事项.md",
+      "bytes": 13612,
+      "sha256": "cc0166e3484f9ac0e43ef7215461d375af7d97932ad2a65093bb17ce7b774fb7"
+    },
+    {
+      "path": "02_全局占比与收益上限.md",
+      "bytes": 7699,
+      "sha256": "352e6b0a1cef6ab6be1a6609857624667ff33cf7146467c25ea42ecfe66078f0"
+    },
+    {
+      "path": "03_统一优先级ToDoList.md",
+      "bytes": 20191,
+      "sha256": "4981ce5df7e154f24d26696e230dff97fc193b34793d416e2acfb419cf4e3827"
+    },
+    {
+      "path": "04_goal.md",
+      "bytes": 5055,
+      "sha256": "286316bc0470c4cf35d0e08220a1a070c228afa202e0105c6ff7ad76dbbf01ca"
+    },
+    {
+      "path": "05_plan.md",
+      "bytes": 5279,
+      "sha256": "d813baa7c386e1d831e001f6373b31bae87c15d4e5e30a800ed16f178956200a"
+    },
+    {
+      "path": "06_单项实验记录模板.md",
+      "bytes": 4670,
+      "sha256": "16a0a80c69da00d90c954b80163cf365b95a98adfee153fb110b4b0839075fb5"
+    },
+    {
+      "path": "07_并行策略与参考目标.md",
+      "bytes": 6182,
+      "sha256": "0a062d1e2896e9431f6b7169826dde164f9151818f1a50da222909f6bd953ae3"
+    },
+    {
+      "path": "08_启动提示词.md",
+      "bytes": 953,
+      "sha256": "d5222a2a482bc382192c48b5f3afc7374a520676e44fb2273832ae6b4f844ebb"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3406,
+      "sha256": "ffb3736ce4131ff6b17c6fa1e56d4419565cce995ac41d3ed49a2d3ae1f7448d"
+    },
+    {
+      "path": "任务清单.json",
+      "bytes": 9224,
+      "sha256": "49f1d97366db652b5b8495b1a1601dfad6f298b3f4aa5aa9797629e5bb4e42c7"
+    },
+    {
+      "path": "依据/代码提交/025e0e1e.patch",
+      "bytes": 4762,
+      "sha256": "95960d1d225924eb4e426211e100d2390a8451c92a1854c94eb9aba496efffc5"
+    },
+    {
+      "path": "依据/代码提交/02c441f4.patch",
+      "bytes": 6129,
+      "sha256": "53c21c66e4ffff5c4d810133192ad45636b293493f8048afef48d8ac9b1518d6"
+    },
+    {
+      "path": "依据/代码提交/0d1f56ef.patch",
+      "bytes": 9935,
+      "sha256": "e1404ffbf1d98a17c04889ddc3166cc1299d70039b157e8a1fa3ac1794c6f8d7"
+    },
+    {
+      "path": "依据/代码提交/2b66eece.patch",
+      "bytes": 172803,
+      "sha256": "754b98fc0332d17d699151e40179ad07536bd2134e0839aee4883132b7290e6e"
+    },
+    {
+      "path": "依据/代码提交/2c7e46dd.patch",
+      "bytes": 59415,
+      "sha256": "23611d451dfe0bb46fd911803b184f58ade2f7458106d028327d0f3e9b63dc27"
+    },
+    {
+      "path": "依据/代码提交/356cd5d2.patch",
+      "bytes": 29903,
+      "sha256": "2a221d2d33811ccc1c56689101808aee41fdd0095c90b87c9753937a87fc2c59"
+    },
+    {
+      "path": "依据/代码提交/3f1f0dba.patch",
+      "bytes": 34360,
+      "sha256": "ba9c09ba5e5aa9b8c7eb3a657d17e0021eef79c1bf2f44cd8ac63dfecd32d107"
+    },
+    {
+      "path": "依据/代码提交/41e335c6.patch",
+      "bytes": 34063,
+      "sha256": "6686e60a870324e458bfde8971d50290ba48f422cd05a3f41207318f9861703f"
+    },
+    {
+      "path": "依据/代码提交/5eb5fc98.patch",
+      "bytes": 6431,
+      "sha256": "beb00691591974e4d0d926a9b7090092d9babc8100c4c06ceb3d665c38b64f07"
+    },
+    {
+      "path": "依据/代码提交/79980282.patch",
+      "bytes": 327934,
+      "sha256": "9879130aa36519137fbcc1c0a6d5a5ea84cbbdbc0c93f0a029499b75b1ea1231"
+    },
+    {
+      "path": "依据/代码提交/8339dc1a.patch",
+      "bytes": 84098,
+      "sha256": "c608b7d9f95432d6ee3f73086b7973cacab86ff0906e80044cda15b2c5a46c70"
+    },
+    {
+      "path": "依据/代码提交/88107189.patch",
+      "bytes": 168758,
+      "sha256": "f12cf6493cdca3169e928963eba8e6fbc5f8b529d527f0663b2724f04a6faf25"
+    },
+    {
+      "path": "依据/代码提交/89e8b415.patch",
+      "bytes": 410345,
+      "sha256": "0fad32e20522b4d48944de82c0a146ba590edc43acea171b36a863392d5a8c26"
+    },
+    {
+      "path": "依据/代码提交/8f55e16a.patch",
+      "bytes": 35235,
+      "sha256": "9ebacab64347cad5bda2fa9a0f88f5a32ff04554a652ee4d28581bee4157161d"
+    },
+    {
+      "path": "依据/代码提交/909a4984.patch",
+      "bytes": 27668,
+      "sha256": "7cd8a6c1a2a2485fbdae6280a50d22d62d5ddac9da6e3837fc3b842c7214439e"
+    },
+    {
+      "path": "依据/代码提交/a2468f85.patch",
+      "bytes": 54219,
+      "sha256": "76459cd7ef481a95d02cca59f440f8b80caf0ba3d74ee363a4e960458a813fc6"
+    },
+    {
+      "path": "依据/代码提交/a2468f85_DSV4_2P1D_PCP_BUILD_START_PERF_ACCURACY.md",
+      "bytes": 12208,
+      "sha256": "43a0a58c0a56f1d4f329f0110126d1e845fa6d138be85c0708d408d063bb4aeb"
+    },
+    {
+      "path": "依据/代码提交/a2468f85_README.md",
+      "bytes": 1459,
+      "sha256": "bd27c3b4345d12f0dc2882cd674ca869a90b690c77cca67cafef9d1a8553bc66"
+    },
+    {
+      "path": "依据/代码提交/additional_commits.json",
+      "bytes": 10856,
+      "sha256": "9df9d75af4db353e2010bc11452e84747169185c90071090ab1698726aaceb20"
+    },
+    {
+      "path": "依据/代码提交/branches.txt",
+      "bytes": 449,
+      "sha256": "41cd0037f87361c4ef5cf05355ca1807bec2af14f0d6f793fbbe1125ded70fd1"
+    },
+    {
+      "path": "依据/代码提交/c6015555.patch",
+      "bytes": 1159,
+      "sha256": "92b55f07b29dcc1758b7e7bbb9e6132f231818d829651d2cc267832553e26350"
+    },
+    {
+      "path": "依据/代码提交/e7e6c15f.patch",
+      "bytes": 23905,
+      "sha256": "dd7deb67e4307424a1c8ba3db52cde86e91121d225ec6c1af005b33587748b2e"
+    },
+    {
+      "path": "依据/代码提交/ea32b090.patch",
+      "bytes": 22713,
+      "sha256": "447af4018d57ba018edf6fd2270df170f8b5569a04a4a1ce80ca33d8cb02ad22"
+    },
+    {
+      "path": "依据/代码提交/f0d23c31.patch",
+      "bytes": 7451,
+      "sha256": "77e659147b9066046ea738865b9b7ed1b6183048fe5a508a0b7ce3526c79bd36"
+    },
+    {
+      "path": "依据/代码提交/f8dd0663.patch",
+      "bytes": 644379,
+      "sha256": "8879340c247f16499801adfce895f201e606addda2a0a7340cb9c0338f042046"
+    },
+    {
+      "path": "依据/代码提交/f8dd0663_DSV4_MT_MAIN_DEPENDENCIES_AND_VALIDATION_20261029.md",
+      "bytes": 10928,
+      "sha256": "8e6b92e36fe11aa5fe7f4acf333a53c61572f85fcab8edc4c57a716ce46cae80"
+    },
+    {
+      "path": "依据/代码提交/fd922efd.patch",
+      "bytes": 52604,
+      "sha256": "1c0cacaa48e35b7934c86f26c18ead7fa19a3168e34e0628e5509e50a5533c1b"
+    },
+    {
+      "path": "依据/代码提交/ff60b8ba.patch",
+      "bytes": 63645,
+      "sha256": "56b6ea61719e1ab0a721aa0612d8344e8aef1d23d8df6a4af07f99837dc3fc9a"
+    },
+    {
+      "path": "依据/代码提交/origin_feat_dsv4-pcp-mate027-verified-20261029_history.txt",
+      "bytes": 6238,
+      "sha256": "2003892a9b5c58d74aa11a52222b524e175dded1fcba0ee40483b1478d6f3e65"
+    },
+    {
+      "path": "依据/代码提交/plan1112_albert-glm_history.txt",
+      "bytes": 5538,
+      "sha256": "08eb593172ff55f61d132ce35be4539151357ea1618c374f26214f201eff7f20"
+    },
+    {
+      "path": "依据/代码提交/plan1112_albert-qwen_history.txt",
+      "bytes": 6068,
+      "sha256": "1ff020324d718f418aecf9a5e0c6122951bc57fe33f655f361d5541ed1d51440"
+    },
+    {
+      "path": "依据/代码提交/plan1112_feihu-1016-dev_history.txt",
+      "bytes": 6460,
+      "sha256": "5760b418342841f4421c827f811fa26e67a2f980c813cf33b90f5ba8cdb732a6"
+    },
+    {
+      "path": "依据/代码提交/recent_history.txt",
+      "bytes": 20852,
+      "sha256": "bbe1005166c1ad6cbc113c75ea81d163c1f71618b2ea832a5bd04484596ac5cf"
+    },
+    {
+      "path": "依据/代码提交/selected_commits.json",
+      "bytes": 26306,
+      "sha256": "dc9ce79bc7439c95b68fa1d0d0c44266579a32f77522d8cef1bb267cce0cc685"
+    },
+    {
+      "path": "依据/代码提交/移植后文件内容核验.json",
+      "bytes": 42908,
+      "sha256": "10711807e1e84e710a9b576cb028ffe564ff6ac7a0b55cea634bee47fa3625fd"
+    },
+    {
+      "path": "依据/公开来源/DeepInfer固定提交核验.json",
+      "bytes": 621,
+      "sha256": "989299070d898f30c37d084491b4aedecdd4333af1de224fa032fdcb7c0a7a17"
+    },
+    {
+      "path": "依据/公开来源/deepinfer_head.json",
+      "bytes": 13637,
+      "sha256": "d071586217231861c894f2cefd1a0a096477b1c1f24ec1862350017d229dbcf6"
+    },
+    {
+      "path": "依据/公开来源/deepinfer_qa.md",
+      "bytes": 34526,
+      "sha256": "ef38cf9d83b0688f1586ec14066a86373d30e4fbf89061c1f4bc40d4276e3053"
+    },
+    {
+      "path": "依据/公开来源/deepinfer_readme.md",
+      "bytes": 4660,
+      "sha256": "b55624158ada4dc21b882d24ded06bf82f65350b44d170877b68395712cd670d"
+    },
+    {
+      "path": "依据/公开来源/llama_cache_pr.json",
+      "bytes": 22312,
+      "sha256": "1a780d64a9d786b2aee501b16686cba3e892c6448e6156014d8c02a429766f97"
+    },
+    {
+      "path": "依据/公开来源/llama_release.json",
+      "bytes": 35723,
+      "sha256": "168b30e15fa8ee5833bd5f0d2ba60ecbeec60d7a3d8318761ab66d3469665032"
+    },
+    {
+      "path": "依据/公开来源/manifest.json",
+      "bytes": 2723,
+      "sha256": "4fa9e6121406d34a6b5b417bebb3ffdc9e7f7dc5ca224ac66718ee66b39c4b57"
+    },
+    {
+      "path": "依据/公开来源/vllm_forward_pr.json",
+      "bytes": 29180,
+      "sha256": "9baeceb0103cc112520a9be6a4a508e93f2697084a8d3a0751c0725e48372243"
+    },
+    {
+      "path": "依据/公开来源/vllm_glm_analysis.md",
+      "bytes": 15984,
+      "sha256": "160c8b6d966cf667fb91b96fb2ada4cd02375db1afd6643da73c981abf32726c"
+    },
+    {
+      "path": "依据/公开来源/vllm_v41_analysis.md",
+      "bytes": 21072,
+      "sha256": "7230a85f373c5c4616f0a89eac1a90bc63dd296339fb56285243ff8e8833f0b4"
+    },
+    {
+      "path": "依据/固定基线/StageI_2048长输入输出重复性边界.md",
+      "bytes": 1894,
+      "sha256": "f930c89accb48dd41b8d93491db03ea43c80382911e3fbe1a18384e19754c8d2"
+    },
+    {
+      "path": "依据/固定基线/StageI_README.md",
+      "bytes": 13402,
+      "sha256": "33d86cf64b0f84aeee0a3bf5fee1844d65715b9edcdfea1ea1b5acae5a1c01a9"
+    },
+    {
+      "path": "依据/固定基线/StageI_StageI与StageH同条件逐请求及改进.json",
+      "bytes": 40641,
+      "sha256": "09a83c9d2e934e467e91d22319e819b71ad47686c683eb7e05c2211920974e4a"
+    },
+    {
+      "path": "依据/固定基线/StageI_after_all_rank_trace_validation.json",
+      "bytes": 490943,
+      "sha256": "1c4cb725b12ba0c2a20ebe137fb756244f82acc7f22977b129bc918e9516e341"
+    },
+    {
+      "path": "依据/固定基线/StageI_manifest.json",
+      "bytes": 25906,
+      "sha256": "0fe85d98c85fefcf89e2e769d3dbbc7491ee96670cff3dad734442243357a1e2"
+    },
+    {
+      "path": "依据/固定基线/StageI_same_trace_scene.json",
+      "bytes": 1038,
+      "sha256": "51ac62bdcf058a22f60d1f0e5a4601e61dbdc36be8af240ab53ef0cb5df0d891"
+    },
+    {
+      "path": "依据/固定基线/operator_coverage.md",
+      "bytes": 10859,
+      "sha256": "78f54bff58cc2d92b3e5ad2054cfa2a76a7fd6c645fc15a16a7e15a34958611d"
+    },
+    {
+      "path": "依据/当前Trace占比/D后三步MCCL与其他内核区间.json",
+      "bytes": 1269,
+      "sha256": "9c270b5174b642265ddbce3298a7ffcd7e2d0d0f6bfb3cf78ad130ec1dc489b8"
+    },
+    {
+      "path": "依据/当前Trace占比/D最后一步全部GPU内核.json",
+      "bytes": 29976,
+      "sha256": "7fb6d40d3ae8580182ce81333adfa0192cb8b0bb84ebdf28349100a76af58fba"
+    },
+    {
+      "path": "依据/当前Trace占比/rank0语义分区与GPU关联.csv",
+      "bytes": 7171,
+      "sha256": "6d513acd0d7601434e7e1c30f6100a4d976619c9e6b7fdf9bae975a99b71a2c7"
+    },
+    {
+      "path": "依据/当前Trace占比/rank0语义分区与GPU关联.json",
+      "bytes": 96477,
+      "sha256": "6838c9cdff29c6fb62fc463aad2c6afcf6b5c6eb8021a84f38120a86c77fe265"
+    },
+    {
+      "path": "依据/输入来源清单.json",
+      "bytes": 1927,
+      "sha256": "409c2b8c9522f21d14a947279c85ee04d2cd9a91056573ce535b194e8b37875a"
+    },
+    {
+      "path": "依据/领导记录/20261107新增领导分享.txt",
+      "bytes": 4363,
+      "sha256": "1e9c47b2eea62dddb12bc5b94015efead14eed4b9882b2a08302516417ac4880"
+    },
+    {
+      "path": "依据/领导记录/20261110新增领导聊天.txt",
+      "bytes": 8054,
+      "sha256": "2c521ba96968c0c1803efa9e74db63642f5989c222ebcc9b958ef4dca34706fa"
+    },
+    {
+      "path": "依据/领导记录/20261110晚上领导新增的聊天.txt",
+      "bytes": 4157,
+      "sha256": "558e25a39d1667543835aba4f7a73897921c64adc2526341f75e5221e343ede5"
+    },
+    {
+      "path": "依据/领导记录/20261111最后新增的领导分享.txt",
+      "bytes": 8519,
+      "sha256": "970468e4a4c80aaad10f466db7df18f30ff78f1e9c7bcf0eef1a45cd14e78381"
+    },
+    {
+      "path": "依据/领导记录/20261112上午新增领导聊天记录.txt",
+      "bytes": 619,
+      "sha256": "1bcb3a25315da9ccb1b0d20196b99e807c3981d8e603b917e0e42c7479f3a7c6"
+    },
+    {
+      "path": "单项实验result模板.json",
+      "bytes": 1553,
+      "sha256": "ef208850e68b65e9de19745c4fdefcd734ebf84e0f16ba79a177384383ee32a6"
+    },
+    {
+      "path": "图/after_cpp_entry_count.png",
+      "bytes": 197284,
+      "sha256": "85a59c41f59de1f9f3e39e522ea88e94ade30c1139f9983c222ac3368847b3ed"
+    },
+    {
+      "path": "图/after_sj10_whole_actual_timeline.png",
+      "bytes": 143959,
+      "sha256": "830df9f34601594193aa7e4952e26e098e2fa8d303fbb4c54e43e22c02239719"
+    },
+    {
+      "path": "图/after_swa_actual_timeline.png",
+      "bytes": 93430,
+      "sha256": "8fcbbfe6acbe2cff7285d16800c115771a5895956f67e8120aa16b4400b5a37f"
+    },
+    {
+      "path": "图/before_cpp_entry_count.png",
+      "bytes": 197766,
+      "sha256": "d6f2ecb07c7a946fc9dd96a1f5596bb92c02abb7c4774ed74d4aa8d55278b237"
+    },
+    {
+      "path": "图/before_sj10_whole_actual_timeline.png",
+      "bytes": 149017,
+      "sha256": "bbe1c5222aebb264ed43d8cb0304537fcbce4d440bbcbb6f4a941031b9b8568a"
+    },
+    {
+      "path": "图/before_swa_actual_timeline.png",
+      "bytes": 104576,
+      "sha256": "41b4809f2f5629dd7e8f3f8fb535731dd2420e96fecd85374040cf9c5dff8037"
+    },
+    {
+      "path": "图/profiled_host_scopes.png",
+      "bytes": 107814,
+      "sha256": "6188617a6d1f8e39705eb7af403eb306f5e134185af4d2ed137e922a3df4341b"
+    },
+    {
+      "path": "工具/README.md",
+      "bytes": 1134,
+      "sha256": "5a8064928dc9673b67c723e10aa879f2dcad79739b2b4a29d8e74b2eee5806c0"
+    },
+    {
+      "path": "工具/离线分析已有trace.py",
+      "bytes": 4282,
+      "sha256": "88729b1f25a78f6addf2b549b076a628a3b74a9cfab55d9b8c83ba43d1bb666c"
+    },
+    {
+      "path": "工具/统计MCCL区间与画图.py",
+      "bytes": 2898,
+      "sha256": "cd418c68d1259a13938d21f03fe7eae6a0f214930e6b7d612819c4507ba80bd5"
+    },
+    {
+      "path": "执行状态记录.json",
+      "bytes": 242,
+      "sha256": "a8cb015ba7b426f4b1cf6eb2adb75304427f13affed3d7b5f98a2361de648899"
+    },
+    {
+      "path": "验收记录.json",
+      "bytes": 376,
+      "sha256": "9106e08ab1cbd959ee3f0705629dcfacfe2686b64044d4dc66dfafb060885d1d"
+    }
+  ]
+}

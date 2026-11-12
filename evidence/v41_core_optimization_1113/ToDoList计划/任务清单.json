@@ -1,0 +1,469 @@
+{
+  "schema_version": 1,
+  "created_date": "2026-11-12",
+  "status": "CORE_G01_G02_T01_T14_EXECUTION_CLOSED_PUBLICATION_PENDING",
+  "baseline_commit": "89a2572fc6c58eebdedb353762939ecd0a0bf0cc",
+  "ranking": "G02 measured proxies + feasibility; tight removable bounds remain unknown; T01 diagnostic first",
+  "tasks": [
+    {
+      "id": "G01",
+      "order": 1,
+      "phase": "前置",
+      "title": "恢复固定基线、环境与真实快路径",
+      "sources": [
+        "S2",
+        "S3",
+        "S7",
+        "S8"
+      ],
+      "reason": "先核验，不计为性能改进",
+      "status": "completed",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_1"
+      ],
+      "evidence": "../ToDoList_1/07_结论/G01基线验收.md"
+    },
+    {
+      "id": "G02",
+      "order": 2,
+      "phase": "前置",
+      "title": "轻量全局计时、关键路径分解与重新排序",
+      "sources": [
+        "S1",
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "reason": "消除现有重 profiler 的归因盲区",
+      "status": "completed_conservative_measurement_fallback",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "Short overhead within preregistered3%; long per-token overhead / strict removable p unknown; native spans not kernel-busy shares",
+      "experiment_directories": [
+        "../ToDoList_1",
+        "../ToDoList_2",
+        "../ToDoList_3"
+      ],
+      "evidence": "../ToDoList_3/07_结论/G01_G02总结与进入核心优化的边界.md"
+    },
+    {
+      "id": "T01",
+      "order": 3,
+      "phase": "核心1",
+      "title": "拆解慢 rank 等待，适配实际小消息 AllReduce",
+      "sources": [
+        "S3",
+        "S4",
+        "S5",
+        "S7"
+      ],
+      "reason": "当前 MCCL 轨道最显著，真实可缩短部分待测",
+      "status": "completed_TP_and_EP_speed_accepted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "Observed disjoint TP/EP stream-span proxy ~71ms/step, contains waits; tight removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_4",
+        "../ToDoList_5",
+        "../ToDoList_6"
+      ],
+      "evidence": "../ToDoList_6/07_结论/EP通信速度改进与trace解释.md",
+      "short_valid_TPOT_improvement_percent": 9.718423094229866,
+      "long_formal_valid_requests": 5,
+      "long_formal_attempts": 5,
+      "after_trace_available": true,
+      "remaining": "Arbitrary EP groups / rank layouts need separate adaptation; current TP8=EP8 only",
+      "long_valid_TPOT_improvement_percent": 9.883742533701845
+    },
+    {
+      "id": "T02",
+      "order": 4,
+      "phase": "核心2",
+      "title": "融合 decode 页地址、SWA/压缩缓存 gather 与 metadata",
+      "sources": [
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S7"
+      ],
+      "reason": "当前 host 大量细碎操作，SWA commit 已完成，重点转读侧",
+      "status": "cache_reuse_and_SWA_fusion_accepted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "G02 observed host/device scopes, overlap/readiness not fully resolved; strict removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_7",
+        "../ToDoList_11",
+        "../ToDoList_12"
+      ],
+      "evidence": "../ToDoList_11/07_结论/SWA读取融合收益与trace解释.md",
+      "remaining": "Additional metadata casts may still be optimized; current two main subtasks completed"
+    },
+    {
+      "id": "T03",
+      "order": 5,
+      "phase": "核心4",
+      "title": "mHC metadata/combine/norm 周边融合",
+      "sources": [
+        "S2",
+        "S3",
+        "S7"
+      ],
+      "reason": "Source and trace show existing MATE projection still followed by six separate reduction/normalization GPU operations per prepare; G02 prepare proxy ~26.6ms, strict removable bound unknown; test small tail fusion next",
+      "status": "completed_cumulative_mhc_formal_and_all32_trace_accepted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "G02 observed host/device scopes, overlap/readiness not fully resolved; strict removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_8",
+        "../ToDoList_38"
+      ],
+      "evidence": "../ToDoList_38/07_结论/mHC融合正式性能与trace晋级说明.md",
+      "valid_requests": 20,
+      "all_rank_trace_files_checked": 64,
+      "TPOT_improvement_percent": {
+        "256": 10.512100839165884,
+        "2048": 13.134177540632376
+      }
+    },
+    {
+      "id": "T04",
+      "order": 6,
+      "phase": "核心5",
+      "title": "MoE gate/路由/共享专家/小 M 选路及负载均衡",
+      "sources": [
+        "S1",
+        "S2",
+        "S3",
+        "S7"
+      ],
+      "reason": "不能先假定 W4A8 GEMM 本体占比最大",
+      "status": "shared_TP_accepted_D_gate_cache_formal_trace_mixed_not_promoted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "G02 observed host/device scopes, overlap/readiness not fully resolved; strict removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_14",
+        "../ToDoList_22",
+        "../ToDoList_26",
+        "../ToDoList_46"
+      ],
+      "evidence": "../ToDoList_46/07_结论/Gate权重缓存正式结果与未晋级说明.md"
+    },
+    {
+      "id": "T05",
+      "order": 7,
+      "phase": "核心3",
+      "title": "分段 Graph → 可验证范围的 decode Graph",
+      "sources": [
+        "S2",
+        "S3",
+        "S4",
+        "S6",
+        "S7"
+      ],
+      "reason": "覆盖启动空隙但与 T02/T03 重叠，先量化捕获范围",
+      "status": "completed_three_mode_formal_trace_negative_rejected",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "G02 observed host/device scopes, overlap/readiness not fully resolved; strict removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_10",
+        "../ToDoList_13",
+        "../ToDoList_18",
+        "../ToDoList_19",
+        "../ToDoList_27"
+      ],
+      "evidence": "../ToDoList_27/07_结论/Graph正式性能与未晋级决定.md"
+    },
+    {
+      "id": "T06",
+      "order": 8,
+      "phase": "核心6",
+      "title": "Dense/投影与 QDQ 的真实 shape 专项",
+      "sources": [
+        "S2",
+        "S3",
+        "S4",
+        "S7"
+      ],
+      "reason": "已有7类慢候选，必须定位新瓶颈再做",
+      "status": "packed_shared_two_trials_small_gain_not_promoted_QKV_mixed_not_promoted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "G02 observed host/device scopes, overlap/readiness not fully resolved; strict removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_15",
+        "../ToDoList_30",
+        "../ToDoList_45"
+      ],
+      "evidence": "../ToDoList_30/07_结论/两轮正式测试与保留候选的决定.md"
+    },
+    {
+      "id": "T07",
+      "order": 9,
+      "phase": "核心7",
+      "title": "服务调度、CPU/NUMA、采样及日志的有据优化",
+      "sources": [
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S8"
+      ],
+      "reason": "G02 若证实服务差值大则升到 T01 前",
+      "status": "D_stream_accepted_P_operational_fence_with_progress1_boundary; no_progress_trial_failed_cleaned",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "G02 observed host/device scopes, overlap/readiness not fully resolved; strict removable p unknown",
+      "experiment_directories": [
+        "../ToDoList_20",
+        "../ToDoList_21",
+        "../ToDoList_31",
+        "../ToDoList_39",
+        "../ToDoList_40",
+        "../ToDoList_57"
+      ],
+      "evidence": "../ToDoList_40/07_结论/当前流完成边界诊断与正式数据.md",
+      "remaining": "E57 log removal exposed/stalled long request despite P current-stream fence; root cause unresolved, do not claim P reliability fully solved"
+    },
+    {
+      "id": "T09",
+      "order": 10,
+      "phase": "核心8",
+      "title": "Prefill chunk 与批量投影扫点",
+      "sources": [
+        "S2",
+        "S3",
+        "S8"
+      ],
+      "reason": "Current mHC-era whole-TTFT E2E upper reduction2.26%/13.67%; strictly removable prefill module fraction remains unknown",
+      "status": "completed_long_TTFT_gain_all32_trace_accepted_short_no_gain",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_47",
+        "../ToDoList_49"
+      ],
+      "evidence": "../ToDoList_47/07_结论/Chunk512长输入收益与短输入边界.md"
+    },
+    {
+      "id": "T08",
+      "order": 11,
+      "phase": "核心9",
+      "title": "P/D 传输、GPU/NIC 亲和和层级重叠",
+      "sources": [
+        "S1",
+        "S2",
+        "S5",
+        "S8"
+      ],
+      "reason": "跨机传输主要作用 TTFT，不混同 D 内 TP/EP 归约",
+      "status": "existing_real_transfer_logs_analyzed_no_network_change_no_gain_claim",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "nonzero-region long request move span mean2.003ms max2.131ms; total ready/wait critical fraction unknown",
+      "experiment_directories": [
+        "../ToDoList_16"
+      ],
+      "evidence": "../ToDoList_16/07_结论/P_D搬运日志与收益判断.md",
+      "remaining": "Per-request ready-path correlation and NIC-affinity/rewrite not yet experimentally optimized; lower priority than decode hotspots"
+    },
+    {
+      "id": "T10",
+      "order": 12,
+      "phase": "本轮核心扩展",
+      "title": "CED / SWA bounded replay",
+      "sources": [
+        "S1",
+        "S2"
+      ],
+      "reason": "New bounded replay strategy: basic position/cache/state checks and successful exact-token performance; model numerical differences recorded, no full precision gate under current user policy",
+      "status": "completed_formal_and_all32_trace_small_mixed_not_promoted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_17",
+        "../ToDoList_43",
+        "../ToDoList_48"
+      ],
+      "scope_update": "2026-11-12用户要求推进到T14，现有SJ9/10资源内执行；额外资源不自动授权",
+      "evidence": "../ToDoList_48/07_结论/CED行裁剪路径与正式性能结论.md"
+    },
+    {
+      "id": "T11",
+      "order": 13,
+      "phase": "本轮核心扩展",
+      "title": "前缀缓存、状态池与避免重算",
+      "sources": [
+        "S1",
+        "S3",
+        "S6",
+        "S8"
+      ],
+      "reason": "prefix 关闭的 C1 无直接收益，需新工作负载",
+      "status": "completed_warm_prefix_formal_all32_trace_accepted_workload_specific",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_28"
+      ],
+      "scope_update": "2026-11-12用户要求推进到T14，现有SJ9/10资源内执行；额外资源不自动授权",
+      "evidence": "../ToDoList_28/07_结论/前缀命中正式结果与冷请求边界.md"
+    },
+    {
+      "id": "T12",
+      "order": 14,
+      "phase": "本轮核心扩展",
+      "title": "多请求批处理与服务吞吐曲线",
+      "sources": [
+        "S3",
+        "S4",
+        "S6",
+        "S8"
+      ],
+      "reason": "当前 C1 实现有硬限制，先完成正确性和资源管理",
+      "status": "completed_C2_C4_formal_all_rank_trace_actual_batch_and_small_mhc_ablation",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_29",
+        "../ToDoList_51",
+        "../ToDoList_52",
+        "../ToDoList_53",
+        "../ToDoList_54",
+        "../ToDoList_55",
+        "../ToDoList_56"
+      ],
+      "scope_update": "2026-11-12用户要求推进到T14，现有SJ9/10资源内执行；额外资源不自动授权",
+      "evidence": "../ToDoList_56/07_结论/C4真实Decode批处理正式结果与trace解释.md"
+    },
+    {
+      "id": "T13",
+      "order": 15,
+      "phase": "本轮核心扩展",
+      "title": "同16卡重新分配 TP/EP/DP/CP 与 DeepEP；再考虑多机",
+      "sources": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S6",
+        "S8"
+      ],
+      "reason": "维度不同不能把所有并行数机械相乘",
+      "status": "current_layout_capacity_and_interface_analysis_complete_alternative_runs_not_done",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_24"
+      ],
+      "scope_update": "2026-11-12用户要求推进到T14，现有SJ9/10资源内执行；额外资源不自动授权",
+      "evidence": "../ToDoList_24/07_结论/并行布局容量与接口边界.md"
+    },
+    {
+      "id": "T14",
+      "order": 16,
+      "phase": "本轮核心扩展",
+      "title": "DSpark / MTP 固定验证后再动态验证",
+      "sources": [
+        "S1",
+        "S2",
+        "S4"
+      ],
+      "reason": "新增接受/回滚状态机制，以真实接受 token 计吞吐",
+      "status": "native_MUSA_DSpark_basic_formal_trace_complete_speed_regression_not_promoted",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": [
+        "../ToDoList_25",
+        "../ToDoList_32",
+        "../ToDoList_33",
+        "../ToDoList_34",
+        "../ToDoList_35",
+        "../ToDoList_36",
+        "../ToDoList_37",
+        "../ToDoList_41",
+        "../ToDoList_43",
+        "../ToDoList_44",
+        "../ToDoList_50"
+      ],
+      "scope_update": "2026-11-12用户要求推进到T14，现有SJ9/10资源内执行；额外资源不自动授权",
+      "remaining": "E50 native DSpark completed but slow under progress1. E58 no-progress retest cancelled because E57 control failed. Selective rollback/proposal tuning future.",
+      "evidence": "../ToDoList_50/07_结论/T14原生功能完成与性能回退说明.md",
+      "TPOT_regression_percent": {
+        "256": 160.84,
+        "2048": 155.36
+      }
+    },
+    {
+      "id": "T15",
+      "order": 17,
+      "phase": "储备",
+      "title": "长上下文/容量瓶颈下的专家缓存与 offload",
+      "sources": [
+        "S1",
+        "S6"
+      ],
+      "reason": "当前全GPU常驻不适用，不主动制造搬运",
+      "status": "not_started",
+      "critical_fraction_low": null,
+      "critical_fraction_high": null,
+      "e2e_speedup_upper": null,
+      "bound_evidence": "unknown_unprofiled",
+      "experiment_directories": []
+    }
+  ],
+  "updated_at": "2026-11-13T01:17:15.774173+08:00",
+  "core_scope": [
+    "G01",
+    "G02",
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "T09",
+    "T10",
+    "T11",
+    "T12",
+    "T13",
+    "T14"
+  ],
+  "acceptance_policy": "speed_first_two_arithmetic_questions_plus_change_related_basic_checks; no_model_logits_or_benchmark_accuracy_gate",
+  "required_report_label": "仅通过基础功能检查，未完成模型精度验收",
+  "cumulative_best_commit": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "cumulative_best_experiment": "ToDoList_38",
+  "current_best_commit_does_not_yet_contain_new_candidate": true,
+  "finished_at": "2026-11-13T03:43:19.643815+08:00",
+  "T15": "reserve_not_part_of_current_scope"
+}

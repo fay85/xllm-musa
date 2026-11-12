@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "  PID STAT     ELAPSED COMMAND\n 8032 Ss         03:20 python3 /work/scripts/g01_baseline_new_start.py\nI20261112 14:41:09.372914 8038 run_basic_pd_gate.py:120] Basic PD question2 answer='56' expected=56 pass=True\nI20261112 14:41:10.455404 8039 run_official_performance.py:157] EvalScope warmup input256 x1\nI20261112 14:42:02.547148 8039 run_official_performance.py:157] EvalScope measured input256 x5\n[\n  {\n    \"input_tokens\": 256,\n    \"phase\": \"warmup\",\n    \"count\": 1,\n    \"directory\": \"/work/new_start_todolist_1/performance/input256_output256/warmup\",\n    \"started_at\": \"2026-11-12T14:41:10.454897+08:00\",\n    \"finished_at\": \"2026-11-12T14:42:02.543439+08:00\",\n    \"exit_code\": 0,\n    \"validated_rows\": [\n      [\n        1,\n        256,\n        256,\n        46.089435040950775,\n        0.31275227945297956\n      ]\n    ]\n  }\n]",
+  "stderr": ""
+}

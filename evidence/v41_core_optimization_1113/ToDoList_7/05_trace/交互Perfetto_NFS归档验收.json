@@ -1,0 +1,50 @@
+{
+  "at": "2026-11-13T03:13:53.665524+08:00",
+  "experiment": 7,
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_7/05_trace/已核验交互Perfetto_62603cbc1ce1c017.tar.zst",
+  "bytes": 1654372,
+  "sha256": "58f5450177a5cb601a0c59ff96deb26abf8b4a0e36e04bca0e6b7485eca0c610",
+  "files": [
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/after_SWA_layer0_decode_优化后实际C++栈及1次GPU写回.pftrace",
+      "bytes": 3902,
+      "sha256": "7d9dd9d73c2c0d8963df32b5b09eba5cb822360336924d9859fa68962bea9558"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/after_SWA_layer0_decode_优化后实际C++栈及1次GPU写回.receipt.json",
+      "bytes": 1439,
+      "sha256": "03a281c99efbbf1e26bcff65b0ef1386e1c50b0ecfe5a596fca4478135abd021"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/before_SWA_layer0_decode_优化前实际C++栈及35次GPU写回.pftrace",
+      "bytes": 30932,
+      "sha256": "d8d3818c189609582afaf3a2c9d54caa8940e670b021072e8ea0860e177d7f4a"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/before_SWA_layer0_decode_优化前实际C++栈及35次GPU写回.receipt.json",
+      "bytes": 1448,
+      "sha256": "9a4b2466de38288032bcbaa7d0715e7ba0d0de0552bd8247c31894951cd3adf9"
+    },
+    {
+      "path": "05_trace/processed/off_sj10_last_step.pftrace",
+      "bytes": 9869773,
+      "sha256": "6ed68983ef91979e3a6674cd2a3d1a73f3017f5b70b0e21d6d62570eddd9ccca"
+    },
+    {
+      "path": "05_trace/processed/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "0ab9ecd1eca770500d06a1f752e508c97140ba54f0d4cb1955a0a802e116eed1"
+    },
+    {
+      "path": "05_trace/processed/reuse_sj10_last_step.pftrace",
+      "bytes": 9228979,
+      "sha256": "84e1d6b194bba71b67082b37a4cdc48021bd97427310099646cf2e3a108ecd2c"
+    },
+    {
+      "path": "05_trace/processed/reuse_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "04163c14cf0a85014a8facdcf5370ac4645d8e6e3a95af7acfb06b4509ea652b"
+    }
+  ],
+  "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+}

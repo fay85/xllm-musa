@@ -71,7 +71,8 @@ class DeepseekV41SharedMlp final {
                        torch::Tensor up,
                        torch::Tensor down,
                        double limit,
-                       bool original_fp8_activation = false)
+                       bool original_fp8_activation = false,
+                       bool decode_packed_gate_up = false)
       : gate_(std::move(gate)),
         up_(std::move(up)),
         down_(std::move(down)),
@@ -94,6 +95,9 @@ class DeepseekV41SharedMlp final {
     CHECK(!original_fp8_activation_ ||
           (gate_.size(0) % 32 == 0 && gate_.size(1) % 32 == 0));
     CHECK(std::isfinite(limit_) && limit_ > 0.0 && limit_ < 1000000.0);
+    if (decode_packed_gate_up) {
+      packed_gate_up_ = torch::cat({gate_, up_}, 0).contiguous();
+    }
   }
 
   torch::Tensor forward(const torch::Tensor& input) const {
@@ -107,8 +111,13 @@ class DeepseekV41SharedMlp final {
       return torch::empty_like(input);
     }
     const torch::Tensor value = quantize(input);
-    const torch::Tensor packed = torch::cat(
-        {torch::linear(value, gate_), torch::linear(value, up_)}, -1);
+    torch::Tensor packed;
+    if (packed_gate_up_.defined() && input.size(0) == 1) {
+      packed = torch::linear(value, packed_gate_up_);
+    } else {
+      packed = torch::cat(
+          {torch::linear(value, gate_), torch::linear(value, up_)}, -1);
+    }
     const torch::Tensor activation =
         torch::empty({input.size(0), gate_.size(0)}, input.options());
     kernel::musa::deepseek_v4_shared_swiglu(packed, limit_, activation);
@@ -126,6 +135,7 @@ class DeepseekV41SharedMlp final {
 
   torch::Tensor gate_;
   torch::Tensor up_;
+  torch::Tensor packed_gate_up_;
   torch::Tensor down_;
   double limit_;
   bool original_fp8_activation_;
@@ -328,7 +338,8 @@ class DeepseekV41Gate final {
                   int64_t image_token_id,
                   int64_t topk,
                   bool normalize,
-                  double scale)
+                  double scale,
+                  bool cache_fp32_weight = false)
       : weight_(std::move(weight)),
         bias_(std::move(bias)),
         vision_bias_(vision_bias.value_or(torch::Tensor{})),
@@ -350,6 +361,12 @@ class DeepseekV41Gate final {
     CHECK_LE(topk_, weight_.size(0));
     CHECK_LE(weight_.size(0), 1024);
     CHECK(std::isfinite(scale_));
+    if (cache_fp32_weight) {
+      torch::DeviceGuard guard(weight_.device());
+      // The weight is immutable after model construction. Materialize exactly
+      // the same BF16-to-FP32 conversion once, without changing routing math.
+      weight_ = weight_.to(torch::kFloat32);
+    }
     if (vision_bias_.defined()) {
       CHECK_EQ(vision_bias_.device(), bias_.device());
       CHECK_EQ(vision_bias_.scalar_type(), torch::kFloat32);

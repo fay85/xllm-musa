@@ -1,0 +1,49 @@
+{
+  "status": "COMPILED_NOT_GPU_VALIDATED",
+  "library": "/work/build/w4a8_mate_v2_delivery_flags/libdeepseek_v41_w4a8_group128.so",
+  "library_sha256": "6757da6f4806d6249ff7f5882feb8424b645dbabf32265ae8881e79625f424dc",
+  "symbol": "mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup",
+  "activation_recipe": [
+    1,
+    128
+  ],
+  "weight_recipe": [
+    1,
+    128
+  ],
+  "activation_dtype": "E4M3",
+  "weight_dtype": "packed signed INT4",
+  "activation_scale_dtype": "FP32",
+  "weight_scale_dtype": "BF16",
+  "output_dtype": "BF16",
+  "mate_source": "/donor/mate",
+  "delivery_compiler_flags": [
+    "-Od3",
+    "-O2",
+    "-DNDEBUG",
+    "-fno-strict-aliasing",
+    "-fno-signed-zeros",
+    "-mllvm",
+    "-mtgpu-load-cluster-mutation=1",
+    "-mllvm",
+    "--num-dwords-of-load-in-mutation=64"
+  ],
+  "package_versions": {
+    "torch": "2.9.1",
+    "torch_musa": "2.9.1",
+    "mate": "0.2.7",
+    "apache-tvm-ffi": "0.1.11.post1+musa.1"
+  },
+  "sources": {
+    "/donor/mate/jit/gemm/masked_moe_gemm_mixed_dtype.py": "4510f7d3439f2bbe8eea1e706f3aede7426e09cfb7990660d6b50db44ce845b1",
+    "/donor/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp": "5da18101e64257b7404f415d6b15a1ac2bd320f132645be8604d7da39d391675"
+  },
+  "compile_commands": [
+    {
+      "directory": "/work/build/mate_cache/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup_sglang_5da18101e64257b7_flags_e413b6da25a4",
+      "command": "/usr/local/musa/bin/mcc -c /work/build/mate_cache/.cache/mate/0.2.6/mp31/generated/masked_moe_gemm_mixed_dtype/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup.mu -fPIC -std=c++17 -O2 --offload-arch=mp_31 -Od3 -O2 -DNDEBUG -fno-strict-aliasing -fno-signed-zeros -mllvm -mtgpu-load-cluster-mutation=1 -mllvm --num-dwords-of-load-in-mutation=64 -I/donor/tvm_ffi/include -I/usr/local/musa-5.1.0/include/mudnncxx -I/donor/sglang/python/sglang/jit_kernel/musa_w4a8/include -I/donor/mate/data/include -I/donor/mate/data/csrc -I/donor/mate/data/mutlass/include -o /work/build/mate_cache/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup_sglang_5da18101e64257b7_flags_e413b6da25a4/masked_moe_gemm_mixed_dtype_mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup.cuda.o",
+      "file": "/work/build/mate_cache/.cache/mate/0.2.6/mp31/generated/masked_moe_gemm_mixed_dtype/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup.mu"
+    }
+  ],
+  "scope": "Offline build only; numerical and runtime tests remain required"
+}

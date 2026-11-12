@@ -1,0 +1,183 @@
+{
+  "status": "PASS_30_COMPILED_SOURCE_BYTES_FORMAT20_1_6_11_TYPED_REGRESSIONS_DIFFCHECK_AND_REAL_TRACE_REGRESSION",
+  "at": "2026-11-13T03:22:40.890573+08:00",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "actual_binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "compiled_source_files": [
+    {
+      "path": "tests/core/kernels/musa/musa_python_kernel_test_module.cpp",
+      "bytes": 37719,
+      "sha256": "974ccbf4fdf51bed6f3b77d6b7a5869c44f4dcec6810e0d593bd9252aae8d3a0"
+    },
+    {
+      "path": "xllm/core/distributed_runtime/master.cpp",
+      "bytes": 56814,
+      "sha256": "be2319f89297350d484b8ee1f64684743bb0d362e3b2dcad9dd2a7acf3e66135"
+    },
+    {
+      "path": "xllm/core/distributed_runtime/speculative_engine.cpp",
+      "bytes": 16533,
+      "sha256": "60a1b5aff3831a58a7b7ad8215971e659471a9f0c855e2cfd428fa5c217b29de"
+    },
+    {
+      "path": "xllm/core/framework/config/speculative_config.h",
+      "bytes": 10786,
+      "sha256": "c582cb1c7f0a02cbf1b553775fb3cc3523377fce8496eeadedbaa0e769137bee"
+    },
+    {
+      "path": "xllm/core/framework/kv_cache/deepseek_v4_kv_cache_impl.cpp",
+      "bytes": 33596,
+      "sha256": "89cc6ac97465fbc987bffa4b804754cc441dc910065fd7945446f8ea7529dd19"
+    },
+    {
+      "path": "xllm/core/framework/parallel_state/musa_process_group.h",
+      "bytes": 5252,
+      "sha256": "72703bdd656fd75da448083e38bf713fa80b73f4ff376e396c369868078b1e4c"
+    },
+    {
+      "path": "xllm/core/kernels/musa/CMakeLists.txt",
+      "bytes": 5499,
+      "sha256": "354b9c206fe481dd2b1e05e22e67da63318cfcd6f6a47f0c4d63e24f89c8761c"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.cpp",
+      "bytes": 3562,
+      "sha256": "f182dd20a8546e3636a4ffd1003bf4e0b544ea93ab390ca05eb43df2a904c69c"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.h",
+      "bytes": 1344,
+      "sha256": "d877baf9a209a4cfd135819b9c1a8895ef0df282f8ad6b549a4a21523c9857ae"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention.h",
+      "bytes": 18859,
+      "sha256": "a9f59fa1d9a4b85b822bcf2c1539db6a972eb529e5a3e7ce66795bc74e69475e"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+      "bytes": 9747,
+      "sha256": "02a9a8363d1bff76d879ebb97521996a4d0e45f0ac35d40fb69b78df57c10af0"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/decoder.h",
+      "bytes": 16297,
+      "sha256": "f1bc32f142eb96ccb1fe9d0d3a1b96261c010ae99d522d90d27c072e6547916a"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/engram_hash.h",
+      "bytes": 10923,
+      "sha256": "40ed76b01873e376f61066e11b5a3be89c2b681ad7f9e7a0596eae806c55de63"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/feed_forward.h",
+      "bytes": 16274,
+      "sha256": "e2eee80c868805b7242d5baa31185cd185b4cae4d65bfe5a108e240175b71b9a"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/hyper_connection.h",
+      "bytes": 7413,
+      "sha256": "a11580239c31fc501a83a7a9bb14041201d6dfab6a0e2c7792eae6b6f2591b20"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/moe.h",
+      "bytes": 11351,
+      "sha256": "7e889d06bed3f4431c4152c616cb43b2bb3beb253bb94c32a05c3a4cf973660d"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/paged_attention.h",
+      "bytes": 14669,
+      "sha256": "a97a2b451d8d42fec5beb9874dd4cef184da387bd346e9bac6ef2e97c8980d90"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/text_model.h",
+      "bytes": 15369,
+      "sha256": "5cd9a230b4ac88d870145c81adbb2e4efea2290c4a296108a29c0cc9bba1a2ed"
+    },
+    {
+      "path": "xllm/core/runtime/dflash/dflash_worker_impl.cpp",
+      "bytes": 95719,
+      "sha256": "aaa2a86e1477060490f9cc3694a2188f1033df3f78031094f02f0a1ff434c99a"
+    },
+    {
+      "path": "xllm/core/runtime/draft_model_config.cpp",
+      "bytes": 18147,
+      "sha256": "da2b0c43def0de75582ca4b813ae66a6b473b2f06ccbf3a706735ee26b760bf6"
+    },
+    {
+      "path": "xllm/models/CMakeLists.txt",
+      "bytes": 1001,
+      "sha256": "74b0651715204b4aad18acbda4ba8b826905a9b5c2a06e5e2e8277a4fc70c349"
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "bytes": 49893,
+      "sha256": "c844ee05e1ae5a8aabaa4c337b94544664a147cc02c6716a4eb4b25d6db16284"
+    },
+    {
+      "path": "xllm/models/models.h",
+      "bytes": 11530,
+      "sha256": "d97fdfabb75dc962c241f91b305833cd62fa16d8efee562f2e0817180171e9ab"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_decoder_graph_inputs.cu",
+      "bytes": 4581,
+      "sha256": "e7c2112c6c93f015bb04e0e6d5f179892b01e519fb48f50cb6d2cd49f867230e"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_decoder_graph_inputs.h",
+      "bytes": 992,
+      "sha256": "339dfedc84fe3e9afae8418499ffc56585e1fe842615a9f00dcd480354a8b291"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm_reduce.cu",
+      "bytes": 3793,
+      "sha256": "18f4d722cc0b198d27be6cc382ecac0637d6d41d1041c9c1a1a7fbc8f40ab4a6"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/batch_metadata.h",
+      "bytes": 1495,
+      "sha256": "26f18758090d787894dc85ebc1c75ac0cf44c770007b72bfce7d9878b3ac2126"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/draft_model.h",
+      "bytes": 6999,
+      "sha256": "0fc98f8b0118ea919deddd5b3a0956278f0c6b2078cbc65cba09e56005425de2"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/state_checkpoint.h",
+      "bytes": 5413,
+      "sha256": "af9c5443304e2309b9ca0412ef5e40fb08e8d29614559464de495390debbcba7"
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+      "bytes": 18274,
+      "sha256": "28902a4fb2b8be58af7196cc533d352f8afaa7a4fa559c7f4c8c996cc85b8ff1"
+    }
+  ],
+  "short_regression_scripts": [
+    "tools/musa_deepseek_v41/validate_batched_real_mate_v2.py",
+    "tools/musa_deepseek_v41/validate_ced_tail_floor.py",
+    "tools/musa_deepseek_v41/validate_decoder_graph_pack.py",
+    "tools/musa_deepseek_v41/validate_draft_body.py",
+    "tools/musa_deepseek_v41/validate_dspark_query.py",
+    "tools/musa_deepseek_v41/validate_entering_capture.py",
+    "tools/musa_deepseek_v41/validate_mhc_fused_reduce.py",
+    "tools/musa_deepseek_v41/validate_packed_projections.py",
+    "tools/musa_deepseek_v41/validate_small_batch_mhc.py",
+    "tools/musa_deepseek_v41/validate_state_checkpoint.py",
+    "tools/musa_deepseek_v41/validate_state_replay.py"
+  ],
+  "no_CPP_edits_since_E51_build": true,
+  "trace_converter_real_before_after_test": {
+    "status": "PASS_ACTUAL_BEFORE_AFTER_TRACEPROCESSOR_AND_DEFAULT_BYTE_EQUIVALENCE",
+    "actual_aten_entry_samples": [
+      33,
+      11
+    ],
+    "default_semantic_trace_byte_identical": true,
+    "no_model_rerun": true,
+    "leaf_provenance": "Actual same-ID ATen RecordFunction names, explicit metadata leaves; CPP caller frames are exactc608 ELF offsets; entry widths are COUNT"
+  },
+  "scope": "Source/build identity and directly related already executed checks; not full model precision or all feature combinations"
+}

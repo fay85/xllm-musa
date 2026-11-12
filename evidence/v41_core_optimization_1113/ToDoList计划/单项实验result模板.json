@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "experiment_id": "ToDoList_n",
+  "task_id": null,
+  "status": "planned",
+  "sources": [],
+  "before": {
+    "commit": null,
+    "exe_sha256": null,
+    "environment_manifest": null
+  },
+  "after": {
+    "commit": null,
+    "exe_sha256": null,
+    "environment_manifest": null
+  },
+  "one_changed_variable": null,
+  "cases": [
+    {
+      "input_tokens": 256,
+      "output_tokens": 256,
+      "concurrency": 1,
+      "warmups": 1,
+      "formal_requests": 5,
+      "correctness_status": "not_run",
+      "bound": {
+        "kind": "unknown",
+        "critical_fraction_low": null,
+        "critical_fraction_high": null,
+        "ideal_e2e_ms": null,
+        "method": null,
+        "overlap_evidence": null
+      },
+      "before_metrics": null,
+      "after_metrics": null,
+      "achieved_bound_fraction": null,
+      "raw_perf": [],
+      "trace_manifest": null
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 256,
+      "concurrency": 1,
+      "warmups": 1,
+      "formal_requests": 5,
+      "correctness_status": "not_run",
+      "bound": {
+        "kind": "unknown",
+        "critical_fraction_low": null,
+        "critical_fraction_high": null,
+        "ideal_e2e_ms": null,
+        "method": null,
+        "overlap_evidence": null
+      },
+      "before_metrics": null,
+      "after_metrics": null,
+      "achieved_bound_fraction": null,
+      "raw_perf": [],
+      "trace_manifest": null
+    }
+  ],
+  "decision": null,
+  "remaining_limitations": [],
+  "next_best_commit": null,
+  "commit_url": null
+}

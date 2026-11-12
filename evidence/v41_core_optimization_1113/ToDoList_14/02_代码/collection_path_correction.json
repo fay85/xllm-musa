@@ -1,0 +1,9 @@
+{
+  "at": "2026-11-12T21:05:05.613731+08:00",
+  "stage": "offline collection, no inference rerun",
+  "old": "native_t04_shared_tp_read",
+  "actual": "native_t04_shared_tp_clean",
+  "cause": "Overlapping prefix replacement in generated collection script",
+  "original_performance_and_traces": "unchanged, both modes 16 normal exits each",
+  "action": "Correct artifact manifest/binary lookup, rebuild only derived evidence archive"
+}

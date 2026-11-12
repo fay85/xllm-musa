@@ -1,0 +1,17 @@
+{
+  "task": "T04",
+  "mode": "GATE_CACHE_D",
+  "run": "t04_gate_cache_decode_v2",
+  "baseline_experiment": "ToDoList_50",
+  "baseline_run": "t14_native_cache_off_v1",
+  "artifact": "native_t14_draft_cache",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "host_env": {
+    "sj10": {
+      "XLLM_DSV41_GATE_CACHE_FP32_WEIGHT": "1"
+    }
+  },
+  "host_args": {},
+  "state": "FROZEN_BEFORE_LAUNCH_SAME_ELF_OFF_CONTROL_AND_GATE_ONLY",
+  "baseline_receipt": "baseline_off_result.json"
+}

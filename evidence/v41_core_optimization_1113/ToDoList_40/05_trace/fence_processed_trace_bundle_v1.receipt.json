@@ -1,0 +1,20 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_comm_stream_fence_analysis_v1.tar.zst",
+  "bytes": 3570987,
+  "sha256": "d55da51bf5ecaf2d62122eaf8709f6a8183b7cef9962ae83ef6fa5d3f0670a47",
+  "receipt": {
+    "status": "STREAM_FENCE_ALL16_AUDITED_AND_EXACT_ELF_SYMBOLIZED",
+    "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t07_comm_stream_fence/bin/xllm",
+    "binary_sha256": "694020e882cf82f9c11cda7f89c830dfdf3348a0a47b761a7a9118deeff3e46d",
+    "raw_archives": {
+      "streamfence": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_prefill_comm_fence_v1_raw_trace.tar.zst",
+        "bytes": 88804502,
+        "sha256": "0759f4d53e83c4fc7c04afae9e9179e11b990394439bcf5c7d6df00265cc4645"
+      }
+    },
+    "symbols": 53,
+    "scope": "CPU-only P blocking successful run, all16 processes exited; original full traces unchanged",
+    "finished_at": 1794500083.9465663
+  }
+}

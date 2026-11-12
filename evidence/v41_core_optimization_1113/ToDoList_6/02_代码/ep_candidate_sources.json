@@ -1,0 +1,10 @@
+{
+  "source_parent": "799a93b2c807c264dfdcaa1c3c8414e9956f0993",
+  "patch_sha256": "845475400e337905e0313f0e9c0feb237dbc36fc191e0cb8824dafe4add0d9ff",
+  "files": {
+    "xllm/core/layers/musa/deepseek_v41/moe.h": "352f53075e5fcc1d5b17047b8e37eb42be03af0557b04dd4b425672dc1ff6ea9",
+    "xllm/models/llm/musa/deepseek_v41_native.h": "a385dd3c56cd8452260b091598b6746d832fdacfe9068485867cbdd40441c852"
+  },
+  "default_ep_custom": false,
+  "policy": "P TP0 EP0, D TP1 EP0/1 paired; no model precision gate"
+}

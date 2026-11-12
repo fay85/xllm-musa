@@ -1,0 +1,16 @@
+[
+  {
+    "host": "sj9",
+    "attempt": 0,
+    "ready": true,
+    "config": "/work/artifacts/prepared/t12_queued_c2_final_v3/sj9.json",
+    "expected_sha256": "e0a06e4d12a8703ca34422fddb431f7da378b3b6369bc87d03497774753c5a3b"
+  },
+  {
+    "host": "sj10",
+    "attempt": 0,
+    "ready": true,
+    "config": "/work/artifacts/prepared/t12_queued_c2_final_v3/sj10.json",
+    "expected_sha256": "59bf51356ba3f784da4f17cea28650de0c386ad4e65e65868ed0b639f41f69c7"
+  }
+]

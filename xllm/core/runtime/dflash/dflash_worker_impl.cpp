@@ -52,6 +52,7 @@ limitations under the License.
 #include "core/framework/speculative/spec_input_builder.h"
 #include "core/framework/speculative/spec_verify.h"
 #include "core/platform/platform.h"
+#include "core/util/env_var.h"
 #include "runtime/draft_model_config.h"
 #include "runtime/llm_worker_impl.h"
 #include "runtime/speculative_worker_utils.h"
@@ -446,6 +447,12 @@ bool DFlashWorkerImpl::init_model(const std::string& model_weights_path,
     context_ = impl_->context_;
     target_is_hybrid_recurrent_ =
         has_linear_attention_layers(impl_->context_.get_model_args());
+#if defined(USE_MUSA)
+    target_is_hybrid_recurrent_ |=
+        util::is_deepseek_v41_model_type(
+            impl_->context_.get_model_args().model_type()) &&
+        util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+#endif
   }
 
   if (draft_impl_->get_status() == WorkerImpl::Status::LOADED) {
@@ -1536,7 +1543,18 @@ void DFlashWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
       for (int32_t q_len : input_params.attention.host.q_seq_lens) {
         q_cu_seq_lens.emplace_back(q_cu_seq_lens.back() + q_len);
       }
+#if defined(USE_MUSA)
+      if (util::is_deepseek_v41_model_type(
+              impl_->context_.get_model_args().model_type()) &&
+          util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false)) {
+        input_params.attention.host.q_cu_seq_lens =
+            input_params.attention.host.q_seq_lens;
+      } else {
+        input_params.attention.host.q_cu_seq_lens = std::move(q_cu_seq_lens);
+      }
+#else
       input_params.attention.host.q_cu_seq_lens = std::move(q_cu_seq_lens);
+#endif
     }
     // The generic builder materializes the device buffer before the hybrid
     // cumulative lengths above are canonicalized.  Rebind it so GDN sees

@@ -1,0 +1,6 @@
+{
+  "at": "2026-11-13T02:24:47.781926+08:00",
+  "stage": "normal_stop_after_local_controller_interruption",
+  "run": "t11_prefill_prefix_v1",
+  "no_model_relaunch": true
+}

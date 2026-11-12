@@ -1,0 +1,7 @@
+{
+  "path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261112新的开始/ToDoList计划/最终源码与工具补丁_相对4411.patch",
+  "bytes": 230548,
+  "sha256": "ed28e287341a53ba70527b78669ecee85aaea7a7f7dbd5bff1ffa321db8b8c9a",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "includes": "30 compiled C++/CMake source files +11 short regression scripts +optional ATen trace converter; raw evidence packaged separately"
+}

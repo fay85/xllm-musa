@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Global Track Events",
+    "uri": null
+  },
+  {
+    "name": "GPU kernel stream 17",
+    "uri": "/track_event_2"
+  },
+  {
+    "name": "Native C++ / ATen thread 16500",
+    "uri": "/track_event_1"
+  },
+  {
+    "name": "Process 14643",
+    "uri": "/process_1"
+  },
+  {
+    "name": "Thread 16500",
+    "uri": "/thread_2"
+  },
+  {
+    "name": "Thread 16500 Callstacks",
+    "uri": "/process_1/thread_2_stack_samples_xllm.native_cpp.RecordFunction_entry_backtrace.COUNT"
+  }
+]

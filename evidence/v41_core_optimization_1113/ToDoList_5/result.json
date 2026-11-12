@@ -1,0 +1,21 @@
+{
+  "task_id": "T01",
+  "status": "ACCEPTED_SPEED_BASELINE_TP_CUSTOM_D_ONLY",
+  "before": "../ToDoList_4/t01_off_v1",
+  "after": "t01_donly_custom_v1",
+  "created_at": "2026-11-12T17:42:25.898861+08:00",
+  "goal_complete": false,
+  "controller_pid": 1280568,
+  "controller_session": 37959,
+  "collector_pid": 1288549,
+  "collector_session": 61416,
+  "long_formal_success_observed": 2,
+  "long_formal_success_observed_at": "2026-11-12T17:51:42+08:00",
+  "latest_evidence_commit": "010b02553c48af2699cec43cfadb56529c55e145",
+  "latest_evidence_commit_pushed": true,
+  "accuracy_label": "仅通过基础功能检查，未完成模型精度验收",
+  "trace_before_after_verified": true,
+  "formal_valid_requests": 10,
+  "all16ranks_normal_exit": true,
+  "remaining_goal_scope": "T01_remaining_to_T14"
+}

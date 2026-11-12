@@ -1,0 +1,1447 @@
+{
+  "status": "PASS_BOUNDED_GPU_PAGED_AND_FULL_STATE_ROLLBACK",
+  "cases": [
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 593152,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 593152,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 593152,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 593152,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593024,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        4,
+        16
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 592928,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": false,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": false,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": false,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int32",
+      "nondefault": true,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": false,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": false,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": false,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 0,
+      "saved_bytes": 592896,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 0,
+      "count": 1,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 3,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 7,
+      "count": 17,
+      "saved_bytes": 610304,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 31,
+      "count": 5,
+      "saved_bytes": 598016,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 127,
+      "count": 5,
+      "saved_bytes": 593920,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    },
+    {
+      "shape": [
+        8,
+        128,
+        512
+      ],
+      "index_dtype": "torch.int64",
+      "nondefault": true,
+      "ring": true,
+      "first": 255,
+      "count": 5,
+      "saved_bytes": 596992,
+      "cache_recurrent_history_bitwise_restored": true,
+      "other_request_block_preserved": true
+    }
+  ],
+  "scope": "Only production C++ transaction primitive; not DSpark inference, scheduler-length rollback, draft block attention, or cross-request prefix migration. All model/cache math in GPU; CPU copies are validation references.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

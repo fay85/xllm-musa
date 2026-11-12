@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 51544, \"at\": \"2026-11-12T15:01:41.074536+08:00\", \"source_files\": {\"xllm/core/layers/musa/deepseek_v41/light_timing.h\": \"6df621baf0b7a05a62ee1a8513d88a6ea7effdc2afd0399e3d2a674c81cc7cdb\", \"xllm/core/layers/musa/deepseek_v41/profile_range.h\": \"b5f2b4197b276d5256fc0c5e43f9f794e63aedcc19401c2e79cdb29457bf029b\", \"xllm/core/layers/musa/deepseek_v41/decoder.h\": \"bd27e39b8c683ffd84c77dcb7da4ccbe20d41cbe0ddac31729d236c1452538c3\", \"xllm/core/layers/musa/deepseek_v41/moe.h\": \"4c04941402bc774f861a922d243818821754c6c223878819bce9f89838794515\"}, \"note\": \"CPU build in owned dev6 container only; no GPU runtime, no SJ benchmark CPU contention.\"}\n",
+  "stderr": ""
+}

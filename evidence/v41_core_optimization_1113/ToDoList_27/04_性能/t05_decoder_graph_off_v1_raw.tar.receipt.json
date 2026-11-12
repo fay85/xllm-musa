@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_off_v1_small_evidence.tar.gz",
+  "bytes": 540357,
+  "sha256": "d9bce7c577411ba651ad899137decbb74e8f23be3681fa74962f2633be5537f4",
+  "run": "t05_decoder_graph_off_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

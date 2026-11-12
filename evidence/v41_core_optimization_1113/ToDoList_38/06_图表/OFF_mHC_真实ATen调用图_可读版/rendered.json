@@ -1,0 +1,22 @@
+{
+  "status": "RENDERED_REAL_INTERVALS_AND_NATIVE_ENTRY_COUNT_WITH_PERFETTO_UI",
+  "trace": "/home/xiaopang/\u684c\u9762/Albert\u5206\u4eab/20261021\u4ecexllm\u5f00\u59cb/\u738b\u5bb6\u660e/20261111\u540e\u7eed\u63a8\u8fdbCpp\u5427/\u4ee5sglang_mt\u5de5\u4f5c\u4e3a\u6bcd\u672c\u53bb\u505a/20261112\u65b0\u7684\u5f00\u59cb/ToDoList_38/05_trace/off_mhc_prepare_aten_named_entries.pftrace",
+  "output_sha256": "67a40b05e2e7b76264ca2280eeac1c2f8c5ae4c6ff6299ee55456dcf2610c4b9",
+  "native_entry_samples": 33,
+  "selected_cpu_interval": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/mHC/prepare",
+    "pid": 6496,
+    "tid": 8346,
+    "ts": 3643418108523.213,
+    "dur": 755.087,
+    "args": {
+      "External id": 146111,
+      "Record function id": 147261,
+      "finished": true,
+      "Ev Idx": 146110
+    }
+  },
+  "boundary": "Entry counts identify real C++ callers; widths are not CPU-time samples. CPU/GPU interval timings are copied from the actual Kineto trace."
+}

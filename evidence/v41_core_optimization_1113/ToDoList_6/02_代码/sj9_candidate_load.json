@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host\": \"sj9\", \"sha256\": \"ef2cbf5b6afadd17f104d63a2e393f65a09c59424a148122c51a2def371c55fb\", \"exit_code\": 0, \"stdout\": \"REQUIRED OPTIONS:\\n  --model <PATH>: Path to the model directory. This is the only required flag.\\n\\nHELP OPTIONS:\\n  -h, --help: Display this help message and exit.\\n\\nCONFIG OPTIONS:\\n  --config_json_file: Path to a JSON config file. Values in the file override command-line flag values.\\n  --enable_dump_c\", \"stderr\": \"[xllm_musa_backend_init] registered PrivateUse1 backend name musa\\n[xllm_musa_backend_init] registered TorchMUSA hooks\\n[xllm_musa_backend_init] installed CUDA-to-MUSA dispatch bridge\\n\"}\n",
+  "stderr": ""
+}

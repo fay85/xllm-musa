@@ -1,0 +1,20 @@
+[
+  "python3",
+  "/work/repos/xllm-musa/tools/musa_deepseek_v41/capture_native_pd_trace.py",
+  "--url",
+  "http://10.121.32.9:31180",
+  "--prefill-control",
+  "http://10.121.32.7:22000",
+  "--decode-control",
+  "http://10.121.32.9:32000",
+  "--performance",
+  "/work/new_start_t06_packed_shared_recheck_packed_v1/performance",
+  "--baseline-commit",
+  "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "--dataset",
+  "/work/artifacts/benchmark_inputs_v1/input256_output256.jsonl",
+  "--profile-root",
+  "/work/profiling/t06_packed_shared_recheck_packed_v1",
+  "--output",
+  "/work/new_start_t06_packed_shared_recheck_packed_v1/trace"
+]

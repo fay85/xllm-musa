@@ -1,0 +1,50 @@
+{
+  "status": "ACTUAL_PD_DRAFT_CACHE_LAYOUT_FAILURE_NOT_PROMOTED",
+  "binary_sha256": "24b096cb54b6d94ebcccb7b5d0b996b63fca3eb3a43726480e73357ae90e84de",
+  "first_failure": "P rank0..7 CHECK commit_draft_context values[21,512] vs cache[21,576]",
+  "where": "create_dsv4_cache_tensors missed MUSA deepseek_v41_dspark family, selected V4 cache+64 rope view",
+  "actual_termination": {
+    "sj9": {
+      "exit": {
+        "exit_codes": [
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6
+        ],
+        "control_exit": null,
+        "stopping": true,
+        "automatic_kill": false
+      },
+      "gpu_free": true
+    },
+    "sj10": {
+      "exit": {
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "control_exit": 0,
+        "stopping": true,
+        "automatic_kill": false
+      },
+      "gpu_free": true
+    }
+  },
+  "SIGKILL": false,
+  "formal_performance_started": false,
+  "trace_started": false,
+  "fix_candidate": "ToDoList_50 native draft family SWA512 allocation, compiling CPU-only; no success claim yet",
+  "accuracy_scope": "基础功能检查未通过（首题HTTP503）；未完成模型精度验收",
+  "at": "2026-11-13T01:05:23.581156+08:00"
+}

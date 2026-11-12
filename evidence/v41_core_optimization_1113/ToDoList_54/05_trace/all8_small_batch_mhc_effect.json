@@ -1,0 +1,154 @@
+{
+  "status": "PASS_ALL8_D_400_KERNELS_REMOVED_PER_Q2_BATCH_30_ACTUAL_BATCHES",
+  "modes": {
+    "off": [
+      {
+        "rank": 0,
+        "all_kernels": 152510,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 1,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 2,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 3,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 4,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 5,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 6,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      },
+      {
+        "rank": 7,
+        "all_kernels": 152446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 0,
+        "mm": 376,
+        "sum": 160,
+        "div": 160
+      }
+    ],
+    "after": [
+      {
+        "rank": 0,
+        "all_kernels": 140510,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 1,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 2,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 3,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 4,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 5,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 6,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      },
+      {
+        "rank": 7,
+        "all_kernels": 140446,
+        "selected_q": "V41/step/q=2/kv=287",
+        "fused_kernel_count_selected": 80,
+        "mm": 376,
+        "sum": 0,
+        "div": 0
+      }
+    ]
+  },
+  "strict_removable_time_fraction": null
+}

@@ -1,0 +1,6 @@
+{
+  "base_commit": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "patch_bytes": 67835,
+  "sha256": "a5670248d4c6b290df71f79b2300ea180fb48dff34c1e2fe0499495247fc59ea",
+  "scope": "Unpromoted isolated candidate; optional predecessor experiments included and must be selected explicitly. Not the current production source commit."
+}

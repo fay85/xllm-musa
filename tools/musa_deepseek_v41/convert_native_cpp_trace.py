@@ -28,7 +28,11 @@ def _sha(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _native_records(path: Path) -> list[dict[str, Any]]:
+def _native_records(
+    path: Path,
+    include_aten: bool = False,
+    record_ids: set[int] | None = None,
+) -> list[dict[str, Any]]:
     stacks: dict[int, list[dict[str, Any]]] = {}
     records = []
     with path.open() as stream:
@@ -36,7 +40,11 @@ def _native_records(path: Path) -> list[dict[str, Any]]:
             row = json.loads(line)
             if row["kind"] == "stack":
                 stacks[row["stack_id"]] = row["frames"]
-            elif row["kind"] == "record" and row["name"].startswith("V41/"):
+            elif row["kind"] == "record" and row["name"].startswith(
+                ("V41/", "aten::") if include_aten else ("V41/",)
+            ):
+                if record_ids is not None and row["record_id"] not in record_ids:
+                    continue
                 frames = [
                     frame
                     for frame in stacks[row["stack_id"]]
@@ -59,6 +67,12 @@ def main() -> None:
         "--scope", help="Optional actual CPU semantic scope within the chosen step"
     )
     parser.add_argument("--scope-index", type=int, default=0)
+    parser.add_argument(
+        "--include-aten",
+        action="store_true",
+        help="Include actual correlated ATen entry backtraces as COUNT; "
+        "the extra leaf is the real RecordFunction name, not a native PC symbol",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
@@ -186,7 +200,9 @@ def main() -> None:
         if "Record function id" in row.get("args", {})
     }
     count = 0
-    for record in _native_records(args.native_stacks):
+    for record in _native_records(
+        args.native_stacks, args.include_aten, set(by_id)
+    ):
         event = by_id.get(record["record_id"])
         if event is None:
             continue
@@ -200,7 +216,9 @@ def main() -> None:
         sample.task_context.tid = record["os_thread"]
         sample.execution_context.mode = 1
         sample.primary_descriptor.name = (
-            "Real native semantic-scope entries (COUNT, not CPU time)"
+            "Real native semantic + ATen entries (COUNT, not CPU time)"
+            if args.include_aten
+            else "Real native semantic-scope entries (COUNT, not CPU time)"
         )
         sample.primary_descriptor.unit = 9
         sample.primary_descriptor.description = "Actual libc backtrace at RecordFunction entry; one count per semantic scope"
@@ -211,6 +229,10 @@ def main() -> None:
             target.function_name = symbol
             if location != "??:?":
                 target.source_file = location
+        if record["name"].startswith("aten::"):
+            # This is the actual matched RecordFunction operation label,
+            # explicitly distinct from the symbolized native PC frames above.
+            sample.callstack.frames.add().function_name = record["name"]
         packets.append((packet.timestamp, 2, 0, packet))
         count += 1
     if not count:
@@ -251,6 +273,12 @@ def main() -> None:
         ),
         "actual_intervals": len(selected),
         "native_entry_samples": count,
+        "include_aten_entries": args.include_aten,
+        "operation_leaf_provenance": (
+            "Actual same-ID RecordFunction names, not invented native symbols"
+            if args.include_aten
+            else None
+        ),
         "output_sha256": _sha(args.output),
         "verification": verification,
         "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling",

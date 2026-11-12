@@ -1,0 +1,5 @@
+{
+  "exit_code": 0,
+  "stdout": "{\"status\": \"PASS_10_FORMAL_EXACT_TOKEN_COUNTS\", \"sha256\": \"fdf45b0268a626abdb64792ba21b4f0a6ab9d29e2164841d20dfe4889842592f\", \"bytes\": 168167, \"metrics\": {\"256\": {\"TTFT_ms\": 398.2286684215069, \"TPOT_ms\": 179.7693577043566, \"E2E_s\": 46.23941488303244, \"QPS_latency_sum\": 0.02162657123861985, \"output_tokens_per_s_latency_sum\": 5.536402237086682, \"itl_counts\": [255, 255, 255, 255, 255]}, \"2048\": {\"TTFT_ms\": 2454.875478707254, \"TPOT_ms\": 181.11292206554435, \"E2E_s\": 48.63867060542107, \"QPS_latency_sum\": 0.020559772451686706, \"output_tokens_per_s_latency_sum\": 5.263301747631797, \"itl_counts\": [252, 253, 254, 253, 253]}}}\n\n",
+  "stderr": ""
+}

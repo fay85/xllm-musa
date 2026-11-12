@@ -1,0 +1,10 @@
+{
+  "status": "PASS_SOURCE_AND_NON_GENERATED_DOCUMENT_DIFF_CHECK",
+  "excluded_only_generated_data": [
+    "evidence/**/*.svg",
+    "evidence/**/*.patch"
+  ],
+  "reason": "Preserve original SVG generator path spacing and patch context lines, byte-identical to SHA-indexed evidence; do not edit captured artifacts as source code",
+  "compiled_source_and_tools_check": "PASS",
+  "all_modified_source_bytes_unchanged_after_E51_verification": true
+}

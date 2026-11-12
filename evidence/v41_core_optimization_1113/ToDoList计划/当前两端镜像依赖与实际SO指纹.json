@@ -1,0 +1,76 @@
+[
+  {
+    "at": "2026-11-13T02:40:45.806368+08:00",
+    "host": "sj9",
+    "container": "xiaopang1112_v41_prefill_sj9",
+    "container_id": "729b140097495ce85af40d5887ab02521fcf5b0b94bfe8dd2f39602befa08177",
+    "image_tag": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+    "image_id": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+    "pip_metadata_no_GPU_import": {
+      "xllm_musa_torch2.9.1": "0.9.0",
+      "apache-tvm-ffi": "0.1.11.post1+musa.1",
+      "torchvision": "0.24.1+03b35c9",
+      "mate": "0.2.7",
+      "torch": "2.9.1",
+      "torch_musa": "2.9.1",
+      "torchaudio": "2.9.1+a224ab2",
+      "mate-mubin": "0.2.7"
+    },
+    "selected_so_libraries": [
+      {
+        "key": "XLLM_DSV41_MATE_W4A8_SO",
+        "configured_path": "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_w4a8_group128.so",
+        "resolved": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_stage_i/lib/mate/libdeepseek_v41_w4a8_group128.so",
+        "bytes": 139872,
+        "sha256": "6757da6f4806d6249ff7f5882feb8424b645dbabf32265ae8881e79625f424dc"
+      },
+      {
+        "key": "XLLM_DSV41_MATE_SPARSE_SO",
+        "configured_path": "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+        "resolved": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+        "bytes": 77664,
+        "sha256": "212fbdd160e6cf63aa6ec1c229074e34793f1453f53fa88e1a9f86a4c52286fe"
+      }
+    ],
+    "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+    "nfs": "10.121.34.78:/data/nfs_shared /data/nfs_shared nfs4",
+    "scope": "Image metadata and selected explicit SO byte fingerprints; pip package version alone is not proof of loaded library revision"
+  },
+  {
+    "at": "2026-11-13T02:40:45.940153+08:00",
+    "host": "sj10",
+    "container": "xiaopang1112_v41_decode_sj10",
+    "container_id": "f74fcc5983f0ac4c7858150f1e7d26e0d32a02d6c0afe51bad5d507038bc33e2",
+    "image_tag": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+    "image_id": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+    "pip_metadata_no_GPU_import": {
+      "torch_musa": "2.9.1",
+      "mate-mubin": "0.2.7",
+      "mate": "0.2.7",
+      "torchaudio": "2.9.1+a224ab2",
+      "torch": "2.9.1",
+      "apache-tvm-ffi": "0.1.11.post1+musa.1",
+      "torchvision": "0.24.1+03b35c9",
+      "xllm_musa_torch2.9.1": "0.9.0"
+    },
+    "selected_so_libraries": [
+      {
+        "key": "XLLM_DSV41_MATE_W4A8_SO",
+        "configured_path": "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_w4a8_group128.so",
+        "resolved": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_stage_i/lib/mate/libdeepseek_v41_w4a8_group128.so",
+        "bytes": 139872,
+        "sha256": "6757da6f4806d6249ff7f5882feb8424b645dbabf32265ae8881e79625f424dc"
+      },
+      {
+        "key": "XLLM_DSV41_MATE_SPARSE_SO",
+        "configured_path": "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+        "resolved": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+        "bytes": 77664,
+        "sha256": "212fbdd160e6cf63aa6ec1c229074e34793f1453f53fa88e1a9f86a4c52286fe"
+      }
+    ],
+    "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+    "nfs": "10.121.34.78:/data/nfs_shared /data/nfs_shared nfs4",
+    "scope": "Image metadata and selected explicit SO byte fingerprints; pip package version alone is not proof of loaded library revision"
+  }
+]

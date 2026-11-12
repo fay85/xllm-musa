@@ -29,6 +29,7 @@ limitations under the License.
 #include "core/framework/model/model_args.h"
 #include "core/platform/platform.h"
 #include "core/runtime/options.h"
+#include "core/util/env_var.h"
 #include "core/util/json_reader.h"
 #include "core/util/utils.h"
 #if defined(USE_NPU)
@@ -322,6 +323,11 @@ void configure_block_diffusion_model(ModelArgs& args,
   const bool python_model_impl = ModelConfig::is_python_model_impl(
       ModelConfig::get_instance().model_impl());
   const bool python_v41_draft = python_model_impl && is_deepseek_v41_dspark;
+  const bool native_v41_draft =
+      Platform::is_musa() && is_deepseek_v41_dspark &&
+      util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+  const bool dedicated_v41_draft = python_v41_draft || native_v41_draft;
+
   const bool is_python_qwen3_dspark =
       is_dspark && args.model_type() == "qwen3" && Platform::is_npu() &&
       ModelConfig::is_python_model_impl(
@@ -343,7 +349,7 @@ void configure_block_diffusion_model(ModelArgs& args,
     // deepseek_v41_dspark and DeepseekV4DSparkForCausalLM (V4 draft) as
     // deepseek_v4_dspark, so the python path routes by checkpoint
     // generation -- only a V4.1 DSpark draft takes the V4.1 class.
-    draft_model_type = python_v41_draft
+    draft_model_type = dedicated_v41_draft
                            ? std::string(util::kDeepseekV41DSparkModelType)
                            : std::string(util::kDeepseekV4DSparkModelType);
   }
@@ -362,7 +368,20 @@ void configure_block_diffusion_model(ModelArgs& args,
   }
 #if defined(USE_NPU) || defined(USE_MUSA)
   if (is_deepseek_v4_dspark) {
-    configure_deepseek_v4_dspark_args(args, options, python_v41_draft);
+    configure_deepseek_v4_dspark_args(args, options, dedicated_v41_draft);
+    if (native_v41_draft) {
+      CHECK_GT(args.dspark_n_routed_experts(), 0);
+      CHECK_GT(args.dspark_num_experts_per_tok(), 0);
+      // The dedicated MUSA drafter implements an entire noncausal query
+      // block (E32), rather than V4's CANN-compatible q1-expanded rows.
+      // Select matching runtime geometry, one request with N query rows.
+      args.dspark_use_native_sas(true);
+      args.n_routed_experts(args.dspark_n_routed_experts());
+      args.num_experts_per_tok(args.dspark_num_experts_per_tok());
+      args.first_k_dense_replace(0);
+      args.moe_layer_freq(1);
+      args.requires_eager_execution(true);
+    }
   }
 #endif
 }

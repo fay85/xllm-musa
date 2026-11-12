@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "  PID STAT     ELAPSED COMMAND\n15854 Ss         03:40 python3 /work/scripts/g02v2_off_v1_client.py\nI20261112 15:10:04.044920 21943 run_basic_pd_gate.py:120] Basic PD question1 answer='4.2' expected=4.2 pass=True\nI20261112 15:10:04.699502 21943 run_basic_pd_gate.py:120] Basic PD question2 answer='56' expected=56 pass=True\nI20261112 15:10:05.758571 22912 run_official_performance.py:157] EvalScope warmup input256 x1\nI20261112 15:10:57.937474 22912 run_official_performance.py:157] EvalScope measured input256 x5\n",
+  "stderr": ""
+}

@@ -1,0 +1,6 @@
+{
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "patch_sha256": "d340d088b5c67d85e84fcf4d0d3099134c69b821a1b4a66c26b3ca4a2ae3def9",
+  "bytes": 161305,
+  "status": "Candidate not promoted; E44 actual PD cache mismatch fix only; further runtime validation required"
+}

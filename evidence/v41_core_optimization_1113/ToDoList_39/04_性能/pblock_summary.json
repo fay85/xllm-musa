@@ -1,0 +1,100 @@
+{
+  "256": {
+    "TTFT_ms": 1136.8308713659644,
+    "TPOT_ms": 76.48288177947204,
+    "E2E_s": 20.639965725131333,
+    "output_tps_from_mean_latency": 12.403121371868027,
+    "QPS_from_mean_latency": 0.04844969285885948,
+    "raw_rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 21.12120203860104,
+        "first_chunk_latency": 1.1544476887211204,
+        "time_per_output_token": 0.07830099745050949
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 20.060401276685297,
+        "first_chunk_latency": 1.1272468054667115,
+        "time_per_output_token": 0.07424766459301406
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 20.939218481071293,
+        "first_chunk_latency": 1.1342070177197456,
+        "time_per_output_token": 0.07766671162098646
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 20.74435745831579,
+        "first_chunk_latency": 1.130918575450778,
+        "time_per_output_token": 0.07691544659947064
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 20.334649370983243,
+        "first_chunk_latency": 1.1373342694714665,
+        "time_per_output_token": 0.07528358863337951
+      }
+    ]
+  },
+  "2048": {
+    "TTFT_ms": 8837.77841348201,
+    "TPOT_ms": 72.65825083954078,
+    "E2E_s": 27.365632377564907,
+    "output_tps_from_mean_latency": 9.354799350804544,
+    "QPS_from_mean_latency": 0.03654218496408025,
+    "raw_rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "latency": 27.22804169356823,
+        "first_chunk_latency": 8.829865340143442,
+        "time_per_output_token": 0.07214971118990113
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "latency": 27.634949713014066,
+        "first_chunk_latency": 8.830681003630161,
+        "time_per_output_token": 0.07374223023287806
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "latency": 26.756461610086262,
+        "first_chunk_latency": 8.812146467156708,
+        "time_per_output_token": 0.0703698633056061
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "latency": 27.124591425061226,
+        "first_chunk_latency": 8.838618409819901,
+        "time_per_output_token": 0.07170969809898559
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "latency": 28.08411744609475,
+        "first_chunk_latency": 8.87758084665984,
+        "time_per_output_token": 0.07531975137033299
+      }
+    ]
+  }
+}

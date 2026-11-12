@@ -33,9 +33,11 @@ enum class DeepseekV41ExpertFormat : int8_t { ORIGINAL_FP4, W4AFP8_MT };
 struct DeepseekV41MoeConfig {
   DeepseekV41ExpertFormat expert_format = DeepseekV41ExpertFormat::ORIGINAL_FP4;
   bool dense = false;
+  bool gate_cache_fp32_weight = false;
   bool original_fp8_activation = true;
   bool decode_ep_custom_allreduce = false;
   bool shared_expert_tp_reduce = false;
+  bool decode_packed_shared_gate_up = false;
   int64_t first_expert = 0;
   int64_t topk = 6;
   int64_t image_token_id = 129264;
@@ -73,7 +75,8 @@ class DeepseekV41Moe final {
                 shared_weight(1),
                 shared_weight(2),
                 config_.limit,
-                config_.original_fp8_activation),
+                config_.original_fp8_activation,
+                config_.decode_packed_shared_gate_up),
         ep_group_(ep_group) {
     if (config_.dense) {
       return;
@@ -111,7 +114,8 @@ class DeepseekV41Moe final {
                                               config_.image_token_id,
                                               config_.topk,
                                               config_.normalize,
-                                              config_.scale);
+                                              config_.scale,
+                                              config_.gate_cache_fp32_weight);
     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
       w4a8_ = std::make_unique<DeepseekV41W4A8Experts>(weights_.expert[0],
                                                        weights_.scale[0],

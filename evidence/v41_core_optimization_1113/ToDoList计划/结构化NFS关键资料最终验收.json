@@ -1,0 +1,2780 @@
+{
+  "verified_count": 353,
+  "missing": [
+    {
+      "path": "ToDoList_1/01_基线/OFF_D_slow_and_fast_requests.json",
+      "bytes": 2132,
+      "sha256": "52537410cb17d61679a0b3136c61d7d241a031f18bd949636e5c4cc142f0078a"
+    },
+    {
+      "path": "ToDoList_1/01_基线/OFF_server_request_records.json",
+      "bytes": 6061,
+      "sha256": "ba88ea18c7aac1944bc4f3b983c1ff3be4996329694dc83b6094562546cb2626"
+    },
+    {
+      "path": "ToDoList_1/01_基线/collect_probe.py",
+      "bytes": 1471,
+      "sha256": "63ef4b20e28f787b6ab6d753e9b9a4ef9eea7ccdb44dc769889e1fe536cec5da"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_dependencies.json",
+      "bytes": 4266,
+      "sha256": "aeb3c248de6106f58b1913ce3e25152f2797b60df188572fa69fc0c2a2c3ecd2"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_dependencies_execution.json",
+      "bytes": 773,
+      "sha256": "bded8b7d4d1ce471bad05dabe6970547984a2c3ef1024431fb6ed11108624a2b"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_identity.json",
+      "bytes": 2266714,
+      "sha256": "1746b591f69d2455a60a06f870ce5a3948211200c9f85a17332e3fb102004ba7"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_identity_execution.json",
+      "bytes": 195,
+      "sha256": "8b8252557b3e865d656c050dce51d5f3b8eb106bbdc7bb13f83d79d61aa5e950"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_normal_stop.json",
+      "bytes": 271,
+      "sha256": "cbda8545ee8a22a482a9d2d682d0cfb3290a7c79ca35e3742e21cc3d8226d397"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_old_exit_verified.json",
+      "bytes": 166,
+      "sha256": "2320ac98d768abb684e1976eccd778c38cbbf710b7235340816c7b1065093592"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_read_only_probe.json",
+      "bytes": 16409,
+      "sha256": "ab4a79b1e6fe108ae4ddfeae14d7a5880c6e90f891954a541c04071889a5475b"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj10_shutdown_observation.json",
+      "bytes": 1491,
+      "sha256": "ecfd4cbe619efe11f261c23d00f8da7a06866394d9a9fa4cd8ce758992450246"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_dependencies.json",
+      "bytes": 4265,
+      "sha256": "6ca6b56ebf75afdcf347befacd83ac46e04ab40b82bc9b25dac8ed3e0110ca57"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_dependencies_execution.json",
+      "bytes": 772,
+      "sha256": "3812b961d07a07a36b5ad4226635b0b0b6ff04e0142d771d9f96a6d1627bb720"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_identity.json",
+      "bytes": 2266398,
+      "sha256": "c2c6e61d3883716712be762e30e7c47978c08eb4383fb126ee3cc682b20ef481"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_identity_execution.json",
+      "bytes": 194,
+      "sha256": "7c1ae5b993bc1eba77e67a8fd4d530b7394ec453c9886a5cb6eec0dd2a2f899b"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_normal_stop.json",
+      "bytes": 270,
+      "sha256": "37373fa07492cd868616ba3c20177f94b4a356d4dafed4deddf8d29f1c37b274"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_old_exit_verified.json",
+      "bytes": 169,
+      "sha256": "b60ef56c54ac8cb1bba2c3f6830901571cac409cc251e6d13578231923717d4a"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_read_only_probe.json",
+      "bytes": 15776,
+      "sha256": "2f1cb5ef30a40f1304edca95eb4d05e1e2babcd90134470edfb01d1db71c3e35"
+    },
+    {
+      "path": "ToDoList_1/01_基线/sj9_shutdown_observation.json",
+      "bytes": 1519,
+      "sha256": "a870451a073167143218411fc6ac32cc71b5e34930b865b76b6e0d15a27e096a"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/authorization_followup_recheck.json",
+      "bytes": 414,
+      "sha256": "80778524e477d81772fe1be9685adebe8152519e4edd49ffd8e6a6c2852f472a"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/gdb_launch_execution.json",
+      "bytes": 805,
+      "sha256": "c651869688961bb0208e411524e7fc24c79226b0aa5be047008fc7508797e2c3"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/gdb_observation.json",
+      "bytes": 14368,
+      "sha256": "036d2281e51fe0adb19d0a0383c11ac4b18baa6698fcbee6a54a2f5cddc2bdb2"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/one_time_sigkill_execution.json",
+      "bytes": 605,
+      "sha256": "5eb6049a39066864203f99c4ae18652d1c6c7878733d469e67017c1f7367a052"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_after_cleanup.json",
+      "bytes": 3568,
+      "sha256": "bebd10a5d098d9d1cc3305b1a3ec3eb8f3d75017fa9ecb0ceba7878a246513c1"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/answers.json",
+      "bytes": 848,
+      "sha256": "142327810f24a64406c7c9eafc5f6eb09f7ace0508ced25b0b95a512cc211931"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/launch.json",
+      "bytes": 203,
+      "sha256": "b3e8649fe879f9f87e6f929741674112182fd1d4b15fe2943a29113b6b953dc8"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "10d2f498116a7ac4f64e91fd5df5017a2ae9ec032197283312d3257f238dedfb"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "2772833334e0d39f1dfe8ede357501e13f48ab58d1453c8a042b5b8174ab8756"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/basic/result.json",
+      "bytes": 1092,
+      "sha256": "6e84d70cc70f4556c537ba96817ec6d82737fca714a477b72c5c9a7222685fca"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/command.json",
+      "bytes": 566,
+      "sha256": "6039c727b8a18029083d7f0fadcb24ac40f1c983e268f6fbcf3eed5bff37e701"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/finished.json",
+      "bytes": 58,
+      "sha256": "70373bf93f5798406a531502d573b7608d903030971bbbb48b9272869244d1c7"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/gate.json",
+      "bytes": 1172,
+      "sha256": "703d1a96e0adcac7a689cc686df81b185aef56b29a6d175e8486e888dc142208"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/active.json",
+      "bytes": 1083,
+      "sha256": "5d0060c79e433e912626a762780cbbf18e422f096daadc1dd81f56cd48135d47"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/basic_gate.json",
+      "bytes": 1172,
+      "sha256": "703d1a96e0adcac7a689cc686df81b185aef56b29a6d175e8486e888dc142208"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/commands.json",
+      "bytes": 4498,
+      "sha256": "ad3e156ce37b84eff25d5c67c5d2fcd1cd4e2b1c0f08fdc7fa435c0ec6fadb38"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/identity.json",
+      "bytes": 531,
+      "sha256": "aacd0cd3050874d55b44c1de43d723a813c27919b50cf4fba5bd2c82f39c2c0f"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2365,
+      "sha256": "4e28dae5203c26ddcf94e56fb4a6aa5eaa6791aad42645e41cf563e4b689dede"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3278,
+      "sha256": "ab05aea62e621a9b7dd494bd50cc747563ebc46c83295eab2de331e12b29ebb9"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 548,
+      "sha256": "9da84d8677f29453dd318192dd1bd8fa8e7908297de188ace180db3ec9bd0601"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2365,
+      "sha256": "d3219cc8dae620e64ac4b9aa2a89852772c356dbfdde0cff60918b5126b6ac1b"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3640,
+      "sha256": "64f63eb092a70954f99141b2fa0b84ffb59e15bd94181611486767212e1365b7"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "0467bb1ac64511bce9e306e22758172a942d94c2c31a4b2c92c242582a07d7f5"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 875,
+      "sha256": "101ef24ff7ad8a38e16e3993bf93467e2258a0b8c4b4d1b19e487bf11d862d99"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 838,
+      "sha256": "1794c86f1a30c4ff3440a502cdd86e0810ad6f5180f796b587c955214fac977f"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2363,
+      "sha256": "f733785f9134ce2b58ed413581bce838776f41d398dfd7edbc4fb6b3957e41d2"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3629,
+      "sha256": "74f623992d567155ca1505db853f476640a9aa1d89fb927abf758c1042cb7a1a"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "f87c611a28ce79f28401829e7cf97205f9fedcfc0865a8150d5416dbae256cee"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "5d613d2ecf7c82796c092e0fec7386ae4d52f551cbd7154a5d25bacee63d9197"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "868e7c0fbfca38676463c53f0a5540de2bae5649cb32c69fafa9c9a1cf56c8cb"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/client/performance/status.json",
+      "bytes": 1584,
+      "sha256": "9b89cd3963ff6650f1d0db9c62d20f8db2a1f279faf3d6c28202cd9b55486277"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/run/control/commands.json",
+      "bytes": 2089,
+      "sha256": "5ede1376b5bf379d8ff7a866cd0941a8e1b7e2e9aa514dabb5ae9d8e30ca27bf"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/run/control/ready.json",
+      "bytes": 69,
+      "sha256": "a0ba346d73184b3e6101b3af2934d2979a9b472094b357e83da11e7acbe527d6"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/run/launch.json",
+      "bytes": 141,
+      "sha256": "307366b16d29660f898057f5147862c8a043009c6cee326c1fc7d0ee02d7b0ee"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/run/resolved_rank0.json",
+      "bytes": 1088,
+      "sha256": "572ee75e1a5f5f1c8659df8a9fda38b28f7267e82f0b0003edd4aa213b2cca29"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/run/role_config.json",
+      "bytes": 34675,
+      "sha256": "ecc357930d80712e9c56bb0da1233edd10007ab937b93437c0761ec424c348d4"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj10_extracted/run/status.json",
+      "bytes": 273,
+      "sha256": "abce65c48a91de7101d5f79adecd3c2ff0a5b0dd3eb6fecc04537ede456271f0"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj9_after_cleanup.json",
+      "bytes": 3579,
+      "sha256": "e0e8dfc8e52afb766cb6c00739c677b48f0311b366103f3aa6d16761824748d6"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj9_extracted/run/launch.json",
+      "bytes": 140,
+      "sha256": "e4902a42c89d5a230aaeea5af1905600ffa79c74cf7eed6bb71b53c89f60165e"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj9_extracted/run/resolved_rank0.json",
+      "bytes": 1087,
+      "sha256": "901851db2fb4ef80b065dbae96a7805269a813b27268b7ea617a8cadc021d06b"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj9_extracted/run/role_config.json",
+      "bytes": 34635,
+      "sha256": "7dea916813d7b83866439c589d51c9701e0c41efeaa0f6a16880aa3f5cfaceb0"
+    },
+    {
+      "path": "ToDoList_1/03_正确性/HOST_failure/sj9_extracted/run/status.json",
+      "bytes": 270,
+      "sha256": "62e4ca6e43372b6ef4e96564c2d7f7b3d128c97ca010f34978e4f5473f47bd54"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/collection.json",
+      "bytes": 723,
+      "sha256": "1faa357a95fd204b269b5d426c2f4a36e9715354d1445b258f26ba61e16bff1c"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/answers.json",
+      "bytes": 848,
+      "sha256": "7d4726809ac507ab024930ce86ac6c97a537737bc4a59c32972343b08afa06f3"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/launch.json",
+      "bytes": 203,
+      "sha256": "190122ae3b002bba22566782f5a4d53bd7a733a75b8c8f5d0aef8f1dca90d929"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "b87c30cc55e22ab01a84d5562ef17ffa68bfa801b4a1dff3e130009c219afc2c"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "b83f6c1286fe64b8cd667164ebf7e479060cff4445812c8a25317ed6bd0ba47a"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/basic/result.json",
+      "bytes": 1092,
+      "sha256": "2ee0d74cd828b2b8d7470c6f4ed1ba7906d2fb07bc3750fb7b6f8c89d93b0dfd"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/command.json",
+      "bytes": 564,
+      "sha256": "8ce7a6fa456db7f9ff952cdf90a19a3d4372b77ce727afaab7332eb2c41959da"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/finished.json",
+      "bytes": 58,
+      "sha256": "b77f1ffd9366f1fc80c7eda8ea72c90756c69cccf2454f520b0eb272521a7ebf"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/gate.json",
+      "bytes": 1172,
+      "sha256": "15a6ed0b00c89447059339048fdad6bf3dfeb9ab50a437973684b76cc6da396e"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/active.json",
+      "bytes": 1087,
+      "sha256": "3b71ab281a5046abddf5f8d55a931b3c3983764d12954d53cbd5302b57ee058d"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/basic_gate.json",
+      "bytes": 1172,
+      "sha256": "15a6ed0b00c89447059339048fdad6bf3dfeb9ab50a437973684b76cc6da396e"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "e3ff1f67ae7196aaa498f9462e8275995c1de865751e3b738da417a6fc04ec90"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/commands.json",
+      "bytes": 4490,
+      "sha256": "260f985e535de1ffb8aae60d90baf610f05537ff201e6dc8b29f9276aa919d61"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/identity.json",
+      "bytes": 531,
+      "sha256": "aacd0cd3050874d55b44c1de43d723a813c27919b50cf4fba5bd2c82f39c2c0f"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2366,
+      "sha256": "0a863dd9f4ed6efb1e847f7472e0af90fd473a8da289cf0aa08e29d4d1ddf596"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3655,
+      "sha256": "edf3bd547e6f67e54939eddc53652645f0bf459bc322f16abe20ff93742192a9"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 668,
+      "sha256": "c330d911ecf481da9f0c4ba4eb2c0ef5c75c841014bada12ca78002384ea66bb"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 876,
+      "sha256": "5fca3ad6fa36b62b22dafb227263ea393c0dc25ccc33ea08cf9de9929a165b52"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 840,
+      "sha256": "273fed5764e1b5049ab9340845b4e2abffea26b939a7c64c6aa61f89bdfc24f4"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2364,
+      "sha256": "4b67a84ae73c816222a76fd0e147c6ae8b5ec33f06fb90b4bc8f491bc2b0343d"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3662,
+      "sha256": "870410a4bfdfb10612e0e5607191afbfd5de8f239248bc01ab01bc2de42dc4b6"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 668,
+      "sha256": "4ab8c64bf22d11b5e1d7af786f8184c88e062467b72ba5d9ac4c7ea609644891"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 834,
+      "sha256": "5ad91102275720c24580660d09a45fa44de4048b573869593a44a446a02b8bf4"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 216,
+      "sha256": "1da7b01002f5e9440b6bb41172c6ab0b62f225a30417205b70aff6ffcf22130b"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2364,
+      "sha256": "8cc67ee43772f3b423073565ba6f7010da681a73525a55db1c43b79754f04318"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3640,
+      "sha256": "db22e36e4a62534d3ba4f56a049c2ef33b53d69c93cff06c4b3db676782a8627"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "5fe5b1c7bfc6ad2a364f58a9fbf93124622fea36e1f0acdf3c39ef40a61d680f"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 873,
+      "sha256": "a875721299e5db8f630023b11b6af67f5b69db4524bc567721531f6752568b86"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 838,
+      "sha256": "edcd2cdc6829a2f6d2856707e0bf0cf6c28886bdd4e68f261c497bb851d0265b"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2362,
+      "sha256": "8863cd51f951aad97157126a2737ef1dd184308cb8b6dcb5cd23fd4278b153a1"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3641,
+      "sha256": "bdf75e0c41ec9bf791ff861de8008b77194233ea6742f13069078fb211b3c661"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "75f6f831e7f45cbbb1e1e34004925fd0efd2e3d2d6e6f3b3f86ce9df52b6504a"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "7a1671cf879a5b67a50b8e94c21954e1dd9f7d6a333254e54fb8b0fce56fc1d9"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "fa87f6c6a5c6547d19259025693a4276581fcf51a0847b261af4557bef42563c"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/performance/status.json",
+      "bytes": 2586,
+      "sha256": "7ff57e7fa5175ddec2186016e3be24ad3120702e15e8f686a62448e010912945"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/raw/summary.json",
+      "bytes": 56073,
+      "sha256": "a47ef2c37cdb8a2d9a7e3600367b6246785b1b908a4ce3c78286db45c7fd043f"
+    },
+    {
+      "path": "ToDoList_1/04_性能/OFF/receipt.json",
+      "bytes": 56638,
+      "sha256": "0866b73ce701627872228bfc6db7839e3c5cab87fec4ea4467d929e25ae54b17"
+    },
+    {
+      "path": "ToDoList_1/04_性能/collect_mode.py",
+      "bytes": 3361,
+      "sha256": "1a5b27b5e0bee312de57efd6b959d7e3838b0021d9832b2b3d4e0fa35deeeca2"
+    },
+    {
+      "path": "ToDoList_1/04_性能/collection.json",
+      "bytes": 2754,
+      "sha256": "a238b61f8181bf6957a95876c01cff9861f68fe3b10bc0a799ee6aebaa3f2087"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_off_client_launch.json",
+      "bytes": 54,
+      "sha256": "a1d19432516f655872d8184bee7ca0767e519435220a79a2a43dada7833b1eef"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/HOST_partial_observation.json",
+      "bytes": 640,
+      "sha256": "9b87932d62e7707dc2a93b67147ebc77c4e3f30f564f55e129ec3658cdac7160"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/active.json",
+      "bytes": 1355,
+      "sha256": "88ecc0c29670dfe42267a6e8c4958c01d6e9ef8e8951da2bb66bad138d6c8f0b"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02_off_v1_exit.json",
+      "bytes": 505,
+      "sha256": "f525ae07fe5aa59e76418e1b742f631dbed0d3357e78714a92a2e46a34dc39f0"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02v2_host_v1_client.py",
+      "bytes": 2265,
+      "sha256": "0bf3e666f053e3c5f994aee16ff68235e12be141a202378c94db3cee4ba8fa03"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02v2_host_v1_observation.json",
+      "bytes": 1852,
+      "sha256": "3c8e29516509974889c16620b997edce8a621edcb179ef6ed37fcce5d975baed"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02v2_off_v1_client.py",
+      "bytes": 2262,
+      "sha256": "677cdc0c27aec2422d3ed8930dd6c13748d44bceb5378b453c8efbe52b37b861"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02v2_off_v1_exit.json",
+      "bytes": 505,
+      "sha256": "f525ae07fe5aa59e76418e1b742f631dbed0d3357e78714a92a2e46a34dc39f0"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02v2_off_v1_observation.json",
+      "bytes": 2964,
+      "sha256": "fd8155e330f441e132015c04a948880ccfd0718e98f87831451c7606e5c68a23"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/g02v2_off_v1_result.json",
+      "bytes": 2964,
+      "sha256": "fd8155e330f441e132015c04a948880ccfd0718e98f87831451c7606e5c68a23"
+    },
+    {
+      "path": "ToDoList_1/04_性能/g02_sequence/remote_live_checkpoint.json",
+      "bytes": 573,
+      "sha256": "e9a1e72139f4cdc0f757e093405f89e92f3b7d119fdb02042636988270bb8ba0"
+    },
+    {
+      "path": "ToDoList_1/04_性能/launch.json",
+      "bytes": 54,
+      "sha256": "a1d19432516f655872d8184bee7ca0767e519435220a79a2a43dada7833b1eef"
+    },
+    {
+      "path": "ToDoList_1/04_性能/live_checkpoint.json",
+      "bytes": 930,
+      "sha256": "bbffc6344852cc8ed13538c879fd3b00104701ae3f6f6b58578ce2666c829c3c"
+    },
+    {
+      "path": "ToDoList_1/04_性能/live_sqlite_checkpoint.json",
+      "bytes": 2369,
+      "sha256": "54b5e8f10904792eacce1a60f212023e6fe78884abb3f5ac7c4c076bb287baad"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/answers.json",
+      "bytes": 850,
+      "sha256": "373a49b0a98bd9956a702b1bc3901884c7ccebf396c7acfc3c6ed9801859b108"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/launch.json",
+      "bytes": 203,
+      "sha256": "4cccd21766cc88ae9fd7444b0edcce0bbb9ab7e4cfc1aabc4f6111ff04b75305"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "0a4375b91aef669072de598fa174263c84f11e159be3c3726b3c4dcec063635d"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "b8db5606859b64b645b3795a8645630323c2a217aa112fa47a41dee50c52ec60"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/basic/result.json",
+      "bytes": 1094,
+      "sha256": "d3eddb4930aa5f68e4911e2799045bc86220afa59548382afa08d9e5ba141a5d"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/command.json",
+      "bytes": 554,
+      "sha256": "0e63613a917d345699ef9af3d1a5aa5ef1eefe49946d234f8733eff0ad9c3a9c"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/finished.json",
+      "bytes": 58,
+      "sha256": "3284505b537c53abfa73ec8bbe46c3c2d6f6e6391c5f07a18d374e7fcc668fc7"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/gate.json",
+      "bytes": 1174,
+      "sha256": "bcef5eb288a2deac47fbbfe69ef2c09600d9324fe64a240c8f88485c42e189f7"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/active.json",
+      "bytes": 1083,
+      "sha256": "e5d7290e2cd09ff34e3ba214a8398bf0b40aef8d715c5d73ee8eca45a4d1d6d1"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/basic_gate.json",
+      "bytes": 1174,
+      "sha256": "bcef5eb288a2deac47fbbfe69ef2c09600d9324fe64a240c8f88485c42e189f7"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "53e00844047c09c9aa66ca96ed59875e838f2b22f5f1f79638071b7512a4c0a7"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/commands.json",
+      "bytes": 4474,
+      "sha256": "f818df1475649b7350748c04bd7dcc72f70e71d2c287cc8fd6d87c0fe6b62143"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/identity.json",
+      "bytes": 531,
+      "sha256": "b4eb6100581456e85a9a559b156810da0bf15419bf6e744979919b5aae8e5bb7"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2364,
+      "sha256": "c6974903e439304bfbe74a8d1c981e54c414905eb419c37ef61e73d2110d290e"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3654,
+      "sha256": "174414dc23bd808a091043119a41ab2ad67142f82052049514d889e588cedaed"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 670,
+      "sha256": "e3c3ab91ef9c2b16f70d70cb44217cc5eb8ee818991519f40a67b5e7a43d10fc"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 876,
+      "sha256": "2fc3bb78e044dacdbf0d7ae8f054556fa5f080c4dfd5572b653ff15218074f25"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 840,
+      "sha256": "735d656ab8254efeb7473b418db3d3f201c580e684e48dfdd5ed38a731257deb"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2362,
+      "sha256": "1498ba19fbbfec1fd947cec3cd37261c83bcd554ff598a2cf2cfc21a4275fb5a"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3640,
+      "sha256": "d2a3544f810057bf9092054335ef7d7c61b8c56a01588de4167fe8bfface1866"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 668,
+      "sha256": "0afa128d5d14dbb31a22c5b53f8fb0e764a8c0a8040fd7b7103c279574af03da"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 832,
+      "sha256": "1decded5ed296ac87a7ad3b82c7fe50e647c639aacddc995a75090754e644c7a"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 216,
+      "sha256": "f2820e62acd3718d37f9b1b6c64b2d2623d516513646fc45619685602809ed29"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2362,
+      "sha256": "91ef8464cf4f39fb5a1d7afe9043a5918383174bd4731efdcc9e314de40197c4"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3633,
+      "sha256": "6d82d6e71ed9510276d0abcb3681fe6a5a0153992e420a3403f83046c0e68f86"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 595,
+      "sha256": "2579dfc86c731970393069f5d93dc96af66c6608377b695ff8c75914eff15c23"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 869,
+      "sha256": "abb1ee12543707b238e937fecc446dc7642a155cb9e8927649fd27bb784b8740"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 837,
+      "sha256": "222bb848118707622819667ce7bd10d3cb6875e1894caf12939946a5a3cc4b0b"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2360,
+      "sha256": "25ebf35366329251a6a64d527c6b83926b9bb136852ed09cc628e0bb96713378"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3641,
+      "sha256": "513b7b119e0ff50ff76fd855d6fac37d75021647f9109dedcf4b37fc23b8db1f"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "402417e86dceb8368d7ebb6a579e8eaf1b298dd3decb40d7b6b053ad215d30c9"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "5cb365d31158ad1d5a89c64b7d0f9b8acf3e84a1f83c03325ddc3ab735533dc1"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "094c521f24462ae1c520915c40a82001eabd9558e793d92f693ab6436f3c72e2"
+    },
+    {
+      "path": "ToDoList_1/04_性能/raw/performance/status.json",
+      "bytes": 2581,
+      "sha256": "f05abb32f6420f255473817cc53388da9d2bee583cdfd8e77458903d58418ce6"
+    },
+    {
+      "path": "ToDoList_1/04_性能/start_baseline.py",
+      "bytes": 5048,
+      "sha256": "072479a8706410cf21a32e50cb7a3333cce49008a3e7768793a19aa20c3ee761"
+    },
+    {
+      "path": "ToDoList_2/01_基线/device_sj10_actual_identity.json",
+      "bytes": 3454,
+      "sha256": "44a03b44d977bfaf2f366e75e53064f88cbcd72816af556ad0ac4fc9a2c19845"
+    },
+    {
+      "path": "ToDoList_2/01_基线/device_sj9_actual_identity.json",
+      "bytes": 3437,
+      "sha256": "5a51672abbab6f5e33b5259cdbab05da61591373e60000046a810edead43cfa0"
+    },
+    {
+      "path": "ToDoList_2/01_基线/host_sj10_actual_identity.json",
+      "bytes": 3108,
+      "sha256": "a18e204c94a1641db224638adb3b700f20d7c20e5134aabb92f20340d4164e91"
+    },
+    {
+      "path": "ToDoList_2/01_基线/host_sj9_actual_identity.json",
+      "bytes": 3091,
+      "sha256": "5b4c170d89ca2ffafa743d34cd0b7330e7f4d6da821b9150f990834f24ca3784"
+    },
+    {
+      "path": "ToDoList_2/01_基线/off_sj10_actual_identity.json",
+      "bytes": 1971,
+      "sha256": "0c9f6f2596266309dd04b191a7c643f9154339ecdb2d16618b238677083ceaef"
+    },
+    {
+      "path": "ToDoList_2/01_基线/off_sj9_actual_identity.json",
+      "bytes": 1970,
+      "sha256": "5a12e80c92089c513c7152d1f61567376653b0664485f1d3f99e39e827b6ed84"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/collection.json",
+      "bytes": 16504,
+      "sha256": "e151e38190039c59e246f0e3989302afaf836b90ccec8d7786d97f2908167232"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/client/finished.json",
+      "bytes": 58,
+      "sha256": "656d11eb3e12742211b9a60cecd5123962a1a9208129af0e19eb3f322955f20a"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/control/commands.json",
+      "bytes": 2098,
+      "sha256": "f2335259da97746bc262c2639d704184f3399f9fc44019fa7f524645077b57af"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/control/ready.json",
+      "bytes": 69,
+      "sha256": "a0ba346d73184b3e6101b3af2934d2979a9b472094b357e83da11e7acbe527d6"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/control/result.json",
+      "bytes": 109,
+      "sha256": "ec295183b5cec62094ed8bdece80211178cc500780f6f5264f5b3a8d10c6bcbf"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/launch.json",
+      "bytes": 144,
+      "sha256": "7ff42b59bf0912025dc8b5b8662f8f266da7bc92dca7630454fc92287794b4ad"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/resolved_rank0.json",
+      "bytes": 1094,
+      "sha256": "0a55f75eb4c1d0de8c0a5ec0538c89f27e0d8382708d013cf1d8426ac5c73e17"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/result.json",
+      "bytes": 148,
+      "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/role_config.json",
+      "bytes": 35211,
+      "sha256": "ee886295241eaf097c8d3ce4384bbd024419040fee8b9ae0d38e4d84ed4f2e38"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj10/status.json",
+      "bytes": 269,
+      "sha256": "ded2aca6a2d55586f901d825bc231a3e51e728f8dc6da9e08a88bc39e8db8126"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj9/launch.json",
+      "bytes": 143,
+      "sha256": "fd68d2c0bc76ec6d8c8f6a50fc89ce52d0a09476bcbd95e18efce53c74cbf9f8"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj9/resolved_rank0.json",
+      "bytes": 1093,
+      "sha256": "642e20d3006ba7812e36323c0d5326e5828d1dc4576c419d3674add9a6a9dbdd"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj9/result.json",
+      "bytes": 153,
+      "sha256": "006332086e979d04b48ef2b03fecbe8d551485470b86f83a22441c896f8b4520"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj9/role_config.json",
+      "bytes": 35171,
+      "sha256": "5e571bf49cfc8c6c1ebc1cad520faed74e9d12323c9f032c69c83b20c85a9c33"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/extracted/run/sj9/status.json",
+      "bytes": 268,
+      "sha256": "ac6c8836507320276caea7fbc57eceb526144f6cdf4025bb66ab43c6c26a90c6"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/sj10_inspection.json",
+      "bytes": 11297,
+      "sha256": "1bb291d91832dc3f26bdae2f26cc598835fff998c71ffab15c9e0c33d133dafe"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/sj10_port_diagnosis.json",
+      "bytes": 637,
+      "sha256": "6717517c082f1f32e2679eff4d5f654db650ea2f3f578d57d0642a1ffe93bc73"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/sj9_inspection.json",
+      "bytes": 11300,
+      "sha256": "24594fa1083f474e5478a93aea798669fe5bf5e276ea56a351c94ea9f89340ec"
+    },
+    {
+      "path": "ToDoList_2/03_正确性/DEVICE_failure/sj9_port_diagnosis.json",
+      "bytes": 594,
+      "sha256": "0cea4a01951ece94e2844ecfcded63c4be19878c492f63fbe92b0750bedcc550"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/collection.json",
+      "bytes": 722,
+      "sha256": "19a44d6072cc324bc18b3429614e31efcd94d886a09bea72d71ddf8eb390c7fc"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/answers.json",
+      "bytes": 848,
+      "sha256": "485dc795ca3037f61c0d45e3b1787f8c7c858d95cf4018c6f95160623d7b5924"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/launch.json",
+      "bytes": 203,
+      "sha256": "505df1586184f4630a94eca1c88d02c8aa5e54e719780853431e53f5aaecb81e"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "d880a5373ceeb78dbd675583ccc94e10022c22c4470bda9dd3547d05fb744d8d"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "f1d683dc3e42354349ca7e80bdad6c01256302e192916812a0be5a120b8cfe3a"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/basic/result.json",
+      "bytes": 1092,
+      "sha256": "9dfc9c7b51243387101f190f7719c0045ace474521686965bc9516e83b9875cd"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/command.json",
+      "bytes": 568,
+      "sha256": "9ddec77db52918390b9ed7ffa799f112873ecb5326dcf01832ba6c00555fbe3b"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/finished.json",
+      "bytes": 58,
+      "sha256": "1c5aa14b33b1344f24e214181e2436ed7334028ea776117509fe46137549544b"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/gate.json",
+      "bytes": 1172,
+      "sha256": "098266422402d1152ee5da2fb9a7e352ce0d4cec450cf5b5a662a3c18eae1542"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/long_gate/http.json",
+      "bytes": 426,
+      "sha256": "21cf45a997977de05745b6a5db3c86c02c284420880bc4e03ddbe03017ecc782"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/long_gate/rendered_token_ids.json",
+      "bytes": 12283,
+      "sha256": "c5039616e18e30f1c003332b609d8993c0971de63328ab548c0081d0f3080360"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/long_gate/request.json",
+      "bytes": 4492,
+      "sha256": "26f4ef218b909505de698a11c73338c9cc22ed57df7729d9019769481676797b"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/long_gate/result.json",
+      "bytes": 429,
+      "sha256": "4d46f8f8a798cdcb6ea87d94649936dbb06ab3144193f1508db55b991a0de5ed"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/active.json",
+      "bytes": 1091,
+      "sha256": "170403aba9431f7a69f097c3976124ead333b5f12f6be2f66db3145406124fa6"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/basic_gate.json",
+      "bytes": 1172,
+      "sha256": "098266422402d1152ee5da2fb9a7e352ce0d4cec450cf5b5a662a3c18eae1542"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "00b493507962dcd83166c794c2e4387f75f6225b9d201eec1bd860205c768b90"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/commands.json",
+      "bytes": 4506,
+      "sha256": "d60e5448c295a5e6c46a83733217d6a1854f7c3d6c6950e3afcdcc85fc7867ba"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/identity.json",
+      "bytes": 531,
+      "sha256": "aacd0cd3050874d55b44c1de43d723a813c27919b50cf4fba5bd2c82f39c2c0f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2368,
+      "sha256": "05b556b7dd01310bb0ee983526f442c35559d34f6d831feccae5e69f3929058b"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3656,
+      "sha256": "26ab588b01070f9770f10b84ec4b3e803bb6c40c1613717ad4f7b3ba30a03354"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 670,
+      "sha256": "d8cf23155283e71159b3929ca5ad9e7948805156618d9c56035f2085667bcd63"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 873,
+      "sha256": "2f6d2ae48098fdeaaf84afae7609e14bc22f89277f307f915992797a36cc5858"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 842,
+      "sha256": "fa1a17aa08a65894999735e0466671440d4227be77e9536d0e0bc31536aeb576"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2366,
+      "sha256": "9d3b2ded0f3b15f92d6785aa5ecdd485e703401610400124d5ae1bceabe107ce"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3663,
+      "sha256": "627bf595069187306a4334393a52f65f6661db714f93442caee9cfb47fcafc82"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 669,
+      "sha256": "9a402391f16c4b947859cb118ddb26ac8eb1172e0d8c4fd25e352eb5c0437c13"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 834,
+      "sha256": "bbd6278ae3354f2b9948908c1dc359189a6a7e9ff88e9d1847f79ce86a657a69"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "6771cae94b98446d06b0292125025dbdf4d512aae0364033f9f238cae9ee118f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2366,
+      "sha256": "ca52b0ed1d164aee20aeb9aa2e932d3767a4aea2a5300155bbb131e1fea4ad8c"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3626,
+      "sha256": "8597ff8c49d1a6139b8998b48df01add7463def8d9ff37e6c59be2dc363ad2e6"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 599,
+      "sha256": "2411c6dc3b0f3104708189da3675d8e8d8a7c9afa21a7853efd949ef348fb66a"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 873,
+      "sha256": "b1fd81aae125efd04d309ea0f7309fba496c87ec70a37e0e159d98687f0a02b2"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 838,
+      "sha256": "52dc82be560456e11858e8663a852d13482fe9b6314a76a5d4d1244996c5373d"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2364,
+      "sha256": "d89762a140d4cdce39d13227540a246201c2281cca47dd741100fd69b749668e"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3640,
+      "sha256": "7ce9f481bf729eac66ab60d7afb33ce6abe91db16468f7d76cc23f9645cb1184"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "9f4f6860ac2c956fc5b0d17087b0626f7ef0695809af22c2518b4515bf85e277"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 824,
+      "sha256": "71be972755df5ae880e8d135a5918171b141e61b8b602e46918e3e360e820d64"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "280a33a0c9aec009e55784ef911a3d22be9403282eaf80c0c78ce0acfd8e8d44"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/raw/performance/status.json",
+      "bytes": 2598,
+      "sha256": "035540033e30a0f580bd26c34a89051f265b91b99cbb779dcf6c11cefe730bf3"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/receipt.json",
+      "bytes": 56665,
+      "sha256": "86a8ec857d2d8bcc34b7e50930b400965b8ebeadf606e6457a0d843c751f82ad"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST/summary.json",
+      "bytes": 56098,
+      "sha256": "2cae9874d7ae89153156b97d1e4aae36534b117c35cefc7deec62e5c34c212f4"
+    },
+    {
+      "path": "ToDoList_2/04_性能/HOST_collector_process.json",
+      "bytes": 722,
+      "sha256": "13656a56f24b1663fa356e92c73a333dadb1e967a24e7c7e6bebaf181cdf5b91"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/collection.json",
+      "bytes": 720,
+      "sha256": "0637b6ed134ed35b32e7d994e29115d907619f24ddb931c3cf7ed81580b9a270"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/answers.json",
+      "bytes": 848,
+      "sha256": "640d74b4af65c1713ff89d1fd687528a3505eb1477ed5ce5140b346ed59ae593"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/launch.json",
+      "bytes": 203,
+      "sha256": "0d8be21fc7688d40381fd4ec04e1bbbe36c9a887ef6bb51076c2017785054a84"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "feb0f0774e96ae05b4de806d64a75e4d14c2322661855bf60518f899b940fd69"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "2fd484a96dcc96185a587f47c3b47c0e6b0cf828d10d9a28c1e8f18cb69a8b73"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/basic/result.json",
+      "bytes": 1092,
+      "sha256": "cabbb1efb9796a683d02a64f063ef60f51eb30d5cd554e27c58e0e398b24b085"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/command.json",
+      "bytes": 566,
+      "sha256": "857a94c1d5784122b2dfc225675dac0ca0e67c89dffd57955c0b0023a5f9721a"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/finished.json",
+      "bytes": 58,
+      "sha256": "d9e03aa48d2d67b767a4d32bf755e9dfd079eac5582ed1e63546c1abef2b8b86"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/gate.json",
+      "bytes": 1172,
+      "sha256": "fa88038ba619ac146f84ecaf78358d8caf55d08784d0cd80e3a28559e776e4c9"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/long_gate/http.json",
+      "bytes": 426,
+      "sha256": "8b097a1a38f7e81c00610f9a765c81e5249e9e8165d8ab2e16de1459262bad41"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/long_gate/rendered_token_ids.json",
+      "bytes": 12283,
+      "sha256": "c5039616e18e30f1c003332b609d8993c0971de63328ab548c0081d0f3080360"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/long_gate/request.json",
+      "bytes": 4492,
+      "sha256": "26f4ef218b909505de698a11c73338c9cc22ed57df7729d9019769481676797b"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/long_gate/result.json",
+      "bytes": 430,
+      "sha256": "fb6148ec81165de9773d3de6bc4feee8403c93b2dae949105c402c519330b5c0"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/active.json",
+      "bytes": 1089,
+      "sha256": "dbbf885f7da2bedaaec7172d5f7b4339a37df68855894ff63e009df5e074528a"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/basic_gate.json",
+      "bytes": 1172,
+      "sha256": "fa88038ba619ac146f84ecaf78358d8caf55d08784d0cd80e3a28559e776e4c9"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "d6334f8acb0f22d63f13fc8b3e394d28650a99181ab69022fed5cfc7fe51ed58"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/commands.json",
+      "bytes": 4498,
+      "sha256": "2d6c27cad3f386dcdb179bd72484a29f56c03bb7bce63e73b9a78400e753a708"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/identity.json",
+      "bytes": 531,
+      "sha256": "aacd0cd3050874d55b44c1de43d723a813c27919b50cf4fba5bd2c82f39c2c0f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2367,
+      "sha256": "ee58dfa28ca0dfb82fc77827b810d599765b32719e5cdb37eb144ba519521ae4"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3656,
+      "sha256": "db3bfc857f5638ef3579878d718c6ddeb43d74c52fa53a66ee8eb6ad9cb0d04f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 669,
+      "sha256": "01569e11c1db98d65503179f33d7e64c6097be30dab7e698d9080f55d75611f4"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 875,
+      "sha256": "13ccf25c33c3f344ba3257dd6bfc8c32a4120ac7e3fdd0964dc907f88049e416"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 840,
+      "sha256": "a1f16cc53dc8fe5c2a170d2fc3f9c98421436d2347ad99bae5bed2718bfce310"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2365,
+      "sha256": "ac0b58ae69f130c7c80c1c0532612eea7cdd1736bebc009b373eb65d15db6110"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3660,
+      "sha256": "84fbda1a0c13642277fdce0e80c42566da83adbda20f06eb790240cd181dd3ea"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 600,
+      "sha256": "258a881f7310bb06d43dda6747299f59d6a91b62c9f2167409e274cb932376c4"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 836,
+      "sha256": "bf236df36274e8d8c2d2303be3f0e137eaf40414fe85793a99423102b9cd09b6"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "f8c6afd15497ac3aed600891184e3939cdb2813c9ba334c46acb50cf01a4c999"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2365,
+      "sha256": "fd460db7c1a365da256ff519a77d4c29b0eb7315e1d98ba7411211b40f7d81e5"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3629,
+      "sha256": "4434772f3a6dd07f556ad495f615126630e522b2dd282782bdeea559f44e154b"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 597,
+      "sha256": "3ad3b4ad0d9debbc5641e46865f23d771494ce74652d50782902fd034661fe09"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 870,
+      "sha256": "555dbed51e91075829155912d919c918bca4690d42aad78465aded753ffecda8"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 838,
+      "sha256": "39d164b2f0bd033f329f74db87e50727f4ed2134b347831a00a072c90089821f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2363,
+      "sha256": "ce6320ecc23f38c68b444e6f326b76be015b8b5a0eb0c837a29b9c2407b7ca67"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3594,
+      "sha256": "565ffaed8fcecc8b5e73c130070a014821f5537e09dc478d6fd00ad11bd2e25f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 594,
+      "sha256": "df9afbfc137bec5bb8d6c8c11566eddf98cbb8061c1c1b29a4324913da019ca0"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "d327afac9ad8f251e62b63a7e7038000263e58cad4691814a86276369a8fa990"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "c79ae0063f8f1d5e9b6f8a5fecf75ca4383c5cfbf9edc460fa46be2ba35ca037"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/raw/performance/status.json",
+      "bytes": 2593,
+      "sha256": "222c9a890af51896c8d7d58490bb9c70a124949bfb90582e0d47797ebf2bcba0"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/receipt.json",
+      "bytes": 56626,
+      "sha256": "6cfb55ab6e982769d89902342475f33dadbd1e5fd388df284a3f36e70be80cdd"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF/summary.json",
+      "bytes": 56061,
+      "sha256": "610bdbd3d40eec1528621a3cded6c3e63e8fb40133f19b22c8b97ec84a1e792a"
+    },
+    {
+      "path": "ToDoList_2/04_性能/OFF_collector_process.json",
+      "bytes": 720,
+      "sha256": "c83849504bb2dc98a4eb0a87c02a5ce73be6cdadf37c38c405618faa1d1afb76"
+    },
+    {
+      "path": "ToDoList_2/04_性能/collect_mode.py",
+      "bytes": 3414,
+      "sha256": "78ac3eb77dbc5ad74e4b25bbdcbb8dd129b7c5eb7d115d5f0163c9c519543d09"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/HOST_sj10_archive.json",
+      "bytes": 295,
+      "sha256": "13e365286e1d55fcb50776ba65898a7c1afaf07fb03cd5c9e9e3b84a2bd1573f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/HOST_sj9_archive.json",
+      "bytes": 293,
+      "sha256": "a70592140335cba76ee577f96f6841ad29db37128925b65acebe0cd36a2f731c"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/OFF_sj10_archive.json",
+      "bytes": 289,
+      "sha256": "de6c844670baddd4d2ac00a45c0566280e8b012f6548b57e3dd6dca730c52706"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/OFF_sj9_archive.json",
+      "bytes": 288,
+      "sha256": "fbbb33bd7221fe4aaffe56d2fc6f095667cf3cabce31a4808d685bb29b8a28b6"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/active.json",
+      "bytes": 223,
+      "sha256": "95d2eb9a1aaef4b087e601ee213653fa57eb2de5c7d2fd35af602c343f4c4181"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_device_v1_client.py",
+      "bytes": 2637,
+      "sha256": "da5646b45f50d5000e5a9278a74d5f695369d595636b5a17df196b958dffc64a"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_device_v1_observation.json",
+      "bytes": 124,
+      "sha256": "ce6a401449fa23ea53c24658dcccfd9131bb2d85d4901407fb4c94dc9bc326c6"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_host_v1_client.py",
+      "bytes": 2631,
+      "sha256": "053aeb15f751a22d1625fba5ccce20d38b86d259c43c78e5365990cff3024d76"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_host_v1_exit.json",
+      "bytes": 505,
+      "sha256": "f525ae07fe5aa59e76418e1b742f631dbed0d3357e78714a92a2e46a34dc39f0"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_host_v1_observation.json",
+      "bytes": 2976,
+      "sha256": "e17e3dd54130d6082a47ce8931e7288f81d8b5420517faa6a15fed5d33b77e36"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_host_v1_result.json",
+      "bytes": 2976,
+      "sha256": "e17e3dd54130d6082a47ce8931e7288f81d8b5420517faa6a15fed5d33b77e36"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_off_v1_client.py",
+      "bytes": 2628,
+      "sha256": "9efcfda679ee9b401a77690d89d00378d5d91f2e6ccc2df1223d6d254b0b2ccd"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_off_v1_exit.json",
+      "bytes": 505,
+      "sha256": "f525ae07fe5aa59e76418e1b742f631dbed0d3357e78714a92a2e46a34dc39f0"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_off_v1_observation.json",
+      "bytes": 2971,
+      "sha256": "b8c40a0eb4b5d410c38f4b4980bda226935ec3032debd7d6883dca4ba6e0cc97"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/g02ram_off_v1_result.json",
+      "bytes": 2971,
+      "sha256": "b8c40a0eb4b5d410c38f4b4980bda226935ec3032debd7d6883dca4ba6e0cc97"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T15_57_15.420674+08_00.json",
+      "bytes": 3340,
+      "sha256": "9e838d0c03f433d28720d9de7cc870615fc41fcb382f9e956aca66e01fe0b5f1"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T15_58_14.895615+08_00.json",
+      "bytes": 3341,
+      "sha256": "4f5166e1d9d62eac540bc57f326074cea8a03bbfe53c73547b79119ea0acb76d"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T15_59_46.411339+08_00.json",
+      "bytes": 3427,
+      "sha256": "8a950922bee5dd224fa74ca4b25f5894f4c287faad9d0c34e9f2bf226d5c1c3f"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_01_14.310457+08_00.json",
+      "bytes": 762,
+      "sha256": "8919b822ffaee0a48bb378016a08974b9623f0554989788b61799d75db5db0e9"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_01_46.597125+08_00.json",
+      "bytes": 762,
+      "sha256": "9263e258dfc6e8bf2248fb86306e1e54af2e838d37670749de7dfc143e8d7115"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_02_51.012432+08_00.json",
+      "bytes": 2529,
+      "sha256": "591485a0a1fab135ac82c56c80cf9a87cce0043057b0e104200b21e87b13f185"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_05_11.117951+08_00.json",
+      "bytes": 2798,
+      "sha256": "3c299bfaf188a4dde2f327d5578513fbc335f8c5c05a9e465b68d7dd57b8c1e6"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_07_22.637784+08_00.json",
+      "bytes": 2998,
+      "sha256": "98b3ae34c0f293bcc77151e80a1c8edc0c708a4a0d86a3f62c46f48ad6a802af"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_09_56.692366+08_00.json",
+      "bytes": 3338,
+      "sha256": "77b9c5fd9b3d3aaf29d4d45bbc0b03fb66cf6e8c5f0525e6bd3304768280fdbf"
+    },
+    {
+      "path": "ToDoList_2/04_性能/g02_sequence/observations/2026-11-12T16_11_27.031433+08_00.json",
+      "bytes": 3339,
+      "sha256": "e3f4f220a6a6116257cda5b5ae92deae5feefd3caeecaf2a57138c012046e3c2"
+    },
+    {
+      "path": "ToDoList_2/05_trace/HOST/sj10/receipt.json",
+      "bytes": 237,
+      "sha256": "6d783e53d39aa732de43636c6cc09aca47f9e8b8904d81f7e82e8d3dc96a0cc6"
+    },
+    {
+      "path": "ToDoList_2/05_trace/HOST/sj9/receipt.json",
+      "bytes": 235,
+      "sha256": "24198a44ef81515eb156b113784e995530f72612765cf0cc1b1877c4087c3b5a"
+    },
+    {
+      "path": "ToDoList_2/05_trace/OFF/sj10/receipt.json",
+      "bytes": 231,
+      "sha256": "b681475a494c51db989e0779881e2ed31cbe4006500325f8373bd44da2c1ccf4"
+    },
+    {
+      "path": "ToDoList_2/05_trace/OFF/sj9/receipt.json",
+      "bytes": 230,
+      "sha256": "a6e95b9ef02f4ce960124495dca5f4cc683f78b849f0394c2ee6fdd702d78e53"
+    },
+    {
+      "path": "ToDoList_3/01_基线/device_sj10_actual_identity.json",
+      "bytes": 3447,
+      "sha256": "144d2ba75bf895f3360f27002cb41e83496cb8be1c932896e78b09917ef4a9f7"
+    },
+    {
+      "path": "ToDoList_3/01_基线/device_sj9_actual_identity.json",
+      "bytes": 3430,
+      "sha256": "0d2dc295e23e47be0a0dc72c3404c0831c20b30e79fec83a94a45b71f1f3a249"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/collection.json",
+      "bytes": 718,
+      "sha256": "1ace6b9eae46f08b5b51f8b9a75bfac8b98ff5da93c408f7a1a81fdaead09a6b"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/answers.json",
+      "bytes": 848,
+      "sha256": "28e234b269cbc130f61883262090592ceac03644842279295c9e07f962411751"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/launch.json",
+      "bytes": 203,
+      "sha256": "7c480cae8f8fa27577660cd3dae539322f7435ec0f344e51de177c275e882b31"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "ad57282ff88025c8a709f44aac991aee45a923ffcaba47c102374b5c243882fb"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "12f78c2fec71eac121d62fbb79cd0462b99c2924a6311faf548798f0c3bac55f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/basic/result.json",
+      "bytes": 1092,
+      "sha256": "71a1fd45df8ecd911f29b176d42018ef98ba31cd53b12f50c3775fa9deec6ea4"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/command.json",
+      "bytes": 574,
+      "sha256": "9421092099f7bfd74145eaa60f2a889ce9571c326cf526dd3999c0ea6300d703"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/finished.json",
+      "bytes": 58,
+      "sha256": "b63c50e5a8e5f8484cb9e28d9ae3b85a79d7e33a46146050a9b8510d0d515a3f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/gate.json",
+      "bytes": 1172,
+      "sha256": "ae936b8a8a47df82a68eee473d784ed6737d0c4b4412bc3b2958746688cef655"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/long_gate/http.json",
+      "bytes": 426,
+      "sha256": "952f8465c0b75b93429da9ab76468f94259ebac5c24e71df861d533bea4072f0"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/long_gate/rendered_token_ids.json",
+      "bytes": 12283,
+      "sha256": "c5039616e18e30f1c003332b609d8993c0971de63328ab548c0081d0f3080360"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/long_gate/request.json",
+      "bytes": 4492,
+      "sha256": "26f4ef218b909505de698a11c73338c9cc22ed57df7729d9019769481676797b"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/long_gate/result.json",
+      "bytes": 429,
+      "sha256": "eb1c27098c85f710e87d92af028d0ce2a943fa0e56408a42b51c6be059ee21c2"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/active.json",
+      "bytes": 1097,
+      "sha256": "12f94887587fe5a2ea3c478cfde02b5048cbd2b073a0009a4c4c71798328ec26"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/basic_gate.json",
+      "bytes": 1172,
+      "sha256": "ae936b8a8a47df82a68eee473d784ed6737d0c4b4412bc3b2958746688cef655"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "db19c381e9eacc06523be90a4866de4f332a0422d0625da68a548afccc747288"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/commands.json",
+      "bytes": 4530,
+      "sha256": "4dc6ecd22a943e8c618cc1c6c828176ae44d5490d0c88ecf9318f5278be7362f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/identity.json",
+      "bytes": 531,
+      "sha256": "aacd0cd3050874d55b44c1de43d723a813c27919b50cf4fba5bd2c82f39c2c0f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2371,
+      "sha256": "3680e37efd2d527bda6cfe386a2adcdc156fbb208a35f05920c5a80395e16c6f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3650,
+      "sha256": "084759ea64aca543430f3ac5d2b4090e982cb5d12ace3ad4643be76a4f86fc35"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 670,
+      "sha256": "5aca17ae122ba4dc68f8cfd95ea66df3cab845f3cca70e7535b006b04b2277c0"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 877,
+      "sha256": "e8c5c4bbc857580aadb29aadebf04b481b27f97a02b42f4f72cc36e9314e7d75"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 841,
+      "sha256": "b770d22c6b4adfeb77c59b4e60a65a37fec194304a17e7e427d52f2e75eb696f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2369,
+      "sha256": "d4f2e8d5607e5936f0ab4577539f0281379a35fec374b535b57e9c549cb322e5"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3663,
+      "sha256": "9db6043288158412576a0d69b32207715495fa98894f8bbd5d0bc57f615ad255"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 668,
+      "sha256": "bf2784dda7967182a8b3a87e6824f162477faea0e38ababcab9ac8ad6e700adc"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 832,
+      "sha256": "7c55440a646805124d4a8ab42708db0a135d7458d79fc71ca52a06741bfbdf7d"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "b6cb1098a055eb14efef9425ad797d51868915830a9cdbcb20357be3875ce0b9"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2369,
+      "sha256": "16a8ffef22146940df72ba07c470e5d65ab85c7ee6bc5dfd708b67645cdc44ac"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3634,
+      "sha256": "10ffac47034b865e74f70f66c66f7627301689c87e21fdb818a44cc9b8f1be51"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 599,
+      "sha256": "371b34270632389f5f8ad15bce5667a12840bcdc85c17b134e8c8987b4d9e563"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 876,
+      "sha256": "5308a73ede78f57a08fd0a5970d5fee507705ddea65f33359b8978029198b026"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 838,
+      "sha256": "6e4fae86bad12fd2f83c53ba1a61a2bb519d15aa2073c059886ad63bb6c86abe"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2367,
+      "sha256": "d3a0ac22f8056d0e8470263ebe40702704fe8ab727cf9b81caf6ecccddc8673c"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3638,
+      "sha256": "4461ae913c62d3adda49124e6f891d141d52c0f20ebfd49361eca010fd462b25"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "226689ffd46b1e46338d9f0dccf5e4bdcd5cb983c987fcd37c2064a5fd585b98"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "5590e497ee775db8d4fd7b682cafcec0065e0788b69f880bbf1ff0796173d183"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "9abc0715a46cb2b00cf448cd6d2533d087f57f892e739f75da185bf1ee1621d7"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/raw/performance/status.json",
+      "bytes": 2611,
+      "sha256": "1ab233844ff12161f32d5660a580a337b46ccbb3a6024f82167a286fa41187fc"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/receipt.json",
+      "bytes": 56585,
+      "sha256": "49ea55d45ae9d785e7fd373c9bef8a4d85711fce8f62d43161a73245360727f5"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE/summary.json",
+      "bytes": 56014,
+      "sha256": "402da426b33efa1cf62b4dd3f6dd561a6966dd9b0f09674db58c0a2286ff3711"
+    },
+    {
+      "path": "ToDoList_3/04_性能/DEVICE_collector_process.json",
+      "bytes": 718,
+      "sha256": "0ff6428d7a4f7b2e2e99f7f369a1a52712f8af5e18540ed0ecc9182b0861352b"
+    },
+    {
+      "path": "ToDoList_3/04_性能/collect_mode.py",
+      "bytes": 3415,
+      "sha256": "21c6538c59f4b03493521c64caafc3693ed412b087ca5e77ce54752d2a8ac19e"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/DEVICE_sj10_archive.json",
+      "bytes": 296,
+      "sha256": "f3479e862d95242ad07b9a2825440ee0f82f09ac574d84dddbba5cbd4370b945"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/DEVICE_sj9_archive.json",
+      "bytes": 294,
+      "sha256": "b3894971bd26944eab1811935eb922d2e2028fbae6cf5a158ca3e24ce7f73b89"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/active.json",
+      "bytes": 124,
+      "sha256": "8ead945be800e27747a79116c4c7bc4171ef3d863c168408c84000512c075b53"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/client_result.json",
+      "bytes": 2989,
+      "sha256": "d8a99dba32a111abeff139117361969d25bc00105f460e66a1b395767bd5c79f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/g02safe_device_v1_client.py",
+      "bytes": 2640,
+      "sha256": "5a368bf87880f696bde7e84013db96f20dbd26f10cc140787e357ac95b7d67e7"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/g02safe_device_v1_observation.json",
+      "bytes": 2989,
+      "sha256": "d8a99dba32a111abeff139117361969d25bc00105f460e66a1b395767bd5c79f"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/normal_exit.json",
+      "bytes": 505,
+      "sha256": "f525ae07fe5aa59e76418e1b742f631dbed0d3357e78714a92a2e46a34dc39f0"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_19_27.955123+08_00.json",
+      "bytes": 765,
+      "sha256": "8b3268e50deebce3532457f368af41b3ca4cc44ce387729f67116633c6f545bf"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_20_18.706007+08_00.json",
+      "bytes": 2464,
+      "sha256": "8a822740e92e4c4753c82d62ae7329b1fa58a13d4f1c9442ad3fb14327e8151d"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_21_15.750858+08_00.json",
+      "bytes": 2733,
+      "sha256": "429e5f8564ff2dbaed7a073a477d5d792c3de7004031f355714e54d93cca17da"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_22_34.198850+08_00.json",
+      "bytes": 2802,
+      "sha256": "a189174168aab2e55a6adc26807821b7c2a08e30bc886143c97b6a408e4c4dbb"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_24_54.506625+08_00.json",
+      "bytes": 3002,
+      "sha256": "aad10044d067ef98b3b2fe34a22a5ba81d3245e87eb39393b8df50fbb201be75"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_26_56.616894+08_00.json",
+      "bytes": 3342,
+      "sha256": "c5f7351bcdf1d2092993d2d686aff79aad1d5c256d37df8962ee1e265f160861"
+    },
+    {
+      "path": "ToDoList_3/04_性能/g02_sequence/observations/2026-11-12T16_30_20.523242+08_00.json",
+      "bytes": 3415,
+      "sha256": "eaa622341b93197f77cd98a0bdbc1a18e33a90ec23f2a9dac56dc64b3d5667d8"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/binary_manifest.json",
+      "bytes": 984,
+      "sha256": "c4a4aed98c54787acfb40e376c3b70b0e97911636feaba0867f201114f1d88ee"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/answers.json",
+      "bytes": 847,
+      "sha256": "cd4fe7ca31cf2dd94f8b7337246987f324db02fe708259575aa79e3b84da88ab"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/launch.json",
+      "bytes": 203,
+      "sha256": "c42540c0a356b87bb0e22d50f2b317f6aa916cc19f00e4c60e33109c98c23ca2"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "885333c9406377ef4eff1ef8bc5c8b9b1c10533a9699b98ba4c2d11652c4b4ee"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "f5432dea607ed97b2a9a762689b661169d0e611bb1f76eeb21b35a6c054c3c38"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/basic/result.json",
+      "bytes": 1091,
+      "sha256": "b80bbdd0622393dfd097576fe797dc6cc8d5c9f085dd1bf5325137bf9721976a"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/command.json",
+      "bytes": 569,
+      "sha256": "894e9d0d8ed74746321515f753d97d728787f6d866e7fdd22934e177de9f87d8"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/failure_diagnostics/gdb_commands.json",
+      "bytes": 758,
+      "sha256": "6494806eb036718f0abef7f37a09760cb29cea1aa5ff96f210523e27211ebebc"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/finished.json",
+      "bytes": 58,
+      "sha256": "19f94277043cc3a34b8f3f8897d9c2365be361e238cd2551aeff9d662a43970f"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/gate.json",
+      "bytes": 1171,
+      "sha256": "0406c0e826313f95ce87694f7e7a76583d4cc9de8a73c838695798c5fc2a22dc"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/long_gate/http.json",
+      "bytes": 426,
+      "sha256": "3f55e4ed4f82d6b817b495adb539a0b6488a9df9a89bcf4b82d9c4bdb8906194"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/long_gate/rendered_token_ids.json",
+      "bytes": 12283,
+      "sha256": "c5039616e18e30f1c003332b609d8993c0971de63328ab548c0081d0f3080360"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/long_gate/request.json",
+      "bytes": 4492,
+      "sha256": "26f4ef218b909505de698a11c73338c9cc22ed57df7729d9019769481676797b"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/long_gate/result.json",
+      "bytes": 430,
+      "sha256": "4c96f6c899bd0f1ec77cae558281b968c4d0e313992246d3204580fe75de7b94"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/active.json",
+      "bytes": 1089,
+      "sha256": "fd0a77b077b0ebe248702081ed8968f0879e1b3f0f56f45eb428e9b25cbbf55d"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/basic_gate.json",
+      "bytes": 1171,
+      "sha256": "0406c0e826313f95ce87694f7e7a76583d4cc9de8a73c838695798c5fc2a22dc"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/commands.json",
+      "bytes": 4498,
+      "sha256": "837cf440277b76f74e0a4015d17f6aff8d0ad8da4a0d03bfd0c9c879334e67af"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/identity.json",
+      "bytes": 531,
+      "sha256": "9fcbbbcdc3b02f687642302b9076893060cba46b54524e7aeaf43f368f727e9e"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2367,
+      "sha256": "e02494eae40cb47c9bf713d4965aa91295d286c88a669362b88c3f2456e932ee"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3278,
+      "sha256": "ab05aea62e621a9b7dd494bd50cc747563ebc46c83295eab2de331e12b29ebb9"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 549,
+      "sha256": "353cab6d13fca2e859f98f1ece810e15f605d401fa1196d49e5dc36ae704d45c"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2365,
+      "sha256": "726fe34017d0d7b88ebcdb00c30e57f7dc4b15edf5cd986a37398f02926f55c4"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3663,
+      "sha256": "7c4f5b3a534deb50cd5a38cb40e7af2a3403ac49e98222b55620a5613697b888"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "fe2cba79244ad334d40d51adb1db11849469e93e68e4c76fe0ef35b8e0239ef7"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "bbd0c61601fc5518e88f76b196a5fe6193cc90cc9a33a91d3ccb41abed66ee52"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "e9a7bdec7edc4185b144706538adfda59bfd0a2dfa92990dd437c58020153baa"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2365,
+      "sha256": "151fa36c01c0ad68b53d90f9546418ee0c74da9771716396048fad780c06f8c9"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3627,
+      "sha256": "d8048d60a1aa125f79e9fa5eed3fba51fb150dbb1bb18dd05d2fdd07211f5443"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 599,
+      "sha256": "8bb2fd8c6b2808f487ee9b61d4c8782f73d18ecdbf6edde8d96accf15c61b385"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 873,
+      "sha256": "e7fdb3dc0ec21b96e56e33a305bb52a253ff6c3e75371baaad5ebd57988d7222"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 837,
+      "sha256": "65f1676393dc36b03945c2b7a6ae5b6d100c90b21391e003ad35d029a1d48dbd"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2363,
+      "sha256": "35abbed01941867affe203e08d8997fe866bf3c5a0acce84d44a7a472a7df8c6"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3606,
+      "sha256": "345f41fea9590e66767b0ad170487d92c4e56213da5d5be1f12bbd1a5a6eb64b"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 596,
+      "sha256": "3a5acb1032d92d6d41fcc3b4033b5a59ef0c8c886c33e044eef2ca13c1c1a2e0"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "db275c83b7417fb795e924b36b0259d0c6ce3329aa39262cbf721f4eac9812c3"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 214,
+      "sha256": "833a7cdbb270089b8105437d59cf213490c5cfafe298ed966a4c9cb5e76ab143"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/performance/status.json",
+      "bytes": 2020,
+      "sha256": "f3d12d4e339e18d982d7e612bef84c9cc8b3c4a5b86b3e2a02cee1831c65a3f9"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/output/prefix_logprobs.json",
+      "bytes": 24002,
+      "sha256": "d26fde2e5db7729d296d9f7c6ba53f3c1815d2daf07638e4f6577a503b483c6f"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj10/launch.json",
+      "bytes": 141,
+      "sha256": "2ffe2e27e069e07d7012ec145ec0d01ab6dcf682506d5d8b3cdb0bce319571db"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj10/resolved_rank0.json",
+      "bytes": 1088,
+      "sha256": "a20b21cbc0645a3d6ee8a3e43cd6afe2e2f0852595dcf0e31f73d5737870b156"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj10/result.json",
+      "bytes": 148,
+      "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj10/role_config.json",
+      "bytes": 33509,
+      "sha256": "c2fddb55ae9572da8a2bb6c600060cc9b19828015c0da5b4073520f9f071ef0a"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj10/status.json",
+      "bytes": 264,
+      "sha256": "4d16c61ef8d52af937655c2cf0e8dd45b0003d766d4638dad10b4e6e1d0774b0"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj9/launch.json",
+      "bytes": 140,
+      "sha256": "8ebc8e856b9eaf38c216a4ca674d22cd338e58b99f42fa55183254e2d54ca27c"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj9/resolved_rank0.json",
+      "bytes": 1087,
+      "sha256": "8cd4bc109075e88e0edc8e553ba57d83b8f3845c83ddb30e0eb979d87fe52319"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj9/role_config.json",
+      "bytes": 33485,
+      "sha256": "3620499bb3d055e26aff254c8956287d3b2366dd8b731c58a86ea68bef60de2a"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_custom_v1_failed_raw/roles/sj9/status.json",
+      "bytes": 270,
+      "sha256": "e2060da7046d5b2b0d821ba915c96ff2746da5b03740b57da43e783b181366a2"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/binary_manifest.json",
+      "bytes": 984,
+      "sha256": "c4a4aed98c54787acfb40e376c3b70b0e97911636feaba0867f201114f1d88ee"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/answers.json",
+      "bytes": 849,
+      "sha256": "f634b6de98d47e381c7623906a5659c0a73fe9753537dbcf6a51662cd952d907"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/launch.json",
+      "bytes": 203,
+      "sha256": "379aa77310937bb1aa7fd29a14b55f254f0f40289a4bf1a5d16597e5a6c0dff3"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "e8dbaaae28b0cbe97710f42a86441aae7d4cb9c054b3eeb5588e74e1ff415635"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "ce59cb1a9ae9aa8caa7561d54538f0e5cf3e1d6cb7a2492c3ae1ffc2b1936f38"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/basic/result.json",
+      "bytes": 1093,
+      "sha256": "b57471d772a1f007f21a64e3535e2f30be58bce51bd3144d119d646ea688d757"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/command.json",
+      "bytes": 563,
+      "sha256": "7217a9f8d2c289ecdcb4e46b1e5232d5520f924107df3fce23a6357932a71867"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/finished.json",
+      "bytes": 58,
+      "sha256": "78f8a4b755c75b85c4a8876c5f2eda9aa1c3c1206907130b727015f70afdcbc2"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/gate.json",
+      "bytes": 1173,
+      "sha256": "f662a67055d2dbb1b27afb6762e50f68afb5978f6424bd531ca5f1d1bfebd7a4"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/long_gate/http.json",
+      "bytes": 426,
+      "sha256": "7a3b536b4abeb423e9d556b2ed1c88db7f02bef36c7175c18d4f596b666e5b56"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/long_gate/rendered_token_ids.json",
+      "bytes": 12283,
+      "sha256": "c5039616e18e30f1c003332b609d8993c0971de63328ab548c0081d0f3080360"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/long_gate/request.json",
+      "bytes": 4492,
+      "sha256": "26f4ef218b909505de698a11c73338c9cc22ed57df7729d9019769481676797b"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/long_gate/result.json",
+      "bytes": 429,
+      "sha256": "c4428b04b9e2821c7396b8bebd2ff69ad136aeca463b2931a1906e437f2ccd9e"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/active.json",
+      "bytes": 1083,
+      "sha256": "106f5984d1a0ae956fa73fcbb9c6e2bafa9588bd6f01cc0e181b8c3ff88fb8b0"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/basic_gate.json",
+      "bytes": 1173,
+      "sha256": "f662a67055d2dbb1b27afb6762e50f68afb5978f6424bd531ca5f1d1bfebd7a4"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "ef1ccfdab94ac9cf1d965c256bcd5f0743239cea7c3074c6ce053adee55a096b"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/commands.json",
+      "bytes": 4474,
+      "sha256": "cc4b4c796b1141abde13ef9cb4f03d8cb87c2d18e79d03197346606c447c8eba"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/identity.json",
+      "bytes": 531,
+      "sha256": "9fcbbbcdc3b02f687642302b9076893060cba46b54524e7aeaf43f368f727e9e"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2364,
+      "sha256": "88998bd34ee9b13fd5821009c304bab34191cd2d11362b0f15d2444e78bafd3e"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3649,
+      "sha256": "3d4999aa483f3bdec993f9ff76854b2c772e16464c675e20643cac53a3ab4382"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 669,
+      "sha256": "dfba56c348583164b74c3c3fe578f689245454645b465ba965700b0601025ef1"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 872,
+      "sha256": "4cb182b32e9ed9bf07641544e83495feef84d4657993723e384fce1a5b605280"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 842,
+      "sha256": "b5febad87172f683dc408f97676999b00c744e3e12d33b9771f9cad28a956218"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2362,
+      "sha256": "f346fb8b197a4f3503448e5055940045367c3f3cc990c60dd808bceecdcaed4f"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3650,
+      "sha256": "3e1b7e2e96154159316094d8bdc2cba32f72f32cfa204abcae1dd49ea15f7843"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 599,
+      "sha256": "cadfa6c08e1b7e20def5d6ba50c5b2c4e4304f57ebe06f0bd6b52515f4c6b517"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "fff8350a5b6ac8bb325533e9b5debea039c4b11c39a844aad43e23e66559765f"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 216,
+      "sha256": "7af9049f538ea184e093b3baf9a26ea1d721d28c03a63bfc51383461ae62b87b"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2362,
+      "sha256": "31e98ccc1d55a48075162c98423860e19fae16ec3afa5726ceff31f6265ea6be"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3637,
+      "sha256": "420f0a59072979c42411d6e1ac3d9f82e0800bc67d40b6fff116a1928c67cd5b"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 598,
+      "sha256": "2d5a91693abee70a78bc1a8e6ea485ac14bbcd9c20afd5a12e5acccb55dc3ad6"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 872,
+      "sha256": "3b4aa4211f47e3b54155cf6c5ca1f87422a1ede4f1fa9f2193873bbbfb6d8341"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 838,
+      "sha256": "025a9feeebb77c065efa41ac50edf18747a8ed79abbe11b99e7ead3bda112262"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2360,
+      "sha256": "1690a3c53e72bb4496b4f248da9efdfc99699a344d26931e03419f27b7feeeda"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3628,
+      "sha256": "478c937eee06cdf84aa6928d21dccda11423c9bc0402a9da1f0d00eeac8adcf0"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 597,
+      "sha256": "f119705ebcecba94d2c1e7104f60c34c23ce7005ac67c24d341af9e6f688ae13"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "015649e2e9d5ae72cbfac77412dff03cf66436600ac18bd743cf6456eeea731d"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "5c3b911a8a78c1388bcb2b2e71656770ce30d782e11e91cdca55265d81b14130"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/performance/status.json",
+      "bytes": 2583,
+      "sha256": "31c219bedf6f994a1d15d6015ecdce8160c9c53b1a4363710539812f312d536c"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/prefix_logprobs.json",
+      "bytes": 23965,
+      "sha256": "e9d094b011e31e64e56393b1df82920e42012e9b34b63ac5bfc8b8cc4848fc3f"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace/archive_manifest.json",
+      "bytes": 7258,
+      "sha256": "043d6d0e9367e21b751018bde076c7359cab68c141ead21107ed93466c19a30d"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace/launch.json",
+      "bytes": 829,
+      "sha256": "675ec16458fd432ed772cbc234145da11e94118e81107222816e595f3ec5abb8"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace/request.json",
+      "bytes": 980,
+      "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace/result.json",
+      "bytes": 445,
+      "sha256": "fe2e8c28c296745afd568cd751d49dad33758aa32800c85273caea07604811dc"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace/start_profile.json",
+      "bytes": 302,
+      "sha256": "067e7c36c3637df59e47c39c92f8a6203383b7477b8f5d15ab84dd9a3c48bff7"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace/stop_profile.json",
+      "bytes": 299,
+      "sha256": "6057b60f1e75fbc8c7e2b74e332d14404e4e300b66e8d3ad590d075756c827ee"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/output/trace_command.json",
+      "bytes": 556,
+      "sha256": "12c19e6bde476e288d5a5cd35129b87ee667ae40dfcad0735923ac8b22bacc63"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj10/launch.json",
+      "bytes": 138,
+      "sha256": "da82cf702c7caba048f9eafbcadee99e026487dfa269e232ffeb3dddac179aba"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj10/resolved_rank0.json",
+      "bytes": 1082,
+      "sha256": "ce03193309f62f7f0328c9495ee2d3c823e0461319c46f7e460b9c6a323c0425"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj10/result.json",
+      "bytes": 148,
+      "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj10/role_config.json",
+      "bytes": 33404,
+      "sha256": "5bcbe73a1579abca6a1d2be795e7c4940fb8ee2a5e91181a8a553debc4f039a2"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj10/status.json",
+      "bytes": 269,
+      "sha256": "3ab40cfd2d385ed5eb1a76ff8b4e4143af847aefe00983d0a4205733d2fa23d6"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj9/launch.json",
+      "bytes": 137,
+      "sha256": "182619e9a3792d5d0a6d73d162955b7135b34f27f330e381438e6bc9f0239aeb"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj9/resolved_rank0.json",
+      "bytes": 1081,
+      "sha256": "6266d1be74a8f89b2809ecb927afad3bc19f380e80056f6b7db23af5aaee3d15"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj9/result.json",
+      "bytes": 151,
+      "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj9/role_config.json",
+      "bytes": 33380,
+      "sha256": "88e34702310ae71cd1f8038eaaef2bbd26b4a8d0972b0cad9160ee7293b6fb3c"
+    },
+    {
+      "path": "ToDoList_4/04_性能/t01_off_v1_raw/roles/sj9/status.json",
+      "bytes": 254,
+      "sha256": "624422fad56cd1fe796d29db85775acd3b61f3200fb4a2fd84f6e7d34d3bb983"
+    },
+    {
+      "path": "ToDoList_4/05_trace/audit_t01_trace.py",
+      "bytes": 11477,
+      "sha256": "11dc8c1b8656e3711f768400a1949da24a413c5786cc546c217524c0b20a74fa"
+    },
+    {
+      "path": "ToDoList_4/05_trace/off/selected_raw/sj10/crop_receipt.json",
+      "bytes": 923,
+      "sha256": "44dfe47673a2334508cde1001568b9b1237081ca40694c7b49dbbf2c818bd374"
+    },
+    {
+      "path": "ToDoList_4/05_trace/off/selected_raw/sj9/crop_receipt.json",
+      "bytes": 912,
+      "sha256": "f12e5dda3e7d611f2c9328cf8c64e64cfa21729ffa9b3501071ed284802f5060"
+    },
+    {
+      "path": "ToDoList_5/02_代码/promoted_source_verification.json",
+      "bytes": 692,
+      "sha256": "321a954d82e24bceb2f0184b89c9af1dcdbd6962561bb9502b3d29da6d5361c7"
+    },
+    {
+      "path": "ToDoList_5/03_正确性/common_prefix_logprob_comparison.json",
+      "bytes": 4903,
+      "sha256": "eee79083bf83216538ab5440bb06164d36c8a7129b6e90b022a489d85baaa52d"
+    },
+    {
+      "path": "ToDoList_5/04_性能/ab_summary.json",
+      "bytes": 1681628,
+      "sha256": "7fd919c50883e9411fc43abb702a429574d86cf9f47525ec578d0604c40c0482"
+    },
+    {
+      "path": "ToDoList_5/04_性能/latest_remote_observation.json",
+      "bytes": 5558,
+      "sha256": "cb9c8696bba1a45422a4a5cdd3f6eb42fca63af86bdccc5ebf491a01b6427e86"
+    },
+    {
+      "path": "ToDoList_5/04_性能/sequence_donly_v1/active.json",
+      "bytes": 118,
+      "sha256": "139b39c05fab0082608829ee884f4bc08ff33df59002d02dacfc55f95a8c20ca"
+    },
+    {
+      "path": "ToDoList_5/04_性能/sequence_donly_v1/t01_donly_custom_v1_exit.json",
+      "bytes": 505,
+      "sha256": "f525ae07fe5aa59e76418e1b742f631dbed0d3357e78714a92a2e46a34dc39f0"
+    },
+    {
+      "path": "ToDoList_5/04_性能/sequence_donly_v1/t01_donly_custom_v1_observation.json",
+      "bytes": 3481,
+      "sha256": "4afdc63d9cff554ade8df757bb7293b7dcc2de5be446a8c64be9d2263126945f"
+    },
+    {
+      "path": "ToDoList_5/04_性能/sequence_donly_v1/t01_donly_custom_v1_result.json",
+      "bytes": 3481,
+      "sha256": "4afdc63d9cff554ade8df757bb7293b7dcc2de5be446a8c64be9d2263126945f"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/binary_manifest.json",
+      "bytes": 984,
+      "sha256": "c4a4aed98c54787acfb40e376c3b70b0e97911636feaba0867f201114f1d88ee"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/answers.json",
+      "bytes": 848,
+      "sha256": "5c4a0c0b8adbc28016b3fdee50a3daecbdb150130f318488c38f1fc4748269ab"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/launch.json",
+      "bytes": 203,
+      "sha256": "56a06ece73ffb6888c53d6f7e4bf7ee28a263960010eda9c0e87afb738633d0d"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/question1_http.json",
+      "bytes": 426,
+      "sha256": "a6de5037699c63bb6d13b15e7ffb3bab8f1184408b0a00d02f2adf94e82ae4ad"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/question1_request.json",
+      "bytes": 394,
+      "sha256": "13e24921c88cfff382d9be669226e53969e6df554301c05f71112dbafddc4911"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/question2_http.json",
+      "bytes": 426,
+      "sha256": "3720085723d94f5c99f3a3e9be51b90e81b37af69c2fb009da8b7b56d167a4e8"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/question2_request.json",
+      "bytes": 391,
+      "sha256": "6c61669283f3f2c3c6876e6b08f81562a32a96044fd4355cb5e636cf8dd3d497"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/basic/result.json",
+      "bytes": 1092,
+      "sha256": "41a47e65fab6575b5fa08102bda3429533cdc17937b7377b527a1156d8832076"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/command.json",
+      "bytes": 581,
+      "sha256": "0b6a3d92614b77fbe2071a5b059ce01bad1b1b670130b711163a2fac3e269648"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/finished.json",
+      "bytes": 58,
+      "sha256": "0c9cfabf5b603a67fe11a1326a41282172699c13bdf3091a6076cadbafdbe918"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/gate.json",
+      "bytes": 1172,
+      "sha256": "890312ab7d929c28d20fb4291956230092d0db4b8d3131e839af33305781b158"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/long_gate/http.json",
+      "bytes": 426,
+      "sha256": "f9f2c6a3b980cecf274c74c6e694b9837ded446c4ac0b16a88aa6151bffe0ee6"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/long_gate/rendered_token_ids.json",
+      "bytes": 12283,
+      "sha256": "c5039616e18e30f1c003332b609d8993c0971de63328ab548c0081d0f3080360"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/long_gate/request.json",
+      "bytes": 4492,
+      "sha256": "26f4ef218b909505de698a11c73338c9cc22ed57df7729d9019769481676797b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/long_gate/result.json",
+      "bytes": 429,
+      "sha256": "73ebf03cdb709916d941804072859f0f36eb954339548c681332f7370d7bbc4a"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/active.json",
+      "bytes": 1101,
+      "sha256": "2feb94271c8b275ca468270f384d05456dc669acd483c5c564597fecb31b27e8"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/basic_gate.json",
+      "bytes": 1172,
+      "sha256": "890312ab7d929c28d20fb4291956230092d0db4b8d3131e839af33305781b158"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/client_runs_finished.json",
+      "bytes": 222,
+      "sha256": "d65c12f0e15b838190989bac4899c1ef99a43cbfb7f1de07dec90a6c2663573e"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/commands.json",
+      "bytes": 4546,
+      "sha256": "bd033363244d0b53c0ad420d01d8b191bd86fa320652ed6d35a3ec433a74b8e5"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/identity.json",
+      "bytes": 531,
+      "sha256": "9fcbbbcdc3b02f687642302b9076893060cba46b54524e7aeaf43f368f727e9e"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2373,
+      "sha256": "5825038a5c0e0cc3fc38eac4c3932edf5b2ff18c5026221ecdfd2e0741f33065"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3658,
+      "sha256": "daaaee00814812bef3344df5e764af72b774388bffc99eb92f7d41d0dfd7fd46"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 670,
+      "sha256": "c38ff5481353776a67004a054f0901059caac4a9a2bd3f91f5d0958f4382f6a9"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 873,
+      "sha256": "27fedb284bb98c0d93d34478f6905abd078753fab98bb7c054968d5228941b6b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 841,
+      "sha256": "a15d919c17ae5ded17c18c9ee8b0cca80f7040745bb2ef514e4a99b95ebdd34a"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2371,
+      "sha256": "11f0ea42195f29fd83af46a795d9fe03bcc19b5d4919728e7af6bb5984f8884d"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3639,
+      "sha256": "7621d152b5a3f60ef1c24ad5fc30002b8f22721439b8c56cb319ef642f343e8b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 599,
+      "sha256": "bfa88211ece9891c9637e91dde3ae1c807dcf702be058f9a96f6920e06869d37"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 834,
+      "sha256": "b68e13e01505186d10d52d7370d28e68b0430e9f1c54c11b66cabd7b544fbfd1"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input2048_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 216,
+      "sha256": "f64268cbb0b2fd1e902c0ae9962b551a767dcdb594ce2f5febcbca4e335b1eed"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2371,
+      "sha256": "84ed4ed632122e5fd1c36f15c2c1d124be94d06a611dda9b1043fd6a4f252ff4"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3633,
+      "sha256": "24a0e28a278acac171e94c7e80515088dc1dc91432ad43abd2169f750251ba31"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 599,
+      "sha256": "31297d692db415d87fab260c3e2c1c5cef64eb067f9626eaf012f7c74406d985"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 870,
+      "sha256": "50106c902e90bc7d002a7731f6d42ca9d3379261de3fa294101094aaa5a4a57b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 837,
+      "sha256": "7113137ab368c051175e69bd1d5b1cefd570d177c60f5c7b196c0b0c7ce7a970"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2369,
+      "sha256": "0641c4acbae05b649991cc75a55405aa96dc0e2fa7829ab48bdcc1caa71b225b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3641,
+      "sha256": "104b7fd38675f60602e57d16eb6247f85738e31d2976b517e8c5f2d85770f17e"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 597,
+      "sha256": "e659222ba86beb0a580fd4bb9b7b1e1e23ba5c19fa6b19ef8de47560f9b811bb"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "7173db112f092d6029cffdee68441c66fefbf0dafd883613fcee6791a46f081f"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/input256_output256/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "d18b8ec192f04a71bd1683dcab937df4a35f7efa1d3174b3bd734b68a3d92d56"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/performance/status.json",
+      "bytes": 2617,
+      "sha256": "9e67bc9b58f39f793bf0521f08d6d9f6dd6710f24e4c7f36bc7425b0e33ae56d"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/prefix_logprobs.json",
+      "bytes": 24002,
+      "sha256": "a14abb9c726e9e5a59aa89d1fafad004e7de77b344e97f57679580c4842d134b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace/archive_manifest.json",
+      "bytes": 7530,
+      "sha256": "672a9be5581be5938ecf4b5f835fa87274dfa531fe5b5645dbb4169b0911e5f3"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace/launch.json",
+      "bytes": 829,
+      "sha256": "1cd3aef7b4c828a0bc08a023734a29f0f2b2dd4dd62fee1938985957decff077"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace/request.json",
+      "bytes": 980,
+      "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace/result.json",
+      "bytes": 445,
+      "sha256": "fe2e8c28c296745afd568cd751d49dad33758aa32800c85273caea07604811dc"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace/start_profile.json",
+      "bytes": 301,
+      "sha256": "ac37edbbe28c703ffb5355488919fc0f0a9b1c21ceb6a1f8114cbcd6d41fa712"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace/stop_profile.json",
+      "bytes": 299,
+      "sha256": "a88a4dd051092bae2f6a902601d391a45812acd27dd8632e8f3044b1341ea90e"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/output/trace_command.json",
+      "bytes": 583,
+      "sha256": "3cb8243f08ed324326ec31fd8d6bcc5e5f5f3429a60da962d7f4331483c706a4"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj10/launch.json",
+      "bytes": 147,
+      "sha256": "84e035eb859c1afa2149ef1ccd7c0e54bbf16e01bcd4e59da3ce66e8409d38da"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj10/resolved_rank0.json",
+      "bytes": 1100,
+      "sha256": "7db75d1e6dc273f84104bd688ca13338f6c4c66b97111509c55646b8171c696e"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj10/result.json",
+      "bytes": 148,
+      "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj10/role_config.json",
+      "bytes": 33713,
+      "sha256": "28599cb8922da47289e4d3fa612a8b6551f96dc02dccfa4e7881b668fc9e60fa"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj10/status.json",
+      "bytes": 254,
+      "sha256": "28ddc59a7373a84211398eb996ebd81bfcb4835d378f580c998ca7bd6fc3351b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj9/launch.json",
+      "bytes": 146,
+      "sha256": "43956ee246d857b2ca2bdbf161ac06c3e68f067230da25e9d71ea88a6d2fcebf"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj9/resolved_rank0.json",
+      "bytes": 1099,
+      "sha256": "c6b6f439b273481eb0ee4863f4e831531e14d17e741c53ee4eeffe01ef4daa1d"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj9/result.json",
+      "bytes": 151,
+      "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj9/role_config.json",
+      "bytes": 33689,
+      "sha256": "2c41efe6cced7ccb7a70ae86a8e5bc8aaeb9309989cd52eec98dc54bad10b1c6"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw/roles/sj9/status.json",
+      "bytes": 246,
+      "sha256": "41a11a6e9b03f6790789197a6be21672448c0c013c13aabe0df6576e04874e8b"
+    },
+    {
+      "path": "ToDoList_5/04_性能/t01_donly_custom_v1_raw.tar.receipt.json",
+      "bytes": 465,
+      "sha256": "4a9eba7791e7c0dac075ee588f787d432e4999bd569b7ba154d97886d07f3f91"
+    },
+    {
+      "path": "ToDoList_5/05_trace/TP_EP实际调用与API对比.json",
+      "bytes": 21118,
+      "sha256": "c44873c1fae4d2082467a3f1e16e0cf12fa058135ca91793120cad82f1d7d7fb"
+    },
+    {
+      "path": "ToDoList_5/05_trace/postprocess_donly.py",
+      "bytes": 3888,
+      "sha256": "9341aa916f880a724d337a12a63082c3e480d0647d97b95154bac418f5bdd617"
+    },
+    {
+      "path": "ToDoList_5/05_trace/postprocess_donly_v2.py",
+      "bytes": 3580,
+      "sha256": "276ebffb69ab55a2474a20052d42f611c9c2572a1b58dabe1e3f7852646f6057"
+    },
+    {
+      "path": "ToDoList_5/05_trace/postprocess_launch.json",
+      "bytes": 246,
+      "sha256": "22314fae4f69f3ed698c3d62b55c9ee4e6b7bc52ff72776611beb7a6ee82f168"
+    },
+    {
+      "path": "ToDoList_5/05_trace/postprocess_v2_launch.json",
+      "bytes": 267,
+      "sha256": "90e745454c7567f8fcd78c557422cce116f85611aee84b1c1bd0b748d402eb27"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/analysis_receipt.json",
+      "bytes": 783,
+      "sha256": "463a8f88bf15adb7a835350d0a10efe46da9c19d99a59fb47f1559d23d2d3989"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/custom/native_offsets.json",
+      "bytes": 431,
+      "sha256": "57e059ed4e7183d8d0cca585f31f52d3c05fab3a7d4ab20d84f4f11aae1f3916"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/custom/selected_raw/sj10/crop_receipt.json",
+      "bytes": 933,
+      "sha256": "4baa4462915ad3a169a3d0450997b0f60d67bd0faa7e8d2504f1e00f5659d0d4"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/custom/selected_raw/sj9/crop_receipt.json",
+      "bytes": 917,
+      "sha256": "159e94187508f914d793fa0162d877ceab36413cc54295eb4a71bbf2d08228a7"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/custom/sj9_semantic_records.json",
+      "bytes": 1240698,
+      "sha256": "5806e2a2b09facb2a2b1fc0e556a330200dff894bba1b06284930b280f513209"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/resolved_symbols.json",
+      "bytes": 10630,
+      "sha256": "70fe018420517159ae772f7de3782896b7623c0b4db8ad1387d0f3bb8123ef75"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed/sj10_last_step_actual.receipt.json",
+      "bytes": 1149,
+      "sha256": "55f465de2eb8f071319d19d582d549bf6d927c7e33e01259a46d381561b2c90c"
+    },
+    {
+      "path": "ToDoList_5/05_trace/processed_trace_bundle_v2.receipt.json",
+      "bytes": 1060,
+      "sha256": "d34ff948c93ed08732233382413b1de50b0443c6a5d5f52b73d2a39bdfd34dc6"
+    },
+    {
+      "path": "ToDoList_5/05_trace/同请求TTFT与服务端计时核对.json",
+      "bytes": 30389,
+      "sha256": "c28426ab385f0502a04bfd486c1eb42ba51daf03f9397203dc565505c356107d"
+    },
+    {
+      "path": "ToDoList_5/05_trace/完整抓取窗口通信路径对比.json",
+      "bytes": 3236,
+      "sha256": "0ac0af012c07ee95cb8edb05c342d82ba7100fe3fff2ad4601d9bed54d090a63"
+    },
+    {
+      "path": "ToDoList_5/README.md",
+      "bytes": 343,
+      "sha256": "690cd967d5651071106dbc6afc519e646c8d3bc863570f8f9c3464506173d3a3"
+    }
+  ],
+  "status": "PASS_ALL_CRITICAL_BASELINE_REPORTS_RESULTS_AND_RAW_SMALL_ARCHIVES_SHA_VERIFIED_OR_COMPLETED",
+  "at": "2026-11-13T03:47:01.545220+08:00",
+  "checked": 907,
+  "copied_count": 554,
+  "physical_share": "10.121.34.78:/data/nfs_shared"
+}

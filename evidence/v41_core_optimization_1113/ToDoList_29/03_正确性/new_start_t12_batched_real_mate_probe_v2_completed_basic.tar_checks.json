@@ -1,0 +1,188 @@
+{
+  "status": "PASS_NATIVE_BATCHED_MATE_ATTENTION_AND_REQUEST_ISOLATION",
+  "cases": [
+    {
+      "batch": 2,
+      "ratio": 0,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 0,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 1,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 1,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 2,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 2,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 0,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 0,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 1,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 1,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 2,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 2,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    }
+  ],
+  "metadata_contract_cases": 9,
+  "scope": "B2/B4 native C++ batch projections plus actual MATE sparse attention and AOT indexer, with accepted fused SWA/cache-read flags. Request-specific state isolation and 9 metadata contract checks. Full-model native adapter and formal serving remain pending.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

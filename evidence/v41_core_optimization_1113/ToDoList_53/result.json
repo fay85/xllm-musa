@@ -1,0 +1,61 @@
+{
+  "status": "ACCEPTED_CONCURRENCY_SPECIFIC_SPEED_OPTIMIZATION",
+  "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": -16.516077457115596,
+      "TPOT_ms_change_percent": -15.720616919270814,
+      "E2E_s_change_percent": -15.732867879460455,
+      "output_tps_change_percent": 16.40831877158826
+    },
+    "2048": {
+      "TTFT_ms_change_percent": -1.302476127511465,
+      "TPOT_ms_change_percent": -11.150004179288553,
+      "E2E_s_change_percent": -10.59230624353521,
+      "output_tps_change_percent": 10.74043655797059
+    }
+  },
+  "valid_after_formal_requests": 10,
+  "after_normal_rank_exits": 16,
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e53_trace_analysis_v1.tar.zst",
+    "bytes": 8793049,
+    "sha256": "0c54679f2ca0989c5e71a7e806e4476c87beb162a41791f87191161fce97917f",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_mhc_small_batch/bin/xllm",
+      "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_queued_c2_final_v3_raw_trace.tar.zst",
+          "bytes": 619502524,
+          "sha256": "5893515425b5c6b98cac5d25423adbc8ed6f3952ab94f5a0eeffd86d2b9d1256"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_batched_c2_final_v1_raw_trace.tar.zst",
+          "bytes": 452895609,
+          "sha256": "c58039a9fa2ee3bb4179c48b32bc1b3d70ff9dbe36d4e3bab84a871f645bf605"
+        }
+      },
+      "symbols": 63,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794510901.555654
+    }
+  },
+  "scope": "Only same-C request mix; not C1 speed or SOL",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "concurrency": 2,
+  "full_native_counts": {
+    "before_step_histogram": {
+      "1": 62
+    },
+    "after_step_histogram": {
+      "1": 2,
+      "2": 30
+    },
+    "actual_D_rows": 62,
+    "mm_before": 21700,
+    "mm_after": 12010
+  },
+  "decision": "Measured serving improvement for this C, conditional on fixed profile"
+}

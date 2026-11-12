@@ -1,0 +1,78 @@
+{
+  "client": {
+    "at": "2026-11-13T02:13:57.772791+08:00",
+    "exit_code": 1
+  },
+  "roles": {
+    "sj9": {
+      "status": {
+        "at": "2026-11-13T02:14:55.084678+08:00",
+        "pids": [
+          63030,
+          63031,
+          63032,
+          63033,
+          63034,
+          63035,
+          63036,
+          63037
+        ],
+        "exit_codes": [
+          -6,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "stopping": true
+      },
+      "result": null,
+      "term_age_s": 46.91348099708557
+    },
+    "sj10": {
+      "status": {
+        "at": "2026-11-13T02:14:16.874001+08:00",
+        "pids": [
+          48201,
+          48202,
+          48203,
+          48204,
+          48205,
+          48206,
+          48207,
+          48208
+        ],
+        "exit_codes": [
+          0,
+          0,
+          null,
+          null,
+          0,
+          0,
+          0,
+          0
+        ],
+        "stopping": true
+      },
+      "result": {
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "control_exit": 0,
+        "stopping": true,
+        "automatic_kill": false
+      },
+      "term_age_s": 46.050087451934814
+    }
+  }
+}

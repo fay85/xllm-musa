@@ -1,0 +1,758 @@
+{
+  "before": [
+    {
+      "rank": 0,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61640,
+        "tid": 63490,
+        "ts": 3617991856399.94,
+        "dur": 513331.273,
+        "args": {
+          "External id": 207407,
+          "Record function id": 208557,
+          "finished": true,
+          "Ev Idx": 207406
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.453602999999998,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 698.832,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 4.8169970000000015,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 627.1190000000003,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 1,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61641,
+        "tid": 63620,
+        "ts": 3617991856305.283,
+        "dur": 507346.451,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.35907,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 696.7459999999995,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 4.792445,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 633.2460000000007,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61642,
+        "tid": 63548,
+        "ts": 3617991856490.559,
+        "dur": 505396.969,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.827636000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 750.918,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.035545,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 660.2470000000005,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61643,
+        "tid": 63515,
+        "ts": 3617991856370.576,
+        "dur": 500617.719,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.7002939999999995,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 683.5640000000001,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.290594,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 612.9269999999996,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61644,
+        "tid": 63544,
+        "ts": 3617991856220.589,
+        "dur": 565789.781,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.968701,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 843.2960000000007,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.560797000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 777.0370000000001,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61645,
+        "tid": 63494,
+        "ts": 3617991856545.743,
+        "dur": 502498.914,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.706126,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 640.7100000000003,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 4.880495,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 538.2860000000003,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61646,
+        "tid": 63536,
+        "ts": 3617991856254.057,
+        "dur": 507325.852,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.335925000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 663.8990000000001,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 4.8031060000000005,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 566.7460000000002,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61647,
+        "tid": 63540,
+        "ts": 3617991856330.804,
+        "dur": 512669.669,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.492241000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 781.5669999999999,
+          "linked_kernel_count": 0
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.153943,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 670.8200000000002,
+          "linked_kernel_count": 0
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "rank": 0,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12584,
+        "tid": 14436,
+        "ts": 3620194223806.751,
+        "dur": 500912.235,
+        "args": {
+          "External id": 207407,
+          "Record function id": 208557,
+          "finished": true,
+          "Ev Idx": 207406
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.391845,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 556.3829999999999,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.558985000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 706.9970000000004,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12590,
+        "tid": 14469,
+        "ts": 3620194223751.335,
+        "dur": 534808.918,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.660788,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 694.0799999999998,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.849894000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 679.7150000000005,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12589,
+        "tid": 14448,
+        "ts": 3620194223709.802,
+        "dur": 515632.677,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.522126,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 683.0099999999996,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 6.028175,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 750.711,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12587,
+        "tid": 14524,
+        "ts": 3620194223905.004,
+        "dur": 507574.705,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.4050789999999997,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 578.8729999999996,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.450824000000001,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 607.4039999999998,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12588,
+        "tid": 14528,
+        "ts": 3620194223623.926,
+        "dur": 507043.367,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.4412439999999997,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 576.2729999999996,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.665213999999999,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 657.7450000000005,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12591,
+        "tid": 14549,
+        "ts": 3620194223688.102,
+        "dur": 506338.05,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.506961,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 600.308,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.721707,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 724.7739999999999,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12586,
+        "tid": 14444,
+        "ts": 3620194223812.022,
+        "dur": 503102.222,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.440279,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 633.1339999999993,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.692493999999999,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 740.712,
+          "linked_kernel_count": 0
+        }
+      ]
+    },
+    {
+      "rank": 1,
+      "step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 12585,
+        "tid": 14440,
+        "ts": 3620194223779.347,
+        "dur": 509871.544,
+        "args": {
+          "External id": 207383,
+          "Record function id": 207586,
+          "finished": true,
+          "Ev Idx": 207382
+        }
+      },
+      "groups": [
+        {
+          "group": "Attention TP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 2.4420289999999993,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 80,
+            "musaMemcpyAsync": 40,
+            "musaLaunchKernel": 40
+          },
+          "actual_runtime_API_sum_us": 623.1899999999999,
+          "linked_kernel_count": 40
+        },
+        {
+          "group": "MoE EP",
+          "scope_count": 40,
+          "CPU_scope_sum_ms": 5.713539,
+          "actual_API_counts": {
+            "musaStreamIsCapturing": 40,
+            "musaEventRecord": 200,
+            "musaStreamWaitEvent": 80,
+            "musaStreamGetCaptureInfo_v2": 40,
+            "musaGetFuncBySymbol": 40
+          },
+          "actual_runtime_API_sum_us": 761.5670000000008,
+          "linked_kernel_count": 0
+        }
+      ]
+    }
+  ]
+}

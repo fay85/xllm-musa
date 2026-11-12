@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_batched_c2_mhc_v1_small_evidence.tar.gz",
+  "bytes": 505185,
+  "sha256": "a35ccafcf999ecd5ec4541ec863760027c3ca57a209905d132470a168a76525c",
+  "run": "t12_batched_c2_mhc_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

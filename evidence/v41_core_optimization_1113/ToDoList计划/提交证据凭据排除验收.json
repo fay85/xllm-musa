@@ -1,0 +1,7 @@
+{
+  "status": "PASS_NO_KNOWN_SSH_VPN_PASSWORDS_PRIVATE_KEYS_HF_GITHUB_TOKEN_PATTERNS",
+  "scanned_items": 4845,
+  "uncompressed_bytes_scanned": 432952594,
+  "matching_paths_only": [],
+  "no_secret_values_logged": true
+}

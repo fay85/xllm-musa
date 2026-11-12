@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 22701, \"checks\": [\"new_start_t14_state_replay_probe_v1\", \"new_start_t14_entering_capture_probe_v1\"]}\n",
+  "stderr": ""
+}

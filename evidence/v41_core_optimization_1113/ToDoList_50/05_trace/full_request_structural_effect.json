@@ -1,0 +1,266 @@
+{
+  "status": "ALL8_D_NATIVE_TARGET30_ROWS_VS7_SAME8_DELIVERED_OUTPUT_TOKENS",
+  "modes": {
+    "off": [
+      {
+        "rank": 0,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24787,
+        "matched_CPU_record_ids": 157627
+      },
+      {
+        "rank": 1,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      },
+      {
+        "rank": 2,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      },
+      {
+        "rank": 3,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      },
+      {
+        "rank": 4,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      },
+      {
+        "rank": 5,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      },
+      {
+        "rank": 6,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      },
+      {
+        "rank": 7,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 7,
+        "actual_step_names": [
+          "V41/step/q=1/kv=257",
+          "V41/step/q=1/kv=258",
+          "V41/step/q=1/kv=259",
+          "V41/step/q=1/kv=260",
+          "V41/step/q=1/kv=261",
+          "V41/step/q=1/kv=262",
+          "V41/step/q=1/kv=263"
+        ],
+        "all_GPU_kernels": 24773,
+        "matched_CPU_record_ids": 157599
+      }
+    ],
+    "after": [
+      {
+        "rank": 0,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 1,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 2,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 3,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 4,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 5,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 6,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      },
+      {
+        "rank": 7,
+        "target_forward_calls_in_capture": 7,
+        "target_forward_query_rows_total": 30,
+        "actual_step_names": [
+          "V41/step/q=6/kv=262",
+          "V41/step/q=6/kv=263",
+          "V41/step/q=1/kv=257",
+          "V41/step/q=6/kv=267",
+          "V41/step/q=4/kv=261",
+          "V41/step/q=6/kv=268",
+          "V41/step/q=1/kv=262"
+        ],
+        "all_GPU_kernels": 50941,
+        "matched_CPU_record_ids": 268672
+      }
+    ]
+  },
+  "interpretation": "After four q6 target verification forwards plus replay q1+q4+q1; before seven q1. Exact mathematical source interpretation checked; durations overlap (replay nested), never sum inclusive durations. CPU/GPU traces are profiler-on; use official profiler-off TPOT for speed. Native draft computation and cache snapshots are additional, not included in target row count."
+}

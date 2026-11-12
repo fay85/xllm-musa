@@ -1,0 +1,38 @@
+{
+  "clientlog": "Traceback (most recent call last):\n  File \"/work/scripts/t12_queued_c2_final_v1_client.py\", line 14, in <module>\n    if any((r/'runs/t12_queued_c2_final_v1'/h/'result.json').exists() for h in ['sj9','sj10']):raise RuntimeError('new service terminal during readiness')\nRuntimeError: new service terminal during readiness\n",
+  "error": "RuntimeError('new service terminal during readiness')",
+  "roles": {
+    "sj9": {
+      "files": [
+        "role_config.json",
+        "supervisor.pid",
+        "launch.json",
+        "supervisor.log",
+        "result.json",
+        "process_resource_limits.json"
+      ],
+      "logs": {
+        "status.json": null,
+        "result.json": "{\n  \"exit_codes\": [],\n  \"control_exit\": null,\n  \"stopping\": true,\n  \"automatic_kill\": false\n}",
+        "supervisor.log": "Traceback (most recent call last):\n  File \"/work/scripts/pd_rank_supervisor_nocore_v1.py\", line 9, in <module>\n    runpy.run_path('/work/scripts/pd_rank_supervisor.py',run_name='__main__')\n  File \"/usr/lib/python3.10/runpy.py\", line 289, in run_path\n    return _run_module_code(code, init_globals, run_name,\n  File \"/usr/lib/python3.10/runpy.py\", line 96, in _run_module_code\n    _run_code(code, mod_globals, init_globals,\n  File \"/usr/lib/python3.10/runpy.py\", line 86, in _run_code\n    exec(code, run_globals)\n  File \"/work/scripts/pd_rank_supervisor.py\", line 32, in <module>\n    else:raise RuntimeError('No ready control plane; no GPU ranks started')\nRuntimeError: No ready control plane; no GPU ranks started\n",
+        "rank0.log": null,
+        "launch.json": "[\"docker\", \"exec\", \"-d\", \"-w\", \"/work/repos/xllm-musa\", \"xiaopang1112_v41_prefill_sj9\", \"bash\", \"/work/scripts/launch_t12_queued_c2_final_v1_sj9.sh\"]"
+      }
+    },
+    "sj10": {
+      "files": [
+        "supervisor.pid",
+        "launch.json",
+        "supervisor.log",
+        "process_resource_limits.json"
+      ],
+      "logs": {
+        "status.json": null,
+        "result.json": null,
+        "supervisor.log": "Traceback (most recent call last):\n  File \"/work/scripts/pd_rank_supervisor_nocore_v1.py\", line 9, in <module>\n    runpy.run_path('/work/scripts/pd_rank_supervisor.py',run_name='__main__')\n  File \"/usr/lib/python3.10/runpy.py\", line 289, in run_path\n    return _run_module_code(code, init_globals, run_name,\n  File \"/usr/lib/python3.10/runpy.py\", line 96, in _run_module_code\n    _run_code(code, mod_globals, init_globals,\n  File \"/usr/lib/python3.10/runpy.py\", line 86, in _run_code\n    exec(code, run_globals)\n  File \"/work/scripts/pd_rank_supervisor.py\", line 6, in <module>\n    cfg=json.loads(args.config.read_text());out=args.output;out.mkdir(parents=True,exist_ok=True)\n  File \"/usr/lib/python3.10/pathlib.py\", line 1134, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n  File \"/usr/lib/python3.10/pathlib.py\", line 1119, in open\n    return self._accessor.open(self, mode, buffering, encoding, errors,\nFileNotFoundError: [Errno 2] No such file or directory: '/work/artifacts/prepared/t12_queued_c2_final_v1/sj10.json'\n",
+        "rank0.log": null,
+        "launch.json": "[\"docker\", \"exec\", \"-d\", \"-w\", \"/work/repos/xllm-musa\", \"xiaopang1112_v41_decode_sj10\", \"bash\", \"/work/scripts/launch_t12_queued_c2_final_v1_sj10.sh\"]"
+      }
+    }
+  }
+}

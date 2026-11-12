@@ -1,0 +1,265 @@
+{
+  "status": "PASS_REAL_RATIO2_ATTENTION_ROLLBACK_AND_ACCEPTED_REPLAY",
+  "cases": [
+    {
+      "nondefault": false,
+      "previous": 127,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 1,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 272128,
+      "recurrent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 127,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 3,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 272128,
+      "recurrent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 127,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 6,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 272128,
+      "recurrent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 128,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 1,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        2
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 128,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 3,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        2
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 128,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 6,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        2
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 257,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 1,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        3
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 257,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 3,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        3
+      ]
+    },
+    {
+      "nondefault": false,
+      "previous": 257,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 6,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        3
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 127,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 1,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 272128,
+      "recurrent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 127,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 3,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 272128,
+      "recurrent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 127,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 6,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 272128,
+      "recurrent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 128,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 1,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        2
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 128,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 3,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        2
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 128,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 6,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        2
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 257,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 1,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        3
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 257,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 3,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        3
+      ]
+    },
+    {
+      "nondefault": true,
+      "previous": 257,
+      "speculative_inputs": 6,
+      "accepted_input_prefix": 6,
+      "next_real_token_checked": true,
+      "after_rollback_all_cache_bytes_exact": true,
+      "after_replay_all_cache_bytes_exact": true,
+      "next_output_exact": true,
+      "checkpoint_bytes": 141056,
+      "recurrent_pages": [
+        3
+      ]
+    }
+  ],
+  "scope": "Native actual MATE sparse/AOT indexer and pair compressor, page-scoped SWA/key/index/recurrent snapshot. Engram and scheduler/native target integration remain separate. No whole-model precision gate.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

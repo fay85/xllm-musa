@@ -1,0 +1,1624 @@
+{
+  "off": {
+    "step_cpu_ms": 352.82657,
+    "cpu_count": 24105,
+    "gpu_count": 3897,
+    "cpu_op_counts": {
+      "V41/step/q=1/kv=263": 1,
+      "aten::to": 1176,
+      "aten::_to_copy": 755,
+      "aten::empty_strided": 1473,
+      "aten::copy_": 997,
+      "aten::_copy_from": 797,
+      "aten::expand_as": 797,
+      "aten::expand": 1039,
+      "aten::as_strided": 2481,
+      "aten::squeeze": 48,
+      "V41/Engram/hash_lookup": 1,
+      "aten::empty": 2801,
+      "aten::reshape": 1160,
+      "aten::view": 1622,
+      "aten::narrow": 245,
+      "aten::slice": 245,
+      "aten::select": 37,
+      "record_param_comms": 6,
+      "mccl:_all_gather_base": 3,
+      "aten::unbind": 3,
+      "aten::cat": 82,
+      "aten::alias": 610,
+      "aten::flatten": 322,
+      "aten::embedding": 1,
+      "aten::index_select": 139,
+      "aten::unsqueeze": 411,
+      "aten::contiguous": 1,
+      "aten::clone": 242,
+      "aten::empty_like": 1106,
+      "aten::zeros": 41,
+      "aten::zero_": 45,
+      "aten::fill_": 89,
+      "V41/layer/0": 1,
+      "V41/mHC/prepare": 80,
+      "aten::sum": 160,
+      "aten::div": 160,
+      "aten::item": 461,
+      "aten::_local_scalar_dense": 461,
+      "aten::add": 204,
+      "aten::rsqrt": 80,
+      "aten::mul": 116,
+      "V41/Attention": 40,
+      "aten::linear": 349,
+      "aten::t": 349,
+      "aten::transpose": 695,
+      "aten::matmul": 349,
+      "aten::mm": 349,
+      "aten::repeat_interleave": 240,
+      "V41/Attention/SWA_sparse_and_commit": 40,
+      "V41/Attention/SWA_decode_read_metadata": 40,
+      "aten::ge": 40,
+      "aten::lt": 48,
+      "aten::logical_and": 40,
+      "aten::result_type": 51,
+      "aten::where": 138,
+      "aten::scalar_tensor": 49,
+      "aten::resize_": 101,
+      "V41/Attention/SWA_commit": 40,
+      "V41/Attention/TP_allreduce/q=1": 40,
+      "_C_custom_ar::all_reduce": 80,
+      "V41/mHC/post": 80,
+      "V41/MoE": 40,
+      "aten::eq": 41,
+      "V41/MoE/W4A8_routed": 40,
+      "aten::add_": 40,
+      "V41/MoE/EP_allreduce/q=1": 40,
+      "V41/layer/1": 1,
+      "V41/layer/2": 1,
+      "V41/Attention/compressor": 4,
+      "aten::floor_divide": 70,
+      "V41/Attention/compressed_cache_commit": 8,
+      "V41/Attention/compressed_cache_materialize": 8,
+      "V41/Attention/compressed_cache_gather": 8,
+      "aten::arange": 20,
+      "aten::clamp_min": 8,
+      "aten::remainder": 20,
+      "aten::clamp": 8,
+      "aten::full": 39,
+      "V41/layer/3": 1,
+      "V41/layer/4": 1,
+      "V41/layer/5": 1,
+      "V41/layer/6": 1,
+      "V41/layer/7": 1,
+      "V41/layer/8": 1,
+      "V41/layer/9": 1,
+      "V41/layer/10": 1,
+      "V41/layer/11": 1,
+      "V41/layer/12": 1,
+      "V41/layer/13": 1,
+      "V41/layer/14": 1,
+      "V41/layer/15": 1,
+      "V41/layer/16": 1,
+      "V41/layer/17": 1,
+      "V41/layer/18": 1,
+      "V41/layer/19": 1,
+      "V41/layer/20": 1,
+      "aten::index_copy_": 2,
+      "aten::amax": 1,
+      "aten::ne": 1,
+      "aten::any": 1,
+      "aten::sub": 2,
+      "aten::masked_fill_": 1,
+      "aten::argsort": 1,
+      "aten::sort": 1,
+      "aten::gather": 1,
+      "aten::zeros_like": 1,
+      "aten::gt": 1,
+      "aten::scatter_": 1,
+      "aten::_unsafe_view": 1,
+      "V41/layer/21": 1,
+      "V41/layer/22": 1,
+      "V41/layer/23": 1,
+      "V41/layer/24": 1,
+      "V41/layer/25": 1,
+      "V41/layer/26": 1,
+      "V41/layer/27": 1,
+      "V41/layer/28": 1,
+      "V41/layer/29": 1,
+      "V41/layer/30": 1,
+      "V41/layer/31": 1,
+      "V41/layer/32": 1,
+      "V41/layer/33": 1,
+      "V41/layer/34": 1,
+      "V41/layer/35": 1,
+      "V41/layer/36": 1,
+      "V41/layer/37": 1,
+      "V41/layer/38": 1,
+      "V41/layer/39": 1
+    },
+    "runtime": {
+      "musaStreamSynchronize": [
+        3,
+        18.100739
+      ],
+      "musaMemcpyAsync": [
+        84,
+        0.7356470000000002
+      ],
+      "musaLaunchKernel": [
+        3534,
+        11.983857000000047
+      ],
+      "muLaunchKernel": [
+        60,
+        0.19373300000000002
+      ],
+      "musaStreamIsCapturing": [
+        1204,
+        0.26484200000000124
+      ],
+      "musaEventRecord": [
+        15,
+        0.037676
+      ],
+      "musaStreamWaitEvent": [
+        6,
+        0.016063
+      ],
+      "musaStreamGetCaptureInfo_v2": [
+        3,
+        0.002683
+      ],
+      "musaGetFuncBySymbol": [
+        3,
+        0.001423
+      ],
+      "musaGetDriverEntryPoint": [
+        480,
+        0.144473
+      ],
+      "musaLaunchKernelExC": [
+        300,
+        1.7211040000000004
+      ],
+      "musaPeekAtLastError": [
+        40,
+        0.007413000000000001
+      ],
+      "musaGetDeviceProperties_v2": [
+        160,
+        0.034265
+      ],
+      "musaDeviceGetAttribute": [
+        80,
+        0.033349000000000004
+      ],
+      "musaThreadExchangeStreamCaptureMode": [
+        8,
+        0.005259000000000001
+      ],
+      "musaEventQuery": [
+        12,
+        0.012549000000000001
+      ]
+    },
+    "gpu_kernels": {
+      "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        97,
+        0.37951999999999997
+      ],
+      "paged_engram_hash": [
+        1,
+        0.0414
+      ],
+      "paged_engram_commit": [
+        1,
+        0.00556
+      ],
+      "engram_gather": [
+        2,
+        0.00912
+      ],
+      "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": [
+        3,
+        1.447603
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatNy<short, 4, 8, false, musa::dnn::FastDivmodU32, true>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 4>, musa::dnn::Array<int, 4>, long, long, long)": [
+        6,
+        0.02544
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)": [
+        9,
+        0.03836
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, true, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)": [
+        1,
+        0.0052
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<float, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)": [
+        4,
+        0.01284
+      ],
+      "void mutlass::device_kernel<mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u> >(mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u>::Params)": [
+        80,
+        1.6312070000000003
+      ],
+      "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 32, 4, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)": [
+        80,
+        0.603362
+      ],
+      "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>)": [
+        80,
+        0.508601
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::TrueDivOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        80,
+        0.373721
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::AddOp, float, float, double, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        80,
+        0.35392099999999976
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::RsqrtOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        80,
+        0.3902010000000001
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::MulOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        80,
+        0.30916099999999996
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_metadata_kernel(float const*, float const*, float const*, float*, float*, float*, long, long, float)": [
+        80,
+        3.918330999999998
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_combine_kernel<c10::BFloat16>(c10::BFloat16 const*, float const*, c10::BFloat16*, long, long, long)": [
+        81,
+        0.3995599999999999
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::rmsnorm_vec8_kernel<__mt_bfloat16, false, true>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int, int, long, long, long, float, float)": [
+        163,
+        1.2188000000000003
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)": [
+        330,
+        1.3106020000000007
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_64x32B128_epilogue_stage5_btmenc": [
+        40,
+        1.038842
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_384_64x16B128_epilogue_stage4_btmenc": [
+        122,
+        2.142327999999999
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_32x128B128_epilogue_stage3_btmenc": [
+        88,
+        1.6265260000000001
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectVectorKernel<float, long, true, 128>(float*, long*, float*, long, long, long, long, unsigned int)": [
+        120,
+        0.44024000000000013
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<4, int, musa::dnn::FastDivmodU32, int, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)": [
+        240,
+        1.2297240000000005
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::CastOp, float, float, __mt_bfloat16, 128>(float*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        246,
+        1.1533229999999999
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_partial_rope_kernel<float>(float const*, float const*, float const*, float*, long, long, long, long, long, long, bool)": [
+        120,
+        0.7290409999999999
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::CastOp, float, __mt_bfloat16, float, 128>(__mt_bfloat16*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        160,
+        0.6566439999999999
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::swa_decode_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long)": [
+        40,
+        0.6168020000000001
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.18688000000000002
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        48,
+        0.21072
+      ],
+      "void musa::dnn::binary::kernel_binary<bool, musa::dnn::binary::AndOp, bool, bool, bool, 128>(bool*, bool const*, bool const*, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.26276
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<long, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long)": [
+        40,
+        0.15244100000000005
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, long, long, long, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        40,
+        0.30144099999999996
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::CastOp, long, int, long, 128>(int*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        48,
+        0.19047999999999998
+      ],
+      "dsa_prefill_kernel": [
+        40,
+        1.489122
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)": [
+        40,
+        0.195762
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_wo_a_m1_kernel<c10::BFloat16, false>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, c10::BFloat16*)": [
+        40,
+        1.1031209999999998
+      ],
+      "void vllm::cross_device_reduce_1stage<__mt_bfloat16, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, __mt_bfloat16*, int, int)": [
+        40,
+        183.19696399999998
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_post_2d_h4_kernel<c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, float const*, c10::BFloat16*, long)": [
+        80,
+        0.5375610000000001
+      ],
+      "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::EQOp, int, bool, int, 128>(bool*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.19335999999999998
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, float, float, float, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        41,
+        0.316001
+      ],
+      "void musa::dnn::(anonymous namespace)::batch_gemv_row_continuous_kernel<float, (musa::dnn::AlignAttr)1, 128, 32, 1024, false, true, 128>(float*, float const*, float const*, float const*, float const*, int, int, int, int, long, int, long, int, long, int, long, float, float, float)": [
+        46,
+        1.490202
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::v41_gate_kernel<12>(float const*, float const*, float*, long*, long, int, int, bool, bool, float)": [
+        40,
+        4.784967000000001
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<int, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, long)": [
+        78,
+        0.235203
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::dispatch_quant_kernel(c10::BFloat16 const*, long const*, c10::Float8_e4m3fn*, float*, int*, int*, int, int, int, int, int)": [
+        40,
+        0.529003
+      ],
+      "void mutlass::device_kernel<mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, 128, false> >(mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, 128, false>::Params)": [
+        80,
+        3.3004859999999994
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float)": [
+        40,
+        1.132125
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::combine_kernel(c10::BFloat16 const*, long const*, int const*, float const*, float*, int, int, int, int)": [
+        40,
+        0.208521
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<short, 2, 8, false, musa::dnn::FastDivmodU32, 1024>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)": [
+        40,
+        0.4270820000000001
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::deepseek_v4_shared_swiglu_kernel(c10::BFloat16 const*, c10::BFloat16*, long, long, float)": [
+        40,
+        0.2356
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc": [
+        42,
+        1.0095999999999998
+      ],
+      "void musa::dnn::binary::kernel_binary<float, musa::dnn::binary::AddOp, float, float, float, 128>(float*, float const*, float const*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.17788000000000004
+      ],
+      "void vllm::cross_device_reduce_1stage<float, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, float*, int, int)": [
+        40,
+        70.527396
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::engram_gate_kernel<c10::BFloat16, c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, bool const*, c10::BFloat16*)": [
+        2,
+        0.0354
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::park_pair_tail_kernel(float const*, float const*, long const*, float*, float*, long, long, long, long, long)": [
+        3,
+        0.028520000000000004
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_64x64B128_epilogue_stage4_btmenc": [
+        8,
+        0.29439999999999994
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::MulOp, float, __mt_bfloat16, double, 128>(__mt_bfloat16*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        8,
+        0.04035999999999999
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<false, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)": [
+        9,
+        0.09291999999999999
+      ],
+      "void at::musa::(anonymous namespace)::arange_kernel<long, long>(long*, long, long, long)": [
+        10,
+        0.031360000000000006
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorDivOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        29,
+        0.237921
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectKernel<int, long>(int*, long*, int*, long, long, long, long, unsigned int)": [
+        10,
+        0.03744
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::ClipOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        16,
+        0.065001
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::MulOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        10,
+        0.042679999999999996
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorModOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        10,
+        0.09083999999999998
+      ],
+      "void musa::dnn::binary::kernel_binary<long, musa::dnn::binary::AddOp, long, long, long, 128>(long*, long const*, long const*, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        8,
+        0.03544
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)": [
+        8,
+        0.032
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, __mt_bfloat16, __mt_bfloat16, __mt_bfloat16, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        8,
+        0.09843999999999999
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::AddOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        19,
+        0.07620099999999999
+      ],
+      "indexer_score": [
+        8,
+        0.39071999999999996
+      ],
+      "indexer_radix_select": [
+        8,
+        0.24212
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<int, 2, 4, false, musa::dnn::FastDivmodU32, 512>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)": [
+        39,
+        0.36016
+      ],
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})": [
+        2,
+        0.0168
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<true, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)": [
+        1,
+        0.01048
+      ],
+      "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>, (musa::dnn::ReduceMode)0, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>)": [
+        1,
+        0.00624
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::NEOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00432
+      ],
+      "void musa::dnn::reduce_column::ReduceSmallColKernel<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>, (musa::dnn::ReduceMode)7, 8>(bool*, bool*, bool*, unsigned int __vector(4), long, int, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>)": [
+        1,
+        0.004
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::SubOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00412
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::EQOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00428
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<float, true, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)": [
+        1,
+        0.0047599999999999995
+      ],
+      "void musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)": [
+        1,
+        0.00412
+      ],
+      "void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<float, unsigned int, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)": [
+        4,
+        0.020679999999999997
+      ],
+      "void musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)": [
+        4,
+        0.02148
+      ],
+      "void musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<float, long, unsigned int, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)": [
+        4,
+        0.035361
+      ],
+      "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})": [
+        1,
+        0.006719999999999999
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<bool, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long)": [
+        1,
+        0.00368
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::GTOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00468
+      ],
+      "void musa::dnn::(anonymous namespace)::scatter_kernel<bool, long, musa::dnn::FastDivmodU64, (musa::dnn::ScatterImpl::Mode)0, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, int, musa::dnn::Array<musa::dnn::FastDivmodU64, 10>)": [
+        1,
+        0.01104
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<16, signed char, musa::dnn::FastDivmodU32, signed char, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)": [
+        1,
+        0.008400000000000001
+      ]
+    },
+    "gpu_streams": {
+      "17": [
+        3894,
+        295.9661390000011
+      ],
+      "14": [
+        3,
+        1.447603
+      ]
+    },
+    "note": "Profiler-on representative last decode step, not formal TPOT; sums may overlap across streams; graph-node device timings/labels depend on original trace backend"
+  },
+  "graph6": {
+    "step_cpu_ms": 260.447906,
+    "cpu_count": 18785,
+    "gpu_count": 2778,
+    "cpu_op_counts": {
+      "V41/step/q=1/kv=263": 1,
+      "aten::to": 896,
+      "aten::_to_copy": 475,
+      "aten::empty_strided": 913,
+      "aten::copy_": 957,
+      "aten::_copy_from": 877,
+      "aten::expand_as": 877,
+      "aten::expand": 1119,
+      "aten::as_strided": 2201,
+      "aten::squeeze": 48,
+      "V41/Engram/hash_lookup": 1,
+      "aten::empty": 1761,
+      "aten::reshape": 1040,
+      "aten::view": 1462,
+      "aten::narrow": 245,
+      "aten::slice": 245,
+      "aten::select": 37,
+      "record_param_comms": 6,
+      "mccl:_all_gather_base": 3,
+      "aten::unbind": 3,
+      "aten::cat": 42,
+      "aten::alias": 330,
+      "aten::flatten": 282,
+      "aten::embedding": 1,
+      "aten::index_select": 139,
+      "aten::unsqueeze": 371,
+      "aten::contiguous": 1,
+      "aten::clone": 242,
+      "aten::empty_like": 786,
+      "aten::zeros": 1,
+      "aten::zero_": 5,
+      "aten::fill_": 169,
+      "V41/layer/0": 1,
+      "V41/mHC/prepare": 40,
+      "aten::sum": 80,
+      "aten::div": 80,
+      "aten::item": 301,
+      "aten::_local_scalar_dense": 301,
+      "aten::add": 124,
+      "aten::rsqrt": 40,
+      "aten::mul": 76,
+      "V41/Attention": 40,
+      "aten::linear": 189,
+      "aten::t": 189,
+      "aten::transpose": 375,
+      "aten::matmul": 189,
+      "aten::mm": 189,
+      "aten::repeat_interleave": 240,
+      "V41/Attention/SWA_sparse_and_commit": 40,
+      "V41/Attention/SWA_decode_read_metadata": 40,
+      "aten::ge": 40,
+      "aten::lt": 48,
+      "aten::logical_and": 40,
+      "aten::result_type": 51,
+      "aten::where": 98,
+      "aten::scalar_tensor": 49,
+      "aten::resize_": 61,
+      "V41/Attention/SWA_commit": 40,
+      "V41/Decoder/FFN_tail_graph_replay": 40,
+      "V41/layer/1": 1,
+      "V41/layer/2": 1,
+      "V41/Attention/compressor": 4,
+      "aten::floor_divide": 70,
+      "V41/Attention/compressed_cache_commit": 8,
+      "V41/Attention/compressed_cache_materialize": 8,
+      "V41/Attention/compressed_cache_gather": 8,
+      "aten::arange": 20,
+      "aten::clamp_min": 8,
+      "aten::remainder": 20,
+      "aten::clamp": 8,
+      "aten::full": 39,
+      "V41/layer/3": 1,
+      "V41/layer/4": 1,
+      "V41/layer/5": 1,
+      "V41/layer/6": 1,
+      "V41/layer/7": 1,
+      "V41/layer/8": 1,
+      "V41/layer/9": 1,
+      "V41/layer/10": 1,
+      "V41/layer/11": 1,
+      "V41/layer/12": 1,
+      "V41/layer/13": 1,
+      "V41/layer/14": 1,
+      "V41/layer/15": 1,
+      "V41/layer/16": 1,
+      "V41/layer/17": 1,
+      "V41/layer/18": 1,
+      "V41/layer/19": 1,
+      "V41/layer/20": 1,
+      "aten::index_copy_": 2,
+      "aten::amax": 1,
+      "aten::ne": 1,
+      "aten::any": 1,
+      "aten::sub": 2,
+      "aten::eq": 1,
+      "aten::masked_fill_": 1,
+      "aten::argsort": 1,
+      "aten::sort": 1,
+      "aten::gather": 1,
+      "aten::zeros_like": 1,
+      "aten::gt": 1,
+      "aten::scatter_": 1,
+      "aten::_unsafe_view": 1,
+      "V41/layer/21": 1,
+      "V41/layer/22": 1,
+      "V41/layer/23": 1,
+      "V41/layer/24": 1,
+      "V41/layer/25": 1,
+      "V41/layer/26": 1,
+      "V41/layer/27": 1,
+      "V41/layer/28": 1,
+      "V41/layer/29": 1,
+      "V41/layer/30": 1,
+      "V41/layer/31": 1,
+      "V41/layer/32": 1,
+      "V41/layer/33": 1,
+      "V41/layer/34": 1,
+      "V41/layer/35": 1,
+      "V41/layer/36": 1,
+      "V41/layer/37": 1,
+      "V41/layer/38": 1,
+      "V41/layer/39": 1
+    },
+    "runtime": {
+      "musaStreamIsCapturing": [
+        524,
+        0.12420999999999985
+      ],
+      "muLaunchKernel": [
+        60,
+        0.16823300000000005
+      ],
+      "musaPeekAtLastError": [
+        40,
+        0.007554999999999997
+      ],
+      "musaLaunchKernel": [
+        2534,
+        7.064139999999987
+      ],
+      "musaLaunchKernelExC": [
+        180,
+        1.0067479999999998
+      ],
+      "musaDeviceCanAccessPeer": [
+        240,
+        0.07054100000000002
+      ],
+      "musaGraphLaunch": [
+        40,
+        0.5196400000000001
+      ],
+      "musaGetDriverEntryPoint": [
+        80,
+        0.042194
+      ],
+      "musaStreamSynchronize": [
+        3,
+        14.461637
+      ],
+      "musaMemcpyAsync": [
+        4,
+        0.09650700000000001
+      ],
+      "musaEventRecord": [
+        15,
+        0.032085999999999996
+      ],
+      "musaStreamWaitEvent": [
+        6,
+        0.014379999999999999
+      ],
+      "musaStreamGetCaptureInfo_v2": [
+        3,
+        0.00117
+      ],
+      "musaGetFuncBySymbol": [
+        3,
+        0.001293
+      ],
+      "musaThreadExchangeStreamCaptureMode": [
+        8,
+        0.006239
+      ],
+      "musaEventQuery": [
+        12,
+        0.016603000000000003
+      ]
+    },
+    "gpu_kernels": {
+      "dsa_prefill_kernel": [
+        40,
+        1.4963229999999998
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)": [
+        40,
+        0.18772000000000003
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectVectorKernel<float, long, true, 128>(float*, long*, float*, long, long, long, long, unsigned int)": [
+        120,
+        0.4302830000000003
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<4, int, musa::dnn::FastDivmodU32, int, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)": [
+        240,
+        1.1877250000000004
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::CastOp, float, float, __mt_bfloat16, 128>(float*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        126,
+        0.42532000000000014
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_partial_rope_kernel<float>(float const*, float const*, float const*, float*, long, long, long, long, long, long, bool)": [
+        120,
+        0.6997209999999998
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::CastOp, float, __mt_bfloat16, float, 128>(__mt_bfloat16*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        120,
+        0.46160100000000026
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)": [
+        250,
+        0.9317230000000005
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_wo_a_m1_kernel<c10::BFloat16, false>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, c10::BFloat16*)": [
+        40,
+        1.0990410000000006
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_32x128B128_epilogue_stage3_btmenc": [
+        88,
+        1.5768010000000001
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::IdentityOp, float, __mt_bfloat16, __mt_bfloat16, 128>(__mt_bfloat16*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        80,
+        0.295881
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::IdentityOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        120,
+        0.44220100000000023
+      ],
+      "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::IdentityOp, int, int, int, 128>(int*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.17664000000000002
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<long, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long)": [
+        120,
+        0.3790800000000001
+      ],
+      "void mutlass::device_kernel<mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u> >(mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u>::Params)": [
+        40,
+        0.8461599999999999
+      ],
+      "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 32, 4, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)": [
+        40,
+        0.33644200000000013
+      ],
+      "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>)": [
+        40,
+        0.29688100000000006
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::TrueDivOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.23035999999999998
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::AddOp, float, float, double, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.16407999999999998
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::RsqrtOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.20296300000000003
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::MulOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.15128
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_metadata_kernel(float const*, float const*, float const*, float*, float*, float*, long, long, float)": [
+        40,
+        2.0108430000000004
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_combine_kernel<c10::BFloat16>(c10::BFloat16 const*, float const*, c10::BFloat16*, long, long, long)": [
+        41,
+        0.20612000000000003
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::rmsnorm_vec8_kernel<__mt_bfloat16, false, true>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int, int, long, long, long, float, float)": [
+        123,
+        0.8754800000000001
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_64x32B128_epilogue_stage5_btmenc": [
+        40,
+        1.066722
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_384_64x16B128_epilogue_stage4_btmenc": [
+        42,
+        0.689722
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<int, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, long)": [
+        38,
+        0.09799999999999998
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<int, 2, 4, false, musa::dnn::FastDivmodU32, 512>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)": [
+        39,
+        0.3549619999999999
+      ],
+      "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        98,
+        0.35788200000000014
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::swa_decode_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long)": [
+        40,
+        0.641081
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.19516000000000008
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        48,
+        0.21180000000000002
+      ],
+      "void musa::dnn::binary::kernel_binary<bool, musa::dnn::binary::AndOp, bool, bool, bool, 128>(bool*, bool const*, bool const*, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.252161
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, long, long, long, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        40,
+        0.2822009999999999
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::CastOp, long, int, long, 128>(int*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        48,
+        0.1878
+      ],
+      "void at::musa::(anonymous namespace)::arange_kernel<long, long>(long*, long, long, long)": [
+        10,
+        0.0328
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::AddOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        19,
+        0.07760000000000002
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<false, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)": [
+        9,
+        0.09536
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorDivOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        29,
+        0.22804
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectKernel<int, long>(int*, long*, int*, long, long, long, long, unsigned int)": [
+        10,
+        0.03296
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::MulOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        10,
+        0.04332
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorModOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        10,
+        0.08428000000000001
+      ],
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})": [
+        2,
+        0.01684
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<true, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)": [
+        1,
+        0.010039999999999999
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_64x64B128_epilogue_stage4_btmenc": [
+        8,
+        0.28736100000000003
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::MulOp, float, __mt_bfloat16, double, 128>(__mt_bfloat16*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        8,
+        0.03536
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::ClipOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        16,
+        0.06756
+      ],
+      "void musa::dnn::binary::kernel_binary<long, musa::dnn::binary::AddOp, long, long, long, 128>(long*, long const*, long const*, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        8,
+        0.03564099999999999
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)": [
+        9,
+        0.04
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)": [
+        8,
+        0.029240000000000002
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, __mt_bfloat16, __mt_bfloat16, __mt_bfloat16, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        8,
+        0.093921
+      ],
+      "indexer_score": [
+        8,
+        0.3930019999999999
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<float, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)": [
+        4,
+        0.0106
+      ],
+      "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>, (musa::dnn::ReduceMode)0, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>)": [
+        1,
+        0.0068
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::NEOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00524
+      ],
+      "void musa::dnn::reduce_column::ReduceSmallColKernel<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>, (musa::dnn::ReduceMode)7, 8>(bool*, bool*, bool*, unsigned int __vector(4), long, int, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>)": [
+        1,
+        0.00584
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, float, float, float, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        1,
+        0.007
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::SubOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.0041600000000000005
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::EQOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00408
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<float, true, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)": [
+        1,
+        0.00444
+      ],
+      "void musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)": [
+        1,
+        0.00396
+      ],
+      "void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<float, unsigned int, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)": [
+        4,
+        0.01984
+      ],
+      "void musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)": [
+        4,
+        0.021320000000000002
+      ],
+      "void musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<float, long, unsigned int, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)": [
+        4,
+        0.0368
+      ],
+      "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})": [
+        1,
+        0.00624
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<bool, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long)": [
+        1,
+        0.00348
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::GTOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00544
+      ],
+      "void musa::dnn::(anonymous namespace)::scatter_kernel<bool, long, musa::dnn::FastDivmodU64, (musa::dnn::ScatterImpl::Mode)0, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, int, musa::dnn::Array<musa::dnn::FastDivmodU64, 10>)": [
+        1,
+        0.010199999999999999
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<16, signed char, musa::dnn::FastDivmodU32, signed char, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)": [
+        1,
+        0.00912
+      ],
+      "indexer_radix_select": [
+        8,
+        0.24012100000000003
+      ],
+      "paged_engram_hash": [
+        1,
+        0.03836
+      ],
+      "paged_engram_commit": [
+        1,
+        0.00328
+      ],
+      "engram_gather": [
+        2,
+        0.01076
+      ],
+      "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": [
+        3,
+        2.373807
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatNy<short, 4, 8, false, musa::dnn::FastDivmodU32, true>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 4>, musa::dnn::Array<int, 4>, long, long, long)": [
+        6,
+        0.02572
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, true, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)": [
+        1,
+        0.0061200000000000004
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc": [
+        2,
+        0.492041
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::engram_gate_kernel<c10::BFloat16, c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, bool const*, c10::BFloat16*)": [
+        2,
+        0.037841
+      ],
+      "void musa::dnn::(anonymous namespace)::batch_gemv_row_continuous_kernel<float, (musa::dnn::AlignAttr)1, 128, 32, 1024, false, true, 128>(float*, float const*, float const*, float const*, float const*, int, int, int, int, long, int, long, int, long, int, long, float, float, float)": [
+        6,
+        0.217121
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::park_pair_tail_kernel(float const*, float const*, long const*, float*, float*, long, long, long, long, long)": [
+        3,
+        0.02792
+      ]
+    },
+    "gpu_streams": {
+      "17": [
+        2774,
+        22.310009
+      ],
+      "5": [
+        1,
+        0.00532
+      ],
+      "14": [
+        3,
+        2.373807
+      ]
+    },
+    "note": "Profiler-on representative last decode step, not formal TPOT; sums may overlap across streams; graph-node device timings/labels depend on original trace backend"
+  },
+  "graph1": {
+    "step_cpu_ms": 250.412254,
+    "cpu_count": 17585,
+    "gpu_count": 2578,
+    "cpu_op_counts": {
+      "V41/step/q=1/kv=263": 1,
+      "aten::to": 896,
+      "aten::_to_copy": 475,
+      "aten::empty_strided": 913,
+      "aten::copy_": 717,
+      "aten::_copy_from": 637,
+      "aten::expand_as": 637,
+      "aten::expand": 879,
+      "aten::as_strided": 1961,
+      "aten::squeeze": 48,
+      "V41/Engram/hash_lookup": 1,
+      "aten::empty": 1761,
+      "aten::reshape": 1040,
+      "aten::view": 1462,
+      "aten::narrow": 245,
+      "aten::slice": 245,
+      "aten::select": 37,
+      "record_param_comms": 6,
+      "mccl:_all_gather_base": 3,
+      "aten::unbind": 3,
+      "aten::cat": 42,
+      "aten::alias": 330,
+      "aten::flatten": 282,
+      "aten::embedding": 1,
+      "aten::index_select": 139,
+      "aten::unsqueeze": 371,
+      "aten::contiguous": 1,
+      "aten::clone": 242,
+      "aten::empty_like": 786,
+      "aten::zeros": 1,
+      "aten::zero_": 5,
+      "aten::fill_": 169,
+      "V41/layer/0": 1,
+      "V41/mHC/prepare": 40,
+      "aten::sum": 80,
+      "aten::div": 80,
+      "aten::item": 301,
+      "aten::_local_scalar_dense": 301,
+      "aten::add": 124,
+      "aten::rsqrt": 40,
+      "aten::mul": 76,
+      "V41/Attention": 40,
+      "aten::linear": 189,
+      "aten::t": 189,
+      "aten::transpose": 375,
+      "aten::matmul": 189,
+      "aten::mm": 189,
+      "aten::repeat_interleave": 240,
+      "V41/Attention/SWA_sparse_and_commit": 40,
+      "V41/Attention/SWA_decode_read_metadata": 40,
+      "aten::ge": 40,
+      "aten::lt": 48,
+      "aten::logical_and": 40,
+      "aten::result_type": 51,
+      "aten::where": 98,
+      "aten::scalar_tensor": 49,
+      "aten::resize_": 61,
+      "V41/Attention/SWA_commit": 40,
+      "V41/Decoder/FFN_tail_graph_replay": 40,
+      "V41/layer/1": 1,
+      "V41/layer/2": 1,
+      "V41/Attention/compressor": 4,
+      "aten::floor_divide": 70,
+      "V41/Attention/compressed_cache_commit": 8,
+      "V41/Attention/compressed_cache_materialize": 8,
+      "V41/Attention/compressed_cache_gather": 8,
+      "aten::arange": 20,
+      "aten::clamp_min": 8,
+      "aten::remainder": 20,
+      "aten::clamp": 8,
+      "aten::full": 39,
+      "V41/layer/3": 1,
+      "V41/layer/4": 1,
+      "V41/layer/5": 1,
+      "V41/layer/6": 1,
+      "V41/layer/7": 1,
+      "V41/layer/8": 1,
+      "V41/layer/9": 1,
+      "V41/layer/10": 1,
+      "V41/layer/11": 1,
+      "V41/layer/12": 1,
+      "V41/layer/13": 1,
+      "V41/layer/14": 1,
+      "V41/layer/15": 1,
+      "V41/layer/16": 1,
+      "V41/layer/17": 1,
+      "V41/layer/18": 1,
+      "V41/layer/19": 1,
+      "V41/layer/20": 1,
+      "aten::index_copy_": 2,
+      "aten::amax": 1,
+      "aten::ne": 1,
+      "aten::any": 1,
+      "aten::sub": 2,
+      "aten::eq": 1,
+      "aten::masked_fill_": 1,
+      "aten::argsort": 1,
+      "aten::sort": 1,
+      "aten::gather": 1,
+      "aten::zeros_like": 1,
+      "aten::gt": 1,
+      "aten::scatter_": 1,
+      "aten::_unsafe_view": 1,
+      "V41/layer/21": 1,
+      "V41/layer/22": 1,
+      "V41/layer/23": 1,
+      "V41/layer/24": 1,
+      "V41/layer/25": 1,
+      "V41/layer/26": 1,
+      "V41/layer/27": 1,
+      "V41/layer/28": 1,
+      "V41/layer/29": 1,
+      "V41/layer/30": 1,
+      "V41/layer/31": 1,
+      "V41/layer/32": 1,
+      "V41/layer/33": 1,
+      "V41/layer/34": 1,
+      "V41/layer/35": 1,
+      "V41/layer/36": 1,
+      "V41/layer/37": 1,
+      "V41/layer/38": 1,
+      "V41/layer/39": 1
+    },
+    "runtime": {
+      "musaStreamSynchronize": [
+        3,
+        15.607431
+      ],
+      "musaMemcpyAsync": [
+        4,
+        0.127012
+      ],
+      "musaLaunchKernel": [
+        2334,
+        6.525365999999997
+      ],
+      "muLaunchKernel": [
+        60,
+        0.157536
+      ],
+      "musaStreamIsCapturing": [
+        524,
+        0.1261609999999999
+      ],
+      "musaEventRecord": [
+        15,
+        0.036603000000000004
+      ],
+      "musaStreamWaitEvent": [
+        6,
+        0.015854999999999998
+      ],
+      "musaStreamGetCaptureInfo_v2": [
+        3,
+        0.0012209999999999999
+      ],
+      "musaGetFuncBySymbol": [
+        3,
+        0.0016420000000000002
+      ],
+      "musaGetDriverEntryPoint": [
+        80,
+        0.04263799999999999
+      ],
+      "musaLaunchKernelExC": [
+        180,
+        0.9893810000000005
+      ],
+      "musaPeekAtLastError": [
+        40,
+        0.0071439999999999984
+      ],
+      "musaGraphLaunch": [
+        40,
+        0.5240819999999999
+      ],
+      "musaThreadExchangeStreamCaptureMode": [
+        8,
+        0.007709999999999999
+      ],
+      "musaEventQuery": [
+        12,
+        0.017535000000000002
+      ]
+    },
+    "gpu_kernels": {
+      "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        98,
+        0.36168
+      ],
+      "paged_engram_hash": [
+        1,
+        0.038799999999999994
+      ],
+      "paged_engram_commit": [
+        1,
+        0.0034
+      ],
+      "engram_gather": [
+        2,
+        0.00996
+      ],
+      "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": [
+        3,
+        2.591527
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatNy<short, 4, 8, false, musa::dnn::FastDivmodU32, true>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 4>, musa::dnn::Array<int, 4>, long, long, long)": [
+        6,
+        0.024399999999999998
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)": [
+        9,
+        0.037320000000000006
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, true, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)": [
+        1,
+        0.00596
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<float, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)": [
+        4,
+        0.0112
+      ],
+      "void mutlass::device_kernel<mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u> >(mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u>::Params)": [
+        40,
+        0.8263240000000001
+      ],
+      "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 32, 4, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)": [
+        40,
+        0.3389609999999999
+      ],
+      "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>)": [
+        40,
+        0.29100099999999995
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::TrueDivOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.23284000000000002
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::AddOp, float, float, double, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.17600099999999996
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::RsqrtOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.20748000000000005
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::MulOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.151441
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_metadata_kernel(float const*, float const*, float const*, float*, float*, float*, long, long, float)": [
+        40,
+        2.004286
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_combine_kernel<c10::BFloat16>(c10::BFloat16 const*, float const*, c10::BFloat16*, long, long, long)": [
+        41,
+        0.20904000000000006
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::rmsnorm_vec8_kernel<__mt_bfloat16, false, true>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int, int, long, long, long, float, float)": [
+        123,
+        0.8921210000000002
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)": [
+        250,
+        0.936044
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_64x32B128_epilogue_stage5_btmenc": [
+        40,
+        1.057683
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_384_64x16B128_epilogue_stage4_btmenc": [
+        42,
+        0.6864000000000001
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_32x128B128_epilogue_stage3_btmenc": [
+        88,
+        1.570684
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectVectorKernel<float, long, true, 128>(float*, long*, float*, long, long, long, long, unsigned int)": [
+        120,
+        0.4292819999999999
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<4, int, musa::dnn::FastDivmodU32, int, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)": [
+        240,
+        1.2062799999999996
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::CastOp, float, float, __mt_bfloat16, 128>(float*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        126,
+        0.4332400000000002
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_partial_rope_kernel<float>(float const*, float const*, float const*, float*, long, long, long, long, long, long, bool)": [
+        120,
+        0.7065609999999997
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::CastOp, float, __mt_bfloat16, float, 128>(__mt_bfloat16*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        120,
+        0.447521
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::swa_decode_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long)": [
+        40,
+        0.641441
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.19779999999999998
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        48,
+        0.21852100000000005
+      ],
+      "void musa::dnn::binary::kernel_binary<bool, musa::dnn::binary::AndOp, bool, bool, bool, 128>(bool*, bool const*, bool const*, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        40,
+        0.24984
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<long, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long)": [
+        120,
+        0.37800099999999986
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, long, long, long, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        40,
+        0.27144100000000004
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::CastOp, long, int, long, 128>(int*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        48,
+        0.18639999999999995
+      ],
+      "dsa_prefill_kernel": [
+        40,
+        1.5122840000000004
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)": [
+        40,
+        0.19384099999999993
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_wo_a_m1_kernel<c10::BFloat16, false>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, c10::BFloat16*)": [
+        40,
+        1.089364
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::copy_decoder_inputs<int>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, float const*, float const*, int const*, c10::BFloat16*, c10::BFloat16*, float*, float*, float*, int*, long)": [
+        40,
+        0.22852000000000003
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc": [
+        2,
+        0.485761
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::engram_gate_kernel<c10::BFloat16, c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, bool const*, c10::BFloat16*)": [
+        2,
+        0.04072
+      ],
+      "void musa::dnn::(anonymous namespace)::batch_gemv_row_continuous_kernel<float, (musa::dnn::AlignAttr)1, 128, 32, 1024, false, true, 128>(float*, float const*, float const*, float const*, float const*, int, int, int, int, long, int, long, int, long, int, long, float, float, float)": [
+        6,
+        0.20576
+      ],
+      "xllm::kernel::musa::(anonymous namespace)::park_pair_tail_kernel(float const*, float const*, long const*, float*, float*, long, long, long, long, long)": [
+        3,
+        0.028919999999999998
+      ],
+      "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_64x64B128_epilogue_stage4_btmenc": [
+        8,
+        0.29128
+      ],
+      "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::MulOp, float, __mt_bfloat16, double, 128>(__mt_bfloat16*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        8,
+        0.035879999999999995
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<false, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)": [
+        9,
+        0.09240200000000001
+      ],
+      "void at::musa::(anonymous namespace)::arange_kernel<long, long>(long*, long, long, long)": [
+        10,
+        0.030959999999999998
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorDivOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        29,
+        0.22148099999999998
+      ],
+      "void at::native::(anonymous namespace)::IndexSelectKernel<int, long>(int*, long*, int*, long, long, long, long, unsigned int)": [
+        10,
+        0.03172
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::ClipOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        16,
+        0.06776
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::MulOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        10,
+        0.03968
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorModOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        10,
+        0.08632000000000001
+      ],
+      "void musa::dnn::binary::kernel_binary<long, musa::dnn::binary::AddOp, long, long, long, 128>(long*, long const*, long const*, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        8,
+        0.03576
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)": [
+        8,
+        0.0346
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, __mt_bfloat16, __mt_bfloat16, __mt_bfloat16, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        8,
+        0.09904
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::AddOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        19,
+        0.07371999999999998
+      ],
+      "indexer_score": [
+        8,
+        0.402282
+      ],
+      "indexer_radix_select": [
+        8,
+        0.24020099999999997
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<int, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, long)": [
+        38,
+        0.09867999999999998
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<int, 2, 4, false, musa::dnn::FastDivmodU32, 512>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)": [
+        39,
+        0.36016000000000004
+      ],
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})": [
+        2,
+        0.0168
+      ],
+      "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<true, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)": [
+        1,
+        0.01024
+      ],
+      "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>, (musa::dnn::ReduceMode)0, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>)": [
+        1,
+        0.0056
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::NEOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.0047599999999999995
+      ],
+      "void musa::dnn::reduce_column::ReduceSmallColKernel<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>, (musa::dnn::ReduceMode)7, 8>(bool*, bool*, bool*, unsigned int __vector(4), long, int, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>)": [
+        1,
+        0.0058
+      ],
+      "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, float, float, float, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)": [
+        1,
+        0.006719999999999999
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::SubOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00512
+      ],
+      "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::EQOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.00412
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<float, true, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)": [
+        1,
+        0.00464
+      ],
+      "void musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)": [
+        1,
+        0.00412
+      ],
+      "void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<float, unsigned int, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)": [
+        4,
+        0.021919999999999995
+      ],
+      "void musa::dnn::ScanPartSumShflKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 4>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, int)": [
+        4,
+        0.02144
+      ],
+      "void musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<float, long, unsigned int, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)": [
+        4,
+        0.03648
+      ],
+      "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})": [
+        1,
+        0.00752
+      ],
+      "void musa::dnn::(anonymous namespace)::KernelFill<bool, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long)": [
+        1,
+        0.004719999999999999
+      ],
+      "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::GTOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)": [
+        1,
+        0.004320999999999999
+      ],
+      "void musa::dnn::(anonymous namespace)::scatter_kernel<bool, long, musa::dnn::FastDivmodU64, (musa::dnn::ScatterImpl::Mode)0, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, int, musa::dnn::Array<musa::dnn::FastDivmodU64, 10>)": [
+        1,
+        0.00932
+      ],
+      "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<16, signed char, musa::dnn::FastDivmodU32, signed char, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)": [
+        1,
+        0.008919999999999999
+      ]
+    },
+    "gpu_streams": {
+      "5": [
+        1,
+        0.00496
+      ],
+      "17": [
+        2574,
+        21.644051000000008
+      ],
+      "14": [
+        3,
+        2.591527
+      ]
+    },
+    "note": "Profiler-on representative last decode step, not formal TPOT; sums may overlap across streams; graph-node device timings/labels depend on original trace backend"
+  }
+}

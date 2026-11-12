@@ -1,0 +1,138 @@
+[
+  {
+    "at": "2026-11-13T03:13:49.077592+08:00",
+    "experiment": 6,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_6/05_trace/已核验交互Perfetto_891a67b9e8797180.tar.zst",
+    "bytes": 1743220,
+    "sha256": "057eff5f6de8b39d904668492137569d7c046da4633b24abc4004bddc7fc9fc3",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:13:53.665524+08:00",
+    "experiment": 7,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_7/05_trace/已核验交互Perfetto_62603cbc1ce1c017.tar.zst",
+    "bytes": 1654372,
+    "sha256": "58f5450177a5cb601a0c59ff96deb26abf8b4a0e36e04bca0e6b7485eca0c610",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:01.921281+08:00",
+    "experiment": 11,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_11/05_trace/已核验交互Perfetto_4d3319aa79c9eb22.tar.zst",
+    "bytes": 4780718,
+    "sha256": "3e724dfedef22a576007b21a3f5414542632936f559a217a7176ce4c7e30a2eb",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:07.921660+08:00",
+    "experiment": 14,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_14/05_trace/已核验交互Perfetto_901504d09bc77bb0.tar.zst",
+    "bytes": 4576284,
+    "sha256": "81015f3ec917dcfe0c54cd2d085ab39c56d1f16a09e88049f0265ba837218738",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:16.104257+08:00",
+    "experiment": 21,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_21/05_trace/已核验交互Perfetto_d73f054823c40505.tar.zst",
+    "bytes": 5965402,
+    "sha256": "b4a01b6813407e6f091576944869297deb684a5a428950fb2cdc4d0f8333105b",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:23.320512+08:00",
+    "experiment": 27,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_27/05_trace/已核验交互Perfetto_53012627b0a5aaef.tar.zst",
+    "bytes": 6977275,
+    "sha256": "3529fbc1d36b81dcfc0eb2f9807cb9aff8063ed9f46279bdee221b77648eb144",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:26.094723+08:00",
+    "experiment": 28,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_28/05_trace/已核验交互Perfetto_12fd0d11a101d78a.tar.zst",
+    "bytes": 1021865,
+    "sha256": "e82faf7d73d2080f707b335fb85d07e51fd9ea993a390a2d9b41e03016f3ebce",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:36.704669+08:00",
+    "experiment": 30,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_30/05_trace/已核验交互Perfetto_1cdbe0ef645ba47b.tar.zst",
+    "bytes": 8223684,
+    "sha256": "abab744fca37bffe32e3e06069750de5b1c134c4ace377f201fb382381672c64",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:53.875840+08:00",
+    "experiment": 38,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_38/05_trace/已核验交互Perfetto_8d9883bc003f9a15.tar.zst",
+    "bytes": 8289671,
+    "sha256": "cdf20323eec915b83b3306392c9873b98a5cfcde15a7d68c590ed1d8b6a7d693",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:14:57.584951+08:00",
+    "experiment": 45,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_45/05_trace/已核验交互Perfetto_7ef9bc775f1cbaf1.tar.zst",
+    "bytes": 1081681,
+    "sha256": "fd36f8d711712be2acee350fe7278c0713af44370b809b8d4a2ec6547fe7e867",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:15:03.180573+08:00",
+    "experiment": 46,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_46/05_trace/已核验交互Perfetto_583a7a4118070863.tar.zst",
+    "bytes": 1087134,
+    "sha256": "8d4ec682870a2b92ed52e93fd81b787fe1521bdf9564b0f95dad0fd8ecea1cd3",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:15:22.762701+08:00",
+    "experiment": 47,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_47/05_trace/已核验交互Perfetto_8d8c3f1029085ed7.tar.zst",
+    "bytes": 12237829,
+    "sha256": "1b9d780d629d66e7977a4de7eba35b851ccac62b31f0b7ebaad0d54f36975210",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:15:37.349320+08:00",
+    "experiment": 48,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_48/05_trace/已核验交互Perfetto_daa832c79558518e.tar.zst",
+    "bytes": 2036255,
+    "sha256": "7b7be0dabd2886ec4997c15a8642a4ba333285db9e0bb4c5b42fe50c22dd4ce9",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:16:14.794339+08:00",
+    "experiment": 50,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_50/05_trace/已核验交互Perfetto_317253d002a6b272.tar.zst",
+    "bytes": 17844986,
+    "sha256": "e488adf73fd366b9bd3599001249cd9fde0634a88950e09ae7e87466ced26ccc",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:43:51.084128+08:00",
+    "experiment": 53,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_53/05_trace/已核验交互Perfetto_729768171b7fbeb9.tar.zst",
+    "bytes": 1322336,
+    "sha256": "7f07ef69a011a7ebc6a68cae4f38d4617cb3aec87d9a5f79569d2bff0d8181de",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:43:53.579391+08:00",
+    "experiment": 54,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_54/05_trace/已核验交互Perfetto_94c6fc7f19a20406.tar.zst",
+    "bytes": 1514356,
+    "sha256": "2927679fecc0b956f0faccbd4c3d43dd9f82739ec95e05e27544876693e9b4c1",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  },
+  {
+    "at": "2026-11-13T03:43:55.954452+08:00",
+    "experiment": 56,
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_56/05_trace/已核验交互Perfetto_3035b4df8d8c9baa.tar.zst",
+    "bytes": 1575791,
+    "sha256": "8f9aef987484c4a578f67bf976b3efcf0aa258d9e227d9b2b04c3114bab390f0",
+    "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+  }
+]

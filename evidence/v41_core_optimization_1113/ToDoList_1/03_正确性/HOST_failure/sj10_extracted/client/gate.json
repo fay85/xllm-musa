@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "questions": [
+    {
+      "id": 1,
+      "question": "\u53ea\u8f93\u51fa\u8ba1\u7b97\u7ed3\u679c\uff0c\u4e0d\u8981\u89e3\u91ca\uff1a1.3 + 2.9 = ?",
+      "expected": "4.2",
+      "content": "4.2",
+      "reasoning_content": "",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 21,
+        "completion_tokens": 4,
+        "total_tokens": 25,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "elapsed_s": 9.978359774686396,
+      "passed": true
+    },
+    {
+      "id": 2,
+      "question": "\u53ea\u8f93\u51fa\u8ba1\u7b97\u7ed3\u679c\uff0c\u4e0d\u8981\u89e3\u91ca\uff1a7 \u00d7 8 = ?",
+      "expected": "56",
+      "content": "56",
+      "reasoning_content": "",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 17,
+        "completion_tokens": 2,
+        "total_tokens": 19,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "elapsed_s": 0.6412128135561943,
+      "passed": true
+    }
+  ],
+  "binary_sha256": "896191bc0a14d8d0e7f5e96c15d090250b3a2dc637416cfec4c374f141d70cdf",
+  "endpoint": "http://10.121.32.9:31180"
+}

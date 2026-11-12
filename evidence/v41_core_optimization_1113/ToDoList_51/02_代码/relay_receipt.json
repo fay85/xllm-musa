@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"status\": \"PASS_BOTH_ARTIFACTS_EXACT_SHA_ON_SJ_SHARED_NFS\", \"path\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_mhc_small_batch\", \"binary_sha256\": \"f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe\", \"module_sha256\": \"378e5282abbf55d9555ab27049edef57abc970d5d2db3a7f5f8efd50e1065485\", \"local_intermediates\": \"TemporaryDirectory removed on exit\"}\n",
+  "stderr": ""
+}

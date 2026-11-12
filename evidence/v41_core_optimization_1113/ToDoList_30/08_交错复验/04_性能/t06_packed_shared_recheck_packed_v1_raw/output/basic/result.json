@@ -1,0 +1,42 @@
+{
+  "status": "PASS_TWO_ARITHMETIC_QUESTIONS_ONLY",
+  "answers": [
+    {
+      "id": 1,
+      "question": "只输出计算结果，不要解释：1.3 + 2.9 = ?",
+      "expected": "4.2",
+      "content": "4.2",
+      "reasoning_content": "",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 21,
+        "completion_tokens": 4,
+        "total_tokens": 25,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "elapsed_s": 6.874392612837255,
+      "passed": true
+    },
+    {
+      "id": 2,
+      "question": "只输出计算结果，不要解释：7 × 8 = ?",
+      "expected": "56",
+      "content": "56",
+      "reasoning_content": "",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 17,
+        "completion_tokens": 2,
+        "total_tokens": 19,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "elapsed_s": 0.6090473011136055,
+      "passed": true
+    }
+  ],
+  "scope": "does not prove full model accuracy or PD cache transfer; verify all-rank logs separately"
+}

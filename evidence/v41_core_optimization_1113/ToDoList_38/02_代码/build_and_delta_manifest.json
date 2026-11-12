@@ -1,0 +1,120 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_cumulative_build_v1/relay_deltas.tar",
+  "bytes": 35307520,
+  "sha256": "0d8cc36e056098a3f05f0fa78fdd0e40dd3c8a20b702d76cb2478f6d0732c7c1",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T23:27:18.285641+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "64901cba9c114093ae8c05b170638d92ed7b45f4aec142527b6c7142d2de77b3",
+        "bytes": 342335720,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t03_mhc_cumulative/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42561040,
+          "sha256": "ab67464da23796e69dcd7f6f715668ee4d36e2a40dd90f4a417169814897f82f"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+        "source_sha256": {
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "c84dcd0e7224bd56ca92951e578f4bb8150011db34d3e02e5c06c527f57382da",
+          "xllm/core/kernels/musa/CMakeLists.txt": "354b9c206fe481dd2b1e05e22e67da63318cfcd6f6a47f0c4d63e24f89c8761c",
+          "xllm/core/kernels/musa/deepseek_v41_decoder_graph_inputs.cu": "e7c2112c6c93f015bb04e0e6d5f179892b01e519fb48f50cb6d2cd49f867230e",
+          "xllm/core/kernels/musa/deepseek_v41_decoder_graph_inputs.h": "339dfedc84fe3e9afae8418499ffc56585e1fe842615a9f00dcd480354a8b291",
+          "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.cpp": "f182dd20a8546e3636a4ffd1003bf4e0b544ea93ab390ca05eb43df2a904c69c",
+          "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.h": "d877baf9a209a4cfd135819b9c1a8895ef0df282f8ad6b549a4a21523c9857ae",
+          "xllm/core/kernels/musa/deepseek_v41_mhc_prenorm_reduce.cu": "18f4d722cc0b198d27be6cc382ecac0637d6d41d1041c9c1a1a7fbc8f40ab4a6",
+          "xllm/core/layers/musa/deepseek_v41/attention.h": "9b1828f9adc6a7dfb851ced50b959b0979e9b787e22fe6e7692cd2e57a3fa588",
+          "xllm/core/layers/musa/deepseek_v41/attention_projection.h": "e9c7f05bb066f763652605799fd411fa14e3451c708cb837ae1bd76df8c44b97",
+          "xllm/core/layers/musa/deepseek_v41/decoder.h": "f79a1e7d821d34752f68278a9e2681611c7a1f374be8410f09977a99bf5e97f6",
+          "xllm/core/layers/musa/deepseek_v41/engram_hash.h": "cdff0ccb8130a82e1d2c69cac2f20e529b75ee306634083c3ef7bfa838a4bc06",
+          "xllm/core/layers/musa/deepseek_v41/feed_forward.h": "00ea926131e12bc463f36909b7e7c8fdf978c75824e95aedc65cfdf440a37955",
+          "xllm/core/layers/musa/deepseek_v41/hyper_connection.h": "7348df5337be64ce84141f3d5d2f95408a1134c501b3492d8a25fe6552b6e695",
+          "xllm/core/layers/musa/deepseek_v41/moe.h": "181f9dc0706cb70799debfec1ef24236f1b6a19de52c314c9d7f21497f52470e",
+          "xllm/core/layers/musa/deepseek_v41/paged_attention.h": "e057467864c28c83ff2d4ef3b8237b227ce1a751dffbf04e71640cda7875b868",
+          "xllm/core/layers/musa/deepseek_v41/text_model.h": "5e806caaf88a67b2ee097d574c15da985ad810ad2fdf6ef3cf717e7ca733efb7",
+          "xllm/core/runtime/dflash_worker_impl.cpp": "de412ee063548226b587468b6344c2d5ca2797d47325cb88817f8db87e6d9496",
+          "xllm/core/runtime/draft_model_config.cpp": "daac2b762582c79db3c53ea90610cc79a4f111ebaafaa198b3cf76cf9b1fc681",
+          "xllm/models/CMakeLists.txt": "a6fd5b1ed9b3662ce36200e5a1def5a6e472d98b6e91916099a457c27c703d4a",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "bdaba2b02505d40de34a1b304952d764eaa546a2bd4909ae3fe24d1a92cea529",
+          "xllm/models/models.h": "5f328213ce0d6f5860fb05d3d4117fa697d6c3e97325c328b3b77b097502e6f2"
+        },
+        "removed_from_prior_candidate": [
+          "xllm/core/layers/musa/deepseek_v41/batch_metadata.h",
+          "xllm/core/layers/musa/deepseek_v41/draft_model.h",
+          "xllm/core/layers/musa/deepseek_v41/state_checkpoint.h",
+          "xllm/models/llm/musa/deepseek_v41_dspark_native.h"
+        ],
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "previous_build": "new_start_t14_real_draft_probe_build_v1",
+        "purpose": "Clean cumulative 4411 plus optional graph/gate and mHC fused reduction; T14 and batch candidate removed from compiled sources"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 30715494,
+        "sha256": "c2f6c9da546ef197b3066082655c34f2b8ddbb5339831665221efb3d2a2a4c91",
+        "base_sha256": "465fea2d0fbbd8360c31bb07102c60005e08400b58c770fa1e51a54d0b8094c8",
+        "target_sha256": "64901cba9c114093ae8c05b170638d92ed7b45f4aec142527b6c7142d2de77b3",
+        "target_bytes": 342335720
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4569139,
+        "sha256": "48bdd2d6e7184ed49b112239a2effa377fc4ecb41c0fab7763083bdc7d96dd59",
+        "base_sha256": "c0ab1cb2a068cb94f44ae964849647c7d87a4ab60eb7c4e1e01c34d25ff96902",
+        "target_sha256": "ab67464da23796e69dcd7f6f715668ee4d36e2a40dd90f4a417169814897f82f",
+        "target_bytes": 42561040
+      }
+    ]
+  }
+}

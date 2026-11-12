@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-13T00:46:09.165778+08:00",
+  "reason": "Short-input1.4% improvement is comparable with ~2ms TPOT sample stdev",
+  "prior_sequence": [
+    "E38OFF",
+    "E38MHC",
+    "PackedON"
+  ],
+  "next_sequence": [
+    "MHC_PACKED_OFF",
+    "MHC_PACKED_ON"
+  ],
+  "contract": "same c608 ELF; cumulative MHC; each 2groups 1warm5formal; two arithmetic gates; actual-token validation; matched actual trace; no other flags changed",
+  "decision": "Use both full trials, do not select fastest run; if benefit cannot be distinguished from noise do not promote"
+}

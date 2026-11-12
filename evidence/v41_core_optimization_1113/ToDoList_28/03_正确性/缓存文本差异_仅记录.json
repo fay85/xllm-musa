@@ -1,0 +1,74 @@
+{
+  "cold_repeat_text_equal": false,
+  "requests": [
+    {
+      "label": "cold",
+      "actual_usage": {
+        "prompt_tokens": 2048,
+        "completion_tokens": 8,
+        "total_tokens": 2056,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "length",
+      "expected_prompt_tokens": 2048,
+      "response_text": "Keeping experiment records helps engineers in several important",
+      "TTFT_s": 1.46545494440943,
+      "E2E_s": 1.9901392525061965,
+      "scope": "Basic cache/request transition observation only; text differences recorded, not model accuracy acceptance"
+    },
+    {
+      "label": "repeat",
+      "actual_usage": {
+        "prompt_tokens": 2048,
+        "completion_tokens": 8,
+        "total_tokens": 2056,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        }
+      },
+      "finish_reason": "length",
+      "expected_prompt_tokens": 2048,
+      "response_text": "Keeping experiment records helps engineers because it creates",
+      "TTFT_s": 0.5531138563528657,
+      "E2E_s": 1.0876392368227243,
+      "scope": "Basic cache/request transition observation only; text differences recorded, not model accuracy acceptance"
+    },
+    {
+      "label": "changed_suffix",
+      "actual_usage": {
+        "prompt_tokens": 2051,
+        "completion_tokens": 8,
+        "total_tokens": 2059,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        }
+      },
+      "finish_reason": "length",
+      "expected_prompt_tokens": 2051,
+      "response_text": "Keeping experiment records helps engineers because it creates",
+      "TTFT_s": 0.5350506203249097,
+      "E2E_s": 1.0497962953522801,
+      "scope": "Basic cache/request transition observation only; text differences recorded, not model accuracy acceptance"
+    },
+    {
+      "label": "original_again",
+      "actual_usage": {
+        "prompt_tokens": 2048,
+        "completion_tokens": 8,
+        "total_tokens": 2056,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        }
+      },
+      "finish_reason": "length",
+      "expected_prompt_tokens": 2048,
+      "response_text": "Keeping experiment records helps engineers because it creates",
+      "TTFT_s": 0.34074706118553877,
+      "E2E_s": 0.8682363322004676,
+      "scope": "Basic cache/request transition observation only; text differences recorded, not model accuracy acceptance"
+    }
+  ],
+  "policy": "Observed greedy outputs differ between cold and cached path. Basic cache/request counts successful; not full model correctness or numerical equivalence acceptance; no precision debugging this round"
+}

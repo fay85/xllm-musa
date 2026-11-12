@@ -1,0 +1,97 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_state_checkpoint_build_v1/relay_deltas.tar",
+  "bytes": 30720000,
+  "sha256": "5c6d13ef31a285a579181dec33036dcbf1e2de50768a077600a7e827369c403c",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T21:30:05.681502+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "dff5de369e8febe7c51e0af95e33d9a4ae9f0019bb6ddfa3ef114c26eba2c399",
+        "bytes": 342232480,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_state_checkpoint/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42426816,
+          "sha256": "5abb373a5a6cffe9121732acb783491df776c1e98646e4c4d94c2a67eeeed5bf"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "3ddc7ba59006c9cbb63d2acef5ed8a7fc84a974a",
+        "source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/feed_forward.h": "e7379344a30b4e053a8bd62b1d6ea38682dc37668f0d42a512aa4c486f07d2f9",
+          "xllm/core/layers/musa/deepseek_v41/moe.h": "b3e6d5e792b28ca9898ea60f66b5f9f0be4c3ea8cf7f093cb4b881655749c38f",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "d751ac3f628dcf158074723bd92ab42cec05f11c11994014bfe5df97c252d84b",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "ce5d46feb212c98d2377000159cd123e6aed1e08251c287e7f20483c47819892",
+          "xllm/core/layers/musa/deepseek_v41/state_checkpoint.h": "e811e8117a0ff249dfceb6b028a3379a825563167e9d642e356bdd7cb77e29b9"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "purpose": "Accepted shared TP + bounded request-local GPU state checkpoint unit binding only; production model behavior unchanged; DSpark not integrated yet"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 26595767,
+        "sha256": "7d02ddc3522d3742e4fdc3c7bb94a421c943e74631578d7720e738a7602d41bc",
+        "base_sha256": "c1cf4671022a987e6301391f5daf7eb426beb134a5f834356dc6d2693afd3d04",
+        "target_sha256": "dff5de369e8febe7c51e0af95e33d9a4ae9f0019bb6ddfa3ef114c26eba2c399",
+        "target_bytes": 342232480
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4109833,
+        "sha256": "8939876508809b36414da34a4d0660feef6cdd308a3ed01d6e799571b42e9251",
+        "base_sha256": "83529586fed80b8243238c67c6d60cf5b2f23105b49d878e8997a1d96d3c3e33",
+        "target_sha256": "5abb373a5a6cffe9121732acb783491df776c1e98646e4c4d94c2a67eeeed5bf",
+        "target_bytes": 42426816
+      }
+    ]
+  }
+}

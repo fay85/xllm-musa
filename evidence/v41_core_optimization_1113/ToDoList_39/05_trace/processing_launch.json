@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 37858, \"log\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/scripts/t07_pblock_postprocess_v2.log\", \"cpu_only\": true}\n",
+  "stderr": ""
+}

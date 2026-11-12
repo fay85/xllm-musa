@@ -1,0 +1,126 @@
+{
+  "status": "FORMAL_SQLITE_RESPONSE_IDS_JOIN_ACTUAL_SERVER_TERMINAL_LOGS",
+  "rows": [
+    {
+      "input_tokens": 256,
+      "index": 0,
+      "request_id": "chatcmpl-12481178814234374860-j7pM7E6N5xAzhAnkohbE36",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 135,
+      "proposed_draft_tokens": 605,
+      "draft_acceptance_rate": 0.2231404958677686,
+      "formal_E2E_s": 44.70238323416561,
+      "formal_TPOT_ms": 173.936358013866,
+      "actual_terminal_log": "I20261113 01:14:48.260253  5476 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-j7pM7E6N5xAzhAnkohbE36, x-request-id: 01a1d0c0-91a8-7437-b1d5-64fbd2952a83, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 338.0ms, ttft: 333.0ms, total_latency: 44686.3ms, avg tpot: 173.9ms, generation speed: 5.8 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 605, speculative_token_acceptance_rate: 0.2231"
+    },
+    {
+      "input_tokens": 256,
+      "index": 1,
+      "request_id": "chatcmpl-12481178814234374860-jGJ5pxmbuop3zzBKKkywJo",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 135,
+      "proposed_draft_tokens": 605,
+      "draft_acceptance_rate": 0.2231404958677686,
+      "formal_E2E_s": 44.82159914448857,
+      "formal_TPOT_ms": 174.34405025971287,
+      "actual_terminal_log": "I20261113 01:15:33.082718  5477 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-jGJ5pxmbuop3zzBKKkywJo, x-request-id: 01a1d0c1-404b-7084-a425-a6ae022cc4bd, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 339.1ms, ttft: 334.0ms, total_latency: 44791.9ms, avg tpot: 174.3ms, generation speed: 5.8 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 605, speculative_token_acceptance_rate: 0.2231"
+    },
+    {
+      "input_tokens": 256,
+      "index": 2,
+      "request_id": "chatcmpl-12481178814234374860-DnpyTwmXU4u76UH3kTAn2p",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 135,
+      "proposed_draft_tokens": 605,
+      "draft_acceptance_rate": 0.2231404958677686,
+      "formal_E2E_s": 44.48566659539938,
+      "formal_TPOT_ms": 173.06355517722812,
+      "actual_terminal_log": "I20261113 01:16:17.568745  5478 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-DnpyTwmXU4u76UH3kTAn2p, x-request-id: 01a1d0c1-ef5f-7d41-b659-9633d22ee727, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 342.4ms, ttft: 337.0ms, total_latency: 44468.0ms, avg tpot: 173.1ms, generation speed: 5.8 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 605, speculative_token_acceptance_rate: 0.2231"
+    },
+    {
+      "input_tokens": 256,
+      "index": 3,
+      "request_id": "chatcmpl-12481178814234374860-6gL7zuRjL4fp4SR6hLZt5B",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 135,
+      "proposed_draft_tokens": 605,
+      "draft_acceptance_rate": 0.2231404958677686,
+      "formal_E2E_s": 45.27738246135414,
+      "formal_TPOT_ms": 176.20145286269047,
+      "actual_terminal_log": "I20261113 01:17:02.846411  5475 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-6gL7zuRjL4fp4SR6hLZt5B, x-request-id: 01a1d0c2-9d24-7f37-8e99-ea2fc9f83a37, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 335.2ms, ttft: 330.0ms, total_latency: 45261.2ms, avg tpot: 176.2ms, generation speed: 5.7 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 605, speculative_token_acceptance_rate: 0.2231"
+    },
+    {
+      "input_tokens": 256,
+      "index": 4,
+      "request_id": "chatcmpl-12481178814234374860-hkX8ZG9aLwZUxSAtJc8im9",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 135,
+      "proposed_draft_tokens": 605,
+      "draft_acceptance_rate": 0.2231404958677686,
+      "formal_E2E_s": 43.98806004039943,
+      "formal_TPOT_ms": 171.1297613732955,
+      "actual_terminal_log": "I20261113 01:17:46.834663  5476 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-hkX8ZG9aLwZUxSAtJc8im9, x-request-id: 01a1d0c3-4e02-7ad5-8732-72c871b6b0ee, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 339.0ms, ttft: 333.0ms, total_latency: 43971.2ms, avg tpot: 171.1ms, generation speed: 5.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 605, speculative_token_acceptance_rate: 0.2231"
+    },
+    {
+      "input_tokens": 2048,
+      "index": 0,
+      "request_id": "chatcmpl-12481178814234374860-vQAyPogMyHsPVwoyjW73Yi",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 128,
+      "proposed_draft_tokens": 635,
+      "draft_acceptance_rate": 0.2015748031496063,
+      "formal_E2E_s": 48.45129128266126,
+      "formal_TPOT_ms": 179.8168304211953,
+      "actual_terminal_log": "I20261113 01:19:31.776008  5478 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-vQAyPogMyHsPVwoyjW73Yi, x-request-id: 01a1d0c4-d67f-754d-876f-91aebd9bb4b7, sequence: 0, finish_reason: length, prompt_tokens: 2048, generated_tokens: 256, queue_to_batch: 2585.1ms, ttft: 2579.0ms, total_latency: 48432.4ms, avg tpot: 179.8ms, generation speed: 5.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 128, speculative_proposed_tokens: 635, speculative_token_acceptance_rate: 0.2016"
+    },
+    {
+      "input_tokens": 2048,
+      "index": 1,
+      "request_id": "chatcmpl-12481178814234374860-96EXHA75ksrYo648yrJhj6",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 139,
+      "proposed_draft_tokens": 595,
+      "draft_acceptance_rate": 0.23361344537815126,
+      "formal_E2E_s": 45.489497422240674,
+      "formal_TPOT_ms": 167.91745312877146,
+      "actual_terminal_log": "I20261113 01:20:17.266052  5475 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-96EXHA75ksrYo648yrJhj6, x-request-id: 01a1d0c5-93c4-7312-a474-496a80cf06f9, sequence: 0, finish_reason: length, prompt_tokens: 2048, generated_tokens: 256, queue_to_batch: 2657.2ms, ttft: 2650.0ms, total_latency: 45469.5ms, avg tpot: 167.9ms, generation speed: 6.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 139, speculative_proposed_tokens: 595, speculative_token_acceptance_rate: 0.2336"
+    },
+    {
+      "input_tokens": 2048,
+      "index": 2,
+      "request_id": "chatcmpl-12481178814234374860-4J97ey2LiadQGHdDizx6tT",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 139,
+      "proposed_draft_tokens": 595,
+      "draft_acceptance_rate": 0.23361344537815126,
+      "formal_E2E_s": 46.143306855112314,
+      "formal_TPOT_ms": 170.06893700317426,
+      "actual_terminal_log": "I20261113 01:21:03.409554  5476 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-4J97ey2LiadQGHdDizx6tT, x-request-id: 01a1d0c6-4576-7b23-a27a-4d2d53a4f15c, sequence: 0, finish_reason: length, prompt_tokens: 2048, generated_tokens: 256, queue_to_batch: 2568.1ms, ttft: 2562.0ms, total_latency: 45929.2ms, avg tpot: 170.1ms, generation speed: 5.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 139, speculative_proposed_tokens: 595, speculative_token_acceptance_rate: 0.2336"
+    },
+    {
+      "input_tokens": 2048,
+      "index": 3,
+      "request_id": "chatcmpl-12481178814234374860-E5ksuNmypdc4zjCw9anfsp",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 139,
+      "proposed_draft_tokens": 595,
+      "draft_acceptance_rate": 0.23361344537815126,
+      "formal_E2E_s": 46.754506030119956,
+      "formal_TPOT_ms": 172.22326506732728,
+      "actual_terminal_log": "I20261113 01:21:50.164194  5477 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-E5ksuNmypdc4zjCw9anfsp, x-request-id: 01a1d0c6-f9b6-7970-bc2f-4ff6149af284, sequence: 0, finish_reason: length, prompt_tokens: 2048, generated_tokens: 256, queue_to_batch: 2621.9ms, ttft: 2615.0ms, total_latency: 46531.7ms, avg tpot: 172.2ms, generation speed: 5.8 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 139, speculative_proposed_tokens: 595, speculative_token_acceptance_rate: 0.2336"
+    },
+    {
+      "input_tokens": 2048,
+      "index": 4,
+      "request_id": "chatcmpl-12481178814234374860-XwnLk6vD6QbNT7Cjp8tVbL",
+      "delivered_output_tokens": 256,
+      "accepted_draft_tokens": 139,
+      "proposed_draft_tokens": 595,
+      "draft_acceptance_rate": 0.23361344537815126,
+      "formal_E2E_s": 46.02804536744952,
+      "formal_TPOT_ms": 170.34836896494323,
+      "actual_terminal_log": "I20261113 01:22:36.192615  5478 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-XwnLk6vD6QbNT7Cjp8tVbL, x-request-id: 01a1d0c7-b057-7a2d-94ef-7ad4f593db0f, sequence: 0, finish_reason: length, prompt_tokens: 2048, generated_tokens: 256, queue_to_batch: 2576.6ms, ttft: 2570.0ms, total_latency: 46008.8ms, avg tpot: 170.3ms, generation speed: 5.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 139, speculative_proposed_tokens: 595, speculative_token_acceptance_rate: 0.2336"
+    }
+  ],
+  "note": "Acceptance rate is accepted/proposed draft tokens; performance throughput uses delivered256 tokens only. Do not use generic EvalScope SpecAcceptRate on non-spec or infer exact full-model round count without trace evidence."
+}

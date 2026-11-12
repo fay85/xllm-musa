@@ -1,0 +1,9 @@
+# PD两端必须共同提供DSpark bootstrap
+
+源码核对：DisaggPDScheduler的D端在num_speculative_tokens>0时要求收到mtp_bootstrap_embedding，缺失会明确拒绝；P端只有num_speculative_tokens>0才序列化该字段。DraftModelSpecWorker同时把target/draft cache注册到同一Mooncake transfer实例，DSpark prefill会写draft context KV。因而不能只在D开DSpark、P仍按普通非spec服务运行。
+
+正式OFF对照两边num_spec0；DSPARK模式P/D都显式num_spec5、algorithm=DSpark、draft_model为同一W4AFP8-mt视图、XLLM_DSV41_DSPARK_NATIVE1。P会捕获37/38/39层aux hidden并建立三层draft context KV；D接收bootstrap并进入proposal/verify。是否所有V4.1 TOKEN C1/C2与draft SWA传输都已正确接上，仍需真实PD运行核验，不能仅凭框架具有接口宣称完成。
+
+这是DSpark部署本身需要的两端协同变化，不是另一个P端加速开关；完整性能将计入其P额外工作和传输代价。P/D各TP8、EP8、C1、全局Graph关闭；P通信fence固定。MTP当前有界状态恢复会重放接受前缀，不能提前承诺TPOT提升。
+
+仅通过基础功能检查，未完成模型精度验收。

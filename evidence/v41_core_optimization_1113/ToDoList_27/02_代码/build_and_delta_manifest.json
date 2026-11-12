@@ -1,0 +1,98 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_cumulative_build_v1/relay_deltas.tar",
+  "bytes": 34385920,
+  "sha256": "df9c368e6cd18613459db08aabdd048b61757e38d63888aba01ec7eca632907d",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T21:36:44.209529+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "9b28367c96003b8e2463fb94e06db123126d6a5895b79ad62fbd0f3c57558e72",
+        "bytes": 342298064,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t05_decoder_graph_cumulative/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42509832,
+          "sha256": "3e0045228336355eac246a2faf092efa23b1babafbf01b6d7d80038aacd60569"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "3ddc7ba59006c9cbb63d2acef5ed8a7fc84a974a",
+        "source_sha256": {
+          "xllm/core/kernels/musa/CMakeLists.txt": "ef06c9d53dbd435309f416f24184ca3517fc6c81cac598e4de1da8dfa0e5ed2d",
+          "xllm/core/layers/musa/deepseek_v41/decoder.h": "f05afdfcad4e6db0532461c5d58e29458c247315dd506fc940844fafb8b209de",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "e6464b0e5f4fcfe18ad66ebbaf279082fcde6b094cb406fa8a93391cdc1b201b",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "6f222b28a38fd42579d6d7a77ee90b7b85a28743602bcab78b74fa81010ef651",
+          "xllm/core/kernels/musa/deepseek_v41_decoder_graph_inputs.h": "339dfedc84fe3e9afae8418499ffc56585e1fe842615a9f00dcd480354a8b291",
+          "xllm/core/kernels/musa/deepseek_v41_decoder_graph_inputs.cu": "e7c2112c6c93f015bb04e0e6d5f179892b01e519fb48f50cb6d2cd49f867230e"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "purpose": "Shared TP + stream + optional Gate cache + independent tail Graph and fused-input controls; cumulative formal policy chosen only from accepted predecessors"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 30015348,
+        "sha256": "8dcd5e91e6e776213038dc67e234ffe1db5432044910557149d6f5a4f8953501",
+        "base_sha256": "c404a3673914bbe16cedef3f509fd8ad931261d2e3c5ffbf26f3be3eb780e5f3",
+        "target_sha256": "9b28367c96003b8e2463fb94e06db123126d6a5895b79ad62fbd0f3c57558e72",
+        "target_bytes": 342298064
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4358467,
+        "sha256": "bd83c251c7ec969f2d8f74fc5da5be373306e09816ad8113692b8077dbf74839",
+        "base_sha256": "5fa23d883e7a80e4f9d88a128eb2ddfe3b14ec0176cc297cee9f917051a78644",
+        "target_sha256": "3e0045228336355eac246a2faf092efa23b1babafbf01b6d7d80038aacd60569",
+        "target_bytes": 42509832
+      }
+    ]
+  }
+}

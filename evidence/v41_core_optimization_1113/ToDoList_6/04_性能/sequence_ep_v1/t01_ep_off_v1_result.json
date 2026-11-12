@@ -1,0 +1,152 @@
+{
+  "terminal": true,
+  "result": {
+    "at": "2026-11-12T18:32:40.661781+08:00",
+    "exit_code": 0
+  },
+  "status": [
+    {
+      "input_tokens": 256,
+      "phase": "warmup",
+      "count": 1,
+      "directory": "/work/new_start_t01_ep_off_v1/performance/input256_output256/warmup",
+      "started_at": "2026-11-12T18:23:16.264508+08:00",
+      "finished_at": "2026-11-12T18:24:03.641316+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          41.81101577915251,
+          0.325313912704587
+        ]
+      ]
+    },
+    {
+      "input_tokens": 256,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t01_ep_off_v1/performance/input256_output256/measured",
+      "started_at": "2026-11-12T18:24:03.644369+08:00",
+      "finished_at": "2026-11-12T18:27:37.874296+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          41.79565701447427,
+          0.33308152947574854
+        ],
+        [
+          1,
+          256,
+          256,
+          41.76748352125287,
+          0.32246499694883823
+        ],
+        [
+          1,
+          256,
+          256,
+          41.91163066774607,
+          0.5061076991260052
+        ],
+        [
+          1,
+          256,
+          256,
+          41.71452011074871,
+          0.3162142839282751
+        ],
+        [
+          1,
+          256,
+          256,
+          41.961413516663015,
+          0.5139275612309575
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "warmup",
+      "count": 1,
+      "directory": "/work/new_start_t01_ep_off_v1/performance/input2048_output256/warmup",
+      "started_at": "2026-11-12T18:27:37.877365+08:00",
+      "finished_at": "2026-11-12T18:28:27.895261+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          44.170759244821966,
+          2.3494398212060332
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t01_ep_off_v1/performance/input2048_output256/measured",
+      "started_at": "2026-11-12T18:28:27.898993+08:00",
+      "finished_at": "2026-11-12T18:32:16.087512+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          44.50267167203128,
+          2.360652893781662
+        ],
+        [
+          1,
+          2048,
+          256,
+          46.01570901367813,
+          3.4581995848566294
+        ],
+        [
+          1,
+          2048,
+          256,
+          44.335491922684014,
+          2.494168027304113
+        ],
+        [
+          1,
+          2048,
+          256,
+          44.24161271005869,
+          2.354379940778017
+        ],
+        [
+          1,
+          2048,
+          256,
+          44.1539849601686,
+          2.3483824990689754
+        ]
+      ]
+    }
+  ],
+  "trace": {
+    "status": "PROFILE_REQUEST_SAVED_REQUIRES_ALL_RANK_TRACE_VALIDATION",
+    "content": "Keeping experiment records helps engineers because it creates",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 256,
+      "completion_tokens": 8,
+      "total_tokens": 264,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "error": null,
+    "scope": "validate actual16rank CPU/GPU traces and native PC correlation separately"
+  }
+}

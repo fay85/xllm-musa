@@ -1,0 +1,118 @@
+{
+  "task_id": [
+    "G01",
+    "G02"
+  ],
+  "status": "running",
+  "baseline_commit": "89a2572fc6c58eebdedb353762939ecd0a0bf0cc",
+  "g01": "completed_identity_dependencies_basic_and_10_formal_requests_pass",
+  "g02": "HOST_NFS_long_failed_archived; cleaned; RAM retry in ../ToDoList_2",
+  "last_verified_at": "2026-11-12T14:44:28.806984+08:00",
+  "runtime_client": null,
+  "optimization_status": "not_started",
+  "g01_metrics": {
+    "256": {
+      "rows": [
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 46.06110255420208,
+          "first_chunk_latency": 0.31509548611938953,
+          "time_per_output_token": 0.17939610614934387
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 46.144261879846454,
+          "first_chunk_latency": 0.31284658331424,
+          "time_per_output_token": 0.1797310403785577
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 46.02320164721459,
+          "first_chunk_latency": 0.31093150842934847,
+          "time_per_output_token": 0.1792638044658245
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 46.101044898852706,
+          "first_chunk_latency": 0.31824073381721973,
+          "time_per_output_token": 0.17954040849033523
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 46.09222088102251,
+          "first_chunk_latency": 0.3131184009835124,
+          "time_per_output_token": 0.17952589207858433
+        }
+      ],
+      "TTFT_ms": 314.046542532742,
+      "TPOT_ms": 179.4914503125291,
+      "E2E_s": 46.08436637222767,
+      "QPS_latency_sum": 0.021699332739500157,
+      "output_tokens_per_s_latency_sum": 5.55502918131204
+    },
+    "2048": {
+      "rows": [
+        {
+          "success": 1,
+          "prompt_tokens": 2048,
+          "completion_tokens": 256,
+          "latency": 48.60161033645272,
+          "first_chunk_latency": 2.4094526479020715,
+          "time_per_output_token": 0.18114571642568883
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 2048,
+          "completion_tokens": 256,
+          "latency": 48.5099860355258,
+          "first_chunk_latency": 2.3555351877585053,
+          "time_per_output_token": 0.18099784646183253
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 2048,
+          "completion_tokens": 256,
+          "latency": 48.44516248628497,
+          "first_chunk_latency": 2.3426919914782047,
+          "time_per_output_token": 0.1807940019404187
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 2048,
+          "completion_tokens": 256,
+          "latency": 48.50558563414961,
+          "first_chunk_latency": 2.339469420723617,
+          "time_per_output_token": 0.18104359299382744
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 2048,
+          "completion_tokens": 256,
+          "latency": 48.46661058720201,
+          "first_chunk_latency": 2.3231092616915703,
+          "time_per_output_token": 0.18095490715886448
+        }
+      ],
+      "TTFT_ms": 2354.051701910794,
+      "TPOT_ms": 180.98721299612637,
+      "E2E_s": 48.50579101592302,
+      "QPS_latency_sum": 0.020616095090001302,
+      "output_tokens_per_s_latency_sum": 5.277720343040333
+    }
+  },
+  "updated_at": "2026-11-12T15:48:01.009493+08:00",
+  "new_binary_sha256": "896191bc0a14d8d0e7f5e96c15d090250b3a2dc637416cfec4c374f141d70cdf",
+  "old_stage_i_exit": "both roles all8 ranks exit0; no SIGKILL",
+  "startup_failure_recorded": "g02_off_v1 client terminal HTTP503 readiness race; no formal requests; later same service two basic questions pass",
+  "cleanup": "P six exited; rank3 host6899 received exactly one authorized SIGKILL; D all8 normal exit0; both hosts all GPUs0MiB"
+}

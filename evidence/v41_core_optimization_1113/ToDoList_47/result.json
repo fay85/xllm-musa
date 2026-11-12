@@ -1,0 +1,50 @@
+{
+  "status": "ACCEPTED_SPEED_OPTIMIZATION",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": 23.248010310642385,
+      "TPOT_ms_change_percent": 2.721627455155695,
+      "E2E_s_change_percent": 3.1326470576320986,
+      "output_tps_change_percent": -3.037493118819623
+    },
+    "2048": {
+      "TTFT_ms_change_percent": -43.91871608321648,
+      "TPOT_ms_change_percent": -0.11430420214780801,
+      "E2E_s_change_percent": -6.051259256952046,
+      "output_tps_change_percent": 6.441022209656211
+    }
+  },
+  "valid_after_formal_requests": 10,
+  "after_normal_rank_exits": 16,
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e47_trace_analysis_v1.tar.zst",
+    "bytes": 7138979,
+    "sha256": "4bd43028b6d1ff5d04f0e2617bd976d8c7c56bb33410e863108e971b22f8d12a",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_draft_cache/bin/xllm",
+      "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t09_chunk256_long_trace_v1_raw_trace.tar.zst",
+          "bytes": 201554523,
+          "sha256": "6033290f69411930f4f4afe14ff06ceb97c52ab58b6e75bc66485a0bbf46e714"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t09_chunk512_cumulative_v1_raw_trace.tar.zst",
+          "bytes": 133776043,
+          "sha256": "f14d474a56c39f713df24d0d426104b452c0ecda010c4a114826752d4a149e46"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794506134.523097
+    }
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "scope": "2048-token cold prefill TTFT; short-input regression recorded, not uniform improvement",
+  "accepted_parameter": "P chunk512/batch512; D unchanged",
+  "reason": "Long TTFT -43.92%, E2E -6.05%, TPOT-.11%; short TTFT+23.25%,TPOT+2.72%,E2E+3.13% retained; all32 trace audited and P chunks8to4"
+}

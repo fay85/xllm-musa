@@ -1,0 +1,34 @@
+{
+  "off": {
+    "all8_full_kernels": [
+      219440,
+      219316,
+      219316,
+      219316,
+      219316,
+      219316,
+      219316,
+      219316
+    ],
+    "actual_D_rows": 62,
+    "full_rank0_kernels_per_D_row": 3539.3548387096776,
+    "selected_step": "V41/step/q=1/kv=287",
+    "selected_mm": 349
+  },
+  "after": {
+    "all8_full_kernels": [
+      152510,
+      152446,
+      152446,
+      152446,
+      152446,
+      152446,
+      152446,
+      152446
+    ],
+    "actual_D_rows": 62,
+    "full_rank0_kernels_per_D_row": 2459.8387096774195,
+    "selected_step": "V41/step/q=2/kv=287",
+    "selected_mm": 376
+  }
+}

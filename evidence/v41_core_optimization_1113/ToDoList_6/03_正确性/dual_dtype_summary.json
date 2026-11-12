@@ -1,0 +1,87 @@
+{
+  "archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_6/ar_dual_dtype_all_attempts_raw.tar.gz",
+  "sha256": "72b2ef111e4c19dd1ad716b1651acb229b0c689148c4b6dc0acfe973e179a0f6",
+  "bytes": 6515,
+  "result": {
+    "exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "TERM_sent": false,
+    "SIGKILL_sent": false,
+    "finished_at": "2026-11-12T18:05:25.355172+08:00"
+  },
+  "ranks": [
+    {
+      "rank": 0,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3856770619750023,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 1,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38619973696768284,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 2,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38587405160069466,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 3,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38571278285235167,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 4,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38607181515544653,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 5,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38601312041282654,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 6,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3855383852496743,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 7,
+      "repetitions": 100,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38625031895935535,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    }
+  ],
+  "GPU_empty": true
+}

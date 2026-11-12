@@ -1,0 +1,5 @@
+{
+  "first_attempt": "Page.goto ui.perfetto.dev timed out60s; trace conversion already succeeded; first output preserved as PREFIX_HIT_P0_UI_FIRST_TIMEOUT",
+  "retry": "Fresh dedicated browser profile from completed CED render; same pftrace/receipt; actual screenshot rendered successfully",
+  "no_model_or_profiler_rerun": true
+}

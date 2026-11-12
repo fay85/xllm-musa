@@ -1,0 +1,291 @@
+{
+  "status": "PASS_FUSED_MHC_REDUCTION_BASIC_CHECKS",
+  "synthetic_cases": [
+    {
+      "splits": 16,
+      "rows": 0,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 0,
+      "magnitude": 0.0001,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 0,
+      "magnitude": 1.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 0,
+      "magnitude": 100.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 1,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 1,
+      "magnitude": 0.0001,
+      "max_abs": 5.960464477539063e-08
+    },
+    {
+      "splits": 16,
+      "rows": 1,
+      "magnitude": 1.0,
+      "max_abs": 5.340576171875e-05
+    },
+    {
+      "splits": 16,
+      "rows": 1,
+      "magnitude": 100.0,
+      "max_abs": 3.4332275390625e-05
+    },
+    {
+      "splits": 16,
+      "rows": 17,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 17,
+      "magnitude": 0.0001,
+      "max_abs": 1.7881393432617188e-07
+    },
+    {
+      "splits": 16,
+      "rows": 17,
+      "magnitude": 1.0,
+      "max_abs": 0.000152587890625
+    },
+    {
+      "splits": 16,
+      "rows": 17,
+      "magnitude": 100.0,
+      "max_abs": 0.0001220703125
+    },
+    {
+      "splits": 16,
+      "rows": 128,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 128,
+      "magnitude": 0.0001,
+      "max_abs": 2.980232238769531e-07
+    },
+    {
+      "splits": 16,
+      "rows": 128,
+      "magnitude": 1.0,
+      "max_abs": 0.000152587890625
+    },
+    {
+      "splits": 16,
+      "rows": 128,
+      "magnitude": 100.0,
+      "max_abs": 0.00018310546875
+    },
+    {
+      "splits": 16,
+      "rows": 512,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 16,
+      "rows": 512,
+      "magnitude": 0.0001,
+      "max_abs": 2.980232238769531e-07
+    },
+    {
+      "splits": 16,
+      "rows": 512,
+      "magnitude": 1.0,
+      "max_abs": 0.00018310546875
+    },
+    {
+      "splits": 16,
+      "rows": 512,
+      "magnitude": 100.0,
+      "max_abs": 0.00018310546875
+    },
+    {
+      "splits": 32,
+      "rows": 0,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 0,
+      "magnitude": 0.0001,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 0,
+      "magnitude": 1.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 0,
+      "magnitude": 100.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 1,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 1,
+      "magnitude": 0.0001,
+      "max_abs": 2.384185791015625e-07
+    },
+    {
+      "splits": 32,
+      "rows": 1,
+      "magnitude": 1.0,
+      "max_abs": 9.1552734375e-05
+    },
+    {
+      "splits": 32,
+      "rows": 1,
+      "magnitude": 100.0,
+      "max_abs": 8.0108642578125e-05
+    },
+    {
+      "splits": 32,
+      "rows": 17,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 17,
+      "magnitude": 0.0001,
+      "max_abs": 2.384185791015625e-07
+    },
+    {
+      "splits": 32,
+      "rows": 17,
+      "magnitude": 1.0,
+      "max_abs": 0.0001220703125
+    },
+    {
+      "splits": 32,
+      "rows": 17,
+      "magnitude": 100.0,
+      "max_abs": 0.0001220703125
+    },
+    {
+      "splits": 32,
+      "rows": 128,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 128,
+      "magnitude": 0.0001,
+      "max_abs": 4.76837158203125e-07
+    },
+    {
+      "splits": 32,
+      "rows": 128,
+      "magnitude": 1.0,
+      "max_abs": 0.000244140625
+    },
+    {
+      "splits": 32,
+      "rows": 128,
+      "magnitude": 100.0,
+      "max_abs": 0.00018310546875
+    },
+    {
+      "splits": 32,
+      "rows": 512,
+      "magnitude": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "splits": 32,
+      "rows": 512,
+      "magnitude": 0.0001,
+      "max_abs": 5.960464477539062e-07
+    },
+    {
+      "splits": 32,
+      "rows": 512,
+      "magnitude": 1.0,
+      "max_abs": 0.000244140625
+    },
+    {
+      "splits": 32,
+      "rows": 512,
+      "magnitude": 100.0,
+      "max_abs": 0.00018310546875
+    }
+  ],
+  "real_weight_cases": [
+    {
+      "part": "attn",
+      "rows": 1,
+      "max_abs": 9.5367431640625e-07,
+      "reference_host_enqueue_plus_device_ms": 0.11192805444200833,
+      "fused_host_enqueue_plus_device_ms": 0.046213933577140175
+    },
+    {
+      "part": "attn",
+      "rows": 17,
+      "max_abs": 4.76837158203125e-06,
+      "reference_host_enqueue_plus_device_ms": 0.1130586490035057,
+      "fused_host_enqueue_plus_device_ms": 0.04751613984505335
+    },
+    {
+      "part": "attn",
+      "rows": 128,
+      "max_abs": 3.814697265625e-06,
+      "reference_host_enqueue_plus_device_ms": 0.1107136718928814,
+      "fused_host_enqueue_plus_device_ms": 0.058798895527919136
+    },
+    {
+      "part": "ffn",
+      "rows": 1,
+      "max_abs": 1.430511474609375e-06,
+      "reference_host_enqueue_plus_device_ms": 0.1098410536845525,
+      "fused_host_enqueue_plus_device_ms": 0.04633180797100067
+    },
+    {
+      "part": "ffn",
+      "rows": 17,
+      "max_abs": 2.86102294921875e-06,
+      "reference_host_enqueue_plus_device_ms": 0.11206393440564473,
+      "fused_host_enqueue_plus_device_ms": 0.04741369436184565
+    },
+    {
+      "part": "ffn",
+      "rows": 128,
+      "max_abs": 3.814697265625e-06,
+      "reference_host_enqueue_plus_device_ms": 0.11114127313097318,
+      "fused_host_enqueue_plus_device_ms": 0.05999427909652392
+    }
+  ],
+  "scope": "Short directly-related operator checks and enqueue+device microtiming; not full-model accuracy or official serving performance.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

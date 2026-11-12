@@ -1,0 +1,116 @@
+{
+  "status": "MATCHED_BY_ACTUAL_CHAT_COMPLETION_ID",
+  "limitations": "Difference includes router/P-D/stream/client scope; not automatically CPU overhead or removable time. P stage durations are logged with millisecond rounding.",
+  "rows": [
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-4q6qvNPyKBXmWWQ9ve9xvA",
+      "client_TTFT_ms": 526.569189503789,
+      "P_stage_TTFT_ms": 299.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 227.56918950378895,
+      "TPOT_ms": 179.26889687922656,
+      "E2E_s": 46.24013789370656,
+      "server_record": "I20261112 15:11:02.478652 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-4q6qvNPyKBXmWWQ9ve9xvA, x-request-id: 01a1ce98-7b44-74f0-b6a4-440581818194, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 299.0ms, total_latency: 299.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-qKYaDxVteb2ZhUKH8jx63y",
+      "client_TTFT_ms": 516.749432310462,
+      "P_stage_TTFT_ms": 299.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 217.749432310462,
+      "TPOT_ms": 179.55330284860204,
+      "E2E_s": 46.30284165870398,
+      "server_record": "I20261112 15:11:48.710260 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-qKYaDxVteb2ZhUKH8jx63y, x-request-id: 01a1ce99-2fe7-73aa-82bc-83a84641e7c7, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 299.0ms, total_latency: 299.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-zAacEAnyasfTmLyAxC33WQ",
+      "client_TTFT_ms": 315.46593364328146,
+      "P_stage_TTFT_ms": 298.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 17.46593364328146,
+      "TPOT_ms": 179.06770287264212,
+      "E2E_s": 45.97773016616702,
+      "server_record": "I20261112 15:12:34.812157 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-zAacEAnyasfTmLyAxC33WQ, x-request-id: 01a1ce99-e4c6-7d64-a19d-8d160fd12af3, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 298.0ms, total_latency: 298.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-XPh4ATcc5EQu2AshpZG4vD",
+      "client_TTFT_ms": 312.28269916027784,
+      "P_stage_TTFT_ms": 295.0,
+      "P_queue_to_batch_ms": 1.2,
+      "outside_P_stage_ms": 17.282699160277843,
+      "TPOT_ms": 179.2697275459182,
+      "E2E_s": 46.02606322336942,
+      "server_record": "I20261112 15:13:20.786965 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-XPh4ATcc5EQu2AshpZG4vD, x-request-id: 01a1ce9a-9860-7b08-a513-0279e42ab1d0, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.2ms, ttft: 295.0ms, total_latency: 295.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-yUp6AMjb7vDKfqv44YMmN9",
+      "client_TTFT_ms": 318.30042973160744,
+      "P_stage_TTFT_ms": 301.0,
+      "P_queue_to_batch_ms": 1.8,
+      "outside_P_stage_ms": 17.300429731607437,
+      "TPOT_ms": 179.0651293909725,
+      "E2E_s": 45.979908424429595,
+      "server_record": "I20261112 15:14:06.819262 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-yUp6AMjb7vDKfqv44YMmN9, x-request-id: 01a1ce9b-4c2a-771c-8ede-24a99e9dd870, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.8ms, ttft: 301.0ms, total_latency: 301.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 2048,
+      "request_id": "chatcmpl-340806405095348604-zHnpvbtqRBDXK2ouy2Np7T",
+      "client_TTFT_ms": 2374.781866557896,
+      "P_stage_TTFT_ms": 2346.0,
+      "P_queue_to_batch_ms": 1.7,
+      "outside_P_stage_ms": 28.781866557896137,
+      "TPOT_ms": 180.62016694057806,
+      "E2E_s": 48.4329244364053,
+      "server_record": "I20261112 15:15:54.186517 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-zHnpvbtqRBDXK2ouy2Np7T, x-request-id: 01a1ce9c-e787-7ccd-84d3-928171452bd3, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.7ms, ttft: 2346.0ms, total_latency: 2346.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 2048,
+      "request_id": "chatcmpl-340806405095348604-Ctybxe6uRT8p5A6WKkC7LW",
+      "client_TTFT_ms": 2350.7493268698454,
+      "P_stage_TTFT_ms": 2328.0,
+      "P_queue_to_batch_ms": 1.7,
+      "outside_P_stage_ms": 22.74932686984539,
+      "TPOT_ms": 181.08836922283268,
+      "E2E_s": 48.528283478692174,
+      "server_record": "I20261112 15:16:42.595963 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-Ctybxe6uRT8p5A6WKkC7LW, x-request-id: 01a1ce9d-a4bc-7d1a-a599-a824cb68bd62, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.7ms, ttft: 2328.0ms, total_latency: 2328.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 2048,
+      "request_id": "chatcmpl-340806405095348604-9LSvd8gTkAY5d7nFeEqv4P",
+      "client_TTFT_ms": 2380.8451825752854,
+      "P_stage_TTFT_ms": 2360.0,
+      "P_queue_to_batch_ms": 2.0,
+      "outside_P_stage_ms": 20.845182575285435,
+      "TPOT_ms": 180.46318496047866,
+      "E2E_s": 48.398957347497344,
+      "server_record": "I20261112 15:17:31.154664 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-9LSvd8gTkAY5d7nFeEqv4P, x-request-id: 01a1ce9e-624b-746b-9406-f50203cbfd55, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 2.0ms, ttft: 2360.0ms, total_latency: 2360.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 2048,
+      "request_id": "chatcmpl-340806405095348604-diTf9cBmoBcoFWactD2JpR",
+      "client_TTFT_ms": 2368.92846878618,
+      "P_stage_TTFT_ms": 2348.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 20.92846878618002,
+      "TPOT_ms": 180.67596499242035,
+      "E2E_s": 48.44129954185337,
+      "server_record": "I20261112 15:18:19.541927 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-diTf9cBmoBcoFWactD2JpR, x-request-id: 01a1ce9f-1f5b-7f35-90ae-18d0e5dfc7ce, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 2348.0ms, total_latency: 2348.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 2048,
+      "request_id": "chatcmpl-340806405095348604-YZqsmpYJCuayMucYdjnAWY",
+      "client_TTFT_ms": 2459.660142660141,
+      "P_stage_TTFT_ms": 2439.0,
+      "P_queue_to_batch_ms": 1.6,
+      "outside_P_stage_ms": 20.66014266014099,
+      "TPOT_ms": 180.65839853941227,
+      "E2E_s": 48.527551770210266,
+      "server_record": "I20261112 15:19:08.074304 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-YZqsmpYJCuayMucYdjnAWY, x-request-id: 01a1ce9f-dc94-7906-8636-1a6c049893b2, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.6ms, ttft: 2439.0ms, total_latency: 2439.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    }
+  ]
+}

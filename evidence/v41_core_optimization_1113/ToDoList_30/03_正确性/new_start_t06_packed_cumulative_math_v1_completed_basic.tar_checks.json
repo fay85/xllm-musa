@@ -1,0 +1,315 @@
+{
+  "status": "PASS_PACKED_NATIVE_PROJECTION_BASIC_CHECKS",
+  "cases": [
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 256,
+      "rows": 1,
+      "magnitude": 0.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 256,
+      "rows": 1,
+      "magnitude": 1.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 256,
+      "rows": 1,
+      "magnitude": 50.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 256,
+      "rows": 17,
+      "magnitude": 0.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 256,
+      "rows": 17,
+      "magnitude": 1.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 256,
+      "rows": 17,
+      "magnitude": 50.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 2048,
+      "rows": 1,
+      "magnitude": 0.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 2048,
+      "rows": 1,
+      "magnitude": 1.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 2048,
+      "rows": 1,
+      "magnitude": 50.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 2048,
+      "rows": 17,
+      "magnitude": 0.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 2048,
+      "rows": 17,
+      "magnitude": 1.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "shared_gate_up",
+      "intermediate": 2048,
+      "rows": 17,
+      "magnitude": 50.0,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    {
+      "kind": "q_a_kv_packed",
+      "rows": 1,
+      "magnitude": 0.0,
+      "output_errors_query_key_qr": [
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        }
+      ]
+    },
+    {
+      "kind": "q_a_kv_packed",
+      "rows": 1,
+      "magnitude": 1.0,
+      "output_errors_query_key_qr": [
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        }
+      ]
+    },
+    {
+      "kind": "q_a_kv_packed",
+      "rows": 1,
+      "magnitude": 50.0,
+      "output_errors_query_key_qr": [
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        }
+      ]
+    },
+    {
+      "kind": "q_a_kv_packed",
+      "rows": 17,
+      "magnitude": 0.0,
+      "output_errors_query_key_qr": [
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        }
+      ]
+    },
+    {
+      "kind": "q_a_kv_packed",
+      "rows": 17,
+      "magnitude": 1.0,
+      "output_errors_query_key_qr": [
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        }
+      ]
+    },
+    {
+      "kind": "q_a_kv_packed",
+      "rows": 17,
+      "magnitude": 50.0,
+      "output_errors_query_key_qr": [
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        }
+      ]
+    }
+  ],
+  "timings": {
+    "shared_256": {
+      "samples": [
+        {
+          "old": 0.11078933080037436,
+          "packed": 0.0731013298034668
+        },
+        {
+          "packed": 0.07259599367777507,
+          "old": 0.10940000216166178
+        },
+        {
+          "old": 0.10896933873494466,
+          "packed": 0.07386799653371175
+        },
+        {
+          "packed": 0.07223333517710367,
+          "old": 0.1088093360265096
+        }
+      ],
+      "old_ms": 0.10918467044830321,
+      "packed_ms": 0.07284866174062093
+    },
+    "shared_2048": {
+      "samples": [
+        {
+          "old": 0.10831467310587566,
+          "packed": 0.08022133509318034
+        },
+        {
+          "packed": 0.08003199895222982,
+          "old": 0.10894532998402913
+        },
+        {
+          "old": 0.10894933541615805,
+          "packed": 0.0786946694056193
+        },
+        {
+          "packed": 0.07925999959309896,
+          "old": 0.108951997756958
+        }
+      ],
+      "old_ms": 0.10894733270009359,
+      "packed_ms": 0.07964599927266439
+    },
+    "q_a_kv": {
+      "samples": [
+        {
+          "old": 0.27447868982950846,
+          "packed": 0.24666399955749513
+        },
+        {
+          "packed": 0.24689734776814778,
+          "old": 0.2783466657002767
+        },
+        {
+          "old": 0.2719493230183919,
+          "packed": 0.2443893273671468
+        },
+        {
+          "packed": 0.2448560078938802,
+          "old": 0.2764333407084147
+        }
+      ],
+      "old_ms": 0.2754560152689616,
+      "packed_ms": 0.24576000372568768
+    }
+  },
+  "scope": "GPU event interval includes host enqueue gaps; not full model or a model accuracy validation",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

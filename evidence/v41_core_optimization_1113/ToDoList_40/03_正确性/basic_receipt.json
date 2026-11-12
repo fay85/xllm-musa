@@ -1,0 +1,10 @@
+{
+  "status": "PASS_8_RANK_NATIVE_SUM_GATHER",
+  "checks_per_rank": 36,
+  "world_size": 8,
+  "sum_and_gather_bitwise": true,
+  "scope": "Actual native C++ process group opt-in stream completion fence, BF16/F32, default/nondefault streams; no model precision claim",
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_comm_fence_probe_v1_basic.tar.gz",
+  "bytes": 4590,
+  "sha256": "28d248dac16233534edeabe701357e4501ee21b3c2bd3f063f81c3e2eb98c70f"
+}

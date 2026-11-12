@@ -1,0 +1,28 @@
+{
+  "status": "G02_COMPLETE_WITH_CONSERVATIVE_BOUNDARIES",
+  "G01": "complete",
+  "formal_requests": 30,
+  "DEVICE_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "device_event_rows_valid": 967680,
+  "core_queue": "not_complete; T01 diagnostic in ../ToDoList_4",
+  "tight_removable_upper_bounds": "unknown; use minimal probes",
+  "long_repeatability": "OFF same prompt five times four contents; retained",
+  "report": "07_结论/G01_G02总结与进入核心优化的边界.md"
+}

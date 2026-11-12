@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"path\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e52_full_native_work_v1.json\", \"bytes\": 46213, \"sha256\": \"e3b44ab5410c238e48284b597719925bd181b00cf34903419258086b155913bc\"}\n",
+  "stderr": ""
+}

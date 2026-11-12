@@ -1,0 +1,162 @@
+{
+  "terminal": true,
+  "result": {
+    "at": "2026-11-13T02:57:27.705232+08:00",
+    "exit_code": 0
+  },
+  "status": [
+    {
+      "input_tokens": 256,
+      "phase": "warmup",
+      "count": 2,
+      "directory": "/work/new_start_t12_queued_c2_final_v3/performance/input256_output256/warmup",
+      "started_at": "2026-11-13T02:51:58.077545+08:00",
+      "finished_at": "2026-11-13T02:52:40.793736+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          18.82572359405458,
+          0.36783408746123314
+        ],
+        [
+          1,
+          256,
+          256,
+          37.16818243637681,
+          0.6969674583524466
+        ]
+      ]
+    },
+    {
+      "input_tokens": 256,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t12_queued_c2_final_v3/performance/input256_output256/measured",
+      "started_at": "2026-11-13T02:52:40.796746+08:00",
+      "finished_at": "2026-11-13T02:54:14.350711+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          18.848917591385543,
+          0.34986987244337797
+        ],
+        [
+          1,
+          256,
+          256,
+          37.160104299895465,
+          0.6825251411646605
+        ],
+        [
+          1,
+          256,
+          256,
+          35.74774854443967,
+          0.5444037681445479
+        ],
+        [
+          1,
+          256,
+          256,
+          34.670798319391906,
+          0.5372791811823845
+        ],
+        [
+          1,
+          256,
+          256,
+          34.0708349654451,
+          0.3577725701034069
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "warmup",
+      "count": 2,
+      "directory": "/work/new_start_t12_queued_c2_final_v3/performance/input2048_output256/warmup",
+      "started_at": "2026-11-13T02:54:14.354736+08:00",
+      "finished_at": "2026-11-13T02:54:55.680406+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          19.081636677496135,
+          1.723581782542169
+        ],
+        [
+          1,
+          2048,
+          256,
+          35.7902049086988,
+          3.129024305380881
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t12_queued_c2_final_v3/performance/input2048_output256/measured",
+      "started_at": "2026-11-13T02:54:55.683773+08:00",
+      "finished_at": "2026-11-13T02:56:26.751948+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          18.516452205367386,
+          1.4991298243403435
+        ],
+        [
+          1,
+          2048,
+          256,
+          35.23593925870955,
+          2.9387938315048814
+        ],
+        [
+          1,
+          2048,
+          256,
+          34.160832695662975,
+          1.4438224406912923
+        ],
+        [
+          1,
+          2048,
+          256,
+          34.031321197748184,
+          1.4611173197627068
+        ],
+        [
+          1,
+          2048,
+          256,
+          33.48271101899445,
+          1.4594938438385725
+        ]
+      ]
+    }
+  ],
+  "trace": {
+    "status": "PROFILE_REQUEST_SAVED_REQUIRES_ALL_RANK_TRACE_VALIDATION",
+    "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed, which people cannot dependably recall in detail over time\nKeeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed, which people cannot dependably recall in detail over time",
+    "finish_reason": "all_requests_validated",
+    "usage": {
+      "prompt_tokens": 512,
+      "completion_tokens": 64
+    },
+    "error": null,
+    "scope": "validate actual16rank CPU/GPU traces and native PC correlation separately"
+  }
+}

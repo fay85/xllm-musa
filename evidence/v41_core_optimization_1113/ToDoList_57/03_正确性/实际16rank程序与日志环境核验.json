@@ -1,0 +1,143 @@
+{
+  "status": "PASS_EXACT931_ALL16_NO_DIAGNOSTIC_ENV",
+  "hosts": [
+    {
+      "host": "sj9",
+      "ranks": [
+        {
+          "rank": 0,
+          "container_pid": 63030,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 1,
+          "container_pid": 63031,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 2,
+          "container_pid": 63032,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 3,
+          "container_pid": 63033,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 4,
+          "container_pid": 63034,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 5,
+          "container_pid": 63035,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 6,
+          "container_pid": 63036,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 7,
+          "container_pid": 63037,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        }
+      ]
+    },
+    {
+      "host": "sj10",
+      "ranks": [
+        {
+          "rank": 0,
+          "container_pid": 48201,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 1,
+          "container_pid": 48202,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 2,
+          "container_pid": 48203,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 3,
+          "container_pid": 48204,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 4,
+          "container_pid": 48205,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 5,
+          "container_pid": 48206,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 6,
+          "container_pid": 48207,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        },
+        {
+          "rank": 7,
+          "container_pid": 48208,
+          "exe_path": "/work/artifacts/native_t14_draft_cache/bin/xllm",
+          "exe_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+          "progress_env_absent": true,
+          "cmdline_rank_present": false
+        }
+      ]
+    }
+  ]
+}

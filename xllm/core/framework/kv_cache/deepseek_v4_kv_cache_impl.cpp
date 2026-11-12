@@ -495,9 +495,16 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
           ? compress_ratios[static_cast<size_t>(layer_idx)]
           : 1;
 
-  const DeepSeekV4CachePolicy cache_policy = get_dsv4_cache_policy(
-      create_options.dtype(),
-      util::is_deepseek_v41_model_type(create_options.model_type()));
+  // A dedicated V4.1 MUSA drafter also stores a 512-value latent row.
+  // V4 FlashMLA's additional 64-value RoPE view is not part of that row.
+  const bool is_v41 =
+      util::is_deepseek_v41_model_type(create_options.model_type())
+#if defined(USE_MUSA)
+      || util::is_deepseek_v41_dspark_model_type(create_options.model_type())
+#endif
+      ;
+  const DeepSeekV4CachePolicy cache_policy =
+      get_dsv4_cache_policy(create_options.dtype(), is_v41);
   const std::shared_ptr<KVCacheTensorAllocator> tensor_allocator =
       create_options.tensor_allocator();
 
@@ -544,7 +551,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   // INDEX_SCALE, on MLU it stays the model dtype with no scale. Ratio-2 kv
   // sources additionally own the fp32 compressor states, which live in the SWA
   // group (ring slot = pos % block_size).
-  if (util::is_deepseek_v41_model_type(create_options.model_type())) {
+  if (is_v41) {
     const int64_t c2_count = pool_counts[1];
     const int64_t c1_count = pool_counts[2];
     const std::vector<int32_t>& kv_source_layer_ids =

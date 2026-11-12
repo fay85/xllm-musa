@@ -1,0 +1,20 @@
+[
+  "python3",
+  "/work/repos/xllm-musa/tools/musa_deepseek_v41/run_official_performance.py",
+  "--url",
+  "http://10.121.32.9:31180",
+  "--model",
+  "deepseek-v4.1-flash-1017-w4afp8-mt",
+  "--gate",
+  "/work/new_start_t06_packed_shared_recheck_packed_v1/gate.json",
+  "--binary",
+  "/work/artifacts/native_t14_native_block/bin/xllm",
+  "--tokenizer-directory",
+  "/work/artifacts/model_view_w4afp8_mt_1017",
+  "--inputs",
+  "/work/artifacts/benchmark_inputs_v1",
+  "--evalscope",
+  "/work/artifacts/bench_venv_v2/bin/evalscope",
+  "--output",
+  "/work/new_start_t06_packed_shared_recheck_packed_v1/performance"
+]

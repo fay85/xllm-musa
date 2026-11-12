@@ -1,0 +1,63 @@
+[
+  {
+    "file": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/04_数值验证/w4a8_mate_v2_build.json",
+    "status": "COMPILED_NOT_GPU_VALIDATED",
+    "library_sha256": "6757da6f4806d6249ff7f5882feb8424b645dbabf32265ae8881e79625f424dc",
+    "symbol": "mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup",
+    "mate_source": "/donor/mate",
+    "package_versions": {
+      "torch": "2.9.1",
+      "torch_musa": "2.9.1",
+      "mate": "0.2.7",
+      "apache-tvm-ffi": "0.1.11.post1+musa.1"
+    },
+    "sources": {
+      "/donor/mate/jit/gemm/masked_moe_gemm_mixed_dtype.py": "4510f7d3439f2bbe8eea1e706f3aede7426e09cfb7990660d6b50db44ce845b1",
+      "/donor/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp": "5da18101e64257b7404f415d6b15a1ac2bd320f132645be8604d7da39d391675"
+    },
+    "activation_recipe": [
+      1,
+      128
+    ],
+    "weight_recipe": [
+      1,
+      128
+    ],
+    "delivery_compiler_flags": [
+      "-Od3",
+      "-O2",
+      "-DNDEBUG",
+      "-fno-strict-aliasing",
+      "-fno-signed-zeros",
+      "-mllvm",
+      "-mtgpu-load-cluster-mutation=1",
+      "-mllvm",
+      "--num-dwords-of-load-in-mutation=64"
+    ]
+  },
+  {
+    "file": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/04_数值验证/w4a8_mate_build.json",
+    "status": "COMPILED_NOT_GPU_VALIDATED",
+    "library_sha256": "223b1292b34572af2e2285253745f9e1c1eb6719a4211b1a5e1bba6ddb81a26d",
+    "symbol": "mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup",
+    "mate_source": "/donor/mate",
+    "package_versions": {
+      "torch": "2.9.1",
+      "torch_musa": "2.9.1",
+      "mate": "0.2.7",
+      "apache-tvm-ffi": "0.1.11.post1+musa.1"
+    },
+    "sources": {
+      "/donor/mate/jit/gemm/masked_moe_gemm_mixed_dtype.py": "4510f7d3439f2bbe8eea1e706f3aede7426e09cfb7990660d6b50db44ce845b1",
+      "/donor/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp": "5da18101e64257b7404f415d6b15a1ac2bd320f132645be8604d7da39d391675"
+    },
+    "activation_recipe": [
+      1,
+      128
+    ],
+    "weight_recipe": [
+      1,
+      128
+    ]
+  }
+]

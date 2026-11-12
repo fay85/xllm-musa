@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"completed_phases\": [{\"input_tokens\": 256, \"phase\": \"warmup\", \"count\": 1, \"directory\": \"/work/new_start_g02v2_host_v1/performance/input256_output256/warmup\", \"started_at\": \"2026-11-12T15:21:59.162189+08:00\", \"finished_at\": \"2026-11-12T15:22:51.242533+08:00\", \"exit_code\": 0, \"validated_rows\": [[1, 256, 256, 46.32968595251441, 0.5409219665452838]]}], \"256\": {\"completed_requests_so_far\": 2, \"rows\": [[1, 256, 256, 46.04117293655872, 0.3221756722778082, 0.17929018535012123], [1, 256, 256, 46.06849728245288, 0.31287554651498795, 0.1794338107291682]]}}\n",
+  "stderr": ""
+}

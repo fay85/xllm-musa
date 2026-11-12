@@ -1,0 +1,9 @@
+{
+  "existing": [
+    "xllm/core/layers/musa/deepseek_v41/decoder.h",
+    "tests/core/kernels/musa/musa_python_kernel_test_module.cpp"
+  ],
+  "new": [
+    "xllm/core/layers/musa/deepseek_v41/draft_model.h"
+  ]
+}

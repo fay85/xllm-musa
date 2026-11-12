@@ -1,0 +1,71 @@
+{
+  "updated_at": "2026-11-13T03:43:19.647125+08:00",
+  "goal_status": "tool_paused_user_explicitly_resumed_work",
+  "status": "CORE_EXECUTION_CLOSED_PUBLICATION_AND_RESOURCE_RECEIPT_PENDING",
+  "current_best_commit": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "best_experiment": "ToDoList_38",
+  "best_binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "current_experiment": "ToDoList_56",
+  "candidate_binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "active_controller": "Finished v4 serial controller",
+  "G01": "completed",
+  "G02": "conservative measurement completed; tight removable bound unknown",
+  "acceptance_policy": "speed-first; two arithmetic questions + change-related basic checks; successful exact-token official performance; no model benchmark/logits gate",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "scope": "T01 through T14; current authorized SJ9/SJ10 only",
+  "next_steps": [
+    "Observe existing serial controller; no repeated completed model runs",
+    "Finish all-rank same-ELF native audit and count actual D rows",
+    "Promote only same-workload measured wins; cold/warm/C2/C4 separately",
+    "Readable final code/evidence commit and report"
+  ],
+  "previous_failures": [
+    "E4 both-role custom long prefill failure not promoted; exact SIGKILL authorization consumed",
+    "E5 D-only TP custom completed all tests/traces; 16 normal exits0"
+  ],
+  "signal_policy": "User continuous authorization: owned confirmed failed ineffective processes only; archive, normal TERM, reverify CID/rank/exe SHA/startticks and pidfd once SIGKILL if needed. D-state/device abnormality/resources not freed: stop force and report. No other tasks/reset/driver/Docker/server/BMC.",
+  "current_best_url": "https://github.com/fay85/xllm-musa/commit/4411c026583457c5f454100ccafcf3db8fc7291d",
+  "current_task": "finalize",
+  "core_scope": "T01 through T14; all work not complete",
+  "user_explicit_resume": "2026-11-12 user resumed interrupted session and explicitly ordered original goal completion; no new goal created",
+  "pending": [
+    "Final resource release verification",
+    "Final shared personal branch source/evidence commit and push, no MR",
+    "Final NFS report synchronization"
+  ],
+  "gpu_state": "Only owned SJ9/SJ10 E56 trial; no parallel model test",
+  "goal_control_status": "tool_reports_paused; user explicitly resumed actual task, no new goal created",
+  "last_precise_kill_permission": "38542 exact once consumed23:05; E31 failed8ranks cleaned under continuous authority23:12; read-only settle23:13 confirms all resources freed. Old PID approvals not reusable.",
+  "cpu_candidates": [
+    "No compilation active; E51 ELFf542 integrated source bytes verified"
+  ],
+  "continuation_queue": null,
+  "current_validated_artifact": "native_t14_draft_cache",
+  "current_validated_elf": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "current_stage": "All bounded model trials and trace reports finished; source/evidence commit and NFS final sync pending",
+  "ongoing_trials": [],
+  "latest_validated_artifact": "native_t14_draft_cache",
+  "latest_validated_binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "cleanup_authorization": "12_故障进程持续清理授权.md",
+  "latest_cold_prefill_profile": "E47 chunk512 long input; short group no improvement",
+  "additional_workload_controls": [
+    "E52queuedC2",
+    "E53batchC2",
+    "E54sameB2_mhc",
+    "E55queuedC4",
+    "E56batchC4"
+  ],
+  "new_evidence": "Diagnostic progress env is presence-based:1 and0 both enable. Remove key; default container env checked absent. T14 will be rechecked against production no-progress baseline.",
+  "failed_trial": "E57 remove progress log: long formal0/5, RPCtimeout;7 owned P ranks verified SIGKILL once each and all target GPU entries gone; D8normal0",
+  "cancelled_dependent_trial": "E58 not run because E57 control failed; E50 T14 reference retained",
+  "current_compatible_baseline": "E47 long chunk512; progress1; CED/spec/prefix/batch0 unless workload-specific trial",
+  "local_controller": "串行任务控制器_v2启动.json",
+  "pending_route": [
+    "E53B2",
+    "E54B2smallMHC",
+    "E55C4B1",
+    "E56C4B4"
+  ],
+  "controller_boundary": "At most one GPU trial; per-role normal exit plus read-only GMI resource release barrier; stop on first failed model trial; no automatic force in orchestrator",
+  "T12": "completed_same_C2_C4_official_and_actual_allrank_trace"
+}

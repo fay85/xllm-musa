@@ -1,0 +1,100 @@
+{
+  "status": "PASS_CACHE_FREE_DECODER_TAIL_GRAPH_BASIC_MATH",
+  "cases": [
+    {
+      "packed_outputs_exact": true,
+      "case": 0,
+      "magnitude": 0.0,
+      "outputs_exact": true,
+      "max_abs_outputs": [
+        0.0,
+        0.0
+      ],
+      "call_including_cpu_ms": 4.959817044436932
+    },
+    {
+      "packed_outputs_exact": true,
+      "case": 1,
+      "magnitude": 1.0,
+      "outputs_exact": true,
+      "max_abs_outputs": [
+        0.0,
+        0.0
+      ],
+      "call_including_cpu_ms": 0.8875355124473572
+    },
+    {
+      "packed_outputs_exact": true,
+      "case": 2,
+      "magnitude": 50.0,
+      "outputs_exact": true,
+      "max_abs_outputs": [
+        0.0,
+        0.0
+      ],
+      "call_including_cpu_ms": 0.9972825646400452
+    },
+    {
+      "packed_outputs_exact": true,
+      "case": 3,
+      "magnitude": 0.1,
+      "outputs_exact": true,
+      "max_abs_outputs": [
+        0.0,
+        0.0
+      ],
+      "call_including_cpu_ms": 0.8216015994548798
+    }
+  ],
+  "first_capture_call_ms": 4.959817044436932,
+  "micro_samples_ms": [
+    {
+      "eager": 0.7570213317871094,
+      "graph_including_6_input_copies": 0.7812906901041666,
+      "graph_including_fused_input_copy": 0.7361426671346029
+    },
+    {
+      "graph_including_fused_input_copy": 0.7397279739379883,
+      "graph_including_6_input_copies": 0.7942293167114258,
+      "eager": 0.7019519805908203
+    },
+    {
+      "eager": 0.7151426951090495,
+      "graph_including_6_input_copies": 0.7520506540934245,
+      "graph_including_fused_input_copy": 0.733355967203776
+    },
+    {
+      "graph_including_fused_input_copy": 0.7411933263142904,
+      "graph_including_6_input_copies": 0.7956239700317382,
+      "eager": 0.7437506993611653
+    }
+  ],
+  "eager_ms": 0.7294466972351075,
+  "packed_graph_ms": 0.7379353205362955,
+  "packed_copy_bit_checks": [
+    {
+      "token_dtype": "torch.int32",
+      "nondefault_stream": false,
+      "six_fields_bitwise_exact": true
+    },
+    {
+      "token_dtype": "torch.int32",
+      "nondefault_stream": true,
+      "six_fields_bitwise_exact": true
+    },
+    {
+      "token_dtype": "torch.int64",
+      "nondefault_stream": false,
+      "six_fields_bitwise_exact": true
+    },
+    {
+      "token_dtype": "torch.int64",
+      "nondefault_stream": true,
+      "six_fields_bitwise_exact": true
+    }
+  ],
+  "graph_ms": 0.7877600034077963,
+  "scope": "Single-rank real HC/two-expert math; TP/EP skipped here. Mixed-dtype IPC Graph already separately checked on8ranks. Full integration still needs owned 1P1D basic and formal tests.",
+  "peak_allocated_bytes": 166351872,
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

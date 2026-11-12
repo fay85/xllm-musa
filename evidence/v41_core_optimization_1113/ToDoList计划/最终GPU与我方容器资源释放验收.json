@@ -1,0 +1,49 @@
+{
+  "status": "PASS_NO_OWNED_MODEL_PROCESSES_OR_GPU_PROCESS_ENTRIES_BOTH_HOSTS",
+  "hosts": [
+    {
+      "host": "sj9",
+      "at": "2026-11-13T03:29:26.864617+08:00",
+      "name": "xiaopang1112_v41_prefill_sj9",
+      "container_id": "729b140097495ce85af40d5887ab02521fcf5b0b94bfe8dd2f39602befa08177",
+      "labels": {
+        "com.mthreads.xllm.base-config": "sha256:bd360c2ee7e634c44b31e49eb509e087037a202e3a142c02c0ab4f37eaece5b4",
+        "com.mthreads.xllm.dependency-policy": "reuse existing third-party and Rust artifacts",
+        "org.opencontainers.image.revision": "be905d41fa9cbd7c247fb60227cc135431abb8d6",
+        "org.opencontainers.image.source": "https://github.com/fay85/xllm-musa",
+        "owner": "xiaopang",
+        "task": "20261112-sglang-mt-cpp"
+      },
+      "container_status": "running",
+      "running_processes": "PID                 PPID                STAT                COMMAND             COMMAND\n15389               15356               Ss                  docker-init         /sbin/docker-init -- sleep infinity\n15462               15389               S                   sleep               sleep infinity\n",
+      "owned_xllm_processes": 0,
+      "gmi_stdout": "Fri Nov 13 03:29:26 2026\n---------------------------------------------------------------------\n    zjlab-gmi:2.3.3              Driver Version:3.3.8-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    X10000               |00000000:03:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    X10000               |00000000:24:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    X10000               |00000000:44:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    X10000               |00000000:63:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    X10000               |00000000:83:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    X10000               |00000000:a3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    X10000               |00000000:c3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    X10000               |00000000:e3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\nID   PID           Process name                           GPU Memory\n                                                               Usage\n+-------------------------------------------------------------------+\n   No running processes found\n---------------------------------------------------------------------\n",
+      "gmi_has_no_processes": true,
+      "physical_nfs": "10.121.34.78:/data/nfs_shared /data/nfs_shared nfs4",
+      "action": "Read-only verification; retained task container idle; no Docker/host/driver changes"
+    },
+    {
+      "host": "sj10",
+      "at": "2026-11-13T03:29:26.416552+08:00",
+      "name": "xiaopang1112_v41_decode_sj10",
+      "container_id": "f74fcc5983f0ac4c7858150f1e7d26e0d32a02d6c0afe51bad5d507038bc33e2",
+      "labels": {
+        "com.mthreads.xllm.base-config": "sha256:bd360c2ee7e634c44b31e49eb509e087037a202e3a142c02c0ab4f37eaece5b4",
+        "com.mthreads.xllm.dependency-policy": "reuse existing third-party and Rust artifacts",
+        "org.opencontainers.image.revision": "be905d41fa9cbd7c247fb60227cc135431abb8d6",
+        "org.opencontainers.image.source": "https://github.com/fay85/xllm-musa",
+        "owner": "xiaopang",
+        "task": "20261112-sglang-mt-cpp"
+      },
+      "container_status": "running",
+      "running_processes": "PID                 PPID                STAT                COMMAND             COMMAND\n12588               12499               Ss                  docker-init         /sbin/docker-init -- sleep infinity\n12752               12588               S                   sleep               sleep infinity\n",
+      "owned_xllm_processes": 0,
+      "gmi_stdout": "Fri Nov 13 03:29:26 2026\n---------------------------------------------------------------------\n    zjlab-gmi:2.3.3              Driver Version:3.3.8-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    X10000               |00000000:03:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    X10000               |00000000:24:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    X10000               |00000000:44:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    X10000               |00000000:63:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |37C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    X10000               |00000000:83:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    X10000               |00000000:a3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    X10000               |00000000:c3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    X10000               |00000000:e3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |34C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\nID   PID           Process name                           GPU Memory\n                                                               Usage\n+-------------------------------------------------------------------+\n   No running processes found\n---------------------------------------------------------------------\n",
+      "gmi_has_no_processes": true,
+      "physical_nfs": "10.121.34.78:/data/nfs_shared /data/nfs_shared nfs4",
+      "action": "Read-only verification; retained task container idle; no Docker/host/driver changes"
+    }
+  ],
+  "forced_cleanup_this_final_check": false,
+  "containers_retained_idle": true
+}

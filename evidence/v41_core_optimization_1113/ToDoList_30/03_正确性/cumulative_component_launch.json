@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 28248, \"checks\": [\"new_start_t05_decoder_graph_cumulative_math_v1\", \"new_start_t06_packed_cumulative_math_v1\"]}\n",
+  "stderr": ""
+}

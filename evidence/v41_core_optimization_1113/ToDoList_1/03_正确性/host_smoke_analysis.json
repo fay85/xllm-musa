@@ -1,0 +1,276 @@
+{
+  "status": "MEASURED_SCOPES_NOT_AUTOMATIC_CRITICAL_PATH",
+  "sample_count": 3,
+  "source_files": [
+    "/tmp/xiaopang_g02_host_timer_v4.1100736.281473200046720.jsonl"
+  ],
+  "limitations": [
+    "GPU stream spans are inclusive and may contain waiting/launch gaps; do not sum nested spans.",
+    "Host steady time aligns ranks only on the same host.",
+    "No valid GPU events means GPU timing remains unknown; host smoke data cannot establish model performance."
+  ],
+  "summary": [
+    {
+      "pid": 1100736,
+      "scope": "V41/step",
+      "count": 3,
+      "host_exclusive_median_ms": 0.0002,
+      "gpu_inclusive_median_ms": null,
+      "gpu_valid_count": 0,
+      "payload_bytes": [
+        -1
+      ],
+      "group_sizes": [
+        -1
+      ]
+    },
+    {
+      "pid": 1100736,
+      "scope": "V41/layer",
+      "count": 3,
+      "host_exclusive_median_ms": 0.00016,
+      "gpu_inclusive_median_ms": null,
+      "gpu_valid_count": 0,
+      "payload_bytes": [
+        -1
+      ],
+      "group_sizes": [
+        -1
+      ]
+    },
+    {
+      "pid": 1100736,
+      "scope": "V41/MoE",
+      "count": 3,
+      "host_exclusive_median_ms": 0.00016,
+      "gpu_inclusive_median_ms": null,
+      "gpu_valid_count": 0,
+      "payload_bytes": [
+        -1
+      ],
+      "group_sizes": [
+        -1
+      ]
+    },
+    {
+      "pid": 1100736,
+      "scope": "V41/MoE/EP_allreduce",
+      "count": 3,
+      "host_exclusive_median_ms": 0.00012,
+      "gpu_inclusive_median_ms": null,
+      "gpu_valid_count": 0,
+      "payload_bytes": [
+        16384
+      ],
+      "group_sizes": [
+        8
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 1,
+      "sample": 1,
+      "q": 1,
+      "kv": 256,
+      "layer": -1,
+      "scope": "V41/step",
+      "host_begin_ns": 59944683708747,
+      "host_inclusive_ms": 0.00056,
+      "host_exclusive_ms": 0.0002,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 1,
+      "sample": 1,
+      "q": 1,
+      "kv": 256,
+      "layer": 0,
+      "scope": "V41/layer",
+      "host_begin_ns": 59944683708907,
+      "host_inclusive_ms": 0.00036,
+      "host_exclusive_ms": 0.00012,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 1,
+      "sample": 1,
+      "q": 1,
+      "kv": 256,
+      "layer": 0,
+      "scope": "V41/MoE",
+      "host_begin_ns": 59944683708987,
+      "host_inclusive_ms": 0.00024,
+      "host_exclusive_ms": 0.00012,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 1,
+      "sample": 1,
+      "q": 1,
+      "kv": 256,
+      "layer": 0,
+      "scope": "V41/MoE/EP_allreduce",
+      "host_begin_ns": 59944683709067,
+      "host_inclusive_ms": 0.00012,
+      "host_exclusive_ms": 0.00012,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": 16384,
+      "group_size": 8
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 3,
+      "sample": 2,
+      "q": 1,
+      "kv": 258,
+      "layer": -1,
+      "scope": "V41/step",
+      "host_begin_ns": 59944684619496,
+      "host_inclusive_ms": 0.0012,
+      "host_exclusive_ms": 0.00064,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 3,
+      "sample": 2,
+      "q": 1,
+      "kv": 258,
+      "layer": 0,
+      "scope": "V41/layer",
+      "host_begin_ns": 59944684620096,
+      "host_inclusive_ms": 0.00056,
+      "host_exclusive_ms": 0.0002,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 3,
+      "sample": 2,
+      "q": 1,
+      "kv": 258,
+      "layer": 0,
+      "scope": "V41/MoE",
+      "host_begin_ns": 59944684620256,
+      "host_inclusive_ms": 0.00036,
+      "host_exclusive_ms": 0.0002,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 3,
+      "sample": 2,
+      "q": 1,
+      "kv": 258,
+      "layer": 0,
+      "scope": "V41/MoE/EP_allreduce",
+      "host_begin_ns": 59944684620416,
+      "host_inclusive_ms": 0.00016,
+      "host_exclusive_ms": 0.00016,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": 16384,
+      "group_size": 8
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 5,
+      "sample": 3,
+      "q": 1,
+      "kv": 260,
+      "layer": -1,
+      "scope": "V41/step",
+      "host_begin_ns": 59944684660941,
+      "host_inclusive_ms": 0.00064,
+      "host_exclusive_ms": 0.0002,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 5,
+      "sample": 3,
+      "q": 1,
+      "kv": 260,
+      "layer": 0,
+      "scope": "V41/layer",
+      "host_begin_ns": 59944684661101,
+      "host_inclusive_ms": 0.00044,
+      "host_exclusive_ms": 0.00016,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 5,
+      "sample": 3,
+      "q": 1,
+      "kv": 260,
+      "layer": 0,
+      "scope": "V41/MoE",
+      "host_begin_ns": 59944684661221,
+      "host_inclusive_ms": 0.00028,
+      "host_exclusive_ms": 0.00016,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": -1,
+      "group_size": -1
+    },
+    {
+      "pid": 1100736,
+      "thread": "0xffff961a41f8",
+      "step": 5,
+      "sample": 3,
+      "q": 1,
+      "kv": 260,
+      "layer": 0,
+      "scope": "V41/MoE/EP_allreduce",
+      "host_begin_ns": 59944684661341,
+      "host_inclusive_ms": 0.00012,
+      "host_exclusive_ms": 0.00012,
+      "gpu_stream_span_ms": null,
+      "device_event_status": null,
+      "payload_bytes": 16384,
+      "group_size": 8
+    }
+  ]
+}

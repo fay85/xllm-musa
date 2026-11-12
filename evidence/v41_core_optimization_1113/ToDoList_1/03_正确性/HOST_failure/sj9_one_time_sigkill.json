@@ -1,0 +1,44 @@
+{
+  "authorized": "User approved this exact seven-process action once",
+  "at": "2026-11-12T15:42:26.015978+08:00",
+  "verified": [
+    {
+      "pid": 6897,
+      "already_gone": true
+    },
+    {
+      "pid": 6898,
+      "already_gone": true
+    },
+    {
+      "pid": 6899,
+      "rank": 3,
+      "thread_count": 562,
+      "D_threads": 0,
+      "verified": true
+    },
+    {
+      "pid": 6900,
+      "already_gone": true
+    },
+    {
+      "pid": 6901,
+      "already_gone": true
+    },
+    {
+      "pid": 6902,
+      "already_gone": true
+    },
+    {
+      "pid": 6903,
+      "already_gone": true
+    }
+  ],
+  "signals": [
+    {
+      "pid": 6899,
+      "signal": "SIGKILL",
+      "sent_once": true
+    }
+  ]
+}

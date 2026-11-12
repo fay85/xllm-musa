@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_prefill_comm_fence_v1_small_evidence.tar.gz",
+  "bytes": 870110,
+  "sha256": "ca0a221a29f38fc6de8cae60da77ee64bad6a3b3a5ea93da02ebfb3c06753eb5",
+  "run": "t07_prefill_comm_fence_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

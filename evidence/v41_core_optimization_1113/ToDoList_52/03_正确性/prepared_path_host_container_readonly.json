@@ -1,0 +1,28 @@
+[
+  {
+    "host": "sj9",
+    "mounts": [
+      {
+        "Type": "bind",
+        "Source": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp",
+        "Destination": "/work"
+      }
+    ],
+    "inside": "{\"files\": {\"/work/artifacts/prepared/t12_queued_c2_final_v1/sj9.json\": {\"exists\": true, \"link\": false, \"resolved\": \"/work/artifacts/prepared/t12_queued_c2_final_v1/sj9.json\"}, \"/work/artifacts/prepared/t12_queued_c2_final_v1/sj10.json\": {\"exists\": true, \"link\": false, \"resolved\": \"/work/artifacts/prepared/t12_queued_c2_final_v1/sj10.json\"}}, \"mount\": [[\"/work\", \"/work\", 1048743, 244860129], [\"/work/artifacts\", \"/work/artifacts\", 1048743, 245174278], [\"/work/artifacts/prepared\", \"/work/artifacts/prepared\", 1048743, 245178205]]}\n",
+    "error": "",
+    "exit": 0
+  },
+  {
+    "host": "sj10",
+    "mounts": [
+      {
+        "Type": "bind",
+        "Source": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp",
+        "Destination": "/work"
+      }
+    ],
+    "inside": "{\"files\": {\"/work/artifacts/prepared/t12_queued_c2_final_v1/sj9.json\": {\"exists\": true, \"link\": false, \"resolved\": \"/work/artifacts/prepared/t12_queued_c2_final_v1/sj9.json\"}, \"/work/artifacts/prepared/t12_queued_c2_final_v1/sj10.json\": {\"exists\": true, \"link\": false, \"resolved\": \"/work/artifacts/prepared/t12_queued_c2_final_v1/sj10.json\"}}, \"mount\": [[\"/work\", \"/work\", 2097159, 244860129], [\"/work/artifacts\", \"/work/artifacts\", 2097159, 245174278], [\"/work/artifacts/prepared\", \"/work/artifacts/prepared\", 2097159, 245178205]]}\n",
+    "error": "",
+    "exit": 0
+  }
+]

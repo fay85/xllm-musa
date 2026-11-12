@@ -1,0 +1,5 @@
+{
+  "status": "NOT_RUN_DEPENDENCY_CONTROL_FAILED",
+  "reason": "E57 production no-progress control failed long formal requests; no DSpark rerun on invalid control. Existing E50 completed reference retained.",
+  "no_model_or_GPU_launch": true
+}

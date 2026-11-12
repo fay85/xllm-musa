@@ -1,0 +1,72 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t02_cache_read_build_v1/relay_deltas.tar",
+  "bytes": 30935040,
+  "sha256": "303e487e0139a4ebcefd4becaa68536c6cd1b5472b25507986edc9a25a3febc4",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T18:37:21.671783+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "3e54a4bb6c4ccfd9e5cc5e298a82f6cea7c173019911592c436e80763295b2c7",
+        "bytes": 342178248,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t02_cache_read/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42324344,
+          "sha256": "8bba4dbd20e98f4e4c9525de741c24a1c8560a12f320fc441cd87c499482fcf1"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "799a93b2c807c264dfdcaa1c3c8414e9956f0993",
+        "includes_independent_EP_candidate": "optional default off; final EP policy selected only after E6 evidence",
+        "before_source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/token_cache.h": "4b26056d5d017ccf4cfd5ffb0f15a68d8a4ab31bc62193e04249cbc0691116e8",
+          "xllm/core/layers/musa/deepseek_v41/attention.h": "3544687e01abcddd5ffef54bd571f09850ad5fd65bca82f4ae829b291a40c8e4",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "a385dd3c56cd8452260b091598b6746d832fdacfe9068485867cbdd40441c852",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "f5aad66df63cd4aa11b95a9a30f5835f36c63ec180dad8aa945fdb38ebf0163a",
+          "xllm/core/layers/musa/deepseek_v41/moe.h": "352f53075e5fcc1d5b17047b8e37eb42be03af0557b04dd4b425672dc1ff6ea9"
+        },
+        "source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/token_cache.h": "cd87ae1a6b9050a2e5ed8c324a40c78b52fa14831f002f8c56c58405b7014fb2",
+          "xllm/core/layers/musa/deepseek_v41/attention.h": "d409efc2a83da56bc0f2098b0749738c3e33d9d0cbdb7bbcab23c7c02890a3cf",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "82deb511b375d76ef68a0320bc1f8ee6e768778c5cb0fe3387ce905b47569c2c",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "2ddd403632842cf26670c6c99e733baf67d616a2395c27dbacd624dbd67192bf",
+          "xllm/core/layers/musa/deepseek_v41/moe.h": "352f53075e5fcc1d5b17047b8e37eb42be03af0557b04dd4b425672dc1ff6ea9"
+        },
+        "purpose": "T02 same-forward immutable cache read materialization; no GPU/driver use on build host"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 26607295,
+        "sha256": "5952cc5198eebee08a548a318846765f33662d3fe6187592f579bbda690a4af2",
+        "base_sha256": "ef2cbf5b6afadd17f104d63a2e393f65a09c59424a148122c51a2def371c55fb",
+        "target_sha256": "3e54a4bb6c4ccfd9e5cc5e298a82f6cea7c173019911592c436e80763295b2c7",
+        "target_bytes": 342178248
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4314028,
+        "sha256": "8c66885532918c2ec7ce57dc80251b57d64280dcfc5f7b42d603e675b6aa89a8",
+        "base_sha256": "14bf90b805de767c2a5778d86b0f8891d8beb8079e6de60827c69c980a857949",
+        "target_sha256": "8bba4dbd20e98f4e4c9525de741c24a1c8560a12f320fc441cd87c499482fcf1",
+        "target_bytes": 42324344
+      }
+    ]
+  }
+}

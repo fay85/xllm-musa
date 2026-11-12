@@ -1,0 +1,12 @@
+{
+  "parent_binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "new_binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "checked_cumulative_source_files": 30,
+  "changed_only": [
+    "xllm/core/layers/musa/deepseek_v41/hyper_connection.h"
+  ],
+  "default_off_variable": "XLLM_DSV41_MHC_SMALL_BATCH_FUSION",
+  "row1_path_unchanged": true,
+  "real_layer_checks": 14,
+  "same_new_ELF_C2_control_and_batch_still_running": true
+}

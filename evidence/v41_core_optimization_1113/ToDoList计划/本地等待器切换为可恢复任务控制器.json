@@ -1,0 +1,41 @@
+{
+  "at": "2026-11-13T02:24:00.430277+08:00",
+  "objects": [
+    {
+      "pid": 1873965,
+      "start_ticks": "10046224",
+      "script": "/tmp/finish_cumulative_trial.py",
+      "signal": "SIGTERM",
+      "reason": "Migrate waiting local observers to file-recorded detached orchestration; no model/server signal"
+    },
+    {
+      "pid": 1874906,
+      "start_ticks": "10052676",
+      "script": "/tmp/continue_prefix_to_queued_c2.py",
+      "signal": "SIGTERM",
+      "reason": "Migrate waiting local observers to file-recorded detached orchestration; no model/server signal"
+    },
+    {
+      "pid": 1877289,
+      "start_ticks": "10067153",
+      "script": "/tmp/finish_single_concurrency_control.py",
+      "signal": "SIGTERM",
+      "reason": "Migrate waiting local observers to file-recorded detached orchestration; no model/server signal"
+    },
+    {
+      "pid": 1877895,
+      "start_ticks": "10070891",
+      "script": "/tmp/continue_c2_control_to_batch.py",
+      "signal": "SIGTERM",
+      "reason": "Migrate waiting local observers to file-recorded detached orchestration; no model/server signal"
+    },
+    {
+      "pid": 1877935,
+      "start_ticks": "10071008",
+      "script": "/tmp/finish_cumulative_trial.py",
+      "signal": "SIGTERM",
+      "reason": "Migrate waiting local observers to file-recorded detached orchestration; no model/server signal"
+    }
+  ],
+  "GPU_jobs_untouched": true
+}

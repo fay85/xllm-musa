@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t06_packed_qkv_cumulative_v1_small_evidence.tar.gz",
+  "bytes": 541729,
+  "sha256": "6f96258fa246f6d9f6c5d54af1757cd873e50108e639e78fd2cf02ec020285e6",
+  "run": "t06_packed_qkv_cumulative_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

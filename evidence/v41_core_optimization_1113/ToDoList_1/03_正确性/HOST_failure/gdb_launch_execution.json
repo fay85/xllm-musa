@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"debugger_pid\": 25654, \"target_host_pid\": 6899, \"worker_host_tid\": [10201], \"target_container_tid\": 20459, \"at\": \"2026-11-12T15:38:59.118484+08:00\", \"read_only\": \"no inferior function calls; detach command appended\", \"command\": [\"gdb\", \"-nx\", \"-batch\", \"-ex\", \"set pagination off\", \"-ex\", \"set debuginfod enabled off\", \"-ex\", \"set auto-load python-scripts off\", \"-ex\", \"set auto-solib-add off\", \"-ex\", \"set may-call-functions off\", \"-ex\", \"set sysroot /proc/6899/root\", \"-ex\", \"attach 6899\", \"-ex\", \"info threads\", \"-ex\", \"python [t.switch() or gdb.execute(\\\"bt 30\\\") for t in gdb.selected_inferior().threads() if t.ptid[1] in [6899, 10201]]\", \"-ex\", \"detach\", \"-ex\", \"quit\"]}\n",
+  "stderr": ""
+}

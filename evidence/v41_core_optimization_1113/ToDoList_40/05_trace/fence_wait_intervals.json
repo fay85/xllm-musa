@@ -1,0 +1,8 @@
+{
+  "wait_count": 83,
+  "wait_CPU_sum_ms": 3.8863529999999984,
+  "wait_median_ms": 0.007941,
+  "musaStreamSynchronize_count": 484,
+  "musaStreamSynchronize_CPU_sum_ms": 193.5491679999999,
+  "note": "Profiler-on CPU intervals, not formal TTFT/TPOT or pure communication time; stream synchronization can include queued compute."
+}

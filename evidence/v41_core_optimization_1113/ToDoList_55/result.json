@@ -1,0 +1,136 @@
+{
+  "status": "VALIDATED_CONCURRENCY_CONTROL",
+  "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "actual_run": "t12_queued_c4_final_v1",
+  "valid_formal_requests": 10,
+  "normal_rank_exits": 16,
+  "audited_distinct_ranks": 16,
+  "audited_trace_stack_files": 32,
+  "cases": {
+    "256": {
+      "TTFT_ms": 755.070573091507,
+      "TPOT_ms": 180.1856564708492,
+      "TPOT_sample_stdev_ms": 85.18007955513933,
+      "E2E_s": 46.70241297315806,
+      "QPS": 0.05977207711554301,
+      "output_tps": 15.301651741579011,
+      "official_wall_s": 83.6511,
+      "concurrency": 4,
+      "formal_rows": [
+        [
+          1,
+          256,
+          256,
+          16.67221574485302,
+          0.3592780688777566,
+          0.0639723046116677
+        ],
+        [
+          1,
+          256,
+          256,
+          32.944361601024866,
+          0.6918187933042645,
+          0.12648056003027686
+        ],
+        [
+          1,
+          256,
+          256,
+          50.01111142616719,
+          1.0243908623233438,
+          0.19210478652487784
+        ],
+        [
+          1,
+          256,
+          256,
+          66.9077258836478,
+          1.3517389157786965,
+          0.2570823018347808
+        ],
+        [
+          1,
+          256,
+          256,
+          66.97665021009743,
+          0.34812622517347336,
+          0.26128832935264296
+        ]
+      ]
+    },
+    "2048": {
+      "TTFT_ms": 3208.764562383294,
+      "TPOT_ms": 171.03952454439568,
+      "TPOT_sample_stdev_ms": 79.5916866978529,
+      "E2E_s": 46.82384332120419,
+      "QPS": 0.05994628812583925,
+      "output_tps": 15.346249760214848,
+      "official_wall_s": 83.408,
+      "concurrency": 4,
+      "formal_rows": [
+        [
+          1,
+          2048,
+          256,
+          17.730402604676783,
+          1.4703021878376603,
+          0.06376509967387892
+        ],
+        [
+          1,
+          2048,
+          256,
+          33.714127144776285,
+          2.9320667516440153,
+          0.1207139623260089
+        ],
+        [
+          1,
+          2048,
+          256,
+          50.089043696410954,
+          4.377222263254225,
+          0.17926204483590874
+        ],
+        [
+          1,
+          2048,
+          256,
+          66.91041900683194,
+          5.8056133249774575,
+          0.23962668894844896
+        ],
+        [
+          1,
+          2048,
+          256,
+          65.67522415332496,
+          1.4586182842031121,
+          0.25182982693773276
+        ]
+      ]
+    }
+  },
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e55_control_trace_analysis_v1.tar.zst",
+    "bytes": 5295813,
+    "sha256": "72eded271826e1a42bca5fd594d9a478105adcaf096124987aaf9740041cfe02",
+    "receipt": {
+      "status": "ALL16_SINGLE_CONTROL_AUDITED_EXACT_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_mhc_small_batch/bin/xllm",
+      "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+      "raw_archives": {
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_queued_c4_final_v1_raw_trace.tar.zst",
+          "bytes": 1245744905,
+          "sha256": "63c0a0d0d2c7de8f7c96ed7609c9e24de3e150716df378726d560c0204ab3996"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794511996.1103604
+    }
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

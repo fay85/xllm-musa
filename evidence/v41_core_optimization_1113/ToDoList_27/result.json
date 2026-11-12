@@ -1,0 +1,69 @@
+{
+  "status": "REJECTED_SPEED_REGRESSION_TRACE_AUDITED",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "9b28367c96003b8e2463fb94e06db123126d6a5895b79ad62fbd0f3c57558e72",
+  "formal": {
+    "off": {
+      "256": {
+        "TTFT_ms": 1304.0142554789782,
+        "TPOT_ms": 74.41857119401296,
+        "E2E_s": 20.280749909952284,
+        "output_tps": 12.622807397983554,
+        "QPS": 0.049307841398373256,
+        "formal_count": 5
+      },
+      "2048": {
+        "TTFT_ms": 8856.636434607208,
+        "TPOT_ms": 74.29527136113714,
+        "E2E_s": 27.80193063169718,
+        "output_tps": 9.20799362430365,
+        "QPS": 0.035968725094936135,
+        "formal_count": 5
+      }
+    },
+    "graph6": {
+      "256": {
+        "TTFT_ms": 1264.104901254177,
+        "TPOT_ms": 127.76087556107372,
+        "E2E_s": 33.843128169327976,
+        "output_tps": 7.564312575337311,
+        "QPS": 0.029548095997411372,
+        "formal_count": 5
+      },
+      "2048": {
+        "TTFT_ms": 8921.029555611312,
+        "TPOT_ms": 128.01765329405373,
+        "E2E_s": 41.56553114559502,
+        "output_tps": 6.1589493251821485,
+        "QPS": 0.024058395801492768,
+        "formal_count": 5
+      }
+    },
+    "graph1": {
+      "256": {
+        "TTFT_ms": 1180.5291209369898,
+        "TPOT_ms": 126.82367113729318,
+        "E2E_s": 33.52056526094675,
+        "output_tps": 7.637102716112418,
+        "QPS": 0.029832432484814132,
+        "formal_count": 5
+      },
+      "2048": {
+        "TTFT_ms": 8953.209999203682,
+        "TPOT_ms": 127.83472583501363,
+        "E2E_s": 41.55106508713216,
+        "output_tps": 6.161093571564787,
+        "QPS": 0.02406677176392495,
+        "formal_count": 5
+      }
+    }
+  },
+  "formal_valid_requests": 30,
+  "normal_rank_lifecycles": 48,
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "accepted_graph_mode": null,
+  "trace": "ALL48 rank /96files SHA nativePC verified; rendered actual timeline and COUNT flamegraph; graph internal GPU node activities absent",
+  "at": "2026-11-13T00:22:44.379684+08:00",
+  "trace_kernel_visibility": "verified against full raw D0 files; do not equate absent activities with removed work",
+  "root_cause": "Not fully identified; CPU submission reduced but formal TPOT regressed; no invented attribution"
+}

@@ -14,11 +14,13 @@ SPDX-License-Identifier: Apache-2.0
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::musa {
+namespace {
 
-torch::Tensor deepseek_v41_mhc_prenorm(const torch::Tensor& residual_flat,
-                                       const torch::Tensor& fn,
-                                       const std::string& library_directory,
-                                       double epsilon) {
+torch::Tensor mhc_prenorm(const torch::Tensor& residual_flat,
+                          const torch::Tensor& fn,
+                          const std::string& library_directory,
+                          double epsilon,
+                          bool fused_reduce) {
   CHECK(residual_flat.defined() && fn.defined());
   CHECK(residual_flat.device().type() == torch::kPrivateUse1);
   CHECK_EQ(fn.device(), residual_flat.device());
@@ -57,10 +59,39 @@ torch::Tensor deepseek_v41_mhc_prenorm(const torch::Tensor& residual_flat,
         to_ffi_tensor(square_sum),
         splits);
   }
+  if (fused_reduce) {
+    return deepseek_v41_mhc_prenorm_reduce(
+        partial, square_sum, residual_flat.size(1), epsilon);
+  }
   const torch::Tensor projection = partial.sum(/*dim=*/0);
   const torch::Tensor mean_square =
       square_sum.sum(/*dim=*/0) / residual_flat.size(1);
   return projection * torch::rsqrt(mean_square.unsqueeze(-1) + epsilon);
+}
+
+}  // namespace
+
+torch::Tensor deepseek_v41_mhc_prenorm(const torch::Tensor& residual_flat,
+                                       const torch::Tensor& fn,
+                                       const std::string& library_directory,
+                                       double epsilon) {
+  return mhc_prenorm(residual_flat,
+                     fn,
+                     library_directory,
+                     epsilon,
+                     /*fused_reduce=*/false);
+}
+
+torch::Tensor deepseek_v41_mhc_prenorm_fused(
+    const torch::Tensor& residual_flat,
+    const torch::Tensor& fn,
+    const std::string& library_directory,
+    double epsilon) {
+  return mhc_prenorm(residual_flat,
+                     fn,
+                     library_directory,
+                     epsilon,
+                     /*fused_reduce=*/true);
 }
 
 }  // namespace xllm::kernel::musa

@@ -1,0 +1,130 @@
+[
+  {
+    "input_tokens": 256,
+    "phase": "warmup",
+    "count": 1,
+    "directory": "/work/new_start_t06_packed_shared_recheck_packed_v1/performance/input256_output256/warmup",
+    "started_at": "2026-11-13T00:54:29.197571+08:00",
+    "finished_at": "2026-11-13T00:54:53.109920+08:00",
+    "exit_code": 0,
+    "validated_rows": [
+      [
+        1,
+        256,
+        256,
+        18.108282557688653,
+        0.3564102789387107
+      ]
+    ]
+  },
+  {
+    "input_tokens": 256,
+    "phase": "measured",
+    "count": 5,
+    "directory": "/work/new_start_t06_packed_shared_recheck_packed_v1/performance/input256_output256/measured",
+    "started_at": "2026-11-13T00:54:53.112751+08:00",
+    "finished_at": "2026-11-13T00:56:25.088642+08:00",
+    "exit_code": 0,
+    "validated_rows": [
+      [
+        1,
+        256,
+        256,
+        17.776283140294254,
+        0.3722092919051647
+      ],
+      [
+        1,
+        256,
+        256,
+        17.600969402119517,
+        0.348094773478806
+      ],
+      [
+        1,
+        256,
+        256,
+        17.18341539707035,
+        0.5861851992085576
+      ],
+      [
+        1,
+        256,
+        256,
+        16.999870283529162,
+        0.3546247808262706
+      ],
+      [
+        1,
+        256,
+        256,
+        17.350925960578024,
+        0.5378331234678626
+      ]
+    ]
+  },
+  {
+    "input_tokens": 2048,
+    "phase": "warmup",
+    "count": 1,
+    "directory": "/work/new_start_t06_packed_shared_recheck_packed_v1/performance/input2048_output256/warmup",
+    "started_at": "2026-11-13T00:56:25.092423+08:00",
+    "finished_at": "2026-11-13T00:56:49.660175+08:00",
+    "exit_code": 0,
+    "validated_rows": [
+      [
+        1,
+        2048,
+        256,
+        19.484980936162174,
+        2.822165783494711
+      ]
+    ]
+  },
+  {
+    "input_tokens": 2048,
+    "phase": "measured",
+    "count": 5,
+    "directory": "/work/new_start_t06_packed_shared_recheck_packed_v1/performance/input2048_output256/measured",
+    "started_at": "2026-11-13T00:56:49.663970+08:00",
+    "finished_at": "2026-11-13T00:58:31.044620+08:00",
+    "exit_code": 0,
+    "validated_rows": [
+      [
+        1,
+        2048,
+        256,
+        19.73463636264205,
+        2.5610748063772917
+      ],
+      [
+        1,
+        2048,
+        256,
+        19.186160692945123,
+        2.6796656865626574
+      ],
+      [
+        1,
+        2048,
+        256,
+        19.04733131453395,
+        2.611971321515739
+      ],
+      [
+        1,
+        2048,
+        256,
+        19.02665433101356,
+        2.5579106835648417
+      ],
+      [
+        1,
+        2048,
+        256,
+        19.29534248728305,
+        2.5699165239930153
+      ]
+    ]
+  }
+]

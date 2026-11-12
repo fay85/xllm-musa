@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host\": \"sj10\", \"remaining_ranks\": [0, 1, 2, 3, 4, 5, 6, 7], \"host_pids\": [4347, 4348, 4349, 4350, 4351, 4352, 4353, 4354], \"D_threads\": 0, \"archive\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_1/03_\\u6b63\\u786e\\u6027/HOST_failure/sj10_logs_and_host_timing.tar.gz\", \"bytes\": 8922415, \"sha256\": \"466fe2653850097cbe85da5003f65790cd7c676cd25a2519d17840e66a826739\"}\n",
+  "stderr": ""
+}

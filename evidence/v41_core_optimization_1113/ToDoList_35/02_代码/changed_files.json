@@ -1,0 +1,10 @@
+{
+  "existing": [
+    "xllm/core/layers/musa/deepseek_v41/text_model.h",
+    "xllm/models/llm/musa/deepseek_v41_native.h",
+    "tests/core/kernels/musa/musa_python_kernel_test_module.cpp"
+  ],
+  "new": [
+    "xllm/core/layers/musa/deepseek_v41/state_checkpoint.h"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "existing": [
+    "xllm/core/layers/musa/deepseek_v41/hyper_connection.h"
+  ],
+  "new": [],
+  "before": {
+    "xllm/core/layers/musa/deepseek_v41/hyper_connection.h": "7348df5337be64ce84141f3d5d2f95408a1134c501b3492d8a25fe6552b6e695"
+  },
+  "after": {
+    "xllm/core/layers/musa/deepseek_v41/hyper_connection.h": "a11580239c31fc501a83a7a9bb14041201d6dfab6a0e2c7792eae6b6f2591b20"
+  }
+}

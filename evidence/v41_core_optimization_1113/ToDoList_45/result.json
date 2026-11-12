@@ -1,0 +1,49 @@
+{
+  "status": "MIXED_SMALL_EFFECT_NOT_PROMOTED",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": 2.8210854033703825,
+      "TPOT_ms_change_percent": 0.5963058056224657,
+      "E2E_s_change_percent": 0.6465224693499749,
+      "output_tps_change_percent": -0.6423694067987817
+    },
+    "2048": {
+      "TTFT_ms_change_percent": 0.29464463865012114,
+      "TPOT_ms_change_percent": -2.835413169512624,
+      "E2E_s_change_percent": -2.407627734559137,
+      "output_tps_change_percent": 2.4670245006552793
+    }
+  },
+  "valid_after_formal_requests": 10,
+  "after_normal_rank_exits": 16,
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e45_trace_analysis_v1.tar.zst",
+    "bytes": 6987667,
+    "sha256": "fb279f241b9d8ede6fad6048b6e4d577cdf4f8c4269a99e8ceedbfcff2ccb947",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_native_block/bin/xllm",
+      "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_integrated_mhc_v1_raw_trace.tar.zst",
+          "bytes": 83623693,
+          "sha256": "d43225bba429cccc3086acde6cdc12c8b8beb6782228efb80f16cb3c17b94f11"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t06_packed_qkv_cumulative_v1_raw_trace.tar.zst",
+          "bytes": 82398819,
+          "sha256": "54df211d83ec2d8fb0c9491fce6d2a7cdd2652c33f6638e50e626d34a0d9f2b0"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794503506.9684076
+    }
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "decision": "Short TPOT +0.60% worse, long -2.84% better; variation and mixed effect do not establish robust cumulative gain. Keep packedQKV0.",
+  "all8_effect": "05_trace/all8_packed_qkv_effect.json"
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"status\": \"VERIFIED_EP_CANDIDATE_ON_SHARED_SJ_NFS\", \"artifact\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t01_ep_decode_ar\", \"binary_sha256\": \"ef2cbf5b6afadd17f104d63a2e393f65a09c59424a148122c51a2def371c55fb\", \"delta_sha256\": \"02f089796e99ab2b58224c0cbd627da0d344a3bde1e2dff6b84edb8ab21cea63\", \"delta_bytes\": 28217476}\n",
+  "stderr": ""
+}

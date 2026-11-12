@@ -1,0 +1,90 @@
+{
+  "at": "2026-11-13T03:14:07.921660+08:00",
+  "experiment": 14,
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_14/05_trace/已核验交互Perfetto_901504d09bc77bb0.tar.zst",
+  "bytes": 4576284,
+  "sha256": "81015f3ec917dcfe0c54cd2d085ab39c56d1f16a09e88049f0265ba837218738",
+  "files": [
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/custom_sj10_last_step.pftrace",
+      "bytes": 10026845,
+      "sha256": "e32890950b18e491dda0810f864c1821c523fdc4ebb45d008a56b40789986815"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/custom_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "389e283da7f3b7eab1feaa1a2b8bff51e2f2bd6a832c837647dfc7417e176115"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 10046499,
+      "sha256": "9013ec0f66509405718dafe91899d959c08323de4ea7aea328a5553283d0d384"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t01_ep_custom_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "1b4f82a6fe9130933430a118c3e66fb9f45f18b5ef7c3aae947f11f089719132"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/off_sj10_last_step.pftrace",
+      "bytes": 9869773,
+      "sha256": "6ed68983ef91979e3a6674cd2a3d1a73f3017f5b70b0e21d6d62570eddd9ccca"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "0ab9ecd1eca770500d06a1f752e508c97140ba54f0d4cb1955a0a802e116eed1"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/reuse_sj10_last_step.pftrace",
+      "bytes": 9228979,
+      "sha256": "84e1d6b194bba71b67082b37a4cdc48021bd97427310099646cf2e3a108ecd2c"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_t02_cache_reuse_1112/05_trace/reuse_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "04163c14cf0a85014a8facdcf5370ac4645d8e6e3a95af7acfb06b4509ea652b"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/after_SWA_layer0_decode_优化后实际C++栈及1次GPU写回.pftrace",
+      "bytes": 3902,
+      "sha256": "7d9dd9d73c2c0d8963df32b5b09eba5cb822360336924d9859fa68962bea9558"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/after_SWA_layer0_decode_优化后实际C++栈及1次GPU写回.receipt.json",
+      "bytes": 1439,
+      "sha256": "03a281c99efbbf1e26bcff65b0ef1386e1c50b0ecfe5a596fca4478135abd021"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/before_SWA_layer0_decode_优化前实际C++栈及35次GPU写回.pftrace",
+      "bytes": 30932,
+      "sha256": "d8d3818c189609582afaf3a2c9d54caa8940e670b021072e8ea0860e177d7f4a"
+    },
+    {
+      "path": "02_代码/source_checkout/evidence/v41_w4afp8_mt_1112/optimization_stage_i/before_SWA_layer0_decode_优化前实际C++栈及35次GPU写回.receipt.json",
+      "bytes": 1448,
+      "sha256": "9a4b2466de38288032bcbaa7d0715e7ba0d0de0552bd8247c31894951cd3adf9"
+    },
+    {
+      "path": "05_trace/processed/off_sj10_last_step.pftrace",
+      "bytes": 7243395,
+      "sha256": "85cba50d17132346cba01000b2476a86eb71b1346a46eb91a64d2dd7deb11300"
+    },
+    {
+      "path": "05_trace/processed/off_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "4c7758803e14c0aad20f4e3576ea1c6e561c66c2925100a7afda3b862baa01ba"
+    },
+    {
+      "path": "05_trace/processed/tp_sj10_last_step.pftrace",
+      "bytes": 7282453,
+      "sha256": "9fadc78e815f2dfa053538030ec9e59c002e69fbca6660ac72131f504be9d768"
+    },
+    {
+      "path": "05_trace/processed/tp_sj10_last_step.receipt.json",
+      "bytes": 1149,
+      "sha256": "3b62d5d55dd69760f730025ad3ed28fea1479cddd8d14dc67bbdae7882cfed53"
+    }
+  ],
+  "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+}

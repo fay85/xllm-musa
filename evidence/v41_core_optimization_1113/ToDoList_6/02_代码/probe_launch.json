@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"command\": [\"docker\", \"exec\", \"-d\", \"-e\", \"LD_PRELOAD=/workspace/artifacts/libmusa_backend_init.so\", \"-e\", \"PYTHONPATH=/work/artifacts/native_stage_i/lib:/work/repos/xllm-musa\", \"-e\", \"LD_LIBRARY_PATH=/work/artifacts/native_stage_i/lib:/usr/local/musa/lib\", \"-e\", \"OMP_NUM_THREADS=1\", \"-e\", \"MKL_NUM_THREADS=1\", \"-e\", \"MCCL_SOCKET_IFNAME=bond0\", \"xiaopang1112_v41_prefill_sj9\", \"sh\", \"-c\", \"echo $$ > /work/scripts/t01_ar_dual_dtype_v1.pid; exec python3 /work/scripts/native_ar_dual_dtype_probe.py --host 10.121.32.7 --port 22561 --output /work/new_start_t01_ar_dual_dtype_v1 > /work/scripts/t01_ar_dual_dtype_v1.log 2>&1\"], \"output\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t01_ar_dual_dtype_v1\", \"source_sha256\": \"92cbf3d8d495e32cb4df7ab8e91b2ceab7c0bf86e5e72e62963966710cbc002b\"}\n",
+  "stderr": ""
+}

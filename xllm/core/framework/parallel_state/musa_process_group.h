@@ -15,10 +15,12 @@ limitations under the License.
 
 #pragma once
 
+#include <torch_musa/csrc/core/MUSAStream.h>
 #include <torch_musa/csrc/distributed/ProcessGroupMCCL.h>
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/process_group.h"
+#include "core/util/env_var.h"
 
 namespace xllm {
 
@@ -81,6 +83,26 @@ class ProcessGroupImpl : public ProcessGroup {
     }
   }
 
+  // Work::wait first establishes the MCCL -> caller-stream dependency. A
+  // synchronous driver wait then enforces host completion without Work's
+  // optional 10-ms polling loop. Explicit opt-in; async APIs are unchanged.
+  void allreduce(torch::Tensor& input) override {
+    ProcessGroup::allreduce(input);
+    finish_sync_collective();
+  }
+
+  void allgather(const torch::Tensor& input,
+                 std::vector<torch::Tensor>& outputs) override {
+    ProcessGroup::allgather(input, outputs);
+    finish_sync_collective();
+  }
+
+  torch::Tensor allgather_base_sync(const torch::Tensor& input) override {
+    torch::Tensor output = ProcessGroup::allgather_base_sync(input);
+    finish_sync_collective();
+    return output;
+  }
+
   std::optional<torch::Tensor> allreduce_custom(
       torch::Tensor& input,
       const std::optional<torch::Tensor>& output = std::nullopt) {
@@ -107,6 +129,14 @@ class ProcessGroupImpl : public ProcessGroup {
   }
 
  private:
+  void finish_sync_collective() const {
+    if (sync_collective_stream_) {
+      torch::DeviceGuard guard(device());
+      c10::musa::getCurrentMUSAStream(device().index()).synchronize();
+    }
+  }
+  const bool sync_collective_stream_ =
+      util::get_bool_env("XLLM_MUSA_SYNC_COLLECTIVE_STREAM", false);
   std::unique_ptr<MusaCustomAllReduce> custom_all_reduce_;
 };
 

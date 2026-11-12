@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host\": \"sj10\", \"at\": \"2026-11-12T14:57:25.095321+08:00\", \"command\": [\"docker\", \"exec\", \"-d\", \"-w\", \"/work/repos/xllm-musa\", \"xiaopang1112_v41_decode_sj10\", \"bash\", \"/work/scripts/launch_g02_off_sj10.sh\"]}\n",
+  "stderr": ""
+}

@@ -1,0 +1,53 @@
+{
+  "run": "g02safe_device_v1",
+  "databases": [],
+  "sj9": {
+    "at": "2026-11-12T16:19:26.432991+08:00",
+    "pids": [
+      44931,
+      44932,
+      44933,
+      44934,
+      44935,
+      44936,
+      44937,
+      44938
+    ],
+    "exit_codes": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "stopping": false
+  },
+  "sj10": {
+    "at": "2026-11-12T16:19:26.324858+08:00",
+    "pids": [
+      53748,
+      53749,
+      53750,
+      53751,
+      53752,
+      53753,
+      53754,
+      53755
+    ],
+    "exit_codes": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "stopping": false
+  },
+  "observed_at": "2026-11-12T16:19:27.955123+08:00"
+}

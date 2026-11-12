@@ -1,0 +1,5 @@
+{
+  "scope": "Repository validator formatted for review, only Callable type annotation added; execution source and SHA remain archived in completed_basic_raw.tar.gz",
+  "formatter": "Black25.1.0 in temporary /tmp path",
+  "AST_equivalent_after_format": true
+}

@@ -1,0 +1,18 @@
+{
+  "task": "T09",
+  "mode": "CHUNK512",
+  "run": "t09_chunk512_cumulative_v1",
+  "baseline_experiment": "ToDoList_50",
+  "baseline_run": "t14_native_cache_off_v1",
+  "artifact": "native_t14_draft_cache",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "host_env": {},
+  "host_args": {
+    "sj9": {
+      "max_tokens_per_batch": 512,
+      "max_tokens_per_chunk_for_prefill": 512
+    }
+  },
+  "state": "FROZEN_SAME931_ELF_CUMULATIVE_NON_SPEC_BEST",
+  "baseline_receipt": "baseline_off_result.json"
+}

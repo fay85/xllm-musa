@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_batched_c4_final_v1_small_evidence.tar.gz",
+  "bytes": 583955,
+  "sha256": "5c13da5628a571b1a7eaaf4af536c1b7b1b9c93fd3d89fadd3f48941d47f44c8",
+  "run": "t12_batched_c4_final_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

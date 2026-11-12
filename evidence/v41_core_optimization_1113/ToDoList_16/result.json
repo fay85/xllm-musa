@@ -1,0 +1,14 @@
+{
+  "status": "T08_EXISTING_TRANSFER_LOGS_ANALYZED_NO_NETWORK_CHANGE",
+  "source": "../ToDoList_12/03_正确性/completed_basic_raw.tar.gz",
+  "rows": 768,
+  "nonzero_regions_rows": 96,
+  "all_success": true,
+  "all_rows_move_ms_mean": 0.463633515625,
+  "nonzero_move_ms_mean": 3.70882896875,
+  "nonzero_move_ms_max": 25.4443,
+  "long_10_requests_each_rank_nonzero_move_ms_mean": 2.003009375,
+  "long_10_requests_each_rank_nonzero_move_ms_max": 2.1307,
+  "scope": "Logged move_ms is a transfer-call span, not all request ready/wait/queue time, not strict removable end-to-end fraction",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

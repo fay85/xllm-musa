@@ -1,0 +1,15 @@
+{
+  "status": "SOURCE_READY_NOT_BUILT_OR_SERVING_TESTED",
+  "preserved_v1_sources": "02_代码/source_v1_adapter_and_binding",
+  "features": [
+    "q1 batch host metadata",
+    "GPU Engram hash per-request lookback then batched lookup",
+    "per-request cache/runtime with batched projections and FFN"
+  ],
+  "not_supported": [
+    "mixed prefill/decode batch",
+    "speculative verification",
+    "CP/DP>1"
+  ],
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

@@ -1,0 +1,48 @@
+{
+  "status": "SAME_ID_DURATION_COMPARISON",
+  "rows": [
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-4q6qvNPyKBXmWWQ9ve9xvA",
+      "client_TTFT_ms": 526.569189503789,
+      "P_stage_TTFT_ms": 299.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 227.56918950378895,
+      "TPOT_ms": 179.26889687922656,
+      "E2E_s": 46.24013789370656,
+      "server_record": "I20261112 15:11:02.478652 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-4q6qvNPyKBXmWWQ9ve9xvA, x-request-id: 01a1ce98-7b44-74f0-b6a4-440581818194, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 299.0ms, total_latency: 299.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "D_terminal_total_latency_ms": 46014.3,
+      "client_minus_D_terminal_total_ms": 225.83789370655722,
+      "D_record": "I20261112 15:11:48.194155 21914 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-340806405095348604-4q6qvNPyKBXmWWQ9ve9xvA, x-request-id: 01a1ce98-7b44-74f0-b6a4-440581818194, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 306.5ms, ttft: 299.0ms, total_latency: 46014.3ms, avg tpot: 179.3ms, generation speed: 5.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-qKYaDxVteb2ZhUKH8jx63y",
+      "client_TTFT_ms": 516.749432310462,
+      "P_stage_TTFT_ms": 299.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 217.749432310462,
+      "TPOT_ms": 179.55330284860204,
+      "E2E_s": 46.30284165870398,
+      "server_record": "I20261112 15:11:48.710260 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-qKYaDxVteb2ZhUKH8jx63y, x-request-id: 01a1ce99-2fe7-73aa-82bc-83a84641e7c7, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 299.0ms, total_latency: 299.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "D_terminal_total_latency_ms": 46085.3,
+      "client_minus_D_terminal_total_ms": 217.54165870397992,
+      "D_record": "I20261112 15:12:34.497351 21911 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-340806405095348604-qKYaDxVteb2ZhUKH8jx63y, x-request-id: 01a1ce99-2fe7-73aa-82bc-83a84641e7c7, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 302.9ms, ttft: 299.0ms, total_latency: 46085.3ms, avg tpot: 179.6ms, generation speed: 5.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input": 256,
+      "request_id": "chatcmpl-340806405095348604-zAacEAnyasfTmLyAxC33WQ",
+      "client_TTFT_ms": 315.46593364328146,
+      "P_stage_TTFT_ms": 298.0,
+      "P_queue_to_batch_ms": 1.4,
+      "outside_P_stage_ms": 17.46593364328146,
+      "TPOT_ms": 179.06770287264212,
+      "E2E_s": 45.97773016616702,
+      "server_record": "I20261112 15:12:34.812157 17550 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-340806405095348604-zAacEAnyasfTmLyAxC33WQ, x-request-id: 01a1ce99-e4c6-7d64-a19d-8d160fd12af3, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 298.0ms, total_latency: 298.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "D_terminal_total_latency_ms": 45960.4,
+      "client_minus_D_terminal_total_ms": 17.330166167019343,
+      "D_record": "I20261112 15:13:20.475361 21912 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-340806405095348604-zAacEAnyasfTmLyAxC33WQ, x-request-id: 01a1ce99-e4c6-7d64-a19d-8d160fd12af3, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 302.7ms, ttft: 298.0ms, total_latency: 45960.4ms, avg tpot: 179.1ms, generation speed: 5.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    }
+  ],
+  "interpretation": "Both TTFT and total-latency differences grow together for first two requests; need determine request-clock origin and client/router boundaries. Do not attribute to GPU kernels or change official benchmark timing."
+}

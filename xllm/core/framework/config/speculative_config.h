@@ -109,6 +109,17 @@ class SpeculativeConfig final {
            is_dspark_algorithm(speculative_algorithm);
   }
 
+  // Native MUSA V4.1 is an explicit experimental implementation with its own
+  // target state checkpoint/replay and dedicated three-stage drafter. Keep
+  // native opt-in separate from the already supported Python pairing.
+  static bool is_v41_dspark_spec(std::string_view model_impl,
+                                 std::string_view algorithm,
+                                 bool enable_native_musa) {
+    return is_v41_python_dspark_spec(model_impl, algorithm) ||
+           (enable_native_musa && model_impl == "native" &&
+            is_dspark_algorithm(algorithm));
+  }
+
   // True for the block-diffusion draft algorithms (DFlash, DSpark) that record
   // validate metrics inline per-seq and drive the adaptive per-seq varlen
   // prune. Case-insensitive so it matches however the flag was cased. MTP is

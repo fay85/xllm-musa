@@ -1,0 +1,50 @@
+{
+  "status": "MIXED_SMALL_EFFECT_NOT_PROMOTED",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": 25.749483083702597,
+      "TPOT_ms_change_percent": 1.7688123194872896,
+      "E2E_s_change_percent": 2.2490004672978126,
+      "output_tps_change_percent": -2.199532960732553
+    },
+    "2048": {
+      "TTFT_ms_change_percent": -0.6462204733892252,
+      "TPOT_ms_change_percent": -3.5814150618056706,
+      "E2E_s_change_percent": -3.1835985497190467,
+      "output_tps_change_percent": 3.2882843216951896
+    }
+  },
+  "valid_after_formal_requests": 10,
+  "after_normal_rank_exits": 16,
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e46_trace_analysis_v1.tar.zst",
+    "bytes": 6988763,
+    "sha256": "24bfcf0c50764fb96e72eec92a62dfc7b019e70f8620d62f2b9767b6b3870483",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_draft_cache/bin/xllm",
+      "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_native_cache_off_v1_raw_trace.tar.zst",
+          "bytes": 83648186,
+          "sha256": "0b3f77afb4c5df11a4147b6397d6b7cfe64708daf529ec1c724a7107eb93537c"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t04_gate_cache_decode_v2_raw_trace.tar.zst",
+          "bytes": 82818473,
+          "sha256": "6c06ac8e15fe878ea6c89b6145132b176c19693dc137b846db4f3d448f9466bf"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794505349.2406852
+    }
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "default_gate_cache": "0",
+  "reason": "Short input TPOT regressed1.77%, long improved3.58%; no uniform reliable serving improvement",
+  "trace_effect": "40 casts/copies removed per step on all8 D ranks; full7step GPU kernels280 fewer"
+}

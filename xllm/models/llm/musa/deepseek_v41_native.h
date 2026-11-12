@@ -22,6 +22,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -31,9 +32,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/framework/model_context.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/rotary_embedding_util.h"
+#include "core/layers/musa/deepseek_v41/batch_metadata.h"
 #include "core/layers/musa/deepseek_v41/engram_embedding.h"
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
+#include "core/layers/musa/deepseek_v41/state_checkpoint.h"
 #include "core/layers/musa/deepseek_v41/text_model.h"
 #include "core/platform/musa_model_compute_stream.h"
 #include "core/util/env_var.h"
@@ -60,7 +63,15 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK_EQ(context.get_parallel_args().cp_size(), 1);
     CHECK_EQ(context.get_parallel_args().dp_size(), 1);
     CHECK(!ExecutionConfig::get_instance().enable_graph());
-    CHECK_EQ(SpeculativeConfig::get_instance().num_speculative_tokens(), 0);
+    native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+    const int64_t speculative_tokens =
+        SpeculativeConfig::get_instance().num_speculative_tokens();
+    CHECK(speculative_tokens == 0 ||
+          (native_dspark_ && speculative_tokens <= 5));
+    if (speculative_tokens > 0) {
+      CHECK(args_.layers_to_capture() == std::vector<int32_t>({37, 38, 39}));
+      CHECK_EQ(args_.n_layers(), 40);
+    }
     CHECK(!context.get_speculative_runtime_config().is_draft_engine);
     CHECK_EQ(args_.hc_mult(), 4);
     CHECK_EQ(args_.n_shared_experts(), 1);
@@ -142,7 +153,11 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     torch::DeviceGuard guard(device());
     torch::NoGradGuard no_grad;
     initialize_decode_ep_policy();
+    initialize_ffn_tail_graph_policy();
     initialize_shared_expert_tp_policy();
+    initialize_gate_cache_policy();
+    initialize_decode_batch_policy();
+    initialize_bounded_replay_policy();
     DeepseekV41Checkpoint checkpoint(
         loader->get_state_dicts(),
         options_,
@@ -191,7 +206,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         std::move(plain_rope),
         std::move(compressed_rope),
         tp_group_,
-        expert_reduction_group());
+        expert_reduction_group(),
+        bounded_replay_);
+    if (!args_.layers_to_capture().empty()) {
+      auxiliary_ = std::make_unique<AuxHiddenCapture>(
+          args_, options_, /*max_tokens_per_batch=*/512);
+    }
     LOG(INFO) << "Native V4.1 weights ready, expert_format="
               << (has_int4_experts ? "w4afp8_mt" : "original_fp4")
               << ", layers=" << args_.n_layers() << ", tp=" << tp_size()
@@ -204,32 +224,54 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                       std::vector<KVCache>& kv_caches,
                       const ModelInputParams& params) override {
     CHECK(model_);
-    CHECK_EQ(params.execution_batch.num_reqs, 1) << "Native V4.1 currently C1";
-    CHECK(!params.enable_graph && !params.is_spec_verify);
+    const int64_t requests = params.execution_batch.num_reqs;
+    const bool batched = requests > 1;
+    CHECK(!batched || batched_decode_)
+        << "Native V4.1 multi-request decode requires explicit batch policy";
+    CHECK(!params.enable_graph);
+    CHECK(!params.is_spec_verify || native_dspark_);
     CHECK(!params.embedding.input_embedding.defined())
         << "Native V4.1 text only";
-    const auto q_length =
-        layer::parse_deepseek_v41_c1_length(params.attention.host.q_seq_lens);
-    const auto kv_length =
-        layer::parse_deepseek_v41_c1_length(params.attention.host.kv_seq_lens);
+    std::optional<std::vector<int64_t>> context_lengths;
+    std::optional<int64_t> q_length;
+    std::optional<int64_t> kv_length;
+    if (batched) {
+      context_lengths = layer::parse_deepseek_v41_decode_batch(
+          params.attention.host.q_seq_lens,
+          params.attention.host.kv_seq_lens,
+          requests,
+          tokens.numel());
+      CHECK(context_lengths.has_value())
+          << "Only B2..B8 all-q1 decode is supported; mixed prefill rejected";
+      q_length = tokens.numel();
+      kv_length =
+          *std::max_element(context_lengths->begin(), context_lengths->end());
+    } else {
+      CHECK_EQ(requests, 1);
+      q_length =
+          layer::parse_deepseek_v41_c1_length(params.attention.host.q_seq_lens);
+      kv_length = layer::parse_deepseek_v41_c1_length(
+          params.attention.host.kv_seq_lens);
+    }
     CHECK(q_length.has_value() && kv_length.has_value())
         << "Invalid C1 query/context host length metadata";
     CHECK_EQ(q_length.value(), tokens.numel());
     const int64_t context_length = kv_length.value();
     const layer::DeepseekV41ProfileRange range(
         "V41/step", /*layer=*/-1, tokens.numel(), context_length);
-    CHECK_GE(context_length, tokens.numel());
+    CHECK(batched || context_length >= tokens.numel());
     CHECK_GT(tokens.numel(), 0);
     CHECK_EQ(kv_caches.size(), static_cast<size_t>(args_.n_layers()));
     const int64_t table_count = 1 + static_cast<int64_t>(ratio1_group_ >= 0) +
                                 static_cast<int64_t>(ratio2_group_ >= 0);
     CHECK_EQ(params.multi_block_tables.size(), table_count);
-    if (!params.synchronize_all_layers()) {
+    if (!replaying_ && !params.synchronize_all_layers()) {
       return ModelOutput();
     }
     torch::DeviceGuard guard(device());
     std::optional<MusaModelComputeStream> model_stream;
-    if (util::get_bool_env("XLLM_DSV41_MODEL_NONDEFAULT_STREAM", false)) {
+    if (!replaying_ &&
+        util::get_bool_env("XLLM_DSV41_MODEL_NONDEFAULT_STREAM", false)) {
       model_stream.emplace(device());
       LOG_FIRST_N(INFO, 1)
           << "Native V4.1 model forward on a valid nondefault stream, "
@@ -253,7 +295,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       const auto& host_table = params.multi_block_tables[group];
       CHECK(host_table.defined());
       CHECK_EQ(host_table.dim(), 2);
-      CHECK_EQ(host_table.size(0), 1);
+      CHECK_EQ(host_table.size(0), requests);
       return host_table.to(device(), /*non_blocking=*/true);
     };
     const torch::Tensor swa_table = device_page_table(0);
@@ -270,6 +312,17 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
           layer::deepseek_v41_cache_view(cache.get_index_cache()),
           defined(cache.get_compress_kv_state()),
           defined(cache.get_compress_score_state())});
+    }
+    if (native_dspark_ && !replaying_) {
+      prepare_speculative_state(tokens,
+                                positions,
+                                kv_caches,
+                                params,
+                                caches,
+                                swa_table,
+                                ratio1_table,
+                                ratio2_table,
+                                context_length);
     }
     std::vector<std::optional<torch::Tensor>> engram_rows(kv_caches.size());
     std::optional<torch::Tensor> mask;
@@ -298,17 +351,43 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       std::optional<torch::Tensor> lookback_tensor;
       if (!lookback.empty()) {
         lookback_tensor = torch::tensor(lookback, torch::kInt32)
-                              .reshape({1, -1})
+                              .reshape({requests, -1})
                               .to(device());
       }
-      auto [hashes, gate_mask] =
-          engram_hash_->forward(tokens,
-                                positions,
-                                swa_table,
-                                swa.size(1),
-                                context_length - tokens.numel(),
-                                lookback_tensor);
-      mask = std::move(gate_mask);
+      torch::Tensor hashes;
+      if (batched) {
+        std::vector<torch::Tensor> per_request_hashes;
+        std::vector<torch::Tensor> per_request_mask;
+        per_request_hashes.reserve(requests);
+        per_request_mask.reserve(requests);
+        for (int64_t row = 0; row < requests; ++row) {
+          const std::optional<torch::Tensor> row_lookback =
+              lookback_tensor.has_value()
+                  ? std::make_optional(lookback_tensor->narrow(0, row, 1))
+                  : std::nullopt;
+          auto [row_hashes, row_mask] =
+              engram_hash_->forward(tokens.narrow(0, row, 1),
+                                    positions.narrow(0, row, 1),
+                                    swa_table.narrow(0, row, 1),
+                                    swa.size(1),
+                                    context_lengths.value()[row] - 1,
+                                    row_lookback);
+          per_request_hashes.emplace_back(std::move(row_hashes));
+          per_request_mask.emplace_back(std::move(row_mask));
+        }
+        hashes = torch::cat(per_request_hashes, 0);
+        mask = torch::cat(per_request_mask, 0);
+      } else {
+        auto [single_hashes, gate_mask] =
+            engram_hash_->forward(tokens,
+                                  positions,
+                                  swa_table,
+                                  swa.size(1),
+                                  context_length - tokens.numel(),
+                                  lookback_tensor);
+        hashes = std::move(single_hashes);
+        mask = std::move(gate_mask);
+      }
       for (int64_t layer : args_.engram_layer_ids()) {
         engram_rows[layer] =
             engram_tables_[layer]
@@ -316,20 +395,40 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                 .flatten(1);
       }
     }
-    torch::Tensor hidden = model_->forward(tokens,
-                                           positions,
-                                           caches,
-                                           swa_table,
-                                           ratio1_table,
-                                           ratio2_table,
-                                           context_length,
-                                           engram_rows,
-                                           mask);
+    torch::Tensor hidden;
+    if (batched) {
+      CHECK(!auxiliary_) << "DSpark capture currently requires one request";
+      hidden = model_->forward_batched_decode(tokens,
+                                              positions,
+                                              caches,
+                                              swa_table,
+                                              ratio1_table,
+                                              ratio2_table,
+                                              context_lengths.value(),
+                                              engram_rows,
+                                              mask);
+    } else {
+      hidden = model_->forward_with_capture(tokens,
+                                            positions,
+                                            caches,
+                                            swa_table,
+                                            ratio1_table,
+                                            ratio2_table,
+                                            context_length,
+                                            engram_rows,
+                                            mask,
+                                            auxiliary_.get());
+    }
+    ModelOutput output =
+        auxiliary_ ? auxiliary_->finalize(hidden) : ModelOutput(hidden);
     if (model_stream.has_value()) {
       model_stream->record_output(hidden);
+      if (output.aux_hidden_states.defined()) {
+        model_stream->record_output(output.aux_hidden_states);
+      }
       model_stream->finish();
     }
-    return ModelOutput(hidden);
+    return output;
   }
 
   torch::Tensor logits(const torch::Tensor& hidden,
@@ -342,10 +441,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                        const torch::Tensor& selected,
                        torch::Tensor& out_hidden) override {
     CHECK(model_);
-    out_hidden = selected.defined() && selected.numel() > 0
-                     ? hidden.index_select(0, selected.to(torch::kInt64))
-                     : hidden;
-    return model_->logits(out_hidden, std::nullopt);
+    out_hidden = model_->select_hidden(hidden, defined(selected));
+    return model_->project_logits(out_hidden);
   }
 
   torch::Device device() const override { return options_.device(); }
@@ -364,6 +461,187 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   }
 
  private:
+  struct PendingVerification {
+    std::unique_ptr<layer::DeepseekV41StateCheckpoint> checkpoint;
+    torch::Tensor tokens;
+    torch::Tensor positions;
+    ModelInputParams parameters;
+    std::string request_id;
+    int64_t begin = 0;
+  };
+
+  void prepare_speculative_state(
+      const torch::Tensor& tokens,
+      const torch::Tensor& positions,
+      std::vector<KVCache>& kv_caches,
+      const ModelInputParams& params,
+      const std::vector<layer::DeepseekV41AttentionCache>& caches,
+      const torch::Tensor& swa_table,
+      const torch::Tensor& c1_table,
+      const torch::Tensor& c2_table,
+      int64_t context) {
+    CHECK_EQ(params.execution_batch.num_reqs, 1);
+    if (!params.is_spec_verify && !pending_verification_) {
+      return;
+    }
+    if (params.meta.is_graph_warmup) {
+      CHECK(!pending_verification_);
+      return;
+    }
+    CHECK_EQ(params.embedding.request_ids.size(), 1)
+        << "Native DSpark requires explicit request identity for cache "
+           "rollback";
+    const std::string& request = params.embedding.request_ids.front();
+    const int64_t begin = context - tokens.numel();
+    if (pending_verification_) {
+      if (request != pending_verification_->request_id) {
+        // A P/D import or a new prefill may already own these physical pages.
+        // Never restore a previous request's snapshot over another request.
+        pending_verification_.reset();
+      } else {
+        CHECK(params.is_spec_verify)
+            << "Native DSpark does not support changing to eager mid-request";
+        const int64_t accepted = begin - pending_verification_->begin;
+        CHECK_GT(accepted, 0);
+        CHECK_LE(accepted, pending_verification_->tokens.numel());
+        CHECK_EQ(params.num_accepted_tokens_host.size(), 1);
+        CHECK_EQ(accepted, params.num_accepted_tokens_host.front())
+            << "Accepted scheduler length disagrees with next verification "
+               "position";
+        auto previous = std::move(pending_verification_);
+        previous->checkpoint->restore();
+        ModelInputParams replay = previous->parameters;
+        replay.is_spec_verify = false;
+        replay.attention.host.q_seq_lens = {0, static_cast<int32_t>(accepted)};
+        replay.attention.host.kv_seq_lens = {0, static_cast<int32_t>(begin)};
+        replay.attention.host.q_cu_seq_lens = replay.attention.host.q_seq_lens;
+        replay.num_accepted_tokens_host.clear();
+        replay.num_accepted_tokens = torch::Tensor{};
+        replaying_ = true;
+        forward(previous->tokens.narrow(0, 0, accepted),
+                previous->positions.narrow(0, 0, accepted),
+                kv_caches,
+                replay);
+        replaying_ = false;
+      }
+    }
+    if (!params.is_spec_verify) {
+      return;
+    }
+    CHECK_GT(tokens.numel(), 0);
+    CHECK_LE(tokens.numel(), 6);
+    CHECK_EQ(caches.size(), static_cast<size_t>(args_.n_layers()));
+    // History uses the same physical SWA slots. It must be bound before the
+    // first checkpoint, and must be restored along with every cache write.
+    if (engram_hash_ && (!history_swa_.defined() ||
+                         history_swa_.data_ptr() != caches[0].swa.data_ptr() ||
+                         history_swa_.sizes() != caches[0].swa.sizes())) {
+      const torch::Tensor& swa = caches[0].swa;
+      engram_hash_->bind_history(torch::zeros({swa.size(0) * swa.size(1)},
+                                              options_.dtype(torch::kInt32)));
+      history_swa_ = swa;
+    }
+    auto pending = std::make_unique<PendingVerification>();
+    pending->checkpoint = std::make_unique<layer::DeepseekV41StateCheckpoint>(
+        /*max_bytes=*/64 * 1024 * 1024);
+    std::unordered_set<uintptr_t> saved;
+    const auto unique_tensor = [&](const torch::Tensor& value) {
+      return value.defined() && value.numel() > 0 &&
+             saved.insert(reinterpret_cast<uintptr_t>(value.data_ptr())).second;
+    };
+    const torch::Tensor rows =
+        torch::arange(tokens.numel(),
+                      swa_table.options().dtype(torch::kInt64)) +
+        begin;
+    const torch::Tensor columns =
+        torch::floor_divide(rows, caches[0].swa.size(1))
+            .remainder(swa_table.size(1));
+    const torch::Tensor state_pages =
+        swa_table.select(0, 0).index_select(0, columns).contiguous();
+    for (size_t index = 0; index < caches.size(); ++index) {
+      const auto& cache = caches[index];
+      if (unique_tensor(cache.swa)) {
+        pending->checkpoint->add_paged(
+            cache.swa, swa_table, begin, tokens.numel(), true);
+      }
+      const int64_t ratio = args_.compress_ratios()[index];
+      if (ratio > 0) {
+        CHECK(ratio == 1 || ratio == 2);
+        const torch::Tensor& table = ratio == 1 ? c1_table : c2_table;
+        const int64_t first = begin / ratio;
+        const int64_t count = context / ratio - first;
+        if (unique_tensor(cache.key)) {
+          pending->checkpoint->add_paged(cache.key, table, first, count, false);
+        }
+        if (unique_tensor(cache.index)) {
+          pending->checkpoint->add_paged(
+              cache.index, table, first, count, false);
+        }
+      }
+      if (cache.compressor_kv_state.has_value() &&
+          unique_tensor(cache.compressor_kv_state.value())) {
+        pending->checkpoint->add_blocks(cache.compressor_kv_state.value(),
+                                        state_pages);
+      }
+      if (cache.compressor_score_state.has_value() &&
+          unique_tensor(cache.compressor_score_state.value())) {
+        pending->checkpoint->add_blocks(cache.compressor_score_state.value(),
+                                        state_pages);
+      }
+    }
+    if (engram_hash_) {
+      const torch::Tensor& swa = caches[0].swa;
+      pending->checkpoint->add_paged(
+          engram_hash_->history().view({swa.size(0), swa.size(1), 1}),
+          swa_table,
+          begin,
+          tokens.numel(),
+          true);
+    }
+    pending->tokens = tokens.clone();
+    pending->positions = positions.clone();
+    pending->parameters = params;
+    for (auto& table : pending->parameters.multi_block_tables) {
+      table = table.clone();
+    }
+    pending->request_id = request;
+    pending->begin = begin;
+    LOG_FIRST_N(INFO, 1)
+        << "Native DSpark target checkpoint bytes="
+        << pending->checkpoint->saved_bytes()
+        << "; accepted input replay is eager, rejected state never reused";
+    pending_verification_ = std::move(pending);
+  }
+  void initialize_ffn_tail_graph_policy() {
+    const bool enabled =
+        util::get_bool_env("XLLM_DSV41_DECODE_FFN_TAIL_GRAPH", false);
+    const bool fused_inputs =
+        util::get_bool_env("XLLM_DSV41_DECODE_FFN_GRAPH_FUSED_INPUTS", false);
+    CHECK(!fused_inputs || enabled)
+        << "Fused Graph inputs require the FFN-tail Graph";
+    const int32_t policy = static_cast<int32_t>(enabled) |
+                           (static_cast<int32_t>(fused_inputs) << 1);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local =
+          torch::tensor({policy}, options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], policy)
+            << "FFN-tail Graph policy differs across TP ranks";
+      }
+    }
+    CHECK(!enabled ||
+          (decode_ep_custom_allreduce_ &&
+           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true)))
+        << "Native FFN-tail Graph currently requires the validated TP/EP "
+           "custom path";
+    decode_ffn_tail_graph_ = enabled;
+    decode_ffn_graph_fused_inputs_ = fused_inputs;
+  }
+
   void initialize_decode_ep_policy() {
     const bool enabled =
         util::get_bool_env("XLLM_DSV41_DECODE_EP_CUSTOM_AR", false);
@@ -406,6 +684,64 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK(!enabled || (tp_size() > 1 && ep_size() == tp_size()))
         << "Shared expert TP requires matching full-world TP and EP groups";
     shared_expert_tp_reduce_ = enabled;
+  }
+
+  void initialize_decode_batch_policy() {
+    const bool enabled = util::get_bool_env("XLLM_DSV41_BATCHED_DECODE", false);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local = torch::tensor({static_cast<int32_t>(enabled)},
+                                                options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], static_cast<int32_t>(enabled))
+            << "Native V4.1 batch policy differs across ranks";
+      }
+    }
+    batched_decode_ = enabled;
+  }
+
+  void initialize_bounded_replay_policy() {
+    const bool enabled =
+        util::get_bool_env("XLLM_DSV41_BOUNDED_PREFILL_REPLAY", false);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local = torch::tensor({static_cast<int32_t>(enabled)},
+                                                options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      CHECK_EQ(peers.numel(), tp_size());
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], static_cast<int32_t>(enabled))
+            << "Bounded prefill replay policy differs across TP ranks";
+      }
+    }
+    if (enabled) {
+      CHECK(args_.layers_to_capture().empty())
+          << "Bounded prefill replay does not expose uncaptured prompt aux "
+             "rows";
+    }
+    bounded_replay_ = enabled;
+  }
+
+  void initialize_gate_cache_policy() {
+    const bool enabled =
+        util::get_bool_env("XLLM_DSV41_GATE_CACHE_FP32_WEIGHT", false);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local = torch::tensor({static_cast<int32_t>(enabled)},
+                                                options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], static_cast<int32_t>(enabled))
+            << "Native V4.1 gate FP32 cache policy differs across ranks";
+      }
+    }
+    gate_cache_fp32_weight_ = enabled;
   }
 
   ProcessGroup* expert_reduction_group() const {
@@ -469,6 +805,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     attention.candidate_block_size = args_.candidate_block_size();
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
+    attention.decode_packed_qkv =
+        util::get_bool_env("XLLM_DSV41_DECODE_PACKED_QKV", false);
     attention.decode_fused_swa_read =
         util::get_bool_env("XLLM_DSV41_DECODE_FUSED_SWA_READ", false);
     attention.decode_cache_read_reuse =
@@ -476,6 +814,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     config.hc_epsilon = args_.hc_eps();
     config.mhc_prenorm_directory = mhc_path_;
+    config.decode_mhc_fused_reduce =
+        util::get_bool_env("XLLM_DSV41_DECODE_MHC_FUSED_REDUCE", false);
+    config.decode_ffn_tail_graph = decode_ffn_tail_graph_;
+    config.decode_ffn_graph_fused_inputs = decode_ffn_graph_fused_inputs_;
     // MusaCustomAllReduce checks this policy across all TP ranks during
     // communicator construction. Keep one consistent selector rather than
     // adding an independent model flag that could disagree between ranks.
@@ -487,10 +829,13 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     moe.decode_ep_custom_allreduce = decode_ep_custom_allreduce_;
     moe.expert_format = expert_format_;
     moe.w4a8_so_path = w4a8_path_;
+    moe.decode_packed_shared_gate_up =
+        util::get_bool_env("XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP", false);
     moe.dense =
         index < args_.first_k_dense_replace() ||
         (args_.moe_layer_freq() > 1 && index % args_.moe_layer_freq() != 0);
     moe.shared_expert_tp_reduce = !moe.dense && shared_expert_tp_reduce_;
+    moe.gate_cache_fp32_weight = !moe.dense && gate_cache_fp32_weight_;
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());
     moe.topk = args_.num_experts_per_tok();
@@ -735,7 +1080,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   ProcessGroup* tp_group_;
   ProcessGroup* ep_group_;
   bool decode_ep_custom_allreduce_ = false;
+  bool decode_ffn_tail_graph_ = false;
+  bool decode_ffn_graph_fused_inputs_ = false;
   bool shared_expert_tp_reduce_ = false;
+  bool bounded_replay_ = false;
+  bool gate_cache_fp32_weight_ = false;
+  bool batched_decode_ = false;
   std::string bmm_path_;
   std::string w4a8_path_;
   std::string mhc_path_;
@@ -752,6 +1102,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       engram_tables_;
   std::unique_ptr<layer::DeepseekV41EngramHash> engram_hash_;
   torch::Tensor history_swa_;
+  bool native_dspark_ = false;
+  bool replaying_ = false;
+  std::unique_ptr<PendingVerification> pending_verification_;
+  std::unique_ptr<AuxHiddenCapture> auxiliary_;
   std::unique_ptr<layer::DeepseekV41TextModel> model_;
 };
 

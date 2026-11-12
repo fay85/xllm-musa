@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_3/05_trace/DEVICE/sj10/raw_timing.tar.gz\", \"bytes\": 16243766, \"sha256\": \"989da09d65b34946ad15720571d6748a74d404f2a8b7e11dfcab4e999b5ccfe2\"}\n",
+  "stderr": ""
+}

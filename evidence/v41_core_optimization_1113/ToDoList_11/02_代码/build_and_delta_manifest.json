@@ -1,0 +1,99 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t02_swa_read_build_v1/relay_deltas.tar",
+  "bytes": 33628160,
+  "sha256": "1418d4358b993f5fc66bde8f8e3e4fc93e6a620fdb97cb2da7077971fcc688eb",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T20:02:36.857726+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "3adb9a58adbc5830a8104a27a1dc62933eee49f11b4b44b9aba092fb8989aaf9",
+        "bytes": 342228344,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t02_swa_read/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42392128,
+          "sha256": "04c8bd2a528aad23ab14651c414f8ce5429ff2fc451ca07e3b532387a80c2282"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "70a8e060e5495b63c7a880984682acdd2e0fe606",
+        "source_sha256": {
+          "xllm/core/kernels/musa/CMakeLists.txt": "1c404aa9231b3d278306d4da7f7dc3fcbc329e4be15510a25af3bf3bf12f9b1c",
+          "xllm/core/layers/musa/deepseek_v41/attention.h": "9b1828f9adc6a7dfb851ced50b959b0979e9b787e22fe6e7692cd2e57a3fa588",
+          "xllm/core/layers/musa/deepseek_v41/paged_attention.h": "e057467864c28c83ff2d4ef3b8237b227ce1a751dffbf04e71640cda7875b868",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "bafdc538e76a08ede0dee796daab846381eeb6dd728ef07d5ffc7d6216930e7c",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "d6b4eecc2b638e4263b89338286c25b476d2960d714d5464f2e4f0072f16db41",
+          "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.h": "0a1d5645ba5080fa811e432696ad7196769459cd0805314902967779fb8e9524",
+          "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.cu": "11fd5d04ffa154c8d28a15912359ae1eb9cc84f353d7a796cd2cec2f3be11842"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "purpose": "Clean accepted cache baseline + default-off SWA read fusion and P FFI sync diagnostic; NO MHC/shared TP candidate"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 29237497,
+        "sha256": "cac61405dab410dfc2e004acdc3ebfb1eb5ce7c07cd56a398f38de8edea64360",
+        "base_sha256": "366653498045ffff3b749a5e6b8cd5b0a31cc234c2f42bb5526d763571b18c1c",
+        "target_sha256": "3adb9a58adbc5830a8104a27a1dc62933eee49f11b4b44b9aba092fb8989aaf9",
+        "target_bytes": 342228344
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4370505,
+        "sha256": "f26638ab439c59fbff59b5ae760586d0e3bcaa047ff4e9d39c0ca8c25c8a0c96",
+        "base_sha256": "14bf90b805de767c2a5778d86b0f8891d8beb8079e6de60827c69c980a857949",
+        "target_sha256": "04c8bd2a528aad23ab14651c414f8ce5429ff2fc451ca07e3b532387a80c2282",
+        "target_bytes": 42392128
+      }
+    ]
+  }
+}

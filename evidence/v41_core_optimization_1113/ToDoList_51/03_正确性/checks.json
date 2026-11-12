@@ -1,0 +1,160 @@
+{
+  "status": "PASS_SMALL_BATCH_MHC_NATIVE_LAYER_BOUNDARIES",
+  "cases": [
+    {
+      "part": "attn",
+      "rows": 1,
+      "metadata_max_abs": [
+        7.450580596923828e-09,
+        0.0,
+        0.0
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "attn",
+      "rows": 2,
+      "metadata_max_abs": [
+        1.4901161193847656e-08,
+        0.0,
+        5.960464477539063e-08
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "attn",
+      "rows": 3,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        5.960464477539063e-08
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "attn",
+      "rows": 4,
+      "metadata_max_abs": [
+        1.1920928955078125e-07,
+        2.9802322387695312e-08,
+        1.1920928955078125e-07
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 3.0517578125e-05
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "metadata_max_abs": [
+        1.1175870895385742e-08,
+        1.1175870895385742e-08,
+        1.1920928955078125e-07
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.00390625
+    },
+    {
+      "part": "attn",
+      "rows": 8,
+      "metadata_max_abs": [
+        1.4901161193847656e-08,
+        2.9802322387695312e-08,
+        7.450580596923828e-08
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 1.52587890625e-05
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "ffn",
+      "rows": 1,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        1.6298145055770874e-09
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "ffn",
+      "rows": 2,
+      "metadata_max_abs": [
+        0.0,
+        5.960464477539063e-08,
+        9.313225746154785e-10
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 1.9073486328125e-06
+    },
+    {
+      "part": "ffn",
+      "rows": 3,
+      "metadata_max_abs": [
+        3.725290298461914e-09,
+        0.0,
+        3.259629011154175e-09
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "metadata_max_abs": [
+        0.0,
+        5.960464477539063e-08,
+        5.960464477539063e-08
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "metadata_max_abs": [
+        0.0,
+        5.960464477539063e-08,
+        1.862645149230957e-09
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 9.5367431640625e-07
+    },
+    {
+      "part": "ffn",
+      "rows": 8,
+      "metadata_max_abs": [
+        1.1920928955078125e-07,
+        8.940696716308594e-08,
+        2.3283064365386963e-09
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0009765625
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "carried_pre_exact": true,
+      "merged_max_abs": 0.0
+    }
+  ],
+  "accuracy_scope": "Short directly-related native GPU layer checks only; not model precision acceptance"
+}

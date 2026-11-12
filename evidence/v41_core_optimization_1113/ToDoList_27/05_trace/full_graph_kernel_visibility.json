@@ -1,0 +1,85 @@
+{
+  "at": "2026-11-13T00:15:14.581163+08:00",
+  "status": "FULL_RAW_D0_SHA_VERIFIED_VISIBILITY_AUDIT",
+  "modes": {
+    "off": {
+      "full_trace_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_off_v1/trace/raw/sj10/xllm_rank0_33896_1794497876641.pt.trace.json",
+      "full_trace_sha256": "23ebc3c2466b2fea3fb58873b2d2af38274cf7281f36867c708c8185281a0253",
+      "full_trace_bytes": 80184871,
+      "full_visible_kernel_activity_count": 27587,
+      "full_visible_kernel_classes": {
+        "custom_ar": 560,
+        "expert_w4a8": 560,
+        "mhc_prenorm": 560,
+        "fused_graph_input_copy": 0
+      },
+      "all_event_categories": {
+        "user_annotation": 3885,
+        "cpu_op": 166062,
+        "kernel": 27587,
+        "ac2g": 70680,
+        "privateuse1_runtime": 42069,
+        "privateuse1_driver": 420,
+        "gpu_memcpy": 604,
+        "none": 66,
+        "Trace": 1
+      },
+      "graph_launch_count": 0,
+      "tail_graph_replay_cpu_scope_count": 0,
+      "target_steps": 7
+    },
+    "graph6": {
+      "full_trace_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_graph6_v1/trace/raw/sj10/xllm_rank0_42065_1794498508933.pt.trace.json",
+      "full_trace_sha256": "2505aaa251db1b48c00a337f5b903b41d61c9a3ac604985939c24fcb884d90ab",
+      "full_trace_bytes": 58447411,
+      "full_visible_kernel_activity_count": 19747,
+      "full_visible_kernel_classes": {
+        "custom_ar": 0,
+        "expert_w4a8": 0,
+        "mhc_prenorm": 280,
+        "fused_graph_input_copy": 0
+      },
+      "all_event_categories": {
+        "user_annotation": 2205,
+        "cpu_op": 130502,
+        "kernel": 19747,
+        "ac2g": 46607,
+        "privateuse1_runtime": 26396,
+        "privateuse1_driver": 420,
+        "gpu_memcpy": 44,
+        "none": 66,
+        "Trace": 1
+      },
+      "graph_launch_count": 280,
+      "tail_graph_replay_cpu_scope_count": 280,
+      "target_steps": 7
+    },
+    "graph1": {
+      "full_trace_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_graph1_v1/trace/raw/sj10/xllm_rank0_50308_1794499136729.pt.trace.json",
+      "full_trace_sha256": "8abda1a8c38f1d5db8ceb35b070d1ac3ba0973c51a0272381e266ef776c0e999",
+      "full_trace_bytes": 54037740,
+      "full_visible_kernel_activity_count": 18347,
+      "full_visible_kernel_classes": {
+        "custom_ar": 0,
+        "expert_w4a8": 0,
+        "mhc_prenorm": 280,
+        "fused_graph_input_copy": 280
+      },
+      "all_event_categories": {
+        "user_annotation": 2205,
+        "cpu_op": 122102,
+        "kernel": 18347,
+        "ac2g": 42120,
+        "privateuse1_runtime": 23309,
+        "privateuse1_driver": 420,
+        "gpu_memcpy": 44,
+        "none": 66,
+        "Trace": 1
+      },
+      "graph_launch_count": 280,
+      "tail_graph_replay_cpu_scope_count": 280,
+      "target_steps": 7
+    }
+  },
+  "interpretation": "Graph replay records exist, but graph-internal expert/custom-AR kernel activities are absent from full original Torch trace. This is not an artifact of representative-step cropping; absence of an activity is not evidence the mathematical work was removed. Do not infer GPU kernel-count speedups or critical-path fractions from these incomplete graph device activities."
+}

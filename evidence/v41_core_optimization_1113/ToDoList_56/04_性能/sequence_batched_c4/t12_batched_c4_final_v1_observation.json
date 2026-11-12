@@ -1,0 +1,190 @@
+{
+  "terminal": true,
+  "result": {
+    "at": "2026-11-13T03:28:00.079004+08:00",
+    "exit_code": 0
+  },
+  "status": [
+    {
+      "input_tokens": 256,
+      "phase": "warmup",
+      "count": 4,
+      "directory": "/work/new_start_t12_batched_c4_final_v1/performance/input256_output256/warmup",
+      "started_at": "2026-11-13T03:23:40.174854+08:00",
+      "finished_at": "2026-11-13T03:24:19.955602+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          33.11136809922755,
+          0.5502363499253988
+        ],
+        [
+          1,
+          256,
+          256,
+          33.70861039869487,
+          0.8766504656523466
+        ],
+        [
+          1,
+          256,
+          256,
+          34.04555989988148,
+          1.2113926568999887
+        ],
+        [
+          1,
+          256,
+          256,
+          34.239391554147005,
+          1.5408871481195092
+        ]
+      ]
+    },
+    {
+      "input_tokens": 256,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t12_batched_c4_final_v1/performance/input256_output256/measured",
+      "started_at": "2026-11-13T03:24:19.958760+08:00",
+      "finished_at": "2026-11-13T03:25:15.004900+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          32.76086339354515,
+          0.34946641232818365
+        ],
+        [
+          1,
+          256,
+          256,
+          33.381188062019646,
+          0.6784331714734435
+        ],
+        [
+          1,
+          256,
+          256,
+          33.74439208954573,
+          1.0042902929708362
+        ],
+        [
+          1,
+          256,
+          256,
+          34.08249192126095,
+          1.3285383181646466
+        ],
+        [
+          1,
+          256,
+          256,
+          17.36651580221951,
+          0.3460992965847254
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "warmup",
+      "count": 4,
+      "directory": "/work/new_start_t12_batched_c4_final_v1/performance/input2048_output256/warmup",
+      "started_at": "2026-11-13T03:25:15.007988+08:00",
+      "finished_at": "2026-11-13T03:25:58.009803+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          32.660907773301005,
+          1.451196737587452
+        ],
+        [
+          1,
+          2048,
+          256,
+          35.58123761229217,
+          2.8915259651839733
+        ],
+        [
+          1,
+          2048,
+          256,
+          37.068677448667586,
+          4.320023718290031
+        ],
+        [
+          1,
+          2048,
+          256,
+          37.77737417910248,
+          5.749240830540657
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t12_batched_c4_final_v1/performance/input2048_output256/measured",
+      "started_at": "2026-11-13T03:25:58.012940+08:00",
+      "finished_at": "2026-11-13T03:26:55.447269+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          32.96571260225028,
+          1.439669968560338
+        ],
+        [
+          1,
+          2048,
+          256,
+          35.90238930936903,
+          2.874836329370737
+        ],
+        [
+          1,
+          2048,
+          256,
+          37.51467014942318,
+          4.285491150803864
+        ],
+        [
+          1,
+          2048,
+          256,
+          38.783371947705746,
+          5.700749430805445
+        ],
+        [
+          1,
+          2048,
+          256,
+          19.63640967477113,
+          1.4889366123825312
+        ]
+      ]
+    }
+  ],
+  "trace": {
+    "status": "PROFILE_REQUEST_SAVED_REQUIRES_ALL_RANK_TRACE_VALIDATION",
+    "content": "Keeping experiment records helps engineers because engineering work often involves complex tests, prototypes, and design decisions that are difficult to remember accurately over time. A clear record allows an\nKeeping experiment records helps engineers because it turns a one-time test into a reusable source of knowledge. When an engineer writes down what was tested, how the test was\nKeeping experiment records helps engineers because it creates a reliable memory of what was actually tried, observed, and changed during a test. Engineering work often involves many variables,\nKeeping experiment records helps engineers because it creates a reliable memory of what was actually tried, observed, and measured. Engineering work often involves many variables, iterations, and",
+    "finish_reason": "all_requests_validated",
+    "usage": {
+      "prompt_tokens": 1024,
+      "completion_tokens": 128
+    },
+    "error": null,
+    "scope": "validate actual16rank CPU/GPU traces and native PC correlation separately"
+  }
+}

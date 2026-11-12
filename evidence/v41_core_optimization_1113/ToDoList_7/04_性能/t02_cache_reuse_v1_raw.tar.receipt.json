@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t02_cache_reuse_v1_small_evidence.tar.gz",
+  "bytes": 532546,
+  "sha256": "f98aad831cbf422521b18469a38c79c37d126b57057327b92d4c60d17597f7f6",
+  "run": "t02_cache_reuse_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

@@ -1,0 +1,82 @@
+{
+  "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "symbols_sha256": "fe7f3554b2babc545132183580b0acbc5406a37ad96cf5bf85b66641ca11fe6e",
+  "offset_count": 39,
+  "sources": [
+    {
+      "mode": "off",
+      "trace_sha256": "e23305001f5ee70232e1ba99f71f088cfdb58052367d005e6a719e469ee553e2",
+      "stack_sha256": "24779ed464819d29881eb63b86da95d9ccde402652b8a829fa384c4f3a152210"
+    },
+    {
+      "mode": "mhc",
+      "trace_sha256": "9a6a0cdf3707d9ebd0aba9c34572bfda343d4434fd224a489e7cf417c8e3b135",
+      "stack_sha256": "01f7ad3a7ff6aaaf0e338beaf1a893145d657bd6f1434d51f0e9cdc5e6a458c7"
+    }
+  ],
+  "entry_counts": {
+    "off": {
+      "matched_native_and_aten_entries": 33,
+      "operation_counts": {
+        "V41/mHC/prepare": 1,
+        "aten::_local_scalar_dense": 3,
+        "aten::_to_copy": 2,
+        "aten::add": 2,
+        "aten::as_strided": 1,
+        "aten::copy_": 2,
+        "aten::div": 2,
+        "aten::empty": 6,
+        "aten::empty_strided": 2,
+        "aten::flatten": 1,
+        "aten::item": 3,
+        "aten::mul": 1,
+        "aten::rsqrt": 1,
+        "aten::sum": 2,
+        "aten::to": 2,
+        "aten::unsqueeze": 1,
+        "aten::view": 1
+      },
+      "actual_scope": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/mHC/prepare",
+        "pid": 6496,
+        "tid": 8346,
+        "ts": 3643418108523.213,
+        "dur": 755.087,
+        "args": {
+          "External id": 146111,
+          "Record function id": 147261,
+          "finished": true,
+          "Ev Idx": 146110
+        }
+      }
+    },
+    "mhc": {
+      "matched_native_and_aten_entries": 11,
+      "operation_counts": {
+        "V41/mHC/fused_prenorm": 1,
+        "V41/mHC/prepare": 1,
+        "aten::empty": 7,
+        "aten::flatten": 1,
+        "aten::view": 1
+      },
+      "actual_scope": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/mHC/prepare",
+        "pid": 14643,
+        "tid": 16500,
+        "ts": 3643819273677.394,
+        "dur": 194.177,
+        "args": {
+          "External id": 135551,
+          "Record function id": 136701,
+          "finished": true,
+          "Ev Idx": 135550
+        }
+      }
+    }
+  },
+  "scope": "Actual selected RecordFunction IDs; xllm ELF native PC callers plus actual ATen operation-name leaf; ENTRY COUNT, not CPU time"
+}

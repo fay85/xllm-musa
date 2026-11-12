@@ -1,0 +1,79 @@
+[
+  {
+    "path": "tools/musa_deepseek_v41/validate_mhc_fused_reduce.py",
+    "actual_validated_script": "ToDoList_38/02_代码/validate_mhc_fused_reduce.py",
+    "validated_script_sha256": "b8c81cd4fa8513002ea628d84fd57f512bda30bc6e9c970331e11210dad4a918",
+    "repository_script_sha256": "b8c81cd4fa8513002ea628d84fd57f512bda30bc6e9c970331e11210dad4a918",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_packed_projections.py",
+    "actual_validated_script": "ToDoList_15/02_代码/validate_packed_projections.py",
+    "validated_script_sha256": "ad920effb6669389d4111f111fe83fc3a07c8d0486af83a6248bec2f12029ccc",
+    "repository_script_sha256": "ad920effb6669389d4111f111fe83fc3a07c8d0486af83a6248bec2f12029ccc",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_ced_tail_floor.py",
+    "actual_validated_script": "ToDoList_17/02_代码/validate_ced_tail_floor.py",
+    "validated_script_sha256": "27fc164d54779a37717e9f23e39069bd9645941bf1aac1795e1f9aa1b4ce82f1",
+    "repository_script_sha256": "27fc164d54779a37717e9f23e39069bd9645941bf1aac1795e1f9aa1b4ce82f1",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_batched_real_mate_v2.py",
+    "actual_validated_script": "ToDoList_29/02_代码/validate_batched_real_mate_v2.py",
+    "validated_script_sha256": "4472deb783320007fd17471df20ffa92bd1a8270dd9f392efbaf0d07cf074e63",
+    "repository_script_sha256": "a72dbb92499178c51ba34f99e70176c5a932d06989a3037fd10fbfff6d9fb70c",
+    "wrapper_change": "Only two nested helper names/type annotations; numeric and fixture logic unchanged"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_state_replay.py",
+    "actual_validated_script": "ToDoList_35/02_代码/validate_state_replay.py",
+    "validated_script_sha256": "c900fe4ffe00d6df1b5cd14c2115273b787bcccd9fef46395ecc1e402d44d079",
+    "repository_script_sha256": "c900fe4ffe00d6df1b5cd14c2115273b787bcccd9fef46395ecc1e402d44d079",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_entering_capture.py",
+    "actual_validated_script": "ToDoList_35/02_代码/validate_entering_capture.py",
+    "validated_script_sha256": "85a41e76f92ba9aa15e8c8297bdf1e5177d85aa18238f8845a00c7906bee773b",
+    "repository_script_sha256": "85a41e76f92ba9aa15e8c8297bdf1e5177d85aa18238f8845a00c7906bee773b",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_small_batch_mhc.py",
+    "actual_validated_script": "ToDoList_51/02_代码/validate_small_batch_mhc.py",
+    "validated_script_sha256": "7b80cb48e3c691e1400628ef92e0eeda676720f588484b2967c7161066f2d615",
+    "repository_script_sha256": "7b80cb48e3c691e1400628ef92e0eeda676720f588484b2967c7161066f2d615",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_dspark_query.py",
+    "actual_validated_script": "ToDoList_32/02_代码/validate_dspark_query.py",
+    "validated_script_sha256": "672ba0c3ac69074c19b8d380ca17c2964ac947eb38217f152307ee24c5044db8",
+    "repository_script_sha256": "672ba0c3ac69074c19b8d380ca17c2964ac947eb38217f152307ee24c5044db8",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_draft_body.py",
+    "actual_validated_script": "ToDoList_33/02_代码/validate_draft_body.py",
+    "validated_script_sha256": "b9c76ad20f5d72001d2177aea17ed51d7e6d38714ac32b76344d500ae12260aa",
+    "repository_script_sha256": "b9c76ad20f5d72001d2177aea17ed51d7e6d38714ac32b76344d500ae12260aa",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_state_checkpoint.py",
+    "actual_validated_script": "ToDoList_25/02_代码/validate_state_checkpoint.py",
+    "validated_script_sha256": "7acd9f14707e75607808ac0d868c3e965d15e2bc0f2bd0618f9e6fa64b1b0a9c",
+    "repository_script_sha256": "7acd9f14707e75607808ac0d868c3e965d15e2bc0f2bd0618f9e6fa64b1b0a9c",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  },
+  {
+    "path": "tools/musa_deepseek_v41/validate_decoder_graph_pack.py",
+    "actual_validated_script": "ToDoList_19/02_代码/validate_decoder_graph_pack.py",
+    "validated_script_sha256": "bd0a5ae976cbf273f62f6889d2a4a30df6f1f2fc28688d484226630b012b3f1c",
+    "repository_script_sha256": "bd0a5ae976cbf273f62f6889d2a4a30df6f1f2fc28688d484226630b012b3f1c",
+    "wrapper_change": "Byte-identical to actual validated experiment script"
+  }
+]

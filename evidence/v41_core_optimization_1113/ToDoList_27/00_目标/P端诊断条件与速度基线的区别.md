@@ -1,0 +1,5 @@
+# Graph三模式固定条件补充
+
+实验31失败，不能作为已接受方案。实验39恢复Pstream0，以P侧MCCL blocking wait完成全部请求、trace和16rank正常退出，但TTFT有较大代价，不作为累计速度最优晋级。本轮Graph OFF/GRAPH6/GRAPH1都固定使用这个P诊断条件，D沿用4411累计最优，只有Graph及输入拷贝方式变化。正式比较以本轮同ELF的OFF为直接对照，同时在结论中展示相对4411原速度最优的端到端结果；不得隐藏P侧TTFT回退或把它算成Graph带来的变化。
+
+当前只是解码tail局部graph，Attention、indexer、cache仍eager；enable_graph全局仍false。仅通过基础功能检查，未完成模型精度验收。

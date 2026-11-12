@@ -1,0 +1,13 @@
+{
+  "verified_at": "2026-11-12T14:35:43.820292+08:00",
+  "main_markdown_files": 10,
+  "task_count": 17,
+  "broken_local_links": [],
+  "python_syntax_valid": true,
+  "json_parse_valid": true,
+  "code_worktree_unchanged": true,
+  "code_head": "89a2572fc6c58eebdedb353762939ecd0a0bf0cc",
+  "new_remote_runtime_actions": false,
+  "goal_created": false,
+  "all_checks_pass": true
+}

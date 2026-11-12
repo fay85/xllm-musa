@@ -1,0 +1,162 @@
+{
+  "status": "PASS_ALL8_LONG_PREFILL_4_CHUNKS_TO_ONE256_NEW_TOKEN_CHUNK",
+  "modes": {
+    "off": [
+      {
+        "rank": 0,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29974,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 1,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 2,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 3,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 4,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 5,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 6,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 7,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_mm": 349
+      }
+    ],
+    "after": [
+      {
+        "rank": 0,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7495,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 1,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 2,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 3,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 4,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 5,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 6,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      },
+      {
+        "rank": 7,
+        "steps": [
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 7493,
+        "selected_cpu_mm": 349
+      }
+    ]
+  },
+  "scope": "Actual total prompt remains2048, cached1792; warm workload, not cold speedup"
+}

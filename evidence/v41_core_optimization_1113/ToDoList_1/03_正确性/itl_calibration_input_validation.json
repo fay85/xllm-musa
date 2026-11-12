@@ -1,0 +1,30 @@
+{
+  "status": "PASS_G01_SQLITE_PRECONDITIONS_WITH_MAPPING_LIMITATIONS",
+  "cases": {
+    "256": {
+      "requests": 5,
+      "intervals_per_request": [
+        255,
+        255,
+        255,
+        255,
+        255
+      ],
+      "exact_token_mapping_requests": 5,
+      "max_tail_gap_s": 0.000598374754190445
+    },
+    "2048": {
+      "requests": 5,
+      "intervals_per_request": [
+        254,
+        253,
+        253,
+        254,
+        253
+      ],
+      "exact_token_mapping_requests": 0,
+      "max_tail_gap_s": 0.00035393424332141876
+    }
+  },
+  "not_yet_verified": "mapping future timing rows to these clocks; long case does not have one interval per token"
+}

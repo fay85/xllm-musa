@@ -1,0 +1,6 @@
+{
+  "started_at": "2026-11-12T15:21:47.496605+08:00",
+  "url": "http://10.121.32.9:31180",
+  "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+  "purpose": "basic integration only, not formal performance"
+}

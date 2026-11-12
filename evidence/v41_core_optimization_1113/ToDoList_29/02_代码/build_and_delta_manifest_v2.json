@@ -1,0 +1,101 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_batched_native_build_v2/relay_deltas.tar",
+  "bytes": 31047680,
+  "sha256": "82c1e74f56c022bdb2661e0a6261c2bf89f9559db7c71a3a83c11bb4f50e20bc",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T22:09:55.099660+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "cea5f04237000ad85fe7be7d652d060a6628e231c1dd03e3a7a7c8c2d5e0be5c",
+        "bytes": 342324384,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t12_batched_native_v2/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42545984,
+          "sha256": "bc2bc85da8b372acff3d4302df4827b1f9281fb353a7eaa1d1205d00ba4529e8"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "3ddc7ba59006c9cbb63d2acef5ed8a7fc84a974a",
+        "source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/attention.h": "cf97ecaa794f46e132d2695c1d6bb79cc3abb3938934c9da9f032d1717c92b10",
+          "xllm/core/layers/musa/deepseek_v41/decoder.h": "5a3be51eea194259c60fb89de8ad06f6ac091ed790bdff3579c0f65cc779aa50",
+          "xllm/core/layers/musa/deepseek_v41/text_model.h": "83183acfb628f0dea60020e26c253d26638fad2bd3a18dd3d7480549ad6e9015",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "2b8ede75cae48bce9860de7837816fd28b87db1ffd849bf5c4216e7c9c28bff7",
+          "xllm/core/layers/musa/deepseek_v41/feed_forward.h": "00ea926131e12bc463f36909b7e7c8fdf978c75824e95aedc65cfdf440a37955",
+          "xllm/core/layers/musa/deepseek_v41/moe.h": "181f9dc0706cb70799debfec1ef24236f1b6a19de52c314c9d7f21497f52470e",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "6cbcba1a5552c9069416f74cbfe2dc44ca3607e83b6c86d145dc839d4cd57170",
+          "xllm/core/layers/musa/deepseek_v41/attention_projection.h": "e9c7f05bb066f763652605799fd411fa14e3451c708cb837ae1bd76df8c44b97",
+          "xllm/core/layers/musa/deepseek_v41/batch_metadata.h": "26f18758090d787894dc85ebc1c75ac0cf44c770007b72bfce7d9878b3ac2126"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "purpose": "True batched q1 native serving adapter, per-request Engram/table/runtime; mixed prefill/spec unsupported; packed projections absent in this artifact"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 26711031,
+        "sha256": "70dacebb1ea976b9d6cedd84da76c4c7f494d58a05baaad38d89e7640ddb0bd6",
+        "base_sha256": "ceab949ba8e8183c6e2dec24579ad41937126e52ca587f3b34a0ebf110917def",
+        "target_sha256": "cea5f04237000ad85fe7be7d652d060a6628e231c1dd03e3a7a7c8c2d5e0be5c",
+        "target_bytes": 342324384
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4320863,
+        "sha256": "eca0fd62711e506c393e1169eab6ccc4d7afcf565846eb08616fc0f90f6f8dc8",
+        "base_sha256": "4cd2b3c2b4dd3df4ac6bd9200307f47f7e840fa7187210ffea9e207cbdad513c",
+        "target_sha256": "bc2bc85da8b372acff3d4302df4827b1f9281fb353a7eaa1d1205d00ba4529e8",
+        "target_bytes": 42545984
+      }
+    ]
+  }
+}

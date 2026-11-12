@@ -1,0 +1,17 @@
+{
+  "task": "T10",
+  "mode": "CED128",
+  "run": "t10_ced128_cumulative_v1",
+  "baseline_experiment": "ToDoList_47",
+  "baseline_run": "t09_chunk512_cumulative_v1",
+  "artifact": "native_t14_draft_cache",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "host_env": {
+    "sj9": {
+      "XLLM_DSV41_BOUNDED_PREFILL_REPLAY": "1"
+    }
+  },
+  "host_args": {},
+  "state": "FROZEN_LATEST_LONG_PREFILL_ACCEPTED_SAME931ELF_CED_ONLY",
+  "baseline_receipt": "result.json"
+}

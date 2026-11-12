@@ -1,0 +1,722 @@
+{
+  "status": "PASS_DSPARK_NONCAUSAL_BLOCK_AND_CONTEXT_COMMIT",
+  "attention_cases": [
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 0,
+      "query_block_width": 1,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 0,
+      "query_block_width": 5,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.001903722295537591,
+      "max_abs": 0.001953125
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 1,
+      "query_block_width": 1,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0009642446530051529,
+      "max_abs": 0.0009765625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 1,
+      "query_block_width": 5,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002022562315687537,
+      "max_abs": 0.0009765625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 127,
+      "query_block_width": 1,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021087350323796272,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 127,
+      "query_block_width": 5,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002295682206749916,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 128,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002071297261863947,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 128,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021620183251798153,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 129,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002251900965347886,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 129,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002164265140891075,
+      "max_abs": 0.00048828125
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 257,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021195230074226856,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 257,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020918836817145348,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 511,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021649375557899475,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "previous_context": 511,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020925458520650864,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 0,
+      "query_block_width": 1,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 0,
+      "query_block_width": 5,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0019771966617554426,
+      "max_abs": 0.001953125
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 1,
+      "query_block_width": 1,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0014435016782954335,
+      "max_abs": 0.001953125
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 1,
+      "query_block_width": 5,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.001958724344149232,
+      "max_abs": 0.0009765625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 127,
+      "query_block_width": 1,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002127532148733735,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 127,
+      "query_block_width": 5,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020855937618762255,
+      "max_abs": 0.00048828125
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 128,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002185833640396595,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 128,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002163402969017625,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 129,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002237587235867977,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 129,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020944084972143173,
+      "max_abs": 0.00048828125
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 257,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002075719414278865,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 257,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002179162809625268,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 511,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021509076468646526,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "previous_context": 511,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021534590050578117,
+      "max_abs": 0.00048828125
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 0,
+      "query_block_width": 1,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 0,
+      "query_block_width": 5,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020533595234155655,
+      "max_abs": 0.0009765625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 1,
+      "query_block_width": 1,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0015257723862305284,
+      "max_abs": 0.001953125
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 1,
+      "query_block_width": 5,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0019331927178427577,
+      "max_abs": 0.0009765625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 127,
+      "query_block_width": 1,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002066301880404353,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 127,
+      "query_block_width": 5,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020780127961188555,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 128,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002135895425453782,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 128,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021348174195736647,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 129,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0022140308283269405,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 129,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002143570687621832,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 257,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020271858666092157,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 257,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002104202751070261,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 511,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002117699943482876,
+      "max_abs": 0.00048828125
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "previous_context": 511,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002161261858418584,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 0,
+      "query_block_width": 1,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 0,
+      "query_block_width": 5,
+      "left_history_rows": 0,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0019232091726735234,
+      "max_abs": 0.001953125
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 1,
+      "query_block_width": 1,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.001167083391919732,
+      "max_abs": 0.001953125
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 1,
+      "query_block_width": 5,
+      "left_history_rows": 1,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.001883370685391128,
+      "max_abs": 0.0009765625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 127,
+      "query_block_width": 1,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002151890890672803,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 127,
+      "query_block_width": 5,
+      "left_history_rows": 127,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002097921911627054,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 128,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020484651904553175,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 128,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021848801989108324,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 129,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002284846268594265,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 129,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002103525446727872,
+      "max_abs": 0.00048828125
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 257,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0022784073371440172,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 257,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.002193956170231104,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 511,
+      "query_block_width": 1,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0020974772050976753,
+      "max_abs": 0.000244140625
+    },
+    {
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "previous_context": 511,
+      "query_block_width": 5,
+      "left_history_rows": 128,
+      "noncausal_entire_block_visible": true,
+      "cache_bitwise_unchanged": true,
+      "relative_rms": 0.0021079122088849545,
+      "max_abs": 0.000244140625
+    }
+  ],
+  "commit_cases": [
+    {
+      "dtype": "torch.int32",
+      "count": 0,
+      "nondefault": false,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int32",
+      "count": 0,
+      "nondefault": true,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int32",
+      "count": 1,
+      "nondefault": false,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int32",
+      "count": 1,
+      "nondefault": true,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int32",
+      "count": 6,
+      "nondefault": false,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int32",
+      "count": 6,
+      "nondefault": true,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int64",
+      "count": 0,
+      "nondefault": false,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int64",
+      "count": 0,
+      "nondefault": true,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int64",
+      "count": 1,
+      "nondefault": false,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int64",
+      "count": 1,
+      "nondefault": true,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int64",
+      "count": 6,
+      "nondefault": false,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    },
+    {
+      "dtype": "torch.int64",
+      "count": 6,
+      "nondefault": true,
+      "latest_duplicate_wins": true,
+      "padding_skipped": true,
+      "NaN_and_signed_zero_bits_preserved": true
+    }
+  ],
+  "attention_implementation": "Actual MATE sparse library; independent FP32 GPU oracle with logical ring mapping",
+  "scope": "One required DSpark primitive, not integrated draft/target serving and no performance gain claimed",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

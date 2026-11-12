@@ -1,0 +1,20 @@
+{
+  "at": "2026-11-13T03:14:26.094723+08:00",
+  "experiment": 28,
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_28/05_trace/已核验交互Perfetto_12fd0d11a101d78a.tar.zst",
+  "bytes": 1021865,
+  "sha256": "e82faf7d73d2080f707b335fb85d07e51fd9ea993a390a2d9b41e03016f3ebce",
+  "files": [
+    {
+      "path": "05_trace/processed/after_sj9_last_step.pftrace",
+      "bytes": 11583186,
+      "sha256": "2a1041cc4552b6667b2fe2a9abc62115c5c77784e660a396f6f98047bc87cbf2"
+    },
+    {
+      "path": "05_trace/processed/after_sj9_last_step.receipt.json",
+      "bytes": 1138,
+      "sha256": "eec19a3521365e0d291c41a2789c8c8c9e541fd783757bf4154162bd76d18a20"
+    }
+  ],
+  "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+}

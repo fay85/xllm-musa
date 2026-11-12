@@ -5,6 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 #include <torch/torch.h>
 
+#include <cstdint>
 #include <string>
 
 namespace xllm::kernel::musa {
@@ -16,5 +17,17 @@ torch::Tensor deepseek_v41_mhc_prenorm(const torch::Tensor& residual_flat,
                                        const torch::Tensor& fn,
                                        const std::string& library_directory,
                                        double epsilon);
+
+// Fused GPU reduction of MATE split projection and square sums.
+torch::Tensor deepseek_v41_mhc_prenorm_reduce(const torch::Tensor& partial,
+                                              const torch::Tensor& square_sum,
+                                              int64_t hidden_width,
+                                              double epsilon);
+
+torch::Tensor deepseek_v41_mhc_prenorm_fused(
+    const torch::Tensor& residual_flat,
+    const torch::Tensor& fn,
+    const std::string& library_directory,
+    double epsilon);
 
 }  // namespace xllm::kernel::musa

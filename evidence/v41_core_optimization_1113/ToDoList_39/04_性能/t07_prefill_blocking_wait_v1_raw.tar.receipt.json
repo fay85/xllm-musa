@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_prefill_blocking_wait_v1_small_evidence.tar.gz",
+  "bytes": 881011,
+  "sha256": "c06210bd20cc3c00e7290bfaaf39c16c14fde522733b87edbbeeb9df1ba6c167",
+  "run": "t07_prefill_blocking_wait_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

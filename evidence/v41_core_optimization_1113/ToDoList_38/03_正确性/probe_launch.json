@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host_pid\": 1888, \"path\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_cumulative_probe_v1\", \"purpose\": \"native MHC fused tail direct operator check; all model roles exited normally\"}\n",
+  "stderr": ""
+}

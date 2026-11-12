@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_native_tables_dspark_v1_failed_evidence.tar.gz",
+  "bytes": 159803,
+  "sha256": "92eeec4f8cfb73b528006f903c9144405c6426a73d30a4493c3266ae4e56e532",
+  "run": "t14_native_tables_dspark_v1",
+  "failed": true,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

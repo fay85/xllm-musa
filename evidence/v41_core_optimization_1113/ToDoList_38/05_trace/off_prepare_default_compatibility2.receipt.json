@@ -1,0 +1,49 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "e23305001f5ee70232e1ba99f71f088cfdb58052367d005e6a719e469ee553e2",
+  "native_stacks_sha256": "24779ed464819d29881eb63b86da95d9ccde402652b8a829fa384c4f3a152210",
+  "symbols_sha256": "930ab73d40c47aa975c97e0d5c53568e289222458caab24f3c9da243c09b7feb",
+  "symbolization_binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=1/kv=263",
+    "pid": 6496,
+    "tid": 8346,
+    "ts": 3643418104085.981,
+    "dur": 373276.191,
+    "args": {
+      "External id": 145787,
+      "Record function id": 146937,
+      "finished": true,
+      "Ev Idx": 145786
+    }
+  },
+  "selected_scope": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/mHC/prepare",
+    "pid": 6496,
+    "tid": 8346,
+    "ts": 3643418108523.213,
+    "dur": 755.087,
+    "args": {
+      "External id": 146111,
+      "Record function id": 147261,
+      "finished": true,
+      "Ev Idx": 146110
+    }
+  },
+  "gpu_selection": "runtime correlation for scope",
+  "actual_intervals": 42,
+  "native_entry_samples": 1,
+  "include_aten_entries": false,
+  "operation_leaf_provenance": null,
+  "output_sha256": "a7088fe70b0f0999655a454cdc2011af5fe546136abb173a9bcb168191a75d32",
+  "verification": {
+    "slices": 42,
+    "native_entry_samples": 1,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

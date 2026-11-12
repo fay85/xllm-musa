@@ -1,0 +1,30 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_trace_analysis_v2.tar.zst",
+  "bytes": 9849822,
+  "sha256": "cc53808429e0278dc946ae50dd3d4fcfab08924732ae7bd188ac53b60677c29f",
+  "receipt": {
+    "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+    "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t05_decoder_graph_cumulative/bin/xllm",
+    "binary_sha256": "9b28367c96003b8e2463fb94e06db123126d6a5895b79ad62fbd0f3c57558e72",
+    "raw_archives": {
+      "off": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_off_v1_raw_trace.tar.zst",
+        "bytes": 88756805,
+        "sha256": "10465749aa36cfdd856d87617dfa9e883cd836c0b1db2df3161ceb4297055b96"
+      },
+      "graph6": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_graph6_v1_raw_trace.tar.zst",
+        "bytes": 70814840,
+        "sha256": "b43d4f1670c60960ad1a0d5519c05c8ac44c22a78ca0cd575261a1d3e0fe5c26"
+      },
+      "graph1": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t05_decoder_graph_graph1_v1_raw_trace.tar.zst",
+        "bytes": 67295781,
+        "sha256": "b5d7f41c000e08b85b5d4162e0e5ca8850ed6582a37da46df30ff8cf8ae9edbc"
+      }
+    },
+    "symbols": 54,
+    "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+    "finished_at": 1794499534.2919729
+  }
+}

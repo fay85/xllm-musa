@@ -1,0 +1,75 @@
+{
+  "status": "PASS_SQLITE_FORMAL_IDS_JOIN_REAL_P_CACHE_COUNTS",
+  "rows": [
+    {
+      "input_tokens": 256,
+      "formal_index": 0,
+      "request_id": "chatcmpl-12481178814234374860-9PZ5fvWF2hTyfe2BXZ9g93",
+      "actual_cached_tokens": 0,
+      "actual_terminal_log": "I20261113 02:19:19.674832 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-9PZ5fvWF2hTyfe2BXZ9g93, x-request-id: 01a1d0fc-50e7-79b1-88d6-61ab32914d23, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.1ms, ttft: 332.0ms, total_latency: 332.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input_tokens": 256,
+      "formal_index": 1,
+      "request_id": "chatcmpl-12481178814234374860-pnB7TQQC2j4Asb6Uxqr7TY",
+      "actual_cached_tokens": 0,
+      "actual_terminal_log": "I20261113 02:19:38.705374 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-pnB7TQQC2j4Asb6Uxqr7TY, x-request-id: 01a1d0fc-9b3a-7d03-bbfa-9917bfe2bd05, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 327.0ms, total_latency: 328.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input_tokens": 256,
+      "formal_index": 2,
+      "request_id": "chatcmpl-12481178814234374860-UuvHfUv5QTR47tBFMYEPtr",
+      "actual_cached_tokens": 0,
+      "actual_terminal_log": "I20261113 02:19:56.521338 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-UuvHfUv5QTR47tBFMYEPtr, x-request-id: 01a1d0fc-e0d0-7064-aff5-0e811710b0d9, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.5ms, ttft: 332.0ms, total_latency: 332.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input_tokens": 256,
+      "formal_index": 3,
+      "request_id": "chatcmpl-12481178814234374860-hxahjF3LQK8pM2XLVHw4Y2",
+      "actual_cached_tokens": 0,
+      "actual_terminal_log": "I20261113 02:20:14.234040 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-hxahjF3LQK8pM2XLVHw4Y2, x-request-id: 01a1d0fd-26be-7c52-a7b3-d9823d131af7, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.5ms, ttft: 333.0ms, total_latency: 333.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input_tokens": 256,
+      "formal_index": 4,
+      "request_id": "chatcmpl-12481178814234374860-gfutBjkbvtnGN2NyYH7hgW",
+      "actual_cached_tokens": 0,
+      "actual_terminal_log": "I20261113 02:20:31.840152 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-gfutBjkbvtnGN2NyYH7hgW, x-request-id: 01a1d0fd-6b66-7722-bf77-e91f3cec0f43, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 363.0ms, total_latency: 363.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0"
+    },
+    {
+      "input_tokens": 2048,
+      "formal_index": 0,
+      "request_id": "chatcmpl-12481178814234374860-5ZQhWwcj2FH3C7JyzNoyMo",
+      "actual_cached_tokens": 1792,
+      "actual_terminal_log": "I20261113 02:21:17.776729 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-5ZQhWwcj2FH3C7JyzNoyMo, x-request-id: 01a1d0fe-1ef8-79aa-b63f-0090f230bc4c, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 2.1ms, ttft: 327.0ms, total_latency: 327.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 1792"
+    },
+    {
+      "input_tokens": 2048,
+      "formal_index": 1,
+      "request_id": "chatcmpl-12481178814234374860-qzz4bnVuPF3vPx8yRuqE5x",
+      "actual_cached_tokens": 1792,
+      "actual_terminal_log": "I20261113 02:21:35.472241 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-qzz4bnVuPF3vPx8yRuqE5x, x-request-id: 01a1d0fe-6412-71bf-9903-701b71f5a08a, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.8ms, ttft: 332.0ms, total_latency: 332.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 1792"
+    },
+    {
+      "input_tokens": 2048,
+      "formal_index": 2,
+      "request_id": "chatcmpl-12481178814234374860-AXtV4JNy9WNz8iGQV5Ht7Q",
+      "actual_cached_tokens": 1792,
+      "actual_terminal_log": "I20261113 02:21:52.605274 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-AXtV4JNy9WNz8iGQV5Ht7Q, x-request-id: 01a1d0fe-a704-73d3-b681-6a6a267428ea, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.6ms, ttft: 327.0ms, total_latency: 327.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 1792"
+    },
+    {
+      "input_tokens": 2048,
+      "formal_index": 3,
+      "request_id": "chatcmpl-12481178814234374860-sKKLu6NEkVHDmaE8iv8a6g",
+      "actual_cached_tokens": 1792,
+      "actual_terminal_log": "I20261113 02:22:09.918799 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-sKKLu6NEkVHDmaE8iv8a6g, x-request-id: 01a1d0fe-eaaa-7e40-a9ca-90cddefe92df, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.2ms, ttft: 323.0ms, total_latency: 323.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 1792"
+    },
+    {
+      "input_tokens": 2048,
+      "formal_index": 4,
+      "request_id": "chatcmpl-12481178814234374860-2eG5pn7wCpzG3tLMxgng7q",
+      "actual_cached_tokens": 1792,
+      "actual_terminal_log": "I20261113 02:22:26.936092 11490 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-2eG5pn7wCpzG3tLMxgng7q, x-request-id: 01a1d0ff-2d26-7e21-b126-4d445cdd8e78, sequence: 0, prompt_tokens: 2048, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 320.0ms, total_latency: 320.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 1792"
+    }
+  ]
+}

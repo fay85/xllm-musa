@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_queued_c2_final_v2_failed_evidence.tar.gz",
+  "bytes": 296415,
+  "sha256": "8a4bc825d588c0249189fa3584b05c16683b109d759575579b484e7a21bda64e",
+  "run": "t12_queued_c2_final_v2",
+  "failed": true,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

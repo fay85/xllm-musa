@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-12T18:13:01.860076+08:00\", \"source_parent_local\": \"799a93b2c807c264dfdcaa1c3c8414e9956f0993\", \"before_files\": {\"xllm/core/layers/musa/deepseek_v41/moe.h\": \"4c04941402bc774f861a922d243818821754c6c223878819bce9f89838794515\", \"xllm/models/llm/musa/deepseek_v41_native.h\": \"bc835987b36ce4d6d5d39f6b872dab352df30d8f31741ada0000bb3f1cdffb38\"}, \"source_files\": {\"xllm/core/layers/musa/deepseek_v41/moe.h\": \"352f53075e5fcc1d5b17047b8e37eb42be03af0557b04dd4b425672dc1ff6ea9\", \"xllm/models/llm/musa/deepseek_v41_native.h\": \"a385dd3c56cd8452260b091598b6746d832fdacfe9068485867cbdd40441c852\"}, \"build_host\": \"dev6 CPU only owned container\", \"purpose\": \"Only q1 routed FP32 EP custom optional; P/TP baseline preserved; startup per-rank policy consistency vote\", \"pid\": 63014}\n",
+  "stderr": ""
+}

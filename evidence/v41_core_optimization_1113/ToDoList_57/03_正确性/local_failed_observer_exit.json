@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-13T02:15:23.133867+08:00",
+  "objects": [
+    {
+      "pid": 1859904,
+      "start_ticks": "9962888",
+      "signal": "SIGTERM",
+      "reason": "E57 failed; success-only CPU observer cannot complete; remote model control unchanged"
+    }
+  ]
+}

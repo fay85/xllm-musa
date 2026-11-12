@@ -1,0 +1,9 @@
+# T14：目标模型进入层前捕获与真实状态快照
+
+AuxHiddenCapture沿用框架既有buffer；V4.1在进入指定层前对四路mHC residual求mean，按capture ID原始顺序放入aux。默认无capture不分配、不求mean；计算流出口同时登记hidden与aux的存储。
+
+Checkpoint新增按SWA物理page保存完整recurrent state页。其state页有32行，不能错误地拿SWA的128 token粒度直接索引。先用真实ratio2 attention做speculative写入→回滚→仅重放接受prefix的基本检查，再接runtime。
+
+现阶段目标模型num_speculative_tokens=0的保护仍保留，不能仅因draft factory编译成功就开启完整DSpark服务。后续要完成target验证的状态恢复和runtime接受长度衔接。
+
+仅通过基础功能检查，未完成模型精度验收。

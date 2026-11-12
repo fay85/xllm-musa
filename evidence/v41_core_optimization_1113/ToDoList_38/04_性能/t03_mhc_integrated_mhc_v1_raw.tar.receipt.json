@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_integrated_mhc_v1_small_evidence.tar.gz",
+  "bytes": 547604,
+  "sha256": "afef5b976672131b8b9d59e75448d791a81e64be823498041db5e318c0514340",
+  "run": "t03_mhc_integrated_mhc_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

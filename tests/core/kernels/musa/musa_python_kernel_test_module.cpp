@@ -10,9 +10,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/deepseek_v41_dense_block32.h"
 #include "core/layers/musa/deepseek_v41/attention.h"
 #include "core/layers/musa/deepseek_v41/attention_projection.h"
+#include "core/layers/musa/deepseek_v41/batch_metadata.h"
 #include "core/layers/musa/deepseek_v41/compressor.h"
 #include "core/layers/musa/deepseek_v41/csa2_attention.h"
 #include "core/layers/musa/deepseek_v41/decoder.h"
+#include "core/layers/musa/deepseek_v41/draft_model.h"
 #include "core/layers/musa/deepseek_v41/engram_embedding.h"
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
 #include "core/layers/musa/deepseek_v41/engram_injection.h"
@@ -21,6 +23,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/indexer.h"
 #include "core/layers/musa/deepseek_v41/paged_attention.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
+#include "core/layers/musa/deepseek_v41/state_checkpoint.h"
 #include "core/layers/musa/deepseek_v41/text_model.h"
 #include "core/layers/musa/deepseek_v41/token_cache.h"
 #include "core/layers/musa/deepseek_v41/w4a8_experts.h"
@@ -60,6 +63,12 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
              &xllm::layer::deepseek_v41_rms_norm,
              pybind11::call_guard<pybind11::gil_scoped_release>());
   xllm::register_musa_kernel_bindings(module);
+  module.def("v41_mhc_prenorm_fused",
+             &xllm::kernel::musa::deepseek_v41_mhc_prenorm_fused,
+             pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def("v41_mhc_prenorm_reduce",
+             &xllm::kernel::musa::deepseek_v41_mhc_prenorm_reduce,
+             pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_mhc_prenorm",
              &xllm::kernel::musa::deepseek_v41_mhc_prenorm,
              pybind11::call_guard<pybind11::gil_scoped_release>());
@@ -120,6 +129,14 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
            pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeHyperConnection = xllm::layer::DeepseekV41HyperConnection;
   pybind11::class_<NativeHyperConnection>(module, "NativeV41HyperConnection")
+      .def(pybind11::init<torch::Tensor,
+                          torch::Tensor,
+                          torch::Tensor,
+                          int64_t,
+                          double,
+                          double,
+                          std::string,
+                          bool>())
       .def(pybind11::init<torch::Tensor,
                           torch::Tensor,
                           torch::Tensor,
@@ -187,6 +204,12 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeSharedMlp = xllm::layer::DeepseekV41SharedMlp;
   pybind11::class_<NativeSharedMlp>(module, "NativeV41SharedMlp")
+      .def(pybind11::init<torch::Tensor,
+                          torch::Tensor,
+                          torch::Tensor,
+                          double,
+                          bool,
+                          bool>())
       .def(
           pybind11::init<torch::Tensor, torch::Tensor, torch::Tensor, double>())
       .def(
@@ -236,6 +259,59 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def("forward",
            &NativePartitionMlp::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def(
+      "v41_paged_draft_forward",
+      [](const torch::Tensor& cache,
+         const torch::Tensor& query,
+         const torch::Tensor& current_kv,
+         const torch::Tensor& table,
+         int64_t previous,
+         const torch::Tensor& sink,
+         const std::string& library) {
+        return xllm::layer::DeepseekV41PagedAttention(
+                   cache, 128, 1.0 / std::sqrt(512.0), library)
+            .forward_draft_block(query, current_kv, table, previous, sink);
+      },
+      pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def(
+      "v41_draft_commit_context",
+      [](const torch::Tensor& cache,
+         const torch::Tensor& slots,
+         const torch::Tensor& values) {
+        xllm::layer::DeepseekV41PagedAttention(
+            cache, 128, 1.0 / std::sqrt(512.0))
+            .commit_draft_context(slots, values);
+      },
+      pybind11::call_guard<pybind11::gil_scoped_release>());
+  using NativeDraftModel = xllm::layer::DeepseekV41DraftModel;
+  pybind11::class_<NativeDraftModel>(module, "NativeV41DraftModel")
+      .def(pybind11::init<std::vector<xllm::layer::DeepseekV41DecoderConfig>,
+                          std::vector<xllm::layer::DeepseekV41DecoderWeights>,
+                          torch::Tensor,
+                          torch::Tensor,
+                          torch::Tensor,
+                          torch::Tensor,
+                          torch::Tensor,
+                          torch::Tensor>())
+      .def("forward",
+           &NativeDraftModel::forward,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("write_context_kv",
+           &NativeDraftModel::write_context_kv,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("logits",
+           &NativeDraftModel::logits,
+           pybind11::call_guard<pybind11::gil_scoped_release>());
+  using NativeStateCheckpoint = xllm::layer::DeepseekV41StateCheckpoint;
+  pybind11::class_<NativeStateCheckpoint>(module, "NativeV41StateCheckpoint")
+      .def(pybind11::init<int64_t>())
+      .def("add_full", &NativeStateCheckpoint::add_full)
+      .def("add_paged", &NativeStateCheckpoint::add_paged)
+      .def("add_blocks", &NativeStateCheckpoint::add_blocks)
+      .def("restore", &NativeStateCheckpoint::restore)
+      .def("saved_bytes", &NativeStateCheckpoint::saved_bytes);
+  module.def("v41_parse_decode_batch",
+             &xllm::layer::parse_deepseek_v41_decode_batch);
   using NativeGate = xllm::layer::DeepseekV41Gate;
   pybind11::class_<NativeGate>(module, "NativeV41Gate")
       .def(pybind11::init<torch::Tensor,
@@ -245,6 +321,14 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
                           int64_t,
                           bool,
                           double>())
+      .def(pybind11::init<torch::Tensor,
+                          torch::Tensor,
+                          std::optional<torch::Tensor>,
+                          int64_t,
+                          int64_t,
+                          bool,
+                          double,
+                          bool>())
       .def("forward",
            &NativeGate::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());
@@ -257,6 +341,13 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
   using NativeAttentionProjection = xllm::layer::DeepseekV41AttentionProjection;
   pybind11::class_<NativeAttentionProjection>(module,
                                               "NativeV41AttentionProjection")
+      .def(pybind11::init<std::vector<torch::Tensor>,
+                          int64_t,
+                          int64_t,
+                          int64_t,
+                          double,
+                          bool,
+                          bool>())
       .def(pybind11::init<std::vector<torch::Tensor>,
                           int64_t,
                           int64_t,
@@ -281,6 +372,9 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def(pybind11::init<torch::Tensor, int64_t, double, std::string, bool>())
       .def(pybind11::
                init<torch::Tensor, int64_t, double, std::string, bool, bool>())
+      .def("forward_with_window_floor",
+           &NativePagedAttention::forward_with_window_floor,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("forward_with_positions",
            &NativePagedAttention::forward_with_positions,
            pybind11::call_guard<pybind11::gil_scoped_release>())
@@ -362,6 +456,14 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
   pybind11::class_<NativeAttentionConfig>(module, "NativeV41AttentionConfig")
       .def(pybind11::init<>())
       .def_readwrite("mode", &NativeAttentionConfig::mode)
+      .def_readwrite("sparse_library_path",
+                     &NativeAttentionConfig::sparse_library_path)
+      .def_readwrite("indexer_score_directory",
+                     &NativeAttentionConfig::indexer_score_directory)
+      .def_readwrite("decode_cache_read_reuse",
+                     &NativeAttentionConfig::decode_cache_read_reuse)
+      .def_readwrite("decode_fused_swa_read",
+                     &NativeAttentionConfig::decode_fused_swa_read)
       .def_readwrite("layer", &NativeAttentionConfig::layer)
       .def_readwrite("source_layer", &NativeAttentionConfig::source_layer)
       .def_readwrite("ratio", &NativeAttentionConfig::ratio)
@@ -420,12 +522,41 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
   using NativeAttention = xllm::layer::DeepseekV41Attention;
   pybind11::class_<NativeAttention>(module, "NativeV41Attention")
       .def(pybind11::init<NativeAttentionConfig, NativeAttentionWeights>())
+      .def("forward_draft_block",
+           &NativeAttention::forward_draft_block,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("write_draft_context",
+           &NativeAttention::write_draft_context,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("forward",
            &NativeAttention::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def(
+      "v41_attention_batched_with_runtime",
+      [](NativeAttention& attention,
+         const torch::Tensor& hidden,
+         const torch::Tensor& positions,
+         const torch::Tensor& rope,
+         const NativeAttentionCache& cache,
+         const torch::Tensor& swa,
+         const torch::Tensor& key,
+         const torch::Tensor& index,
+         const std::vector<int64_t>& lengths,
+         std::vector<NativeAttentionRuntime> runtime) {
+        torch::Tensor output = attention.forward_batched_decode(
+            hidden, positions, rope, cache, swa, key, index, lengths, runtime);
+        return std::make_tuple(std::move(output), std::move(runtime));
+      },
+      pybind11::call_guard<pybind11::gil_scoped_release>());
+  using NativeExpertFormat = xllm::layer::DeepseekV41ExpertFormat;
+  pybind11::enum_<NativeExpertFormat>(module, "NativeV41ExpertFormat")
+      .value("ORIGINAL_FP4", NativeExpertFormat::ORIGINAL_FP4)
+      .value("W4AFP8_MT", NativeExpertFormat::W4AFP8_MT);
   using NativeMoeConfig = xllm::layer::DeepseekV41MoeConfig;
   pybind11::class_<NativeMoeConfig>(module, "NativeV41MoeConfig")
       .def(pybind11::init<>())
+      .def_readwrite("expert_format", &NativeMoeConfig::expert_format)
+      .def_readwrite("w4a8_so_path", &NativeMoeConfig::w4a8_so_path)
       .def_readwrite("dense", &NativeMoeConfig::dense)
       .def_readwrite("original_fp8_activation",
                      &NativeMoeConfig::original_fp8_activation)
@@ -449,6 +580,12 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
   using NativeDecoderConfig = xllm::layer::DeepseekV41DecoderConfig;
   pybind11::class_<NativeDecoderConfig>(module, "NativeV41DecoderConfig")
       .def(pybind11::init<>())
+      .def_readwrite("decode_ffn_graph_fused_inputs",
+                     &NativeDecoderConfig::decode_ffn_graph_fused_inputs)
+      .def_readwrite("decode_ffn_tail_graph",
+                     &NativeDecoderConfig::decode_ffn_tail_graph)
+      .def_readwrite("decode_mhc_fused_reduce",
+                     &NativeDecoderConfig::decode_mhc_fused_reduce)
       .def_readwrite("attention", &NativeDecoderConfig::attention)
       .def_readwrite("moe", &NativeDecoderConfig::moe)
       .def_readwrite("sinkhorn_iterations",
@@ -473,16 +610,22 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def("forward",
            &NativeMoe::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def("v41_copy_decoder_graph_inputs",
+             &xllm::kernel::musa::deepseek_v41_copy_decoder_graph_inputs,
+             pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeDecoder = xllm::layer::DeepseekV41Decoder;
   pybind11::class_<NativeDecoder>(module, "NativeV41Decoder")
       .def(pybind11::init<NativeDecoderConfig, NativeDecoderWeights>())
+      .def("forward_tail",
+           &NativeDecoder::forward_tail,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("forward",
            &NativeDecoder::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeTextModel = xllm::layer::DeepseekV41TextModel;
   pybind11::class_<NativeTextModel>(module, "NativeV41TextModel")
-      .def(pybind11::init<std::vector<NativeDecoderConfig>,
-                          std::vector<NativeDecoderWeights>,
+      .def(pybind11::init<std::vector<xllm::layer::DeepseekV41DecoderConfig>,
+                          std::vector<xllm::layer::DeepseekV41DecoderWeights>,
                           torch::Tensor,
                           torch::Tensor,
                           torch::Tensor,
@@ -494,6 +637,38 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       .def("logits",
            &NativeTextModel::logits,
            pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def(
+      "v41_text_forward_with_capture",
+      [](NativeTextModel& model,
+         const torch::Tensor& tokens,
+         const torch::Tensor& positions,
+         const std::vector<NativeAttentionCache>& caches,
+         const torch::Tensor& swa,
+         const torch::Tensor& c1,
+         const torch::Tensor& c2,
+         int64_t context,
+         const std::vector<int32_t>& ids,
+         int64_t width) {
+        xllm::ModelArgs args;
+        args.layers_to_capture(ids);
+        args.hidden_size(width);
+        xllm::AuxHiddenCapture capture(
+            args, tokens.options().dtype(torch::kBFloat16), tokens.numel());
+        const auto hidden = model.forward_with_capture(
+            tokens,
+            positions,
+            caches,
+            swa,
+            c1,
+            c2,
+            context,
+            std::vector<std::optional<torch::Tensor>>(caches.size()),
+            std::nullopt,
+            &capture);
+        const auto output = capture.finalize(hidden);
+        return std::make_tuple(output.hidden_states, output.aux_hidden_states);
+      },
+      pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeEngramHash = xllm::layer::DeepseekV41EngramHash;
   pybind11::class_<NativeEngramHash>(module, "NativeV41EngramHash")
       .def(pybind11::init<torch::Tensor,

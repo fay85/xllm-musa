@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t10_ced128_cumulative_v1_small_evidence.tar.gz",
+  "bytes": 459228,
+  "sha256": "82d21afb8c5b1f38d338bd99a034b0229da84c67137be89b1c402b2cd28b041e",
+  "run": "t10_ced128_cumulative_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

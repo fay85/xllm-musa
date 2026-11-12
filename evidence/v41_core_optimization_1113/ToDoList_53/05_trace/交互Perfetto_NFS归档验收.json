@@ -1,0 +1,30 @@
+{
+  "at": "2026-11-13T03:43:51.084128+08:00",
+  "experiment": 53,
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_53/05_trace/已核验交互Perfetto_729768171b7fbeb9.tar.zst",
+  "bytes": 1322336,
+  "sha256": "7f07ef69a011a7ebc6a68cae4f38d4617cb3aec87d9a5f79569d2bff0d8181de",
+  "files": [
+    {
+      "path": "05_trace/after_D0_actual_batch.pftrace",
+      "bytes": 9990512,
+      "sha256": "497029e88b7b34c2fa95df151bd929373fbe2e481c6d2ad2613420f80ac85654"
+    },
+    {
+      "path": "05_trace/after_D0_actual_batch.receipt.json",
+      "bytes": 1219,
+      "sha256": "3c9544caf1918c8efaa8aba35dfd98528d1156edce87e1d20fb40e4d78db188a"
+    },
+    {
+      "path": "05_trace/off_D0_actual_batch.pftrace",
+      "bytes": 7281425,
+      "sha256": "fe54942269ba782a7d1c1ac4354af00bdb44eada216b2dba5cc273bbab65ebef"
+    },
+    {
+      "path": "05_trace/off_D0_actual_batch.receipt.json",
+      "bytes": 1219,
+      "sha256": "e7653fa3dbefeb2a2bfd7a04ecd50ab2e885a7c9f2ce3a4b3f126654ed495ec6"
+    }
+  ],
+  "scope": "Verified converted UI traces and receipts; original raw fullrank GPU/native traces separately retained; no model rerun"
+}

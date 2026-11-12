@@ -1,0 +1,22 @@
+{
+  "task": "T12",
+  "mode": "QUEUED_C2",
+  "run": "t12_queued_c2_v1",
+  "baseline_experiment": "ToDoList_38",
+  "baseline_run": "t03_mhc_integrated_mhc_v1",
+  "artifact": "native_t14_native_block",
+  "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "host_env": {
+    "sj10": {
+      "XLLM_DSV41_BATCHED_DECODE": "0"
+    }
+  },
+  "host_args": {
+    "sj10": {
+      "max_cache_size": 4294967296,
+      "max_seqs_per_batch": 1
+    }
+  },
+  "state": "PREPARED_NOT_RUN; baseline must be updated to latest accepted before launch",
+  "concurrency": 2
+}

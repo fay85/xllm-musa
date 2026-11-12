@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"basic/answers.json\": [{\"content\": \"4.2\", \"passed\": true}, {\"content\": \"56\", \"passed\": true}], \"performance/active.json\": {\"input_tokens\": 256, \"phase\": \"measured\", \"count\": 5, \"started_at\": \"2026-11-12T20:19:33.140266+08:00\"}, \"256\": []}\n",
+  "stderr": ""
+}

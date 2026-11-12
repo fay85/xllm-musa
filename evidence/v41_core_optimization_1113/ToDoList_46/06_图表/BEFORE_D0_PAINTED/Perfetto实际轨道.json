@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Global Track Events",
+    "uri": null
+  },
+  {
+    "name": "GPU kernel stream 14",
+    "uri": "/track_event_4"
+  },
+  {
+    "name": "GPU kernel stream 17",
+    "uri": "/track_event_3"
+  },
+  {
+    "name": "GPU kernel stream 5",
+    "uri": "/track_event_2"
+  },
+  {
+    "name": "Native C++ / ATen thread 9717",
+    "uri": "/track_event_1"
+  },
+  {
+    "name": "Process 7865",
+    "uri": "/process_1"
+  },
+  {
+    "name": "Thread 9717",
+    "uri": "/thread_2"
+  },
+  {
+    "name": "Thread 9717 Callstacks",
+    "uri": "/process_1/thread_2_stack_samples_xllm.native_cpp.RecordFunction_entry_backtrace.COUNT"
+  }
+]

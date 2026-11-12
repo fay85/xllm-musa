@@ -1,0 +1,10 @@
+{
+  "status": "PASS_ACTUAL_BEFORE_AFTER_TRACEPROCESSOR_AND_DEFAULT_BYTE_EQUIVALENCE",
+  "actual_aten_entry_samples": [
+    33,
+    11
+  ],
+  "default_semantic_trace_byte_identical": true,
+  "no_model_rerun": true,
+  "leaf_provenance": "Actual same-ID ATen RecordFunction names, explicit metadata leaves; CPP caller frames are exactc608 ELF offsets; entry widths are COUNT"
+}

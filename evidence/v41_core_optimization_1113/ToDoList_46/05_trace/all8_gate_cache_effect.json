@@ -1,0 +1,186 @@
+{
+  "status": "PASS_40_WEIGHT_CAST_COPIES_REMOVED_PER_STEP_ALL8_RANKS",
+  "modes": {
+    "off": [
+      {
+        "rank": 0,
+        "all_gpu_kernels": 24787,
+        "selected_gpu_kernels": 3498,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 1,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3498,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 2,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3497,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 3,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3498,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 4,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3497,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 5,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3498,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 6,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3498,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 7,
+        "all_gpu_kernels": 24773,
+        "selected_gpu_kernels": 3498,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 595,
+          "aten::copy_": 837,
+          "aten::mm": 349
+        }
+      }
+    ],
+    "after": [
+      {
+        "rank": 0,
+        "all_gpu_kernels": 24507,
+        "selected_gpu_kernels": 3458,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 1,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3457,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 2,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3457,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 3,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3457,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 4,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3457,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 5,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3458,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 6,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3457,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 7,
+        "all_gpu_kernels": 24493,
+        "selected_gpu_kernels": 3457,
+        "step_count": 7,
+        "cpu_ops": {
+          "aten::_to_copy": 555,
+          "aten::copy_": 797,
+          "aten::mm": 349
+        }
+      }
+    ]
+  },
+  "scope": "counts not CPU-time; full capture7steps; crop boundary may differ by1 kernel"
+}

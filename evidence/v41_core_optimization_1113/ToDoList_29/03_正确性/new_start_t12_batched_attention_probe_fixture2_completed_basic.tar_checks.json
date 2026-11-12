@@ -1,0 +1,187 @@
+{
+  "status": "PASS_NATIVE_BATCHED_ATTENTION_PROJECTIONS_AND_REQUEST_ISOLATION",
+  "cases": [
+    {
+      "batch": 2,
+      "ratio": 0,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 0,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 1,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 1,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 2,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 2,
+      "ratio": 2,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 0,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 0,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": false,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 1,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 1,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 2,
+      "nondefault": false,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    },
+    {
+      "batch": 4,
+      "ratio": 2,
+      "nondefault": true,
+      "contexts": [
+        1,
+        129,
+        258,
+        511
+      ],
+      "output_relative_rms": 0.0,
+      "output_max_abs": 0.0,
+      "request_tables_and_CSA2_runtime_isolated": true,
+      "source_compressed_state_exact": true,
+      "unowned_block0_unchanged": true
+    }
+  ],
+  "scope": "B2/B4 native C++ projections plus explicit FP32 GPU SparseAttention oracle (empty library path), with per-request cache/index/compressor/runtime. This does not claim MATE serving integration; actual native adapter/MATE full-model and formal tests remain pending.",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

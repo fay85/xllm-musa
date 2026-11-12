@@ -1,0 +1,15 @@
+{
+  "status": "PROFILE_REQUEST_SAVED_REQUIRES_ALL_RANK_TRACE_VALIDATION",
+  "content": "Keeping experiment records helps engineers because it creates",
+  "finish_reason": "length",
+  "usage": {
+    "prompt_tokens": 256,
+    "completion_tokens": 8,
+    "total_tokens": 264,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "error": null,
+  "scope": "validate actual16rank CPU/GPU traces and native PC correlation separately"
+}

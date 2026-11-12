@@ -1,0 +1,118 @@
+{
+  "status": "SMALL_POSITIVE_GAIN_NOT_PROMOTED_CONFIDENCE_LIMITED",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+  "comparisons": {
+    "256": {
+      "TTFT_ms_change_percent": 1.691306028133055,
+      "TPOT_ms_change_percent": -1.4039861026908351,
+      "E2E_s_change_percent": -1.334120645353265,
+      "output_tps_change_percent": 1.3521600923029231
+    },
+    "2048": {
+      "TTFT_ms_change_percent": -1.278607116142838,
+      "TPOT_ms_change_percent": -4.107428833910609,
+      "E2E_s_change_percent": -3.7208133772294927,
+      "output_tps_change_percent": 3.8646082375082047
+    }
+  },
+  "valid_after_formal_requests": 10,
+  "after_normal_rank_exits": 16,
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e30_trace_analysis_v1.tar.zst",
+    "bytes": 6946731,
+    "sha256": "94bdf1bc27d8cf1c796132acf54f91e9c33490eebef0abbeb2eca61d62971832",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_native_block/bin/xllm",
+      "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_integrated_mhc_v1_raw_trace.tar.zst",
+          "bytes": 83623693,
+          "sha256": "d43225bba429cccc3086acde6cdc12c8b8beb6782228efb80f16cb3c17b94f11"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t06_packed_shared_cumulative_v1_raw_trace.tar.zst",
+          "bytes": 80574555,
+          "sha256": "de476857fd68007a84485b1d8653d0f4749aac3bd124e4e1de16d9be7a577602"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794502000.9498627
+    }
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "repeat_completed": true,
+  "all_formal_requests_in_two_pairs": 40,
+  "normal_rank_exits_in_two_pairs": 64,
+  "pooled": {
+    "256": {
+      "off": {
+        "samples": 10,
+        "TTFT_ms": 421.60769747570157,
+        "TPOT_ms": 67.66356150893604,
+        "TPOT_stdev_ms": 1.6038261050664127,
+        "E2E_s": 17.67581588225439,
+        "output_tps": 14.483065545902797
+      },
+      "after": {
+        "samples": 10,
+        "TTFT_ms": 420.94945795834064,
+        "TPOT_ms": 66.32408591644729,
+        "TPOT_stdev_ms": 1.668271359461585,
+        "E2E_s": 17.3335913666524,
+        "output_tps": 14.769010909793979
+      },
+      "TPOT_change_percent": -1.9796114224815864
+    },
+    "2048": {
+      "off": {
+        "samples": 10,
+        "TTFT_ms": 2668.663486558944,
+        "TPOT_ms": 66.01190838597569,
+        "TPOT_stdev_ms": 0.6390460808101907,
+        "E2E_s": 19.501700124982744,
+        "output_tps": 13.127060633654704
+      },
+      "after": {
+        "samples": 10,
+        "TTFT_ms": 2616.9878903776407,
+        "TPOT_ms": 64.40697464544107,
+        "TPOT_stdev_ms": 1.355011774133955,
+        "E2E_s": 19.040766424965113,
+        "output_tps": 13.444836950699008
+      },
+      "TPOT_change_percent": -2.431279112778373
+    }
+  },
+  "decision": "Keep disabled on cumulative best. Both repetitions favor packed, but small short-input effect vs variation fails conservative preregistered confidence criterion. Not a proven regression; retain optional candidate.",
+  "recheck_trace_audit": "ALL32_TRACE_SHA_AND_EXACT_ELF_PC_COMPLETE",
+  "at": "2026-11-13T01:01:01.865775+08:00",
+  "recheck_trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e30_recheck_trace_analysis_v1.tar.zst",
+    "bytes": 6952573,
+    "sha256": "d556732ece9fe12c3ea45b131e3e9f3de8de9fb8497c0903c521111de4accec7",
+    "receipt": {
+      "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_native_block/bin/xllm",
+      "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+      "raw_archives": {
+        "off": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t06_packed_shared_recheck_off_v1_raw_trace.tar.zst",
+          "bytes": 83651655,
+          "sha256": "c4c3d49b4f7b11a096b4211f5865bdb10dca4b0709a78372b95df17954ceca8a"
+        },
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t06_packed_shared_recheck_packed_v1_raw_trace.tar.zst",
+          "bytes": 80729573,
+          "sha256": "da1e3b56fc49719f52b5d0e8bf21d4b2afc0ce0a30bee2ed77ed9b6098959ecd"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794502847.2955375
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "source_base": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "actual_previous_build": "new_start_t03_mhc_cumulative_build_v1",
+  "full_patch_sha256": "4732783cd0218ff8539f9b357b07f7cc4c748b7e9070373aab8ab4632f3e414e",
+  "full_patch_bytes": 43208,
+  "patch_applies_to_pristine_base": true,
+  "status": "UNPROMOTED_CANDIDATE",
+  "note": "Original build source_manifest.previous_build may retain template value new_start_t12_batched_native_build_v2 for E35–37. This sidecar records the real guarded predecessor, without rewriting immutable build evidence."
+}

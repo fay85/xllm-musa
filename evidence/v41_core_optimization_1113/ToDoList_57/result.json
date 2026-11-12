@@ -1,0 +1,113 @@
+{
+  "status": "REJECTED_RUNTIME_LONG_REQUEST_STALL_NO_PROMOTION",
+  "run": "t07_disable_progress_cumulative_v1",
+  "binary_sha256": "931741c398ec88a02e1d472becbcf8f69a24f9abb4405852c6a203aaa274e05d",
+  "groups": {
+    "256": {
+      "rows": [
+        [
+          1,
+          256,
+          256,
+          18.993605780415237,
+          0.5654482180252671,
+          0.07226728455839204
+        ],
+        [
+          1,
+          256,
+          256,
+          19.09005901683122,
+          0.5490762647241354,
+          0.07270973628277287
+        ],
+        [
+          1,
+          256,
+          256,
+          18.025466036982834,
+          0.36046996619552374,
+          0.06927449439524436
+        ],
+        [
+          1,
+          256,
+          256,
+          17.842588422819972,
+          0.543713292106986,
+          0.06783872600279603
+        ],
+        [
+          1,
+          256,
+          256,
+          18.454473595134914,
+          0.3544198237359524,
+          0.07098060302509397
+        ]
+      ],
+      "successful_exact": 5,
+      "failed": 0
+    },
+    "2048": {
+      "rows": [
+        [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      ],
+      "successful_exact": 0,
+      "failed": 5
+    }
+  },
+  "trace": "not captured because formal performance invalid",
+  "cleanup_status": "CLEANED_OWN_FAILED_ROLE",
+  "cleanup_host_pids": [
+    14883,
+    14884,
+    14885,
+    14886,
+    14888,
+    14889,
+    14892
+  ],
+  "target_GPU_entries_gone": true,
+  "default_progress_env": "1 retained from validated compatible baseline",
+  "accuracy_scope": "Two arithmetic passed; no full model precision acceptance; full formal protocol failed"
+}

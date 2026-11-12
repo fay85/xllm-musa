@@ -1,0 +1,136 @@
+{
+  "status": "VALIDATED_CONCURRENCY_CONTROL",
+  "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "actual_run": "t12_queued_c2_final_v3",
+  "valid_formal_requests": 10,
+  "normal_rank_exits": 16,
+  "audited_distinct_ranks": 16,
+  "audited_trace_stack_files": 32,
+  "cases": {
+    "256": {
+      "TTFT_ms": 494.37010660767555,
+      "TPOT_ms": 123.9423946568779,
+      "TPOT_sample_stdev_ms": 29.03639111873903,
+      "E2E_s": 32.09968074411154,
+      "QPS": 0.05639006587487496,
+      "output_tps": 14.43585686396799,
+      "official_wall_s": 88.6681,
+      "concurrency": 2,
+      "formal_rows": [
+        [
+          1,
+          256,
+          256,
+          18.848917591385543,
+          0.34986987244337797,
+          0.07254528517232221
+        ],
+        [
+          1,
+          256,
+          256,
+          37.160104299895465,
+          0.6825251411646605,
+          0.14304933003423845
+        ],
+        [
+          1,
+          256,
+          256,
+          35.74774854443967,
+          0.5444037681445479,
+          0.13805233245605933
+        ],
+        [
+          1,
+          256,
+          256,
+          34.670798319391906,
+          0.5372791811823845,
+          0.13385693779690008
+        ],
+        [
+          1,
+          256,
+          256,
+          34.0708349654451,
+          0.3577725701034069,
+          0.1322080878248694
+        ]
+      ]
+    },
+    "2048": {
+      "TTFT_ms": 1760.4714520275593,
+      "TPOT_ms": 114.99992087556451,
+      "TPOT_sample_stdev_ms": 27.001219910272496,
+      "E2E_s": 31.08545127529651,
+      "QPS": 0.05803116505688215,
+      "output_tps": 14.85597825456183,
+      "official_wall_s": 86.1606,
+      "concurrency": 2,
+      "formal_rows": [
+        [
+          1,
+          2048,
+          256,
+          18.516452205367386,
+          1.4991298243403435,
+          0.06673459757265507
+        ],
+        [
+          1,
+          2048,
+          256,
+          35.23593925870955,
+          2.9387938315048814,
+          0.12665547226354773
+        ],
+        [
+          1,
+          2048,
+          256,
+          34.160832695662975,
+          1.4438224406912923,
+          0.12830200099988895
+        ],
+        [
+          1,
+          2048,
+          256,
+          34.031321197748184,
+          1.4611173197627068,
+          0.12772628971759012
+        ],
+        [
+          1,
+          2048,
+          256,
+          33.48271101899445,
+          1.4594938438385725,
+          0.1255812438241407
+        ]
+      ]
+    }
+  },
+  "trace_receipt": {
+    "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e52_control_trace_analysis_v1.tar.zst",
+    "bytes": 4327815,
+    "sha256": "a99249cb08651ab7cc5f2c68482e9d0ee58872b343ab485ececf7fad2503e02d",
+    "receipt": {
+      "status": "ALL16_SINGLE_CONTROL_AUDITED_EXACT_ELF_SYMBOLIZED",
+      "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_mhc_small_batch/bin/xllm",
+      "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+      "raw_archives": {
+        "after": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_queued_c2_final_v3_raw_trace.tar.zst",
+          "bytes": 619502524,
+          "sha256": "5893515425b5c6b98cac5d25423adbc8ed6f3952ab94f5a0eeffd86d2b9d1256"
+        }
+      },
+      "symbols": 55,
+      "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+      "finished_at": 1794510222.6404598
+    }
+  },
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+}

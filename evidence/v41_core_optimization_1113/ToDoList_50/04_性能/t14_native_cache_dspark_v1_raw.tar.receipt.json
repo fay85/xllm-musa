@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_native_cache_dspark_v1_small_evidence.tar.gz",
+  "bytes": 9882573,
+  "sha256": "93a2d06df56df7c43e4a9a8d93b7bba45f81c2148aaf890122ad684c9176a4d5",
+  "run": "t14_native_cache_dspark_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

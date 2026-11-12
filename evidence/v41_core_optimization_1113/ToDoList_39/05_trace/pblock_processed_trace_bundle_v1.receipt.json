@@ -1,0 +1,20 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_prefill_blocking_analysis_v2.tar.zst",
+  "bytes": 3586852,
+  "sha256": "b0a08562f5312d8fced5106de9c92cc532faac3ea206f09578724b3ee5fcb5d9",
+  "receipt": {
+    "status": "PBLOCK_ALL16_AUDITED_AND_EXACT_ELF_SYMBOLIZED",
+    "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t04_gate_cache_stream/bin/xllm",
+    "binary_sha256": "c404a3673914bbe16cedef3f509fd8ad931261d2e3c5ffbf26f3be3eb780e5f3",
+    "raw_archives": {
+      "pblock": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_prefill_blocking_wait_v1_raw_trace.tar.zst",
+        "bytes": 88787602,
+        "sha256": "23991a875dfc82c39a79fc55c68c7e3c141cff1f1f48697ddcc8a37fe380374d"
+      }
+    },
+    "symbols": 51,
+    "scope": "CPU-only P blocking successful run, all16 processes exited; original full traces unchanged",
+    "finished_at": 1794497619.7905252
+  }
+}

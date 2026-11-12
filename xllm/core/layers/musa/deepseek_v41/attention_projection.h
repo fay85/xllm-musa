@@ -14,6 +14,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -35,7 +36,8 @@ class DeepseekV41AttentionProjection final {
                                  int64_t groups,
                                  int64_t output_rank,
                                  double epsilon,
-                                 bool original_fp8_activation)
+                                 bool original_fp8_activation,
+                                 bool decode_packed_qkv = false)
       : weights_(check_weights(std::move(weights))),
         q_a_(weights_[0], original_fp8_activation),
         q_b_(weights_[2], original_fp8_activation),
@@ -69,6 +71,11 @@ class DeepseekV41AttentionProjection final {
     CHECK_EQ(weights_[6].sizes(),
              torch::IntArrayRef({weights_[0].size(1), groups_ * output_rank_}));
     CHECK(!original_fp8_activation_ || head_dim_ % 32 == 0);
+    if (decode_packed_qkv) {
+      packed_qkv_ = std::make_unique<DeepseekV41Dense>(
+          torch::cat({weights_[0], weights_[3]}, 0).contiguous(),
+          original_fp8_activation_);
+    }
   }
 
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> prepare(
@@ -78,13 +85,31 @@ class DeepseekV41AttentionProjection final {
     check_hidden(hidden);
     check_rotary(positions, table, hidden.size(0));
     torch::DeviceGuard guard(hidden.device());
-    const torch::Tensor qr = norm(q_a_.forward(hidden), weights_[1]);
-    const torch::Tensor key = norm(kv_.forward(hidden), weights_[4]);
+    torch::Tensor qr;
+    torch::Tensor key;
+    if (packed_qkv_ != nullptr && hidden.size(0) == 1) {
+      const torch::Tensor packed = packed_qkv_->forward(hidden);
+      qr = norm(packed.narrow(1, 0, weights_[0].size(0)), weights_[1]);
+      key = norm(packed.narrow(1, weights_[0].size(0), head_dim_), weights_[4]);
+    } else {
+      qr = norm(q_a_.forward(hidden), weights_[1]);
+      key = norm(kv_.forward(hidden), weights_[4]);
+    }
     const torch::Tensor query =
         q_b_.forward(qr).view({hidden.size(0), heads_, head_dim_});
     return {rope(query, positions, table, /*inverse=*/false),
             quantize(rope(key, positions, table, /*inverse=*/false)),
             qr};
+  }
+
+  torch::Tensor prepare_context_kv(const torch::Tensor& hidden,
+                                   const torch::Tensor& positions,
+                                   const torch::Tensor& table) const {
+    check_hidden(hidden);
+    check_rotary(positions, table, hidden.size(0));
+    torch::DeviceGuard guard(hidden.device());
+    const torch::Tensor key = norm(kv_.forward(hidden), weights_[4]);
+    return quantize(rope(key, positions, table, /*inverse=*/false));
   }
 
   torch::Tensor project_output(const torch::Tensor& attention,
@@ -202,6 +227,7 @@ class DeepseekV41AttentionProjection final {
   }
 
   std::vector<torch::Tensor> weights_;
+  std::unique_ptr<DeepseekV41Dense> packed_qkv_;
   DeepseekV41Dense q_a_;
   DeepseekV41Dense q_b_;
   DeepseekV41Dense kv_;

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host_pid\": 57824, \"path\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t07_comm_fence_probe_v1\", \"purpose\": \"8rank actual native synchronous collective fence basic check; host GPU list empty\"}\n",
+  "stderr": ""
+}

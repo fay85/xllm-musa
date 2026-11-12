@@ -1,0 +1,18 @@
+{
+  "at": "2026-11-13T00:56:59.222028+08:00",
+  "baseline": "ToDoList_38",
+  "bounds": {
+    "256": {
+      "entire_TTFT_fraction": 0.022571522940212897,
+      "if_entire_TTFT_zero_max_E2E_reduction_percent": 2.2571522940212896,
+      "if_entire_TTFT_zero_max_speedup": 1.0230927617416168,
+      "subset_chunk_CED_PD_bound": "cannot exceed entire TTFT under same cold C1 workload; not an attainable forecast; does not quantify specific module critical fraction"
+    },
+    "2048": {
+      "entire_TTFT_fraction": 0.13667013875523054,
+      "if_entire_TTFT_zero_max_E2E_reduction_percent": 13.667013875523054,
+      "if_entire_TTFT_zero_max_speedup": 1.1583058166876983,
+      "subset_chunk_CED_PD_bound": "cannot exceed entire TTFT under same cold C1 workload; not an attainable forecast; does not quantify specific module critical fraction"
+    }
+  }
+}

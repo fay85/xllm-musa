@@ -1,0 +1,286 @@
+{
+  "status": "PASS_ALL8_D_FUSED_PATH_AND_400_KERNEL_REDUCTION",
+  "modes": {
+    "off": [
+      {
+        "rank": 0,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27587,
+        "step_count": 7,
+        "selected_gpu_kernels": 3897,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 1,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3898,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 2,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3898,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 3,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3898,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 4,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3898,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 5,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3898,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 6,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3897,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 7,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 27573,
+        "step_count": 7,
+        "selected_gpu_kernels": 3897,
+        "fused_reduction_kernels": 0,
+        "cpu_ops": {
+          "aten::sum": 160,
+          "aten::div": 160,
+          "aten::add": 204,
+          "aten::rsqrt": 80,
+          "aten::mul": 116,
+          "aten::mm": 349
+        }
+      }
+    ],
+    "mhc": [
+      {
+        "rank": 0,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24787,
+        "step_count": 7,
+        "selected_gpu_kernels": 3498,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 1,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3497,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 2,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3497,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 3,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3498,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 4,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3497,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 5,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3498,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 6,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3498,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      },
+      {
+        "rank": 7,
+        "selected_step": "V41/step/q=1/kv=263",
+        "all_gpu_kernels": 24773,
+        "step_count": 7,
+        "selected_gpu_kernels": 3497,
+        "fused_reduction_kernels": 80,
+        "cpu_ops": {
+          "aten::sum": 0,
+          "aten::div": 0,
+          "aten::add": 44,
+          "aten::rsqrt": 0,
+          "aten::mul": 36,
+          "aten::mm": 349
+        }
+      }
+    ]
+  },
+  "all32_trace_rank_pairs_checked": true,
+  "receipt": {
+    "status": "ALL16_EACH_MODE_AUDITED_AND_EXACT_NEW_ELF_SYMBOLIZED",
+    "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_native_block/bin/xllm",
+    "binary_sha256": "c608c4bf811f0349dec2e2954044bbf43b5d5ae79bce6221b07712d79c8a79cf",
+    "raw_archives": {
+      "off": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_integrated_off_v1_raw_trace.tar.zst",
+        "bytes": 88997993,
+        "sha256": "864f3d11f6faa01545433b7665203b6e6b148b77a910ddeb845512a987ab2d59"
+      },
+      "mhc": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t03_mhc_integrated_mhc_v1_raw_trace.tar.zst",
+        "bytes": 83623693,
+        "sha256": "d43225bba429cccc3086acde6cdc12c8b8beb6782228efb80f16cb3c17b94f11"
+      }
+    },
+    "symbols": 55,
+    "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+    "finished_at": 1794501191.9073424
+  }
+}

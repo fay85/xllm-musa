@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "text/event-stream",
+    "Transfer-Encoding": "chunked",
+    "Cache-Control": "no-cache",
+    "X-Request-UID": "01a1cea2-7be6-7c9f-88d4-aec0b27f242b",
+    "X-Trace-ID": "01a1cea2-7be6-7a8f-9aeb-cb695dd8195c",
+    "X-Request-ID": "01a1cea2-7be6-78e0-a1b5-5b5a52bfd4ce",
+    "Connection": "keep-alive",
+    "X-Global-Request-ID": "01a1cea2-7be6-78e0-a1b5-5b5a52bfd4ce"
+  }
+}

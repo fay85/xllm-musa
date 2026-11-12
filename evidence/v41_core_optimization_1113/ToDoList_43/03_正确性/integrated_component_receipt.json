@@ -1,0 +1,1347 @@
+{
+  "status": "PASS_ALL_SIX_COMPONENT_SUITES",
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_integrated_components_v1_basic.tar.gz",
+  "sha256": "4089814bf437c868af84b577bf6c2d27110ecaffa19849a0ffc207c132b136ee",
+  "bytes": 16025,
+  "checks": {
+    "mhc": {
+      "status": "PASS_FUSED_MHC_REDUCTION_BASIC_CHECKS",
+      "synthetic_cases": [
+        {
+          "splits": 16,
+          "rows": 0,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 0,
+          "magnitude": 0.0001,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 0,
+          "magnitude": 1.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 0,
+          "magnitude": 100.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 1,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 1,
+          "magnitude": 0.0001,
+          "max_abs": 5.960464477539063e-08
+        },
+        {
+          "splits": 16,
+          "rows": 1,
+          "magnitude": 1.0,
+          "max_abs": 5.340576171875e-05
+        },
+        {
+          "splits": 16,
+          "rows": 1,
+          "magnitude": 100.0,
+          "max_abs": 3.4332275390625e-05
+        },
+        {
+          "splits": 16,
+          "rows": 17,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 17,
+          "magnitude": 0.0001,
+          "max_abs": 1.7881393432617188e-07
+        },
+        {
+          "splits": 16,
+          "rows": 17,
+          "magnitude": 1.0,
+          "max_abs": 0.000152587890625
+        },
+        {
+          "splits": 16,
+          "rows": 17,
+          "magnitude": 100.0,
+          "max_abs": 0.0001220703125
+        },
+        {
+          "splits": 16,
+          "rows": 128,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 128,
+          "magnitude": 0.0001,
+          "max_abs": 2.980232238769531e-07
+        },
+        {
+          "splits": 16,
+          "rows": 128,
+          "magnitude": 1.0,
+          "max_abs": 0.000152587890625
+        },
+        {
+          "splits": 16,
+          "rows": 128,
+          "magnitude": 100.0,
+          "max_abs": 0.00018310546875
+        },
+        {
+          "splits": 16,
+          "rows": 512,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 16,
+          "rows": 512,
+          "magnitude": 0.0001,
+          "max_abs": 2.980232238769531e-07
+        },
+        {
+          "splits": 16,
+          "rows": 512,
+          "magnitude": 1.0,
+          "max_abs": 0.00018310546875
+        },
+        {
+          "splits": 16,
+          "rows": 512,
+          "magnitude": 100.0,
+          "max_abs": 0.00018310546875
+        },
+        {
+          "splits": 32,
+          "rows": 0,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 0,
+          "magnitude": 0.0001,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 0,
+          "magnitude": 1.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 0,
+          "magnitude": 100.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 1,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 1,
+          "magnitude": 0.0001,
+          "max_abs": 2.384185791015625e-07
+        },
+        {
+          "splits": 32,
+          "rows": 1,
+          "magnitude": 1.0,
+          "max_abs": 9.1552734375e-05
+        },
+        {
+          "splits": 32,
+          "rows": 1,
+          "magnitude": 100.0,
+          "max_abs": 8.0108642578125e-05
+        },
+        {
+          "splits": 32,
+          "rows": 17,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 17,
+          "magnitude": 0.0001,
+          "max_abs": 2.384185791015625e-07
+        },
+        {
+          "splits": 32,
+          "rows": 17,
+          "magnitude": 1.0,
+          "max_abs": 0.0001220703125
+        },
+        {
+          "splits": 32,
+          "rows": 17,
+          "magnitude": 100.0,
+          "max_abs": 0.0001220703125
+        },
+        {
+          "splits": 32,
+          "rows": 128,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 128,
+          "magnitude": 0.0001,
+          "max_abs": 4.76837158203125e-07
+        },
+        {
+          "splits": 32,
+          "rows": 128,
+          "magnitude": 1.0,
+          "max_abs": 0.000244140625
+        },
+        {
+          "splits": 32,
+          "rows": 128,
+          "magnitude": 100.0,
+          "max_abs": 0.00018310546875
+        },
+        {
+          "splits": 32,
+          "rows": 512,
+          "magnitude": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "splits": 32,
+          "rows": 512,
+          "magnitude": 0.0001,
+          "max_abs": 5.960464477539062e-07
+        },
+        {
+          "splits": 32,
+          "rows": 512,
+          "magnitude": 1.0,
+          "max_abs": 0.000244140625
+        },
+        {
+          "splits": 32,
+          "rows": 512,
+          "magnitude": 100.0,
+          "max_abs": 0.00018310546875
+        }
+      ],
+      "real_weight_cases": [
+        {
+          "part": "attn",
+          "rows": 1,
+          "max_abs": 9.5367431640625e-07,
+          "reference_host_enqueue_plus_device_ms": 0.15416499227285385,
+          "fused_host_enqueue_plus_device_ms": 0.056279016037782036
+        },
+        {
+          "part": "attn",
+          "rows": 17,
+          "max_abs": 4.76837158203125e-06,
+          "reference_host_enqueue_plus_device_ms": 0.15475349500775337,
+          "fused_host_enqueue_plus_device_ms": 0.0596925305823485
+        },
+        {
+          "part": "attn",
+          "rows": 128,
+          "max_abs": 3.814697265625e-06,
+          "reference_host_enqueue_plus_device_ms": 0.145522008339564,
+          "fused_host_enqueue_plus_device_ms": 0.0606355257332325
+        },
+        {
+          "part": "ffn",
+          "rows": 1,
+          "max_abs": 1.430511474609375e-06,
+          "reference_host_enqueue_plus_device_ms": 0.14477825413147608,
+          "fused_host_enqueue_plus_device_ms": 0.05711916213234266
+        },
+        {
+          "part": "ffn",
+          "rows": 17,
+          "max_abs": 2.86102294921875e-06,
+          "reference_host_enqueue_plus_device_ms": 0.15850653871893883,
+          "fused_host_enqueue_plus_device_ms": 0.05956701934337616
+        },
+        {
+          "part": "ffn",
+          "rows": 128,
+          "max_abs": 3.814697265625e-06,
+          "reference_host_enqueue_plus_device_ms": 0.15193947280446687,
+          "fused_host_enqueue_plus_device_ms": 0.05999462058146795
+        }
+      ],
+      "scope": "Short directly-related operator checks and enqueue+device microtiming; not full-model accuracy or official serving performance.",
+      "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+    },
+    "packed": {
+      "status": "PASS_PACKED_NATIVE_PROJECTION_BASIC_CHECKS",
+      "cases": [
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 256,
+          "rows": 1,
+          "magnitude": 0.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 256,
+          "rows": 1,
+          "magnitude": 1.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 256,
+          "rows": 1,
+          "magnitude": 50.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 256,
+          "rows": 17,
+          "magnitude": 0.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 256,
+          "rows": 17,
+          "magnitude": 1.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 256,
+          "rows": 17,
+          "magnitude": 50.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 2048,
+          "rows": 1,
+          "magnitude": 0.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 2048,
+          "rows": 1,
+          "magnitude": 1.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 2048,
+          "rows": 1,
+          "magnitude": 50.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 2048,
+          "rows": 17,
+          "magnitude": 0.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 2048,
+          "rows": 17,
+          "magnitude": 1.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "shared_gate_up",
+          "intermediate": 2048,
+          "rows": 17,
+          "magnitude": 50.0,
+          "relative_rms": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        {
+          "kind": "q_a_kv_packed",
+          "rows": 1,
+          "magnitude": 0.0,
+          "output_errors_query_key_qr": [
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            }
+          ]
+        },
+        {
+          "kind": "q_a_kv_packed",
+          "rows": 1,
+          "magnitude": 1.0,
+          "output_errors_query_key_qr": [
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            }
+          ]
+        },
+        {
+          "kind": "q_a_kv_packed",
+          "rows": 1,
+          "magnitude": 50.0,
+          "output_errors_query_key_qr": [
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            }
+          ]
+        },
+        {
+          "kind": "q_a_kv_packed",
+          "rows": 17,
+          "magnitude": 0.0,
+          "output_errors_query_key_qr": [
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            }
+          ]
+        },
+        {
+          "kind": "q_a_kv_packed",
+          "rows": 17,
+          "magnitude": 1.0,
+          "output_errors_query_key_qr": [
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            }
+          ]
+        },
+        {
+          "kind": "q_a_kv_packed",
+          "rows": 17,
+          "magnitude": 50.0,
+          "output_errors_query_key_qr": [
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            },
+            {
+              "relative_rms": 0.0,
+              "max_abs": 0.0,
+              "exact": true
+            }
+          ]
+        }
+      ],
+      "timings": {
+        "shared_256": {
+          "samples": [
+            {
+              "old": 0.13075199127197265,
+              "packed": 0.08824133078257243
+            },
+            {
+              "packed": 0.08700133164723714,
+              "old": 0.12553866704305014
+            },
+            {
+              "old": 0.13017067114512126,
+              "packed": 0.085152006149292
+            },
+            {
+              "packed": 0.08658933639526367,
+              "old": 0.12846000194549562
+            }
+          ],
+          "old_ms": 0.12931533654530844,
+          "packed_ms": 0.0867953340212504
+        },
+        "shared_2048": {
+          "samples": [
+            {
+              "old": 0.1065733273824056,
+              "packed": 0.0812719980875651
+            },
+            {
+              "packed": 0.08069466749827067,
+              "old": 0.10465466181437175
+            },
+            {
+              "old": 0.10397199789683025,
+              "packed": 0.07826666831970215
+            },
+            {
+              "packed": 0.07921733856201171,
+              "old": 0.10571066538492839
+            }
+          ],
+          "old_ms": 0.10518266359965006,
+          "packed_ms": 0.07995600303014119
+        },
+        "q_a_kv": {
+          "samples": [
+            {
+              "old": 0.25711199442545574,
+              "packed": 0.23038533528645833
+            },
+            {
+              "packed": 0.22765332857767742,
+              "old": 0.25910800298055015
+            },
+            {
+              "old": 0.2605813185373942,
+              "packed": 0.22893865903218588
+            },
+            {
+              "packed": 0.228331995010376,
+              "old": 0.2592533429463704
+            }
+          ],
+          "old_ms": 0.25918067296346026,
+          "packed_ms": 0.22863532702128092
+        }
+      },
+      "scope": "GPU event interval includes host enqueue gaps; not full model or a model accuracy validation",
+      "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+    },
+    "ced": {
+      "status": "PASS_CED_TAIL_FLOOR_AND_RING_COMMIT_BASIC_CHECKS",
+      "cases": [
+        {
+          "original_rows": 129,
+          "tail_rows": 128,
+          "context": 129,
+          "tail_start": 1,
+          "with_compressed": false,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 129,
+          "tail_rows": 128,
+          "context": 129,
+          "tail_start": 1,
+          "with_compressed": false,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 129,
+          "tail_rows": 128,
+          "context": 129,
+          "tail_start": 1,
+          "with_compressed": true,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 129,
+          "tail_rows": 128,
+          "context": 129,
+          "tail_start": 1,
+          "with_compressed": true,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 256,
+          "tail_start": 128,
+          "with_compressed": false,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 256,
+          "tail_start": 128,
+          "with_compressed": false,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 256,
+          "tail_start": 128,
+          "with_compressed": true,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 256,
+          "tail_start": 128,
+          "with_compressed": true,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": false,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": false,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": true,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": true,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": false,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": false,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": true,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 256,
+          "tail_rows": 128,
+          "context": 512,
+          "tail_start": 384,
+          "with_compressed": true,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 1024,
+          "tail_start": 896,
+          "with_compressed": false,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 1024,
+          "tail_start": 896,
+          "with_compressed": false,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 1024,
+          "tail_start": 896,
+          "with_compressed": true,
+          "nondefault_stream": false,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        },
+        {
+          "original_rows": 512,
+          "tail_rows": 128,
+          "context": 1024,
+          "tail_start": 896,
+          "with_compressed": true,
+          "nondefault_stream": true,
+          "output_exact_independent_floor_reference": true,
+          "stale_NaN_history_masked": true,
+          "tail_slot_commit_exact": true
+        }
+      ],
+      "scope": "Basic visibility/cache checks, not full model equivalence or performance. Full prompt logits of skipped rows unsupported.",
+      "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+    },
+    "batch": {
+      "status": "PASS_NATIVE_BATCHED_MATE_ATTENTION_AND_REQUEST_ISOLATION",
+      "cases": [
+        {
+          "batch": 2,
+          "ratio": 0,
+          "nondefault": false,
+          "contexts": [
+            1,
+            129
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": false,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 2,
+          "ratio": 0,
+          "nondefault": true,
+          "contexts": [
+            1,
+            129
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": false,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 2,
+          "ratio": 1,
+          "nondefault": false,
+          "contexts": [
+            1,
+            129
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 2,
+          "ratio": 1,
+          "nondefault": true,
+          "contexts": [
+            1,
+            129
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 2,
+          "ratio": 2,
+          "nondefault": false,
+          "contexts": [
+            1,
+            129
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 2,
+          "ratio": 2,
+          "nondefault": true,
+          "contexts": [
+            1,
+            129
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 4,
+          "ratio": 0,
+          "nondefault": false,
+          "contexts": [
+            1,
+            129,
+            258,
+            511
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": false,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 4,
+          "ratio": 0,
+          "nondefault": true,
+          "contexts": [
+            1,
+            129,
+            258,
+            511
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": false,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 4,
+          "ratio": 1,
+          "nondefault": false,
+          "contexts": [
+            1,
+            129,
+            258,
+            511
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 4,
+          "ratio": 1,
+          "nondefault": true,
+          "contexts": [
+            1,
+            129,
+            258,
+            511
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 4,
+          "ratio": 2,
+          "nondefault": false,
+          "contexts": [
+            1,
+            129,
+            258,
+            511
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        },
+        {
+          "batch": 4,
+          "ratio": 2,
+          "nondefault": true,
+          "contexts": [
+            1,
+            129,
+            258,
+            511
+          ],
+          "output_relative_rms": 0.0,
+          "output_max_abs": 0.0,
+          "request_tables_and_CSA2_runtime_isolated": true,
+          "source_compressed_state_exact": true,
+          "unowned_block0_unchanged": true
+        }
+      ],
+      "metadata_contract_cases": 9,
+      "scope": "B2/B4 native C++ batch projections plus actual MATE sparse attention and AOT indexer, with accepted fused SWA/cache-read flags. Request-specific state isolation and 9 metadata contract checks. Full-model native adapter and formal serving remain pending.",
+      "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+    },
+    "state": {
+      "status": "PASS_REAL_RATIO2_ATTENTION_ROLLBACK_AND_ACCEPTED_REPLAY",
+      "cases": [
+        {
+          "nondefault": false,
+          "previous": 127,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 1,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 272128,
+          "recurrent_pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 127,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 3,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 272128,
+          "recurrent_pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 127,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 6,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 272128,
+          "recurrent_pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 128,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 1,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            2
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 128,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 3,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            2
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 128,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 6,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            2
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 257,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 1,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            3
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 257,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 3,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            3
+          ]
+        },
+        {
+          "nondefault": false,
+          "previous": 257,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 6,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            3
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 127,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 1,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 272128,
+          "recurrent_pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 127,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 3,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 272128,
+          "recurrent_pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 127,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 6,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 272128,
+          "recurrent_pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 128,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 1,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            2
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 128,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 3,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            2
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 128,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 6,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            2
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 257,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 1,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            3
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 257,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 3,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            3
+          ]
+        },
+        {
+          "nondefault": true,
+          "previous": 257,
+          "speculative_inputs": 6,
+          "accepted_input_prefix": 6,
+          "next_real_token_checked": true,
+          "after_rollback_all_cache_bytes_exact": true,
+          "after_replay_all_cache_bytes_exact": true,
+          "next_output_exact": true,
+          "checkpoint_bytes": 141056,
+          "recurrent_pages": [
+            3
+          ]
+        }
+      ],
+      "scope": "Native actual MATE sparse/AOT indexer and pair compressor, page-scoped SWA/key/index/recurrent snapshot. Engram and scheduler/native target integration remain separate. No whole-model precision gate.",
+      "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+    },
+    "capture": {
+      "status": "PASS_TARGET_ENTERING_RESIDUAL_CAPTURE",
+      "cases": [
+        {
+          "width": 1,
+          "nondefault": false,
+          "ordered_capture_ids": [
+            2,
+            0
+          ],
+          "entering_residual_mean_and_slot_order_exact": true,
+          "SWA_caches_exact": true,
+          "final_hidden_relative_rms": 0.0
+        },
+        {
+          "width": 5,
+          "nondefault": false,
+          "ordered_capture_ids": [
+            2,
+            0
+          ],
+          "entering_residual_mean_and_slot_order_exact": true,
+          "SWA_caches_exact": true,
+          "final_hidden_relative_rms": 0.0
+        },
+        {
+          "width": 1,
+          "nondefault": true,
+          "ordered_capture_ids": [
+            2,
+            0
+          ],
+          "entering_residual_mean_and_slot_order_exact": true,
+          "SWA_caches_exact": true,
+          "final_hidden_relative_rms": 0.0
+        },
+        {
+          "width": 5,
+          "nondefault": true,
+          "ordered_capture_ids": [
+            2,
+            0
+          ],
+          "entering_residual_mean_and_slot_order_exact": true,
+          "SWA_caches_exact": true,
+          "final_hidden_relative_rms": 0.0
+        }
+      ],
+      "scope": "Three-layer actual MATE sparse/mHC/W4A8 component fixture, caller capture order and entering-vs-exiting residual checked; this is not full target/spec serving validation.",
+      "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收"
+    }
+  },
+  "all_children_normal_exit": true,
+  "GPU_no_processes": true
+}

@@ -1,0 +1,20 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_e52_control_trace_analysis_v1.tar.zst",
+  "bytes": 4327815,
+  "sha256": "a99249cb08651ab7cc5f2c68482e9d0ee58872b343ab485ececf7fad2503e02d",
+  "receipt": {
+    "status": "ALL16_SINGLE_CONTROL_AUDITED_EXACT_ELF_SYMBOLIZED",
+    "binary_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_mhc_small_batch/bin/xllm",
+    "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+    "raw_archives": {
+      "after": {
+        "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t12_queued_c2_final_v3_raw_trace.tar.zst",
+        "bytes": 619502524,
+        "sha256": "5893515425b5c6b98cac5d25423adbc8ed6f3952ab94f5a0eeffd86d2b9d1256"
+      }
+    },
+    "symbols": 55,
+    "scope": "CPU-only after all16 role-process exits; original full traces unchanged; representative actual step subsets for local rendering",
+    "finished_at": 1794510222.6404598
+  }
+}

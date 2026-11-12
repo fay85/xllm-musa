@@ -1,0 +1,99 @@
+{
+  "scope": "Observation only, not a precision gate. No retry or precision-cause investigation. Same prompt/sampling and exact token counts remain performance requirements.",
+  "cases": {
+    "256": {
+      "off": [
+        {
+          "sha256": "b90cb52603154cc2ba28b035be299d5b011b3884b3bb89b6e140a7a61dd84ced",
+          "characters": 1283
+        },
+        {
+          "sha256": "b90cb52603154cc2ba28b035be299d5b011b3884b3bb89b6e140a7a61dd84ced",
+          "characters": 1283
+        },
+        {
+          "sha256": "b90cb52603154cc2ba28b035be299d5b011b3884b3bb89b6e140a7a61dd84ced",
+          "characters": 1283
+        },
+        {
+          "sha256": "b90cb52603154cc2ba28b035be299d5b011b3884b3bb89b6e140a7a61dd84ced",
+          "characters": 1283
+        },
+        {
+          "sha256": "b90cb52603154cc2ba28b035be299d5b011b3884b3bb89b6e140a7a61dd84ced",
+          "characters": 1283
+        }
+      ],
+      "tp": [
+        {
+          "sha256": "3595fbcb352a01da758363e72d86eb6cf47427308a569f71e521912f9b179563",
+          "characters": 1146
+        },
+        {
+          "sha256": "3595fbcb352a01da758363e72d86eb6cf47427308a569f71e521912f9b179563",
+          "characters": 1146
+        },
+        {
+          "sha256": "3595fbcb352a01da758363e72d86eb6cf47427308a569f71e521912f9b179563",
+          "characters": 1146
+        },
+        {
+          "sha256": "3595fbcb352a01da758363e72d86eb6cf47427308a569f71e521912f9b179563",
+          "characters": 1146
+        },
+        {
+          "sha256": "3595fbcb352a01da758363e72d86eb6cf47427308a569f71e521912f9b179563",
+          "characters": 1146
+        }
+      ],
+      "paired_equal_count": 0
+    },
+    "2048": {
+      "off": [
+        {
+          "sha256": "ab588626b8312fbc8855ccf0bf18f2bab66126a8066fc66c82e00788750b8ef1",
+          "characters": 1461
+        },
+        {
+          "sha256": "8ed8da93e8fe0bb882035e1bae0cb0dc23180928e9bfa33003d82fe4dc3a2242",
+          "characters": 1530
+        },
+        {
+          "sha256": "0bbf8b4b420a9735e2573a8cfa509d70c04950c56bc40cfca7073e8f6b7076eb",
+          "characters": 1365
+        },
+        {
+          "sha256": "5e7d7b35f74ef518d1185fb079806160ad376508e280f53905e93a3b6d47bd11",
+          "characters": 1522
+        },
+        {
+          "sha256": "ed550bcb748021f736b82868c2b46a57b83410a25cde95e60b95418d588044eb",
+          "characters": 1452
+        }
+      ],
+      "tp": [
+        {
+          "sha256": "2c6c3b7e4e88abd5bb0c321d6a1be5910878ccf64d7a5ccc753bf596627bdcd6",
+          "characters": 1446
+        },
+        {
+          "sha256": "89d32186993d5767f0f60172efc77766c37e81977657b1f547822a5b51694b89",
+          "characters": 1431
+        },
+        {
+          "sha256": "2c6c3b7e4e88abd5bb0c321d6a1be5910878ccf64d7a5ccc753bf596627bdcd6",
+          "characters": 1446
+        },
+        {
+          "sha256": "5b29660702a58806fb002b780b8e910c7e8f1e502da54b58fae06da144aec956",
+          "characters": 1438
+        },
+        {
+          "sha256": "306229371dfecea5d1e4007c41cf31b9ec8b7c8652a3ea7d4a6e9b2db9cb8a6a",
+          "characters": 1530
+        }
+      ],
+      "paired_equal_count": 0
+    }
+  }
+}

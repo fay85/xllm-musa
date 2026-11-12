@@ -1,0 +1,97 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t14_target_capture_build_v1/relay_deltas.tar",
+  "bytes": 35205120,
+  "sha256": "be21cd2e14248d3cafd204370548deabd2fc3800f45e99db2badff5d43a3cc28",
+  "receipt": {
+    "build_manifest": {
+      "build_result": {
+        "exit_code": 0,
+        "finished_at": "2026-11-12T22:46:07.018947+08:00",
+        "command": [
+          "docker",
+          "exec",
+          "-w",
+          "/work/repos/xllm-musa",
+          "xiaopang1112_v41_w4a8_build_dev6",
+          "env",
+          "-u",
+          "TORCH_MUSA_ARCH_LIST",
+          "MUSA_HOME=/usr/local/musa",
+          "CUDA_HOME=/usr/local/musa",
+          "CUDAToolkit_ROOT=/usr/local/musa",
+          "MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH=/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT=/opt/intel/oneapi/mkl",
+          "MKL_DIR=/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST=9.0",
+          "bash",
+          "scripts/ninja_safe.sh",
+          "build/cmake.linux-x86_64-cpython-310",
+          "-j2",
+          "xllm",
+          "musa_python_kernel_test_module"
+        ],
+        "sha256": "6a27bc874088ae44fe5d4f76b424ef46d74fd202fbd3a68927ac3afc03293fa9",
+        "bytes": 342423768,
+        "module": {
+          "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t14_target_capture/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so",
+          "bytes": 42514680,
+          "sha256": "0474088daf45164825f2a8eb6f77447431fb44519a83d83f92eb377f6d13db44"
+        }
+      },
+      "source_manifest": {
+        "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+        "source_sha256": {
+          "xllm/core/layers/musa/deepseek_v41/text_model.h": "6010917eb3fc3435ad4bc5b551bb2c4c32859919d118f257ecbcd1f33a3d8281",
+          "xllm/models/llm/musa/deepseek_v41_native.h": "2c44d63d53b9f497dde2e366a0ba70ba8f03a510a5c7b045d336fb5bf5c15c9b",
+          "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "37c3161d898685aba94e261db4d4e552bc897dd8722bd2271cdf6fb7282190fe",
+          "xllm/core/layers/musa/deepseek_v41/state_checkpoint.h": "af9c5443304e2309b9ca0412ef5e40fb08e8d29614559464de495390debbcba7"
+        },
+        "build_environment": {
+          "MUSA_HOME": "/usr/local/musa",
+          "CUDA_HOME": "/usr/local/musa",
+          "CUDAToolkit_ROOT": "/usr/local/musa",
+          "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+          "PYTORCH_INSTALL_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "LIBTORCH_ROOT": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_LIB_PATH": "/usr/local/lib/python3.10/dist-packages/torch",
+          "PYTHON_INCLUDE_PATH": "/usr/include/python3.10",
+          "TORCH_MUSA_PYTHONPATH": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake",
+          "TorchMusa_DIR": "/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa",
+          "MKLROOT": "/opt/intel/oneapi/mkl",
+          "MKL_DIR": "/opt/intel/oneapi/mkl/lib/cmake/mkl",
+          "TVM_FFI_LIB_DIR": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib",
+          "TORCH_CUDA_ARCH_LIST": "9.0"
+        },
+        "previous_build": "new_start_t12_batched_native_build_v2",
+        "purpose": "Target entering-residual capture and page-scoped recurrent state checkpoint primitives; num_speculative_tokens0 guard still retained pending runtime rollback integration"
+      }
+    },
+    "items": [
+      {
+        "key": "binary",
+        "delta_name": "binary.zstpatch",
+        "bytes": 30652379,
+        "sha256": "e1593cb56515e49a4077c7f050bb69d98bf8bb70b15cd6293865f1b4b4484669",
+        "base_sha256": "0d0600a4af01f024312d1e4b66c0686ef115805237c743a9acde33648f51f0e8",
+        "target_sha256": "6a27bc874088ae44fe5d4f76b424ef46d74fd202fbd3a68927ac3afc03293fa9",
+        "target_bytes": 342423768
+      },
+      {
+        "key": "module",
+        "delta_name": "module.zstpatch",
+        "bytes": 4534370,
+        "sha256": "9287d368991cd2a0a00eb95934ce0b5fa2d1768529258c404bbca4bcd0bbec33",
+        "base_sha256": "3bacc027fef045fec1b6e034fc2847de19660208aa9eaa84be0e753eb46ed34a",
+        "target_sha256": "0474088daf45164825f2a8eb6f77447431fb44519a83d83f92eb377f6d13db44",
+        "target_bytes": 42514680
+      }
+    ]
+  }
+}

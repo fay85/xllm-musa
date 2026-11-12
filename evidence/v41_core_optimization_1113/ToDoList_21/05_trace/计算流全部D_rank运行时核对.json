@@ -1,0 +1,749 @@
+{
+  "status": "ACTUAL_ALL8_D_RUNTIME_COMPARISON",
+  "modes": {
+    "off": [
+      {
+        "rank": 0,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 353.498288,
+        "runtime_counts": {
+          "musaMemcpyAsync": 84,
+          "musaStreamSynchronize": 1,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaMemcpyAsync": 964.56,
+          "musaStreamSynchronize": 2.594,
+          "musaLaunchKernel": 18260.340999999993,
+          "musaStreamIsCapturing": 265.6009999999983,
+          "musaEventRecord": 1088.543,
+          "musaStreamWaitEvent": 1234.7389999999998,
+          "musaStreamGetCaptureInfo_v2": 1.552,
+          "musaGetFuncBySymbol": 1.563,
+          "musaGetDriverEntryPoint": 157.8730000000002,
+          "musaLaunchKernelExC": 2316.6330000000003,
+          "musaPeekAtLastError": 7.509,
+          "musaGetDeviceProperties_v2": 35.98399999999999,
+          "musaDeviceGetAttribute": 36.732
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3574,
+          "14": 3,
+          "17": 192
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 1,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 345.955755,
+        "runtime_counts": {
+          "musaMemcpyAsync": 84,
+          "musaStreamSynchronize": 1,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaMemcpyAsync": 961.3080000000003,
+          "musaStreamSynchronize": 2.213,
+          "musaLaunchKernel": 17770.301999999952,
+          "musaStreamIsCapturing": 258.321999999998,
+          "musaEventRecord": 1004.6990000000005,
+          "musaStreamWaitEvent": 1093.273,
+          "musaStreamGetCaptureInfo_v2": 1.153,
+          "musaGetFuncBySymbol": 1.9520000000000002,
+          "musaGetDriverEntryPoint": 154.90400000000037,
+          "musaLaunchKernelExC": 2294.2170000000006,
+          "musaPeekAtLastError": 6.618,
+          "musaGetDeviceProperties_v2": 31.549999999999986,
+          "musaDeviceGetAttribute": 32.478
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "5": 1,
+          "0": 3489,
+          "14": 3,
+          "17": 187
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 2,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 343.32964799999996,
+        "runtime_counts": {
+          "musaLaunchKernelExC": 300,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaMemcpyAsync": 84,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaGetDriverEntryPoint": 480,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaStreamSynchronize": 1,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernelExC": 2317.961,
+          "musaLaunchKernel": 16236.665999999965,
+          "musaStreamIsCapturing": 275.7209999999995,
+          "musaMemcpyAsync": 822.5580000000002,
+          "musaEventRecord": 871.2499999999998,
+          "musaStreamWaitEvent": 971.2909999999996,
+          "musaGetDriverEntryPoint": 147.9630000000002,
+          "musaPeekAtLastError": 7.2799999999999985,
+          "musaGetDeviceProperties_v2": 45.875999999999955,
+          "musaDeviceGetAttribute": 32.62500000000001,
+          "musaStreamSynchronize": 1.793,
+          "musaStreamGetCaptureInfo_v2": 1.842,
+          "musaGetFuncBySymbol": 1.311
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3478,
+          "17": 187,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 3,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 343.42286099999995,
+        "runtime_counts": {
+          "musaMemcpyAsync": 84,
+          "musaStreamSynchronize": 1,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaMemcpyAsync": 884.611,
+          "musaStreamSynchronize": 2.784,
+          "musaLaunchKernel": 15087.68400000003,
+          "musaStreamIsCapturing": 252.05099999999788,
+          "musaEventRecord": 910.6729999999998,
+          "musaStreamWaitEvent": 1014.5229999999999,
+          "musaStreamGetCaptureInfo_v2": 1.171,
+          "musaGetFuncBySymbol": 1.501,
+          "musaGetDriverEntryPoint": 159.25400000000027,
+          "musaLaunchKernelExC": 2014.4679999999983,
+          "musaPeekAtLastError": 7.029,
+          "musaGetDeviceProperties_v2": 33.15299999999998,
+          "musaDeviceGetAttribute": 36.207
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3489,
+          "14": 3,
+          "17": 187
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 4,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 343.585683,
+        "runtime_counts": {
+          "musaMemcpyAsync": 84,
+          "musaStreamSynchronize": 1,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaMemcpyAsync": 815.2659999999996,
+          "musaStreamSynchronize": 2.153,
+          "musaLaunchKernel": 14893.025999999993,
+          "musaStreamIsCapturing": 258.72499999999843,
+          "musaEventRecord": 935.0770000000009,
+          "musaStreamWaitEvent": 1043.5480000000014,
+          "musaStreamGetCaptureInfo_v2": 1.983,
+          "musaGetFuncBySymbol": 2.052,
+          "musaGetDriverEntryPoint": 155.57900000000024,
+          "musaLaunchKernelExC": 2019.782,
+          "musaPeekAtLastError": 7.433,
+          "musaGetDeviceProperties_v2": 35.42600000000001,
+          "musaDeviceGetAttribute": 39.73500000000001
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3489,
+          "14": 3,
+          "17": 187
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 5,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 344.871298,
+        "runtime_counts": {
+          "musaMemcpyAsync": 84,
+          "musaStreamSynchronize": 1,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaMemcpyAsync": 1032.423,
+          "musaStreamSynchronize": 2.083,
+          "musaLaunchKernel": 16987.545999999977,
+          "musaStreamIsCapturing": 250.41799999999796,
+          "musaEventRecord": 942.1650000000003,
+          "musaStreamWaitEvent": 1005.9999999999992,
+          "musaStreamGetCaptureInfo_v2": 1.3719999999999999,
+          "musaGetFuncBySymbol": 1.793,
+          "musaGetDriverEntryPoint": 147.89100000000028,
+          "musaLaunchKernelExC": 2187.781,
+          "musaPeekAtLastError": 6.728999999999999,
+          "musaGetDeviceProperties_v2": 28.66799999999999,
+          "musaDeviceGetAttribute": 31.321000000000005
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3489,
+          "14": 3,
+          "17": 187
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 6,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 353.518047,
+        "runtime_counts": {
+          "musaMemcpyAsync": 84,
+          "musaStreamSynchronize": 1,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaMemcpyAsync": 927.1480000000004,
+          "musaStreamSynchronize": 1.392,
+          "musaLaunchKernel": 17483.54400000001,
+          "musaStreamIsCapturing": 261.6959999999987,
+          "musaEventRecord": 1036.9579999999996,
+          "musaStreamWaitEvent": 1130.2250000000006,
+          "musaStreamGetCaptureInfo_v2": 1.722,
+          "musaGetFuncBySymbol": 1.9130000000000003,
+          "musaGetDriverEntryPoint": 160.2220000000002,
+          "musaLaunchKernelExC": 2408.3920000000003,
+          "musaPeekAtLastError": 7.741,
+          "musaGetDeviceProperties_v2": 36.622,
+          "musaDeviceGetAttribute": 36.68399999999999
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3574,
+          "14": 3,
+          "17": 192
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 7,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 368.410249,
+        "runtime_counts": {
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 415,
+          "musaStreamWaitEvent": 406,
+          "musaPeekAtLastError": 40,
+          "musaLaunchKernelExC": 300,
+          "musaMemcpyAsync": 84,
+          "musaGetDriverEntryPoint": 480,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaStreamSynchronize": 1,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernel": 18160.557999999975,
+          "musaStreamIsCapturing": 278.8869999999984,
+          "musaEventRecord": 1135.7039999999997,
+          "musaStreamWaitEvent": 1057.4749999999997,
+          "musaPeekAtLastError": 8.034,
+          "musaLaunchKernelExC": 2563.2960000000026,
+          "musaMemcpyAsync": 790.2420000000004,
+          "musaGetDriverEntryPoint": 169.17300000000046,
+          "musaGetDeviceProperties_v2": 43.339999999999975,
+          "musaDeviceGetAttribute": 34.85399999999999,
+          "musaStreamSynchronize": 1.893,
+          "musaStreamGetCaptureInfo_v2": 1.3319999999999999,
+          "musaGetFuncBySymbol": 1.323
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "0": 3694,
+          "17": 200,
+          "5": 1,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      }
+    ],
+    "stream": [
+      {
+        "rank": 0,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.579997,
+        "runtime_counts": {
+          "musaStreamSynchronize": 3,
+          "musaMemcpyAsync": 84,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaStreamSynchronize": 21733.684999999998,
+          "musaMemcpyAsync": 677.6919999999998,
+          "musaLaunchKernel": 11328.06000000002,
+          "musaStreamIsCapturing": 276.0720000000001,
+          "musaEventRecord": 35.193000000000005,
+          "musaStreamWaitEvent": 15.312000000000001,
+          "musaStreamGetCaptureInfo_v2": 1.232,
+          "musaGetFuncBySymbol": 1.462,
+          "musaGetDriverEntryPoint": 141.80600000000047,
+          "musaLaunchKernelExC": 1696.4479999999983,
+          "musaPeekAtLastError": 7.869000000000001,
+          "musaGetDeviceProperties_v2": 28.528999999999993,
+          "musaDeviceGetAttribute": 36.572
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "5": 1,
+          "17": 3894,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 1,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.71014299999996,
+        "runtime_counts": {
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaMemcpyAsync": 84,
+          "musaPeekAtLastError": 40,
+          "musaStreamSynchronize": 3,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernel": 9329.332000000033,
+          "musaStreamIsCapturing": 259.4439999999994,
+          "musaGetDeviceProperties_v2": 36.77400000000002,
+          "musaDeviceGetAttribute": 32.317,
+          "musaGetDriverEntryPoint": 136.9780000000002,
+          "musaLaunchKernelExC": 1518.6119999999994,
+          "musaMemcpyAsync": 582.681,
+          "musaPeekAtLastError": 6.968,
+          "musaStreamSynchronize": 32137.841,
+          "musaEventRecord": 32.328,
+          "musaStreamWaitEvent": 11.056000000000001,
+          "musaStreamGetCaptureInfo_v2": 1.303,
+          "musaGetFuncBySymbol": 1.27
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "17": 3894,
+          "5": 1,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 2,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.590722,
+        "runtime_counts": {
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaMemcpyAsync": 84,
+          "musaPeekAtLastError": 40,
+          "musaStreamSynchronize": 3,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernel": 10013.096000000007,
+          "musaStreamIsCapturing": 257.7000000000002,
+          "musaGetDeviceProperties_v2": 27.747999999999994,
+          "musaDeviceGetAttribute": 30.16900000000001,
+          "musaGetDriverEntryPoint": 146.87200000000016,
+          "musaLaunchKernelExC": 1518.457999999999,
+          "musaMemcpyAsync": 588.9159999999999,
+          "musaPeekAtLastError": 6.949999999999999,
+          "musaStreamSynchronize": 26257.541,
+          "musaEventRecord": 33.69799999999999,
+          "musaStreamWaitEvent": 12.920000000000002,
+          "musaStreamGetCaptureInfo_v2": 1.6119999999999999,
+          "musaGetFuncBySymbol": 1.361
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "17": 3894,
+          "5": 1,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 3,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.484331,
+        "runtime_counts": {
+          "musaStreamSynchronize": 3,
+          "musaMemcpyAsync": 84,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaStreamSynchronize": 28044.792,
+          "musaMemcpyAsync": 700.3059999999999,
+          "musaLaunchKernel": 11260.630000000006,
+          "musaStreamIsCapturing": 260.80799999999994,
+          "musaEventRecord": 35.840999999999994,
+          "musaStreamWaitEvent": 13.097999999999999,
+          "musaStreamGetCaptureInfo_v2": 1.123,
+          "musaGetFuncBySymbol": 1.383,
+          "musaGetDriverEntryPoint": 147.28000000000037,
+          "musaLaunchKernelExC": 1665.3490000000004,
+          "musaPeekAtLastError": 6.542,
+          "musaGetDeviceProperties_v2": 32.49299999999999,
+          "musaDeviceGetAttribute": 31.913000000000004
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "5": 1,
+          "17": 3894,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 4,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.583582,
+        "runtime_counts": {
+          "musaStreamSynchronize": 3,
+          "musaMemcpyAsync": 84,
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaPeekAtLastError": 40,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80
+        },
+        "runtime_sum_us": {
+          "musaStreamSynchronize": 15422.469000000001,
+          "musaMemcpyAsync": 788.9810000000002,
+          "musaLaunchKernel": 14028.248000000009,
+          "musaStreamIsCapturing": 295.26499999999965,
+          "musaEventRecord": 37.342999999999996,
+          "musaStreamWaitEvent": 15.322999999999999,
+          "musaStreamGetCaptureInfo_v2": 1.383,
+          "musaGetFuncBySymbol": 1.302,
+          "musaGetDriverEntryPoint": 144.5510000000002,
+          "musaLaunchKernelExC": 1993.584,
+          "musaPeekAtLastError": 6.81,
+          "musaGetDeviceProperties_v2": 32.79800000000001,
+          "musaDeviceGetAttribute": 36.80200000000002
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "5": 1,
+          "17": 3894,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 5,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.447087,
+        "runtime_counts": {
+          "musaLaunchKernel": 3534,
+          "musaStreamIsCapturing": 1204,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaGetDriverEntryPoint": 480,
+          "musaLaunchKernelExC": 300,
+          "musaMemcpyAsync": 84,
+          "musaPeekAtLastError": 40,
+          "musaStreamSynchronize": 3,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernel": 15567.258999999956,
+          "musaStreamIsCapturing": 298.8009999999994,
+          "musaGetDeviceProperties_v2": 31.417000000000005,
+          "musaDeviceGetAttribute": 37.98799999999998,
+          "musaGetDriverEntryPoint": 148.60200000000015,
+          "musaLaunchKernelExC": 2232.636,
+          "musaMemcpyAsync": 871.5639999999997,
+          "musaPeekAtLastError": 7.867999999999999,
+          "musaStreamSynchronize": 10759.624,
+          "musaEventRecord": 31.727,
+          "musaStreamWaitEvent": 15.250000000000002,
+          "musaStreamGetCaptureInfo_v2": 1.3820000000000001,
+          "musaGetFuncBySymbol": 1.8519999999999999
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "17": 3894,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 6,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 357.08730099999997,
+        "runtime_counts": {
+          "musaLaunchKernel": 3534,
+          "musaLaunchKernelExC": 300,
+          "musaStreamIsCapturing": 1204,
+          "musaMemcpyAsync": 84,
+          "musaGetDriverEntryPoint": 480,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaPeekAtLastError": 40,
+          "musaStreamSynchronize": 3,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernel": 13513.735999999986,
+          "musaLaunchKernelExC": 2171.291,
+          "musaStreamIsCapturing": 303.1889999999988,
+          "musaMemcpyAsync": 655.674,
+          "musaGetDriverEntryPoint": 146.3650000000002,
+          "musaGetDeviceProperties_v2": 29.382999999999992,
+          "musaDeviceGetAttribute": 33.887,
+          "musaPeekAtLastError": 7.3009999999999975,
+          "musaStreamSynchronize": 643.298,
+          "musaEventRecord": 33.778999999999996,
+          "musaStreamWaitEvent": 13.98,
+          "musaStreamGetCaptureInfo_v2": 1.231,
+          "musaGetFuncBySymbol": 1.363
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "17": 3894,
+          "5": 1,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      },
+      {
+        "rank": 7,
+        "scope": "V41/step/q=1/kv=263",
+        "CPU_step_ms_with_heavy_profiler": 356.582701,
+        "runtime_counts": {
+          "musaLaunchKernel": 3534,
+          "musaLaunchKernelExC": 300,
+          "musaStreamIsCapturing": 1204,
+          "musaMemcpyAsync": 84,
+          "musaGetDriverEntryPoint": 480,
+          "musaGetDeviceProperties_v2": 160,
+          "musaDeviceGetAttribute": 80,
+          "musaPeekAtLastError": 40,
+          "musaStreamSynchronize": 3,
+          "musaEventRecord": 15,
+          "musaStreamWaitEvent": 6,
+          "musaStreamGetCaptureInfo_v2": 3,
+          "musaGetFuncBySymbol": 3
+        },
+        "runtime_sum_us": {
+          "musaLaunchKernel": 10900.977000000012,
+          "musaLaunchKernelExC": 1686.3619999999999,
+          "musaStreamIsCapturing": 264.7539999999998,
+          "musaMemcpyAsync": 621.55,
+          "musaGetDriverEntryPoint": 145.51700000000028,
+          "musaGetDeviceProperties_v2": 32.798,
+          "musaDeviceGetAttribute": 35.95900000000001,
+          "musaPeekAtLastError": 7.318999999999998,
+          "musaStreamSynchronize": 24898.041,
+          "musaEventRecord": 24.605,
+          "musaStreamWaitEvent": 10.354000000000001,
+          "musaStreamGetCaptureInfo_v2": 1.2429999999999999,
+          "musaGetFuncBySymbol": 1.513
+        },
+        "complete_kernel_events_by_stream_within_CPU_window": {
+          "17": 3894,
+          "5": 1,
+          "14": 3
+        },
+        "TP_EP_custom_AR_CPU_entries": 80,
+        "matmul_CPU_entries": 349
+      }
+    ]
+  },
+  "comparison": [
+    {
+      "rank": 0,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 1,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 2,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 3,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 4,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 5,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 6,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    },
+    {
+      "rank": 7,
+      "eventRecord_reduction": 400,
+      "streamWaitEvent_reduction": 400,
+      "kernel_launch_API_counts_equal": true,
+      "matmul_counts_equal": true,
+      "TP_EP_calls_80_both": true
+    }
+  ],
+  "scope": "Selected same q1 kv263 CPU interval from original full traces, all D ranks. Event/API counts are not critical-path time. Full raw archives remain unchanged."
+}

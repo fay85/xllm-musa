@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t01_donly_custom_v1_small_evidence.tar.gz",
+  "bytes": 610686,
+  "sha256": "334b80a79e58fc771d1ac0606464f206ad3047de70bd71d637afe0e17979c49e",
+  "run": "t01_donly_custom_v1",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}

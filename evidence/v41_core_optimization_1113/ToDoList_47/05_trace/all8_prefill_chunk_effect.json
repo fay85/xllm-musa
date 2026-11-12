@@ -1,0 +1,266 @@
+{
+  "status": "PASS_ALL8_P_8_Q256_TO_4_Q512",
+  "modes": {
+    "off": [
+      {
+        "rank": 1,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 0,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59978,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 6,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 5,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 4,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 2,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 7,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 3,
+        "steps": [
+          "V41/step/q=256/kv=256",
+          "V41/step/q=256/kv=512",
+          "V41/step/q=256/kv=768",
+          "V41/step/q=256/kv=1024",
+          "V41/step/q=256/kv=1280",
+          "V41/step/q=256/kv=1536",
+          "V41/step/q=256/kv=1792",
+          "V41/step/q=256/kv=2048"
+        ],
+        "all_gpu_kernels": 59976,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      }
+    ],
+    "after": [
+      {
+        "rank": 3,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 5,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 4,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 2,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 7,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 6,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 1,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29972,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      },
+      {
+        "rank": 0,
+        "steps": [
+          "V41/step/q=512/kv=512",
+          "V41/step/q=512/kv=1024",
+          "V41/step/q=512/kv=1536",
+          "V41/step/q=512/kv=2048"
+        ],
+        "all_gpu_kernels": 29974,
+        "selected_cpu_op_counts": {
+          "aten::mm": 349,
+          "V41/layer/0": 1
+        }
+      }
+    ]
+  },
+  "not_time_fraction": true
+}

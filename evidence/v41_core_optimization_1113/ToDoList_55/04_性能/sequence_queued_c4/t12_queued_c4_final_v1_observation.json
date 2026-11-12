@@ -1,0 +1,190 @@
+{
+  "terminal": true,
+  "result": {
+    "at": "2026-11-13T03:21:16.259576+08:00",
+    "exit_code": 0
+  },
+  "status": [
+    {
+      "input_tokens": 256,
+      "phase": "warmup",
+      "count": 4,
+      "directory": "/work/new_start_t12_queued_c4_final_v1/performance/input256_output256/warmup",
+      "started_at": "2026-11-13T03:14:03.504950+08:00",
+      "finished_at": "2026-11-13T03:15:17.309218+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          17.496231055818498,
+          0.36779307946562767
+        ],
+        [
+          1,
+          256,
+          256,
+          34.53009538166225,
+          0.7006434146314859
+        ],
+        [
+          1,
+          256,
+          256,
+          51.25273080635816,
+          1.035289873369038
+        ],
+        [
+          1,
+          256,
+          256,
+          67.97620493825525,
+          1.3694258537143469
+        ]
+      ]
+    },
+    {
+      "input_tokens": 256,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t12_queued_c4_final_v1/performance/input256_output256/measured",
+      "started_at": "2026-11-13T03:15:17.312710+08:00",
+      "finished_at": "2026-11-13T03:16:46.436405+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          256,
+          256,
+          16.67221574485302,
+          0.3592780688777566
+        ],
+        [
+          1,
+          256,
+          256,
+          32.944361601024866,
+          0.6918187933042645
+        ],
+        [
+          1,
+          256,
+          256,
+          50.01111142616719,
+          1.0243908623233438
+        ],
+        [
+          1,
+          256,
+          256,
+          66.9077258836478,
+          1.3517389157786965
+        ],
+        [
+          1,
+          256,
+          256,
+          66.97665021009743,
+          0.34812622517347336
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "warmup",
+      "count": 4,
+      "directory": "/work/new_start_t12_queued_c4_final_v1/performance/input2048_output256/warmup",
+      "started_at": "2026-11-13T03:16:46.439677+08:00",
+      "finished_at": "2026-11-13T03:17:59.364839+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          17.95081005245447,
+          1.4656425779685378
+        ],
+        [
+          1,
+          2048,
+          256,
+          34.29580813832581,
+          2.941189780831337
+        ],
+        [
+          1,
+          2048,
+          256,
+          50.66708084009588,
+          4.399219325743616
+        ],
+        [
+          1,
+          2048,
+          256,
+          67.60265169013292,
+          5.852765001356602
+        ]
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "phase": "measured",
+      "count": 5,
+      "directory": "/work/new_start_t12_queued_c4_final_v1/performance/input2048_output256/measured",
+      "started_at": "2026-11-13T03:17:59.368520+08:00",
+      "finished_at": "2026-11-13T03:19:28.163907+08:00",
+      "exit_code": 0,
+      "validated_rows": [
+        [
+          1,
+          2048,
+          256,
+          17.730402604676783,
+          1.4703021878376603
+        ],
+        [
+          1,
+          2048,
+          256,
+          33.714127144776285,
+          2.9320667516440153
+        ],
+        [
+          1,
+          2048,
+          256,
+          50.089043696410954,
+          4.377222263254225
+        ],
+        [
+          1,
+          2048,
+          256,
+          66.91041900683194,
+          5.8056133249774575
+        ],
+        [
+          1,
+          2048,
+          256,
+          65.67522415332496,
+          1.4586182842031121
+        ]
+      ]
+    }
+  ],
+  "trace": {
+    "status": "PROFILE_REQUEST_SAVED_REQUIRES_ALL_RANK_TRACE_VALIDATION",
+    "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed, which people cannot dependably recall in detail over time\nKeeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed, which people cannot dependably recall in detail over time\nKeeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed, which people cannot dependably recall in detail over time\nKeeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed, which people cannot dependably recall in detail over time",
+    "finish_reason": "all_requests_validated",
+    "usage": {
+      "prompt_tokens": 1024,
+      "completion_tokens": 128
+    },
+    "error": null,
+    "scope": "validate actual16rank CPU/GPU traces and native PC correlation separately"
+  }
+}

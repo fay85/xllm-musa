@@ -1,0 +1,29 @@
+{
+  "task": "T12",
+  "mode": "BATCHED_C2",
+  "run": "t12_batched_c2_final_v1",
+  "baseline_experiment": "ToDoList_47",
+  "baseline_receipt": "result.json",
+  "baseline_run": "t09_chunk512_cumulative_v1",
+  "artifact": "native_mhc_small_batch",
+  "binary_sha256": "f54260ea3ad2a75e558c430791528b9ee23dfab279d83221b6f61dbe71537abe",
+  "host_env": {
+    "sj10": {
+      "XLLM_DSV41_BATCHED_DECODE": "1",
+      "XLLM_DSV41_MHC_SMALL_BATCH_FUSION": "0"
+    }
+  },
+  "host_args": {
+    "sj10": {
+      "max_cache_size": 4294967296,
+      "max_seqs_per_batch": 2,
+      "max_tokens_per_batch": 4096
+    },
+    "sj9": {
+      "max_tokens_per_batch": 4096
+    }
+  },
+  "concurrency": 2,
+  "state": "FROZEN_PENDING_C2v2_cleanup; capacity reserve4096 on both, actual P chunk512/maxseq1; D B1/B2/B4; same resource parameters all modes",
+  "source_delta": "E51 default-off row selector; q1 accepted path unchanged;14 native real-weight checks passed; queueB1 is same-ELF runtime control"
+}

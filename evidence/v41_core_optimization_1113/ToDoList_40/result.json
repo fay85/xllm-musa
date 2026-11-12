@@ -1,0 +1,129 @@
+{
+  "status": "STABLE_STREAM_FENCE_DIAGNOSTIC_COMPLETE",
+  "source_parent": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "binary_sha256": "694020e882cf82f9c11cda7f89c830dfdf3348a0a47b761a7a9118deeff3e46d",
+  "actual8rank_direct_communication_check": "36 per rank passed BF16/F32 sum and gather exactly",
+  "long_stability": {
+    "count": 10,
+    "input": 2048,
+    "output": 8,
+    "cached_tokens": 0
+  },
+  "formal": {
+    "256": {
+      "TTFT_ms": 343.2190340012312,
+      "TPOT_ms": 78.43176978110684,
+      "TPOT_sample_stdev_ms": 4.354918163592386,
+      "E2E_s": 20.343320328183474,
+      "output_tps": 12.58398313894412,
+      "QPS": 0.04915618413650047,
+      "rows": [
+        [
+          1,
+          256,
+          256,
+          21.931934756226838,
+          0.34506404493004084,
+          0.08465439494626195
+        ],
+        [
+          1,
+          256,
+          256,
+          20.905670532025397,
+          0.33926571998745203,
+          0.08065256789034488
+        ],
+        [
+          1,
+          256,
+          256,
+          19.758254140615463,
+          0.34468125831335783,
+          0.07613165836196904
+        ],
+        [
+          1,
+          256,
+          256,
+          20.074380519799888,
+          0.3460368737578392,
+          0.07736605351389039
+        ],
+        [
+          1,
+          256,
+          256,
+          19.046361692249775,
+          0.34104727301746607,
+          0.07335417419306788
+        ]
+      ]
+    },
+    "2048": {
+      "TTFT_ms": 2677.6665668934584,
+      "TPOT_ms": 76.49863080724198,
+      "TPOT_sample_stdev_ms": 2.5081600037931704,
+      "E2E_s": 22.18481742274016,
+      "output_tps": 11.539423341730624,
+      "QPS": 0.04507587242863525,
+      "rows": [
+        [
+          1,
+          2048,
+          256,
+          23.157981085591018,
+          2.8518391251564026,
+          0.07963192925660634
+        ],
+        [
+          1,
+          2048,
+          256,
+          22.199588926509023,
+          2.573230843991041,
+          0.0769661101275215
+        ],
+        [
+          1,
+          2048,
+          256,
+          22.115474903024733,
+          2.5976612670347095,
+          0.07654044563133343
+        ],
+        [
+          1,
+          2048,
+          256,
+          22.184251118451357,
+          2.6161014325916767,
+          0.07673784190533207
+        ],
+        [
+          1,
+          2048,
+          256,
+          21.266791080124676,
+          2.749500165693462,
+          0.07261682711541653
+        ]
+      ]
+    }
+  },
+  "formal_valid_rows": 10,
+  "normal_rank_exit_count": 16,
+  "trace": "ALL16/32files SHA nativePC exact-ELF audited",
+  "promotion": "No claim of overall speed improvement; usable explicit P stability boundary in subsequent same-ELF AB controls",
+  "current_best_commit_unchanged": "4411c026583457c5f454100ccafcf3db8fc7291d",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "at": "2026-11-13T00:12:53.219530+08:00",
+  "trace_interval_evidence": {
+    "wait_count": 83,
+    "wait_CPU_sum_ms": 3.8863529999999984,
+    "wait_median_ms": 0.007941,
+    "musaStreamSynchronize_count": 484,
+    "musaStreamSynchronize_CPU_sum_ms": 193.5491679999999,
+    "note": "Profiler-on CPU intervals, not formal TTFT/TPOT or pure communication time; stream synchronization can include queued compute."
+  }
+}

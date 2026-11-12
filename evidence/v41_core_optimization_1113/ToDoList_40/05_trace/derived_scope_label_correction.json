@@ -1,0 +1,6 @@
+{
+  "derived_label_correction": "Original analysis receipt scope inherited the words P blocking from a template; actual run is TORCH_MCCL_BLOCKING_WAIT0 and XLLM_MUSA_SYNC_COLLECTIVE_STREAM1 on P only. Role configs, SHA, run path and raw data are authoritative and unchanged.",
+  "binary_sha256": "694020e882cf82f9c11cda7f89c830dfdf3348a0a47b761a7a9118deeff3e46d",
+  "run": "t07_prefill_comm_fence_v1",
+  "raw_and_processed_archive_hashes_unchanged": true
+}

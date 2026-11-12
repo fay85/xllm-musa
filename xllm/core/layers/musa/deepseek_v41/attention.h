@@ -51,6 +51,7 @@ struct DeepseekV41AttentionConfig {
   bool original_fp8_activation = true;
   bool decode_cache_read_reuse = false;
   bool decode_fused_swa_read = false;
+  bool decode_packed_qkv = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
 };
@@ -76,6 +77,7 @@ struct DeepseekV41AttentionCache {
 // a new object for each forward, never retain candidate masks across requests.
 // Persistent caches are scheduler owned and are published as tensor handles.
 struct DeepseekV41AttentionRuntime {
+  int64_t swa_replay_start = 0;
   int64_t source_layer = -1;
   int64_t ratio = 0;
   torch::Tensor key;
@@ -106,7 +108,8 @@ class DeepseekV41Attention final {
                     config_.groups,
                     config_.output_rank,
                     config_.epsilon,
-                    config_.original_fp8_activation) {
+                    config_.original_fp8_activation,
+                    config_.decode_packed_qkv) {
     CHECK_GE(config_.layer, 0);
     CHECK_GT(config_.window, 0);
     CHECK(weights_.sink.defined());
@@ -155,6 +158,122 @@ class DeepseekV41Attention final {
     CHECK_GE(context_length, hidden.size(0));
     auto [query, current_kv, qr] =
         projection_.prepare(hidden, positions, rope_table);
+    return projection_.project_output(attend_prepared(hidden,
+                                                      positions,
+                                                      rope_table,
+                                                      cache,
+                                                      swa_table,
+                                                      key_table,
+                                                      index_table,
+                                                      context_length,
+                                                      shared,
+                                                      query,
+                                                      current_kv,
+                                                      qr),
+                                      positions,
+                                      rope_table);
+  }
+
+  // Only true multi-request q1 decode. Projection GEMMs run once over B;
+  // physical cache, compressor, indexer and CSA2 runtime stay request-local.
+  torch::Tensor forward_batched_decode(
+      const torch::Tensor& hidden,
+      const torch::Tensor& positions,
+      const torch::Tensor& rope_table,
+      const DeepseekV41AttentionCache& cache,
+      const torch::Tensor& swa_table,
+      const torch::Tensor& key_table,
+      const torch::Tensor& index_table,
+      const std::vector<int64_t>& context_lengths,
+      std::vector<DeepseekV41AttentionRuntime>& runtime) {
+    const DeepseekV41ProfileRange range("V41/Attention/batched_decode");
+    const int64_t batch = hidden.size(0);
+    CHECK_GT(batch, 1);
+    CHECK_LE(batch, 8);
+    CHECK_EQ(positions.numel(), batch);
+    CHECK_EQ(swa_table.dim(), 2);
+    CHECK_EQ(swa_table.size(0), batch);
+    for (const auto& table : {key_table, index_table}) {
+      if (table.defined()) {
+        CHECK_EQ(table.dim(), 2);
+        CHECK_EQ(table.size(0), batch);
+      }
+    }
+    CHECK_EQ(context_lengths.size(), static_cast<size_t>(batch));
+    CHECK_EQ(runtime.size(), static_cast<size_t>(batch));
+    auto [query, current_kv, qr] =
+        projection_.prepare(hidden, positions, rope_table);
+    const auto table_row = [](const torch::Tensor& table, int64_t row) {
+      return table.defined() ? table.narrow(0, row, 1) : torch::Tensor{};
+    };
+    std::vector<torch::Tensor> attention;
+    attention.reserve(batch);
+    for (int64_t row = 0; row < batch; ++row) {
+      CHECK_GT(context_lengths[row], 0);
+      attention.emplace_back(attend_prepared(hidden.narrow(0, row, 1),
+                                             positions.narrow(0, row, 1),
+                                             rope_table,
+                                             cache,
+                                             table_row(swa_table, row),
+                                             table_row(key_table, row),
+                                             table_row(index_table, row),
+                                             context_lengths[row],
+                                             runtime[row],
+                                             query.narrow(0, row, 1),
+                                             current_kv.narrow(0, row, 1),
+                                             qr.narrow(0, row, 1)));
+    }
+    return projection_.project_output(
+        torch::cat(attention, 0), positions, rope_table);
+  }
+
+  torch::Tensor forward_draft_block(const torch::Tensor& hidden,
+                                    const torch::Tensor& positions,
+                                    const torch::Tensor& rope_table,
+                                    const torch::Tensor& swa_cache,
+                                    const torch::Tensor& swa_table,
+                                    int64_t previous_context) {
+    CHECK(config_.mode == DeepseekV41AttentionMode::SWA);
+    CHECK_EQ(config_.ratio, 0);
+    auto [query, current_kv, ignored_qr] =
+        projection_.prepare(hidden, positions, rope_table);
+    const torch::Tensor attention =
+        DeepseekV41PagedAttention(swa_cache,
+                                  config_.window,
+                                  config_.scale,
+                                  config_.sparse_library_path)
+            .forward_draft_block(
+                query, current_kv, swa_table, previous_context, weights_.sink);
+    return projection_.project_output(attention, positions, rope_table);
+  }
+
+  void write_draft_context(const torch::Tensor& hidden,
+                           const torch::Tensor& positions,
+                           const torch::Tensor& rope_table,
+                           const torch::Tensor& swa_cache,
+                           const torch::Tensor& cache_slots) {
+    CHECK(config_.mode == DeepseekV41AttentionMode::SWA);
+    CHECK_EQ(config_.ratio, 0);
+    const torch::Tensor values =
+        projection_.prepare_context_kv(hidden, positions, rope_table);
+    DeepseekV41PagedAttention(
+        swa_cache, config_.window, config_.scale, config_.sparse_library_path)
+        .commit_draft_context(cache_slots, values);
+  }
+
+ private:
+  torch::Tensor attend_prepared(const torch::Tensor& hidden,
+                                const torch::Tensor& positions,
+                                const torch::Tensor& rope_table,
+                                const DeepseekV41AttentionCache& cache,
+                                const torch::Tensor& swa_table,
+                                const torch::Tensor& key_table,
+                                const torch::Tensor& index_table,
+                                int64_t context_length,
+                                DeepseekV41AttentionRuntime& shared,
+                                const torch::Tensor& query,
+                                const torch::Tensor& current_kv,
+                                const torch::Tensor& qr) {
     if (config_.mode == DeepseekV41AttentionMode::FULL) {
       publish(hidden,
               rope_table,
@@ -241,18 +360,18 @@ class DeepseekV41Attention final {
                                   config_.sparse_library_path,
                                   /*single_token_scatter=*/true,
                                   config_.decode_fused_swa_read)
-            .forward_with_positions(query,
-                                    current_kv,
-                                    swa_table,
-                                    context_length,
-                                    weights_.sink,
-                                    compressed,
-                                    picks,
-                                    positions);
-    return projection_.project_output(attention, positions, rope_table);
+            .forward_with_window_floor(query,
+                                       current_kv,
+                                       swa_table,
+                                       context_length,
+                                       weights_.sink,
+                                       compressed,
+                                       picks,
+                                       positions,
+                                       shared.swa_replay_start);
+    return attention;
   }
 
- private:
   void publish(const torch::Tensor& hidden,
                const torch::Tensor& rope_table,
                const DeepseekV41AttentionCache& cache,

@@ -1,0 +1,8 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t04_gate_cache_decode_v2_small_evidence.tar.gz",
+  "bytes": 538523,
+  "sha256": "c1f4c81881a3a70dddcd5ab99ba9cc6ff0f36ebaa50b04abcdc9a134745f88e4",
+  "run": "t04_gate_cache_decode_v2",
+  "failed": false,
+  "scope": "all official performance, gates, configs, server logs; failed-run role logs may be a snapshot rather than final; large raw traces retained in original NFS paths"
+}
