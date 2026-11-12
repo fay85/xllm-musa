@@ -1,0 +1,18 @@
+{
+  "task_id": "T01",
+  "phase": "Attention TP custom first integration",
+  "status": "FAILED_FULL_AB_NOT_PROMOTED",
+  "short_tpot_reduction_percent": 9.411942837971331,
+  "short_e2e_reduction_percent": 9.327107758778407,
+  "long_formal_success": 0,
+  "long_formal_total": 5,
+  "after_trace_available": false,
+  "before_trace_16rank_verified": true,
+  "tight_end_to_end_upper_bound": "unknown",
+  "model_worktree_restored_to": "28824b2df45413d3f93c0d3c0ca5afbf2e6e07c3",
+  "next_action": "ToDoList_5 P0/D1 isolation live; not accepted, full two-case gate unchanged",
+  "goal_complete": false,
+  "updated_at": "2026-11-12T17:37:17.192366+08:00",
+  "cleanup": "6gone_before_execution; host47001rank6 SIGKILL once under fresh approval; all7gone/SJ9all8GPU0MiB observed17:41:27",
+  "before_perfetto_rendered_and_visually_inspected": true
+}

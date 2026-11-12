@@ -112,7 +112,7 @@ def main() -> None:
             if row.get("ph") == "X"
             and (
                 row.get("cat", "").endswith("_runtime")
-                or row.get("cat") == "cuda_driver"
+                or row.get("cat", "").endswith("_driver")
             )
             and row.get("tid") == selected_scope["tid"]
             and begin <= row["ts"]

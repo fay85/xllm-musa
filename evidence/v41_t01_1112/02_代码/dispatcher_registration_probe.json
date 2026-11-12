@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"exit_code\": 0, \"stdout\": \"{\\\"custom_ar_registered\\\": true, \\\"meta_size\\\": 7936}\\n\", \"stderr\": \"No MUSA runtime is found, using MUSA_HOME='/usr/local/musa'\\n\"}\n",
+  "stderr": ""
+}

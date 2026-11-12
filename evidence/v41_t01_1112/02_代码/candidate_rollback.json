@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-12T17:34:51.207270+08:00",
+  "restored_to": "28824b2df45413d3f93c0d3c0ca5afbf2e6e07c3",
+  "reason": "T01 v1 long formal failed; do not promote short-only speedup. Exact candidate retained as patch, full source archive and SHA-matched NFS binary.",
+  "source_sha256": {
+    "xllm/core/layers/musa/deepseek_v41/decoder.h": "db20ec1d03a7f02001597e3254b0c76a2e9d8f8a89364e34d2fca445ea3bcd76",
+    "xllm/models/llm/musa/deepseek_v41_native.h": "bc835987b36ce4d6d5d39f6b872dab352df30d8f31741ada0000bb3f1cdffb38"
+  },
+  "patch_sha256": "847ca0902c3abf04097716f5f0a8c8afe811fde65e9977b9deaf3738138e4a15"
+}

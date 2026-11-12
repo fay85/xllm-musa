@@ -1,0 +1,17 @@
+{
+  "exit_code": 0,
+  "finished_at": "2026-11-12T16:52:42.679086+08:00",
+  "command": [
+    "docker",
+    "exec",
+    "-w",
+    "/work/repos/xllm-musa",
+    "xiaopang1112_v41_w4a8_build_dev6",
+    "bash",
+    "scripts/ninja_safe.sh",
+    "build/cmake.linux-x86_64-cpython-310",
+    "-j2",
+    "xllm"
+  ],
+  "sha256": "20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489"
+}

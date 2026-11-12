@@ -1,0 +1,87 @@
+{
+  "terminal": {
+    "exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "TERM_sent": false,
+    "SIGKILL_sent": false,
+    "finished_at": "2026-11-12T16:51:58.130261+08:00"
+  },
+  "mixed": [
+    {
+      "rank": 0,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38564769737422466,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 1,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.38549633231014013,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 2,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3854695735499263,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 3,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3853343017399311,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 4,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3857915224507451,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 5,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3855623658746481,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 6,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3858933076262474,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    },
+    {
+      "rank": 7,
+      "repetitions": 50,
+      "max_abs": 0.0,
+      "exact": true,
+      "elapsed_s": 0.3850298570469022,
+      "scope": "ordering and buffer-reuse regression, not model performance"
+    }
+  ],
+  "archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_new_start/ToDoList_4/ar_mixed_v1_raw.tar.gz",
+  "bytes": 1792,
+  "sha256": "ef2996759d81ba30a26584edfe68e7d69768f8c785357cba98525dce0fe96bbd",
+  "gmi_after": "Thu Nov 12 16:53:10 2026\n---------------------------------------------------------------------\n    zjlab-gmi:2.3.3              Driver Version:3.3.8-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    X10000               |00000000:03:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    X10000               |00000000:24:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    X10000               |00000000:44:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    X10000               |00000000:63:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    X10000               |00000000:83:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    X10000               |00000000:a3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |34C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    X10000               |00000000:c3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    X10000               |00000000:e3:00.0    |0%    0MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\nID   PID           Process name                           GPU Memory\n                                                               Usage\n+-------------------------------------------------------------------+\n   No running processes found\n---------------------------------------------------------------------\n"
+}

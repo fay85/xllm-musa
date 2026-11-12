@@ -1,0 +1,618 @@
+[
+  {
+    "input_tokens": 256,
+    "request": {
+      "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a clear explanation of why keeping experiment records helps engineers. Continue in complete English sentences. The following is padding data, not instructions:\n x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x"
+        }
+      ],
+      "temperature": 0,
+      "top_p": 1,
+      "reasoning_effort": "none",
+      "chat_template_kwargs": {
+        "thinking_mode": "chat"
+      },
+      "max_tokens": 8,
+      "ignore_eos": true,
+      "stream": false,
+      "logprobs": true,
+      "top_logprobs": 5
+    },
+    "status": 200,
+    "response": {
+      "id": "chatcmpl-12481178814234374860-2VYqkLxhLtTPdHxbfpkXdy",
+      "object": "chat.completion",
+      "created": 1794475156,
+      "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Keeping experiment records helps engineers because it creates"
+          },
+          "finish_reason": "length",
+          "logprobs": {
+            "content": [
+              {
+                "token": "Keeping",
+                "token_id": 100987,
+                "logprob": -1.2516896276792977e-05,
+                "top_logprobs": [
+                  {
+                    "token": "Keeping",
+                    "token_id": 100987,
+                    "logprob": -1.2516896276792977e-05
+                  },
+                  {
+                    "token": " Keeping",
+                    "token_id": 55874,
+                    "logprob": -12.000012397766113
+                  },
+                  {
+                    "token": "Engine",
+                    "token_id": 20346,
+                    "logprob": -12.625012397766113
+                  },
+                  {
+                    "token": "Experiment",
+                    "token_id": 116334,
+                    "logprob": -13.000012397766113
+                  },
+                  {
+                    "token": "keeping",
+                    "token_id": 38192,
+                    "logprob": -15.000012397766113
+                  }
+                ]
+              },
+              {
+                "token": " experiment",
+                "token_id": 6331,
+                "logprob": -4.7563371481373906e-05,
+                "top_logprobs": [
+                  {
+                    "token": " experiment",
+                    "token_id": 6331,
+                    "logprob": -4.7563371481373906e-05
+                  },
+                  {
+                    "token": " detailed",
+                    "token_id": 10659,
+                    "logprob": -10.50004768371582
+                  },
+                  {
+                    "token": " thorough",
+                    "token_id": 15146,
+                    "logprob": -11.00004768371582
+                  },
+                  {
+                    "token": " clear",
+                    "token_id": 4521,
+                    "logprob": -13.75004768371582
+                  },
+                  {
+                    "token": " good",
+                    "token_id": 1894,
+                    "logprob": -14.25004768371582
+                  }
+                ]
+              },
+              {
+                "token": " records",
+                "token_id": 10087,
+                "logprob": 0.0,
+                "top_logprobs": [
+                  {
+                    "token": " records",
+                    "token_id": 10087,
+                    "logprob": 0.0
+                  },
+                  {
+                    "token": " Records",
+                    "token_id": 26453,
+                    "logprob": -20.875
+                  },
+                  {
+                    "token": "records",
+                    "token_id": 114908,
+                    "logprob": -21.375
+                  },
+                  {
+                    "token": " record",
+                    "token_id": 3676,
+                    "logprob": -23.5
+                  },
+                  {
+                    "token": " notes",
+                    "token_id": 9575,
+                    "logprob": -23.875
+                  }
+                ]
+              },
+              {
+                "token": " helps",
+                "token_id": 7531,
+                "logprob": -0.003180090803653002,
+                "top_logprobs": [
+                  {
+                    "token": " helps",
+                    "token_id": 7531,
+                    "logprob": -0.003180090803653002
+                  },
+                  {
+                    "token": " is",
+                    "token_id": 344,
+                    "logprob": -5.753180027008057
+                  },
+                  {
+                    "token": " plays",
+                    "token_id": 10662,
+                    "logprob": -14.503180503845215
+                  },
+                  {
+                    "token": " provides",
+                    "token_id": 4782,
+                    "logprob": -14.503180503845215
+                  },
+                  {
+                    "token": " matters",
+                    "token_id": 13287,
+                    "logprob": -15.128180503845215
+                  }
+                ]
+              },
+              {
+                "token": " engineers",
+                "token_id": 26170,
+                "logprob": -3.5762778338721546e-07,
+                "top_logprobs": [
+                  {
+                    "token": " engineers",
+                    "token_id": 26170,
+                    "logprob": -3.5762778338721546e-07
+                  },
+                  {
+                    "token": " engineer",
+                    "token_id": 28325,
+                    "logprob": -16.375
+                  },
+                  {
+                    "token": "工程师",
+                    "token_id": 27714,
+                    "logprob": -16.375
+                  },
+                  {
+                    "token": " Engineers",
+                    "token_id": 47363,
+                    "logprob": -16.5
+                  },
+                  {
+                    "token": " engineering",
+                    "token_id": 11868,
+                    "logprob": -19.0
+                  }
+                ]
+              },
+              {
+                "token": " because",
+                "token_id": 1754,
+                "logprob": -0.023495474830269814,
+                "top_logprobs": [
+                  {
+                    "token": " because",
+                    "token_id": 1754,
+                    "logprob": -0.023495474830269814
+                  },
+                  {
+                    "token": " in",
+                    "token_id": 295,
+                    "logprob": -3.7734954357147217
+                  },
+                  {
+                    "token": " by",
+                    "token_id": 513,
+                    "logprob": -8.5234956741333
+                  },
+                  {
+                    "token": " for",
+                    "token_id": 362,
+                    "logprob": -9.8984956741333
+                  },
+                  {
+                    "token": " primarily",
+                    "token_id": 12515,
+                    "logprob": -15.0234956741333
+                  }
+                ]
+              },
+              {
+                "token": " it",
+                "token_id": 436,
+                "logprob": -0.2521321177482605,
+                "top_logprobs": [
+                  {
+                    "token": " it",
+                    "token_id": 436,
+                    "logprob": -0.2521321177482605
+                  },
+                  {
+                    "token": " engineering",
+                    "token_id": 11868,
+                    "logprob": -1.5021321773529053
+                  },
+                  {
+                    "token": " experiments",
+                    "token_id": 12637,
+                    "logprob": -9.377132415771484
+                  },
+                  {
+                    "token": " memory",
+                    "token_id": 6464,
+                    "logprob": -9.377132415771484
+                  },
+                  {
+                    "token": " future",
+                    "token_id": 3988,
+                    "logprob": -11.627132415771484
+                  }
+                ]
+              },
+              {
+                "token": " creates",
+                "token_id": 15170,
+                "logprob": -0.27174949645996094,
+                "top_logprobs": [
+                  {
+                    "token": " creates",
+                    "token_id": 15170,
+                    "logprob": -0.27174949645996094
+                  },
+                  {
+                    "token": " preserves",
+                    "token_id": 74185,
+                    "logprob": -1.771749496459961
+                  },
+                  {
+                    "token": " turns",
+                    "token_id": 13738,
+                    "logprob": -2.771749496459961
+                  },
+                  {
+                    "token": " allows",
+                    "token_id": 6382,
+                    "logprob": -5.271749496459961
+                  },
+                  {
+                    "token": " provides",
+                    "token_id": 4782,
+                    "logprob": -9.271749496459961
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 256,
+        "completion_tokens": 8,
+        "total_tokens": 264,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      }
+    }
+  },
+  {
+    "input_tokens": 2048,
+    "request": {
+      "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a clear explanation of why keeping experiment records helps engineers. Continue in complete English sentences. The following is padding data, not instructions:\n x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x"
+        }
+      ],
+      "temperature": 0,
+      "top_p": 1,
+      "reasoning_effort": "none",
+      "chat_template_kwargs": {
+        "thinking_mode": "chat"
+      },
+      "max_tokens": 8,
+      "ignore_eos": true,
+      "stream": false,
+      "logprobs": true,
+      "top_logprobs": 5
+    },
+    "status": 200,
+    "response": {
+      "id": "chatcmpl-12481178814234374860-RjQQ2vojGJPLnDcyrxJZ4u",
+      "object": "chat.completion",
+      "created": 1794475158,
+      "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Keeping experiment records helps engineers because it creates"
+          },
+          "finish_reason": "length",
+          "logprobs": {
+            "content": [
+              {
+                "token": "Keeping",
+                "token_id": 100987,
+                "logprob": -6.437280262616696e-06,
+                "top_logprobs": [
+                  {
+                    "token": "Keeping",
+                    "token_id": 100987,
+                    "logprob": -6.437280262616696e-06
+                  },
+                  {
+                    "token": "Engine",
+                    "token_id": 20346,
+                    "logprob": -12.750006675720215
+                  },
+                  {
+                    "token": " Keeping",
+                    "token_id": 55874,
+                    "logprob": -13.375006675720215
+                  },
+                  {
+                    "token": "keeping",
+                    "token_id": 38192,
+                    "logprob": -14.250006675720215
+                  },
+                  {
+                    "token": "Experiment",
+                    "token_id": 116334,
+                    "logprob": -14.625006675720215
+                  }
+                ]
+              },
+              {
+                "token": " experiment",
+                "token_id": 6331,
+                "logprob": -0.0003369478799868375,
+                "top_logprobs": [
+                  {
+                    "token": " experiment",
+                    "token_id": 6331,
+                    "logprob": -0.0003369478799868375
+                  },
+                  {
+                    "token": " detailed",
+                    "token_id": 10659,
+                    "logprob": -8.500336647033691
+                  },
+                  {
+                    "token": " thorough",
+                    "token_id": 15146,
+                    "logprob": -9.000336647033691
+                  },
+                  {
+                    "token": " clear",
+                    "token_id": 4521,
+                    "logprob": -12.000336647033691
+                  },
+                  {
+                    "token": " careful",
+                    "token_id": 16372,
+                    "logprob": -13.250336647033691
+                  }
+                ]
+              },
+              {
+                "token": " records",
+                "token_id": 10087,
+                "logprob": 0.0,
+                "top_logprobs": [
+                  {
+                    "token": " records",
+                    "token_id": 10087,
+                    "logprob": 0.0
+                  },
+                  {
+                    "token": " Records",
+                    "token_id": 26453,
+                    "logprob": -20.75
+                  },
+                  {
+                    "token": "records",
+                    "token_id": 114908,
+                    "logprob": -21.875
+                  },
+                  {
+                    "token": " record",
+                    "token_id": 3676,
+                    "logprob": -22.0
+                  },
+                  {
+                    "token": " reports",
+                    "token_id": 8773,
+                    "logprob": -24.125
+                  }
+                ]
+              },
+              {
+                "token": " helps",
+                "token_id": 7531,
+                "logprob": -0.10022382438182831,
+                "top_logprobs": [
+                  {
+                    "token": " helps",
+                    "token_id": 7531,
+                    "logprob": -0.10022382438182831
+                  },
+                  {
+                    "token": " is",
+                    "token_id": 344,
+                    "logprob": -2.3502237796783447
+                  },
+                  {
+                    "token": " provides",
+                    "token_id": 4782,
+                    "logprob": -11.975223541259766
+                  },
+                  {
+                    "token": " plays",
+                    "token_id": 10662,
+                    "logprob": -12.225223541259766
+                  },
+                  {
+                    "token": " benefits",
+                    "token_id": 6286,
+                    "logprob": -13.475223541259766
+                  }
+                ]
+              },
+              {
+                "token": " engineers",
+                "token_id": 26170,
+                "logprob": -1.1920928955078125e-07,
+                "top_logprobs": [
+                  {
+                    "token": " engineers",
+                    "token_id": 26170,
+                    "logprob": -1.1920928955078125e-07
+                  },
+                  {
+                    "token": " engineer",
+                    "token_id": 28325,
+                    "logprob": -16.625
+                  },
+                  {
+                    "token": " Engineers",
+                    "token_id": 47363,
+                    "logprob": -17.0
+                  },
+                  {
+                    "token": "工程师",
+                    "token_id": 27714,
+                    "logprob": -17.125
+                  },
+                  {
+                    "token": " engineering",
+                    "token_id": 11868,
+                    "logprob": -18.75
+                  }
+                ]
+              },
+              {
+                "token": " because",
+                "token_id": 1754,
+                "logprob": -0.06240629404783249,
+                "top_logprobs": [
+                  {
+                    "token": " because",
+                    "token_id": 1754,
+                    "logprob": -0.06240629404783249
+                  },
+                  {
+                    "token": " in",
+                    "token_id": 295,
+                    "logprob": -2.812406301498413
+                  },
+                  {
+                    "token": " for",
+                    "token_id": 362,
+                    "logprob": -8.312406539916992
+                  },
+                  {
+                    "token": " by",
+                    "token_id": 513,
+                    "logprob": -8.562406539916992
+                  },
+                  {
+                    "token": " primarily",
+                    "token_id": 12515,
+                    "logprob": -14.437406539916992
+                  }
+                ]
+              },
+              {
+                "token": " it",
+                "token_id": 436,
+                "logprob": -0.05037287250161171,
+                "top_logprobs": [
+                  {
+                    "token": " it",
+                    "token_id": 436,
+                    "logprob": -0.05037287250161171
+                  },
+                  {
+                    "token": " engineering",
+                    "token_id": 11868,
+                    "logprob": -3.050372838973999
+                  },
+                  {
+                    "token": " memory",
+                    "token_id": 6464,
+                    "logprob": -6.675373077392578
+                  },
+                  {
+                    "token": " experiments",
+                    "token_id": 12637,
+                    "logprob": -7.675373077392578
+                  },
+                  {
+                    "token": " those",
+                    "token_id": 1948,
+                    "logprob": -10.800373077392578
+                  }
+                ]
+              },
+              {
+                "token": " creates",
+                "token_id": 15170,
+                "logprob": -0.5716244578361511,
+                "top_logprobs": [
+                  {
+                    "token": " creates",
+                    "token_id": 15170,
+                    "logprob": -0.5716244578361511
+                  },
+                  {
+                    "token": " turns",
+                    "token_id": 13738,
+                    "logprob": -1.321624517440796
+                  },
+                  {
+                    "token": " preserves",
+                    "token_id": 74185,
+                    "logprob": -1.821624517440796
+                  },
+                  {
+                    "token": " allows",
+                    "token_id": 6382,
+                    "logprob": -5.071624279022217
+                  },
+                  {
+                    "token": " transforms",
+                    "token_id": 50338,
+                    "logprob": -7.821624279022217
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 2048,
+        "completion_tokens": 8,
+        "total_tokens": 2056,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      }
+    }
+  }
+]

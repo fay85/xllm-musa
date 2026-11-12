@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-12T17:30:52.065066+08:00\", \"failure\": \"P rank0 already terminated during 2048 measured group; stop this failed experiment normally\", \"normal_stop_created\": false, \"client_TERM\": [], \"SIGKILL\": false}\n",
+  "stderr": ""
+}

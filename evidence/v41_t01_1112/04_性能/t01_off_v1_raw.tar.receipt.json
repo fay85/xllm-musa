@@ -1,0 +1,7 @@
+{
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t01_off_v1_small_evidence.tar.gz",
+  "bytes": 617126,
+  "sha256": "9dec802b0e276809b7e55723b88b01c6a5cea4f6530c447edc2d77633a985a1b",
+  "run": "t01_off_v1",
+  "scope": "all official performance, gates, configs, server logs; large raw traces retained in original NFS paths"
+}

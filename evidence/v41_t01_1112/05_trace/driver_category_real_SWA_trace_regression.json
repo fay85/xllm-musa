@@ -1,0 +1,108 @@
+[
+  {
+    "version": "old",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "I20261112 17:46:18.843783 1283752 convert_native_cpp_trace.py:261] Converted 259 actual intervals and 2 native entries\n",
+    "receipt": {
+      "status": "CONVERTED_AND_VERIFIED",
+      "trace_sha256": "49cf04e5f52092b4006211c32975f4d1615ea560da12e14930dbae8def9844fa",
+      "native_stacks_sha256": "7992ceeea8f869b4400c229cf91301e5b2a7964c2ca5f2ac1bb20cdefd3fcaad",
+      "symbols_sha256": "70fe018420517159ae772f7de3782896b7623c0b4db8ad1387d0f3bb8123ef75",
+      "symbolization_binary_sha256": "20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489",
+      "selected_step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61640,
+        "tid": 63490,
+        "ts": 3617991856399.94,
+        "dur": 513331.273,
+        "args": {
+          "External id": 207407,
+          "Record function id": 208557,
+          "finished": true,
+          "Ev Idx": 207406
+        }
+      },
+      "selected_scope": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/Attention/SWA_sparse_and_commit",
+        "pid": 61640,
+        "tid": 63490,
+        "ts": 3617991864543.422,
+        "dur": 3726.849,
+        "args": {
+          "External id": 207962,
+          "Record function id": 209112,
+          "finished": true,
+          "Ev Idx": 207961
+        }
+      },
+      "gpu_selection": "runtime correlation for scope",
+      "actual_intervals": 259,
+      "native_entry_samples": 2,
+      "output_sha256": "b9262ecb03b0938d2e894f4f16e718a51334b9b9839f372dae17bdb8aa6e0d4a",
+      "verification": {
+        "slices": 259,
+        "native_entry_samples": 2,
+        "errors": 0
+      },
+      "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+    }
+  },
+  {
+    "version": "new",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "I20261112 17:46:24.831588 1283928 convert_native_cpp_trace.py:261] Converted 260 actual intervals and 2 native entries\n",
+    "receipt": {
+      "status": "CONVERTED_AND_VERIFIED",
+      "trace_sha256": "49cf04e5f52092b4006211c32975f4d1615ea560da12e14930dbae8def9844fa",
+      "native_stacks_sha256": "7992ceeea8f869b4400c229cf91301e5b2a7964c2ca5f2ac1bb20cdefd3fcaad",
+      "symbols_sha256": "70fe018420517159ae772f7de3782896b7623c0b4db8ad1387d0f3bb8123ef75",
+      "symbolization_binary_sha256": "20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489",
+      "selected_step": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/step/q=1/kv=263",
+        "pid": 61640,
+        "tid": 63490,
+        "ts": 3617991856399.94,
+        "dur": 513331.273,
+        "args": {
+          "External id": 207407,
+          "Record function id": 208557,
+          "finished": true,
+          "Ev Idx": 207406
+        }
+      },
+      "selected_scope": {
+        "ph": "X",
+        "cat": "user_annotation",
+        "name": "V41/Attention/SWA_sparse_and_commit",
+        "pid": 61640,
+        "tid": 63490,
+        "ts": 3617991864543.422,
+        "dur": 3726.849,
+        "args": {
+          "External id": 207962,
+          "Record function id": 209112,
+          "finished": true,
+          "Ev Idx": 207961
+        }
+      },
+      "gpu_selection": "runtime correlation for scope",
+      "actual_intervals": 260,
+      "native_entry_samples": 2,
+      "output_sha256": "33e738303bca2a033a28c9d191d65d5b59df1e09ce7dbdd66ada9706cd115b8b",
+      "verification": {
+        "slices": 260,
+        "native_entry_samples": 2,
+        "errors": 0
+      },
+      "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+    }
+  }
+]

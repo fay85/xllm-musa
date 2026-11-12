@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-12T17:40:20.071312+08:00\", \"authorization\": \"User explicitly approved only host46996-47002 once each; pidfd pins identity\", \"container\": \"xiaopang1112_v41_prefill_sj9\", \"verified\": [{\"pid\": 46996, \"already_gone\": true}, {\"pid\": 46997, \"already_gone\": true}, {\"pid\": 46998, \"already_gone\": true}, {\"pid\": 46999, \"already_gone\": true}, {\"pid\": 47000, \"already_gone\": true}, {\"pid\": 47001, \"container_pid\": 64932, \"rank\": 6, \"verified\": true, \"D_threads\": 0, \"exe_sha256\": \"20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489\", \"stat\": \"47001 (xllm) S 46723 46723 46723 0 -1 1077936384 24937795 0 38 0 235616 154306 0 0 20 0 562 0 483508311 93376096833536 1972564 18446744073709551615 94432227827712 94432288774377 140720317789456 0 0 0 0 4096 17410 0 0 0 17 11 0 0 0 0 0 94432324992272 94432327345080 94432396132352 140720317795387 140720317796604 140720317796604 140720317800391 0\\n\"}, {\"pid\": 47002, \"already_gone\": true}], \"signals\": [{\"pid\": 47001, \"signal\": \"SIGKILL\", \"intent_recorded\": true, \"sent_once\": true}]}\n",
+  "stderr": ""
+}

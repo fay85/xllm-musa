@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"launched\": true, \"output\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/new_start_t01_ar_mixed_v1\", \"script_sha256\": \"36227b067088c0dc8aa66de525b4a823951caf78c3710ebf00a4eb0654e75938\"}\n",
+  "stderr": ""
+}

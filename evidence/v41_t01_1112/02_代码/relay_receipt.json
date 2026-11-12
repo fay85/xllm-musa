@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"status\": \"VERIFIED_NEW_BINARY_SHARED_WITH_SJ10\", \"artifact\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261112_sglang_mt_cpp/artifacts/native_t01_decode_tp_ar\", \"bytes\": 23926869, \"sha256\": \"ddcf81e73950e8a718ad71256dd5f4f83af287be0b9029ca741ba6c95b8686ce\", \"binary_sha256\": \"20376a77ad348ffd889d2592aa982c7a6b35962c0bb3908bbe866d7eca1d8489\"}\n",
+  "stderr": ""
+}

@@ -29,7 +29,7 @@ async def _render(args: argparse.Namespace, receipt: dict) -> None:
         )
         page = await context.new_page()
         await page.goto(
-            "https://ui.perfetto.dev", wait_until="networkidle", timeout=60000
+            "https://ui.perfetto.dev", wait_until="domcontentloaded", timeout=60000
         )
         await page.locator("input.trace_file").set_input_files(str(args.trace))
         await page.wait_for_function(
