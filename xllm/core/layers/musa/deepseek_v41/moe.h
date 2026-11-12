@@ -35,6 +35,7 @@ struct DeepseekV41MoeConfig {
   bool dense = false;
   bool original_fp8_activation = true;
   bool decode_ep_custom_allreduce = false;
+  bool shared_expert_tp_reduce = false;
   int64_t first_expert = 0;
   int64_t topk = 6;
   int64_t image_token_id = 129264;
@@ -161,6 +162,12 @@ class DeepseekV41Moe final {
     } else {
       routed = local_experts(input, indices, route_weights);
     }
+    if (config_.shared_expert_tp_reduce) {
+      CHECK(ep_group_ != nullptr && ep_group_->world_size() > 1);
+      // Local shared slices must join the routed FP32 sum exactly once.
+      // The same reduction now combines both sources, with no extra collective.
+      routed.add_(shared_.forward(input).to(torch::kFloat32));
+    }
     if (ep_group_ != nullptr && ep_group_->world_size() > 1) {
       const DeepseekV41ProfileRange reduction_range(
           "V41/MoE/EP_allreduce",
@@ -183,9 +190,10 @@ class DeepseekV41Moe final {
         ep_group_->allreduce(routed);
       }
     }
-    // Shared output is replicated in this baseline and must not be included
-    // in the EP sum. FP32 routed+shared accumulation rounds to BF16 once.
-    routed.add_(shared_.forward(input).to(torch::kFloat32));
+    if (!config_.shared_expert_tp_reduce) {
+      // The original shared output is replicated and joins after the EP sum.
+      routed.add_(shared_.forward(input).to(torch::kFloat32));
+    }
     return routed.to(input.scalar_type());
   }
 

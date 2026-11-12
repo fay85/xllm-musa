@@ -1,0 +1,33 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "e5e2010d72ae23c040796af0cfba30d68389f057d907817b450df8eb95b122ef",
+  "native_stacks_sha256": "c4d06ccd3e30079338299fc6049c4298580c97a48632be86c3c5e0beace22b1a",
+  "symbols_sha256": "a4fbed97bc0b53c3dd5aa304036002d7a5993bdf723baebd4671b5144c68be3f",
+  "symbolization_binary_sha256": "dff5de369e8febe7c51e0af95e33d9a4ae9f0019bb6ddfa3ef114c26eba2c399",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=1/kv=263",
+    "pid": 24268,
+    "tid": 26130,
+    "ts": 3630763241326.915,
+    "dur": 343441.408,
+    "args": {
+      "External id": 145787,
+      "Record function id": 146937,
+      "finished": true,
+      "Ev Idx": 145786
+    }
+  },
+  "selected_scope": null,
+  "gpu_selection": "within full step window",
+  "actual_intervals": 27801,
+  "native_entry_samples": 550,
+  "output_sha256": "85cba50d17132346cba01000b2476a86eb71b1346a46eb91a64d2dd7deb11300",
+  "verification": {
+    "slices": 27801,
+    "native_entry_samples": 550,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

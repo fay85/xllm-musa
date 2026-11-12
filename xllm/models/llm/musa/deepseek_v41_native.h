@@ -141,6 +141,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     torch::DeviceGuard guard(device());
     torch::NoGradGuard no_grad;
     initialize_decode_ep_policy();
+    initialize_shared_expert_tp_policy();
     DeepseekV41Checkpoint checkpoint(
         loader->get_state_dicts(),
         options_,
@@ -373,6 +374,26 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     decode_ep_custom_allreduce_ = enabled;
   }
 
+  void initialize_shared_expert_tp_policy() {
+    const bool enabled =
+        util::get_bool_env("XLLM_DSV41_SHARED_EXPERT_TP", false);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local = torch::tensor({static_cast<int32_t>(enabled)},
+                                                options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], static_cast<int32_t>(enabled))
+            << "Native V4.1 shared expert TP policy differs across ranks";
+      }
+    }
+    CHECK(!enabled || (tp_size() > 1 && ep_size() == tp_size()))
+        << "Shared expert TP requires matching full-world TP and EP groups";
+    shared_expert_tp_reduce_ = enabled;
+  }
+
   ProcessGroup* expert_reduction_group() const {
     // This C1/DP1/CP1 model already requires TP to span the complete world.
     // When EP also spans that world, both reductions have identical members
@@ -455,6 +476,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     moe.dense =
         index < args_.first_k_dense_replace() ||
         (args_.moe_layer_freq() > 1 && index % args_.moe_layer_freq() != 0);
+    moe.shared_expert_tp_reduce = !moe.dense && shared_expert_tp_reduce_;
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());
     moe.topk = args_.num_experts_per_tok();
@@ -529,6 +551,20 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     moe.shared = {checkpoint.dense(shared + "w1"),
                   checkpoint.dense(shared + "w3"),
                   checkpoint.dense(shared + "w2")};
+    if (config.moe.shared_expert_tp_reduce) {
+      const int64_t intermediate = moe.shared[0].size(0);
+      CHECK_EQ(intermediate % tp_size(), 0);
+      const int64_t local_intermediate = intermediate / tp_size();
+      CHECK_EQ(local_intermediate % 32, 0)
+          << "Shared-expert TP slices must align activation quant groups";
+      const int64_t start = tp_group_->rank() * local_intermediate;
+      moe.shared[0] =
+          moe.shared[0].narrow(0, start, local_intermediate).contiguous();
+      moe.shared[1] =
+          moe.shared[1].narrow(0, start, local_intermediate).contiguous();
+      moe.shared[2] =
+          moe.shared[2].narrow(1, start, local_intermediate).contiguous();
+    }
     if (!config.moe.dense) {
       moe.gate = checkpoint.copy(ffn + "gate.weight", torch::kBFloat16);
       moe.bias = checkpoint.copy(ffn + "gate.bias", torch::kFloat32);
@@ -685,6 +721,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   ProcessGroup* tp_group_;
   ProcessGroup* ep_group_;
   bool decode_ep_custom_allreduce_ = false;
+  bool shared_expert_tp_reduce_ = false;
   std::string bmm_path_;
   std::string w4a8_path_;
   std::string mhc_path_;
