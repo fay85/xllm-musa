@@ -2,6 +2,8 @@
 
 本文只规划 GLM-5.3-Flash 的 **Prefill** 优化。阶段性 benchmark 固定使用 `--osl 1`，先测首 token 延迟和 Prefill 吞吐，不把 Decode TPOT 优化混入本计划。
 
+当前 P0/CP0 实施进度见 [PREFILL_EP_MOE_DEVELOPMENT_STATUS.md](PREFILL_EP_MOE_DEVELOPMENT_STATUS.md)。
+
 ## 目标和边界
 
 目标拓扑是单机 8 卡：

@@ -39,6 +39,7 @@ limitations under the License.
 #include "core/layers/musa/musa_mega_moe.h"
 #include "core/layers/musa/routed_moe_gate.h"
 #include "core/platform/musa_graph_handle.h"
+#include "models/llm/musa/glm5_next.h"
 
 namespace xllm::layer {
 namespace {
@@ -1726,5 +1727,1005 @@ TEST_F(GlmSparseTest, MegaMoeEp8WorkerPreservesClampOwnershipAndReplay) {
     EXPECT_GT(cosine, 0.995);
   }
 }
+
+// Quantized top-k is discontinuous at BF16/FP8 rounding boundaries. Build a
+// single-device reference with the same GEMM row shapes, then use the original
+// unpartitioned IndexPool update and attention kernels. No CP communication or
+// CP cache-update helper participates in this oracle.
+std::pair<torch::Tensor, Selection> dsa_partition_reference(
+    Glm5NextSparseAttention& layer,
+    const torch::Tensor& input,
+    const torch::Tensor& positions,
+    const AttentionMetadata& meta,
+    KVCache& cache,
+    const ModelArgs& args,
+    int64_t world) {
+  auto modules = layer->named_modules();
+  auto replicated = [&](const std::string& name, const torch::Tensor& value) {
+    return std::dynamic_pointer_cast<ReplicatedLinearImpl>(modules[name])
+        ->forward(value)
+        .clone();
+  };
+  auto norm = [&](const std::string& name, torch::Tensor value) {
+    return std::get<0>(std::dynamic_pointer_cast<RMSNormImpl>(modules[name])
+                           ->forward(value))
+        .clone();
+  };
+  auto column = [&](const std::string& name, const torch::Tensor& value) {
+    return std::dynamic_pointer_cast<ColumnParallelLinearImpl>(modules[name])
+        ->forward(value)
+        .clone();
+  };
+  const int64_t tokens = input.size(0);
+  auto key = torch::empty({tokens, 128}, input.options());
+  auto gate = torch::empty_like(key);
+  auto q = torch::empty({tokens, args.n_heads(), 256}, input.options());
+  auto latent = torch::empty({tokens, 512}, input.options());
+  auto iq = torch::empty({tokens, 32, 128}, input.options());
+  auto weights =
+      torch::empty({tokens, 32}, input.options().dtype(torch::kFloat32));
+  auto shards = torch::tensor_split(input, world);
+  int64_t begin = 0;
+  for (int64_t rank = 0; rank < world; ++rank) {
+    const int64_t count = shards[rank].size(0);
+    if (count == 0) {
+      continue;
+    }
+    auto raw = replicated("indexer_wk_weights_proj", shards[rank])
+                   .narrow(1, 0, 128)
+                   .to(torch::kFloat32)
+                   .contiguous();
+    key.narrow(0, begin, count)
+        .copy_(norm("indexer_k_norm", raw).to(torch::kBFloat16));
+    gate.narrow(0, begin, count)
+        .copy_(replicated("indexer_compress_gate", shards[rank]));
+    begin += count;
+    auto rows = torch::arange(count, positions.options()) * world + rank;
+    auto x = input.index_select(0, rows);
+    auto fused = replicated("fused_qkv_a_proj", x);
+    auto q_norm = norm("q_a_layernorm",
+                       fused.narrow(1, 0, args.q_lora_rank()).contiguous());
+    latent.index_copy_(
+        0,
+        rows,
+        norm("kv_a_layernorm",
+             fused.narrow(1, args.q_lora_rank(), 512).contiguous()));
+    q.index_copy_(
+        0, rows, column("q_b_proj", q_norm).view({count, args.n_heads(), 256}));
+    iq.index_copy_(
+        0, rows, replicated("indexer_wq_b", q_norm).view({count, 32, 128}));
+    weights.index_copy_(
+        0, rows, replicated("indexer_weights_proj", x.to(torch::kFloat32)));
+  }
+  auto parameters = layer->named_parameters();
+  auto index_cache = cache.get_index_cache();
+  auto tail = cache.get_kpool_tail();
+  auto selection =
+      kernel::musa::glm5_next_indexer(iq,
+                                      key,
+                                      gate,
+                                      weights,
+                                      parameters["indexer_compress_ape"],
+                                      positions,
+                                      meta.q_cu_seq_lens,
+                                      meta.linear_state_indices,
+                                      meta.linear_state_read_indices,
+                                      meta.block_table,
+                                      index_cache,
+                                      tail,
+                                      meta.max_seq_len,
+                                      args.index_topk());
+  auto kv = parameters["kv_b_proj.weight"].view({args.n_heads(), 512, 512});
+  auto wk = kv.narrow(1, 0, 256).transpose(1, 2).contiguous();
+  auto wv = kv.narrow(1, 256, 256).transpose(1, 2).contiguous();
+  auto main_cache = cache.get_k_cache();
+  auto attention = glm5_next_mla_attention(q,
+                                           latent,
+                                           wk,
+                                           wv,
+                                           selection.tokens,
+                                           selection.lengths,
+                                           selection.rows,
+                                           positions,
+                                           meta.block_table,
+                                           meta.slot_mapping,
+                                           main_cache);
+  auto output =
+      std::dynamic_pointer_cast<RowParallelLinearImpl>(modules["o_proj"])
+          ->forward(attention.flatten(1, 2))
+          .clone();
+  return {output, selection};
+}
+
+class DsaCpCountingGroup final : public ProcessGroup {
+ public:
+  explicit DsaCpCountingGroup(ProcessGroup& delegate)
+      : ProcessGroup(delegate.rank(), delegate.world_size(), delegate.device()),
+        delegate_(delegate) {}
+  torch::Tensor allgather_base_sync(const torch::Tensor& input) override {
+    record(input);
+    return delegate_.allgather_base_sync(input);
+  }
+  c10::intrusive_ptr<c10d::Work> allgather_base_async(
+      const torch::Tensor& input,
+      torch::Tensor& output) override {
+    record(input);
+    return delegate_.allgather_base_async(input, output);
+  }
+  void all_to_all_single(
+      torch::Tensor output,
+      torch::Tensor input,
+      std::vector<int64_t> receive = {},
+      std::vector<int64_t> send = {},
+      bool async = false,
+      c10::intrusive_ptr<c10d::Work>* work = nullptr) override {
+    ++exchanges;
+    delegate_.all_to_all_single(output, input, receive, send, async, work);
+  }
+  void allreduce(torch::Tensor& input) override {
+    ++reductions;
+    delegate_.allreduce(input);
+  }
+  c10::intrusive_ptr<c10d::Work> allreduce_async(
+      torch::Tensor& input) override {
+    ++reductions;
+    return delegate_.allreduce_async(input);
+  }
+  int64_t exchanges = 0, reductions = 0, latent_gathers = 0, pool_gathers = 0;
+
+ private:
+  void record(const torch::Tensor& input) {
+    if (input.dim() == 1) {
+      EXPECT_EQ(input.scalar_type(), torch::kInt64);  // positions only
+      return;
+    }
+    EXPECT_EQ(input.dim(), 2);
+    if (input.scalar_type() == torch::kUInt8) {
+      EXPECT_EQ(input.size(1), 132);
+      ++pool_gathers;
+    } else {
+      EXPECT_EQ(input.scalar_type(), torch::kBFloat16);
+      EXPECT_TRUE(input.size(1) == 512 || input.size(1) == 256);
+      latent_gathers += input.size(1) == 512;
+    }
+  }
+  ProcessGroup& delegate_;
+};
+
+TEST(GlmDsaCpTest, McclContextParallelWorker) {
+  const char* rank_text = std::getenv("XLLM_GLM_DSA_CP_RANK");
+  const char* port_text = std::getenv("XLLM_GLM_DSA_CP_PORT");
+  if (rank_text == nullptr || port_text == nullptr) {
+    GTEST_SKIP() << "Requires run_dsa_cp_test.sh";
+  }
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard no_grad;
+  torch::manual_seed(532);
+  const int32_t rank = std::stoi(rank_text);
+  constexpr int32_t kWorld = 8;
+  const bool production = std::getenv("XLLM_GLM_DSA_CP_PRODUCTION") != nullptr;
+  const torch::Device device(torch::kPrivateUse1, rank);
+  c10::musa::MUSAGuard device_guard(device);
+  const auto stream = c10::musa::getStreamFromPool(false, rank);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  std::vector<int32_t> ranks(kWorld);
+  std::iota(ranks.begin(), ranks.end(), 0);
+  auto real = create_process_group(rank,
+                                   rank,
+                                   ranks,
+                                   kWorld,
+                                   kWorld,
+                                   std::stoi(port_text),
+                                   "127.0.0.1",
+                                   "glm_dsa_cp_test",
+                                   device);
+  DsaCpCountingGroup counted(*real);
+  ProcessGroup one(0, 1, device);
+  ParallelArgs cp(rank,
+                  kWorld,
+                  /*dp_size=*/1,
+                  /*cp_size=*/kWorld,
+                  real.get(),
+                  /*ep_size=*/1);
+  cp.tp_group_ = &one;
+  cp.cp_group_ = &counted;
+  cp.kv_split_size(1);
+  ParallelArgs serial(0, 1, &one);
+  serial.tp_group_ = &one;
+  auto args = production ? model_args(64, 4096, 1536) : model_args(64);
+  args.index_topk(std::getenv("XLLM_GLM_DSA_CP_TOPK") == nullptr
+                      ? 64
+                      : std::stoi(std::getenv("XLLM_GLM_DSA_CP_TOPK")));
+  auto weights = make_weights(args);
+  auto opts = torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  Glm5NextSparseAttention local(args, cp, opts), full(args, serial, opts);
+  Glm5NextSparseAttention reused(args, cp, opts, /*enable_indexer=*/false);
+  std::vector<Glm5NextSparseAttention> layers{local, full, reused};
+  for (auto& layer : layers) {
+    layer->load_state_dict(StateDict(weights));
+    layer->verify_loaded_weights();
+  }
+  EXPECT_EQ(local->named_parameters()["q_b_proj.weight"].size(0), 64 * 256);
+  auto compare = [&](const torch::Tensor& actual,
+                     const torch::Tensor& expected,
+                     const std::string& label) {
+    ASSERT_EQ(actual.sizes(), expected.sizes()) << label;
+    if (actual.numel() == 0) {
+      return;
+    }
+    auto a = actual.cpu().to(torch::kFloat32);
+    auto b = expected.cpu().to(torch::kFloat32);
+    const float error = (a - b).abs().max().item<float>();
+    EXPECT_TRUE(torch::allclose(a, b, 0.04, 0.004))
+        << label << " error=" << error;
+    LOG(INFO) << "DSA CP " << label << " rank=" << rank
+              << " max_abs_error=" << error;
+  };
+  const std::vector<int64_t> lengths =
+      production ? std::vector<int64_t>{129}
+                 : std::vector<int64_t>{1, 7, 128, 129, 2048, 4092, 4096};
+  for (const bool fp8_cache : {false, true}) {
+    for (const int64_t tokens : lengths) {
+      SCOPED_TRACE("tokens=" + std::to_string(tokens) +
+                   " fp8=" + std::to_string(fp8_cache));
+      auto local_cache =
+          Glm5NextSparseAttentionImpl::create_cache(36, 6, opts, fp8_cache);
+      auto full_cache =
+          Glm5NextSparseAttentionImpl::create_cache(36, 6, opts, fp8_cache);
+      auto reference_cache =
+          Glm5NextSparseAttentionImpl::create_cache(36, 6, opts, fp8_cache);
+      auto reuse_cache =
+          Glm5NextSparseAttentionImpl::create_cache(36, 6, opts, fp8_cache);
+      const int64_t batch = tokens == 1 ? 1 : 2;
+      std::vector<int64_t> starts(batch, 0);
+      for (int32_t phase = 0; phase < 2; ++phase) {
+        const std::vector<int64_t> sizes =
+            phase == 0
+                ? (batch == 1 ? std::vector<int64_t>{tokens}
+                              : std::vector<int64_t>{tokens / 7 + 1,
+                                                     tokens - tokens / 7 - 1})
+                : (batch == 1 ? std::vector<int64_t>{3}
+                              : std::vector<int64_t>{3, 5});
+        std::vector<int32_t> cu{0}, ids, read_ids;
+        std::vector<int64_t> positions, slots;
+        ids.reserve(batch);
+        read_ids.reserve(batch);
+        positions.reserve(tokens + 8);
+        slots.reserve(tokens + 8);
+        cu.reserve(batch + 1);
+        auto table = torch::arange(batch * 18, torch::kInt32)
+                         .view({batch, 18})
+                         .flip({1})
+                         .contiguous();
+        for (int64_t request = 0; request < batch; ++request) {
+          for (int64_t position = starts[request];
+               position < starts[request] + sizes[request];
+               ++position) {
+            positions.emplace_back(position);
+            slots.emplace_back(
+                table.data_ptr<int32_t>()[request * 18 + position / 256] * 256 +
+                position % 256);
+          }
+          cu.emplace_back(positions.size());
+          ids.emplace_back(request + 1 + (phase == 1 ? 2 : 0));
+          read_ids.emplace_back(request + 1);
+          starts[request] += sizes[request];
+        }
+        AttentionMetadata meta{};
+        meta.is_prefill = true;
+        meta.is_chunked_prefill = phase == 1;
+        meta.q_cu_seq_lens = torch::tensor(cu, torch::kInt32).to(device);
+        meta.block_table = table.to(device);
+        meta.linear_state_indices =
+            torch::tensor(ids, torch::kInt32).to(device);
+        meta.linear_state_read_indices =
+            torch::tensor(read_ids, torch::kInt32).to(device);
+        meta.slot_mapping = torch::tensor(slots, torch::kInt64).to(device);
+        meta.max_seq_len = *std::max_element(starts.begin(), starts.end());
+        auto pos = torch::tensor(positions, torch::kInt64).to(device);
+        auto input =
+            (torch::randn({pos.numel(), args.hidden_size()}, torch::kBFloat16) *
+             0.3)
+                .to(device);
+        auto unpartitioned = full->forward(pos, input, meta, full_cache);
+        auto expected = dsa_partition_reference(
+            full, input, pos, meta, reference_cache, args, kWorld);
+        const auto baseline_diff =
+            expected.first.cpu().to(torch::kFloat32) -
+            unpartitioned.first.cpu().to(torch::kFloat32);
+        const double relative_rmse =
+            std::sqrt(baseline_diff.square().mean().item<double>() /
+                      unpartitioned.first.cpu()
+                          .to(torch::kFloat32)
+                          .square()
+                          .mean()
+                          .item<double>());
+        const auto changed_rows =
+            std::get<0>(expected.second.tokens.cpu().sort(1))
+                .ne(std::get<0>(unpartitioned.second.tokens.cpu().sort(1)))
+                .any(1);
+        const double changed_fraction =
+            changed_rows.to(torch::kFloat32).mean().item<double>();
+        EXPECT_LT(relative_rmse, 0.02) << "unpartitioned BF16 baseline drift";
+        EXPECT_LE(changed_fraction, 0.01)
+            << "unpartitioned candidate-set drift";
+        LOG(INFO) << "DSA full-M baseline tokens=" << pos.numel()
+                  << " rank=" << rank << " relative_rmse=" << relative_rmse
+                  << " changed_rows=" << changed_rows.sum().item<int64_t>()
+                  << " max_abs_error="
+                  << baseline_diff.abs().max().item<float>();
+        auto sharded = meta;
+        sharded.glm5_prefill_cp_enabled = true;
+        sharded.glm5_prefill_cp_rank = rank;
+        sharded.glm5_prefill_cp_size = kWorld;
+        sharded.glm5_prefill_global_rows = pos.numel();
+        sharded.glm5_prefill_row_offsets = {0};
+        auto partitions = torch::tensor_split(
+            torch::arange(pos.numel(), torch::kInt64), kWorld);
+        for (const auto& part : partitions) {
+          sharded.glm5_prefill_row_offsets.emplace_back(
+              sharded.glm5_prefill_row_offsets.back() + part.numel());
+        }
+        const int64_t begin = sharded.glm5_prefill_row_offsets[rank];
+        const int64_t count = partitions[rank].numel();
+        sharded.glm5_prefill_local_row_begin = begin;
+        sharded.glm5_prefill_local_row_end = begin + count;
+        const int64_t exchanges = counted.exchanges,
+                      gathers = counted.latent_gathers;
+        auto actual = local->forward(pos.narrow(0, begin, count),
+                                     input.narrow(0, begin, count),
+                                     sharded,
+                                     local_cache);
+        EXPECT_EQ(
+            counted.exchanges,
+            exchanges + 3);  // two activation exchanges + bounded key/gate halo
+        EXPECT_EQ(counted.latent_gathers, gathers + 1);
+        EXPECT_EQ(counted.reductions, 0);
+        compare(actual.first,
+                expected.first.narrow(0, begin, count),
+                "prefill output");
+        EXPECT_TRUE(torch::equal(
+            std::get<0>(actual.second.tokens.cpu().sort(1)),
+            std::get<0>(
+                expected.second.tokens.narrow(0, begin, count).cpu().sort(1))));
+        EXPECT_TRUE(
+            torch::equal(actual.second.rows.cpu(),
+                         expected.second.rows.narrow(0, begin, count).cpu()));
+        EXPECT_TRUE(torch::equal(
+            actual.second.lengths.cpu(),
+            expected.second.lengths.narrow(0, begin, count).cpu()));
+        EXPECT_TRUE(torch::equal(local_cache.get_k_cache().cpu(),
+                                 reference_cache.get_k_cache().cpu()));
+        EXPECT_TRUE(torch::equal(local_cache.get_index_cache().cpu(),
+                                 reference_cache.get_index_cache().cpu()));
+        EXPECT_TRUE(torch::equal(local_cache.get_kpool_tail().cpu(),
+                                 reference_cache.get_kpool_tail().cpu()));
+        auto shared = reused->forward(pos.narrow(0, begin, count),
+                                      input.narrow(0, begin, count),
+                                      sharded,
+                                      reuse_cache,
+                                      &actual.second);
+        compare(shared.first, actual.first, "shared selection output");
+        EXPECT_TRUE(torch::equal(shared.second.tokens.cpu(),
+                                 actual.second.tokens.cpu()));
+      }
+      // Read the completed CP caches through the original single-rank path.
+      // Only KDA/DSA state ownership is checked; this is not CP Decode support.
+      auto next = metadata(starts[0], 1, device);
+      next.block_table =
+          torch::arange(18, torch::kInt32).flip({0}).unsqueeze(0).to(device);
+      next.linear_state_indices = torch::tensor({3}, torch::kInt32).to(device);
+      next.slot_mapping =
+          torch::tensor({(17 - starts[0] / 256) * 256 + starts[0] % 256},
+                        torch::kInt64)
+              .to(device);
+      auto input =
+          (torch::randn({1, args.hidden_size()}, torch::kBFloat16) * 0.3)
+              .to(device);
+      auto pos = torch::tensor({starts[0]}, torch::kInt64).to(device);
+      compare(full->forward(pos, input, next, local_cache).first,
+              full->forward(pos, input, next, reference_cache).first,
+              "first token after CP");
+    }
+  }
+  EXPECT_GT(counted.pool_gathers, 0);
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+}
+
+TEST_F(GlmSparseTest, CpLocalOperationsAtModelDimensions) {
+  // Production dimensions with FP8 replicated weights. The eight contiguous
+  // shards are checked independently on one device; the mixed-model worker
+  // separately verifies real CP8 communication and model wiring.
+  const auto opts =
+      torch::TensorOptions().device(device_).dtype(torch::kBFloat16);
+  ProcessGroup one(0, 1, device_);
+  QuantArgs quant;
+  quant.quant_method("fp8").weight_block_size({128, 128});
+  DenseMLP dense(
+      4096, 12288, true, false, "silu", false, quant, &one, opts, "", 10.0);
+  RoutedMoeSharedExpert shared(4096, 2048, "silu", quant, &one, opts, 10.0);
+  auto make_fp8 = [](int64_t intermediate) {
+    Weights weights;
+    for (const std::string proj : {"gate_proj", "up_proj", "down_proj"}) {
+      const int64_t rows = proj == "down_proj" ? 4096 : intermediate;
+      const int64_t cols = proj == "down_proj" ? intermediate : 4096;
+      weights[proj + ".weight"] =
+          (torch::randn({rows, cols}, torch::kFloat32) * 5.0)
+              .to(torch::kFloat8_e4m3fn);
+      weights[proj + ".weight_scale_inv"] =
+          torch::full({rows / 128, cols / 128}, 0.001, torch::kFloat32);
+    }
+    return weights;
+  };
+  dense->load_state_dict(StateDict(make_fp8(12288)));
+  shared->load_state_dict(StateDict(make_fp8(2048)));
+  MHCPre pre(4, 4096, 20, 1e-6, 1e-5, opts);
+  pre->load_state_dict(
+      StateDict({{"hc_fn", torch::randn({24, 16384}, torch::kBFloat16) * 0.01},
+                 {"hc_base", torch::randn({24}, torch::kFloat32) * 0.05},
+                 {"hc_scale", torch::randn({3}, torch::kFloat32) * 0.05}}));
+  RMSNorm norm(4096, 1e-5, opts);
+  norm->load_state_dict(
+      StateDict({{"weight", torch::ones({4096}, torch::kBFloat16)}}));
+  auto input = (torch::randn({129, 4096}, torch::kBFloat16) * 0.3).to(device_);
+  auto run = [&](const torch::Tensor& x) {
+    auto residual = kernel::musa::mhc_expand(x, 4);
+    auto first = pre->forward(residual);
+    auto normalized = x.size(0) == 0 ? first.output
+                                     : std::get<0>(norm->forward(first.output));
+    auto dense_out = x.size(0) == 0 ? torch::empty_like(normalized)
+                                    : dense->forward(normalized).clone();
+    auto [second, next_residual, post, comb] = pre->post_pre_norm(
+        dense_out, residual, first.post, first.comb, norm->weight());
+    auto shared_out = shared->forward(second).clone();
+    auto output = kernel::musa::mhc_contract_mean(
+        kernel::musa::mhc_post(shared_out, next_residual, post, comb));
+    return std::vector<torch::Tensor>{dense_out, shared_out, output};
+  };
+  auto expected = run(input);
+  for (int64_t rank = 0; rank < 8; ++rank) {
+    const int64_t begin = rank * 16 + std::min<int64_t>(rank, 1);
+    const int64_t count = 16 + (rank == 0 ? 1 : 0);
+    auto actual = run(input.narrow(0, begin, count));
+    for (int64_t stage = 0; stage < 3; ++stage) {
+      auto a = actual[stage].cpu().to(torch::kFloat32);
+      auto b =
+          expected[stage].narrow(0, begin, count).cpu().to(torch::kFloat32);
+      const float maximum = (a - b).abs().max().item<float>();
+      const float rms =
+          ((a - b).square().mean() / b.square().mean()).sqrt().item<float>();
+      EXPECT_TRUE(torch::allclose(a, b, 0.04, 0.004))
+          << "stage=" << stage << " max=" << maximum;
+      EXPECT_LT(rms, 0.02);
+      LOG(INFO) << "CP3 dimensions rank=" << rank << " stage=" << stage
+                << " max_abs=" << maximum << " relative_rms=" << rms;
+    }
+  }
+  for (const auto& output : run(input.narrow(0, 0, 0))) {
+    EXPECT_EQ(output.sizes(), torch::IntArrayRef({0, 4096}));
+  }
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+}
+
+TEST(GlmLocalCpDeathTest, RejectsMissingDispatchAndMoeTpReduction) {
+  const auto opts =
+      torch::TensorOptions().device(torch::kCPU).dtype(torch::kBFloat16);
+  ProcessGroup one(0, 1, torch::kCPU);
+  ProcessGroup eight(0, 8, torch::kCPU);
+  ParallelArgs cp(0, 8, 1, 8, &eight, 1);
+  cp.tp_group_ = &one;
+  cp.cp_group_ = &eight;
+  cp.moe_tp_group_ = &eight;
+  ModelArgs args;
+  args.model_type("glm5_next")
+      .hidden_size(128)
+      .moe_intermediate_size(128)
+      .n_routed_experts(8)
+      .num_experts_per_tok(2);
+  EXPECT_DEATH(
+      {
+        setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
+        RoutedMoe layer(args, QuantArgs(), cp, opts);
+      },
+      "moe_tp must be 1");
+  cp.moe_tp_group_ = &one;
+  cp.ep_size(8);
+  cp.moe_ep_group_ = &eight;
+  EXPECT_DEATH(
+      {
+        setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
+        RoutedMoe layer(args, QuantArgs(), cp, opts);
+      },
+      "requires EP dispatch/combine");
+  cp.ep_size(1);
+  cp.moe_ep_group_ = &one;
+  EXPECT_DEATH(
+      {
+        setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
+        setenv("XLLM_GLM5_MEGA_MOE", "1", 1);
+        RoutedMoe layer(args, QuantArgs(), cp, opts);
+      },
+      "requires XLLM_GLM5_MEGA_MOE=0");
+}
+
+// Mixed-model CP3 integration: all local elementwise/FFN operations are
+// exercised between both CP attention layouts, including an empty shard.
+class GlmLocalCpGroup final : public ProcessGroup {
+ public:
+  explicit GlmLocalCpGroup(ProcessGroup& group)
+      : ProcessGroup(group.rank(), group.world_size(), group.device()),
+        group_(group) {}
+  torch::Tensor allgather_base_sync(const torch::Tensor& x) override {
+    ++gathers;
+    return group_.allgather_base_sync(x);
+  }
+  c10::intrusive_ptr<c10d::Work> allgather_base_async(
+      const torch::Tensor& x,
+      torch::Tensor& y) override {
+    ++gathers;
+    return group_.allgather_base_async(x, y);
+  }
+  void reduce_scatter(const torch::Tensor& x, torch::Tensor& y) override {
+    ++scatters;
+    group_.reduce_scatter(x, y);
+  }
+  void all_to_all_single(
+      torch::Tensor output,
+      torch::Tensor input,
+      std::vector<int64_t> receive = {},
+      std::vector<int64_t> send = {},
+      bool async = false,
+      c10::intrusive_ptr<c10d::Work>* work = nullptr) override {
+    ++exchanges;
+    group_.all_to_all_single(output, input, receive, send, async, work);
+  }
+  void allreduce(torch::Tensor& x) override {
+    ++reductions;
+    group_.allreduce(x);
+  }
+  c10::intrusive_ptr<c10d::Work> allreduce_async(torch::Tensor& x) override {
+    ++reductions;
+    return group_.allreduce_async(x);
+  }
+  int64_t gathers = 0, scatters = 0, exchanges = 0, reductions = 0;
+
+ private:
+  ProcessGroup& group_;
+};
+
+TEST(GlmLocalCpTest, MixedModelPrefillWorker) {
+  const char* rank_text = std::getenv("XLLM_GLM_LOCAL_CP_RANK");
+  const char* port_text = std::getenv("XLLM_GLM_LOCAL_CP_PORT");
+  if (rank_text == nullptr || port_text == nullptr) {
+    GTEST_SKIP() << "Requires run_local_cp_test.sh";
+  }
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard no_grad;
+  torch::manual_seed(533);
+  const int32_t rank = std::stoi(rank_text);
+  const bool random_indexer =
+      std::getenv("XLLM_GLM_LOCAL_CP_RANDOM_INDEXER") != nullptr;
+  const torch::Device device(torch::kPrivateUse1, rank);
+  c10::musa::MUSAGuard device_guard(device);
+  const auto stream = c10::musa::getStreamFromPool(false, rank);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  auto group = create_process_group(rank,
+                                    rank,
+                                    {0, 1, 2, 3, 4, 5, 6, 7},
+                                    8,
+                                    8,
+                                    std::stoi(port_text),
+                                    "127.0.0.1",
+                                    "glm_local_cp_test",
+                                    device);
+  GlmLocalCpGroup counted(*group);
+  ProcessGroup one(0, 1, device);
+  ParallelArgs cp(rank, 8, 1, 8, group.get(), 1);
+  cp.tp_group_ = &one;
+  cp.cp_group_ = &counted;
+  cp.moe_tp_group_ = &one;
+  cp.moe_ep_group_ = &one;
+  cp.kv_split_size(1);
+  ParallelArgs serial(0, 1, &one);
+  serial.tp_group_ = &one;
+  serial.moe_tp_group_ = &one;
+  auto opts = torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  auto args = model_args(64, 128, 128);
+  args.model_type("glm5_next")
+      .vocab_size(32)
+      .n_layers(4)
+      .enable_mla(true)
+      .layer_types({"linear_attention",
+                    "deepseek_sparse_attention",
+                    "deepseek_sparse_attention",
+                    "linear_attention"})
+      .mlp_layer_types({"dense", "dense", "dense", "sparse"})
+      .indexer_types({"full", "full", "shared", "full"})
+      .index_topk(2048)
+      .linear_num_key_heads(64)
+      .linear_num_value_heads(64)
+      .linear_key_head_dim(128)
+      .linear_value_head_dim(128)
+      .linear_conv_kernel_dim(4)
+      .intermediate_size(256)
+      .moe_intermediate_size(128)
+      .n_routed_experts(8)
+      .num_experts_per_tok(2)
+      .n_shared_experts(1)
+      .routed_scaling_factor(2.5f)
+      .norm_topk_prob(true)
+      .n_group(1)
+      .topk_group(1)
+      .scoring_func("sigmoid")
+      .topk_method("noaux_tc")
+      .swiglu_limit(10.0f)
+      .hidden_act("silu")
+      .hc_mult(4)
+      .hc_sinkhorn_iters(20)
+      .hc_eps(1e-6f);
+  QuantArgs quant;
+  quant.quant_method("fp8").weight_block_size({128, 128});
+  Weights weights;
+  auto add = [&](const std::string& name, std::vector<int64_t> shape) {
+    weights[name] =
+        (torch::randn(shape, torch::kFloat32) * 0.02).to(torch::kBFloat16);
+  };
+  auto add_fp8 = [&](const std::string& name, int64_t rows, int64_t cols) {
+    auto value = torch::randn({rows, cols}, torch::kFloat32) * 0.02;
+    auto scale = torch::full({rows / 128, cols / 128}, 0.01, torch::kFloat32);
+    weights[name + ".weight"] = (value / 0.01).to(torch::kFloat8_e4m3fn);
+    weights[name + ".weight_scale_inv"] = scale;
+  };
+  add("embed_tokens.weight", {32, 128});
+  weights["norm.weight"] = torch::ones({128}, torch::kBFloat16);
+  for (int32_t i = 0; i < 4; ++i) {
+    const std::string prefix = "layers." + std::to_string(i) + ".";
+    const std::string attn = prefix + "self_attn.";
+    if (i == 0 || i == 3) {
+      for (const std::string name : {"q", "k", "v"}) {
+        add(attn + name + "_proj.weight", {8192, 128});
+        add(attn + name + "_conv1d.weight", {8192, 1, 4});
+      }
+      add(attn + "b_proj.weight", {64, 128});
+      for (const std::string name : {"f", "g"}) {
+        add(attn + name + "_a_proj.weight", {128, 128});
+        add(attn + name + "_b_proj.weight", {8192, 128});
+      }
+      add(attn + "o_proj.weight", {128, 8192});
+      weights[attn + "o_norm.weight"] = torch::ones({128}, torch::kBFloat16);
+      weights[attn + "A_log"] = torch::zeros({1, 1, 64, 1}, torch::kFloat32);
+      weights[attn + "dt_bias"] = torch::zeros({8192}, torch::kFloat32);
+    } else {
+      for (const auto& [key, value] : make_weights(args)) {
+        if (i != 2 || key.rfind("indexer.", 0) != 0) {
+          // Isolate the local-token plumbing from discontinuous quantized
+          // DSA top-k changes after upstream BF16 reductions. CP2 separately
+          // tests random scoring against its partitioned projection oracle.
+          weights[attn + key] =
+              !random_indexer && key == "indexer.weights_proj.weight"
+                  ? torch::zeros_like(value)
+                  : value;
+        }
+      }
+    }
+    for (const std::string norm :
+         {"input_layernorm", "post_attention_layernorm"}) {
+      weights[prefix + norm + ".weight"] = torch::ones({128}, torch::kBFloat16);
+    }
+    for (const std::string mhc : {"attn_hc_pre.", "ffn_hc_pre."}) {
+      add(prefix + mhc + "hc_fn", {24, 512});
+      weights[prefix + mhc + "hc_base"] = torch::randn({24}) * 0.05;
+      weights[prefix + mhc + "hc_scale"] = torch::randn({3}) * 0.05;
+    }
+    if (i < 3) {
+      add_fp8(prefix + "mlp.gate_proj", 256, 128);
+      add_fp8(prefix + "mlp.up_proj", 256, 128);
+      add_fp8(prefix + "mlp.down_proj", 128, 256);
+    } else {
+      add(prefix + "mlp.gate.weight", {8, 128});
+      weights[prefix + "mlp.gate.e_score_correction_bias"] =
+          torch::randn({8}) * 0.01;
+      for (int32_t expert = -1; expert < 8; ++expert) {
+        const std::string name =
+            prefix + "mlp." +
+            (expert < 0 ? "shared_experts"
+                        : "experts." + std::to_string(expert));
+        for (const std::string proj : {"gate_proj", "up_proj", "down_proj"}) {
+          add_fp8(name + "." + proj, 128, 128);
+        }
+      }
+    }
+  }
+  using ::xllm::musa::model::Glm5NextModel;
+  Glm5NextModel local(ModelContext(cp, args, quant, opts));
+  // Environment switches only select construction; both model instances then
+  // execute their own stored contracts on the same device and stream.
+  ASSERT_EQ(setenv("XLLM_GLM5_PREFILL_CP", "0", 1), 0);
+  Glm5NextModel full(ModelContext(serial, args, quant, opts));
+  ASSERT_EQ(setenv("XLLM_GLM5_PREFILL_CP", "1", 1), 0);
+  for (auto& model : std::vector<Glm5NextModel>{local, full}) {
+    model->load_state_dict(StateDict(weights));
+    model->verify_loaded_weights();
+  }
+  const int64_t vocab_size = args.vocab_size();
+  LmHead lm_head(ModelContext(cp, args, QuantArgs(), opts));
+  lm_head->load_state_dict(StateDict(
+      {{"weight",
+        (torch::randn({vocab_size, args.hidden_size()}, torch::kFloat32) * 0.02)
+            .to(torch::kBFloat16)}}));
+  // Full Dense/Shared weights must be present on each CP rank.
+  auto local_params = local->named_parameters();
+  EXPECT_EQ(local_params["layers.0.mlp.gate_up_proj.weight"].size(0), 512);
+  EXPECT_EQ(
+      local_params["layers.3.mlp.shared_experts.gate_up_proj.weight"].size(0),
+      256);
+  auto make_caches = [&](bool partitioned) {
+    std::vector<KVCache> caches;
+    for (int32_t i = 0; i < 4; ++i) {
+      if (i == 0 || i == 3) {
+        const int64_t heads = partitioned ? 8 : 64;
+        caches.emplace_back(LinearAttentionKVCacheTensors{
+            torch::zeros({3, 3 * heads * 128, 3}, opts),
+            torch::zeros({3, heads, 128, 128}, opts.dtype(torch::kFloat32))});
+      } else if (i == 1) {
+        caches.emplace_back(
+            Glm5NextSparseAttentionImpl::create_cache(32, 3, opts));
+      } else {
+        // The engine allocates neither an Indexer pool nor a tail for a shared
+        // layer.
+        IndexedKVCacheTensors tensors;
+        tensors.kv_cache_tensors.key_cache =
+            torch::zeros({32, 256, 1, 512}, opts);
+        caches.emplace_back(tensors);
+      }
+    }
+    return caches;
+  };
+  for (const int64_t total : {1, 7, 128, 129, 2048, 4092}) {
+    auto local_caches = make_caches(true);
+    auto full_caches = make_caches(false);
+    const int64_t batch = total == 1 ? 1 : 2;
+    std::vector<int64_t> starts(batch, 0);
+    for (int32_t phase = 0; phase < 2; ++phase) {
+      const std::vector<int64_t> sizes =
+          phase == 0
+              ? (batch == 1
+                     ? std::vector<int64_t>{total}
+                     : std::vector<int64_t>{total / 3, total - total / 3})
+              : (batch == 1 ? std::vector<int64_t>{3}
+                            : std::vector<int64_t>{3, 5});
+      std::vector<int32_t> cu{0}, ids;
+      std::vector<int64_t> positions, slots, requests;
+      for (int64_t request = 0; request < batch; ++request) {
+        for (int64_t j = 0; j < sizes[request]; ++j) {
+          positions.push_back(starts[request] + j);
+          slots.push_back(request * 16 * 256 + starts[request] + j);
+          requests.push_back(request);
+        }
+        starts[request] += sizes[request];
+        cu.push_back(positions.size());
+        ids.push_back(request + 1);
+      }
+      auto pos = torch::tensor(positions, torch::kInt64).to(device);
+      auto tokens =
+          torch::arange(pos.numel(), torch::kInt64).remainder(32).to(device);
+      ModelInputParams params;
+      params.meta.batch_forward_type = phase == 0
+                                           ? BatchForwardType::PREFILL
+                                           : BatchForwardType::CHUNKED_PREFILL;
+      params.embedding.linear_state_ids = ids;
+      params.attn_metadata = std::make_shared<AttentionMetadata>();
+      auto& meta = *params.attn_metadata;
+      meta.is_prefill = phase == 0;
+      meta.is_chunked_prefill = phase == 1;
+      meta.q_cu_seq_lens = torch::tensor(cu, torch::kInt32).to(device);
+      meta.block_table =
+          torch::arange(batch * 16, torch::kInt32).view({batch, 16}).to(device);
+      meta.slot_mapping = torch::tensor(slots, torch::kInt64).to(device);
+      meta.linear_state_indices = torch::tensor(ids, torch::kInt32).to(device);
+      meta.has_initial_states =
+          torch::full({batch}, phase == 1, opts.dtype(torch::kBool));
+      meta.max_query_len = *std::max_element(sizes.begin(), sizes.end());
+      meta.max_seq_len = *std::max_element(starts.begin(), starts.end());
+      // Alternate raw token IDs and supplied embeddings (VL entry contract).
+      if (phase == 1) {
+        params.embedding.input_embedding = weights.at("embed_tokens.weight")
+                                               .index_select(0, tokens.cpu())
+                                               .to(device);
+      }
+      const int64_t begin =
+          rank * (pos.numel() / 8) + std::min<int64_t>(rank, pos.numel() % 8);
+      const int64_t count = pos.numel() / 8 + (rank < pos.numel() % 8 ? 1 : 0);
+      auto expected =
+          full->forward(tokens, pos, full_caches, params).hidden_states.clone();
+      const int64_t previous_scatters = counted.scatters;
+      auto output =
+          local->forward(tokens, pos, local_caches, params).hidden_states;
+      EXPECT_EQ(output.sizes(), torch::IntArrayRef({count, 128}));
+      EXPECT_EQ(counted.scatters - previous_scatters, 2);
+      EXPECT_EQ(counted.reductions, 0);
+      EXPECT_FALSE(
+          meta.glm5_prefill_cp_enabled);  // caller metadata is not mutated
+      auto shard_meta = meta;
+      shard_meta.glm5_prefill_cp_enabled = true;
+      shard_meta.glm5_prefill_cp_rank = rank;
+      shard_meta.glm5_prefill_cp_size = 8;
+      shard_meta.glm5_prefill_local_row_begin = begin;
+      shard_meta.glm5_prefill_local_row_end = begin + count;
+      auto identity =
+          make_routed_moe_token_shard(shard_meta, pos.narrow(0, begin, count));
+      EXPECT_TRUE(torch::equal(identity.global_rows.cpu(),
+                               torch::arange(begin, begin + count)));
+      EXPECT_TRUE(torch::equal(
+          identity.request_rows.cpu().to(torch::kInt64),
+          torch::tensor(requests, torch::kInt64).narrow(0, begin, count)));
+      EXPECT_TRUE(torch::equal(identity.positions.cpu(),
+                               pos.narrow(0, begin, count).cpu()));
+      auto restored = local->restore_prefill_cp_hidden(output);
+      ASSERT_EQ(restored.sizes(), expected.sizes());
+      if (count > 0) {
+        const float restore_error =
+            (restored.narrow(0, begin, count).cpu().to(torch::kFloat32) -
+             expected.narrow(0, begin, count).cpu().to(torch::kFloat32))
+                .abs()
+                .max()
+                .item<float>();
+        EXPECT_LE(restore_error, 0.06f) << "S=" << total << " phase=" << phase;
+      }
+      auto selected =
+          torch::tensor(
+              std::vector<int64_t>{0, std::max<int64_t>(0, pos.numel() - 1)},
+              torch::TensorOptions().dtype(torch::kInt64))
+              .to(device);
+      auto actual_logits = lm_head->forward(restored.index_select(0, selected));
+      auto expected_logits =
+          lm_head->forward(expected.index_select(0, selected));
+      EXPECT_TRUE(torch::allclose(actual_logits.cpu().to(torch::kFloat32),
+                                  expected_logits.cpu().to(torch::kFloat32),
+                                  0.05,
+                                  0.04))
+          << "S=" << total << " phase=" << phase;
+      ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+      if (count > 0) {
+        auto a = output.cpu().to(torch::kFloat32);
+        auto b = expected.narrow(0, begin, count).cpu().to(torch::kFloat32);
+        const float maximum = (a - b).abs().max().item<float>();
+        const float rms =
+            ((a - b).square().mean() / b.square().mean()).sqrt().item<float>();
+        EXPECT_TRUE(torch::allclose(a, b, 0.05, 0.04))
+            << "S=" << total << " phase=" << phase << " max=" << maximum;
+        EXPECT_LT(rms, 0.02);
+        LOG(INFO) << "CP3 rank=" << rank << " S=" << total << " phase=" << phase
+                  << " rows=" << count << " max_abs=" << maximum
+                  << " relative_rms=" << rms;
+      }
+    }
+  }
+  EXPECT_GT(counted.gathers, 0);
+  EXPECT_GT(counted.exchanges, 0);
+}
+
+TEST(GlmLocalCpTest, FinalNormLmHeadRestoreWorker) {
+  const char* rank_text = std::getenv("XLLM_GLM_LOCAL_CP_RANK");
+  const char* port_text = std::getenv("XLLM_GLM_LOCAL_CP_PORT");
+  if (rank_text == nullptr || port_text == nullptr) {
+    GTEST_SKIP() << "Requires run_local_cp_test.sh";
+  }
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard no_grad;
+  const int32_t rank = std::stoi(rank_text);
+  constexpr int32_t kWorld = 8;
+  const torch::Device device(torch::kPrivateUse1, rank);
+  c10::musa::MUSAGuard device_guard(device);
+  const auto stream = c10::musa::getStreamFromPool(false, rank);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  auto group = create_process_group(rank,
+                                    rank,
+                                    {0, 1, 2, 3, 4, 5, 6, 7},
+                                    kWorld,
+                                    kWorld,
+                                    std::stoi(port_text) + 1,
+                                    "127.0.0.1",
+                                    "glm_lm_head_cp_test",
+                                    device);
+  ProcessGroup one(0, 1, device);
+  ParallelArgs cp(rank, kWorld, 1, kWorld, group.get(), 1);
+  cp.tp_group_ = &one;
+  cp.cp_group_ = group.get();
+  cp.moe_tp_group_ = &one;
+  cp.moe_ep_group_ = &one;
+  ParallelArgs serial(0, 1, &one);
+  serial.tp_group_ = &one;
+  serial.moe_tp_group_ = &one;
+
+  ModelArgs args;
+  args.model_type("glm5_next")
+      .hidden_size(32)
+      .vocab_size(17)
+      .n_layers(0)
+      .hc_mult(4)
+      .rms_norm_eps(1e-5);
+  const auto opts =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  ASSERT_EQ(setenv("XLLM_GLM5_PREFILL_CP", "1", 1), 0);
+  ::xllm::musa::model::Glm5NextForCausalLM local(
+      ModelContext(cp, args, QuantArgs(), opts));
+  ASSERT_EQ(setenv("XLLM_GLM5_PREFILL_CP", "0", 1), 0);
+  ::xllm::musa::model::Glm5NextForCausalLM full(
+      ModelContext(serial, args, QuantArgs(), opts));
+  ASSERT_EQ(setenv("XLLM_GLM5_PREFILL_CP", "1", 1), 0);
+  for (auto& parameter : local->named_parameters()) {
+    parameter.value().fill_(0.01);
+  }
+  for (auto& parameter : full->named_parameters()) {
+    parameter.value().fill_(0.01);
+  }
+
+  for (const int64_t kTokens : {int64_t{1}, int64_t{7}, int64_t{129}}) {
+    auto tokens = torch::arange(kTokens, torch::kInt64)
+                      .remainder(args.vocab_size())
+                      .to(device);
+    auto positions = torch::arange(kTokens, torch::kInt64).to(device);
+    auto make_params = [&]() {
+      ModelInputParams params;
+      params.meta.batch_forward_type = BatchForwardType::PREFILL;
+      params.attn_metadata = std::make_shared<AttentionMetadata>();
+      params.attn_metadata->is_prefill = true;
+      params.attn_metadata->q_cu_seq_lens =
+          torch::tensor(std::vector<int32_t>{0, static_cast<int32_t>(kTokens)},
+                        torch::kInt32)
+              .to(device);
+      params.attn_metadata->block_table =
+          torch::zeros({1, 1}, torch::kInt32).to(device);
+      params.attn_metadata->slot_mapping =
+          torch::arange(kTokens, torch::kInt64).to(device);
+      params.attn_metadata->max_query_len = kTokens;
+      params.attn_metadata->max_seq_len = kTokens;
+      return params;
+    };
+    std::vector<KVCache> no_cache;
+    auto expected =
+        full->forward(tokens, positions, no_cache, make_params()).hidden_states;
+    auto actual = local->forward(tokens, positions, no_cache, make_params())
+                      .hidden_states;
+    const int64_t count = kTokens / kWorld + (rank < kTokens % kWorld ? 1 : 0);
+    EXPECT_EQ(actual.size(0), count);
+    auto selected =
+        torch::tensor(std::vector<int64_t>{0, kTokens / 2, kTokens - 1},
+                      torch::TensorOptions().dtype(torch::kInt64))
+            .to(device);
+    auto actual_logits = local->logits(actual, selected);
+    auto expected_logits = full->logits(expected, selected);
+    EXPECT_TRUE(torch::allclose(actual_logits.cpu().to(torch::kFloat32),
+                                expected_logits.cpu().to(torch::kFloat32),
+                                0.002,
+                                0.002));
+    torch::Tensor actual_hidden;
+    torch::Tensor expected_hidden;
+    auto actual_logits_with_hidden =
+        local->logits(actual, selected, actual_hidden);
+    auto expected_logits_with_hidden =
+        full->logits(expected, selected, expected_hidden);
+    EXPECT_TRUE(
+        torch::allclose(actual_logits_with_hidden.cpu().to(torch::kFloat32),
+                        expected_logits_with_hidden.cpu().to(torch::kFloat32),
+                        0.002,
+                        0.002));
+    EXPECT_TRUE(torch::allclose(actual_hidden.cpu().to(torch::kFloat32),
+                                expected_hidden.cpu().to(torch::kFloat32),
+                                0.002,
+                                0.002));
+    LOG(INFO) << "CP4 restore S=" << kTokens << " rank=" << rank
+              << " local_rows=" << count;
+  }
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+}
+
 }  // namespace
 }  // namespace xllm::layer

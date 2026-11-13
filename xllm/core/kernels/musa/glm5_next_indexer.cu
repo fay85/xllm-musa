@@ -159,8 +159,10 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
                                       int32_t* pool_lengths,
                                       int64_t states,
                                       int64_t pages,
-                                      int64_t table_width) {
-  const int32_t row = blockIdx.x;
+                                      int64_t table_width,
+                                      int64_t first_row = 0,
+                                      int64_t key_begin = 0) {
+  const int32_t row = blockIdx.x + first_row;
   const int32_t lane = threadIdx.x;
   int32_t request = 0;
   while (cu[request + 1] <= row) {
@@ -171,8 +173,8 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
   const int64_t position = positions[row];
   const bool valid = state > 0 && state < states && position >= 0;
   if (lane == 0) {
-    rows[row] = valid ? request : -1;
-    pool_lengths[row] = valid ? (position + 1) / 4 : 0;
+    rows[blockIdx.x] = valid ? request : -1;
+    pool_lengths[blockIdx.x] = valid ? (position + 1) / 4 : 0;
   }
   if (!valid || position % 4 != 3) {
     return;
@@ -188,11 +190,15 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
         static_cast<float>(read_tail[read_state * 1024 + 512 + j * 128 + lane]);
     // Find the most recent write to this ring entry. Normally this reads at
     // most four positions; padding is skipped just as in the decode kernel.
-    for (int32_t input_row = row; input_row >= cu[request]; --input_row) {
+    for (int32_t input_row = row;
+         input_row >= cu[request] && input_row >= key_begin;
+         --input_row) {
       const int64_t input_position = positions[input_row];
       if (input_position >= 0 && input_position % 4 == j) {
-        pool_keys[j] = static_cast<float>(keys[input_row * 128 + lane]);
-        pool_gates[j] = static_cast<float>(gates[input_row * 128 + lane]);
+        pool_keys[j] =
+            static_cast<float>(keys[(input_row - key_begin) * 128 + lane]);
+        pool_gates[j] =
+            static_cast<float>(gates[(input_row - key_begin) * 128 + lane]);
         break;
       }
       if (input_position == 0) {
@@ -416,14 +422,18 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
   CHECK_GT(max_context, 0);
   CHECK_LE(max_context, block_table.size(1) * 256);
   CHECK_LE(max_context, std::numeric_limits<int32_t>::max());
-  const int64_t width = ((token_topk + 3 + 127) / 128) * 128;
   auto ints = query.options().dtype(torch::kInt32);
-  Glm5NextIndexerSelection result{torch::empty({tokens, width}, ints),
-                                  torch::empty({tokens}, ints),
-                                  torch::empty({tokens}, ints)};
   if (tokens == 0) {
-    return result;
+    return glm5_next_indexer_select(query,
+                                    weights,
+                                    positions,
+                                    torch::empty({0}, ints),
+                                    block_table,
+                                    cache,
+                                    max_context,
+                                    token_topk);
   }
+  auto query_rows = torch::empty({tokens}, ints);
   musaDeviceProp properties{};
   CHECK_EQ(musaGetDeviceProperties(&properties, query.device().index()),
            musaSuccess);
@@ -448,7 +458,7 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
         block_table.data_ptr<int32_t>(),
         cache.data_ptr<uint8_t>(),
         snapshot.data_ptr<c10::BFloat16>(),
-        result.rows.data_ptr<int32_t>(),
+        query_rows.data_ptr<int32_t>(),
         pool_lengths.data_ptr<int32_t>(),
         tail.size(0),
         cache.size(0),
@@ -475,13 +485,71 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                             cache.data_ptr<uint8_t>(),
                                             snapshot.data_ptr<c10::BFloat16>(),
                                             tail.data_ptr<c10::BFloat16>(),
-                                            result.rows.data_ptr<int32_t>(),
+                                            query_rows.data_ptr<int32_t>(),
                                             pool_lengths.data_ptr<int32_t>(),
                                             tail.size(0),
                                             cache.size(0),
                                             block_table.size(1));
   }
   check_musa_kernel_launch("GLM IndexPool update");
+  return glm5_next_indexer_select(query,
+                                  weights,
+                                  positions,
+                                  query_rows,
+                                  block_table,
+                                  cache,
+                                  max_context,
+                                  token_topk);
+}
+
+Glm5NextIndexerSelection glm5_next_indexer_select(
+    const torch::Tensor& query,
+    const torch::Tensor& weights,
+    const torch::Tensor& positions,
+    const torch::Tensor& rows,
+    const torch::Tensor& block_table,
+    const torch::Tensor& cache,
+    int64_t max_context,
+    int64_t token_topk) {
+  XLLMDeviceGuard device_guard(query.device());
+  check_tensor(query, query, torch::kBFloat16);
+  check_tensor(weights, query, torch::kFloat32);
+  check_tensor(positions, query, torch::kInt64);
+  check_tensor(rows, query, torch::kInt32);
+  check_tensor(block_table, query, torch::kInt32);
+  check_tensor(cache, query, torch::kUInt8);
+  const int64_t tokens = query.size(0);
+  CHECK_EQ(query.sizes(), torch::IntArrayRef({tokens, 32, 128}));
+  CHECK_EQ(weights.sizes(), torch::IntArrayRef({tokens, 32}));
+  CHECK_EQ(positions.sizes(), torch::IntArrayRef({tokens}));
+  CHECK_EQ(rows.sizes(), positions.sizes());
+  CHECK_EQ(block_table.dim(), 2);
+  CHECK_EQ(cache.dim(), 4);
+  CHECK_EQ(cache.sizes().slice(1), torch::IntArrayRef({64, 1, 132}));
+  CHECK_GT(max_context, 0);
+  CHECK_LE(max_context, std::numeric_limits<int32_t>::max());
+  CHECK_LE(max_context, block_table.size(1) * 256);
+  CHECK_GT(token_topk, 0);
+  CHECK_EQ(token_topk % 4, 0);
+  CHECK_LE(token_topk, 2048);
+  const int64_t width = ((token_topk + 3 + 127) / 128) * 128;
+  auto ints = query.options().dtype(torch::kInt32);
+  Glm5NextIndexerSelection result{
+      torch::empty({tokens, width}, ints), torch::empty({tokens}, ints), rows};
+  if (tokens == 0) {
+    return result;
+  }
+  const torch::Tensor pool_lengths =
+      torch::where(rows.ge(0), (positions + 1).div(4, "floor"), 0)
+          .to(torch::kInt32);
+  musaDeviceProp properties{};
+  CHECK_EQ(musaGetDeviceProperties(&properties, query.device().index()),
+           musaSuccess);
+  CHECK_EQ(properties.major * 10 + properties.minor, 31);
+  auto metadata_fn =
+      get_function("glm_kpool_metadata_v1", "get_paged_mqa_logits_metadata");
+  auto score_fn = get_function("glm_kpool_score_v1", "fp8_paged_mqa_logits");
+  const auto stream = current_musa_stream(query.device());
   const int64_t pools = (max_context + 3) / 4;
   const int64_t count = std::min<int64_t>(token_topk / 4, pools);
   auto selected =
@@ -543,5 +611,112 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                            token_topk);
   check_musa_kernel_launch("GLM IndexPool candidate expansion");
   return result;
+}
+// CP owns a contiguous range of pool-ending rows. Only the preceding three
+// projected key/gate rows are needed from other ranks. The recurrent tail is
+// read here and finalized after the compressed pool exchange.
+void glm5_next_indexer_update_cp(const torch::Tensor& keys,
+                                 const torch::Tensor& gates,
+                                 const torch::Tensor& ape,
+                                 const torch::Tensor& positions,
+                                 const torch::Tensor& cu,
+                                 const torch::Tensor& ids,
+                                 const torch::Tensor& read_ids,
+                                 const torch::Tensor& table,
+                                 torch::Tensor& cache,
+                                 const torch::Tensor& tail,
+                                 int64_t first_row,
+                                 int64_t count,
+                                 int64_t key_begin) {
+  XLLMDeviceGuard device_guard(keys.device());
+  CHECK_GE(count, 0);
+  CHECK_GE(first_row, key_begin);
+  CHECK_GE(key_begin, 0);
+  CHECK_LE(first_row + count, positions.numel());
+  CHECK_EQ(keys.sizes(),
+           torch::IntArrayRef({first_row + count - key_begin, 128}));
+  CHECK_EQ(gates.sizes(), keys.sizes());
+  CHECK_EQ(ape.sizes(), torch::IntArrayRef({4, 128}));
+  CHECK_EQ(positions.dim(), 1);
+  CHECK_EQ(table.dim(), 2);
+  CHECK_EQ(cu.sizes(), torch::IntArrayRef({table.size(0) + 1}));
+  CHECK_EQ(ids.sizes(), torch::IntArrayRef({table.size(0)}));
+  CHECK_EQ(read_ids.sizes(), ids.sizes());
+  CHECK_EQ(cache.dim(), 4);
+  CHECK_EQ(cache.sizes().slice(1), torch::IntArrayRef({64, 1, 132}));
+  CHECK_EQ(tail.dim(), 4);
+  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  for (const auto& value : {keys, gates, tail}) {
+    check_tensor(value, keys, torch::kBFloat16);
+  }
+  check_tensor(ape, keys, torch::kFloat32);
+  check_tensor(positions, keys, torch::kInt64);
+  for (const auto& value : {cu, ids, read_ids, table}) {
+    check_tensor(value, keys, torch::kInt32);
+  }
+  check_tensor(cache, keys, torch::kUInt8);
+  if (count == 0) {
+    return;
+  }
+  auto rows = torch::empty({count}, keys.options().dtype(torch::kInt32));
+  auto lengths = torch::empty_like(rows);
+  update_pools_parallel<<<count, 128, 0, current_musa_stream(keys.device())>>>(
+      keys.data_ptr<c10::BFloat16>(),
+      gates.data_ptr<c10::BFloat16>(),
+      ape.data_ptr<float>(),
+      positions.data_ptr<int64_t>(),
+      cu.data_ptr<int32_t>(),
+      ids.data_ptr<int32_t>(),
+      read_ids.data_ptr<int32_t>(),
+      table.data_ptr<int32_t>(),
+      cache.data_ptr<uint8_t>(),
+      tail.data_ptr<c10::BFloat16>(),
+      rows.data_ptr<int32_t>(),
+      lengths.data_ptr<int32_t>(),
+      tail.size(0),
+      cache.size(0),
+      table.size(1),
+      first_row,
+      key_begin);
+  check_musa_kernel_launch("GLM CP IndexPool update");
+}
+
+void glm5_next_indexer_update_tail(const torch::Tensor& keys,
+                                   const torch::Tensor& gates,
+                                   const torch::Tensor& positions,
+                                   const torch::Tensor& cu,
+                                   const torch::Tensor& ids,
+                                   const torch::Tensor& read_ids,
+                                   torch::Tensor& tail) {
+  XLLMDeviceGuard device_guard(keys.device());
+  for (const auto& value : {keys, gates, tail}) {
+    check_tensor(value, keys, torch::kBFloat16);
+  }
+  for (const auto& value : {cu, ids, read_ids}) {
+    check_tensor(value, keys, torch::kInt32);
+  }
+  check_tensor(positions, keys, torch::kInt64);
+  CHECK_EQ(keys.sizes(), torch::IntArrayRef({positions.numel(), 128}));
+  CHECK_EQ(gates.sizes(), keys.sizes());
+  CHECK_GT(ids.numel(), 0);
+  CHECK_EQ(cu.numel(), ids.numel() + 1);
+  CHECK_EQ(read_ids.sizes(), ids.sizes());
+  CHECK_EQ(tail.dim(), 4);
+  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  auto snapshot = tail.clone();
+  update_pool_tails<<<ids.numel(),
+                      128,
+                      0,
+                      current_musa_stream(keys.device())>>>(
+      keys.data_ptr<c10::BFloat16>(),
+      gates.data_ptr<c10::BFloat16>(),
+      positions.data_ptr<int64_t>(),
+      cu.data_ptr<int32_t>(),
+      ids.data_ptr<int32_t>(),
+      read_ids.data_ptr<int32_t>(),
+      snapshot.data_ptr<c10::BFloat16>(),
+      tail.data_ptr<c10::BFloat16>(),
+      tail.size(0));
+  check_musa_kernel_launch("GLM CP IndexPool tail update");
 }
 }  // namespace xllm::kernel::musa

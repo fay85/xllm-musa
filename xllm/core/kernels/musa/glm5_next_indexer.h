@@ -53,4 +53,44 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                            int64_t max_context,
                                            int64_t token_topk);
 
+// Selection from a populated replicated pool cache. Query rows may be
+// interleaved; rows and positions retain global request/causal coordinates.
+Glm5NextIndexerSelection glm5_next_indexer_select(
+    const torch::Tensor& query,
+    const torch::Tensor& weights,
+    const torch::Tensor& positions,
+    const torch::Tensor& rows,
+    const torch::Tensor& block_table,
+    const torch::Tensor& cache,
+    int64_t max_context,
+    int64_t token_topk);
+
+// CP cache update uses natural-order projected key/gate rows [key_begin,
+// first_row+count), including up to three predecessor rows. It writes only
+// completed pools ending in [first_row, first_row+count), without changing
+// tail.
+void glm5_next_indexer_update_cp(const torch::Tensor& keys,
+                                 const torch::Tensor& gates,
+                                 const torch::Tensor& ape,
+                                 const torch::Tensor& positions,
+                                 const torch::Tensor& cu,
+                                 const torch::Tensor& ids,
+                                 const torch::Tensor& read_ids,
+                                 const torch::Tensor& table,
+                                 torch::Tensor& cache,
+                                 const torch::Tensor& tail,
+                                 int64_t first_row,
+                                 int64_t count,
+                                 int64_t key_begin);
+
+// keys/gates contain the last min(4, query_length) rows of each request,
+// concatenated with matching positions and cumulative boundaries.
+void glm5_next_indexer_update_tail(const torch::Tensor& keys,
+                                   const torch::Tensor& gates,
+                                   const torch::Tensor& positions,
+                                   const torch::Tensor& cu,
+                                   const torch::Tensor& ids,
+                                   const torch::Tensor& read_ids,
+                                   torch::Tensor& tail);
+
 }  // namespace xllm::kernel::musa

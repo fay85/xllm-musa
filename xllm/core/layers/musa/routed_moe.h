@@ -18,6 +18,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,21 @@ class RoutedMoeSharedExpertImpl final : public torch::nn::Module {
 };
 TORCH_MODULE(RoutedMoeSharedExpert);
 
+// Source-token identity for future EP dispatch. Every payload row stays local;
+// the global packed row, request row and causal position travel as metadata.
+struct RoutedMoeTokenShard final {
+  int32_t cp_rank = 0;
+  int32_t cp_size = 1;
+  torch::Tensor global_rows;
+  torch::Tensor request_rows;
+  torch::Tensor positions;
+};
+
+struct AttentionMetadata;
+RoutedMoeTokenShard make_routed_moe_token_shard(
+    const AttentionMetadata& metadata,
+    const torch::Tensor& positions);
+
 class RoutedMoeImpl final : public torch::nn::Module {
  public:
   RoutedMoeImpl() = default;
@@ -89,7 +105,8 @@ class RoutedMoeImpl final : public torch::nn::Module {
       const torch::Tensor& topk_ids,
       const ModelInputParams& input_params,
       bool skip_tp_allreduce = false,
-      const torch::Tensor& output_buffer = {});
+      const torch::Tensor& output_buffer = {},
+      const RoutedMoeTokenShard* token_shard = nullptr);
 
   void load_state_dict(const StateDict& state_dict);
   void verify_loaded_weights(const std::string& prefix = "") const;
@@ -147,6 +164,10 @@ class RoutedMoeImpl final : public torch::nn::Module {
   double swiglu_limit_ = 0.0;
   std::string hidden_act_ = "silu";
   torch::TensorOptions options_;
+  bool prefill_cp_enabled_ = false;
+  int32_t prefill_cp_rank_ = 0;
+  int32_t prefill_cp_size_ = 1;
+  std::unique_ptr<ProcessGroup> shared_single_rank_group_;
   ProcessGroup* tp_pg_ = nullptr;
   ProcessGroup* ep_pg_ = nullptr;
   std::shared_ptr<MusaMegaMoe> mega_moe_;

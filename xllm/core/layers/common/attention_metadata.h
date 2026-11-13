@@ -269,6 +269,18 @@ struct AttentionMetadata {
   std::shared_ptr<const MusaKdaBatchMetadata> musa_kda_batch;
   // Set only on the per-rank metadata of a context-parallel prefill.
   musa_pcp::Context* pcp_context = nullptr;
+
+  // GLM5 Hybrid CP0 model-level token-shard contract. These fields describe
+  // the balanced contiguous shard that a future CP layer implementation will
+  // consume; they do not change the tensors passed to attention yet.
+  bool glm5_prefill_cp_enabled = false;
+  int32_t glm5_prefill_cp_rank = 0;
+  int32_t glm5_prefill_cp_size = 1;
+  int64_t glm5_prefill_global_rows = 0;
+  int64_t glm5_prefill_local_row_begin = 0;
+  int64_t glm5_prefill_local_row_end = 0;
+  torch::Tensor glm5_prefill_local_row_indices;
+  std::vector<int32_t> glm5_prefill_row_offsets;
 #endif
 
 #if defined(USE_NPU)

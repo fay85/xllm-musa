@@ -157,6 +157,12 @@ std::tuple<torch::Tensor, torch::Tensor> RoutedMoeGateImpl::forward(
       << hidden_size_ << " got " << hidden_states.size(-1);
 
   const int64_t num_tokens = hidden_states.numel() / hidden_size_;
+  if (num_tokens == 0) {
+    return {torch::empty({0, top_k_},
+                         hidden_states.options().dtype(torch::kFloat32)),
+            torch::empty({0, top_k_},
+                         hidden_states.options().dtype(torch::kInt32))};
+  }
   if (score_func_to_norm_type(scoring_func_) == 2 && weight_bf16_.defined() &&
       num_tokens > 0 && num_tokens <= decode_workspace_tokens_ &&
       decode_logits_output_.defined() &&

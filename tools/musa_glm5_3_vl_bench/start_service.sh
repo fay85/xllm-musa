@@ -14,6 +14,8 @@ HOST="${GLM5_HOST:-127.0.0.1}"
 BASE_PORT="${GLM5_PORT:-18901}"
 MASTER_ADDR="${GLM5_MASTER_ADDR:-127.0.0.1:29888}"
 NNODES="${GLM5_NNODES:-8}"
+EP_SIZE="${GLM5_EP_SIZE:-1}"
+CP_SIZE="${GLM5_CP_SIZE:-1}"
 MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-4096}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
@@ -21,6 +23,8 @@ ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-auto}"
 # GLM MegaMoE is enabled by default; set 0 to select the original TP experts.
 export XLLM_GLM5_MEGA_MOE="${XLLM_GLM5_MEGA_MOE:-1}"
+export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-0}"
+export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-0}"
 PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
 ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-false}"
 MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:--1}"
@@ -151,6 +155,23 @@ if [[ ! -d "${MODEL_PATH}" ]]; then
   exit 1
 fi
 
+if [[ "${XLLM_GLM5_PREFILL_EP}" != "0" && "${EP_SIZE}" != "8" ]]; then
+  echo "Error: XLLM_GLM5_PREFILL_EP requires GLM5_EP_SIZE=8, got ${EP_SIZE}." >&2
+  exit 1
+fi
+if [[ "${XLLM_GLM5_PREFILL_CP}" != "0" && "${CP_SIZE}" != "8" ]]; then
+  echo "Error: XLLM_GLM5_PREFILL_CP requires GLM5_CP_SIZE=8, got ${CP_SIZE}." >&2
+  exit 1
+fi
+if [[ "${EP_SIZE}" != "1" && "${NNODES}" != "8" ]]; then
+  echo "Error: GLM5_EP_SIZE=${EP_SIZE} currently requires GLM5_NNODES=8." >&2
+  exit 1
+fi
+if [[ "${CP_SIZE}" != "1" && "${NNODES}" != "8" ]]; then
+  echo "Error: GLM5_CP_SIZE=${CP_SIZE} currently requires GLM5_NNODES=8." >&2
+  exit 1
+fi
+
 ensure_ops_cache
 mkdir -p "${LOG_DIR}"
 stop_service
@@ -170,6 +191,7 @@ fi
 
 echo "Binary: ${XLLM_BIN}"
 echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
+echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_cp=${XLLM_GLM5_PREFILL_CP} mega_moe=${XLLM_GLM5_MEGA_MOE}"
 echo "Logs: ${LOG_DIR}/rank_*.log"
 if [[ "${TORCH_PROFILE}" == "1" ]]; then
   echo "Torch profile dir: ${PROFILE_DIR}"
@@ -189,6 +211,9 @@ for ((r = 0; r < NNODES; ++r)); do
     --port="${RANK_PORT}" \
     --nnodes="${NNODES}" \
     --node_rank="${r}" \
+    --ep_size="${EP_SIZE}" \
+    --cp_size="${CP_SIZE}" \
+    --kv_split_size=1 \
     --master_node_addr="${MASTER_ADDR}" \
     --communication_backend=mccl \
     --max_memory_utilization="${MAX_MEMORY_UTILIZATION}" \

@@ -18,21 +18,80 @@ limitations under the License.
 #include <c10/core/DeviceGuard.h>
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <tuple>
 #include <unordered_set>
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "framework/parallel_state/parallel_state.h"
 #include "framework/state_dict/utils.h"
 #include "kernels/musa/gdn_ops.h"
 #include "kernels/ops_api.h"
+#include "util/env_var.h"
 
 namespace xllm {
 namespace layer {
 
 namespace {
+
+std::vector<int32_t> validate_kda_cp_input(const torch::Tensor& input,
+                                           const AttentionMetadata& metadata,
+                                           const ProcessGroup& group) {
+  CHECK(metadata.is_prefill || metadata.is_chunked_prefill)
+      << "KDA CP supports prefill only";
+  CHECK(!metadata.enable_cuda_graph && !kernel::musa::is_stream_capturing())
+      << "KDA CP graph capture is not supported";
+  CHECK_EQ(metadata.glm5_prefill_cp_rank, group.rank());
+  CHECK_EQ(metadata.glm5_prefill_cp_size, group.world_size());
+  const int64_t global_rows = metadata.glm5_prefill_global_rows;
+  CHECK_GT(global_rows, 0) << "KDA CP requires a nonempty global batch";
+  CHECK_LE(global_rows, std::numeric_limits<int32_t>::max());
+  const auto& offsets = metadata.glm5_prefill_row_offsets;
+  CHECK_EQ(offsets.size(), static_cast<size_t>(group.world_size()) + 1);
+  const int64_t base = global_rows / group.world_size();
+  const int64_t remainder = global_rows % group.world_size();
+  std::vector<int32_t> counts;
+  counts.reserve(group.world_size());
+  for (int32_t rank = 0; rank < group.world_size(); ++rank) {
+    CHECK_EQ(offsets[rank], rank * base + std::min<int64_t>(rank, remainder))
+        << "KDA CP requires balanced Plain row order";
+    counts.emplace_back(static_cast<int32_t>(base + (rank < remainder)));
+  }
+  CHECK_EQ(offsets.back(), global_rows);
+  CHECK_EQ(metadata.glm5_prefill_local_row_begin, offsets[group.rank()]);
+  CHECK_EQ(metadata.glm5_prefill_local_row_end, offsets[group.rank() + 1]);
+  CHECK_EQ(input.size(0), counts[group.rank()])
+      << "KDA CP expects local rows, not the replicated global input";
+  return counts;
+}
+
+torch::Tensor reduce_scatter_kda_rows(const torch::Tensor& partial_output,
+                                      ProcessGroup& group,
+                                      const std::vector<int32_t>& counts) {
+  const int64_t padded_rows = *std::max_element(counts.begin(), counts.end());
+  torch::Tensor packed = partial_output;
+  if (partial_output.size(0) != padded_rows * group.world_size()) {
+    // Pad each rank's block, not only the tail of the global tensor. CP0 uses
+    // balanced counts (e.g. 10 rows / 8 ranks = 2,2,1,1,1,1,1,1).
+    packed =
+        torch::zeros({padded_rows * group.world_size(), partial_output.size(1)},
+                     partial_output.options());
+    int64_t offset = 0;
+    for (int32_t rank = 0; rank < group.world_size(); ++rank) {
+      packed.narrow(0, rank * padded_rows, counts[rank])
+          .copy_(partial_output.narrow(0, offset, counts[rank]));
+      offset += counts[rank];
+    }
+  }
+  torch::Tensor local = torch::empty({padded_rows, partial_output.size(1)},
+                                     partial_output.options());
+  group.reduce_scatter(packed.contiguous(), local);
+  return local.narrow(0, 0, counts[group.rank()]);
+}
 
 constexpr std::array<const char*, 6> kInputProjectionNames = {
     "q_proj.weight",
@@ -150,10 +209,22 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
     : gate_lower_bound_(gate_lower_bound) {
   (void)quant_args;
   CHECK_EQ(options.dtype().toScalarType(), torch::kBFloat16);
-  CHECK_EQ(parallel_args.cp_size(), 1) << "KDA requires CP=1";
   CHECK(parallel_args.tp_group_ != nullptr);
-  tp_size_ = parallel_args.tp_group_->world_size();
-  rank_ = parallel_args.tp_group_->rank();
+  ProcessGroup* head_group = parallel_args.tp_group_;
+  if (parallel_args.cp_size() > 1) {
+    CHECK(util::get_bool_env("XLLM_GLM5_PREFILL_CP", /*defaultValue=*/false))
+        << "KDA CP requires XLLM_GLM5_PREFILL_CP=1";
+    CHECK_EQ(parallel_args.dp_size(), 1);
+    CHECK_EQ(head_group->world_size(), 1)
+        << "KDA Hybrid CP requires attention TP=1";
+    cp_group_ = parallel_args.cp_group_;
+    CHECK(cp_group_ != nullptr);
+    CHECK_EQ(cp_group_->world_size(), parallel_args.cp_size());
+    CHECK_EQ(parallel_args.world_size(), parallel_args.cp_size());
+    head_group = cp_group_;
+  }
+  tp_size_ = head_group->world_size();
+  rank_ = head_group->rank();
   num_heads_ = args.linear_num_key_heads();
   head_dim_ = args.linear_key_head_dim();
   conv_kernel_size_ = args.linear_conv_kernel_dim();
@@ -189,7 +260,7 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_group,
                                                    options));
   g_b_proj_ = register_module("g_b_proj",
                               ColumnParallelLinear(head_dim_,
@@ -197,7 +268,7 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_group,
                                                    options));
 
   // The existing MUSA convolution wrapper requires BF16 weights and state.
@@ -208,7 +279,7 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_group,
                                                    options));
   k_conv1d_ = register_module("k_conv1d",
                               ColumnParallelLinear(conv_kernel_size_,
@@ -216,7 +287,7 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_group,
                                                    options));
   v_conv1d_ = register_module("v_conv1d",
                               ColumnParallelLinear(conv_kernel_size_,
@@ -224,7 +295,7 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_group,
                                                    options));
 
   const torch::TensorOptions fp32_options = options.dtype(torch::kFloat32);
@@ -242,15 +313,16 @@ Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
                                          /*max_rows=*/256 * local_num_heads_,
                                          args.rms_norm_eps(),
                                          options));
-  o_proj_ = register_module("o_proj",
-                            RowParallelLinear(projection_size_,
-                                              args.hidden_size(),
-                                              /*bias=*/false,
-                                              /*input_is_parallelized=*/true,
-                                              /*enable_result_reduction=*/true,
-                                              no_quant_args,
-                                              parallel_args.tp_group_,
-                                              options));
+  o_proj_ = register_module(
+      "o_proj",
+      RowParallelLinear(projection_size_,
+                        args.hidden_size(),
+                        /*bias=*/false,
+                        /*input_is_parallelized=*/true,
+                        /*enable_result_reduction=*/cp_group_ == nullptr,
+                        no_quant_args,
+                        head_group,
+                        options));
 }
 
 Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
@@ -439,8 +511,18 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
       << "GLM5-Next KDA expects flattened [tokens, hidden] input";
   CHECK_EQ(hidden_states.scalar_type(), torch::kBFloat16);
   CHECK_EQ(head_dim_, 128) << "MUSA GLM5-Next KDA requires head_dim=128";
-  const int64_t num_tokens = hidden_states.size(0);
-  torch::Tensor projected = in_proj_qkvbfg_a_->forward(hidden_states);
+  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, cp_group_ != nullptr)
+      << "KDA CP layer and token-shard metadata must agree";
+  std::vector<int32_t> cp_token_counts;
+  torch::Tensor global_hidden_states = hidden_states;
+  if (cp_group_ != nullptr) {
+    cp_token_counts =
+        validate_kda_cp_input(hidden_states, attn_metadata, *cp_group_);
+    global_hidden_states = parallel_state::gather(
+        hidden_states.contiguous(), cp_group_, cp_token_counts);
+  }
+  const int64_t num_tokens = global_hidden_states.size(0);
+  torch::Tensor projected = in_proj_qkvbfg_a_->forward(global_hidden_states);
   const auto projections = projected.split_with_sizes(
       {3 * local_projection_size_, local_num_heads_, head_dim_, head_dim_},
       /*dim=*/-1);
@@ -578,8 +660,13 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   // FusedRMSNormGated(activation="sigmoid") semantics.
   torch::Tensor normalized = o_norm_->forward(core_output);
   normalized = glm5_next_kda_apply_output_gate(normalized, output_gate);
-  return o_proj_->forward(normalized.to(hidden_states.scalar_type())
-                              .view({num_tokens, local_projection_size_}));
+  torch::Tensor output =
+      o_proj_->forward(normalized.to(hidden_states.scalar_type())
+                           .view({num_tokens, local_projection_size_}));
+  if (cp_group_ != nullptr) {
+    return reduce_scatter_kda_rows(output, *cp_group_, cp_token_counts);
+  }
+  return output;
 }
 
 }  // namespace layer

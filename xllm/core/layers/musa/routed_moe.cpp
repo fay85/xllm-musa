@@ -32,6 +32,7 @@ limitations under the License.
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "core/layers/common/attention_metadata.h"
 #include "core/layers/musa/musa_fp8_linear.h"
 #include "core/layers/musa/musa_mega_moe.h"
 
@@ -246,6 +247,30 @@ torch::Tensor unpack_fp4_weight(const torch::Tensor& packed,
 
 }  // namespace
 
+RoutedMoeTokenShard make_routed_moe_token_shard(
+    const AttentionMetadata& metadata,
+    const torch::Tensor& positions) {
+  CHECK(metadata.glm5_prefill_cp_enabled);
+  CHECK(metadata.is_prefill || metadata.is_chunked_prefill);
+  const int64_t count = metadata.glm5_prefill_local_row_end -
+                        metadata.glm5_prefill_local_row_begin;
+  CHECK_EQ(positions.sizes(), torch::IntArrayRef({count}));
+  CHECK_EQ(metadata.q_cu_seq_lens.device(), positions.device());
+  auto rows = torch::arange(metadata.glm5_prefill_local_row_begin,
+                            metadata.glm5_prefill_local_row_end,
+                            positions.options().dtype(torch::kInt64));
+  auto requests =
+      torch::bucketize(rows,
+                       metadata.q_cu_seq_lens.slice(0, 1).to(torch::kInt64),
+                       /*out_int32=*/true,
+                       /*right=*/true);
+  return {metadata.glm5_prefill_cp_rank,
+          metadata.glm5_prefill_cp_size,
+          rows,
+          requests,
+          positions.to(torch::kInt64).contiguous()};
+}
+
 RoutedMoeSharedExpertImpl::RoutedMoeSharedExpertImpl(
     int64_t hidden_size,
     int64_t intermediate_size,
@@ -320,6 +345,9 @@ torch::Tensor RoutedMoeSharedExpertImpl::forward(
     const torch::Tensor& hidden_states) {
   torch::Tensor input = hidden_states.reshape({-1, hidden_size_});
   const int64_t num_tokens = input.size(0);
+  if (num_tokens == 0) {
+    return torch::empty_like(hidden_states);
+  }
   if (num_tokens > 0 && num_tokens <= kFp8GemvWorkspaceTokens &&
       input.is_contiguous() && fp8_decode_ready()) {
     torch::Tensor gate_up = musa::fp8_linear_forward(
@@ -415,6 +443,26 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
   CHECK_GT(intermediate_size_, 0)
       << "RoutedMoe requires moe_intermediate_size/intermediate_size > 0.";
 
+  prefill_cp_enabled_ = model_args.model_type() == "glm5_next" &&
+                        parallel_args.cp_size() > 1 &&
+                        env_flag_enabled("XLLM_GLM5_PREFILL_CP");
+  if (prefill_cp_enabled_) {
+    CHECK(parallel_args.cp_group_ != nullptr);
+    CHECK(parallel_args.tp_group_ != nullptr);
+    CHECK_EQ(parallel_args.tp_group_->world_size(), 1);
+    CHECK_EQ(parallel_args.dp_size(), 1);
+    CHECK_EQ(parallel_args.ep_size(), 1)
+        << "GLM local-token MoE requires EP dispatch/combine before EP>1";
+    CHECK_EQ(tp_pg_->world_size(), 1) << "GLM CP local tokens cannot use a MoE "
+                                         "TP AllReduce; moe_tp must be 1";
+    CHECK(ep_pg_ == nullptr || ep_pg_->world_size() == 1);
+    CHECK(!env_flag_enabled("XLLM_GLM5_MEGA_MOE", true))
+        << "Hybrid CP requires XLLM_GLM5_MEGA_MOE=0";
+    prefill_cp_rank_ = parallel_args.cp_group_->rank();
+    prefill_cp_size_ = parallel_args.cp_group_->world_size();
+    shared_single_rank_group_ =
+        std::make_unique<ProcessGroup>(0, 1, options.device());
+  }
   const int64_t ep_size = std::max<int64_t>(parallel_args.ep_size(), 1);
   const int64_t ep_rank = ep_size > 1 && parallel_args.moe_ep_group_ != nullptr
                               ? parallel_args.moe_ep_group_->rank()
@@ -453,7 +501,9 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
                               intermediate_size_ * n_shared_experts_,
                               hidden_act_,
                               quant_args,
-                              tp_pg_,
+                              shared_single_rank_group_
+                                  ? shared_single_rank_group_.get()
+                                  : tp_pg_,
                               options,
                               swiglu_limit_));
     shared_expert_gate_ = register_module(
@@ -1000,7 +1050,22 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     const torch::Tensor& topk_ids,
     const ModelInputParams& input_params,
     bool skip_tp_allreduce,
-    const torch::Tensor& output_buffer) {
+    const torch::Tensor& output_buffer,
+    const RoutedMoeTokenShard* token_shard) {
+  CHECK_EQ(prefill_cp_enabled_, token_shard != nullptr);
+  if (token_shard != nullptr) {
+    CHECK(input_params.meta.batch_forward_type.is_prefill() ||
+          input_params.meta.batch_forward_type.is_chunked_prefill());
+    CHECK(!kernel::musa::is_stream_capturing());
+    CHECK_EQ(token_shard->cp_rank, prefill_cp_rank_);
+    CHECK_EQ(token_shard->cp_size, prefill_cp_size_);
+    for (const auto& rows : {token_shard->global_rows,
+                             token_shard->request_rows,
+                             token_shard->positions}) {
+      CHECK_EQ(rows.sizes(), torch::IntArrayRef({hidden_states.size(0)}));
+      CHECK_EQ(rows.device(), hidden_states.device());
+    }
+  }
   CHECK((w13_is_loaded_ && w2_is_loaded_) || fp4_experts_loaded() ||
         fp8_experts_loaded())
       << "RoutedMoe expert weights must be loaded before forward.";
@@ -1010,7 +1075,17 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
   torch::Tensor weights_2d = topk_weights.reshape({-1, topk_});
   torch::Tensor ids_2d = topk_ids.reshape({-1, topk_});
   const bool is_prefill = !input_params.meta.batch_forward_type.is_decode();
-  const bool use_shared_expert_overlap = is_prefill && shared_experts_ &&
+  if (prefill_cp_enabled_ && input_2d.size(0) == 0) {
+    if (output_buffer.defined()) {
+      output_buffer.zero_();
+      return output_buffer.narrow(0, 0, 0).reshape(hidden_states.sizes());
+    }
+    return torch::empty_like(hidden_states);
+  }
+  // Local shared output joins the local routed result on the same stream.
+  // EP will replace the routed branch; no full-token shared output is needed.
+  const bool use_shared_expert_overlap = !prefill_cp_enabled_ && is_prefill &&
+                                         shared_experts_ &&
                                          input_2d.device().is_privateuseone() &&
                                          !kernel::musa::is_stream_capturing();
   torch::Tensor shared_output;

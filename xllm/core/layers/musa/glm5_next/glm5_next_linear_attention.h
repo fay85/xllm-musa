@@ -74,7 +74,9 @@ TORCH_MODULE(Glm5NextLinearAttentionInputProjection);
 // recurrent [slots, Hlocal, 128, 128] FP32 (V first). Caller restores any
 // prefix state into unique destination slots before forward. Fresh prefill
 // resets both histories via has_initial_states=false. MTP, mixed batches,
-// graph capture, distinct source slots and CP are explicitly unsupported.
+// distinct source slots are unsupported. CP prefill takes Plain local rows,
+// gathers global sequence order, computes CP-sharded heads, and returns local
+// rows through ReduceScatter. CP decode and CP graph capture are unsupported.
 // Weight prefixes are stripped by the caller (typically self_attn.).
 class Glm5NextLinearAttentionImpl final : public torch::nn::Module {
  public:
@@ -108,6 +110,8 @@ class Glm5NextLinearAttentionImpl final : public torch::nn::Module {
   int64_t rank_ = 0;
   int32_t conv_kernel_size_ = 0;
   float gate_lower_bound_ = -5.0f;
+  // Non-owning; the communicator outlives the layer. Null on the TP path.
+  ProcessGroup* cp_group_ = nullptr;
 
   Glm5NextLinearAttentionInputProjection in_proj_qkvbfg_a_{nullptr};
   ColumnParallelLinear f_b_proj_{nullptr};

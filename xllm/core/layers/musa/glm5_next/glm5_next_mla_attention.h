@@ -36,11 +36,13 @@ limitations under the License.
 namespace xllm::layer {
 
 // Complete NoPE sparse-attention layer, including replicated rate-4 IndexPool.
-// Main head projections are TP sharded; indexer and latent cache are
-// replicated. Uses canonical self_attn.* checkpoint names after the caller
-// strips its layer prefix. BF16/FP32 weights and E4M3 weights with FP32 128x128
-// block scales are accepted; projections run BF16, head-weight scoring runs
-// FP32 (as in vLLM).
+// Ordinary TP shards main head projections. Hybrid Prefill CP uses TP=1,
+// interleaved local queries with all heads, and replicated compressed caches.
+// CP input/output activations and returned/shared selections use Plain local
+// row order; positions are local, while scheduling metadata remains global.
+// Uses canonical self_attn.* checkpoint names after the caller strips its layer
+// prefix. BF16/FP32 weights and E4M3 weights with FP32 128x128 block scales are
+// accepted; projections run BF16, head-weight scoring runs FP32 (as in vLLM).
 class Glm5NextMLAAttentionImpl final : public torch::nn::Module {
  public:
   Glm5NextMLAAttentionImpl(const ModelArgs& args,
@@ -64,6 +66,14 @@ class Glm5NextMLAAttentionImpl final : public torch::nn::Module {
                               bool fp8_main_cache = false);
 
  private:
+  std::pair<torch::Tensor, kernel::musa::Glm5NextIndexerSelection> forward_cp(
+      const torch::Tensor& positions,
+      const torch::Tensor& hidden_states,
+      const AttentionMetadata& metadata,
+      KVCache& cache,
+      const kernel::musa::Glm5NextIndexerSelection* shared_selection);
+  // Non-owning; the worker owns the communicator for this module's lifetime.
+  ProcessGroup* cp_group_ = nullptr;
   std::vector<std::string> required_weights() const;
   bool weights_ready() const;
   torch::Tensor dense_weight(const std::string& name,
@@ -106,6 +116,8 @@ using Glm5NextSparseAttention = Glm5NextMLAAttention;
 // For FP8 each row becomes an independent single-query decode item. The caller
 // supplies valid unique write slots [T] int64, or -1 for padded input rows.
 // All inputs are device tensors. Supports eager and graph execution on MP31.
+// write_cache=false requires the caller to have populated the complete current
+// batch's latent cache already (the Hybrid CP AllGather path).
 inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
                                              const torch::Tensor& latent,
                                              const torch::Tensor& w_k,
@@ -116,7 +128,8 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
                                              const torch::Tensor& positions,
                                              const torch::Tensor& block_table,
                                              const torch::Tensor& slots,
-                                             torch::Tensor& cache) {
+                                             torch::Tensor& cache,
+                                             bool write_cache = true) {
   CHECK_EQ(q.dim(), 3);
   CHECK_EQ(q.size(2), 256);
   CHECK_EQ(q.scalar_type(), torch::kBFloat16);
@@ -151,8 +164,10 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
                       .contiguous();
   torch::Tensor z;
   if (fp8) {
-    kernel::musa::flash_mla_sparse_fp8_cache_write(
-        latent.contiguous(), slots, cache);
+    if (write_cache) {
+      kernel::musa::flash_mla_sparse_fp8_cache_write(
+          latent.contiguous(), slots, cache);
+    }
     z = kernel::musa::flash_mla_sparse_nope_fp8(
             q_latent.unsqueeze(1),
             cache,
@@ -161,8 +176,10 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
             0.0625)
             .squeeze(1);
   } else {
-    kernel::musa::flash_mla_sparse_cache_write(
-        latent.contiguous(), slots, cache);
+    if (write_cache) {
+      kernel::musa::flash_mla_sparse_cache_write(
+          latent.contiguous(), slots, cache);
+    }
     z = kernel::musa::flash_mla_sparse_bf16(q_latent,
                                             cache.view({-1, 1, 512}),
                                             indices.unsqueeze(1),

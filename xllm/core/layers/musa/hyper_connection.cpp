@@ -107,7 +107,9 @@ MHCPreImpl::post_pre_norm(const torch::Tensor& x,
       kernel::musa::mhc_post(x, residual, post, comb);
   MHCPreOutput pre = forward(residual_current);
   torch::Tensor normalized = torch::empty_like(pre.output);
-  kernel::cuda::rms_norm(normalized, pre.output, norm_weight, norm_eps_);
+  if (pre.output.numel() > 0) {
+    kernel::cuda::rms_norm(normalized, pre.output, norm_weight, norm_eps_);
+  }
   return {normalized, residual_current, pre.post, pre.comb};
 }
 

@@ -80,7 +80,8 @@ void transpose_dim_1_and_2(std::vector<int64_t>* shape) {
 
 KVCacheShape::KVCacheShape(const KVCacheCapacity& kv_cache_cap,
                            const ModelArgs& model_args,
-                           int64_t world_size) {
+                           int64_t world_size,
+                           int64_t linear_state_world_size) {
   CHECK_GT(world_size, 0) << "world_size must be positive.";
   CHECK_GT(kv_cache_cap.block_size(), 0) << "block_size must be positive.";
   replicated_block_pages_ =
@@ -136,8 +137,13 @@ KVCacheShape::KVCacheShape(const KVCacheCapacity& kv_cache_cap,
   }
 
   if (enable_linear_attention) {
-    init_conv_cache_shape(kv_cache_cap, model_args, world_size);
-    init_ssm_cache_shape(kv_cache_cap, model_args, world_size);
+    // Hybrid KDA CP shards recurrent heads across CP while attention TP=1.
+    // Other models retain the attention-TP width by default.
+    CHECK_GE(linear_state_world_size, 0);
+    const int64_t state_world_size =
+        linear_state_world_size > 0 ? linear_state_world_size : world_size;
+    init_conv_cache_shape(kv_cache_cap, model_args, state_world_size);
+    init_ssm_cache_shape(kv_cache_cap, model_args, state_world_size);
   }
 
   // apply_device_layout() is an MLU/ILU/DCU dim1<->2 swap and is a no-op on

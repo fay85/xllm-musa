@@ -302,14 +302,22 @@ bool LLMEngine::init_model(MasterStatus master_status) {
   n_local_q_heads_ = std::max<int64_t>(1, n_heads / world_size);
   head_dim_ = args_.head_dim();
   dtype_ = util::parse_dtype(args_.dtype(), options_.devices()[0]);
+  linear_state_tp_size_ = world_size;
+#if defined(USE_MUSA)
+  if (cp_size_ > 1 && is_glm5_next_target_model(args_) &&
+      util::get_bool_env("XLLM_GLM5_PREFILL_CP", /*defaultValue=*/false)) {
+    CHECK_EQ(world_size, 1) << "GLM5 Hybrid CP requires attention TP=1";
+    linear_state_tp_size_ = cp_size_;
+  }
+#endif
   // For qwen3_next hybrid attention.
   if (has_linear_attention_layers(args_)) {
     const int64_t linear_n_k_heads = args_.linear_num_key_heads();
     const int64_t linear_n_v_heads = args_.linear_num_value_heads();
     n_local_linear_k_heads_ =
-        std::max<int64_t>(1, linear_n_k_heads / world_size);
+        std::max<int64_t>(1, linear_n_k_heads / linear_state_tp_size_);
     n_local_linear_v_heads_ =
-        std::max<int64_t>(1, linear_n_v_heads / world_size);
+        std::max<int64_t>(1, linear_n_v_heads / linear_state_tp_size_);
   }
   // key + value for all layers
   LOG(INFO) << "Block info, block_size: " << options_.block_size()
@@ -652,7 +660,8 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
 
   // Validate host offload before constructing block managers or asking workers
   // to allocate potentially large pinned host tensors.
-  const KVCacheShape kv_cache_shape(kv_cache_cap, args_, dp_local_tp_size_);
+  const KVCacheShape kv_cache_shape(
+      kv_cache_cap, args_, dp_local_tp_size_, linear_state_tp_size_);
   const int32_t kv_split_size_eff =
       ::xllm::ParallelConfig::get_instance().kv_split_size_effective();
   // Any registered role would fold more than one physical row per logical

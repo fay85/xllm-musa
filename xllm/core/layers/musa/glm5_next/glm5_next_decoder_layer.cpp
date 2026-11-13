@@ -22,6 +22,7 @@ limitations under the License.
 #include <utility>
 
 #include "core/layers/common/dsa_topk_share_plan.h"
+#include "core/util/env_var.h"
 
 namespace xllm::layer {
 namespace {
@@ -69,6 +70,13 @@ Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
   const QuantArgs& quant_args = context.get_quant_args();
   const ParallelArgs& parallel_args = context.get_parallel_args();
   const torch::TensorOptions& options = context.get_tensor_options();
+  prefill_cp_enabled_ = parallel_args.cp_size() > 1 &&
+                        util::get_bool_env("XLLM_GLM5_PREFILL_CP", false);
+  if (prefill_cp_enabled_) {
+    CHECK(parallel_args.tp_group_ != nullptr);
+    CHECK_EQ(parallel_args.tp_group_->world_size(), 1);
+    single_rank_group_ = std::make_unique<ProcessGroup>(0, 1, options.device());
+  }
   const int64_t hidden_size = args.hidden_size();
   const double norm_eps = static_cast<double>(args.rms_norm_eps());
   attn_hc_pre_ = register_module("attn_hc_pre",
@@ -101,19 +109,20 @@ Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
         Glm5NextMLAAttention(args, parallel_args, options, enable_indexer_));
   }
   if (role_.mlp == Glm5NextMlpRole::DENSE) {
-    dense_mlp_ =
-        register_module("mlp",
-                        DenseMLP(hidden_size,
-                                 args.intermediate_size(),
-                                 /*is_gated=*/true,
-                                 /*has_bias=*/false,
-                                 args.hidden_act(),
-                                 /*enable_result_reduction=*/true,
-                                 quant_args,
-                                 parallel_args.tp_group_,
-                                 options,
-                                 /*module_prefix=*/"",
-                                 static_cast<double>(args.swiglu_limit())));
+    dense_mlp_ = register_module(
+        "mlp",
+        DenseMLP(hidden_size,
+                 args.intermediate_size(),
+                 /*is_gated=*/true,
+                 /*has_bias=*/false,
+                 args.hidden_act(),
+                 /*enable_result_reduction=*/!prefill_cp_enabled_,
+                 quant_args,
+                 single_rank_group_ ? single_rank_group_.get()
+                                    : parallel_args.tp_group_,
+                 options,
+                 /*module_prefix=*/"",
+                 static_cast<double>(args.swiglu_limit())));
   } else {
     sparse_gate_ =
         register_module("gate", RoutedMoeGate(args, quant_args, options));
@@ -180,6 +189,20 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     std::optional<PendingMHC>* pending_mhc,
     bool is_last_layer,
     kernel::musa::Glm5NextIndexerSelection* shared_selection) {
+  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, prefill_cp_enabled_);
+  if (prefill_cp_enabled_) {
+    CHECK(attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
+    CHECK(!attn_metadata.enable_cuda_graph && !attn_metadata.is_dummy &&
+          !attn_metadata.is_mixed && !attn_metadata.is_spec_verify);
+    const int64_t rows = attn_metadata.glm5_prefill_local_row_end -
+                         attn_metadata.glm5_prefill_local_row_begin;
+    CHECK_EQ(hidden_states.size(0), rows);
+    CHECK_EQ(positions.numel(), rows);
+    if (pending_mhc != nullptr && pending_mhc->has_value()) {
+      CHECK_EQ(pending_mhc->value().residual.size(0), rows);
+      CHECK_EQ(pending_mhc->value().x.size(0), rows);
+    }
+  }
   residual = std::nullopt;
   const bool has_pending = pending_mhc != nullptr && pending_mhc->has_value();
   torch::Tensor residual_attention;
@@ -200,7 +223,10 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
   } else {
     residual_attention = hidden_states;
     attention_hc = attn_hc_pre_->forward(hidden_states);
-    attention_input = std::get<0>(input_norm_->forward(attention_hc.output));
+    attention_input =
+        attention_hc.output.numel() == 0
+            ? attention_hc.output
+            : std::get<0>(input_norm_->forward(attention_hc.output));
   }
 
   torch::Tensor attention_output;
@@ -234,7 +260,9 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
                                  post_norm_->weight());
   torch::Tensor ffn_output;
   if (dense_mlp_) {
-    ffn_output = dense_mlp_->forward(ffn_input);
+    ffn_output = prefill_cp_enabled_ && ffn_input.size(0) == 0
+                     ? torch::empty_like(ffn_input)
+                     : dense_mlp_->forward(ffn_input);
   } else {
     torch::Tensor ffn_input_2d = ffn_input.reshape({-1, ffn_input.size(-1)});
     const bool is_prefill =
@@ -252,8 +280,18 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
         moe_input_params.meta.batch_forward_type = BatchForwardType::DECODE;
       }
     }
+    std::optional<RoutedMoeTokenShard> token_shard;
+    if (prefill_cp_enabled_) {
+      token_shard = make_routed_moe_token_shard(attn_metadata, positions);
+    }
     ffn_output = sparse_moe_->forward_with_selected_experts(
-        ffn_input_2d, topk_weights, topk_ids, moe_input_params);
+        ffn_input_2d,
+        topk_weights,
+        topk_ids,
+        moe_input_params,
+        /*skip_tp_allreduce=*/false,
+        /*output_buffer=*/{},
+        token_shard ? &token_shard.value() : nullptr);
     ffn_output = ffn_output.reshape(ffn_input.sizes());
   }
   if (!is_last_layer && pending_mhc != nullptr) {

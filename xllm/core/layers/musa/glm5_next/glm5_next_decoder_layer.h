@@ -18,6 +18,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -80,6 +81,8 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
   int32_t layer_id_ = 0;
   Glm5NextLayerRole role_;
   bool enable_indexer_ = true;
+  bool prefill_cp_enabled_ = false;
+  std::unique_ptr<ProcessGroup> single_rank_group_;
 
   MHCPre attn_hc_pre_{nullptr};
   MHCPre ffn_hc_pre_{nullptr};

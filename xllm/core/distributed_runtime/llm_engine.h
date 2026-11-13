@@ -196,6 +196,7 @@ class LLMEngine : public Engine {
   int64_t head_dim_ = 0;
   int64_t n_local_linear_v_heads_ = 0;
   int64_t n_local_linear_k_heads_ = 0;
+  int64_t linear_state_tp_size_ = 1;
 
   // common frequently used args
   uint32_t dp_size_ = 1;
