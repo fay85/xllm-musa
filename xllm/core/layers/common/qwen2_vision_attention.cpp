@@ -124,8 +124,11 @@ int32_t Qwen2VisionAttentionImpl::get_max_sequence_length(
 
 namespace {
 
-#if defined(USE_CUDA) || defined(USE_DCU)
-// Pure PyTorch scaled dot-product attention for Qwen2 vision.
+#if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
+// Fused scaled dot-product attention for Qwen2/Qwen3 vision.
+// Uses torch::scaled_dot_product_attention so MUSA/CUDA dispatch to fused
+// FlashAttention/SDPA without materializing the quadratic [heads, N, N] score
+// matrix on long/high-resolution image inputs.
 void compute_qwen2_vision_attention_torch(
     torch::Tensor& q,
     torch::Tensor& k,
@@ -142,29 +145,35 @@ void compute_qwen2_vision_attention_torch(
     int32_t len = end - start;
     if (len <= 0) continue;
 
-    // Current sequence: [len, heads, head_dim]
-    auto q_i = q.slice(/*dim=*/0, /*start=*/start, /*end=*/end);
-    auto k_i = k.slice(0, start, end);
-    auto v_i = v.slice(0, start, end);
+    // Current sequence: [len, H, D] -> [1, H, len, D]
+    const torch::Tensor q_i =
+        q.slice(/*dim=*/0, /*start=*/start, /*end=*/end)
+            .permute({1, 0, 2})
+            .unsqueeze(0);
+    const torch::Tensor k_i =
+        k.slice(/*dim=*/0, /*start=*/start, /*end=*/end)
+            .permute({1, 0, 2})
+            .unsqueeze(0);
+    const torch::Tensor v_i =
+        v.slice(/*dim=*/0, /*start=*/start, /*end=*/end)
+            .permute({1, 0, 2})
+            .unsqueeze(0);
 
-    // [len, H, D] -> [H, len, D]
-    q_i = q_i.permute({1, 0, 2});
-    k_i = k_i.permute({1, 0, 2});
-    v_i = v_i.permute({1, 0, 2});
-
-    // Scaled dot-product attention per head.
-    auto k_t = k_i.transpose(1, 2);  // [H, D, len]
-    auto q_scaled = q_i * scale;
-    auto scores = torch::matmul(q_scaled, k_t);  // [H, len, len]
-    auto attn = torch::softmax(scores, /*dim=*/-1);
-    auto out_i = torch::matmul(attn, v_i);  // [H, len, D]
+    const torch::Tensor out_i =
+        torch::scaled_dot_product_attention(q_i,
+                                            k_i,
+                                            v_i,
+                                            /*attn_mask=*/std::nullopt,
+                                            /*dropout_p=*/0.0,
+                                            /*is_causal=*/false,
+                                            /*scale=*/scale);
 
     // Back to [len, H, D] and write into output.
-    out_i = out_i.permute({1, 0, 2}).contiguous();
-    output.slice(/*dim=*/0, /*start=*/start, /*end=*/end).copy_(out_i);
+    output.slice(/*dim=*/0, /*start=*/start, /*end=*/end)
+        .copy_(out_i.squeeze(/*dim=*/0).permute({1, 0, 2}));
   }
 }
-#endif  // defined(USE_CUDA) || defined(USE_DCU)
+#endif  // defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
 
 #if defined(USE_NPU)
 void compute_qwen_vision_attention_fused(
@@ -250,10 +259,18 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
   // NOTE: Do NOT call apply_rotary twice; the first call already handles both
   // q and k. A second call would incorrectly apply RoPE to k a second time.
   xllm::kernel::RotaryParams rotary_params;
+#if defined(USE_MUSA)
+  // Preserve patch-position precision through the MUSA rotary computation.
+  rotary_params.q = q.to(torch::kFloat32);
+  rotary_params.k = k.to(torch::kFloat32);
+  rotary_params.sin = m_sin_pos.to(torch::kFloat32);
+  rotary_params.cos = m_cos_pos.to(torch::kFloat32);
+#else
   rotary_params.q = q;
   rotary_params.k = k;
   rotary_params.sin = m_sin_pos;
   rotary_params.cos = m_cos_pos;
+#endif
   rotary_params.interleaved = false;
   rotary_params.discrete = false;
 #if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
@@ -268,10 +285,17 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
 #endif
   rotary_params.max_query_len = max_seqlen;
   xllm::kernel::apply_rotary(rotary_params);
+#if defined(USE_MUSA)
+  q = rotary_params.q.to(hidden_states.scalar_type())
+          .reshape({B * S, num_attention_heads_per_partition_, head_dim});
+  k = rotary_params.k.to(hidden_states.scalar_type())
+          .reshape({B * S, num_attention_heads_per_partition_, head_dim});
+#else
   q = rotary_params.q.reshape(
       {B * S, num_attention_heads_per_partition_, head_dim});
   k = rotary_params.k.reshape(
       {B * S, num_attention_heads_per_partition_, head_dim});
+#endif
 #endif
 
   // q, k, v = (rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v])
@@ -306,11 +330,7 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
                                    /*window_size_right=*/-1,
                                    /*compute_dtype=*/"half",
                                    /*return_lse=*/false);
-#elif defined(USE_CUDA) || defined(USE_DCU)
-  // CUDA/DCU path: use a pure PyTorch vision attention implementation that
-  // matches Transformers Qwen2.5-VL VisionAttention. FlashInfer's precompiled
-  // AOT kernels in this project do not support head_dim=80, so we intentionally
-  // do not call FlashInfer here and run attention entirely in PyTorch instead.
+#elif defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
   compute_qwen2_vision_attention_torch(q, k, v, output, cu_seq_len_vec, scale_);
 #elif defined(USE_NPU)
   compute_qwen_vision_attention_fused(q, k, v, output, cu_seq_len_vec, scale_);
