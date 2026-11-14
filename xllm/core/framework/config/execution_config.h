@@ -92,9 +92,9 @@ class ExecutionConfig final {
 
   PROPERTY(bool, enable_fia_decode) = false;
 
-  PROPERTY(int32_t, musa_prefill_graph_token_stride) = 64;
+  PROPERTY(int32_t, musa_prefill_graph_token_stride) = 256;
 
-  PROPERTY(int32_t, musa_prefill_graph_max_entries) = 32;
+  PROPERTY(int32_t, musa_prefill_graph_max_entries) = 128;
 
   PROPERTY(int32_t, musa_prefill_warmup_reserve_mb) = 2048;
 };

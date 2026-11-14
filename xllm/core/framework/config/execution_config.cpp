@@ -117,12 +117,12 @@ DEFINE_bool(
 
 DEFINE_int32(
     musa_prefill_graph_token_stride,
-    64,
+    256,
     "Token bucket stride for single-sequence MUSA Prefill graphs. "
     "Decode buckets and exact multi-sequence GDN layouts are unchanged.");
 
 DEFINE_int32(musa_prefill_graph_max_entries,
-             32,
+             128,
              "Maximum retained Prefill graph keys per MUSA executor. Existing "
              "keys replay at the limit; unseen keys execute eager before any "
              "capture or VMM address-space allocation.");
