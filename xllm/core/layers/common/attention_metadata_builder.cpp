@@ -506,9 +506,9 @@ AttentionMetadata build_attention_metadata(
     attn_metadata.kv_cu_seq_lens = torch::tensor({0, 1}, options);
     attn_metadata.q_seq_lens = torch::tensor({1}, options);
     attn_metadata.kv_seq_lens = torch::tensor({1}, options);
-#if defined(USE_NPU)
-    // NPU keeps these host vectors as one length per sequence.  Keep the
-    // dummy row consistent with normal NPU batches; the *_cu_seq_lens tensors
+#if defined(USE_NPU) || defined(USE_MUSA)
+    // NPU and MUSA keep these host vectors as one length per sequence. Keep the
+    // dummy row consistent with normal batches; the *_cu_seq_lens tensors
     // above carry the cumulative representation.
     attn_metadata.q_seq_lens_vec = {1};
     attn_metadata.kv_seq_lens_vec = {1};
@@ -537,7 +537,9 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
 #if defined(USE_MUSA)
-  populate_fa3_attention_metadata(attn_metadata, params, attn_mask);
+  if (!attn_metadata.is_dummy) {
+    populate_fa3_attention_metadata(attn_metadata, params, attn_mask);
+  }
 #endif
 
 #if defined(USE_CUDA)

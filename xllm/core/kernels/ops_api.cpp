@@ -237,7 +237,14 @@ void active(ActivationParams& params) {
 #elif defined(USE_MUSA)
   if (params.is_gated) {
     musa::active(params.output, params.input, params.act_mode, true);
-  } else if (params.act_mode == "silu") {
+    return;
+  }
+  CHECK(params.input.defined()) << "MUSA activation input is undefined";
+  CHECK(params.input.scalar_type() == torch::kFloat16 ||
+        params.input.scalar_type() == torch::kBFloat16 ||
+        params.input.scalar_type() == torch::kFloat32)
+      << "Ungated MUSA activation supports FP16, BF16 and FP32";
+  if (params.act_mode == "silu") {
     params.output = torch::silu(params.input);
   } else if (params.act_mode == "gelu") {
     params.output = torch::gelu(params.input);
@@ -392,20 +399,33 @@ void fused_layernorm(FusedLayerNormParams& params) {
     params.output += params.beta.value();
   }
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
-#if defined(USE_MUSA)
-  // The shared CUDA norm kernels implement RMSNorm only.
   if (params.mode == "layernorm") {
-    CHECK(!params.residual.has_value())
-        << "MUSA LayerNorm does not support fused residual addition";
-    params.output.copy_(torch::layer_norm(params.input,
-                                          {params.input.size(-1)},
-                                          params.weight,
-                                          params.beta.value_or(torch::Tensor()),
-                                          params.eps));
-    return;
-  }
-#endif
-  if (params.residual.has_value()) {
+    CHECK(params.beta.has_value()) << "LayerNorm requires beta";
+    torch::Tensor norm_input = params.input;
+    if (params.residual.has_value()) {
+      norm_input = params.input + params.residual.value();
+      if (params.residual_out.has_value() &&
+          params.residual_out->defined()) {
+        CHECK(params.residual_out->sizes() == norm_input.sizes())
+            << "LayerNorm residual_out size mismatch";
+        params.residual_out->copy_(norm_input);
+      } else {
+        params.residual_out = norm_input;
+      }
+    }
+    torch::Tensor norm_output = torch::layer_norm(norm_input,
+                                                  {params.input.size(-1)},
+                                                  params.weight,
+                                                  params.beta.value(),
+                                                  params.eps);
+    if (params.output.defined()) {
+      CHECK(params.output.sizes() == norm_output.sizes())
+          << "LayerNorm output size mismatch";
+      params.output.copy_(norm_output);
+    } else {
+      params.output = norm_output;
+    }
+  } else if (params.residual.has_value()) {
     cuda::fused_add_rms_norm(
         params.input, params.residual.value(), params.weight, params.eps);
     params.output = params.input;

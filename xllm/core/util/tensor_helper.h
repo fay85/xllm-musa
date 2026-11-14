@@ -97,8 +97,8 @@ inline void print_tensor(
     bool print_value = true,
     const char* file = __builtin_FILE(),
     int line = __builtin_LINE()) {
-  auto& log_stream =
-      google::LogMessage(file, line, google::GLOG_INFO).stream();
+  google::LogMessage log_message(file, line, google::GLOG_INFO);
+  auto& log_stream = log_message.stream();
   if (!tensor.defined()) {
     log_stream << tensor_name << ", Undefined tensor." << std::endl;
     return;

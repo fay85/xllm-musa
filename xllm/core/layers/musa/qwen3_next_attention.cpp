@@ -365,39 +365,52 @@ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
 
   if (attn_output_gate_ && qkv_proj_->is_weight_loaded() &&
       !qkv_weight_reordered_) {
-    // Rearrange q_proj rows from per-head interleaved [q0,g0,q1,g1,...]
-    // to grouped [q0,q1,...,g0,g1,...] so forward output is [Q|G|K|V].
-    auto w = qkv_proj_->weight();
-    auto qg_rows = w.slice(0, 0, q_size_ * 2);
-    const int64_t hidden = w.size(1);
-    auto qg_3d = qg_rows.view({num_heads_, 2 * head_dim_, hidden});
-    auto q_part = qg_3d.slice(1, 0, head_dim_);
-    auto g_part = qg_3d.slice(1, head_dim_, 2 * head_dim_);
-    auto reordered = torch::cat(
-        {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
-        0);
-    qg_rows.copy_(reordered);
-    // Block-FP8: the weight rows were permuted from per-head [q,g]
-    // interleave to [Q|G]; permute the [128-row] scale blocks identically,
-    // otherwise Q and G rows are dequantized with each other's scales.
+    // Scale storage exists as soon as the FP8 parameter is registered, but
+    // its checkpoint values can arrive in a later call. Reordering the rows
+    // before that is not idempotent, so wait until the real FP8 weight and
+    // its scale are both loaded. Keep loading the other tensors below.
     torch::Tensor scale_inv = qkv_proj_->weight_scale_inv();
-    if (scale_inv.defined() && scale_inv.numel() > 0 &&
-        qkv_proj_->is_weight_scale_inv_loaded()) {
-      constexpr int64_t kBlock = 128;
-      CHECK_EQ(head_dim_ % kBlock, 0)
-          << "Q/G scale reorder requires head_dim % 128 == 0";
-      const int64_t blocks_per_head = head_dim_ / kBlock;
-      const int64_t qg_blocks = q_size_ * 2 / kBlock;
-      auto s_rows = scale_inv.slice(0, 0, qg_blocks);
-      auto s_3d =
-          s_rows.view({num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
-      auto sq = s_3d.slice(1, 0, blocks_per_head)
-                    .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
-      auto sg = s_3d.slice(1, blocks_per_head, 2 * blocks_per_head)
-                    .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
-      s_rows.copy_(torch::cat({sq, sg}, 0));
+    const bool weight_is_fp8 =
+        c10::isFloat8Type(qkv_proj_->weight().scalar_type());
+    const bool needs_block_fp8_scale =
+        weight_is_fp8 && scale_inv.defined() && scale_inv.numel() > 0;
+    const bool scale_ready =
+        !needs_block_fp8_scale || qkv_proj_->is_weight_scale_inv_loaded();
+    if (scale_ready) {
+      // Rearrange q_proj rows from per-head interleaved [q0,g0,q1,g1,...]
+      // to grouped [q0,q1,...,g0,g1,...] so forward output is [Q|G|K|V].
+      auto w = qkv_proj_->weight();
+      auto qg_rows = w.slice(0, 0, q_size_ * 2);
+      const int64_t hidden = w.size(1);
+      auto qg_3d = qg_rows.view({num_heads_, 2 * head_dim_, hidden});
+      auto q_part = qg_3d.slice(1, 0, head_dim_);
+      auto g_part = qg_3d.slice(1, head_dim_, 2 * head_dim_);
+      auto reordered = torch::cat(
+          {q_part.reshape({q_size_, hidden}),
+           g_part.reshape({q_size_, hidden})},
+          0);
+      qg_rows.copy_(reordered);
+      // The FP8 scale blocks must follow the same Q/G row permutation as the
+      // checkpoint weights, otherwise each row uses another head's scale.
+      if (needs_block_fp8_scale) {
+        constexpr int64_t kBlock = 128;
+        CHECK_EQ(head_dim_ % kBlock, 0)
+            << "Q/G scale reorder requires head_dim % 128 == 0";
+        const int64_t blocks_per_head = head_dim_ / kBlock;
+        const int64_t qg_blocks = q_size_ * 2 / kBlock;
+        torch::Tensor scale_rows = scale_inv.slice(/*dim=*/0, 0, qg_blocks);
+        torch::Tensor scale_heads = scale_rows.view(
+            {num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
+        torch::Tensor q_scales =
+            scale_heads.slice(/*dim=*/1, 0, blocks_per_head)
+                .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
+        torch::Tensor gate_scales =
+            scale_heads.slice(/*dim=*/1, blocks_per_head, 2 * blocks_per_head)
+                .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
+        scale_rows.copy_(torch::cat({q_scales, gate_scales}, /*dim=*/0));
+      }
+      qkv_weight_reordered_ = true;
     }
-    qkv_weight_reordered_ = true;
   }
 
   o_proj_->load_state_dict(state_dict.get_dict_with_prefix("o_proj."));

@@ -116,12 +116,12 @@ void Qwen3NextGatedDeltaNetImpl::load_state_dict(const StateDict& state_dict) {
 void Qwen3NextGatedDeltaNetImpl::load_projection_state_dict(
     const StateDict& state_dict) {
   auto qkvz_state_dict = state_dict.get_dict_with_prefix("in_proj_qkvz.");
-  if (qkvz_state_dict.size() > 0 && !qkvz_proj_->is_weight_loaded()) {
+  if (qkvz_state_dict.size() > 0) {
     qkvz_proj_->load_state_dict(qkvz_state_dict);
   }
 
   auto ba_state_dict = state_dict.get_dict_with_prefix("in_proj_ba.");
-  if (ba_state_dict.size() > 0 && !ba_proj_->is_weight_loaded()) {
+  if (ba_state_dict.size() > 0) {
     ba_proj_->load_state_dict(ba_state_dict);
   }
 }
@@ -375,7 +375,7 @@ void Qwen3_5GatedDeltaNetImpl::load_projection_state_dict(
   }
 
   auto in_proj_qkv_state_dict = state_dict.get_dict_with_prefix("in_proj_qkv.");
-  if (in_proj_qkv_state_dict.size() > 0 && !in_proj_qkv_->is_weight_loaded()) {
+  if (in_proj_qkv_state_dict.size() > 0) {
     in_proj_qkv_->load_state_dict(
         in_proj_qkv_state_dict,
         /*shard_tensor_count=*/3,
@@ -384,17 +384,17 @@ void Qwen3_5GatedDeltaNetImpl::load_projection_state_dict(
   }
 
   auto in_proj_z_state_dict = state_dict.get_dict_with_prefix("in_proj_z.");
-  if (in_proj_z_state_dict.size() > 0 && !in_proj_z_->is_weight_loaded()) {
+  if (in_proj_z_state_dict.size() > 0) {
     in_proj_z_->load_state_dict(in_proj_z_state_dict);
   }
 
   auto in_proj_b_state_dict = state_dict.get_dict_with_prefix("in_proj_b.");
-  if (in_proj_b_state_dict.size() > 0 && !in_proj_b_->is_weight_loaded()) {
+  if (in_proj_b_state_dict.size() > 0) {
     in_proj_b_->load_state_dict(in_proj_b_state_dict);
   }
 
   auto in_proj_a_state_dict = state_dict.get_dict_with_prefix("in_proj_a.");
-  if (in_proj_a_state_dict.size() > 0 && !in_proj_a_->is_weight_loaded()) {
+  if (in_proj_a_state_dict.size() > 0) {
     in_proj_a_->load_state_dict(in_proj_a_state_dict);
   }
 }

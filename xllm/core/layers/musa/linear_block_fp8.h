@@ -47,7 +47,7 @@ void maybe_resolve_block_fp8_unquantized(
     const torch::TensorOptions& options,
     torch::Tensor& weight,
     bool& weight_is_loaded,
-    bool weight_scale_inv_is_loaded,
+    bool& weight_scale_inv_is_loaded,
     bool& block_fp8_resolved_unquantized);
 
 void register_block_fp8_parameters(torch::nn::Module& module,

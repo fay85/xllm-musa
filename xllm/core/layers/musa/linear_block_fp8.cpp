@@ -179,17 +179,33 @@ void maybe_resolve_block_fp8_unquantized(
     const torch::TensorOptions& options,
     torch::Tensor& weight,
     bool& weight_is_loaded,
-    bool weight_scale_inv_is_loaded,
+    bool& weight_scale_inv_is_loaded,
     bool& block_fp8_resolved_unquantized) {
+  auto checkpoint_is_fp8 = [](const torch::Tensor& tensor) {
+    return tensor.defined() && c10::isFloat8Type(tensor.scalar_type());
+  };
+  bool checkpoint_has_fp8_weight = false;
   if (prefixes == nullptr) {
-    check_block_fp8_weight_dtype(state_dict.get_tensor("weight"));
+    const torch::Tensor checkpoint_weight = state_dict.get_tensor("weight");
+    check_block_fp8_weight_dtype(checkpoint_weight);
+    checkpoint_has_fp8_weight = checkpoint_is_fp8(checkpoint_weight);
   } else {
     for (const std::string& prefix : *prefixes) {
-      check_block_fp8_weight_dtype(state_dict.get_tensor(prefix + "weight"));
+      const torch::Tensor checkpoint_weight =
+          state_dict.get_tensor(prefix + "weight");
+      check_block_fp8_weight_dtype(checkpoint_weight);
+      checkpoint_has_fp8_weight =
+          checkpoint_has_fp8_weight || checkpoint_is_fp8(checkpoint_weight);
     }
   }
 
   if (block_fp8_resolved_unquantized || weight_scale_inv_is_loaded) {
+    return;
+  }
+
+  // An FP8 checkpoint cannot be downgraded before its scale arrives. Only a
+  // genuinely unquantized checkpoint may use the BF16 parameter path.
+  if (checkpoint_has_fp8_weight) {
     return;
   }
 
@@ -209,6 +225,9 @@ void maybe_resolve_block_fp8_unquantized(
   block_fp8_resolved_unquantized = true;
   weight.set_data(torch::empty(weight.sizes(), options));
   weight_is_loaded = false;
+  // A prior quantized load can leave this flag true. The downgraded BF16
+  // weight has no valid scale, so the next forward must not require one.
+  weight_scale_inv_is_loaded = false;
 }
 
 void register_block_fp8_parameters(torch::nn::Module& module,

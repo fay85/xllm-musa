@@ -31,13 +31,15 @@ void load_weight(const StateDict& state_dict,
                  torch::Tensor& weight,
                  bool& weight_is_loaded);
 
-void load_sharded_weight(const StateDict& state_dict,
-                         const std::string& name,
-                         int64_t dim,
-                         int32_t rank,
-                         int32_t world_size,
-                         torch::Tensor& weight,
-                         bool& weight_is_loaded);
+void load_sharded_weight(
+    const StateDict& state_dict,
+    const std::string& name,
+    int64_t dim,
+    int32_t rank,
+    int32_t world_size,
+    torch::Tensor& weight,
+    bool& weight_is_loaded,
+    const std::vector<int64_t>* block_fp8_shard_rows = nullptr);
 
 using TensorTransform = std::function<torch::Tensor(const torch::Tensor&)>;
 
@@ -67,25 +69,31 @@ void load_sharded_weight(const StateDict& state_dict,
                          torch::Tensor& weight,
                          bool& weight_is_loaded);
 
-void load_fused_weight(const StateDict& state_dict,
-                       const std::vector<std::string>& prefixes,
-                       const std::string& name,
-                       int64_t dim,
-                       int32_t rank,
-                       int32_t world_size,
-                       std::vector<torch::Tensor>& accumulated_tensors,
-                       torch::Tensor& weight,
-                       bool& weight_is_loaded,
-                       int32_t num_kv_head_replicas = 1);
+void load_fused_weight(
+    const StateDict& state_dict,
+    const std::vector<std::string>& prefixes,
+    const std::string& name,
+    int64_t dim,
+    int32_t rank,
+    int32_t world_size,
+    std::vector<torch::Tensor>& accumulated_tensors,
+    torch::Tensor& weight,
+    bool& weight_is_loaded,
+    int32_t num_kv_head_replicas = 1,
+    const std::vector<int64_t>* block_fp8_shard_rows = nullptr,
+    bool block_fp8_scales_are_separate = false);
 
-bool load_tensor_list(const StateDict& state_dict,
-                      const std::vector<std::string>& prefixes,
-                      const std::string& name,
-                      int64_t dim,
-                      int32_t rank,
-                      int32_t world_size,
-                      std::vector<torch::Tensor>& accumulated_tensors,
-                      int32_t num_kv_head_replicas = 1);
+bool load_tensor_list(
+    const StateDict& state_dict,
+    const std::vector<std::string>& prefixes,
+    const std::string& name,
+    int64_t dim,
+    int32_t rank,
+    int32_t world_size,
+    std::vector<torch::Tensor>& accumulated_tensors,
+    int32_t num_kv_head_replicas = 1,
+    const std::vector<int64_t>* block_fp8_shard_rows = nullptr,
+    bool block_fp8_scales_are_separate = false);
 
 void load_moe_weight(const StateDict& state_dict,
                      const std::string& sub_prefix,
@@ -176,6 +184,21 @@ void load_merged_weight_v2(const StateDict& state_dict,
                            torch::Tensor& weight,
                            bool& weight_is_loaded);
 
+std::vector<int64_t> block_fp8_scale_shard_sizes(
+    const std::vector<int64_t>& weight_shard_sizes);
+
+void load_merged_block_fp8_scale(
+    const StateDict& state_dict,
+    const std::string& name,
+    int64_t dim,
+    int32_t rank,
+    int32_t world_size,
+    int32_t shard_tensor_count,
+    const std::vector<int64_t>& full_shard_rows,
+    const std::vector<int64_t>& scale_shard_sizes,
+    torch::Tensor& weight,
+    bool& weight_is_loaded);
+
 }  // namespace weight
 
 // helper macros for defining and loading weights
@@ -210,10 +233,34 @@ void load_merged_weight_v2(const StateDict& state_dict,
                             name##_,                     \
                             name##_is_loaded_,           \
                             num_kv_head_replicas);
+#define LOAD_QKV_BLOCK_FP8_SCALE(                                         \
+    name, dim, num_kv_head_replicas, shard_rows, scales_are_separate)       \
+  weight::load_fused_weight(state_dict,                                      \
+                            prefixes,                                        \
+                            #name,                                           \
+                            dim,                                             \
+                            rank,                                            \
+                            world_size,                                      \
+                            name##_list_,                                    \
+                            name##_,                                         \
+                            name##_is_loaded_,                               \
+                            num_kv_head_replicas,                            \
+                            &(shard_rows),                                   \
+                            scales_are_separate);
 
 #define LOAD_SHARDED_WEIGHT(name, dim) \
   weight::load_sharded_weight(         \
       state_dict, #name, dim, rank, world_size, name##_, name##_is_loaded_);
+
+#define LOAD_SHARDED_BLOCK_FP8_SCALE(name, dim, shard_rows) \
+  weight::load_sharded_weight(state_dict,                   \
+                              #name,                        \
+                              dim,                          \
+                              rank,                         \
+                              world_size,                   \
+                              name##_,                      \
+                              name##_is_loaded_,            \
+                              &(shard_rows));
 
 #define LOAD_SHARDED_WEIGHT_WITH_TRANSFORM(name, dim) \
   weight::load_sharded_weight(state_dict,             \
@@ -308,6 +355,19 @@ void load_merged_weight_v2(const StateDict& state_dict,
                              shard_size,         \
                              name##_,            \
                              name##_is_loaded_);
+
+#define LOAD_MERGED_BLOCK_FP8_SCALE(                        \
+    name, dim, full_rows, scale_shard_sizes)               \
+  weight::load_merged_block_fp8_scale(state_dict,          \
+                                      #name,               \
+                                      dim,                 \
+                                      rank,                \
+                                      world_size,          \
+                                      shard_tensor_count,  \
+                                      full_rows,           \
+                                      scale_shard_sizes,   \
+                                      name##_,             \
+                                      name##_is_loaded_);
 
 #define LOAD_MERGED_WEIGHT_V2(name, dim)            \
   weight::load_merged_weight_v2(state_dict,         \

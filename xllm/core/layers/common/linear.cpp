@@ -655,6 +655,10 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
                                 linear_extra_args_);
 #if defined(USE_MUSA)
   } else if (musa::is_block_fp8_quant(quant_args_)) {
+    CHECK(block_fp8_resolved_unquantized_ ||
+          !c10::isFloat8Type(weight_.scalar_type()) ||
+          weight_scale_inv_is_loaded_)
+        << "weight_scale_inv is required for block-FP8 linear.";
     output = musa::block_fp8_or_bf16_forward(
         input, weight_, weight_scale_inv_, bias, matmul_output_buffer_);
 #endif
@@ -928,7 +932,9 @@ void ColumnParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
                                               weight_scale_inv_is_loaded_,
                                               block_fp8_resolved_unquantized_);
     if (!block_fp8_resolved_unquantized_) {
-      LOAD_SHARDED_WEIGHT(weight_scale_inv, 0);
+      const std::vector<int64_t> block_fp8_scale_rows = {weight_.size(0) *
+                                                         weight_world_size_};
+      LOAD_SHARDED_BLOCK_FP8_SCALE(weight_scale_inv, 0, block_fp8_scale_rows);
     }
     LOAD_SHARDED_WEIGHT(weight, 0);
 #endif
@@ -1217,20 +1223,17 @@ void ColumnParallelLinearImpl::load_state_dict(
                                               weight_scale_inv_is_loaded_,
                                               block_fp8_resolved_unquantized_);
     if (!block_fp8_resolved_unquantized_) {
-      if (world_size == 1) {
-        LOAD_WEIGHT(weight_scale_inv);
-      } else {
-        weight::load_merged_weight_v2(
-            state_dict,
-            "weight_scale_inv",
-            /*dim=*/0,
-            static_cast<int32_t>(rank),
-            static_cast<int32_t>(world_size),
-            shard_tensor_count,
-            musa::block_fp8_scale_shard_sizes(shard_sizes),
-            weight_scale_inv_,
-            weight_scale_inv_is_loaded_);
+      std::vector<int64_t> block_fp8_scale_rows;
+      block_fp8_scale_rows.reserve(shard_sizes.size());
+      for (int64_t shard_size : shard_sizes) {
+        block_fp8_scale_rows.emplace_back(shard_size * world_size);
       }
+      const std::vector<int64_t> block_fp8_scale_shard_sizes =
+          weight::block_fp8_scale_shard_sizes(shard_sizes);
+      LOAD_MERGED_BLOCK_FP8_SCALE(weight_scale_inv,
+                                  0,
+                                  block_fp8_scale_rows,
+                                  block_fp8_scale_shard_sizes);
     }
     LOAD_MERGED_WEIGHT_V2(weight, 0);
 #endif
@@ -1383,6 +1386,10 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
         input, qweight_, per_channel_scale_, smooth_, bias, output_dtype_);
 #if defined(USE_MUSA)
   } else if (musa::is_block_fp8_quant(quant_args_)) {
+    CHECK(block_fp8_resolved_unquantized_ ||
+          !c10::isFloat8Type(weight_.scalar_type()) ||
+          weight_scale_inv_is_loaded_)
+        << "weight_scale_inv is required for block-FP8 linear.";
     output = musa::block_fp8_or_bf16_forward(
         input, weight_, weight_scale_inv_, bias, matmul_output_buffer_);
 #endif
@@ -1535,7 +1542,21 @@ void QKVParallelLinearImpl::load_state_dict(
 #if defined(USE_MUSA)
   if (is_block_fp8) {
     if (!block_fp8_resolved_unquantized_) {
-      LOAD_QKV_WEIGHT(weight_scale_inv, 0, num_kv_head_replicas_);
+      const int64_t kv_world_size =
+          num_kv_head_replicas_ > 1 ? world_size_ / num_kv_head_replicas_
+                                    : world_size_;
+      const std::vector<int64_t> block_fp8_scale_rows = {
+          num_heads_ * head_size_ * world_size_,
+          num_kv_heads_ * head_size_ * kv_world_size,
+          num_kv_heads_ * head_size_ * kv_world_size};
+      // q_proj/k_proj/v_proj each carry one scale. A single weight_scale_inv
+      // prefix identifies the fused checkpoint tensor instead.
+      const bool scales_are_separate = prefixes.size() > 1;
+      LOAD_QKV_BLOCK_FP8_SCALE(weight_scale_inv,
+                               0,
+                               num_kv_head_replicas_,
+                               block_fp8_scale_rows,
+                               scales_are_separate);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
 #else
@@ -1915,6 +1936,10 @@ torch::Tensor RowParallelLinearImpl::forward_impl(
 #if defined(USE_MUSA)
   } else if (musa::is_block_fp8_quant(quant_args_)) {
     log_mmrs_quant_skip(reduce_mode, fc1_ctx, "block_fp8", input);
+    CHECK(block_fp8_resolved_unquantized_ ||
+          !c10::isFloat8Type(weight_.scalar_type()) ||
+          weight_scale_inv_is_loaded_)
+        << "weight_scale_inv is required for block-FP8 linear.";
     if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
@@ -2199,7 +2224,9 @@ void RowParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
                                               weight_scale_inv_is_loaded_,
                                               block_fp8_resolved_unquantized_);
     if (!block_fp8_resolved_unquantized_) {
-      LOAD_SHARDED_WEIGHT(weight_scale_inv, 1);
+      const std::vector<int64_t> block_fp8_scale_rows = {weight_.size(1) *
+                                                         world_size_};
+      LOAD_SHARDED_BLOCK_FP8_SCALE(weight_scale_inv, 1, block_fp8_scale_rows);
     }
     LOAD_SHARDED_WEIGHT(weight, 1);
 #endif
