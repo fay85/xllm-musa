@@ -79,8 +79,7 @@ void fill_native_engine_state(NativeEngineStateBuilder& builder,
                               ? static_cast<uint64_t>(used_blocks[rank])
                               : 0;
     uint64_t total = free + used;
-    if (dp_count == 1 &&
-        static_cast<uint64_t>(block_manager_pool.num_blocks()) > total) {
+    if (static_cast<uint64_t>(block_manager_pool.num_blocks()) > total) {
       total = block_manager_pool.num_blocks();
     }
     snapshot.kv_free_blocks[rank] = std::min(free, total);
@@ -91,7 +90,8 @@ void fill_native_engine_state(NativeEngineStateBuilder& builder,
         rank < prefix_cache_blocks.size()
             ? static_cast<uint64_t>(prefix_cache_blocks[rank])
             : 0;
-    const uint64_t occupied = total - snapshot.kv_free_blocks[rank];
+    const uint64_t occupied =
+        total - snapshot.kv_free_blocks[rank] - snapshot.kv_used_blocks[rank];
     snapshot.prefix_cache_reclaimable_blocks[rank] = std::min(cached, occupied);
   }
   std::string error;

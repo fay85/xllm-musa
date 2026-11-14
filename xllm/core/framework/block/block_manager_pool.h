@@ -115,6 +115,7 @@ class BlockManagerPool : public KVCacheManager {
   void reset_swa_prefix_cache();
 
   void allocate_shared(Sequence* sequence) override;
+  size_t probe_prefix_hit_tokens(Sequence* sequence, int32_t dp_rank) const;
   void cache(Sequence* sequence) override;
   void cache(Sequence* sequence, size_t num_tokens) override;
 

@@ -93,6 +93,7 @@ class CompositeBlockManager : public BlockManager {
   void deallocate_for_sequence(Sequence* seq, KVCacheState& kv_state);
   void allocate_shared_for_sequence(Sequence* seq);
   void allocate_shared_for_sequence(Sequence* seq, KVCacheState& kv_state);
+  size_t probe_hit_tokens_for_sequence(Sequence* seq);
   void cache_for_sequence(Sequence* seq);
   void cache_for_sequence(Sequence* seq, size_t num_tokens);
   void cache_full_blocks_for_sequence(Sequence* seq);

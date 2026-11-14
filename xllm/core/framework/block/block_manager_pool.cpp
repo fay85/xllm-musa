@@ -472,6 +472,17 @@ bool BlockManagerPool::process_beam_search(Sequence* sequence, bool need_swap) {
   return true;
 }
 
+size_t BlockManagerPool::probe_prefix_hit_tokens(Sequence* sequence,
+                                                 int32_t dp_rank) const {
+  if (!options_.enable_prefix_cache() || sequence == nullptr || dp_rank < 0 ||
+      static_cast<size_t>(dp_rank) >= block_managers_.size()) {
+    return 0;
+  }
+  auto* composite =
+      static_cast<CompositeBlockManager*>(block_managers_[dp_rank].get());
+  return composite->probe_hit_tokens_for_sequence(sequence);
+}
+
 void BlockManagerPool::allocate_shared(Sequence* sequence) {
   if (!options_.enable_prefix_cache()) {
     return;

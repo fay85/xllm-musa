@@ -188,6 +188,11 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
       static_cast<size_t>(state.kv_cache_manager->num_blocks());
   const std::vector<size_t> used_blocks =
       state.kv_cache_manager->num_used_blocks();
+  const auto* pool =
+      state.enable_prefix_cache && dp_size > 1
+          ? dynamic_cast<const BlockManagerPool*>(state.kv_cache_manager)
+          : nullptr;
+  size_t max_hit_tokens = 0;
   size_t max_available = 0;
   std::vector<int32_t> candidates;
   candidates.reserve(dp_size);
@@ -196,14 +201,21 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
         per_dp_counts[dp_rank] >= cap) {
       continue;
     }
+    const size_t hit =
+        pool != nullptr
+            ? pool->probe_prefix_hit_tokens(const_cast<Sequence*>(sequence),
+                                            dp_rank)
+            : 0;
     const size_t avail = total_blocks >= used_blocks[dp_rank]
                              ? total_blocks - used_blocks[dp_rank]
                              : 0;
-    if (candidates.empty() || avail > max_available) {
+    if (candidates.empty() || hit > max_hit_tokens ||
+        (hit == max_hit_tokens && avail > max_available)) {
+      max_hit_tokens = hit;
       max_available = avail;
       candidates.clear();
       candidates.push_back(dp_rank);
-    } else if (avail == max_available) {
+    } else if (hit == max_hit_tokens && avail == max_available) {
       candidates.push_back(dp_rank);
     }
   }

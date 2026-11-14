@@ -799,6 +799,8 @@ std::optional<ProbeResult> take_probe(std::vector<ProbeResult>& probes,
 TrimOutcome trim_flat_kv(std::vector<ProbeResult> probes) {
   CHECK_EQ(probes.size(), 1u) << "FLAT_KV expects a single KV probe";
   TrimOutcome out;
+  out.safe_hit_tokens =
+      probes.front().blocks.size() * probes.front().block_size;
   out.to_mount = std::move(probes);
   return out;
 }
@@ -958,6 +960,35 @@ void CompositeBlockManager::allocate_shared_for_sequence(Sequence* seq) {
     return;
   }
   allocate_shared_for_sequence(seq, seq->kv_state());
+}
+
+size_t CompositeBlockManager::probe_hit_tokens_for_sequence(Sequence* seq) {
+  if (seq == nullptr || combination_ == LeafCombination::UNSUPPORTED) {
+    return 0;
+  }
+  std::vector<ProbeResult> probes =
+      probe_prefix_cache(seq, leaves_, seq->kv_state());
+  if (probes.empty()) {
+    return 0;
+  }
+  TrimOutcome trimmed;
+  switch (combination_) {
+    case LeafCombination::FLAT_KV:
+      trimmed = trim_flat_kv(std::move(probes));
+      break;
+    case LeafCombination::FLAT_KV_LINEAR:
+      trimmed = trim_flat_kv_linear(std::move(probes));
+      break;
+    case LeafCombination::SWA_COMPRESSED:
+      trimmed = trim_swa_compressed(std::move(probes), seq->tokens().size());
+      break;
+    case LeafCombination::UNSUPPORTED:
+      return 0;
+  }
+  const size_t hit_tokens = trimmed.safe_hit_tokens;
+  release_probes(&trimmed.to_drop);
+  release_probes(&trimmed.to_mount);
+  return hit_tokens;
 }
 
 void CompositeBlockManager::allocate_shared_for_sequence(
