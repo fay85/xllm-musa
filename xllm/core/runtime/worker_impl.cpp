@@ -899,6 +899,11 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
 #elif defined(USE_MLU)
   reads_distinct_state = is_glm5_next_target_model(context_.get_model_args()) &&
                          is_prefill && !params.is_spec_verify;
+#elif defined(USE_MUSA)
+  const ModelArgs& args = context_.get_model_args();
+  reads_distinct_state = (is_qwen3_5_target_model_type(args.model_type()) ||
+                          args.model_type() == "qwen3_next") &&
+                         is_prefill && !params.is_spec_verify;
 #endif
   if (is_prefill && params.meta.requires_host_restore) {
     CHECK(hierarchy_kv_cache_transfer_ != nullptr)

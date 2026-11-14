@@ -52,6 +52,8 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
   torch::Tensor fusable_ba_weight() const override;
   torch::Tensor project_qkvz(
       const NormalizedHiddenStates& hidden_states) override;
+  torch::Tensor project_ba(
+      const NormalizedHiddenStates& hidden_states) override;
 
   virtual void load_projection_state_dict(const StateDict& state_dict);
   virtual void verify_projection_weights(const std::string& prefix) const;
@@ -86,6 +88,10 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
     return use_merged_projections();
   }
   torch::Tensor fusable_ba_weight() const override;
+  torch::Tensor project_qkvz(
+      const NormalizedHiddenStates& hidden_states) override;
+  torch::Tensor project_ba(
+      const NormalizedHiddenStates& hidden_states) override;
 
   void load_projection_state_dict(const StateDict& state_dict) override;
   void verify_projection_weights(const std::string& prefix) const override;
