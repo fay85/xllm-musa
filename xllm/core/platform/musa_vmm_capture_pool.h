@@ -31,6 +31,12 @@ namespace xllm {
 // Graph cache hits do not create a pool; every new capture calls create_pool().
 class MusaVmmCapturePool final {
  public:
+  struct Snapshot {
+    size_t mapped_size = 0;
+    size_t num_virtual_spaces = 0;
+    size_t captures_created = 0;
+  };
+
   explicit MusaVmmCapturePool(int32_t device_index, size_t reserve_size = 0)
       : device_index_(device_index), torch_allocator_(&allocator_) {
     c10::musa::MUSAGuard guard(device_index_);
@@ -39,6 +45,20 @@ class MusaVmmCapturePool final {
 
   MusaVmmCapturePool(const MusaVmmCapturePool&) = delete;
   MusaVmmCapturePool& operator=(const MusaVmmCapturePool&) = delete;
+
+  Snapshot snapshot() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return Snapshot{allocator_.mapped_size(),
+                    allocator_.num_virtual_spaces(),
+                    captures_created_};
+  }
+
+  void rollback(const Snapshot& snap) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    c10::musa::MUSAGuard guard(device_index_);
+    allocator_.rollback_capture(snap.mapped_size, snap.num_virtual_spaces);
+    captures_created_ = snap.captures_created;
+  }
 
   std::unique_ptr<c10::musa::MemPool> create_pool() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -61,7 +81,7 @@ class MusaVmmCapturePool final {
   SharedVMMAllocator allocator_;
   VMMTorchAllocator torch_allocator_;
   size_t captures_created_ = 0;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
 };
 
 }  // namespace xllm

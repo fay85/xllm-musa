@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
+#include "core/runtime/musa/prefill_graph_policy.h"
+
 namespace xllm {
 namespace {
 
@@ -81,6 +83,51 @@ TEST(AclGraphBucketPolicyUnitTest, AppliesWarmupCapacityInLocalDpUnits) {
   EXPECT_FALSE(npu::is_acl_graph_decode_capture_allowed(5, 16, 4, true));
   EXPECT_FALSE(npu::is_acl_graph_decode_capture_allowed(15, 16, 1, false));
   EXPECT_TRUE(npu::is_acl_graph_decode_capture_allowed(15, 16, 1, true));
+}
+
+TEST(MusaPrefillGraphPolicyUnitTest, EnforcesMemoryHeadroomAndOomLatch) {
+  constexpr std::size_t kMiB = 1024ULL * 1024ULL;
+  // Minimum floor is 1536 MiB even when reserve_mb is smaller.
+  EXPECT_EQ(runtime::musa::prefill_capture_required_free_bytes(0),
+            1536ULL * kMiB);
+  EXPECT_EQ(runtime::musa::prefill_capture_required_free_bytes(2048),
+            2048ULL * kMiB);
+
+  // Cache hits always replay even when OOM is latched or free memory is 0.
+  EXPECT_TRUE(runtime::musa::can_admit_prefill_graph_with_memory(
+      /*cached_entries=*/128,
+      /*max_entries=*/128,
+      /*cache_hit=*/true,
+      /*oom_latched=*/true,
+      /*physical_free_bytes=*/0,
+      /*reserve_mb=*/2048));
+
+  // Unseen keys are rejected when OOM is latched.
+  EXPECT_FALSE(runtime::musa::can_admit_prefill_graph_with_memory(
+      /*cached_entries=*/10,
+      /*max_entries=*/128,
+      /*cache_hit=*/false,
+      /*oom_latched=*/true,
+      /*physical_free_bytes=*/4096ULL * kMiB,
+      /*reserve_mb=*/2048));
+
+  // Unseen keys are rejected when physical free memory is below reserve.
+  EXPECT_FALSE(runtime::musa::can_admit_prefill_graph_with_memory(
+      /*cached_entries=*/10,
+      /*max_entries=*/128,
+      /*cache_hit=*/false,
+      /*oom_latched=*/false,
+      /*physical_free_bytes=*/2047ULL * kMiB,
+      /*reserve_mb=*/2048));
+
+  // Unseen keys are admitted when within max_entries and free memory >= reserve.
+  EXPECT_TRUE(runtime::musa::can_admit_prefill_graph_with_memory(
+      /*cached_entries=*/10,
+      /*max_entries=*/128,
+      /*cache_hit=*/false,
+      /*oom_latched=*/false,
+      /*physical_free_bytes=*/2048ULL * kMiB,
+      /*reserve_mb=*/2048));
 }
 
 }  // namespace

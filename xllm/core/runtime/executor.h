@@ -40,6 +40,9 @@ class Executor final {
 
   void set_dp_process_group(ProcessGroup* group);
 
+  void set_model_parallel_groups(ProcessGroup* tp_group,
+                                 ProcessGroup* cp_group);
+
   ForwardInput prepare_inputs(Batch& batch);
 
   // tokens: vector size is dp_size, each element is [num_tokens/dp_size]

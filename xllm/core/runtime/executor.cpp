@@ -48,6 +48,11 @@ void Executor::set_dp_process_group(ProcessGroup* group) {
   impl_->set_dp_process_group(group);
 }
 
+void Executor::set_model_parallel_groups(ProcessGroup* tp_group,
+                                         ProcessGroup* cp_group) {
+  impl_->set_model_parallel_groups(tp_group, cp_group);
+}
+
 ModelOutput Executor::forward(const torch::Tensor& tokens,
                               const torch::Tensor& positions,
                               std::vector<KVCache>& kv_caches,

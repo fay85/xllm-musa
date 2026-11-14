@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/rec_config.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#include "core/framework/parallel_state/process_group.h"
 #include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
@@ -2450,303 +2451,371 @@ bool MusaGraph::capture(CausalLM* model,
   // FlashInfer plan/update).
   const bool needs_model_graph_metadata =
       model->requires_graph_forward_metadata();
-  auto full_attention_cache =
-      MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
-  CHECK(needs_model_graph_metadata || full_attention_cache.has_value())
-      << "MUSA graph capture requires at least one full-attention KV cache "
-         "unless the model supplies graph-forward metadata";
-  const torch::Tensor k_cache =
-      full_attention_cache ? full_attention_cache->first : torch::Tensor();
-  const torch::Tensor v_cache =
-      full_attention_cache ? full_attention_cache->second : torch::Tensor();
-  auto graph_params_opt =
-      is_piecewise_
-          ? persistent_param_.update_prefill(tokens,
-                                             positions,
-                                             params,
-                                             padded_num_tokens_,
-                                             /*return_capture_params=*/true)
-          : persistent_param_.update(
-                tokens,
-                k_cache,
-                v_cache,
-                positions,
-                params,
-                padded_num_tokens_,
-                /*return_capture_params=*/true,
-                /*update_attention_plan=*/!needs_model_graph_metadata);
-
-  // Use the returned ModelInputParams for graph capture
-  CHECK(graph_params_opt.has_value())
-      << "update() should return ModelInputParams when "
-         "return_capture_params=true";
-
-  prepare_model_graph_metadata(
-      model,
-      persistent_param_.persistent_positions(padded_num_tokens_),
-      graph_params_opt.value());
-
-  torch::Tensor& capture_fa3_scheduler_metadata =
-      graph_params_opt.value()
-          .attn_metadata->fa3_metadata.fa3_scheduler_metadata;
-  if (capture_fa3_scheduler_metadata.defined()) {
-    // Replay overwrites this captured address, so it must not alias the
-    // shared metadata cache.
-    capture_fa3_scheduler_metadata = capture_fa3_scheduler_metadata.clone();
-  }
-  captured_fa3_scheduler_metadata_ = capture_fa3_scheduler_metadata;
-  replayed_fa3_scheduler_metadata_ = torch::Tensor();
-
-  // Graph preparation executes eager warmup and FFI-record forwards before
-  // the real replay. Each forward mutates GDN convolution and recurrent state,
-  // including ordinary decode capture. Snapshot the live sequence rows so
-  // every preparation pass starts from the same state and the first replay
-  // applies the current token or chunk exactly once.
   const bool snapshot_linear_state =
       params.embedding.linear_state_indices.defined() ||
       !params.embedding.linear_state_ids.empty();
   torch::Tensor linear_state_snapshot_indices;
   std::vector<IndexedTensorSnapshot> linear_state_snapshots;
-  if (snapshot_linear_state) {
-    linear_state_snapshot_indices =
-        get_linear_state_snapshot_indices(params, persistent_param_.device());
-    linear_state_snapshots = snapshot_linear_attention_state(
-        kv_cache, linear_state_snapshot_indices);
-  }
+  bool ffi_alloc_record_active = false;
+  bool ffi_alloc_replay_active = false;
 
-  if (!is_piecewise_) {
-    refresh_persistent_paged_kv_host_mirrors(
-        graph_params_opt.value().attn_metadata, params.attention.host);
-  }
-  // Piecewise warmups run on the same bucket rows as the capture.
-  std::optional<xllm::kernel::musa::PiecewisePreparationScope>
-      piecewise_preparation_scope;
-  if (is_piecewise_) {
-    piecewise_preparation_scope.emplace();
-  }
-
-  LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
-            << bucket_num_tokens
-            << ", actual_num_tokens: " << actual_num_tokens;
-  size_t physical_free_before_warmup = 0;
-  size_t physical_total = 0;
-  if (is_piecewise_) {
-    CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
-             musaSuccess);
-  }
-
-  {
-    // Normal capture mode for decode.
-    // Reuses the outer `capture_stream` (set up at the top of this function
-    // and active via stream_guard) so the warmup runs on the exact stream
-    // about to be captured -- syncing a different stream would leave the
-    // capture stream with stale pending work.
-    const char* skip_graph_warmup_env =
-        std::getenv("XLLM_MUSA_GRAPH_SKIP_WARMUP");
-    const bool skip_graph_warmup = skip_graph_warmup_env != nullptr &&
-                                   std::string(skip_graph_warmup_env) == "1";
-    void* const capture_stream_handle =
-        reinterpret_cast<void*>(capture_stream.stream());
-    std::optional<xllm::kernel::musa::TvmffiStreamOverrideGuard>
-        ffi_capture_stream_guard;
-    ffi_capture_stream_guard.emplace(persistent_param_.device(),
-                                     capture_stream_handle);
-    // Warmup and FFI recording run eagerly before capture and must not advance
-    // DSV4 compressor/indexer state. The real captured forward below is the
-    // first preparation pass allowed to mutate that state.
-    // For non-piecewise decode/verify graphs, the FFI recording forward below
-    // serves as the 2nd eager warmup pass, cutting preparation from 3 full
-    // eager forwards down to 2.
-    xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
-    const int num_warmup_iters =
-        skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
-    for (int warmup_iter = 0; warmup_iter < num_warmup_iters;
-         ++warmup_iter) {
-      capture_stream.synchronize();
-      {
-        xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
-        auto warmup_output = model->forward(
-            persistent_param_.persistent_tokens(padded_num_tokens_),
-            persistent_param_.persistent_positions(padded_num_tokens_),
-            kv_cache,
-            graph_params_opt.value());
-        if (should_capture_graph_aux_hidden_states(args, options) &&
-            warmup_output.aux_hidden_states.defined()) {
-          persistent_param_.set_aux_hidden_states(
-              warmup_output.aux_hidden_states);
-        }
-      }
-      xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
-      if (snapshot_linear_state) {
-        // The warmup is an eager forward and therefore mutates the live
-        // recurrent state. Restore it before the next warmup so every warmup
-        // observes the same input state as the captured replay.
-        capture_stream.synchronize();
-      }
-      if (snapshot_linear_state) {
-        restore_linear_attention_state(linear_state_snapshots,
-                                       linear_state_snapshot_indices);
-      }
-    }
-    capture_stream.synchronize();
-
-    if (is_piecewise_) {
-      size_t physical_free_after_warmup = 0;
-      CHECK_EQ(musaMemGetInfo(&physical_free_after_warmup, &physical_total),
-               musaSuccess);
-      LOG(INFO) << "MUSA Prefill preparation: bucket_num_tokens="
-                << bucket_num_tokens << " physical_free_before_warmup="
-                << physical_free_before_warmup
-                << " physical_free_after_warmup=" << physical_free_after_warmup;
-    }
-
-    // Record Mate FFI internal scratch allocations on one extra eager forward.
-    // The Mate decode .so allocates via TVM-FFI's DLPackManagedTensorAllocator
-    // hook (torch::empty), which MUSA rejects under stream capture. We capture
-    // the exact sequence of tensors here and replay them during capture_begin.
-    // Piecewise prefill graphs take Mate scratch from the shared graph pool
-    // instead, because recorded scratch would stay pinned by every exact-shape
-    // prefill graph.
-    recorded_ffi_allocs_.clear();
-    if (!is_piecewise_ && !skip_graph_warmup) {
-      xllm::kernel::musa::begin_ffi_alloc_record();
-      {
-        xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
-        model->forward(
-            persistent_param_.persistent_tokens(padded_num_tokens_),
-            persistent_param_.persistent_positions(padded_num_tokens_),
-            kv_cache,
-            graph_params_opt.value());
-      }
-      xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
-      if (snapshot_linear_state) {
-        // The FFI recording pass is eager as well; leave the live cache at the
-        // pre-capture state before beginning graph capture.
-        capture_stream.synchronize();
-      }
-      if (snapshot_linear_state) {
-        restore_linear_attention_state(linear_state_snapshots,
-                                       linear_state_snapshot_indices);
-      }
-      recorded_ffi_allocs_ = xllm::kernel::musa::end_ffi_alloc_record();
-      capture_stream.synchronize();
-      LOG(INFO) << "Recorded " << recorded_ffi_allocs_.size()
-                << " Mate FFI scratch tensors for decode graph capture, "
-                   "bucket_num_tokens="
-                << bucket_num_tokens;
-    }
-
-    // Allocations made during capture can only be served by the graph pool,
-    // and the caching allocator cannot release default-pool blocks until
-    // capture ends. Return them to the device before a lazy capture.
-    Device::empty_cache(/*device_index=*/-1);
-
-    // MemPoolContext has been deprecated in torch >= 2.8
-#if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
-    // Activate VMM mempool only for the actual capture to keep plan_info
-    // allocations out of the shared physical memory pool.
-    std::optional<c10::musa::MemPoolContext> mempool_ctx;
-    if (pool_ptr != nullptr) {
-      mempool_ctx.emplace(pool_ptr);
-    }
-#endif
-
-    // Begin graph capture (capture_mode defaults to
-    // musaStreamCaptureModeGlobal)
-    // graph_.capture_begin(pool);
+  auto cleanup_failed_capture = [&]() noexcept {
     xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(false);
-    GlobalCaptureInstance& piecewise_capture =
-        GlobalCaptureInstance::get_instance();
+    if (ffi_alloc_record_active) {
+      (void)xllm::kernel::musa::end_ffi_alloc_record();
+      ffi_alloc_record_active = false;
+    }
+    if (ffi_alloc_replay_active) {
+      xllm::kernel::musa::end_ffi_alloc_replay();
+      ffi_alloc_replay_active = false;
+    }
     if (is_piecewise_) {
-      piecewise_capture.begin_capture(pool, pool_ptr != nullptr);
+      GlobalCaptureInstance::get_instance().abort_capture();
+      piecewise_graph_.reset();
     } else {
-      if (s_graph_dump_directory() != nullptr) {
-        graph_.enable_debug_mode();
+      graph_.abort_capture();
+    }
+    (void)musaGetLastError();
+    (void)musaStreamSynchronize(capture_stream.stream());
+    (void)musaGetLastError();
+    if (snapshot_linear_state && !linear_state_snapshots.empty()) {
+      try {
+        restore_linear_attention_state(linear_state_snapshots,
+                                       linear_state_snapshot_indices);
+        (void)musaStreamSynchronize(capture_stream.stream());
+      } catch (const std::exception& restore_err) {
+        LOG(ERROR) << "Failed to restore linear attention state after "
+                   << "aborted MUSA graph capture: " << restore_err.what();
+      } catch (...) {
       }
-      graph_.capture_begin(
-          pool, musaStreamCaptureModeThreadLocal, pool_ptr != nullptr);
     }
+    pool_owner_.reset();
+    stream_guard.reset();
+    try {
+      Device::empty_cache(device_index_);
+    } catch (...) {
+    }
+    (void)musaGetLastError();
+  };
 
-    if (!is_piecewise_) {
-      xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
-    }
-    // Execute forward pass; the MUSA graph captures this work.
-    auto forward_result = model->forward(
-        persistent_param_.persistent_tokens(padded_num_tokens_),
+  try {
+    auto full_attention_cache =
+        MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
+    CHECK(needs_model_graph_metadata || full_attention_cache.has_value())
+        << "MUSA graph capture requires at least one full-attention KV cache "
+           "unless the model supplies graph-forward metadata";
+    const torch::Tensor k_cache =
+        full_attention_cache ? full_attention_cache->first : torch::Tensor();
+    const torch::Tensor v_cache =
+        full_attention_cache ? full_attention_cache->second : torch::Tensor();
+    auto graph_params_opt =
+        is_piecewise_
+            ? persistent_param_.update_prefill(tokens,
+                                               positions,
+                                               params,
+                                               padded_num_tokens_,
+                                               /*return_capture_params=*/true)
+            : persistent_param_.update(
+                  tokens,
+                  k_cache,
+                  v_cache,
+                  positions,
+                  params,
+                  padded_num_tokens_,
+                  /*return_capture_params=*/true,
+                  /*update_attention_plan=*/!needs_model_graph_metadata);
+
+    // Use the returned ModelInputParams for graph capture
+    CHECK(graph_params_opt.has_value())
+        << "update() should return ModelInputParams when "
+           "return_capture_params=true";
+
+    prepare_model_graph_metadata(
+        model,
         persistent_param_.persistent_positions(padded_num_tokens_),
-        kv_cache,
         graph_params_opt.value());
 
-    // Store result in persistent buffer
-    persistent_param_.set_hidden_states(forward_result.hidden_states);
-    if (should_capture_graph_aux_hidden_states(args, options) &&
-        forward_result.aux_hidden_states.defined()) {
-      persistent_param_.set_aux_hidden_states(forward_result.aux_hidden_states);
+    torch::Tensor& capture_fa3_scheduler_metadata =
+        graph_params_opt.value()
+            .attn_metadata->fa3_metadata.fa3_scheduler_metadata;
+    if (capture_fa3_scheduler_metadata.defined()) {
+      // Replay overwrites this captured address, so it must not alias the
+      // shared metadata cache.
+      capture_fa3_scheduler_metadata = capture_fa3_scheduler_metadata.clone();
+    }
+    captured_fa3_scheduler_metadata_ = capture_fa3_scheduler_metadata;
+    replayed_fa3_scheduler_metadata_ = torch::Tensor();
+
+    // Graph preparation executes eager warmup and FFI-record forwards before
+    // the real replay. Each forward mutates GDN convolution and recurrent
+    // state, including ordinary decode capture. Snapshot the live sequence rows
+    // so every preparation pass starts from the same state and the first replay
+    // applies the current token or chunk exactly once.
+    if (snapshot_linear_state) {
+      linear_state_snapshot_indices =
+          get_linear_state_snapshot_indices(params, persistent_param_.device());
+      linear_state_snapshots = snapshot_linear_attention_state(
+          kv_cache, linear_state_snapshot_indices);
     }
 
-    // End graph capture
+    if (!is_piecewise_) {
+      refresh_persistent_paged_kv_host_mirrors(
+          graph_params_opt.value().attn_metadata, params.attention.host);
+    }
+    // Piecewise warmups run on the same bucket rows as the capture.
+    std::optional<xllm::kernel::musa::PiecewisePreparationScope>
+        piecewise_preparation_scope;
     if (is_piecewise_) {
-      piecewise_graph_ = piecewise_capture.end_capture();
-      CHECK(piecewise_graph_ != nullptr)
-          << "MUSA piecewise prefill capture returned null";
-      LOG(INFO) << "MUSA piecewise prefill capture: graphs="
-                << piecewise_graph_->size()
-                << ", runners=" << piecewise_graph_->num_runners();
-    } else {
-      graph_.capture_end();
+      piecewise_preparation_scope.emplace();
+    }
+
+    LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
+              << bucket_num_tokens
+              << ", actual_num_tokens: " << actual_num_tokens;
+    size_t physical_free_before_warmup = 0;
+    size_t physical_total = 0;
+    if (is_piecewise_) {
+      // Release idle cached blocks on other streams (e.g. ViT or prior eager
+      // forwards) before warmup on capture_stream so warmup does not allocate
+      // duplicate physical segments from the driver.
+      Device::empty_cache(device_index_);
+      CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
+               musaSuccess);
+    }
+
+    {
+      // Normal capture mode for decode.
+      // Reuses the outer `capture_stream` (set up at the top of this function
+      // and active via stream_guard) so the warmup runs on the exact stream
+      // about to be captured -- syncing a different stream would leave the
+      // capture stream with stale pending work.
+      const char* skip_graph_warmup_env =
+          std::getenv("XLLM_MUSA_GRAPH_SKIP_WARMUP");
+      const bool skip_graph_warmup = skip_graph_warmup_env != nullptr &&
+                                     std::string(skip_graph_warmup_env) == "1";
+      void* const capture_stream_handle =
+          reinterpret_cast<void*>(capture_stream.stream());
+      std::optional<xllm::kernel::musa::TvmffiStreamOverrideGuard>
+          ffi_capture_stream_guard;
+      ffi_capture_stream_guard.emplace(persistent_param_.device(),
+                                       capture_stream_handle);
+      // Warmup and FFI recording run eagerly before capture and must not
+      // advance DSV4 compressor/indexer state. The real captured forward below
+      // is the first preparation pass allowed to mutate that state. For
+      // non-piecewise decode/verify graphs, the FFI recording forward below
+      // serves as the 2nd eager warmup pass, cutting preparation from 3 full
+      // eager forwards down to 2.
+      xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
+      const int num_warmup_iters =
+          skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
+      for (int warmup_iter = 0; warmup_iter < num_warmup_iters; ++warmup_iter) {
+        capture_stream.synchronize();
+        {
+          xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
+          auto warmup_output = model->forward(
+              persistent_param_.persistent_tokens(padded_num_tokens_),
+              persistent_param_.persistent_positions(padded_num_tokens_),
+              kv_cache,
+              graph_params_opt.value());
+          if (should_capture_graph_aux_hidden_states(args, options) &&
+              warmup_output.aux_hidden_states.defined()) {
+            persistent_param_.set_aux_hidden_states(
+                warmup_output.aux_hidden_states);
+          }
+        }
+        xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
+        if (snapshot_linear_state) {
+          // The warmup is an eager forward and therefore mutates the live
+          // recurrent state. Restore it before the next warmup so every warmup
+          // observes the same input state as the captured replay.
+          capture_stream.synchronize();
+        }
+        if (snapshot_linear_state) {
+          restore_linear_attention_state(linear_state_snapshots,
+                                         linear_state_snapshot_indices);
+        }
+      }
+      capture_stream.synchronize();
+
+      if (is_piecewise_) {
+        size_t physical_free_after_warmup = 0;
+        CHECK_EQ(musaMemGetInfo(&physical_free_after_warmup, &physical_total),
+                 musaSuccess);
+        LOG(INFO) << "MUSA Prefill preparation: bucket_num_tokens="
+                  << bucket_num_tokens << " physical_free_before_warmup="
+                  << physical_free_before_warmup
+                  << " physical_free_after_warmup="
+                  << physical_free_after_warmup;
+      }
+
+      // Record Mate FFI internal scratch allocations on one extra eager
+      // forward. The Mate decode .so allocates via TVM-FFI's
+      // DLPackManagedTensorAllocator hook (torch::empty), which MUSA rejects
+      // under stream capture. We capture the exact sequence of tensors here and
+      // replay them during capture_begin. Piecewise prefill graphs take Mate
+      // scratch from the shared graph pool instead, because recorded scratch
+      // would stay pinned by every exact-shape prefill graph.
+      recorded_ffi_allocs_.clear();
+      if (!is_piecewise_ && !skip_graph_warmup) {
+        xllm::kernel::musa::begin_ffi_alloc_record();
+        ffi_alloc_record_active = true;
+        {
+          xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
+          model->forward(
+              persistent_param_.persistent_tokens(padded_num_tokens_),
+              persistent_param_.persistent_positions(padded_num_tokens_),
+              kv_cache,
+              graph_params_opt.value());
+        }
+        xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
+        if (snapshot_linear_state) {
+          // The FFI recording pass is eager as well; leave the live cache at
+          // the pre-capture state before beginning graph capture.
+          capture_stream.synchronize();
+        }
+        if (snapshot_linear_state) {
+          restore_linear_attention_state(linear_state_snapshots,
+                                         linear_state_snapshot_indices);
+        }
+        recorded_ffi_allocs_ = xllm::kernel::musa::end_ffi_alloc_record();
+        ffi_alloc_record_active = false;
+        capture_stream.synchronize();
+        LOG(INFO) << "Recorded " << recorded_ffi_allocs_.size()
+                  << " Mate FFI scratch tensors for decode graph capture, "
+                     "bucket_num_tokens="
+                  << bucket_num_tokens;
+      }
+
+      // Allocations made during capture can only be served by the graph pool,
+      // and the caching allocator cannot release default-pool blocks until
+      // capture ends. Return them to the device before a lazy capture.
+      Device::empty_cache(/*device_index=*/-1);
+
+      // MemPoolContext has been deprecated in torch >= 2.8
+#if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
+      // Activate VMM mempool only for the actual capture to keep plan_info
+      // allocations out of the shared physical memory pool.
+      std::optional<c10::musa::MemPoolContext> mempool_ctx;
+      if (pool_ptr != nullptr) {
+        mempool_ctx.emplace(pool_ptr);
+      }
+#endif
+
+      // Begin graph capture (capture_mode defaults to
+      // musaStreamCaptureModeGlobal)
+      // graph_.capture_begin(pool);
       xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(false);
-      if (const char* dump_directory = s_graph_dump_directory()) {
-        const uint32_t capture_index =
-            s_completed_musa_graph_captures.load(std::memory_order_relaxed) + 1;
-        const std::string dump_path =
-            std::string(dump_directory) + "/target_device" +
-            std::to_string(device_index_) + "_capture" +
-            std::to_string(capture_index) + ".dot";
-        graph_.debug_dump(dump_path);
-        LOG(INFO) << "MUSA graph diagnostic dump: " << dump_path;
+      GlobalCaptureInstance& piecewise_capture =
+          GlobalCaptureInstance::get_instance();
+      if (is_piecewise_) {
+        piecewise_capture.begin_capture(pool, pool_ptr != nullptr);
+      } else {
+        if (s_graph_dump_directory() != nullptr) {
+          graph_.enable_debug_mode();
+        }
+        graph_.capture_begin(
+            pool, musaStreamCaptureModeThreadLocal, pool_ptr != nullptr);
+      }
+
+      if (!is_piecewise_) {
+        xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
+        ffi_alloc_replay_active = true;
+      }
+      // Execute forward pass; the MUSA graph captures this work.
+      auto forward_result = model->forward(
+          persistent_param_.persistent_tokens(padded_num_tokens_),
+          persistent_param_.persistent_positions(padded_num_tokens_),
+          kv_cache,
+          graph_params_opt.value());
+
+      // Store result in persistent buffer
+      persistent_param_.set_hidden_states(forward_result.hidden_states);
+      if (should_capture_graph_aux_hidden_states(args, options) &&
+          forward_result.aux_hidden_states.defined()) {
+        persistent_param_.set_aux_hidden_states(
+            forward_result.aux_hidden_states);
+      }
+
+      // End graph capture
+      if (is_piecewise_) {
+        piecewise_graph_ = piecewise_capture.end_capture();
+        CHECK(piecewise_graph_ != nullptr)
+            << "MUSA piecewise prefill capture returned null";
+        LOG(INFO) << "MUSA piecewise prefill capture: graphs="
+                  << piecewise_graph_->size()
+                  << ", runners=" << piecewise_graph_->num_runners();
+      } else {
+        graph_.capture_end();
+        xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(false);
+        if (const char* dump_directory = s_graph_dump_directory()) {
+          const uint32_t capture_index =
+              s_completed_musa_graph_captures.load(std::memory_order_relaxed) +
+              1;
+          const std::string dump_path =
+              std::string(dump_directory) + "/target_device" +
+              std::to_string(device_index_) + "_capture" +
+              std::to_string(capture_index) + ".dot";
+          graph_.debug_dump(dump_path);
+          LOG(INFO) << "MUSA graph diagnostic dump: " << dump_path;
+        }
+      }
+      ffi_capture_stream_guard.reset();
+      if (!is_piecewise_) {
+        xllm::kernel::musa::end_ffi_alloc_replay();
+        ffi_alloc_replay_active = false;
+      }
+      if (snapshot_linear_state) {
+        capture_stream.synchronize();
+      }
+      if (snapshot_linear_state) {
+        // The captured forward executes once while recording and mutates the
+        // live convolution/SSM cache. Restore the pre-capture snapshot so the
+        // first replay applies the current decode input exactly once.
+        restore_linear_attention_state(linear_state_snapshots,
+                                       linear_state_snapshot_indices);
       }
     }
-    ffi_capture_stream_guard.reset();
-    if (!is_piecewise_) {
-      xllm::kernel::musa::end_ffi_alloc_replay();
+
+    if (params.is_spec_verify && params.gdn_mtp_verify_cache != nullptr &&
+        params.gdn_mtp_verify_cache->enabled) {
+      is_spec_verify_graph_ = true;
+      captured_verify_states_ = params.gdn_mtp_verify_cache->layer_states;
+      CHECK(!captured_verify_states_.empty())
+          << "spec-verify graph capture produced no GDN verify checkpoints";
     }
-    if (snapshot_linear_state) {
-      capture_stream.synchronize();
-    }
-    if (snapshot_linear_state) {
-      // The captured forward executes once while recording and mutates the
-      // live convolution/SSM cache. Restore the pre-capture snapshot so the
-      // first replay applies the current decode input exactly once.
-      restore_linear_attention_state(linear_state_snapshots,
-                                     linear_state_snapshot_indices);
-    }
+
+    // Synchronize to ensure graph capture is completed.
+    capture_stream.synchronize();
+
+    // The external custom-allreduce backend records graph buffer addresses
+    // during capture. Exchange and register their IPC metadata before replay.
+    finalize_musa_custom_allreduce_graphs();
+
+    // Explicitly restore stream after capture before replay logic.
+    stream_guard.reset();
+
+    // Replay is unified in MusaGraphExecutorImpl::run() after capture success.
+
+    s_completed_musa_graph_captures.fetch_add(1, std::memory_order_release);
+
+    LOG(INFO) << "MUSA graph capture end, bucket_num_tokens: "
+              << bucket_num_tokens;
+    return true;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "MUSA graph capture failed for bucket_num_tokens="
+               << bucket_num_tokens
+               << " (actual_num_tokens=" << actual_num_tokens
+               << ", is_piecewise=" << is_piecewise_ << "): " << e.what();
+    cleanup_failed_capture();
+    return false;
+  } catch (...) {
+    LOG(ERROR) << "MUSA graph capture failed for bucket_num_tokens="
+               << bucket_num_tokens
+               << " (actual_num_tokens=" << actual_num_tokens
+               << ", is_piecewise=" << is_piecewise_ << "): unknown exception";
+    cleanup_failed_capture();
+    return false;
   }
-
-  if (params.is_spec_verify && params.gdn_mtp_verify_cache != nullptr &&
-      params.gdn_mtp_verify_cache->enabled) {
-    is_spec_verify_graph_ = true;
-    captured_verify_states_ = params.gdn_mtp_verify_cache->layer_states;
-    CHECK(!captured_verify_states_.empty())
-        << "spec-verify graph capture produced no GDN verify checkpoints";
-  }
-
-  // Synchronize to ensure graph capture is completed.
-  capture_stream.synchronize();
-
-  // The external custom-allreduce backend records graph buffer addresses
-  // during capture. Exchange and register their IPC metadata before replay.
-  finalize_musa_custom_allreduce_graphs();
-
-  // Explicitly restore stream after capture before replay logic.
-  stream_guard.reset();
-
-  // Replay is unified in MusaGraphExecutorImpl::run() after capture success.
-
-  s_completed_musa_graph_captures.fetch_add(1, std::memory_order_release);
-
-  LOG(INFO) << "MUSA graph capture end, bucket_num_tokens: "
-            << bucket_num_tokens;
-  return true;
 }
 
 ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
@@ -3018,7 +3087,41 @@ constexpr uint32_t kPhysicalPoolIdPrefill = 2;
 
 struct MusaGraphExecutorImpl::VmmPoolState {
   std::unique_ptr<::xllm::MusaVmmCapturePool> capture_pool;
+  std::optional<::xllm::MusaVmmCapturePool::Snapshot> pre_capture_snapshot;
 };
+
+void MusaGraphExecutorImpl::set_model_parallel_groups(ProcessGroup* tp_group,
+                                                      ProcessGroup* cp_group) {
+  tp_group_ = tp_group;
+  cp_group_ = cp_group;
+}
+
+bool MusaGraphExecutorImpl::agree_bool_across_model_group(
+    bool local_flag) const {
+  bool agreed = local_flag;
+  auto reduce_in_group = [&](ProcessGroup* group) {
+    if (group == nullptr || group->world_size() <= 1) {
+      return;
+    }
+    torch::Tensor local = torch::tensor(
+        {agreed ? int32_t{1} : int32_t{0}},
+        torch::TensorOptions().dtype(torch::kInt32).device(device_));
+    torch::Tensor gathered =
+        group->allgather_base_sync(local).to(torch::kCPU).contiguous();
+    const int32_t* values = gathered.data_ptr<int32_t>();
+    for (int32_t i = 0; i < group->world_size(); ++i) {
+      if (values[i] == 0) {
+        agreed = false;
+        break;
+      }
+    }
+  };
+  reduce_in_group(tp_group_);
+  if (cp_group_ != tp_group_) {
+    reduce_in_group(cp_group_);
+  }
+  return agreed;
+}
 
 MusaGraphExecutorImpl::~MusaGraphExecutorImpl() {
   // Drain submitted work before graph-owned pools and their physical pages
@@ -3063,12 +3166,24 @@ std::unique_ptr<MusaMemPool> MusaGraphExecutorImpl::create_vmm_mempool(
   }
   VmmPoolState& state = get_or_create_vmm_pool_state(physical_pool_id);
   std::lock_guard<std::mutex> lock(vmm_mutex_);
+  state.pre_capture_snapshot = state.capture_pool->snapshot();
   auto pool = state.capture_pool->create_pool();
   VLOG(kGraphExecutorLogVerboseLevel)
       << "Created VMM MemPool for executor " << this
       << ", physical_pool_id: " << physical_pool_id << ", pool_id: {"
       << pool->id().first << ", " << pool->id().second << "}";
   return pool;
+}
+
+void MusaGraphExecutorImpl::rollback_vmm_mempool(uint32_t physical_pool_id) {
+  std::lock_guard<std::mutex> lock(vmm_mutex_);
+  auto it = vmm_pools_.find(physical_pool_id);
+  if (it == vmm_pools_.end() || !it->second ||
+      !it->second->pre_capture_snapshot.has_value()) {
+    return;
+  }
+  it->second->capture_pool->rollback(*it->second->pre_capture_snapshot);
+  it->second->pre_capture_snapshot.reset();
 }
 
 MusaGraphExecutorImpl::GraphMemoryUsageStats
@@ -3339,53 +3454,82 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         get_prefill_graph_num_tokens(n_tokens, params);
     const std::vector<int32_t> graph_key =
         get_prefill_graph_key(n_tokens, params);
-    const ModelInputParams graph_params =
-        maybe_precompute_embedding_for_graph(tokens, params);
     auto it = prefill_graphs_.find(graph_key);
     if (it != prefill_graphs_.end()) {
+      const ModelInputParams graph_params =
+          maybe_precompute_embedding_for_graph(tokens, params);
       auto result =
           it->second->replay(tokens, positions, kv_caches, graph_params);
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
-    auto graph =
-        std::make_unique<MusaGraph>(*persistent_param_,
-                                    device_.index(),
-                                    get_capture_stream(device_.index()),
-                                    /*is_piecewise=*/true);
-    auto pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
-    const c10::musa::MempoolId_t mem_pool =
-        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
-    const bool capture_success = graph->capture(model_,
-                                                args_,
-                                                options_,
-                                                tokens,
-                                                positions,
-                                                graph_params,
-                                                kv_caches,
-                                                graph_num_tokens,
-                                                mem_pool,
-                                                std::move(pool_owner));
-    CHECK(capture_success)
-        << "Failed to capture MUSA piecewise prefill graph, num_tokens="
-        << graph_num_tokens << " (actual num_tokens: " << n_tokens << ")";
-    LOG(INFO) << "Lazy capturing MUSA piecewise prefill graph num_tokens="
-              << graph_num_tokens << " (actual num_tokens: " << n_tokens
-              << ") num_sequences=" << effective_num_sequences << " chunked="
-              << params.meta.batch_forward_type.is_chunked_prefill()
-              << " retained_prefill_keys=" << prefill_graphs_.size() + 1
-              << " max_prefill_keys="
-              << ::xllm::ExecutionConfig::get_instance()
-                     .musa_prefill_graph_max_entries()
-              << " done";
-    log_graph_memory_after_capture();
-    auto& stored = prefill_graphs_[graph_key];
-    stored = std::move(graph);
-    auto result = stored->replay(tokens, positions, kv_caches, graph_params);
-    return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    std::unique_ptr<MusaGraph> graph;
+    std::unique_ptr<MusaMemPool> pool_owner;
+    std::optional<ModelInputParams> graph_params_opt;
+    bool capture_success = false;
+    try {
+      graph_params_opt.emplace(
+          maybe_precompute_embedding_for_graph(tokens, params));
+      graph = std::make_unique<MusaGraph>(*persistent_param_,
+                                          device_.index(),
+                                          get_capture_stream(device_.index()),
+                                          /*is_piecewise=*/true);
+      pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
+      const c10::musa::MempoolId_t mem_pool =
+          pool_owner != nullptr ? pool_owner->id() : graph_pool_;
+      capture_success = graph->capture(model_,
+                                       args_,
+                                       options_,
+                                       tokens,
+                                       positions,
+                                       *graph_params_opt,
+                                       kv_caches,
+                                       graph_num_tokens,
+                                       mem_pool,
+                                       std::move(pool_owner));
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Exception while preparing MUSA piecewise prefill graph "
+                 << "for num_tokens=" << graph_num_tokens << ": " << e.what();
+      capture_success = false;
+    } catch (...) {
+      LOG(ERROR) << "Unknown exception while preparing MUSA piecewise prefill "
+                 << "graph for num_tokens=" << graph_num_tokens;
+      capture_success = false;
+    }
+    capture_success = agree_bool_across_model_group(capture_success);
+    if (capture_success) {
+      LOG(INFO) << "Lazy capturing MUSA piecewise prefill graph num_tokens="
+                << graph_num_tokens << " (actual num_tokens: " << n_tokens
+                << ") num_sequences=" << effective_num_sequences << " chunked="
+                << params.meta.batch_forward_type.is_chunked_prefill()
+                << " retained_prefill_keys=" << prefill_graphs_.size() + 1
+                << " max_prefill_keys="
+                << ::xllm::ExecutionConfig::get_instance()
+                       .musa_prefill_graph_max_entries()
+                << " done";
+      log_graph_memory_after_capture();
+      auto& stored = prefill_graphs_[graph_key];
+      stored = std::move(graph);
+      auto result =
+          stored->replay(tokens, positions, kv_caches, *graph_params_opt);
+      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    }
+    graph.reset();
+    pool_owner.reset();
+    rollback_vmm_mempool(kPhysicalPoolIdPrefill);
+    prefill_graphs_oom_latched_ = true;
+    LOG(WARNING) << "Failed to capture MUSA piecewise prefill graph for "
+                 << "num_tokens=" << graph_num_tokens
+                 << " (actual num_tokens=" << n_tokens
+                 << ", retained_prefill_keys=" << prefill_graphs_.size()
+                 << "); latching prefill graph cache and falling back to eager "
+                    "mode.";
   }
 
-  // Prefill without a piecewise graph runs eager.
-  if (is_prefill) {
+  // Prefill (including non-spec-verify chunked prefill) without a piecewise
+  // graph runs eager.
+  if (is_prefill ||
+      (params.meta.batch_forward_type.is_chunked_prefill() &&
+       !params.is_spec_verify)) {
     COUNTER_INC(num_model_execution_total_eager);
     const bool time_fwd = s_enable_prefill_fwd_timing();
     if (time_fwd) {
@@ -3453,32 +3597,52 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       auto result = it->second->replay(tokens, positions, kv_caches, params);
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
-    auto graph =
-        std::make_unique<MusaGraph>(*persistent_param_,
-                                    device_.index(),
-                                    get_capture_stream(device_.index()));
-    auto pool_owner = create_vmm_mempool(kPhysicalPoolIdDecode);
-    const c10::musa::MempoolId_t mem_pool =
-        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
-    const bool ok = graph->capture(model_,
-                                   args_,
-                                   options_,
-                                   tokens,
-                                   positions,
-                                   params,
-                                   kv_caches,
-                                   n_tokens,
-                                   mem_pool,
-                                   std::move(pool_owner));
-    CHECK(ok) << "Failed to capture MUSA spec-verify graph, num_tokens="
-              << n_tokens << " q_len=" << q_len;
-    LOG(INFO) << "Lazy capturing MUSA spec-verify graph num_tokens=" << n_tokens
-              << " q_len=" << q_len << " done";
-    log_graph_memory_after_capture();
-    auto& stored = spec_verify_graphs_[key];
-    stored = std::move(graph);
-    auto result = stored->replay(tokens, positions, kv_caches, params);
-    return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    std::unique_ptr<MusaGraph> graph;
+    std::unique_ptr<MusaMemPool> pool_owner;
+    bool ok = false;
+    try {
+      graph = std::make_unique<MusaGraph>(*persistent_param_,
+                                          device_.index(),
+                                          get_capture_stream(device_.index()));
+      pool_owner = create_vmm_mempool(kPhysicalPoolIdDecode);
+      const c10::musa::MempoolId_t mem_pool =
+          pool_owner != nullptr ? pool_owner->id() : graph_pool_;
+      ok = graph->capture(model_,
+                          args_,
+                          options_,
+                          tokens,
+                          positions,
+                          params,
+                          kv_caches,
+                          n_tokens,
+                          mem_pool,
+                          std::move(pool_owner));
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Exception while capturing MUSA spec-verify graph for "
+                 << "num_tokens=" << n_tokens << " q_len=" << q_len << ": "
+                 << e.what();
+      ok = false;
+    } catch (...) {
+      LOG(ERROR) << "Unknown exception while capturing MUSA spec-verify graph "
+                 << "for num_tokens=" << n_tokens << " q_len=" << q_len;
+      ok = false;
+    }
+    ok = agree_bool_across_model_group(ok);
+    if (ok) {
+      LOG(INFO) << "Lazy capturing MUSA spec-verify graph num_tokens="
+                << n_tokens << " q_len=" << q_len << " done";
+      log_graph_memory_after_capture();
+      auto& stored = spec_verify_graphs_[key];
+      stored = std::move(graph);
+      auto result = stored->replay(tokens, positions, kv_caches, params);
+      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    }
+    graph.reset();
+    pool_owner.reset();
+    rollback_vmm_mempool(kPhysicalPoolIdDecode);
+    LOG(WARNING) << "Failed to capture MUSA spec-verify graph for num_tokens="
+                 << n_tokens << " q_len=" << q_len
+                 << "; falling back to eager mode.";
   }
 
   if (params.meta.batch_forward_type.is_chunked_prefill() ||
@@ -3646,27 +3810,40 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     }
 
     // Graph doesn't exist for this bucket num_tokens, try to create it lazily
-    auto graph =
-        std::make_unique<MusaGraph>(*persistent_param_,
-                                    device_.index(),
-                                    get_capture_stream(device_.index()));
-    VLOG(kGraphExecutorLogVerboseLevel)
-        << "MusaGraphExecutorImpl::run() in decode capture mode";
+    std::unique_ptr<MusaGraph> graph;
+    std::unique_ptr<MusaMemPool> pool_owner;
+    bool capture_success = false;
+    try {
+      graph = std::make_unique<MusaGraph>(*persistent_param_,
+                                          device_.index(),
+                                          get_capture_stream(device_.index()));
+      VLOG(kGraphExecutorLogVerboseLevel)
+          << "MusaGraphExecutorImpl::run() in decode capture mode";
 
-    auto pool_owner = create_vmm_mempool(kPhysicalPoolIdDecode);
-    const c10::musa::MempoolId_t mem_pool =
-        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
+      pool_owner = create_vmm_mempool(kPhysicalPoolIdDecode);
+      const c10::musa::MempoolId_t mem_pool =
+          pool_owner != nullptr ? pool_owner->id() : graph_pool_;
 
-    bool capture_success = graph->capture(model_,
-                                          args_,
-                                          options_,
-                                          tokens,
-                                          positions,
-                                          graph_params,
-                                          kv_caches,
-                                          bucket_num_tokens,
-                                          mem_pool,
-                                          std::move(pool_owner));
+      capture_success = graph->capture(model_,
+                                       args_,
+                                       options_,
+                                       tokens,
+                                       positions,
+                                       graph_params,
+                                       kv_caches,
+                                       bucket_num_tokens,
+                                       mem_pool,
+                                       std::move(pool_owner));
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Exception while capturing MUSA decode graph for bucket "
+                 << bucket_num_tokens << ": " << e.what();
+      capture_success = false;
+    } catch (...) {
+      LOG(ERROR) << "Unknown exception while capturing MUSA decode graph for "
+                 << "bucket " << bucket_num_tokens;
+      capture_success = false;
+    }
+    capture_success = agree_bool_across_model_group(capture_success);
 
     if (capture_success) {
       LOG(INFO) << "Lazy capturing MUSA graph for bucket num_tokens: "
@@ -3692,11 +3869,18 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       return output;
     }
 
-    // Keep graph-mode behavior explicit instead of silently switching
-    // execution semantics after a capture failure.
-    LOG(FATAL) << "Failed to capture MUSA graph for bucket num_tokens: "
-               << bucket_num_tokens << " (actual num_tokens: " << n_tokens
-               << ")";
+    graph.reset();
+    pool_owner.reset();
+    rollback_vmm_mempool(kPhysicalPoolIdDecode);
+    LOG(WARNING) << "Failed to capture MUSA decode graph for bucket "
+                 << "num_tokens: " << bucket_num_tokens
+                 << " (actual num_tokens: " << n_tokens
+                 << "); falling back to eager mode.";
+    ModelInputParams eager_params = params;
+    eager_params.enable_graph = false;
+    eager_params.attn_metadata.reset();
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, eager_params);
   }
 
   // Defensive fallback for unsupported forward types (should be unreachable for
@@ -3750,19 +3934,72 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   }
   const bool cache_hit = prefill_graphs_.find(get_prefill_graph_key(
                              num_tokens, params)) != prefill_graphs_.end();
-  const bool admitted =
-      can_admit_prefill_graph(prefill_graphs_.size(),
-                              execution_config.musa_prefill_graph_max_entries(),
-                              cache_hit);
-  if (!admitted) {
+  if (cache_hit) {
+    return true;
+  }
+  if (!can_admit_prefill_graph(prefill_graphs_.size(),
+                               execution_config.musa_prefill_graph_max_entries(),
+                               /*cache_hit=*/false)) {
     LOG_FIRST_N(WARNING, 8)
         << "MUSA Prefill graph cache at limit: entries="
         << prefill_graphs_.size()
         << " limit=" << execution_config.musa_prefill_graph_max_entries()
         << " bucket_num_tokens=" << bucket_num_tokens
         << "; execute unseen shape eager without allocating another graph/VA";
+    return false;
   }
-  return admitted;
+  if (prefill_graphs_oom_latched_) {
+    LOG_FIRST_N(WARNING, 8)
+        << "MUSA Prefill graph cache latched after low memory or capture "
+           "failure: entries="
+        << prefill_graphs_.size() << " bucket_num_tokens=" << bucket_num_tokens
+        << "; execute unseen shape eager";
+    return false;
+  }
+  const int32_t reserve_mb = execution_config.musa_prefill_warmup_reserve_mb();
+  const std::size_t required_free_bytes =
+      prefill_capture_required_free_bytes(reserve_mb);
+  c10::musa::MUSAGuard device_guard(device_.index());
+  std::size_t physical_free_bytes = 0;
+  std::size_t physical_total_bytes = 0;
+  bool mem_ok =
+      musaMemGetInfo(&physical_free_bytes, &physical_total_bytes) ==
+          musaSuccess &&
+      can_admit_prefill_graph_with_memory(
+          prefill_graphs_.size(),
+          execution_config.musa_prefill_graph_max_entries(),
+          /*cache_hit=*/false,
+          prefill_graphs_oom_latched_,
+          physical_free_bytes,
+          reserve_mb);
+  if (!mem_ok) {
+    // Release any idle blocks cached by MUSACachingAllocator on other streams
+    // before concluding that physical memory is exhausted.
+    Device::empty_cache(device_.index());
+    mem_ok = musaMemGetInfo(&physical_free_bytes, &physical_total_bytes) ==
+                 musaSuccess &&
+             can_admit_prefill_graph_with_memory(
+                 prefill_graphs_.size(),
+                 execution_config.musa_prefill_graph_max_entries(),
+                 /*cache_hit=*/false,
+                 prefill_graphs_oom_latched_,
+                 physical_free_bytes,
+                 reserve_mb);
+  }
+  const bool agreed_admit = agree_bool_across_model_group(mem_ok);
+  if (!agreed_admit) {
+    prefill_graphs_oom_latched_ = true;
+    LOG(WARNING) << "MUSA Prefill graph capture skipped due to low physical "
+                 << "free memory: free_mb="
+                 << (physical_free_bytes / (1024 * 1024))
+                 << " required_mb=" << (required_free_bytes / (1024 * 1024))
+                 << " retained_entries=" << prefill_graphs_.size()
+                 << " bucket_num_tokens=" << bucket_num_tokens
+                 << "; latching prefill graph cache and falling back to eager "
+                    "mode.";
+    return false;
+  }
+  return true;
 }
 
 uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(

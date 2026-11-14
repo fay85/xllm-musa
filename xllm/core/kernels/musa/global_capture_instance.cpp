@@ -49,8 +49,13 @@ void GlobalCaptureInstance::begin_capture(const MusaMempoolId& pool,
   current_piecewise_graph_ = std::make_unique<PiecewiseGraphs>();
 
   current_graph_ = std::make_unique<MusaGraphSegment>();
-  current_graph_->capture_begin(
-      pool, musaStreamCaptureModeThreadLocal, owns_user_pool_ref_);
+  try {
+    current_graph_->capture_begin(
+        pool, musaStreamCaptureModeThreadLocal, owns_user_pool_ref_);
+  } catch (...) {
+    abort_capture();
+    throw;
+  }
 }
 
 std::unique_ptr<PiecewiseGraphs> GlobalCaptureInstance::end_capture() {
@@ -74,6 +79,20 @@ std::unique_ptr<PiecewiseGraphs> GlobalCaptureInstance::end_capture() {
   capture_lock_.reset();
 
   return result;
+}
+
+void GlobalCaptureInstance::abort_capture() noexcept {
+  if (!is_capturing_) {
+    return;
+  }
+  if (current_graph_) {
+    current_graph_->abort_capture();
+    current_graph_.reset();
+  }
+  current_piecewise_graph_.reset();
+  is_capturing_ = false;
+  owns_user_pool_ref_ = false;
+  capture_lock_.reset();
 }
 
 void GlobalCaptureInstance::temporarily_end_graph() {
@@ -102,8 +121,13 @@ void GlobalCaptureInstance::temporarily_begin_graph_locked() {
   CHECK(!current_graph_) << "Current graph already exists";
 
   current_graph_ = std::make_unique<MusaGraphSegment>();
-  current_graph_->capture_begin(
-      graph_pool_, musaStreamCaptureModeThreadLocal, owns_user_pool_ref_);
+  try {
+    current_graph_->capture_begin(
+        graph_pool_, musaStreamCaptureModeThreadLocal, owns_user_pool_ref_);
+  } catch (...) {
+    abort_capture();
+    throw;
+  }
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "MusaGlobalCaptureInstance::temporarily_begin_graph()";

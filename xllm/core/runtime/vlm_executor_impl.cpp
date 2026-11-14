@@ -48,6 +48,13 @@ void VlmExecutorImpl::set_dp_process_group(ProcessGroup* group) {
   }
 }
 
+void VlmExecutorImpl::set_model_parallel_groups(ProcessGroup* tp_group,
+                                                ProcessGroup* cp_group) {
+  if (llm_executor_) {
+    llm_executor_->set_model_parallel_groups(tp_group, cp_group);
+  }
+}
+
 ForwardInput VlmExecutorImpl::prepare_inputs(Batch& batch) {
   return batch.prepare_forward_input(
       options_.num_decoding_tokens(), 0, args_, options_.cp_size());

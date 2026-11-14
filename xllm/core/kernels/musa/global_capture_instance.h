@@ -31,6 +31,7 @@ class GlobalCaptureInstance final {
   void begin_capture(const MusaMempoolId& pool,
                      bool owns_user_pool_ref = false);
   std::unique_ptr<PiecewiseGraphs> end_capture();
+  void abort_capture() noexcept;
 
   void temporarily_end_graph();
   void temporarily_begin_graph();

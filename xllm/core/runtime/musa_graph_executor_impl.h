@@ -478,6 +478,9 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   ~MusaGraphExecutorImpl() override;
 
+  void set_model_parallel_groups(ProcessGroup* tp_group,
+                                 ProcessGroup* cp_group) override;
+
   ForwardInput prepare_inputs(Batch& batch) override;
 
   // Execute model with graph optimization for decode phase
@@ -508,6 +511,11 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Piecewise prefill graphs keyed by get_prefill_graph_key().
   absl::flat_hash_map<std::vector<int32_t>, std::unique_ptr<MusaGraph>>
       prefill_graphs_;
+  mutable bool prefill_graphs_oom_latched_ = false;
+  ProcessGroup* tp_group_ = nullptr;
+  ProcessGroup* cp_group_ = nullptr;
+
+  bool agree_bool_across_model_group(bool local_flag) const;
 
   int64_t max_tokens_for_graph_mode_ = 0;
 
@@ -559,6 +567,7 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   VmmPoolState& get_or_create_vmm_pool_state(uint32_t physical_pool_id);
   // Each new capture gets an empty logical pool and a fresh VA mapping.
   std::unique_ptr<MusaMemPool> create_vmm_mempool(uint32_t physical_pool_id);
+  void rollback_vmm_mempool(uint32_t physical_pool_id);
   GraphMemoryUsageStats get_graph_memory_usage_stats();
   void log_graph_memory_after_capture();
 

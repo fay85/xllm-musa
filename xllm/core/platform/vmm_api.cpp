@@ -93,6 +93,17 @@ size_t get_recommended_granularity(int32_t device_id) {
   return granularity_size;
 }
 
+bool try_create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
+                               int32_t device_id) {
+  const size_t granularity_size = get_recommended_granularity(device_id);
+  if (!try_create_phy_mem_handle(phy_mem_handle, device_id, granularity_size)) {
+    return false;
+  }
+  ::xllm::KVCacheConfig::get_instance().phy_page_granularity_size(
+      granularity_size);
+  return true;
+}
+
 void create_phy_mem_handle(PhyMemHandle& phy_mem_handle, int32_t device_id) {
   // Allocate a single granularity-sized (e.g. 2MB) physical page. This is the
   // xtensor page-allocator path: it delegates the actual allocation to the
@@ -104,31 +115,25 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle, int32_t device_id) {
       granularity_size);
 }
 
-void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
-                           int32_t device_id,
-                           size_t size) {
-  // `size` is the total bytes of one physical handle (e.g. a 1GiB region
-  // chunk), not a single page. It must be a multiple of the device allocation
-  // granularity (SleepableRegion aligns to get_recommended_granularity()); on
-  // NPU the driver additionally rounds up to the page granularity implied by
-  // memAttr.
-  CHECK_GT(size, 0u) << "physical memory handle size must be > 0";
+bool try_create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
+                               int32_t device_id,
+                               size_t size) {
+  if (size == 0u) {
+    LOG(ERROR) << "physical memory handle size must be > 0";
+    return false;
+  }
   const size_t granularity = get_recommended_granularity(device_id);
-  if (granularity > 0) {
-    CHECK_EQ(size % granularity, 0u)
-        << "physical memory handle size " << size
-        << " must be aligned (rounded up) to the device allocation granularity "
-        << granularity;
+  if (granularity > 0 && size % granularity != 0u) {
+    LOG(ERROR) << "physical memory handle size " << size
+               << " must be aligned to the device allocation granularity "
+               << granularity;
+    return false;
   }
   int32_t ret = 0;
 #if defined(USE_NPU)
   aclrtPhysicalMemProp prop = {};
   prop.handleType = ACL_MEM_HANDLE_TYPE_NONE;
   prop.allocationType = ACL_MEM_ALLOCATION_TYPE_PINNED;
-  // 2MB-granularity huge pages. This backs an arbitrary-size allocation (a
-  // multi-GiB chunk uses multiple 2MB pages). ACL_HBM_MEM_HUGE1G (1GiB pages,
-  // fewer page-table entries / better TLB) is only available on A2/A3, so we
-  // keep the portable 2MB option, consistent with the xtensor KV path.
   prop.memAttr = ACL_HBM_MEM_HUGE;
   prop.location.type = ACL_MEM_LOCATION_TYPE_DEVICE;
   prop.location.id = device_id;
@@ -144,12 +149,16 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
   prop.allocFlags.compressionType = CN_MEM_ALLOCATION_COMP_NONE;
 
   ret = cnMemCreate(&phy_mem_handle, size, &prop, /*flags=*/0);
-
-  CNmemAccessDesc accessDesc = {};
-  accessDesc.location.type = CN_MEM_LOCATION_TYPE_DEVICE;
-  accessDesc.location.id = device_id;
-  accessDesc.accessFlags = CN_MEM_ACCESS_FLAGS_PROT_READWRITE;
-  ret = cnMemSetAccess(phy_mem_handle, size, &accessDesc, /*count=*/1);
+  if (ret == 0) {
+    CNmemAccessDesc accessDesc = {};
+    accessDesc.location.type = CN_MEM_LOCATION_TYPE_DEVICE;
+    accessDesc.location.id = device_id;
+    accessDesc.accessFlags = CN_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    ret = cnMemSetAccess(phy_mem_handle, size, &accessDesc, /*count=*/1);
+    if (ret != 0) {
+      (void)cnMemRelease(phy_mem_handle);
+    }
+  }
 #elif defined(USE_MUSA)
   MUmemAllocationProp prop = {};
   prop.type = MU_MEM_ALLOCATION_TYPE_PINNED;
@@ -163,7 +172,6 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
   prop.location.id = device_id;
 
   ret = cuMemCreate(&phy_mem_handle, size, &prop, /*flags=*/0);
-  // Note: cuMemSetAccess is called in map() after cuMemMap, not here
 #elif defined(USE_DCU)
   hipMemAllocationProp prop = {};
   prop.type = hipMemAllocationTypePinned;
@@ -175,11 +183,22 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
   (void)device_id;
   (void)size;
 #endif
-  CHECK_EQ(ret, 0) << "Failed to create physical memory handle of size "
-                   << size;
+  if (ret != 0) {
+    LOG(WARNING) << "try_create_phy_mem_handle failed on device " << device_id
+                 << " for size " << size << " with error code " << ret;
+    return false;
+  }
+  return true;
 }
 
-void create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size) {
+void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
+                           int32_t device_id,
+                           size_t size) {
+  CHECK(try_create_phy_mem_handle(phy_mem_handle, device_id, size))
+      << "Failed to create physical memory handle of size " << size;
+}
+
+bool try_create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size) {
   int ret = 0;
 #if defined(USE_NPU)
   ret = aclrtReserveMemAddress(&vir_ptr, aligned_size, 0, nullptr, 0);
@@ -192,7 +211,17 @@ void create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size) {
 #elif defined(USE_MUSA)
   ret = muMemAddressReserve(&vir_ptr, aligned_size, 0, 0, 0);
 #endif
-  CHECK_EQ(ret, 0) << "Failed to create virtual memory handle";
+  if (ret != 0) {
+    LOG(WARNING) << "try_create_vir_ptr failed for aligned_size "
+                 << aligned_size << " with error code " << ret;
+    return false;
+  }
+  return true;
+}
+
+void create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size) {
+  CHECK(try_create_vir_ptr(vir_ptr, aligned_size))
+      << "Failed to create virtual memory handle";
 }
 
 void release_phy_mem_handle(PhyMemHandle& phy_mem_handle) {
@@ -235,10 +264,10 @@ void map(VirPtr& vir_ptr, PhyMemHandle& phy_mem_handle, int32_t device_id) {
       device_id);
 }
 
-void map(VirPtr& vir_ptr,
-         PhyMemHandle& phy_mem_handle,
-         size_t granularity_size,
-         int32_t device_id) {
+bool try_map(VirPtr& vir_ptr,
+             PhyMemHandle& phy_mem_handle,
+             size_t granularity_size,
+             int32_t device_id) {
   int ret = 0;
 #if defined(USE_NPU)
   ret = aclrtMapMem(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
@@ -246,36 +275,69 @@ void map(VirPtr& vir_ptr,
   ret = cnMemMap(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
 #elif defined(USE_CUDA) || defined(USE_ILU)
   ret = cuMemMap(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
-  CHECK_EQ(ret, 0) << "Failed to map virtual memory to physical memory";
+  if (ret != 0) {
+    LOG(WARNING) << "cuMemMap failed with error code " << ret;
+    return false;
+  }
 
-  // Set access permissions on the mapped virtual address range
   CUmemAccessDesc accessDesc = {};
   accessDesc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
   accessDesc.location.id = device_id;
   accessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
   ret = cuMemSetAccess(vir_ptr, granularity_size, &accessDesc, 1);
+  if (ret != 0) {
+    (void)cuMemUnmap(vir_ptr, granularity_size);
+  }
 #elif defined(USE_MUSA)
   ret = muMemMap(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
-  CHECK_EQ(ret, 0) << "Failed to map virtual memory to physical memory";
+  if (ret != 0) {
+    LOG(WARNING) << "muMemMap failed with error code " << ret;
+    return false;
+  }
 
-  // Set access permissions on the mapped virtual address range
   MUmemAccessDesc accessDesc = {};
   accessDesc.location.type = MU_MEM_LOCATION_TYPE_DEVICE;
   accessDesc.location.id = device_id;
   accessDesc.flags = MU_MEM_ACCESS_FLAGS_PROT_READWRITE;
   ret = muMemSetAccess(vir_ptr, granularity_size, &accessDesc, 1);
+  if (ret != 0) {
+    (void)muMemUnmap(vir_ptr, granularity_size);
+  }
 #elif defined(USE_DCU)
   ret = hipMemMap(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
-  CHECK_EQ(ret, 0) << "Failed to map virtual memory to physical memory";
+  if (ret != 0) {
+    LOG(WARNING) << "hipMemMap failed with error code " << ret;
+    return false;
+  }
 
-  // Set access permissions on the mapped virtual address range
   hipMemAccessDesc accessDesc = {};
   accessDesc.location.type = hipMemLocationTypeDevice;
   accessDesc.location.id = device_id;
   accessDesc.flags = hipMemAccessFlagsProtReadWrite;
   ret = hipMemSetAccess(vir_ptr, granularity_size, &accessDesc, 1);
+  if (ret != 0) {
+    (void)hipMemUnmap(vir_ptr, granularity_size);
+  }
+#else
+  (void)vir_ptr;
+  (void)phy_mem_handle;
+  (void)granularity_size;
+  (void)device_id;
 #endif
-  CHECK_EQ(ret, 0) << "Failed to set memory access permissions";
+  if (ret != 0) {
+    LOG(WARNING) << "try_map failed on device " << device_id
+                 << " with error code " << ret;
+    return false;
+  }
+  return true;
+}
+
+void map(VirPtr& vir_ptr,
+         PhyMemHandle& phy_mem_handle,
+         size_t granularity_size,
+         int32_t device_id) {
+  CHECK(try_map(vir_ptr, phy_mem_handle, granularity_size, device_id))
+      << "Failed to map virtual memory to physical memory";
 }
 
 void unmap(VirPtr& vir_ptr, size_t aligned_size) {

@@ -93,6 +93,7 @@ size_t get_recommended_granularity(int32_t device_id);
 
 // create a physical memory handle for a specific device
 void create_phy_mem_handle(PhyMemHandle& phy_mem_handle, int32_t device_id);
+bool try_create_phy_mem_handle(PhyMemHandle& phy_mem_handle, int32_t device_id);
 
 // create a physical memory handle of an explicit size (must be a multiple of
 // the device allocation granularity). Unlike the granularity-sized overload
@@ -101,9 +102,13 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle, int32_t device_id);
 void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
                            int32_t device_id,
                            size_t size);
+bool try_create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
+                               int32_t device_id,
+                               size_t size);
 
 // create a virtual memory pointer with a specific aligned size
 void create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size);
+bool try_create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size);
 
 // release a physical memory handle
 void release_phy_mem_handle(PhyMemHandle& phy_mem_handle);
@@ -117,6 +122,10 @@ void map(VirPtr& vir_ptr,
          PhyMemHandle& phy_mem_handle,
          size_t granularity_size,
          int32_t device_id = 0);
+bool try_map(VirPtr& vir_ptr,
+             PhyMemHandle& phy_mem_handle,
+             size_t granularity_size,
+             int32_t device_id = 0);
 
 // unmap a virtual memory pointer with a specific aligned size
 void unmap(VirPtr& vir_ptr, size_t aligned_size);

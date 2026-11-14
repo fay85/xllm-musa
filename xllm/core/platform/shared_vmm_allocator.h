@@ -111,7 +111,24 @@ class SharedVMMAllocator {
    */
   bool is_initialized() const { return initialized_; }
 
+  /**
+   * @brief Get the number of active virtual address spaces.
+   */
+  size_t num_virtual_spaces() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return virtual_spaces_.size();
+  }
+
+  /**
+   * @brief Roll back physical pages and virtual address spaces allocated
+   * during a failed graph capture so previous captures remain valid and
+   * no physical/virtual memory is leaked.
+   */
+  void rollback_capture(size_t target_mapped_size,
+                        size_t target_num_spaces);
+
  private:
+  void shrink_mapping_locked(size_t target_mapped_size);
   /**
    * @brief Structure to track a virtual address space.
    */

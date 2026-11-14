@@ -34,7 +34,7 @@ namespace xllm {
 class MusaGraphHandle final : public at::musa::MUSAGraph {
  public:
   MusaGraphHandle() = default;
-  ~MusaGraphHandle() { reset(); }
+  ~MusaGraphHandle() { abort_capture(); }
 
   MusaGraphHandle(const MusaGraphHandle&) = delete;
   MusaGraphHandle& operator=(const MusaGraphHandle&) = delete;
@@ -42,9 +42,66 @@ class MusaGraphHandle final : public at::musa::MUSAGraph {
   void capture_begin(c10::musa::MempoolId_t pool = {0, 0},
                      musaStreamCaptureMode mode = musaStreamCaptureModeGlobal,
                      bool owns_user_pool_ref = false) {
-    at::musa::MUSAGraph::capture_begin(pool, mode);
+    try {
+      at::musa::MUSAGraph::capture_begin(pool, mode);
+    } catch (...) {
+      clear_generator_states_noexcept();
+      (void)musaGetLastError();
+      throw;
+    }
+    capture_started_ = true;
     if (owns_user_pool_ref) {
       pool_ref_.mark_captured();
+    }
+  }
+
+  void capture_end() {
+    at::musa::MUSAGraph::capture_end();
+    capture_started_ = false;
+  }
+
+  void abort_capture() noexcept {
+    try {
+      if (capture_started_) {
+        musaStreamCaptureStatus status = musaStreamCaptureStatusNone;
+        if (musaStreamIsCapturing(capture_stream_.stream(), &status) ==
+                musaSuccess &&
+            status != musaStreamCaptureStatusNone) {
+          musaGraph_t aborted_graph = nullptr;
+          (void)musaStreamEndCapture(capture_stream_.stream(), &aborted_graph);
+          if (aborted_graph != nullptr) {
+            (void)musaGraphDestroy(aborted_graph);
+          }
+          (void)musaGetLastError();
+          c10::musa::MUSACachingAllocator::endAllocateToPool(capture_dev_,
+                                                             mempool_id_);
+          for (auto& kv : captured_generator_states_) {
+            if (kv.first) {
+              try {
+                kv.first->capture_epilogue();
+              } catch (...) {
+              }
+            }
+          }
+        } else if (has_graph_ && !has_graph_exec_) {
+          (void)musaGetLastError();
+          for (auto& kv : captured_generator_states_) {
+            if (kv.first) {
+              try {
+                kv.first->capture_epilogue();
+              } catch (...) {
+              }
+            }
+          }
+        }
+        clear_generator_states_noexcept();
+        capture_started_ = false;
+      }
+      reset();
+    } catch (...) {
+      clear_generator_states_noexcept();
+      capture_started_ = false;
+      (void)musaGetLastError();
     }
   }
 
@@ -61,7 +118,20 @@ class MusaGraphHandle final : public at::musa::MUSAGraph {
   }
 
  private:
+  void clear_generator_states_noexcept() noexcept {
+    for (auto& kv : captured_generator_states_) {
+      if (kv.first) {
+        try {
+          kv.first->unregister_graph(this);
+        } catch (...) {
+        }
+      }
+    }
+    captured_generator_states_.clear();
+  }
+
   GraphPoolRef pool_ref_;
+  bool capture_started_ = false;
 };
 
 }  // namespace xllm

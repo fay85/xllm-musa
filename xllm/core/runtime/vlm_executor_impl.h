@@ -44,6 +44,9 @@ class VlmExecutorImpl : public ExecutorImpl {
 
   void set_dp_process_group(ProcessGroup* group) override;
 
+  void set_model_parallel_groups(ProcessGroup* tp_group,
+                                 ProcessGroup* cp_group) override;
+
   ForwardInput prepare_inputs(Batch& batch) override;
 
   ModelOutput run(const torch::Tensor& tokens,

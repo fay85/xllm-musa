@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <stdexcept>
 #include <type_traits>
 
 #include "common/global_flags.h"
@@ -173,7 +174,12 @@ void SharedVMMAllocator::switch_to_new_virtual_space() {
 
   // Create a new virtual address space
   VirtualSpace new_space;
-  vmm::create_vir_ptr(new_space.base_ptr, reserved_size_);
+  if (!vmm::try_create_vir_ptr(new_space.base_ptr, reserved_size_)) {
+    LOG(ERROR) << "SharedVMMAllocator: failed to reserve virtual address space "
+               << reserved_size_ << " bytes on device " << device_id_;
+    throw std::runtime_error(
+        "SharedVMMAllocator: failed to reserve virtual address space");
+  }
   new_space.reserved_size = reserved_size_;
   new_space.mapped_size = 0;
 
@@ -181,7 +187,18 @@ void SharedVMMAllocator::switch_to_new_virtual_space() {
   size_t granularity = get_granularity();
   for (size_t i = 0; i < handles_.size(); ++i) {
     VirPtr map_addr = add_offset(new_space.base_ptr, i * granularity);
-    vmm::map(map_addr, handles_[i], granularity, device_id_);
+    if (!vmm::try_map(map_addr, handles_[i], granularity, device_id_)) {
+      LOG(ERROR) << "SharedVMMAllocator: failed to map physical handle " << i
+                 << " of " << handles_.size()
+                 << " into new virtual space on device " << device_id_;
+      if (new_space.mapped_size > 0) {
+        vmm::unmap(new_space.base_ptr, new_space.mapped_size);
+      }
+      vmm::release_vir_ptr(new_space.base_ptr, new_space.reserved_size);
+      throw std::runtime_error(
+          "SharedVMMAllocator: failed to map physical memory into new virtual "
+          "space");
+    }
     new_space.mapped_size += granularity;
   }
 
@@ -257,13 +274,60 @@ void SharedVMMAllocator::deallocate(void* ptr) {
   VLOG(20) << "SharedVMMAllocator: deallocate called (no-op), ptr: " << ptr;
 }
 
+void SharedVMMAllocator::shrink_mapping_locked(size_t target_mapped_size) {
+  const size_t granularity = get_granularity();
+  if (granularity == 0) {
+    return;
+  }
+  while (mapped_size_ > target_mapped_size && !handles_.empty()) {
+    const size_t unmap_offset = mapped_size_ - granularity;
+    for (auto& space : virtual_spaces_) {
+      if (space.mapped_size > unmap_offset) {
+        VirPtr map_addr = add_offset(space.base_ptr, unmap_offset);
+        vmm::unmap(map_addr, granularity);
+        space.mapped_size = unmap_offset;
+      }
+    }
+    PhyMemHandle handle = handles_.back();
+    handles_.pop_back();
+    vmm::release_phy_mem_handle(handle);
+    mapped_size_ = unmap_offset;
+  }
+}
+
+void SharedVMMAllocator::rollback_capture(size_t target_mapped_size,
+                                          size_t target_num_spaces) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!initialized_) {
+    return;
+  }
+  shrink_mapping_locked(target_mapped_size);
+  const size_t min_spaces = std::max<size_t>(1, target_num_spaces);
+  while (virtual_spaces_.size() > min_spaces) {
+    VirtualSpace space = virtual_spaces_.back();
+    virtual_spaces_.pop_back();
+    if (space.mapped_size > 0) {
+      vmm::unmap(space.base_ptr, space.mapped_size);
+    }
+    if (space.reserved_size > 0) {
+      vmm::release_vir_ptr(space.base_ptr, space.reserved_size);
+    }
+  }
+  current_space_index_ =
+      virtual_spaces_.empty() ? 0 : virtual_spaces_.size() - 1;
+  current_offset_ = 0;
+  high_water_mark_ = std::min(high_water_mark_, mapped_size_);
+}
+
 void SharedVMMAllocator::extend_mapping(size_t new_size) {
   // This function is called with mutex_ held
 
   if (new_size > reserved_size_) {
-    LOG(FATAL) << "SharedVMMAllocator: Requested size " << new_size
+    LOG(ERROR) << "SharedVMMAllocator: Requested size " << new_size
                << " exceeds reserved virtual address space " << reserved_size_;
-    return;
+    throw std::runtime_error(
+        "SharedVMMAllocator: requested size exceeds reserved virtual address "
+        "space");
   }
 
   size_t granularity = get_granularity();
@@ -274,16 +338,43 @@ void SharedVMMAllocator::extend_mapping(size_t new_size) {
   while (mapped_size_ < new_size) {
     // Create physical memory handle
     PhyMemHandle handle;
-    vmm::create_phy_mem_handle(handle, device_id_);
-    handles_.push_back(handle);
-
-    // Map to all existing virtual address spaces
-    for (auto& space : virtual_spaces_) {
-      VirPtr map_addr = add_offset(space.base_ptr, mapped_size_);
-      vmm::map(map_addr, handle, granularity, device_id_);
-      space.mapped_size = mapped_size_ + granularity;
+    if (!vmm::try_create_phy_mem_handle(handle, device_id_)) {
+      LOG(ERROR) << "SharedVMMAllocator: OOM creating physical memory handle "
+                 << "at mapped_size=" << mapped_size_
+                 << ", requested=" << new_size
+                 << ", rolling back to prev_mapped_size=" << prev_mapped_size;
+      shrink_mapping_locked(prev_mapped_size);
+      throw std::runtime_error(
+          "SharedVMMAllocator: out of physical memory while extending VMM "
+          "mapping");
     }
 
+    // Map to all existing virtual address spaces
+    size_t mapped_spaces = 0;
+    bool map_ok = true;
+    for (auto& space : virtual_spaces_) {
+      VirPtr map_addr = add_offset(space.base_ptr, mapped_size_);
+      if (!vmm::try_map(map_addr, handle, granularity, device_id_)) {
+        map_ok = false;
+        break;
+      }
+      space.mapped_size = mapped_size_ + granularity;
+      ++mapped_spaces;
+    }
+    if (!map_ok) {
+      for (size_t s = 0; s < mapped_spaces; ++s) {
+        VirPtr map_addr = add_offset(virtual_spaces_[s].base_ptr, mapped_size_);
+        vmm::unmap(map_addr, granularity);
+        virtual_spaces_[s].mapped_size = mapped_size_;
+      }
+      vmm::release_phy_mem_handle(handle);
+      shrink_mapping_locked(prev_mapped_size);
+      throw std::runtime_error(
+          "SharedVMMAllocator: failed to map physical handle across virtual "
+          "spaces");
+    }
+
+    handles_.push_back(handle);
     mapped_size_ += granularity;
   }
 
