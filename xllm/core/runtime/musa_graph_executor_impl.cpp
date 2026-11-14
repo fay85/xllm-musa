@@ -2574,13 +2574,22 @@ bool MusaGraph::capture(CausalLM* model,
               << ", actual_num_tokens: " << actual_num_tokens;
     size_t physical_free_before_warmup = 0;
     size_t physical_total = 0;
+    const size_t required_prefill_free_bytes =
+        prefill_capture_required_free_bytes(
+            ::xllm::ExecutionConfig::get_instance()
+                .musa_prefill_warmup_reserve_mb());
     if (is_piecewise_) {
-      // Release idle cached blocks on other streams (e.g. ViT or prior eager
-      // forwards) before warmup on capture_stream so warmup does not allocate
-      // duplicate physical segments from the driver.
-      Device::empty_cache(device_index_);
       CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
                musaSuccess);
+      if (!skip_piecewise_warmup_ ||
+          physical_free_before_warmup < required_prefill_free_bytes) {
+        // Release idle cached blocks on other streams (e.g. ViT or prior eager
+        // forwards) before warmup on capture_stream so warmup does not allocate
+        // duplicate physical segments from the driver.
+        Device::empty_cache(device_index_);
+        CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
+                 musaSuccess);
+      }
     }
 
     {
@@ -2604,10 +2613,14 @@ bool MusaGraph::capture(CausalLM* model,
       // is the first preparation pass allowed to mutate that state. For
       // non-piecewise decode/verify graphs, the FFI recording forward below
       // serves as the 2nd eager warmup pass, cutting preparation from 3 full
-      // eager forwards down to 2.
+      // eager forwards down to 2. For piecewise prefill graphs, only the first
+      // captured bucket on an executor needs 1 eager warmup pass; subsequent
+      // buckets reuse already-initialized handles and persistent buffers.
       xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
       const int num_warmup_iters =
-          skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
+          skip_graph_warmup
+              ? 0
+              : (is_piecewise_ ? (skip_piecewise_warmup_ ? 0 : 1) : 1);
       for (int warmup_iter = 0; warmup_iter < num_warmup_iters; ++warmup_iter) {
         capture_stream.synchronize();
         {
@@ -2638,9 +2651,11 @@ bool MusaGraph::capture(CausalLM* model,
       capture_stream.synchronize();
 
       if (is_piecewise_) {
-        size_t physical_free_after_warmup = 0;
-        CHECK_EQ(musaMemGetInfo(&physical_free_after_warmup, &physical_total),
-                 musaSuccess);
+        size_t physical_free_after_warmup = physical_free_before_warmup;
+        if (num_warmup_iters > 0) {
+          CHECK_EQ(musaMemGetInfo(&physical_free_after_warmup, &physical_total),
+                   musaSuccess);
+        }
         LOG(INFO) << "MUSA Prefill preparation: bucket_num_tokens="
                   << bucket_num_tokens << " physical_free_before_warmup="
                   << physical_free_before_warmup
@@ -2688,8 +2703,12 @@ bool MusaGraph::capture(CausalLM* model,
 
       // Allocations made during capture can only be served by the graph pool,
       // and the caching allocator cannot release default-pool blocks until
-      // capture ends. Return them to the device before a lazy capture.
-      Device::empty_cache(/*device_index=*/-1);
+      // capture ends. Return them to the device before a lazy capture when
+      // warmup ran or when no VMM pool is used.
+      if (!is_piecewise_ || num_warmup_iters > 0 || pool_ptr == nullptr ||
+          physical_free_before_warmup < required_prefill_free_bytes) {
+        Device::empty_cache(/*device_index=*/-1);
+      }
 
       // MemPoolContext has been deprecated in torch >= 2.8
 #if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
@@ -3469,10 +3488,12 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     try {
       graph_params_opt.emplace(
           maybe_precompute_embedding_for_graph(tokens, params));
-      graph = std::make_unique<MusaGraph>(*persistent_param_,
-                                          device_.index(),
-                                          get_capture_stream(device_.index()),
-                                          /*is_piecewise=*/true);
+      graph = std::make_unique<MusaGraph>(
+          *persistent_param_,
+          device_.index(),
+          get_capture_stream(device_.index()),
+          /*is_piecewise=*/true,
+          /*skip_piecewise_warmup=*/!prefill_graphs_.empty());
       pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
       const c10::musa::MempoolId_t mem_pool =
           pool_owner != nullptr ? pool_owner->id() : graph_pool_;

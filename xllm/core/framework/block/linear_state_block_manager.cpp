@@ -302,6 +302,14 @@ void LinearStateBlockManager::cache_read_source(Sequence* seq,
   if (cached_tokens % chunk_stride != 0) {
     return;
   }
+  const size_t total_tokens = seq->num_tokens();
+  if (total_tokens > 0 && cached_tokens < total_tokens) {
+    const size_t next_8k = ((cached_tokens / 8192) + 1) * 8192;
+    if (next_8k < total_tokens ||
+        (cached_tokens >= 8192 && cached_tokens % 8192 != 0)) {
+      return;
+    }
+  }
   const size_t checkpoint_index = cached_tokens / chunk_stride;
   if (checkpoint_index <= kv_state.num_cached_blocks(BlockType::LINEAR)) {
     return;

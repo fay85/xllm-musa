@@ -309,11 +309,11 @@ EncoderEmbeddingGatherVisitor::EncoderEmbeddingGatherVisitor(
       total_scheduled_tokens_(std::accumulate(per_seq_scheduled_lens_.begin(),
                                               per_seq_scheduled_lens_.end(),
                                               0)) {
-  LOG(INFO) << "MM_TRACE raw_context=" << seq_lens.size()
-            << " raw_scheduled=" << scheduled_seq_lens.size()
-            << " context=" << per_seq_context_lens_.size()
-            << " scheduled=" << per_seq_scheduled_lens_.size()
-            << " total_scheduled=" << total_scheduled_tokens_;
+  VLOG(2) << "MM_TRACE raw_context=" << seq_lens.size()
+          << " raw_scheduled=" << scheduled_seq_lens.size()
+          << " context=" << per_seq_context_lens_.size()
+          << " scheduled=" << per_seq_scheduled_lens_.size()
+          << " total_scheduled=" << total_scheduled_tokens_;
   CHECK_EQ(per_seq_context_lens_.size(), per_seq_scheduled_lens_.size())
       << "sequence length counts do not match";
   for (size_t seq_index = 0; seq_index < per_seq_context_lens_.size();
@@ -523,6 +523,7 @@ void EncoderCacheDirectory::plan(MMBatchData& batch) {
   // output first stored in this step cannot serve another item of the step.
   KeySet stored;
   std::vector<XXH3Key> evicted;
+  bool any_reused = false;
   for (MMDataItem* item : collector.items()) {
     const XXH3Key& key = item->state().schedule_data().key;
     const int64_t size =
@@ -538,6 +539,7 @@ void EncoderCacheDirectory::plan(MMBatchData& batch) {
         item->mutable_data().erase(input_key);
       }
       add_command(*item, kEncoderCacheReuseKey);
+      any_reused = true;
       continue;
     }
     if (it != entries_.end() || admit(key, size, referenced, evicted)) {
@@ -555,6 +557,9 @@ void EncoderCacheDirectory::plan(MMBatchData& batch) {
                     absl::BytesToHexString(absl::string_view(
                         reinterpret_cast<const char*>(key.data),
                         sizeof(key.data))));
+  }
+  if (any_reused) {
+    batch.replace(MMDict{});
   }
 }
 

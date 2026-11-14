@@ -60,10 +60,10 @@ class Options {
   PROPERTY(bool, enable_prefix_cache) = true;
 
   // maximum encoder cache size in MB (0 disables encoder cache)
-  PROPERTY(int64_t, max_encoder_cache_size) = 0;
+  PROPERTY(int64_t, max_encoder_cache_size) = 2048;
 
-  // maximum processor cache item count (default 256; 0 disables)
-  PROPERTY(int64_t, max_processor_cache_items) = 256;
+  // maximum processor cache item count (default 2048; 0 disables)
+  PROPERTY(int64_t, max_processor_cache_items) = 2048;
 
   // active linear-state slots. 0 derives capacity from the KV cache budget.
   PROPERTY(int64_t, max_linear_state_cache_slots) = 0;

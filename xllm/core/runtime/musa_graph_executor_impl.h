@@ -317,11 +317,13 @@ class MusaGraph final {
   explicit MusaGraph(MusaGraphPersistentParam& persistent_param,
                      at::DeviceIndex device_index,
                      c10::musa::MUSAStream capture_stream,
-                     bool is_piecewise = false)
+                     bool is_piecewise = false,
+                     bool skip_piecewise_warmup = false)
       : persistent_param_(persistent_param),
         device_index_(device_index),
         capture_stream_(capture_stream),
-        is_piecewise_(is_piecewise) {}
+        is_piecewise_(is_piecewise),
+        skip_piecewise_warmup_(skip_piecewise_warmup) {}
 
   // Capture computation graph for given bucket num_tokens
   bool capture(CausalLM* model,
@@ -392,6 +394,7 @@ class MusaGraph final {
 
   // Prefill graphs are captured as segments separated by attention runners.
   bool is_piecewise_ = false;
+  bool skip_piecewise_warmup_ = false;
 
   uint32_t padded_num_tokens_ = 0;
   uint32_t captured_actual_tokens_ = 0;

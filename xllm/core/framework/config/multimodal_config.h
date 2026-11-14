@@ -73,9 +73,9 @@ class MultimodalConfig final {
 
   PROPERTY(int32_t, video_max_token_num) = -1;
 
-  PROPERTY(int64_t, max_encoder_cache_size) = 0;
+  PROPERTY(int64_t, max_encoder_cache_size) = 2048;
 
-  PROPERTY(int64_t, max_processor_cache_items) = 256;
+  PROPERTY(int64_t, max_processor_cache_items) = 2048;
 
   PROPERTY(bool, enable_return_mm_full_embeddings) = false;
 

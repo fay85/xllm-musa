@@ -117,7 +117,7 @@ DEFINE_bool(
 
 DEFINE_int32(
     musa_prefill_graph_token_stride,
-    256,
+    512,
     "Token bucket stride for single-sequence MUSA Prefill graphs. "
     "Decode buckets and exact multi-sequence GDN layouts are unchanged.");
 

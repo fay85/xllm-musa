@@ -30,6 +30,9 @@ inline constexpr std::size_t kMinPrefillCaptureFreeBytes =
 // Padding is for a single sequence only. Multi-sequence GDN capture must keep
 // the exact host layout in both its key and metadata.
 inline int64_t prefill_graph_token_bucket(uint32_t num_tokens, int32_t stride) {
+  if (stride > 256 && num_tokens <= 256) {
+    return 256;
+  }
   return ((static_cast<int64_t>(num_tokens) + stride - 1) / stride) * stride;
 }
 

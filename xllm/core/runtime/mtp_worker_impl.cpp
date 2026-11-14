@@ -1879,15 +1879,15 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
 void MTPWorkerImpl::prepare_prefill_inputs(const ForwardInput& input,
                                            ForwardInput& prefill_input) {
   c10::StreamGuard stream_guard = prepare_stream_->set_stream_guard();
-  prefill_input = input.to(device_, dtype_);
+  // The draft model feeds on the target's hidden states (input_embedding set
+  // below), never on raw multimodal input: strip mm_data before input.to() so
+  // the draft executor does not drive vision encode on the text-only draft
+  // model and skips the H2D copy of pixel_values it would never consume.
+  ForwardInput input_without_mm = input;
+  input_without_mm.input_params.multimodal.mm_data = MMBatchData();
+  prefill_input = input_without_mm.to(device_, dtype_);
   prepare_draft_sampling(prefill_input.sampling_params);
   clear_ready_events(prefill_input);
-  // The draft model feeds on the target's hidden states (input_embedding set
-  // below), never on raw multimodal input: strip the copied mm_data so the
-  // draft executor does not drive vision encode on the text-only draft model
-  // (whose python object has no ``encode``) and skips the device copy of
-  // pixel_values it would never consume.
-  prefill_input.input_params.multimodal.mm_data = MMBatchData();
   auto& input_params = prefill_input.input_params;
   // The Qwen draft is a pure full-attention model; without this cleanup the
   // target's recurrent slot metadata makes MTP prefill enter a stateful path

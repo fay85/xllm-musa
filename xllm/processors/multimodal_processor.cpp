@@ -30,7 +30,7 @@ namespace xllm {
 namespace {
 
 // Each distinct shared prefix contributes one cached segment per image.
-constexpr size_t kMaxCachedSegments = 256;
+constexpr size_t kMaxCachedSegments = 4096;
 
 }  // namespace
 

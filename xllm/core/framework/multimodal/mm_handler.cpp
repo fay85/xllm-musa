@@ -21,6 +21,10 @@ limitations under the License.
 
 #include <fstream>
 #include <iterator>
+#include <list>
+#include <mutex>
+#include <optional>
+#include <unordered_map>
 
 #include "common/global_flags.h"
 #include "core/framework/config/multimodal_config.h"
@@ -41,6 +45,69 @@ const std::unordered_map<std::string, std::string>& global_download_headers() {
   return headers;
 }
 
+class DecodedImageUrlCache final {
+ public:
+  struct CachedImage {
+    XXH3Key hash_key;
+    torch::Tensor decode_image;
+  };
+
+  static DecodedImageUrlCache& instance() {
+    static DecodedImageUrlCache cache(/*max_entries=*/1024);
+    return cache;
+  }
+
+  std::optional<CachedImage> lookup(const XXH3Key& url_key) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = entries_.find(url_key);
+    if (it == entries_.end()) {
+      return std::nullopt;
+    }
+    lru_.splice(lru_.end(), lru_, it->second.lru_it);
+    return it->second.value;
+  }
+
+  void insert(const XXH3Key& url_key,
+              const XXH3Key& hash_key,
+              const torch::Tensor& decode_image) {
+    if (!decode_image.defined()) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = entries_.find(url_key);
+    if (it != entries_.end()) {
+      lru_.splice(lru_.end(), lru_, it->second.lru_it);
+      return;
+    }
+    while (entries_.size() >= max_entries_ && !lru_.empty()) {
+      const XXH3Key& oldest = lru_.front();
+      entries_.erase(oldest);
+      lru_.pop_front();
+    }
+    lru_.push_back(url_key);
+    entries_.emplace(
+        url_key,
+        Entry{CachedImage{hash_key, decode_image}, std::prev(lru_.end())});
+  }
+
+ private:
+  explicit DecodedImageUrlCache(size_t max_entries)
+      : max_entries_(max_entries) {}
+
+  struct Entry {
+    CachedImage value;
+    std::list<XXH3Key>::iterator lru_it;
+  };
+
+  size_t max_entries_;
+  std::mutex mutex_;
+  std::list<XXH3Key> lru_;
+  std::unordered_map<XXH3Key, Entry, FixedStringKeyHash, FixedStringKeyEqual>
+      entries_;
+};
+
+thread_local std::optional<XXH3Key> tls_pending_image_url_key;
+
 }  // namespace
 
 MMErrCode MMHandlerBase::process(const MMContent& content,
@@ -52,7 +119,7 @@ MMErrCode MMHandlerBase::process(const MMContent& content,
   code = this->decode(input);
   if (code != MMErrCode::SUCCESS) return code;
 
-  if (!input.raw_data.empty()) {
+  if (!input.raw_data.empty() && !input.hash_key.has_value()) {
     input.hash_key = hash_string(input.raw_data);
   }
 
@@ -130,19 +197,46 @@ MMErrCode ImageHandler::load(const MMContent& content,
                              MMInputItem& input,
                              MMPayload& payload) {
   input.clear();
+  tls_pending_image_url_key.reset();
 
   const auto& image_url = content.image_url;
   const auto& url = image_url.url;
 
   if (url.compare(0, dataurl_prefix_.size(), dataurl_prefix_) ==
       0) {  // data url
-
     input.type = MMType::IMAGE;
+    const bool is_base64 = url.find(";base64,") != std::string::npos;
+    if (is_base64) {
+      const XXH3Key url_key = hash_string(url);
+      if (auto cached = DecodedImageUrlCache::instance().lookup(url_key)) {
+        input.hash_key = cached->hash_key;
+        input.decode_image = cached->decode_image;
+        return MMErrCode::SUCCESS;
+      }
+      MMErrCode code = this->load_from_dataurl(url, input.raw_data, payload);
+      if (code == MMErrCode::SUCCESS) {
+        tls_pending_image_url_key = url_key;
+      }
+      return code;
+    }
     return this->load_from_dataurl(url, input.raw_data, payload);
   } else if (url.compare(0, httpurl_prefix_.size(), httpurl_prefix_) ==
              0) {  // http url
-
     input.type = MMType::IMAGE;
+    if (content.image_url.headers.empty()) {
+      const XXH3Key url_key = hash_string(url);
+      if (auto cached = DecodedImageUrlCache::instance().lookup(url_key)) {
+        input.hash_key = cached->hash_key;
+        input.decode_image = cached->decode_image;
+        return MMErrCode::SUCCESS;
+      }
+      MMErrCode code =
+          this->load_from_http(url, input.raw_data, content.image_url.headers);
+      if (code == MMErrCode::SUCCESS) {
+        tls_pending_image_url_key = url_key;
+      }
+      return code;
+    }
     return this->load_from_http(url, input.raw_data, content.image_url.headers);
   } else {
     // treat as local path or file:// url
@@ -156,9 +250,22 @@ MMErrCode ImageHandler::load(const MMContent& content,
 }
 
 MMErrCode ImageHandler::decode(MMInputItem& input) {
+  std::optional<XXH3Key> url_key = tls_pending_image_url_key;
+  tls_pending_image_url_key.reset();
+  if (input.decode_image.defined() && input.hash_key.has_value()) {
+    return MMErrCode::SUCCESS;
+  }
   OpenCVImageDecoder decoder;
   if (!decoder.decode(input.raw_data, input.decode_image)) {
     return MMErrCode::DECODE_ERR;
+  }
+  if (!input.raw_data.empty()) {
+    input.hash_key = hash_string(input.raw_data);
+  }
+  if (url_key.has_value() && input.hash_key.has_value()) {
+    DecodedImageUrlCache::instance().insert(
+        *url_key, *input.hash_key, input.decode_image);
+    std::string().swap(input.raw_data);
   }
   return MMErrCode::SUCCESS;
 }

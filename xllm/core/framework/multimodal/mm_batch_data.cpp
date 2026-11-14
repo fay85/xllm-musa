@@ -401,12 +401,15 @@ bool mmdata_to_proto(const xllm::MMBatchData& cpp_mmdata,
 
   pb_mmdata->Clear();
   pb_mmdata->set_type(cpp_mmdata.type());
-  if (!mmdict_to_proto(cpp_mmdata.data(), pb_mmdata->mutable_dict())) {
-    LOG(ERROR) << "Failed to convert MMBatchData dict";
-    return false;
+  const auto& cpp_entries = cpp_mmdata.mm_data_vec();
+  if (cpp_entries.empty()) {
+    if (!mmdict_to_proto(cpp_mmdata.data(), pb_mmdata->mutable_dict())) {
+      LOG(ERROR) << "Failed to convert MMBatchData dict";
+      return false;
+    }
+    return true;
   }
 
-  const auto& cpp_entries = cpp_mmdata.mm_data_vec();
   pb_mmdata->mutable_entries()->Reserve(cpp_entries.size());
   for (const auto& cpp_entry : cpp_entries) {
     if (!mmdata_entry_to_proto(cpp_entry, pb_mmdata->add_entries())) {

@@ -61,15 +61,15 @@ DEFINE_int32(video_max_token_num,
              "video_max_pixels from the model configuration.");
 
 DEFINE_int64(max_encoder_cache_size,
-             0,
+             2048,
              "Max gpu/npu memory size in MB for encoder cache per worker. "
-             "Default is 0, which disables encoder cache.");
+             "Default is 2048 MB; set to 0 to disable encoder cache.");
 
 DEFINE_int64(max_processor_cache_items,
-             256,
+             2048,
              "Maximum number of multimodal processor results cached on the "
              "master. Capacity is counted by item. "
-             "Default is 256; set to 0 to disable processor cache.");
+             "Default is 2048; set to 0 to disable processor cache.");
 
 DEFINE_bool(enable_return_mm_full_embeddings,
             false,
