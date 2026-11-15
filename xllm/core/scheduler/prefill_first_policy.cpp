@@ -20,8 +20,10 @@ limitations under the License.
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <unordered_map>
 
 #include "core/framework/config/scheduler_config.h"
+#include "framework/block/block_manager_pool.h"
 #include "framework/request/priority_comparator.h"
 #include "framework/request/request.h"
 #include "scheduler/scheduler_policy.h"
@@ -29,6 +31,23 @@ limitations under the License.
 namespace xllm {
 
 namespace {
+
+size_t estimate_remaining_prefill_tokens(const std::shared_ptr<Request>& req,
+                                         const SchedulerState& state,
+                                         const BlockManagerPool* pool) {
+  if (req == nullptr || req->sequences().empty() ||
+      req->sequences()[0] == nullptr) {
+    return 0;
+  }
+  Sequence* seq = req->sequences()[0].get();
+  const size_t total = seq->num_tokens();
+  size_t cached = seq->kv_state().kv_cache_tokens_num();
+  if (cached == 0 && pool != nullptr && state.enable_prefix_cache) {
+    const int32_t dp_rank = std::max<int32_t>(0, seq->dp_rank());
+    cached = pool->probe_prefix_hit_tokens(seq, dp_rank);
+  }
+  return total > cached ? total - cached : 0;
+}
 
 // Running decodes keep the device until a waiting prefill request has been
 // queued for decode_priority_max_wait_ms.
@@ -117,10 +136,44 @@ void PrefillFirstPolicy::schedule(
 
   // Requeue / MPMC drain can shuffle FCFS order. Sort waiting prefill
   // queues by created_time so earlier requests stay at the front.
+  const auto* block_pool =
+      state.enable_prefix_cache
+          ? dynamic_cast<const BlockManagerPool*>(state.kv_cache_manager)
+          : nullptr;
+  const bool is_prefill_instance =
+      state.options.instance_role().has_value() &&
+      state.options.instance_role().value() == InstanceRole::PREFILL;
   if (batch_mode_.priority_strategy == "fcfs") {
     auto fcfs_cmp = create_comparator("fcfs", /*is_reversed=*/true);
     if (!state.prefill_queue.empty() && state.prefill_queue.supports_sort()) {
       state.prefill_queue.sort(fcfs_cmp);
+      if (is_prefill_instance && state.prefill_queue.size() > 1) {
+        const absl::Time now = absl::Now();
+        std::unordered_map<const Request*, double> srpt_scores;
+        srpt_scores.reserve(state.prefill_queue.size());
+        for (const std::shared_ptr<Request>& req : state.prefill_queue) {
+          if (req == nullptr) {
+            continue;
+          }
+          const size_t rem =
+              estimate_remaining_prefill_tokens(req, state, block_pool);
+          const double wait_ms =
+              std::max(0.0, absl::ToDoubleMilliseconds(now - req->created_time()));
+          srpt_scores.emplace(req.get(),
+                              static_cast<double>(rem) - 10.0 * wait_ms);
+        }
+        state.prefill_queue.sort(
+            [&srpt_scores, &fcfs_cmp](const std::shared_ptr<Request>& a,
+                                      const std::shared_ptr<Request>& b) {
+              const auto it_a = srpt_scores.find(a.get());
+              const auto it_b = srpt_scores.find(b.get());
+              if (it_a != srpt_scores.end() && it_b != srpt_scores.end() &&
+                  std::abs(it_a->second - it_b->second) > 128.0) {
+                return it_a->second < it_b->second;
+              }
+              return fcfs_cmp(a, b);
+            });
+      }
     }
     if (!state.chunk_queue.empty() && state.chunk_queue.supports_sort()) {
       state.chunk_queue.sort(fcfs_cmp);
@@ -159,15 +212,52 @@ void PrefillFirstPolicy::schedule(
                                     state);
 
   // Schedule chunked prefill continuations first (they already have partial
-  // KV).
+  // KV), unless a single-chunk request in prefill_queue can finish in one step
+  // while chunk_queue still has multiple chunks remaining.
   std::vector<size_t> reserved_full_footprint(
       static_cast<size_t>(state.options.dp_size()), 0);
-  schedule_prefill_from_queue(
-      &state.chunk_queue, state, budget, finished, reserved_full_footprint);
-  // Then new prefill requests.
-  if (!should_defer_new_prefill(state)) {
+  bool fast_single_chunk_first = false;
+  if (is_prefill_instance && batch_mode_.enable_chunked_prefill &&
+      !state.chunk_queue.empty() && !state.prefill_queue.empty() &&
+      !should_defer_new_prefill(state)) {
+    const size_t max_chunk =
+        std::max<size_t>(1, options_.max_tokens_per_chunk_for_prefill());
+    const size_t rem_new = estimate_remaining_prefill_tokens(
+        state.prefill_queue.top(), state, block_pool);
+    const size_t rem_chunk = estimate_remaining_prefill_tokens(
+        state.chunk_queue.top(), state, block_pool);
+    if (rem_new > 0 && rem_new <= max_chunk && rem_chunk > max_chunk &&
+        rem_new * 2 <= rem_chunk) {
+      fast_single_chunk_first = true;
+      const size_t block_size =
+          static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+      for (const std::shared_ptr<Request>& req : state.chunk_queue) {
+        if (req == nullptr || req->sequences().empty() ||
+            req->sequences()[0] == nullptr) {
+          continue;
+        }
+        Sequence* s = req->sequences()[0].get();
+        const int32_t r = std::max<int32_t>(0, s->dp_rank());
+        if (static_cast<size_t>(r) < reserved_full_footprint.size()) {
+          reserved_full_footprint[r] +=
+              (s->num_tokens() + block_size - 1) / block_size;
+        }
+      }
+    }
+  }
+  if (fast_single_chunk_first) {
     schedule_prefill_from_queue(
         &state.prefill_queue, state, budget, finished, reserved_full_footprint);
+    schedule_prefill_from_queue(
+        &state.chunk_queue, state, budget, finished, reserved_full_footprint);
+  } else {
+    schedule_prefill_from_queue(
+        &state.chunk_queue, state, budget, finished, reserved_full_footprint);
+    // Then new prefill requests.
+    if (!should_defer_new_prefill(state)) {
+      schedule_prefill_from_queue(
+          &state.prefill_queue, state, budget, finished, reserved_full_footprint);
+    }
   }
 
   if (!state.running_sequences.empty()) {

@@ -168,6 +168,16 @@ ProfileManager::ProfileManager(Engine* engine, const Options& options)
 #endif
     }
   }
+#elif defined(USE_MUSA)
+  if (!is_rec_multi_round_mode()) {
+    const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
+    if (execution_config.enable_graph() &&
+        execution_config.enable_prefill_piecewise_graph() &&
+        !execution_config.disable_graph_warmup() &&
+        options_.instance_role() == InstanceRole::PREFILL) {
+      warmup_prefill_for_graph();
+    }
+  }
 #endif
 }
 
@@ -844,8 +854,13 @@ std::shared_ptr<Request> ProfileManager::generate_single_request(
   std::mt19937_64 gen(rd());
 
   // If req_state does not initialize the stopchecker, default eos_token_id = 0,
-  // need to skip it
-  std::uniform_int_distribution<int32_t> dis(1, vocab_size - 2);
+  // need to skip it. For graph warmup, restrict to low token IDs [1, 1000] so
+  // VLM mRoPE generators never see unaligned vision_start/image token IDs.
+  const int32_t max_token_id =
+      is_graph_warmup ? std::min<int32_t>(vocab_size - 2, 1000)
+                      : (vocab_size - 2);
+  std::uniform_int_distribution<int32_t> dis(
+      1, std::max<int32_t>(1, max_token_id));
 
   std::vector<int32_t> token_ids(token_length);
   std::generate(token_ids.begin(), token_ids.end(), [&]() {
@@ -909,8 +924,13 @@ std::shared_ptr<Request> ProfileManager::try_generate_single_decode_request(
   std::mt19937_64 gen(rd());
 
   // If req_state does not initialize the stopchecker, default eos_token_id = 0,
-  // need to skip it
-  std::uniform_int_distribution<int32_t> dis(1, vocab_size - 2);
+  // need to skip it. For graph warmup, restrict to low token IDs [1, 1000] so
+  // VLM mRoPE generators never see unaligned vision_start/image token IDs.
+  const int32_t max_token_id =
+      is_graph_warmup ? std::min<int32_t>(vocab_size - 2, 1000)
+                      : (vocab_size - 2);
+  std::uniform_int_distribution<int32_t> dis(
+      1, std::max<int32_t>(1, max_token_id));
 
   const int32_t prompt_length = total_length - 1;
   std::vector<int32_t> prompt_token_ids(prompt_length);
@@ -1290,6 +1310,19 @@ void ProfileManager::warmup_prefill_for_graph() {
     }
     prefill_tokens = std::min(prefill_tokens, per_group_cap);
   }
+  if (::xllm::SchedulerConfig::get_instance().enable_chunked_prefill()) {
+    const int32_t max_chunk_tokens =
+        ::xllm::SchedulerConfig::get_instance()
+            .max_tokens_per_chunk_for_prefill();
+    if (max_chunk_tokens > 0) {
+      prefill_tokens = std::min(prefill_tokens, max_chunk_tokens);
+    }
+  }
+  const int32_t max_graph_tokens =
+      ::xllm::ExecutionConfig::get_instance().max_tokens_for_graph_mode();
+  if (max_graph_tokens > 0) {
+    prefill_tokens = std::min(prefill_tokens, max_graph_tokens);
+  }
   double prefill_latency = run_request(prefill_tokens,
                                        /*prefix_length=*/0,
                                        /*batch_size=*/1,
@@ -1297,6 +1330,38 @@ void ProfileManager::warmup_prefill_for_graph() {
                                        /*is_graph_warmup=*/true);
   LOG(INFO) << "Prefill warmup completed: tokens=" << prefill_tokens
             << ", latency=" << prefill_latency << " ms";
+#if defined(USE_MUSA)
+  const auto& exec_cfg = ::xllm::ExecutionConfig::get_instance();
+  if (exec_cfg.enable_prefill_piecewise_graph() &&
+      ::xllm::SchedulerConfig::get_instance().enable_chunked_prefill() &&
+      options_.dp_size() == 1) {
+    const int32_t stride =
+        std::max<int32_t>(256, exec_cfg.musa_prefill_graph_token_stride());
+    const int32_t prefix_step = std::max<int32_t>(
+        128, static_cast<int32_t>(block_manager_pool_->options().block_size()) * 2);
+    std::vector<int32_t> chunk_buckets;
+    for (int32_t b = (prefill_tokens / stride) * stride; b >= stride;
+         b -= stride) {
+      chunk_buckets.push_back(b);
+    }
+    if (stride > 256 &&
+        (chunk_buckets.empty() || chunk_buckets.back() > 256)) {
+      chunk_buckets.push_back(256);
+    }
+    double chunk_warmup_ms = 0.0;
+    for (int32_t b : chunk_buckets) {
+      chunk_warmup_ms += run_request(prefix_step + b,
+                                     /*prefix_length=*/prefix_step,
+                                     /*batch_size=*/1,
+                                     /*extra_token_length=*/0,
+                                     /*is_graph_warmup=*/true);
+    }
+    LOG(INFO) << "MUSA chunked-prefill piecewise graph warmup completed: "
+              << "buckets=" << chunk_buckets.size()
+              << ", stride=" << stride
+              << ", total_latency=" << chunk_warmup_ms << " ms";
+  }
+#endif
 }
 
 void ProfileManager::warmup_unified_for_graph() {
