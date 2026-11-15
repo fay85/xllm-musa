@@ -15,6 +15,10 @@ limitations under the License.
 
 #pragma once
 
+#include <map>
+#include <mutex>
+#include <tuple>
+
 #include "core/framework/model/model_output.h"
 #include "core/layers/common/lm_head.h"
 #include "core/layers/qwen3_vision_layer.h"
@@ -362,18 +366,31 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
   }
 
   torch::Tensor rot_pos_emb(torch::Tensor grid_thw) {
+    auto grid_thw_cpu = grid_thw.cpu().to(torch::kLong);
+    auto count = grid_thw_cpu.size(0);
     std::vector<torch::Tensor> pos_ids_vec;
-    auto count = grid_thw.sizes()[0];
     pos_ids_vec.reserve(count);
 
-    auto grid_thw_cpu = grid_thw.cpu();
     auto options =
         torch::TensorOptions().dtype(torch::kLong).device(grid_thw.device());
+    int64_t max_grid = 0;
 
-    for (int idx = 0; idx < count; ++idx) {
+    for (int64_t idx = 0; idx < count; ++idx) {
       auto t = grid_thw_cpu[idx][0].item<int64_t>();
       auto h = grid_thw_cpu[idx][1].item<int64_t>();
       auto w = grid_thw_cpu[idx][2].item<int64_t>();
+      max_grid = std::max(max_grid, std::max(h, w));
+
+      const auto key = std::make_tuple(t, h, w);
+      {
+        std::lock_guard<std::mutex> lock(pos_cache_mutex_);
+        auto it = rot_pos_id_cache_.find(key);
+        if (it != rot_pos_id_cache_.end() &&
+            it->second.device() == grid_thw.device()) {
+          pos_ids_vec.push_back(it->second);
+          continue;
+        }
+      }
 
       auto hpos_ids = torch::arange(h, options).unsqueeze(1).expand({-1, w});
       hpos_ids = hpos_ids
@@ -393,18 +410,19 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
                      .permute({0, 2, 1, 3})
                      .flatten();
 
-      pos_ids_vec.push_back(
-          torch::stack({hpos_ids, wpos_ids}, -1).repeat({t, 1}));
+      auto entry = torch::stack({hpos_ids, wpos_ids}, -1).repeat({t, 1});
+      {
+        std::lock_guard<std::mutex> lock(pos_cache_mutex_);
+        if (rot_pos_id_cache_.size() < 256) {
+          rot_pos_id_cache_[key] = entry;
+        }
+      }
+      pos_ids_vec.push_back(std::move(entry));
     }
 
-    auto pos_ids = torch::cat(pos_ids_vec, 0);
-    auto max_grid_size =
-        grid_thw
-            .index({torch::indexing::Slice(),
-                    torch::indexing::Slice(1, torch::indexing::None)})
-            .max();
-
-    auto rotary_pos_emb_full = rotary_pos_emb_(max_grid_size.item<int64_t>());
+    auto pos_ids = pos_ids_vec.size() == 1 ? pos_ids_vec[0]
+                                           : torch::cat(pos_ids_vec, 0);
+    auto rotary_pos_emb_full = rotary_pos_emb_(max_grid);
     auto rotary_pos_emb = rotary_pos_emb_full.index({pos_ids}).flatten(1);
 
     return rotary_pos_emb;
@@ -415,8 +433,8 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
     int64_t hidden_dim = hidden_size_;
     int64_t m_size = spatial_merge_size_;
 
-    auto grid_cpu = grid_thw.to(torch::kCPU);
-    int64_t count = grid_thw.size(0);
+    auto grid_cpu = grid_thw.to(torch::kCPU).to(torch::kLong);
+    int64_t count = grid_cpu.size(0);
 
     std::vector<torch::Tensor> outputs;
     outputs.reserve(count);
@@ -425,6 +443,16 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
       int64_t t = grid_cpu[idx][0].item<int64_t>();
       int64_t h = grid_cpu[idx][1].item<int64_t>();
       int64_t w = grid_cpu[idx][2].item<int64_t>();
+
+      const auto key = std::make_tuple(t, h, w);
+      {
+        std::lock_guard<std::mutex> lock(pos_cache_mutex_);
+        auto it = pos_embed_cache_.find(key);
+        if (it != pos_embed_cache_.end() && it->second.device() == device) {
+          outputs.push_back(it->second);
+          continue;
+        }
+      }
 
       auto h_idxs =
           torch::linspace(
@@ -483,10 +511,16 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
           {t, h / m_size, m_size, w / m_size, m_size, hidden_dim});
       repeated = repeated.permute({0, 1, 3, 2, 4, 5}).reshape({-1, hidden_dim});
 
-      outputs.push_back(repeated);
+      {
+        std::lock_guard<std::mutex> lock(pos_cache_mutex_);
+        if (pos_embed_cache_.size() < 256) {
+          pos_embed_cache_[key] = repeated;
+        }
+      }
+      outputs.push_back(std::move(repeated));
     }
 
-    return torch::cat(outputs, 0);
+    return outputs.size() == 1 ? outputs[0] : torch::cat(outputs, 0);
   }
 
   torch::Tensor forward(torch::Tensor hidden_states,
@@ -496,15 +530,26 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
     hidden_states = hidden_states + pos_embeds;
     //   compute position embedding
     auto rotary_pos_emb = rot_pos_emb(grid_thw);
-    // compute cu_seqlens
-    auto cu_seqlens = torch::repeat_interleave(
-                          grid_thw.index({torch::indexing::Slice(), 1}) *
-                              grid_thw.index({torch::indexing::Slice(), 2}),
-                          grid_thw.index({torch::indexing::Slice(), 0}))
-                          .cumsum(0, torch::kInt32);
-    namespace F = torch::nn::functional;
-    cu_seqlens = F::pad(
-        cu_seqlens, F::PadFuncOptions({1, 0}).mode(torch::kConstant).value(0));
+    // compute cu_seqlens on CPU to avoid GPU sync + repeat_interleave overhead
+    auto grid_cpu = grid_thw.to(torch::kCPU).to(torch::kLong);
+    const int64_t grid_count = grid_cpu.size(0);
+    std::vector<int32_t> cu_seqlens_vec;
+    cu_seqlens_vec.reserve(grid_count + 1);
+    cu_seqlens_vec.push_back(0);
+    int32_t acc = 0;
+    for (int64_t idx = 0; idx < grid_count; ++idx) {
+      const int64_t t = grid_cpu[idx][0].item<int64_t>();
+      const int32_t hw = static_cast<int32_t>(
+          grid_cpu[idx][1].item<int64_t>() * grid_cpu[idx][2].item<int64_t>());
+      for (int64_t frame = 0; frame < t; ++frame) {
+        acc += hw;
+        cu_seqlens_vec.push_back(acc);
+      }
+    }
+    auto cu_seqlens =
+        torch::tensor(cu_seqlens_vec,
+                      torch::TensorOptions().dtype(torch::kInt32))
+            .to(hidden_states.device());
 
 #if defined(USE_MUSA)
     // The MUSA vision attention applies rotary in fp32; bf16 tables blur the
@@ -518,10 +563,6 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
     m_cos = m_cos.repeat({1, 2});
     m_sin = m_sin.repeat({1, 2});
 
-    torch::Tensor cu_seqlens_cpu = cu_seqlens.cpu();
-    std::vector<int32_t> cu_seqlens_vec(
-        cu_seqlens_cpu.data_ptr<int>(),  // full seqlen vec
-        cu_seqlens_cpu.data_ptr<int>() + cu_seqlens_cpu.numel());
     std::vector<torch::Tensor> deepstack_feature_lists;
     deepstack_feature_lists.reserve(deepstack_visual_indexes_.size());
     for (int32_t idx = 0; idx < layers_.size(); ++idx) {
@@ -571,6 +612,8 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
           << "weight size mismatch for " << name();
       emb_->weight.data().copy_(emb_weight);
       is_emb_weight_loaded = true;
+      std::lock_guard<std::mutex> lock(pos_cache_mutex_);
+      pos_embed_cache_.clear();
     }
   }
 
@@ -597,6 +640,11 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
 
   torch::Tensor m_cos;
   torch::Tensor m_sin;
+  std::mutex pos_cache_mutex_;
+  std::map<std::tuple<int64_t, int64_t, int64_t>, torch::Tensor>
+      pos_embed_cache_;
+  std::map<std::tuple<int64_t, int64_t, int64_t>, torch::Tensor>
+      rot_pos_id_cache_;
   int device_id = 0;
   bool is_emb_weight_loaded = false;
   torch::TensorOptions options_;

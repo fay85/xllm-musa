@@ -36,6 +36,9 @@ class Qwen3VLPromptProcessor final : public PromptProcessor {
   explicit Qwen3VLPromptProcessor(const ModelArgs& args);
 
   bool process(std::string& prompt, const MMData& mm_data) override;
+  bool expand_pretokenized(const std::vector<int32_t>& base_tokens,
+                           const MMData& mm_data,
+                           std::vector<int32_t>& out_tokens) override;
   bool find_mm_spans(const std::vector<int32_t>& token_ids,
                      MMData& mm_data) override;
 

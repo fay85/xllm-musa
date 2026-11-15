@@ -139,6 +139,40 @@ void compute_qwen2_vision_attention_torch(
   if (cu_seq_len_vec.size() < 2) return;
 
   const int32_t num_seqs = static_cast<int32_t>(cu_seq_len_vec.size()) - 1;
+  const int64_t total_s = q.size(0);
+  const int64_t num_heads = q.size(1);
+  const int64_t head_dim = q.size(2);
+  if (num_seqs > 1 && cu_seq_len_vec[0] == 0 &&
+      cu_seq_len_vec.back() == total_s) {
+    const int32_t first_len = cu_seq_len_vec[1] - cu_seq_len_vec[0];
+    bool equal_lens = first_len > 0;
+    for (int32_t i = 1; i < num_seqs && equal_lens; ++i) {
+      if (cu_seq_len_vec[i + 1] - cu_seq_len_vec[i] != first_len) {
+        equal_lens = false;
+      }
+    }
+    if (equal_lens) {
+      const torch::Tensor q_b =
+          q.view({num_seqs, first_len, num_heads, head_dim}).transpose(1, 2);
+      const torch::Tensor k_b =
+          k.view({num_seqs, first_len, num_heads, head_dim}).transpose(1, 2);
+      const torch::Tensor v_b =
+          v.view({num_seqs, first_len, num_heads, head_dim}).transpose(1, 2);
+      const torch::Tensor out_b =
+          torch::scaled_dot_product_attention(q_b,
+                                              k_b,
+                                              v_b,
+                                              /*attn_mask=*/std::nullopt,
+                                              /*dropout_p=*/0.0,
+                                              /*is_causal=*/false,
+                                              /*scale=*/scale);
+      output = out_b.transpose(1, 2).reshape({total_s, num_heads, head_dim});
+      return;
+    }
+  }
+  if (!output.defined()) {
+    output = torch::empty_like(q);
+  }
   for (int32_t i = 0; i < num_seqs; ++i) {
     int32_t start = cu_seq_len_vec[i];
     int32_t end = cu_seq_len_vec[i + 1];
@@ -223,27 +257,40 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
     std::vector<int32_t>& cu_seq_len_vec) {
   // 1. qkv projection
   auto qkv = qkv_proj_->forward(hidden_states);
-  // 2. split qkv
-  auto qkv_split = split_qkv(qkv);
-  // 3. transpose [s, b, h, d] -> [b, s, h, d]
-  for (auto& tensor : qkv_split) {
-    tensor = tensor.transpose(0, 1).contiguous();
+  // 2. split qkv + reshape to [B*S, H, D]
+  torch::Tensor q;
+  torch::Tensor k;
+  torch::Tensor v;
+  int64_t B = 1;
+  int64_t S = 0;
+  int64_t head_dim = hidden_size_per_attention_head_;
+  if (tp_group_->world_size() == 1 && qkv.dim() == 2) {
+    S = qkv.size(0);
+    auto qkv_perm =
+        qkv.view({S, 3, num_attention_heads_per_partition_, head_dim})
+            .permute({1, 0, 2, 3})
+            .contiguous();
+    q = qkv_perm[0];
+    k = qkv_perm[1];
+    v = qkv_perm[2];
+  } else {
+    auto qkv_split = split_qkv(qkv);
+    // 3. transpose [s, b, h, d] -> [b, s, h, d]
+    for (auto& tensor : qkv_split) {
+      tensor = tensor.transpose(0, 1).contiguous();
+    }
+    q = qkv_split[0];
+    k = qkv_split[1];
+    v = qkv_split[2];
+    B = q.size(0);
+    S = q.size(1);
+    head_dim = q.size(3);
+    CHECK_EQ(head_dim, hidden_size_per_attention_head_) << "head_dim mismatch";
+    q = q.reshape({B * S, num_attention_heads_per_partition_, head_dim});
+    k = k.reshape({B * S, num_attention_heads_per_partition_, head_dim});
+    v = v.view({B * S, v.size(2), v.size(3)});
   }
-  auto q = qkv_split[0];
-  auto k = qkv_split[1];
-  auto v = qkv_split[2];
-  int64_t B = q.size(0);
-  int64_t S = q.size(1);
-  int64_t head_dim = q.size(3);
-  CHECK_EQ(head_dim, hidden_size_per_attention_head_) << "head_dim mismatch";
   int32_t max_seqlen = get_max_sequence_length(cu_seq_len_vec);
-
-  // 4. rope
-  // Reshape q, k from [B, S, H, D] to [B*S, H, D] before applying RoPE so
-  // that the RoPE kernel sees the correct total token count (B*S = seq_len),
-  // not just the batch dimension (B=1).
-  q = q.reshape({B * S, num_attention_heads_per_partition_, head_dim});
-  k = k.reshape({B * S, num_attention_heads_per_partition_, head_dim});
 
   // Apply rotary position embedding to both q and k in a single call.
 #if defined(USE_NPU)
@@ -263,8 +310,8 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
   // Preserve patch-position precision through the MUSA rotary computation.
   rotary_params.q = q.to(torch::kFloat32);
   rotary_params.k = k.to(torch::kFloat32);
-  rotary_params.sin = m_sin_pos.to(torch::kFloat32);
-  rotary_params.cos = m_cos_pos.to(torch::kFloat32);
+  rotary_params.sin = m_sin_pos;
+  rotary_params.cos = m_cos_pos;
 #else
   rotary_params.q = q;
   rotary_params.k = k;
@@ -274,11 +321,51 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
   rotary_params.interleaved = false;
   rotary_params.discrete = false;
 #if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
-  rotary_params.position_ids =
-      torch::arange(
-          q.size(0),
-          torch::TensorOptions().dtype(torch::kInt64).device(q.device()))
-          .contiguous();
+  {
+    struct VisionRopeCache {
+      torch::Tensor pos_ids;
+      const void* last_cos_ptr = nullptr;
+      const void* last_sin_ptr = nullptr;
+      int64_t last_cos_len = 0;
+      torch::Device last_device = torch::kCPU;
+      torch::Tensor precomputed_cos_sin;
+    };
+    static thread_local VisionRopeCache rope_cache;
+    const int64_t total_tokens = q.size(0);
+    if (!rope_cache.pos_ids.defined() ||
+        rope_cache.pos_ids.device() != q.device() ||
+        rope_cache.pos_ids.numel() < total_tokens) {
+      const int64_t alloc_len = std::max<int64_t>(total_tokens, 16384);
+      rope_cache.pos_ids =
+          torch::arange(
+              alloc_len,
+              torch::TensorOptions().dtype(torch::kInt64).device(q.device()))
+              .contiguous();
+    }
+    rotary_params.position_ids =
+        rope_cache.pos_ids.narrow(/*dim=*/0, /*start=*/0, /*length=*/total_tokens);
+    if (m_cos_pos.defined() && m_sin_pos.defined()) {
+      const void* cos_ptr = m_cos_pos.data_ptr();
+      const void* sin_ptr = m_sin_pos.data_ptr();
+      const int64_t cos_len = m_cos_pos.size(0);
+      if (!rope_cache.precomputed_cos_sin.defined() ||
+          rope_cache.last_cos_ptr != cos_ptr ||
+          rope_cache.last_sin_ptr != sin_ptr ||
+          rope_cache.last_cos_len != cos_len ||
+          rope_cache.last_device != q.device()) {
+        const int64_t rot_half = m_cos_pos.size(-1) / 2;
+        auto cos_sliced = m_cos_pos.contiguous().slice(-1, 0, rot_half);
+        auto sin_sliced = m_sin_pos.contiguous().slice(-1, 0, rot_half);
+        rope_cache.precomputed_cos_sin =
+            torch::cat({cos_sliced, sin_sliced}, -1).contiguous();
+        rope_cache.last_cos_ptr = cos_ptr;
+        rope_cache.last_sin_ptr = sin_ptr;
+        rope_cache.last_cos_len = cos_len;
+        rope_cache.last_device = q.device();
+      }
+      rotary_params.precomputed_cos_sin = rope_cache.precomputed_cos_sin;
+    }
+  }
   rotary_params.cu_query_lens = std::nullopt;
 #else
   rotary_params.cu_query_lens = cu_seq_len;
@@ -298,14 +385,9 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
 #endif
 #endif
 
-  // q, k, v = (rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v])
-  // q and k are already [B*S, H, D] after the reshape above; just
-  // flatten v to the same shape.
-  v = v.view({B * S, v.size(2), v.size(3)});
-  torch::Tensor output = torch::zeros_like(q);
-
   // 5. store k/v cache and do attention
 #if defined(USE_MLU)
+  torch::Tensor output = torch::zeros_like(q);
   std::optional<torch::Tensor> output_lse = std::nullopt;
 
   xllm::kernel::mlu::batch_prefill(q,
@@ -331,8 +413,10 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
                                    /*compute_dtype=*/"half",
                                    /*return_lse=*/false);
 #elif defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
+  torch::Tensor output;
   compute_qwen2_vision_attention_torch(q, k, v, output, cu_seq_len_vec, scale_);
 #elif defined(USE_NPU)
+  torch::Tensor output = torch::empty_like(q);
   compute_qwen_vision_attention_fused(q, k, v, output, cu_seq_len_vec, scale_);
 #endif
 

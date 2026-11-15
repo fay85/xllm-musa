@@ -284,7 +284,8 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     const RequestParams& sp,
     std::string payload,
     OutputCallback callback,
-    bool use_prompt_as_is) {
+    bool use_prompt_as_is,
+    std::optional<std::vector<int32_t>> pretokenized_ids) {
   // Guard the rate-limit slot acquired at the service entry. The next hop
   // (create(prompt, ...)) installs its own guard, so we dismiss ours before
   // forwarding.
@@ -316,6 +317,20 @@ std::shared_ptr<Request> VLMRequestFactory::create(
       CALLBACK_WITH_ERROR(StatusCode::INVALID_ARGUMENT,
                           "Failed to process multimodal input.");
       return nullptr;
+    }
+  }
+
+  if (!use_prompt_as_is && pretokenized_ids.has_value() &&
+      !pretokenized_ids->empty() && model_args_->audio_token_id() == 0) {
+    std::vector<int32_t> prompt_tokens;
+    if (processor_->process_pretokenized_prompt(
+            *pretokenized_ids, mm_data, prompt_tokens)) {
+      rate_limit_guard.dismiss();
+      return build_request(/*prompt=*/"",
+                           std::move(prompt_tokens),
+                           std::move(mm_data),
+                           sp,
+                           std::move(callback));
     }
   }
 

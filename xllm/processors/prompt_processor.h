@@ -34,6 +34,14 @@ class PromptProcessor {
 
   // false rejects the request at construction.
   virtual bool process(std::string& prompt, const MMData& mm_data) = 0;
+  virtual bool expand_pretokenized(const std::vector<int32_t>& base_tokens,
+                                   const MMData& mm_data,
+                                   std::vector<int32_t>& out_tokens) {
+    (void)base_tokens;
+    (void)mm_data;
+    (void)out_tokens;
+    return false;
+  }
   virtual bool find_mm_spans(const std::vector<int32_t>& token_ids,
                              MMData& mm_data) = 0;
 

@@ -289,71 +289,76 @@ bool Qwen2VLImageProcessor::process_image(
   int64_t resized_height = shape[2];
   int64_t resized_width = shape[3];
 
+  std::optional<Size> target_size;
   if (do_resize_) {
-    std::optional<Size> size;
     if (min_tokens_ > 0 && max_tokens_ > 0) {
-      // token-budget resize (matches HF Glm5NextImageProcessor). For a
-      // single image HF passes num_frames == temporal_factor.
-      size = smart_resize_tokens(temporal_patch_size_,
-                                 static_cast<int32_t>(resized_height),
-                                 static_cast<int32_t>(resized_width),
-                                 temporal_patch_size_,
-                                 patch_size_ * merge_size_,
-                                 min_tokens_,
-                                 max_tokens_);
+      target_size = smart_resize_tokens(temporal_patch_size_,
+                                        static_cast<int32_t>(resized_height),
+                                        static_cast<int32_t>(resized_width),
+                                        temporal_patch_size_,
+                                        patch_size_ * merge_size_,
+                                        min_tokens_,
+                                        max_tokens_);
     } else {
-      size = smart_resize(static_cast<int32_t>(resized_height),
-                          static_cast<int32_t>(resized_width),
-                          patch_size_ * merge_size_,
-                          min_pixels_,
-                          max_pixels_);
+      target_size = smart_resize(static_cast<int32_t>(resized_height),
+                                 static_cast<int32_t>(resized_width),
+                                 patch_size_ * merge_size_,
+                                 min_pixels_,
+                                 max_pixels_);
     }
-    if (!size) {
+    if (!target_size) {
       return false;
     }
-
-    std::tie(resized_height, resized_width) = *size;
-    batch_images = transforms::resize(
-        batch_images, {resized_height, resized_width}, resample_, true);
+    std::tie(resized_height, resized_width) = *target_size;
   }
 
-  if (do_normalize_) {
-    batch_images = transforms::normalize(batch_images, image_mean_, image_std_);
-  }
+  auto run_pipeline = [&](torch::Tensor work_images) {
+    if (do_resize_) {
+      work_images = transforms::resize(
+          work_images, {resized_height, resized_width}, resample_, true);
+    }
+    if (do_normalize_) {
+      work_images =
+          transforms::normalize(work_images, image_mean_, image_std_);
+    }
+    if (do_rescale_) {
+      work_images = transforms::rescale(work_images, rescale_factor_);
+    }
 
-  if (do_rescale_) {
-    batch_images = transforms::rescale(batch_images, rescale_factor_);
-  }
+    torch::Tensor patches = work_images.unsqueeze(1);
+    if (temporal_patch_size_ > 1) {
+      patches = patches.repeat({1, temporal_patch_size_, 1, 1, 1});
+    }
 
-  torch::Tensor patches = batch_images.unsqueeze(1);
-  if (temporal_patch_size_ > 1) {
-    torch::Tensor repeats =
-        patches.repeat({1, temporal_patch_size_ - 1, 1, 1, 1});
-    patches = torch::cat({patches, repeats}, 1);
-  }
+    const auto patch_shape = patches.sizes();
+    const int64_t channel = patch_shape[2];
+    const int64_t grid_t = patch_shape[1] / temporal_patch_size_;
+    const int64_t grid_h = resized_height / patch_size_;
+    const int64_t grid_w = resized_width / patch_size_;
 
-  const auto patch_shape = patches.sizes();
-  const int64_t channel = patch_shape[2];
-  const int64_t grid_t = patch_shape[1] / temporal_patch_size_;
+    patches = patches.view({batch_size,
+                            grid_t,
+                            temporal_patch_size_,
+                            channel,
+                            grid_h / merge_size_,
+                            merge_size_,
+                            patch_size_,
+                            grid_w / merge_size_,
+                            merge_size_,
+                            patch_size_});
+
+    patches = patches.permute({0, 1, 4, 7, 5, 8, 3, 2, 6, 9});
+    return patches.reshape(
+        {batch_size,
+         grid_t * grid_h * grid_w,
+         channel * temporal_patch_size_ * patch_size_ * patch_size_});
+  };
+
+  torch::Tensor batch_pixel_values = run_pipeline(batch_images);
+
+  const int64_t grid_t = 1;
   const int64_t grid_h = resized_height / patch_size_;
   const int64_t grid_w = resized_width / patch_size_;
-
-  patches = patches.view({batch_size,
-                          grid_t,
-                          temporal_patch_size_,
-                          channel,
-                          grid_h / merge_size_,
-                          merge_size_,
-                          patch_size_,
-                          grid_w / merge_size_,
-                          merge_size_,
-                          patch_size_});
-
-  patches = patches.permute({0, 1, 4, 7, 5, 8, 3, 2, 6, 9});
-  torch::Tensor batch_pixel_values = patches.reshape(
-      {batch_size,
-       grid_t * grid_h * grid_w,
-       channel * temporal_patch_size_ * patch_size_ * patch_size_});
   torch::Tensor batch_thw = torch::tensor({grid_t, grid_h, grid_w})
                                 .repeat({batch_size, 1})
                                 .reshape({batch_size, 1, 3});

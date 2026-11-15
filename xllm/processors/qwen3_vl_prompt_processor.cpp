@@ -148,6 +148,78 @@ bool Qwen3VLPromptProcessor::process(std::string& prompt,
   return true;
 }
 
+bool Qwen3VLPromptProcessor::expand_pretokenized(
+    const std::vector<int32_t>& base_tokens,
+    const MMData& mm_data,
+    std::vector<int32_t>& out_tokens) {
+  if (base_tokens.empty()) {
+    return false;
+  }
+  if (auto vres = mm_data.get<torch::Tensor>("video_grid_thw")) {
+    if (vres.value().defined() && vres.value().numel() > 0) {
+      return false;
+    }
+  }
+  for (int32_t tid : base_tokens) {
+    if (tid == video_token_id_) {
+      return false;
+    }
+  }
+
+  torch::Tensor image_grid_thw;
+  if (auto res = mm_data.get<torch::Tensor>("image_grid_thw")) {
+    image_grid_thw = res.value();
+  }
+  const int32_t expected_images =
+      (image_grid_thw.defined() && image_grid_thw.numel() > 0)
+          ? static_cast<int32_t>(image_grid_thw.size(0))
+          : 0;
+
+  int32_t placeholder_count = 0;
+  for (int32_t tid : base_tokens) {
+    if (tid == image_token_id_) {
+      ++placeholder_count;
+    }
+  }
+  if (placeholder_count != expected_images) {
+    return false;
+  }
+
+  if (expected_images == 0) {
+    out_tokens = base_tokens;
+    return true;
+  }
+
+  const int32_t merge_length = merge_size_ * merge_size_;
+  if (merge_length <= 0) {
+    return false;
+  }
+  std::vector<int32_t> per_image_tokens(expected_images, 0);
+  size_t total_extra = 0;
+  for (int32_t idx = 0; idx < expected_images; ++idx) {
+    const int32_t n =
+        image_grid_thw[idx].prod().item<int32_t>() / merge_length;
+    if (n <= 0) {
+      return false;
+    }
+    per_image_tokens[idx] = n;
+    total_extra += static_cast<size_t>(n - 1);
+  }
+
+  out_tokens.clear();
+  out_tokens.reserve(base_tokens.size() + total_extra);
+  int32_t img_idx = 0;
+  for (int32_t tid : base_tokens) {
+    if (tid == image_token_id_) {
+      out_tokens.insert(
+          out_tokens.end(), per_image_tokens[img_idx++], image_token_id_);
+    } else {
+      out_tokens.push_back(tid);
+    }
+  }
+  return img_idx == expected_images;
+}
+
 bool Qwen3VLPromptProcessor::find_mm_spans(
     const std::vector<int32_t>& token_ids,
     MMData& mm_data) {

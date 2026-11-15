@@ -65,11 +65,13 @@ class VLMRequestFactory final {
 
   // chat: decodes the multimodal payload and renders messages into a prompt,
   // then delegates to the completion overload above.
-  std::shared_ptr<Request> create(std::vector<Message> messages,
-                                  const RequestParams& sp,
-                                  std::string payload,
-                                  OutputCallback callback,
-                                  bool use_prompt_as_is = false);
+  std::shared_ptr<Request> create(
+      std::vector<Message> messages,
+      const RequestParams& sp,
+      std::string payload,
+      OutputCallback callback,
+      bool use_prompt_as_is = false,
+      std::optional<std::vector<int32_t>> pretokenized_ids = std::nullopt);
 
  private:
   std::shared_ptr<Request> build_request(std::string prompt,

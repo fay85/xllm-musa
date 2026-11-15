@@ -52,11 +52,13 @@ class VLMMaster : public Master {
                       OutputCallback callback);
 
   // chat
-  void handle_request(std::vector<Message> messages,
-                      RequestParams sp,
-                      std::string payload,
-                      OutputCallback callback,
-                      bool use_prompt_as_is = false);
+  void handle_request(
+      std::vector<Message> messages,
+      RequestParams sp,
+      std::string payload,
+      OutputCallback callback,
+      bool use_prompt_as_is = false,
+      std::optional<std::vector<int32_t>> pretokenized_ids = std::nullopt);
 
   // batch completion
   void handle_batch_request(std::vector<std::string> prompts,

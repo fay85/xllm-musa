@@ -1003,10 +1003,13 @@ void MMChatServiceImpl::process_async_rpc_impl(
   }
 
   RequestParams request_params(rpc_request, "", "");
-  // The service's token ids omit the image placeholder expansion, so the
-  // request factory re-tokenizes the prompt.
+  std::optional<std::vector<int32_t>> pretokenized_ids = std::nullopt;
   if (rpc_request.has_routing()) {
     request_params.decode_address = rpc_request.routing().decode_name();
+    if (rpc_request.token_ids_size() > 0) {
+      pretokenized_ids.emplace(rpc_request.token_ids().begin(),
+                               rpc_request.token_ids().end());
+    }
   }
   std::vector<Message> messages;
   messages.reserve(rpc_request.messages_size());
@@ -1017,7 +1020,9 @@ void MMChatServiceImpl::process_async_rpc_impl(
   master_->handle_request(std::move(messages),
                           std::move(request_params),
                           /*payload=*/"",
-                          callback);
+                          callback,
+                          /*use_prompt_as_is=*/false,
+                          std::move(pretokenized_ids));
 }
 
 }  // namespace xllm

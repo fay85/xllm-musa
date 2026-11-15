@@ -278,11 +278,13 @@ void VLMMaster::handle_request(std::string prompt,
   });
 }
 
-void VLMMaster::handle_request(std::vector<Message> messages,
-                               RequestParams sp,
-                               std::string payload,
-                               OutputCallback callback,
-                               bool use_prompt_as_is) {
+void VLMMaster::handle_request(
+    std::vector<Message> messages,
+    RequestParams sp,
+    std::string payload,
+    OutputCallback callback,
+    bool use_prompt_as_is,
+    std::optional<std::vector<int32_t>> pretokenized_ids) {
   // Offline-only guard: fail loudly on the caller thread (pybind surfaces
   // the exception to the Python caller) before any scheduling side effect.
   if (use_prompt_as_is && !join_message_texts(messages).has_value()) {
@@ -301,6 +303,7 @@ void VLMMaster::handle_request(std::vector<Message> messages,
                          sp = std::move(sp),
                          payload = std::move(payload),
                          use_prompt_as_is,
+                         pretokenized_ids = std::move(pretokenized_ids),
                          callback = std::move(cb)]() mutable {
     AUTO_COUNTER(request_handling_latency_seconds_chat);
 
@@ -327,7 +330,8 @@ void VLMMaster::handle_request(std::vector<Message> messages,
                                             sp,
                                             std::move(payload),
                                             std::move(callback),
-                                            use_prompt_as_is);
+                                            use_prompt_as_is,
+                                            std::move(pretokenized_ids));
     if (!request) {
       return;
     }

@@ -54,6 +54,16 @@ class MultimodalProcessorBase {
                               MMData& mm_data,
                               std::vector<int32_t>& token_ids) = 0;
 
+  virtual bool process_pretokenized_prompt(
+      const std::vector<int32_t>& base_tokens,
+      MMData& mm_data,
+      std::vector<int32_t>& token_ids) {
+    (void)base_tokens;
+    (void)mm_data;
+    (void)token_ids;
+    return false;
+  }
+
   virtual bool process_multimodal(const MMInput& inputs,
                                   MMData& data) const = 0;
 
@@ -123,6 +133,21 @@ class MultimodalProcessor final : public MultimodalProcessorBase {
     if (!tokenize(prompt, prompt_processor_->segment_delimiter(), token_ids)) {
       return false;
     }
+    if (!prompt_processor_->find_mm_spans(token_ids, mm_data)) {
+      return false;
+    }
+    return true;
+  }
+
+  bool process_pretokenized_prompt(
+      const std::vector<int32_t>& base_tokens,
+      MMData& mm_data,
+      std::vector<int32_t>& token_ids) override {
+    if (!prompt_processor_->expand_pretokenized(
+            base_tokens, mm_data, token_ids)) {
+      return false;
+    }
+    pad_to_max_length(token_ids);
     if (!prompt_processor_->find_mm_spans(token_ids, mm_data)) {
       return false;
     }
