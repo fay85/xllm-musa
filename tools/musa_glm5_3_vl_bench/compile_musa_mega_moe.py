@@ -54,7 +54,10 @@ def main() -> None:
                   }
                 }
 """)
-    overlay = args.ops_path.parent / 'glm53_mega_overlay_v1'
+    # Keep the private include overlay with the generated operator cache.  The
+    # parent directory is the repository build root, which makes a runtime
+    # JIT artifact appear unrelated to the MATE cache.
+    overlay = args.ops_path / 'glm53_mega_overlay_v1'
     (overlay / relative).parent.mkdir(parents=True, exist_ok=True)
     (overlay / relative).write_text(header)
     decode = MegaMoEKernelConfig(**{key: getattr(config, key) for key in
