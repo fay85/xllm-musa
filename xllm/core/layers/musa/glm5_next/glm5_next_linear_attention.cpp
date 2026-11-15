@@ -43,8 +43,6 @@ std::vector<int32_t> validate_kda_cp_input(const torch::Tensor& input,
                                            const ProcessGroup& group) {
   CHECK(metadata.is_prefill || metadata.is_chunked_prefill)
       << "KDA CP supports prefill only";
-  CHECK(!metadata.enable_cuda_graph && !kernel::musa::is_stream_capturing())
-      << "KDA CP graph capture is not supported";
   CHECK_EQ(metadata.glm5_prefill_cp_rank, group.rank());
   CHECK_EQ(metadata.glm5_prefill_cp_size, group.world_size());
   const int64_t global_rows = metadata.glm5_prefill_global_rows;
@@ -511,11 +509,13 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
       << "GLM5-Next KDA expects flattened [tokens, hidden] input";
   CHECK_EQ(hidden_states.scalar_type(), torch::kBFloat16);
   CHECK_EQ(head_dim_, 128) << "MUSA GLM5-Next KDA requires head_dim=128";
-  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, cp_group_ != nullptr)
+  const bool use_prefill_cp =
+      cp_group_ != nullptr && attn_metadata.glm5_prefill_cp_enabled;
+  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, use_prefill_cp)
       << "KDA CP layer and token-shard metadata must agree";
   std::vector<int32_t> cp_token_counts;
   torch::Tensor global_hidden_states = hidden_states;
-  if (cp_group_ != nullptr) {
+  if (use_prefill_cp) {
     cp_token_counts =
         validate_kda_cp_input(hidden_states, attn_metadata, *cp_group_);
     global_hidden_states = parallel_state::gather(
@@ -663,8 +663,15 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   torch::Tensor output =
       o_proj_->forward(normalized.to(hidden_states.scalar_type())
                            .view({num_tokens, local_projection_size_}));
-  if (cp_group_ != nullptr) {
+  if (use_prefill_cp) {
     return reduce_scatter_kda_rows(output, *cp_group_, cp_token_counts);
+  }
+  if (cp_group_ != nullptr) {
+    // CP shards KDA heads, while decode keeps the token replicated on every
+    // rank.  RowParallelLinear cannot reduce through cp_group_ in the
+    // prefill path (that path needs reduce-scatter), so complete the partial
+    // output explicitly for decode.
+    cp_group_->allreduce(output);
   }
   return output;
 }

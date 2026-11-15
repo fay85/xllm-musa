@@ -80,20 +80,24 @@ class Glm5NextModelImpl final
                 << cp_group_->rank() << "/" << cp_group_->world_size();
     }
     if (prefill_ep_enabled_) {
-      CHECK_EQ(ep_size_, 8)
-          << "GLM5 prefill EP0 requires ep_size=8 in the baseline contract.";
+      CHECK_GE(ep_size_, 1) << "GLM5 prefill EP0 requires ep_size >= 1.";
       CHECK_EQ(parallel_args.dp_size(), 1)
           << "GLM5 prefill EP0 requires dp_size=1 in the baseline contract.";
-      CHECK_EQ(parallel_args.world_size(), 8)
-          << "GLM5 prefill EP0 requires an 8-rank world in the baseline "
-             "contract.";
-      CHECK(parallel_args.moe_ep_group_ != nullptr)
-          << "GLM5 prefill EP0 requires the native moe_ep_group.";
-      CHECK_EQ(parallel_args.moe_ep_group_->world_size(), 8)
-          << "GLM5 prefill EP0 requires an 8-rank moe_ep_group.";
-      LOG(INFO) << "GLM5 prefill EP0 contract enabled: ep_rank="
-                << parallel_args.moe_ep_group_->rank() << "/"
-                << parallel_args.moe_ep_group_->world_size();
+      CHECK(parallel_args.moe_tp_group_ == nullptr ||
+            parallel_args.moe_tp_group_->world_size() == 1)
+          << "GLM5 prefill EP0 requires moe_tp=1.";
+      if (ep_size_ > 1) {
+        CHECK(parallel_args.moe_ep_group_ != nullptr)
+            << "GLM5 prefill EP0 requires the native moe_ep_group when "
+               "ep_size > 1.";
+        CHECK_EQ(parallel_args.moe_ep_group_->world_size(), ep_size_)
+            << "GLM5 prefill EP0 requires moe_ep_group size == ep_size.";
+      }
+      const int32_t ep_rank = parallel_args.moe_ep_group_ == nullptr
+                                  ? 0
+                                  : parallel_args.moe_ep_group_->rank();
+      LOG(INFO) << "GLM5 prefill EP0 contract enabled: ep_rank=" << ep_rank
+                << "/" << ep_size_;
     }
     CHECK_EQ(args.n_layers(),
              static_cast<int32_t>(args.mlp_layer_types().size()) == 0
@@ -122,13 +126,17 @@ class Glm5NextModelImpl final
                       const ModelInputParams& input_params) override {
     torch::NoGradGuard no_grad;
     CHECK_EQ(kv_caches.size(), layers_.size());
-    if (prefill_cp_enabled_) {
+    const bool use_prefill_cp =
+        prefill_cp_enabled_ &&
+        (input_params.meta.batch_forward_type.is_prefill() ||
+         input_params.meta.batch_forward_type.is_chunked_prefill());
+    last_forward_prefill_cp_ = use_prefill_cp;
+    if (use_prefill_cp) {
       CHECK(input_params.meta.batch_forward_type.is_prefill() ||
             input_params.meta.batch_forward_type.is_chunked_prefill())
-          << "Hybrid CP currently supports eager Prefill only";
+          << "Hybrid CP supports Prefill and Chunked Prefill only";
       CHECK(!input_params.is_spec_verify);
       CHECK_GT(tokens.numel(), 0) << "CP does not synthesize dummy global rows";
-      CHECK(!kernel::musa::is_stream_capturing());
     }
     if (tokens.numel() == 0) {
       tokens = torch::ones(
@@ -147,12 +155,9 @@ class Glm5NextModelImpl final
         modified_input_params.parallel.dp_global_token_nums;
     std::replace(dp_token_nums.begin(), dp_token_nums.end(), 0, 1);
     prepare_attention_metadata(modified_input_params);
-    if (prefill_cp_enabled_ &&
+    if (use_prefill_cp &&
         modified_input_params.meta.batch_forward_type.no_decode() &&
         !modified_input_params.is_spec_verify) {
-      CHECK(!modified_input_params.attn_metadata->enable_cuda_graph)
-          << "GLM5 prefill CP0 metadata is eager-only until the CP graph "
-             "contract is implemented.";
       prepare_prefill_cp_metadata(modified_input_params, global_rows);
     }
     if (!modified_input_params.attn_metadata->enable_cuda_graph ||
@@ -189,7 +194,7 @@ class Glm5NextModelImpl final
     const layer::AttentionMetadata& attn_metadata =
         *modified_input_params.attn_metadata;
 
-    if (prefill_cp_enabled_) {
+    if (use_prefill_cp) {
       cp_global_rows_ = attn_metadata.glm5_prefill_global_rows;
       cp_local_row_begin_ = attn_metadata.glm5_prefill_local_row_begin;
       cp_local_row_end_ = attn_metadata.glm5_prefill_local_row_end;
@@ -197,7 +202,7 @@ class Glm5NextModelImpl final
     }
 
     torch::Tensor input_embedding = input_params.embedding.input_embedding;
-    if (prefill_cp_enabled_) {
+    if (use_prefill_cp) {
       const int64_t begin = attn_metadata.glm5_prefill_local_row_begin;
       const int64_t count = attn_metadata.glm5_prefill_local_row_end - begin;
       positions = positions.narrow(0, begin, count).contiguous();
@@ -246,6 +251,14 @@ class Glm5NextModelImpl final
     return ModelOutput(hidden_states.numel() == 0
                            ? hidden_states
                            : std::get<0>(norm_->forward(hidden_states)));
+  }
+
+  bool last_forward_used_prefill_cp() const { return last_forward_prefill_cp_; }
+
+  bool can_restore_prefill_cp_hidden(const torch::Tensor& hidden_states) const {
+    return last_forward_prefill_cp_ && hidden_states.defined() &&
+           hidden_states.dim() == 2 &&
+           hidden_states.size(0) == cp_local_row_end_ - cp_local_row_begin_;
   }
 
   // CP4 restores the Plain local rows after the final local norm.  The
@@ -304,7 +317,22 @@ class Glm5NextModelImpl final
     const bool is_prefill = params.meta.batch_forward_type.is_prefill() ||
                             params.meta.batch_forward_type.is_chunked_prefill();
     CHECK(is_decode || is_prefill);
+    if (prefill_cp_enabled_ && is_prefill) {
+      prepare_prefill_cp_metadata(params, positions.size(/*dim=*/0));
+    }
     const auto& attention = params.attention.device;
+    const auto copy_cp_metadata = [](const layer::AttentionMetadata& source,
+                                     layer::AttentionMetadata& target) {
+      target.glm5_prefill_cp_enabled = source.glm5_prefill_cp_enabled;
+      target.glm5_prefill_cp_rank = source.glm5_prefill_cp_rank;
+      target.glm5_prefill_cp_size = source.glm5_prefill_cp_size;
+      target.glm5_prefill_global_rows = source.glm5_prefill_global_rows;
+      target.glm5_prefill_local_row_begin = source.glm5_prefill_local_row_begin;
+      target.glm5_prefill_local_row_end = source.glm5_prefill_local_row_end;
+      target.glm5_prefill_local_row_indices =
+          source.glm5_prefill_local_row_indices;
+      target.glm5_prefill_row_offsets = source.glm5_prefill_row_offsets;
+    };
     if (!graph_state->metadata) {
       graph_state->metadata =
           std::make_shared<layer::AttentionMetadata>(*params.attn_metadata);
@@ -323,6 +351,9 @@ class Glm5NextModelImpl final
       metadata.kv_cu_seq_lens = attention.kv_seq_lens;
       metadata.block_table = attention.block_tables;
       metadata.slot_mapping = attention.new_cache_slots;
+      if (prefill_cp_enabled_ && is_prefill) {
+        copy_cp_metadata(*params.attn_metadata, metadata);
+      }
       if (params.embedding.linear_state_indices.defined()) {
         metadata.linear_state_indices = params.embedding.linear_state_indices;
       }
@@ -352,6 +383,9 @@ class Glm5NextModelImpl final
       metadata.kv_cu_seq_lens = attention.kv_seq_lens;
       metadata.block_table = attention.block_tables;
       metadata.slot_mapping = attention.new_cache_slots;
+      if (prefill_cp_enabled_ && is_prefill) {
+        copy_cp_metadata(*params.attn_metadata, metadata);
+      }
       if (params.linear_state_validity_mask_tensor.defined() &&
           metadata.has_initial_states.defined()) {
         metadata.has_initial_states.copy_(
@@ -468,6 +502,7 @@ class Glm5NextModelImpl final
   int32_t ep_size_ = 1;
   bool prefill_cp_enabled_ = false;
   bool prefill_ep_enabled_ = false;
+  bool last_forward_prefill_cp_ = false;
   int64_t cp_global_rows_ = 0;
   int64_t cp_local_row_begin_ = 0;
   int64_t cp_local_row_end_ = 0;
@@ -486,7 +521,7 @@ class Glm5NextForCausalLMImpl final
 
   torch::Tensor logits(const torch::Tensor& hidden_states,
                        const torch::Tensor& selected_indices) override {
-    if (!prefill_cp_enabled_) {
+    if (!model_->can_restore_prefill_cp_hidden(hidden_states)) {
       return LlmForCausalLMImplBase<Glm5NextModel>::logits(hidden_states,
                                                            selected_indices);
     }
@@ -498,7 +533,7 @@ class Glm5NextForCausalLMImpl final
   torch::Tensor logits(const torch::Tensor& hidden_states,
                        const torch::Tensor& selected_indices,
                        torch::Tensor& out_hidden) override {
-    if (!prefill_cp_enabled_) {
+    if (!model_->can_restore_prefill_cp_hidden(hidden_states)) {
       return LlmForCausalLMImplBase<Glm5NextModel>::logits(
           hidden_states, selected_indices, out_hidden);
     }
@@ -509,7 +544,7 @@ class Glm5NextForCausalLMImpl final
 
   torch::Tensor pooler(const torch::Tensor& hidden_states,
                        const torch::Tensor& selected_indices) override {
-    if (!prefill_cp_enabled_) {
+    if (!model_->can_restore_prefill_cp_hidden(hidden_states)) {
       return LlmForCausalLMImplBase<Glm5NextModel>::pooler(hidden_states,
                                                            selected_indices);
     }

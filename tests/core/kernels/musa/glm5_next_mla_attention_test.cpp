@@ -2209,7 +2209,7 @@ TEST_F(GlmSparseTest, CpLocalOperationsAtModelDimensions) {
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
 }
 
-TEST(GlmLocalCpDeathTest, RejectsMissingDispatchAndMoeTpReduction) {
+TEST(GlmLocalCpDeathTest, RejectsInvalidEpAndMoeTpContracts) {
   const auto opts =
       torch::TensorOptions().device(torch::kCPU).dtype(torch::kBFloat16);
   ProcessGroup one(0, 1, torch::kCPU);
@@ -2232,13 +2232,13 @@ TEST(GlmLocalCpDeathTest, RejectsMissingDispatchAndMoeTpReduction) {
       "moe_tp must be 1");
   cp.moe_tp_group_ = &one;
   cp.ep_size(8);
-  cp.moe_ep_group_ = &eight;
+  cp.moe_ep_group_ = nullptr;
   EXPECT_DEATH(
       {
         setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
         RoutedMoe layer(args, QuantArgs(), cp, opts);
       },
-      "requires EP dispatch/combine");
+      "requires moe_ep_group");
   cp.ep_size(1);
   cp.moe_ep_group_ = &one;
   EXPECT_DEATH(
@@ -2294,6 +2294,108 @@ class GlmLocalCpGroup final : public ProcessGroup {
  private:
   ProcessGroup& group_;
 };
+
+TEST(GlmEpTest, AllToAllDispatchCombineWorker) {
+  const char* rank_text = std::getenv("XLLM_GLM_EP_RANK");
+  const char* port_text = std::getenv("XLLM_GLM_EP_PORT");
+  if (rank_text == nullptr || port_text == nullptr) {
+    GTEST_SKIP() << "Requires eight-process EP launcher";
+  }
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard no_grad;
+  const int32_t rank = std::stoi(rank_text);
+  constexpr int32_t kWorld = 8;
+  const torch::Device device(torch::kPrivateUse1, rank);
+  c10::musa::MUSAGuard device_guard(device);
+  const auto stream = c10::musa::getStreamFromPool(false, rank);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  auto group = create_process_group(rank,
+                                    rank,
+                                    {0, 1, 2, 3, 4, 5, 6, 7},
+                                    kWorld,
+                                    kWorld,
+                                    std::stoi(port_text),
+                                    "127.0.0.1",
+                                    "glm_ep_dispatch_test",
+                                    device);
+  ProcessGroup one(0, 1, device);
+  ParallelArgs distributed(rank, kWorld, 1, kWorld, group.get(), kWorld);
+  distributed.tp_group_ = &one;
+  distributed.cp_group_ = group.get();
+  distributed.moe_tp_group_ = &one;
+  distributed.moe_ep_group_ = group.get();
+  ParallelArgs serial(0, 1, &one);
+  serial.tp_group_ = &one;
+  serial.moe_tp_group_ = &one;
+
+  ModelArgs args;
+  args.model_type("glm5_next")
+      .hidden_size(128)
+      .moe_intermediate_size(128)
+      .n_routed_experts(8)
+      .num_experts_per_tok(2)
+      .n_activated_experts(2)
+      .n_shared_experts(0)
+      .swiglu_limit(10.0f)
+      .hidden_act("silu");
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  Weights weights;
+  torch::manual_seed(1401);
+  for (int32_t expert = 0; expert < 8; ++expert) {
+    const std::string prefix = "experts." + std::to_string(expert) + ".";
+    weights[prefix + "gate_proj.weight"] =
+        (torch::randn({128, 128}, torch::kFloat32) * 0.02).to(torch::kBFloat16);
+    weights[prefix + "up_proj.weight"] =
+        (torch::randn({128, 128}, torch::kFloat32) * 0.02).to(torch::kBFloat16);
+    weights[prefix + "down_proj.weight"] =
+        (torch::randn({128, 128}, torch::kFloat32) * 0.02).to(torch::kBFloat16);
+  }
+  setenv("XLLM_GLM5_MEGA_MOE", "0", 1);
+  setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
+  setenv("XLLM_GLM5_PREFILL_EP", "1", 1);
+  RoutedMoe distributed_moe(args, QuantArgs(), distributed, options);
+  setenv("XLLM_GLM5_PREFILL_CP", "0", 1);
+  setenv("XLLM_GLM5_PREFILL_EP", "0", 1);
+  RoutedMoe serial_moe(args, QuantArgs(), serial, options);
+  distributed_moe->load_state_dict(StateDict(weights));
+  serial_moe->load_state_dict(StateDict(weights));
+  distributed_moe->verify_loaded_weights();
+  serial_moe->verify_loaded_weights();
+
+  for (const int64_t tokens :
+       {int64_t{0}, int64_t{1}, int64_t{7}, int64_t{33}}) {
+    const int64_t local_tokens = rank == 7 ? 0 : tokens + rank % 3;
+    auto input = torch::randn({local_tokens, 128}, options) * 0.1;
+    auto ids = torch::arange(local_tokens * 2, options.dtype(torch::kInt32))
+                   .remainder(8)
+                   .view({local_tokens, 2});
+    auto weights_for_route =
+        torch::full({local_tokens, 2}, 0.5, options.dtype(torch::kFloat32));
+    ModelInputParams params;
+    params.meta.batch_forward_type = BatchForwardType::PREFILL;
+    RoutedMoeTokenShard token_shard;
+    token_shard.cp_rank = rank;
+    token_shard.cp_size = kWorld;
+    token_shard.global_rows =
+        torch::arange(local_tokens, options.dtype(torch::kInt64));
+    token_shard.request_rows = torch::zeros_like(token_shard.global_rows);
+    token_shard.positions = token_shard.global_rows.clone();
+    auto expected = serial_moe->forward_with_selected_experts(
+        input, weights_for_route, ids, params);
+    auto actual = distributed_moe->forward_with_selected_experts(
+        input, weights_for_route, ids, params, false, {}, &token_shard);
+    ASSERT_EQ(actual.sizes(), expected.sizes());
+    EXPECT_TRUE(torch::allclose(actual.cpu().to(torch::kFloat32),
+                                expected.cpu().to(torch::kFloat32),
+                                0.002,
+                                0.002))
+        << "rank=" << rank << " tokens=" << local_tokens;
+  }
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+}
 
 TEST(GlmLocalCpTest, MixedModelPrefillWorker) {
   const char* rank_text = std::getenv("XLLM_GLM_LOCAL_CP_RANK");

@@ -342,7 +342,9 @@ class MusaGraph final {
 
   // Get the hidden states from the last capture
   torch::Tensor get_hidden_states(uint32_t actual_num_tokens) const {
-    return persistent_param_.hidden_states(actual_num_tokens);
+    const uint32_t result_tokens = result_tokens_ > 0 ? result_tokens_
+                                                      : actual_num_tokens;
+    return persistent_param_.hidden_states(result_tokens);
   }
 
   bool captured_without_padding() const {
@@ -353,6 +355,7 @@ class MusaGraph final {
   void prepare_model_graph_metadata(CausalLM* model,
                                     const torch::Tensor& positions,
                                     ModelInputParams& params);
+  void update_result_token_count(const ModelInputParams& params);
 
   // Print graph held tensors for debugging
   void print_graph_tensors() const;
@@ -396,6 +399,7 @@ class MusaGraph final {
 
   uint32_t padded_num_tokens_ = 0;
   uint32_t captured_actual_tokens_ = 0;
+  uint32_t result_tokens_ = 0;
 
   std::unique_ptr<ModelGraphMetadataState> model_graph_metadata_state_;
 

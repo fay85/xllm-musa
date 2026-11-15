@@ -189,11 +189,14 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     std::optional<PendingMHC>* pending_mhc,
     bool is_last_layer,
     kernel::musa::Glm5NextIndexerSelection* shared_selection) {
-  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, prefill_cp_enabled_);
-  if (prefill_cp_enabled_) {
+  const bool use_prefill_cp =
+      prefill_cp_enabled_ &&
+      (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
+  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, use_prefill_cp);
+  if (use_prefill_cp) {
     CHECK(attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
-    CHECK(!attn_metadata.enable_cuda_graph && !attn_metadata.is_dummy &&
-          !attn_metadata.is_mixed && !attn_metadata.is_spec_verify);
+    CHECK(!attn_metadata.is_dummy && !attn_metadata.is_mixed &&
+          !attn_metadata.is_spec_verify);
     const int64_t rows = attn_metadata.glm5_prefill_local_row_end -
                          attn_metadata.glm5_prefill_local_row_begin;
     CHECK_EQ(hidden_states.size(0), rows);
@@ -260,7 +263,7 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
                                  post_norm_->weight());
   torch::Tensor ffn_output;
   if (dense_mlp_) {
-    ffn_output = prefill_cp_enabled_ && ffn_input.size(0) == 0
+    ffn_output = use_prefill_cp && ffn_input.size(0) == 0
                      ? torch::empty_like(ffn_input)
                      : dense_mlp_->forward(ffn_input);
   } else {
@@ -281,7 +284,7 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
       }
     }
     std::optional<RoutedMoeTokenShard> token_shard;
-    if (prefill_cp_enabled_) {
+    if (use_prefill_cp) {
       token_shard = make_routed_moe_token_shard(attn_metadata, positions);
     }
     ffn_output = sparse_moe_->forward_with_selected_experts(

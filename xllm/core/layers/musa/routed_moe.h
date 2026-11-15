@@ -144,6 +144,12 @@ class RoutedMoeImpl final : public torch::nn::Module {
   torch::Tensor forward_reference_experts(const torch::Tensor& input,
                                           const torch::Tensor& ids,
                                           const torch::Tensor& weights);
+  torch::Tensor forward_dispatched_experts(
+      const torch::Tensor& input,
+      const torch::Tensor& expert_ids) const;
+  torch::Tensor forward_ep_all_to_all(const torch::Tensor& input,
+                                      const torch::Tensor& topk_ids,
+                                      const torch::Tensor& topk_weights) const;
   bool fp4_experts_loaded() const {
     return w13_packed_is_loaded_ && w2_packed_is_loaded_;
   }
@@ -170,7 +176,9 @@ class RoutedMoeImpl final : public torch::nn::Module {
   std::unique_ptr<ProcessGroup> shared_single_rank_group_;
   ProcessGroup* tp_pg_ = nullptr;
   ProcessGroup* ep_pg_ = nullptr;
+  bool ep_dispatch_enabled_ = false;
   std::shared_ptr<MusaMegaMoe> mega_moe_;
+  std::shared_ptr<MusaMegaMoe> ep_mate_moe_;
 
   RoutedMoeSharedExpert shared_experts_{nullptr};
   torch::nn::Linear shared_expert_gate_{nullptr};

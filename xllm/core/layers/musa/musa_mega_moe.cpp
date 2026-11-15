@@ -97,6 +97,9 @@ MusaMegaMoe::MusaMegaMoe(ProcessGroup* group) : group_(group) {
   auto slices =
       layout[1].cast<ffi::Function>()(storage).cast<ffi::Array<ffi::Tensor>>();
   buffer_ = retain_tensor(storage, torch::kInt8, group_->device());
+  local_output_ = torch::empty(
+      {kCapacity, kHidden},
+      torch::TensorOptions().device(group_->device()).dtype(torch::kBFloat16));
   const std::vector<torch::ScalarType> types = {torch::kFloat8_e4m3fn,
                                                 torch::kFloat32,
                                                 torch::kInt64,
@@ -173,16 +176,23 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
                                    const torch::Tensor& w2,
                                    const torch::Tensor& s2,
                                    double clamp,
-                                   const torch::Tensor& output_buffer) {
+                                   const torch::Tensor& output_buffer,
+                                   bool partition_replicated_input,
+                                   bool force_prefill) {
   CHECK_EQ(input.size(1), kHidden);
   CHECK_EQ(input.scalar_type(), torch::kBFloat16);
   CHECK_EQ(weights.scalar_type(), torch::kFloat32);
   const int64_t tokens = input.size(0);
-  CHECK_GT(tokens, 0);
-  const int64_t local_rows = (tokens + kRanks - 1) / kRanks;
+  const int64_t local_rows =
+      partition_replicated_input ? (tokens + kRanks - 1) / kRanks : tokens;
   CHECK_LE(local_rows, kCapacity);
-  const int64_t start = std::min<int64_t>(tokens, group_->rank() * local_rows);
-  const int64_t count = std::min(local_rows, tokens - start);
+  const int64_t start =
+      partition_replicated_input
+          ? std::min<int64_t>(tokens, group_->rank() * local_rows)
+          : 0;
+  const int64_t count = partition_replicated_input
+                            ? std::min(local_rows, tokens - start)
+                            : tokens;
   // Invalid rows carry no routes. In particular C1 is owned by rank zero,
   // not dispatched eight times from replicated attention outputs.
   views_[2].narrow(0, 0, local_rows).fill_(-1);
@@ -199,11 +209,13 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
   // Prefill exchanges per-rank counts and accepts unequal positive row counts.
   // Do not feed artificial -1 routes to its persistent dispatch schedule.
   // Decode still needs a sentinel row on ranks with no owned tokens.
-  const int64_t execution_rows = local_rows > 128 ? count : local_rows;
-  auto local_output = torch::empty({execution_rows, kHidden}, input.options());
+  const bool use_prefill = force_prefill || local_rows > 128;
+  const int64_t execution_rows = use_prefill ? count : local_rows;
+  torch::Tensor local_output = local_output_.narrow(
+      /*dim=*/0, /*start=*/0, /*length=*/execution_rows);
   {
     km::TvmffiStreamGuard stream_guard(input.device());
-    if (local_rows <= 128) {
+    if (!use_prefill) {
       km::get_function("glm53_mega_decode1_v1", "glm53_mega_decode1_v1")(
           km::to_ffi_tensor(views_[4]),
           km::to_ffi_tensor(views_[5]),

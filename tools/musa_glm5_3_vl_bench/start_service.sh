@@ -14,26 +14,33 @@ HOST="${GLM5_HOST:-127.0.0.1}"
 BASE_PORT="${GLM5_PORT:-18901}"
 MASTER_ADDR="${GLM5_MASTER_ADDR:-127.0.0.1:29888}"
 NNODES="${GLM5_NNODES:-8}"
-EP_SIZE="${GLM5_EP_SIZE:-1}"
-CP_SIZE="${GLM5_CP_SIZE:-1}"
+EP_SIZE="${GLM5_EP_SIZE:-8}"
+CP_SIZE="${GLM5_CP_SIZE:-8}"
 MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-4096}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
 ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-auto}"
-# GLM MegaMoE is enabled by default; set 0 to select the original TP experts.
-export XLLM_GLM5_MEGA_MOE="${XLLM_GLM5_MEGA_MOE:-1}"
-export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-0}"
-export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-0}"
+# The default is the validated GLM5 CP8+EP8 graph Prefill path. Set the
+# corresponding GLM5_* variables explicitly to run a single-rank baseline.
+export XLLM_GLM5_MEGA_MOE="${XLLM_GLM5_MEGA_MOE:-0}"
+export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-1}"
+export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-1}"
+export XLLM_GLM5_PREFILL_EP_BACKEND="${XLLM_GLM5_PREFILL_EP_BACKEND:-mate}"
 PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
-ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-false}"
-MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:--1}"
+ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-true}"
+MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:-4096}"
 PREFILL_BATCH_WAIT_MS="${GLM5_PREFILL_BATCH_WAIT_MS:-0}"
 # Graph capture uses exact GLM5 token shapes for prefill and exact decode batch
 # shapes.  The executor enforces model-specific safety checks for unsupported
 # shapes; this limit only prevents unexpectedly large graph allocations.
 MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-4096}"
 ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-true}"
+ENABLE_DISAGG_PD="${GLM5_ENABLE_DISAGG_PD:-false}"
+INSTANCE_ROLE="${GLM5_INSTANCE_ROLE:-DEFAULT}"
+KV_CACHE_TRANSFER_MODE="${GLM5_KV_CACHE_TRANSFER_MODE:-PUSH}"
+TRANSFER_LISTEN_PORT="${GLM5_TRANSFER_LISTEN_PORT:-26000}"
+ETCD_ADDR="${GLM5_ETCD_ADDR:-}"
 LOG_DIR="${GLM5_LOG_DIR:-/tmp/glm5_3_flash_run}"
 WAIT_READY="${GLM5_WAIT_READY:-1}"
 WAIT_TIMEOUT_SEC="${GLM5_WAIT_TIMEOUT_SEC:-180}"
@@ -78,7 +85,8 @@ ensure_sparse_ops_cache() {
 
 ensure_ops_cache() {
   ensure_sparse_ops_cache
-  if [[ "${XLLM_GLM5_MEGA_MOE}" != "0" ]]; then
+  if [[ "${XLLM_GLM5_MEGA_MOE}" != "0" ||
+        "${XLLM_GLM5_PREFILL_EP_BACKEND}" == "mate" ]]; then
     MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
       python3 "${SCRIPT_DIR}/compile_musa_mega_moe.py" --ops-path "${FLASHINFER_OPS_PATH}"
   fi
@@ -159,6 +167,21 @@ if [[ "${XLLM_GLM5_PREFILL_EP}" != "0" && "${EP_SIZE}" != "8" ]]; then
   echo "Error: XLLM_GLM5_PREFILL_EP requires GLM5_EP_SIZE=8, got ${EP_SIZE}." >&2
   exit 1
 fi
+if [[ "${XLLM_GLM5_PREFILL_EP_BACKEND}" != "eager" &&
+      "${XLLM_GLM5_PREFILL_EP_BACKEND}" != "mate" ]]; then
+  echo "Error: XLLM_GLM5_PREFILL_EP_BACKEND must be eager or mate, got ${XLLM_GLM5_PREFILL_EP_BACKEND}." >&2
+  exit 1
+fi
+if [[ "${XLLM_GLM5_PREFILL_EP_BACKEND}" == "mate" &&
+      "${XLLM_GLM5_PREFILL_EP}" == "0" ]]; then
+  echo "Error: MATE EP2 backend requires XLLM_GLM5_PREFILL_EP=1." >&2
+  exit 1
+fi
+if [[ "${XLLM_GLM5_PREFILL_EP_BACKEND}" == "mate" &&
+      "${XLLM_GLM5_MEGA_MOE}" != "0" ]]; then
+  echo "Error: MATE EP2 backend requires XLLM_GLM5_MEGA_MOE=0." >&2
+  exit 1
+fi
 if [[ "${XLLM_GLM5_PREFILL_CP}" != "0" && "${CP_SIZE}" != "8" ]]; then
   echo "Error: XLLM_GLM5_PREFILL_CP requires GLM5_CP_SIZE=8, got ${CP_SIZE}." >&2
   exit 1
@@ -170,6 +193,17 @@ fi
 if [[ "${CP_SIZE}" != "1" && "${NNODES}" != "8" ]]; then
   echo "Error: GLM5_CP_SIZE=${CP_SIZE} currently requires GLM5_NNODES=8." >&2
   exit 1
+fi
+if [[ "${CP_SIZE}" != "1" && "${ENABLE_GRAPH}" == "true" ]]; then
+  if [[ "${ENABLE_CHUNKED_PREFILL}" != "true" ]]; then
+    echo "Error: graph CP prefill requires GLM5_ENABLE_CHUNKED_PREFILL=true." >&2
+    exit 1
+  fi
+  if [[ "${MAX_TOKENS_PER_CHUNK}" -lt 1 ||
+        "${MAX_TOKENS_PER_CHUNK}" -gt "${MAX_TOKENS_FOR_GRAPH_MODE}" ]]; then
+    echo "Error: graph CP prefill requires 1 <= GLM5_MAX_TOKENS_PER_CHUNK <= ${MAX_TOKENS_FOR_GRAPH_MODE}." >&2
+    exit 1
+  fi
 fi
 
 ensure_ops_cache
@@ -191,7 +225,7 @@ fi
 
 echo "Binary: ${XLLM_BIN}"
 echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
-echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_cp=${XLLM_GLM5_PREFILL_CP} mega_moe=${XLLM_GLM5_MEGA_MOE}"
+echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_ep_backend=${XLLM_GLM5_PREFILL_EP_BACKEND} prefill_cp=${XLLM_GLM5_PREFILL_CP} mega_moe=${XLLM_GLM5_MEGA_MOE} disagg_pd=${ENABLE_DISAGG_PD} instance_role=${INSTANCE_ROLE}"
 echo "Logs: ${LOG_DIR}/rank_*.log"
 if [[ "${TORCH_PROFILE}" == "1" ]]; then
   echo "Torch profile dir: ${PROFILE_DIR}"
@@ -200,6 +234,7 @@ fi
 
 for ((r = 0; r < NNODES; ++r)); do
   RANK_PORT=$((BASE_PORT + r))
+  RANK_TRANSFER_PORT=$((TRANSFER_LISTEN_PORT + r))
   RANK_LOG="${LOG_DIR}/rank_${r}.log"
   : > "${RANK_LOG}"
   setsid "${XLLM_BIN}" \
@@ -230,6 +265,11 @@ for ((r = 0; r < NNODES; ++r)); do
     --max_tokens_for_graph_mode="${MAX_TOKENS_FOR_GRAPH_MODE}" \
     --enable_prefill_piecewise_graph="${ENABLE_PREFILL_PIECEWISE_GRAPH}" \
     --musa_prefill_graph_max_entries="${PREFILL_GRAPH_MAX_ENTRIES}" \
+    --enable_disagg_pd="${ENABLE_DISAGG_PD}" \
+    --instance_role="${INSTANCE_ROLE}" \
+    --kv_cache_transfer_mode="${KV_CACHE_TRANSFER_MODE}" \
+    --transfer_listen_port="${RANK_TRANSFER_PORT}" \
+    --etcd_addr="${ETCD_ADDR}" \
     --enable_shm=false \
     "${PROFILE_ARGS[@]}" \
     > "${RANK_LOG}" 2>&1 < /dev/null &

@@ -4,9 +4,18 @@ set -euo pipefail
 HOST="${GLM5_HOST:-127.0.0.1}"
 PORT="${GLM5_PORT:-18901}"
 MODEL_ID="${GLM5_MODEL_ID:-glm-5.3-flash}"
-MODE="${GLM5_MODE:-${MODE:-chat}}"
 PROMPT="${1:-${GLM5_PROMPT:-${PROMPT:-请用一句话介绍北京。}}}"
 IMAGE_URL="${GLM5_IMAGE_URL:-${IMAGE_URL:-}}"
+MODE_OVERRIDE="${GLM5_MODE:-${MODE:-}}"
+if [[ -n "${MODE_OVERRIDE}" ]]; then
+  MODE="${MODE_OVERRIDE}"
+elif [[ -n "${IMAGE_URL}" ]]; then
+  # An image URL implies the OpenAI VLM message format unless the caller
+  # explicitly selects another mode.
+  MODE="vlm"
+else
+  MODE="chat"
+fi
 MAX_TOKENS="${GLM5_MAX_TOKENS:-${MAX_TOKENS:-1024}}"
 TEMPERATURE="${GLM5_TEMPERATURE:-${TEMPERATURE:-0.0}}"
 REASONING_EFFORT="${GLM5_REASONING_EFFORT:-${REASONING_EFFORT:-low}}"
@@ -39,7 +48,13 @@ payload = {
     "temperature": float(temperature),
 }
 if reasoning_effort:
-    payload["chat_template_kwargs"] = {"reasoning_effort": reasoning_effort}
+    # Keep the one-shot helper consistent with vl_bench.py.  GLM-5 emits a
+    # separate reasoning channel when thinking is enabled; the helper is used
+    # for ordinary VLM descriptions, so explicitly disable that channel.
+    payload["chat_template_kwargs"] = {
+        "reasoning_effort": reasoning_effort,
+        "enable_thinking": False,
+    }
 print(json.dumps(payload, ensure_ascii=False))
 PY
 )"
@@ -61,7 +76,10 @@ payload = {
     "temperature": float(temperature),
 }
 if reasoning_effort:
-    payload["chat_template_kwargs"] = {"reasoning_effort": reasoning_effort}
+    payload["chat_template_kwargs"] = {
+        "reasoning_effort": reasoning_effort,
+        "enable_thinking": False,
+    }
 print(json.dumps(payload, ensure_ascii=False))
 PY
 )"

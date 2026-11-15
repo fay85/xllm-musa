@@ -2378,6 +2378,16 @@ void MusaGraph::prepare_model_graph_metadata(CausalLM* model,
       << "MUSA graph metadata preparation did not populate attn_metadata";
 }
 
+void MusaGraph::update_result_token_count(const ModelInputParams& params) {
+  result_tokens_ = 0;
+  if (is_glm_prefill_ && params.attn_metadata &&
+      params.attn_metadata->glm5_prefill_cp_enabled) {
+    result_tokens_ = static_cast<uint32_t>(
+        params.attn_metadata->glm5_prefill_local_row_end -
+        params.attn_metadata->glm5_prefill_local_row_begin);
+  }
+}
+
 bool MusaGraph::capture(CausalLM* model,
                         const ModelArgs& args,
                         const runtime::Options& options,
@@ -2489,6 +2499,7 @@ bool MusaGraph::capture(CausalLM* model,
       model,
       persistent_param_.persistent_positions(padded_num_tokens_),
       graph_params_opt.value());
+  update_result_token_count(graph_params_opt.value());
 
   torch::Tensor& capture_fa3_scheduler_metadata =
       graph_params_opt.value()
@@ -2813,6 +2824,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         << "update_prefill() should return ModelInputParams for replay";
     CHECK(piecewise_graph_ != nullptr)
         << "piecewise prefill replay requires a captured graph";
+    update_result_token_count(replay_params_opt.value());
     ::xllm::kernel::musa::AttentionReplayParams runner_params;
     runner_params.actual_num_tokens = actual_num_tokens;
     runner_params.attn_metadata = replay_params_opt->attn_metadata;
@@ -2854,6 +2866,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         model_,
         persistent_param_.persistent_positions(padded_num_tokens_),
         replay_params_opt.value());
+    update_result_token_count(replay_params_opt.value());
 
     // persistent_param_.update() and model-private DSA metadata preparation
     // run on the caller stream, while the captured graph replays on the
@@ -3506,11 +3519,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   // Prefill without a piecewise graph runs eager.
   if (is_prefill) {
     COUNTER_INC(num_model_execution_total_eager);
+    ModelInputParams eager_params = params;
+    eager_params.enable_graph = false;
+    eager_params.attn_metadata.reset();
     const bool time_fwd = s_enable_prefill_fwd_timing();
     if (time_fwd) {
       c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
       const auto t0 = std::chrono::steady_clock::now();
-      auto result = model_->forward(tokens, positions, kv_caches, params);
+      auto result = model_->forward(tokens, positions, kv_caches, eager_params);
       c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
       const auto t1 = std::chrono::steady_clock::now();
       const double ms =
@@ -3525,7 +3541,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       maybe_empty_prefill_cache();
       return result;
     }
-    auto result = model_->forward(tokens, positions, kv_caches, params);
+    auto result = model_->forward(tokens, positions, kv_caches, eager_params);
     maybe_empty_prefill_cache();
     return result;
   }
@@ -3854,6 +3870,17 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   }
   // Spec verify has its own graph.
   if (params.is_spec_verify || params.has_llmrec_params()) {
+    return false;
+  }
+  // GLM5 CP graph capture currently uses identical local row counts on all
+  // ranks.  An arbitrary short text/image request may not divide evenly by
+  // CP8; run that shape eagerly instead of aborting inside DSA graph capture.
+  if (args_.model_type() == "glm5_next" && options_.cp_size() > 1 &&
+      num_tokens % options_.cp_size() != 0) {
+    LOG_FIRST_N(WARNING, 8)
+        << "GLM5 CP graph requires token count divisible by cp_size; "
+           "falling back to eager Prefill for num_tokens="
+        << num_tokens << " cp_size=" << options_.cp_size();
     return false;
   }
   // Multi-sequence GDN chunked prefill runs its recurrence inside the forward

@@ -23,6 +23,7 @@ limitations under the License.
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -451,11 +452,10 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
     CHECK(parallel_args.tp_group_ != nullptr);
     CHECK_EQ(parallel_args.tp_group_->world_size(), 1);
     CHECK_EQ(parallel_args.dp_size(), 1);
-    CHECK_EQ(parallel_args.ep_size(), 1)
-        << "GLM local-token MoE requires EP dispatch/combine before EP>1";
     CHECK_EQ(tp_pg_->world_size(), 1) << "GLM CP local tokens cannot use a MoE "
                                          "TP AllReduce; moe_tp must be 1";
-    CHECK(ep_pg_ == nullptr || ep_pg_->world_size() == 1);
+    CHECK(parallel_args.ep_size() == 1 || ep_pg_ != nullptr)
+        << "GLM local-token MoE EP requires moe_ep_group when ep_size > 1";
     CHECK(!env_flag_enabled("XLLM_GLM5_MEGA_MOE", true))
         << "Hybrid CP requires XLLM_GLM5_MEGA_MOE=0";
     prefill_cp_rank_ = parallel_args.cp_group_->rank();
@@ -464,6 +464,37 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
         std::make_unique<ProcessGroup>(0, 1, options.device());
   }
   const int64_t ep_size = std::max<int64_t>(parallel_args.ep_size(), 1);
+  if (ep_size > 1) {
+    CHECK(ep_pg_ != nullptr)
+        << "RoutedMoe EP requires a moe_ep_group when ep_size > 1";
+    CHECK(env_flag_enabled("XLLM_GLM5_PREFILL_EP"))
+        << "RoutedMoe EP1 requires XLLM_GLM5_PREFILL_EP=1";
+    CHECK_EQ(ep_pg_->world_size(), ep_size)
+        << "RoutedMoe EP group size must equal ep_size";
+    CHECK_EQ(tp_pg_->world_size(), 1)
+        << "RoutedMoe EP1 contract requires moe_tp=1";
+    ep_dispatch_enabled_ = true;
+    const char* backend = std::getenv("XLLM_GLM5_PREFILL_EP_BACKEND");
+    const std::string backend_name = backend == nullptr ? "eager" : backend;
+    CHECK(backend_name == "eager" || backend_name == "mate")
+        << "XLLM_GLM5_PREFILL_EP_BACKEND must be eager or mate, got "
+        << backend_name;
+    const bool use_mate = backend_name == "mate";
+    if (use_mate) {
+      CHECK(prefill_cp_enabled_)
+          << "MATE EP2 requires the GLM5 Prefill CP local-token contract";
+      CHECK_EQ(num_total_experts_, 288);
+      CHECK_EQ(topk_, 8);
+      CHECK_EQ(hidden_size_, 4096);
+      CHECK_EQ(intermediate_size_, 2048);
+      ep_mate_moe_ = MusaMegaMoe::acquire(ep_pg_);
+      LOG(INFO) << "GLM5 prefill EP2 backend=MATE normal prefill, ep_rank="
+                << ep_pg_->rank() << "/" << ep_pg_->world_size();
+    }
+  } else {
+    CHECK(ep_pg_ == nullptr || ep_pg_->world_size() == 1)
+        << "RoutedMoe EP0 requires a single-rank moe_ep_group";
+  }
   const int64_t ep_rank = ep_size > 1 && parallel_args.moe_ep_group_ != nullptr
                               ? parallel_args.moe_ep_group_->rank()
                               : 0;
@@ -556,8 +587,9 @@ void RoutedMoeImpl::ensure_fp8_expert_storage() {
     w13_fp8_scale_ = register_parameter(
         "w13_fp8_scale",
         torch::empty({num_experts_per_rank_,
-                      mega_moe_ ? local_intermediate_size_ / 32
-                                : (local_intermediate_size_ * 2 + 127) / 128,
+                      (mega_moe_ || ep_mate_moe_)
+                          ? local_intermediate_size_ / 32
+                          : (local_intermediate_size_ * 2 + 127) / 128,
                       (hidden_size_ + 127) / 128},
                      scale_options),
         /*requires_grad=*/false);
@@ -760,7 +792,7 @@ bool RoutedMoeImpl::try_load_quantized_experts(
       packed_vec.emplace_back(torch::cat({w1_list[idx], w3_list[idx]}, 0));
       scale_vec.emplace_back(torch::cat({s1_list[idx], s3_list[idx]}, 0));
     }
-    if (mega_moe_) {
+    if (mega_moe_ || ep_mate_moe_) {
       CHECK(!packed_fp4);
       // Transform checkpoint tensors before H2D. Concurrent layer loading
       // must not retain both TP-style and interleaved EP GPU weights or
@@ -783,7 +815,7 @@ bool RoutedMoeImpl::try_load_quantized_experts(
   if (!w2_loaded && all_tensors_defined(w2_list) &&
       all_tensors_defined(s2_list)) {
     ensure_storage();
-    if (mega_moe_) {
+    if (mega_moe_ || ep_mate_moe_) {
       w2_storage.copy_(torch::stack(w2_list));
       s2.copy_(torch::stack(s2_list));
     } else {
@@ -1044,6 +1076,166 @@ torch::Tensor RoutedMoeImpl::forward_reference_experts(
   return output;
 }
 
+torch::Tensor RoutedMoeImpl::forward_dispatched_experts(
+    const torch::Tensor& input,
+    const torch::Tensor& expert_ids) const {
+  CHECK_EQ(input.dim(), 2);
+  CHECK_EQ(expert_ids.dim(), 1);
+  CHECK_EQ(input.size(0), expert_ids.size(0));
+  torch::Tensor output = torch::zeros_like(input);
+  if (input.size(0) == 0) {
+    return output;
+  }
+
+  if (fp8_experts_loaded()) {
+    // EP dispatch carries one assignment per row. Re-express it as a
+    // top-k-shaped grouped-GEMM request so the existing MUSA FP8 path remains
+    // the production compute path; the unused slots use expert zero and have
+    // zero weight.
+    torch::Tensor grouped_ids = torch::zeros(
+        {input.size(0), topk_}, expert_ids.options().dtype(torch::kInt64));
+    grouped_ids.select(/*dim=*/1, /*index=*/0)
+        .copy_(expert_ids.to(torch::kInt64));
+    torch::Tensor grouped_weights = torch::zeros(
+        {input.size(0), topk_}, input.options().dtype(torch::kFloat32));
+    grouped_weights.select(/*dim=*/1, /*index=*/0).fill_(1.0);
+    torch::Tensor grouped_output =
+        forward_grouped_fp8(input, grouped_ids, grouped_weights);
+    if (grouped_output.defined()) {
+      return grouped_output;
+    }
+  }
+
+  // The route IDs stay on device.  The fixed expert loop is deliberately
+  // conservative for EP1: it avoids copying token identities to host while
+  // keeping the dispatch/combine contract independent of a fused MoE kernel.
+  const torch::Tensor local_ids =
+      expert_ids.to(torch::kInt64).contiguous() - start_expert_id_;
+  for (int64_t local_expert = 0; local_expert < num_experts_per_rank_;
+       ++local_expert) {
+    torch::Tensor token_indices =
+        torch::nonzero(local_ids.eq(local_expert)).flatten();
+    if (token_indices.numel() == 0) {
+      continue;
+    }
+    torch::Tensor expert_output = apply_expert(
+        input.index_select(/*dim=*/0, token_indices), local_expert);
+    output.index_copy_(/*dim=*/0, token_indices, expert_output);
+  }
+  return output;
+}
+
+torch::Tensor RoutedMoeImpl::forward_ep_all_to_all(
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    const torch::Tensor& topk_weights) const {
+  CHECK(ep_dispatch_enabled_);
+  CHECK(ep_pg_ != nullptr);
+  const int64_t world_size = ep_pg_->world_size();
+  CHECK_GT(world_size, 1);
+  const int64_t num_tokens = input.size(0);
+  const int64_t num_assignments = num_tokens * topk_;
+  const torch::Tensor input_2d = input.reshape({num_tokens, hidden_size_});
+
+  const torch::Tensor ids =
+      topk_ids.reshape({num_tokens, topk_}).to(torch::kInt64).contiguous();
+  const torch::Tensor weights = topk_weights.reshape({num_tokens, topk_})
+                                    .to(torch::kFloat32)
+                                    .contiguous();
+  CHECK(ids.ge(0).all().to(torch::kCPU).item<bool>())
+      << "RoutedMoe EP received a negative expert id.";
+  CHECK(ids.lt(num_total_experts_).all().to(torch::kCPU).item<bool>())
+      << "RoutedMoe EP received an out-of-range expert id.";
+
+  const torch::Tensor flat_ids = ids.reshape({-1});
+  const torch::Tensor flat_weights = weights.reshape({-1});
+  const torch::Tensor source_rows =
+      torch::arange(num_tokens, input.options().dtype(torch::kInt64))
+          .view({num_tokens, 1})
+          .expand({num_tokens, topk_})
+          .reshape({-1})
+          .contiguous();
+  const torch::Tensor topk_slots =
+      torch::arange(topk_, input.options().dtype(torch::kInt64))
+          .view({1, topk_})
+          .expand({num_tokens, topk_})
+          .reshape({-1})
+          .contiguous();
+  const torch::Tensor owners = flat_ids.div(num_experts_per_rank_, "floor");
+  const torch::Tensor permutation = torch::argsort(owners,
+                                                   /*stable=*/true,
+                                                   static_cast<int64_t>(0),
+                                                   /*descending=*/false);
+  const torch::Tensor sorted_owners = owners.index_select(0, permutation);
+  const torch::Tensor sorted_input =
+      input_2d.index_select(0, source_rows.index_select(0, permutation))
+          .contiguous();
+  const torch::Tensor sorted_meta =
+      torch::stack({flat_ids.index_select(0, permutation),
+                    source_rows.index_select(0, permutation),
+                    topk_slots.index_select(0, permutation)},
+                   /*dim=*/1)
+          .contiguous();
+  const torch::Tensor sorted_weights =
+      flat_weights.index_select(0, permutation).contiguous();
+
+  std::vector<int64_t> send_counts;
+  send_counts.reserve(world_size);
+  for (int64_t peer = 0; peer < world_size; ++peer) {
+    send_counts.emplace_back(
+        sorted_owners.eq(peer).sum().to(torch::kCPU).item<int64_t>());
+  }
+
+  torch::Tensor send_counts_device =
+      torch::tensor(send_counts, input.options().dtype(torch::kInt64));
+  torch::Tensor recv_counts_device = torch::empty_like(send_counts_device);
+  std::vector<int64_t> unit_splits(world_size, 1);
+  ep_pg_->all_to_all_single(
+      recv_counts_device, send_counts_device, unit_splits, unit_splits);
+  std::vector<int64_t> recv_counts;
+  recv_counts.reserve(world_size);
+  for (int64_t peer = 0; peer < world_size; ++peer) {
+    recv_counts.emplace_back(
+        recv_counts_device[peer].to(torch::kCPU).item<int64_t>());
+  }
+  const int64_t received_assignments =
+      std::accumulate(recv_counts.begin(), recv_counts.end(), int64_t{0});
+
+  torch::Tensor received_input =
+      torch::empty({received_assignments, hidden_size_}, input_2d.options());
+  torch::Tensor received_meta =
+      torch::empty({received_assignments, 3}, sorted_meta.options());
+  torch::Tensor received_weights =
+      torch::empty({received_assignments}, sorted_weights.options());
+  ep_pg_->all_to_all_single(
+      received_input, sorted_input, recv_counts, send_counts);
+  ep_pg_->all_to_all_single(
+      received_meta, sorted_meta, recv_counts, send_counts);
+  ep_pg_->all_to_all_single(
+      received_weights, sorted_weights, recv_counts, send_counts);
+
+  torch::Tensor dispatched_output = forward_dispatched_experts(
+      received_input,
+      received_meta.select(/*dim=*/1, /*index=*/0).contiguous());
+  dispatched_output.mul_(
+      received_weights.to(dispatched_output.dtype()).view({-1, 1}));
+
+  torch::Tensor combined_output = torch::empty_like(sorted_input);
+  torch::Tensor combined_rows =
+      torch::empty({num_assignments}, sorted_meta.options());
+  ep_pg_->all_to_all_single(
+      combined_output, dispatched_output, send_counts, recv_counts);
+  ep_pg_->all_to_all_single(
+      combined_rows,
+      received_meta.select(/*dim=*/1, /*index=*/1).contiguous(),
+      send_counts,
+      recv_counts);
+
+  torch::Tensor output = torch::zeros_like(input_2d);
+  output.index_add_(/*dim=*/0, combined_rows.to(torch::kLong), combined_output);
+  return output;
+}
+
 torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     const torch::Tensor& hidden_states,
     const torch::Tensor& topk_weights,
@@ -1052,11 +1244,12 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     bool skip_tp_allreduce,
     const torch::Tensor& output_buffer,
     const RoutedMoeTokenShard* token_shard) {
-  CHECK_EQ(prefill_cp_enabled_, token_shard != nullptr);
+  const bool is_prefill = !input_params.meta.batch_forward_type.is_decode();
+  const bool use_prefill_cp = prefill_cp_enabled_ && is_prefill;
+  CHECK_EQ(use_prefill_cp, token_shard != nullptr);
   if (token_shard != nullptr) {
     CHECK(input_params.meta.batch_forward_type.is_prefill() ||
           input_params.meta.batch_forward_type.is_chunked_prefill());
-    CHECK(!kernel::musa::is_stream_capturing());
     CHECK_EQ(token_shard->cp_rank, prefill_cp_rank_);
     CHECK_EQ(token_shard->cp_size, prefill_cp_size_);
     for (const auto& rows : {token_shard->global_rows,
@@ -1074,8 +1267,7 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
   torch::Tensor input_2d = input.reshape({-1, input.size(-1)});
   torch::Tensor weights_2d = topk_weights.reshape({-1, topk_});
   torch::Tensor ids_2d = topk_ids.reshape({-1, topk_});
-  const bool is_prefill = !input_params.meta.batch_forward_type.is_decode();
-  if (prefill_cp_enabled_ && input_2d.size(0) == 0) {
+  if (use_prefill_cp && input_2d.size(0) == 0 && !ep_dispatch_enabled_) {
     if (output_buffer.defined()) {
       output_buffer.zero_();
       return output_buffer.narrow(0, 0, 0).reshape(hidden_states.sizes());
@@ -1084,8 +1276,8 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
   }
   // Local shared output joins the local routed result on the same stream.
   // EP will replace the routed branch; no full-token shared output is needed.
-  const bool use_shared_expert_overlap = !prefill_cp_enabled_ && is_prefill &&
-                                         shared_experts_ &&
+  const bool use_shared_expert_overlap = is_prefill && shared_experts_ &&
+                                         (ep_mate_moe_ || !use_prefill_cp) &&
                                          input_2d.device().is_privateuseone() &&
                                          !kernel::musa::is_stream_capturing();
   torch::Tensor shared_output;
@@ -1118,12 +1310,12 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
 
   const bool disable_fp8_gemv =
       env_flag_enabled("XLLM_MUSA_MOE_DISABLE_FP8_GEMV", false);
-  const bool use_fp8_gemv = !mega_moe_ && !disable_fp8_gemv &&
+  const bool use_fp8_gemv = !mega_moe_ && !ep_mate_moe_ && !disable_fp8_gemv &&
                             input_params.meta.batch_forward_type.is_decode() &&
                             input_2d.size(0) > 0 &&
                             input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
                             fp8_experts_loaded();
-  if (!mega_moe_ && !use_fp8_gemv &&
+  if (!mega_moe_ && !ep_mate_moe_ && !use_fp8_gemv &&
       weights_2d.scalar_type() != input_2d.scalar_type()) {
     weights_2d = weights_2d.to(input_2d.dtype());
   }
@@ -1133,7 +1325,27 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
       << "RoutedMoe topk_ids token count mismatch.";
 
   torch::Tensor output;
-  if (mega_moe_) {
+  if (ep_mate_moe_) {
+    CHECK(fp8_experts_loaded())
+        << "RoutedMoe MATE EP2 requires FP8 expert weights.";
+    output = ep_mate_moe_->forward(input_2d,
+                                   ids_2d,
+                                   weights_2d,
+                                   w13_fp8_,
+                                   w13_fp8_scale_,
+                                   w2_fp8_,
+                                   w2_fp8_scale_,
+                                   swiglu_limit_,
+                                   output_buffer,
+                                   /*partition_replicated_input=*/false,
+                                   /*force_prefill=*/is_prefill);
+  } else if (ep_dispatch_enabled_) {
+    CHECK(!kernel::musa::is_stream_capturing())
+        << "RoutedMoe EP1 is not selected for graph capture; use the MATE "
+           "backend for graph-enabled CP prefill.";
+    CHECK(!mega_moe_) << "EP dispatch and MegaMoE are mutually exclusive";
+    output = forward_ep_all_to_all(input_2d, ids_2d, weights_2d);
+  } else if (mega_moe_) {
     CHECK(fp8_experts_loaded());
     CHECK(!skip_tp_allreduce);
     output = mega_moe_->forward(
@@ -1169,10 +1381,6 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
 
   if (!output.defined()) {
     output = forward_reference_experts(input_2d, ids_2d, weights_2d);
-  }
-
-  if (ep_pg_ != nullptr && ep_pg_->world_size() > 1) {
-    ep_pg_->allreduce(output);
   }
 
   if (shared_experts_ && !shared_output.defined()) {
@@ -1268,10 +1476,18 @@ void RoutedMoeImpl::load_experts(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;
   }
+  // Expert ownership and projection tensor sharding are independent.  EP
+  // selects the [start_expert_id_, num_experts_per_rank_] range in the
+  // constructor; rank/world here must remain the MoE-TP group used to slice
+  // each selected expert's projection.  In the EP0 contract this is rank 0 /
+  // world 1, so every local expert is loaded in full without communication.
   const int64_t rank = mega_moe_ ? 0 : tp_pg_->rank();
   const int64_t world_size = mega_moe_ ? 1 : tp_pg_->world_size();
+  if (ep_dispatch_enabled_) {
+    CHECK_EQ(world_size, 1) << "RoutedMoe EP1 expert weights require moe_tp=1";
+  }
 
-  if (mega_moe_) {
+  if (mega_moe_ || ep_mate_moe_) {
     // A checkpoint shard can contain only experts owned by another rank.
     // That is not evidence of a dense checkpoint: do not allocate BF16
     // expert storage before this rank's FP8 tensors arrive.

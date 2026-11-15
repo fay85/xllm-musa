@@ -431,33 +431,41 @@ std::optional<std::string> validate_model_cp(const Options& options,
   }
 
   if (Platform::is_musa()) {
-    // VLM+disagg_pd also runs under LLMEngine (see Master ctor), so CP is OK
-    // without speculative decoding when MTP is off.
-    const bool llm_engine_target = engine_type == EngineType::LLM ||
-                                   engine_type == EngineType::SSM ||
-                                   ((engine_type == EngineType::VLMSSM ||
-                                     engine_type == EngineType::VLM) &&
-                                    options.enable_disagg_pd());
+    // GLM5-Next owns the same model-side CP implementation in LLM and VLM
+    // engines.  VLM requests use the text path when the prompt contains no
+    // media, and the CP shard is applied to the resulting prefill rows.
+    const bool llm_engine_target =
+        engine_type == EngineType::LLM || engine_type == EngineType::SSM ||
+        engine_type == EngineType::VLMSSM || engine_type == EngineType::VLM;
     if (!llm_engine_target) {
-      return "MUSA CP supports only LLM-engine generation: text, or VLM under "
-             "disaggregated PD (with or without speculative decoding)";
+      return "MUSA CP supports only LLM/VLM generation";
     }
     if (options.task_type() != "generate") {
       return "MUSA CP supports only the generate task";
     }
     const bool deepseek_text_target = model_type == "deepseek_v4";
-    if (!is_qwen3_5_target_model_type(model_type) && !deepseek_text_target) {
-      return "MUSA CP supports only Qwen3.5 or DeepSeek-V4 text targets, got "
-             "model_type=" +
+    const bool glm5_text_target = is_glm5_next_target_model_type(model_type);
+    if (!is_qwen3_5_target_model_type(model_type) && !deepseek_text_target &&
+        !glm5_text_target) {
+      return "MUSA CP supports only Qwen3.5, DeepSeek-V4, or GLM5 text "
+             "targets, got model_type=" +
              model_type;
     }
-    if (options.cp_size() != 2 || options.dp_size() != 1 ||
-        (deepseek_text_target ? (global_world_size % options.cp_size() != 0 ||
-                                 global_world_size / options.cp_size() < 1)
-                              : global_world_size != options.cp_size())) {
-      return "MUSA CP requires cp_size == 2, dp_size == 1; Qwen3.5 runs "
-             "world_size == cp_size (no tensor parallelism), DeepSeek-V4 "
-             "splits the world into CP groups over tensor-parallel ranks";
+    const bool glm5_topology =
+        glm5_text_target && options.cp_size() == 8 && global_world_size == 8;
+    const bool qwen_topology = is_qwen3_5_target_model_type(model_type) &&
+                               options.cp_size() == 2 &&
+                               global_world_size == options.cp_size();
+    const bool deepseek_topology = deepseek_text_target &&
+                                   options.cp_size() == 2 &&
+                                   global_world_size % options.cp_size() == 0 &&
+                                   global_world_size / options.cp_size() >= 1;
+    if (options.dp_size() != 1 ||
+        !(glm5_topology || qwen_topology || deepseek_topology)) {
+      return "MUSA CP requires dp_size == 1 and a supported topology: GLM5 "
+             "uses cp_size=8/world_size=8, Qwen3.5 uses cp_size=2 with "
+             "world_size=cp_size, and DeepSeek-V4 uses cp_size=2 over "
+             "tensor-parallel ranks";
     }
     if (ParallelConfig::get_instance().kv_split_size_effective() != 1) {
       return "MUSA CP keeps the full KV cache on every CP rank; set "
@@ -675,7 +683,6 @@ Master::Master(const Options& options, EngineType type)
                    << options_.block_size() << " -> 256.";
       options_.block_size(256);
     }
-    options_.enable_graph(false);
   }
   options_.enable_mla(util::should_enable_mla(model_path, options_.backend()));
   print_startup_banner(model_path, options_.backend(), options_.node_rank());

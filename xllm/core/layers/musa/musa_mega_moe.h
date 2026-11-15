@@ -38,7 +38,9 @@ class MusaMegaMoe final {
                         const torch::Tensor& w2,
                         const torch::Tensor& s2,
                         double clamp,
-                        const torch::Tensor& output_buffer = {});
+                        const torch::Tensor& output_buffer = {},
+                        bool partition_replicated_input = true,
+                        bool force_prefill = false);
   static std::pair<torch::Tensor, torch::Tensor> transform_gate_up(
       const torch::Tensor& weight,
       const torch::Tensor& scale);
@@ -46,6 +48,7 @@ class MusaMegaMoe final {
  private:
   ProcessGroup* group_;
   torch::Tensor buffer_;
+  torch::Tensor local_output_;
   torch::Tensor pointers_;
   std::vector<torch::Tensor> views_;
 };

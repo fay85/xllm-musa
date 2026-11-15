@@ -230,6 +230,12 @@ kernel 至少需要覆盖：route pack、stable metadata、source-index restore�
 
 ### EP2：替换为 MUSA DeepEP/MATE 高性能通信
 
+当前实现选择路径 B：复用已安装 MATE 0.2.8 的 Prefill Stage1/2/3 ABI。路径 A
+需要独立的 DeepEP C++/MUSA ABI，而当前环境没有可链接的 `deep_ep` runtime；
+因此不能把 Python dispatcher 当成 xLLM 的 C++ 依赖。使用
+`XLLM_GLM5_PREFILL_EP_BACKEND=mate` 显式启用 MATE normal path，默认仍保留
+EP1 eager backend。
+
 EP1 通过后再决定最终 backend：
 
 #### 路径 A：MUSA DeepEP
@@ -250,7 +256,11 @@ EP1 通过后再决定最终 backend：
 
 ### EP3：接入 GLM Prefill 主路径
 
-在 EP1/EP2 的 EP kernel 稳定、CP0-CP4 已建立 local-token 契约后修改 `RoutedMoeImpl::forward_with_selected_experts`：
+当前 CP8+EP8 主路径已接入；MATE backend 的 Shared Expert overlap、固定
+workspace 和设备侧 graph metadata 已落地。graph 仅支持单序列、均匀 CP8
+chunked Prefill，20k 请求按 4096×4 + 3616 分块。
+
+EP1/EP2 的 EP kernel、CP0-CP4 local-token 契约和真实 GLM5 主路径已接通；`RoutedMoeImpl::forward_with_selected_experts` 现在按 Prefill/Decode 动态选择 MATE 路径，CP8+EP8 的真实请求已完成一次端到端验证：
 
 ```text
 if prefill && prefill_ep_enabled:
@@ -265,12 +275,17 @@ else:
 - 删除 EP 路径的 `ep_pg_->allreduce(output)`；combine 已返回 source rank 的完整 routed output。
 - Shared Expert 计算输入只使用本 rank 的 token，输出只加一次。
 - `skip_tp_allreduce` 要由调用方语义明确传递；不能用它掩盖 EP combine 或 Shared Expert 的重复归约。
-- 第一版关闭 Prefill CUDA graph，先完成 eager correctness；graph 只在 EP4 加入。
+- graph 路径使用固定 CP8 counts、设备侧 permutation/slot metadata 和持久输出；不支持的 packed/mixed shape 继续走 eager 或显式拒绝。
 - Chunked Prefill 使用同一 dispatch/combine 协议；chunk 边界不能改变 source token index 的局部编号契约。
 
-## EP4：Graph、workspace 和 overlap
+### EP4：Graph、workspace 和 overlap
 
-只在 eager 多形状正确后处理：
+当前已完成 MATE workspace 持久化、MATE Prefill/Decode ABI 复用、CP+EP
+Shared Expert overlap 和 CP8 graph metadata contract。graph capture 内使用
+固定 CP8 collective counts 及设备侧 arithmetic metadata；eager 路径保留完整
+host validation。
+
+graph contract 的维护要求：
 
 1. 为每个支持的 token shape 固定 dispatch metadata、counts buffer、packed rows、combine output 和 MATE/DeepEP workspace；capture 内不能动态创建 ProcessGroup 或 Python/host 对象。
 2. 处理 graph replay 的空 rank：所有 rank 必须执行相同数量的 collective，空 rank 通过预分配 sentinel/0-row schedule 参与通信。
