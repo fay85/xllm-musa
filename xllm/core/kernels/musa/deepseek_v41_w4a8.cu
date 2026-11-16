@@ -38,7 +38,8 @@ __global__ void dispatch_quant_kernel(const c10::BFloat16* input,
                                       int32_t topk,
                                       int32_t first_expert,
                                       int32_t experts,
-                                      int32_t capacity) {
+                                      int32_t capacity,
+                                      float static_scale) {
   const int32_t route = blockIdx.x;
   const int64_t expert = expert_ids[route] - first_expert;
   if (expert < 0 || expert >= experts) {
@@ -67,9 +68,12 @@ __global__ void dispatch_quant_kernel(const c10::BFloat16* input,
       values[item] = static_cast<float>(input[token * hidden + column]);
       maximum = fmaxf(maximum, fabsf(values[item]));
     }
-    const float scale = fmaxf(warp_max(maximum), 1.0e-4f) / kFp8Max;
-    if (lane == 0) {
-      scales[target_row * groups + group] = scale;
+    const float scale = static_scale > 0.0f
+                            ? static_scale
+                            : fmaxf(warp_max(maximum), 1.0e-4f) / kFp8Max;
+    if (lane == 0 && (static_scale == 0.0f || group == 0)) {
+      scales[static_scale > 0.0f ? target_row : target_row * groups + group] =
+          scale;
     }
 #pragma unroll
     for (int32_t item = 0; item < 4; ++item) {
@@ -88,7 +92,8 @@ __global__ void swiglu_quant_kernel(const c10::BFloat16* gate_up,
                                     float* scales,
                                     int32_t intermediate,
                                     int32_t capacity,
-                                    float limit) {
+                                    float limit,
+                                    float static_scale) {
   const int32_t expert = blockIdx.z;
   const int32_t row = blockIdx.y * 4 + threadIdx.y;
   if (row >= counts[expert]) {
@@ -112,9 +117,13 @@ __global__ void swiglu_quant_kernel(const c10::BFloat16* gate_up,
     values[item] = (gate / (1.0f + __expf(-gate))) * up;
     maximum = fmaxf(maximum, fabsf(values[item]));
   }
-  const float scale = fmaxf(warp_max(maximum), 1.0e-10f) / kFp8Max;
-  if (lane == 0) {
-    scales[offset * (intermediate / kGroupSize) + group] = scale;
+  const float scale = static_scale > 0.0f
+                          ? static_scale
+                          : fmaxf(warp_max(maximum), 1.0e-10f) / kFp8Max;
+  if (lane == 0 && (static_scale == 0.0f || group == 0)) {
+    scales[static_scale > 0.0f ? offset
+                               : offset * (intermediate / kGroupSize) + group] =
+        scale;
   }
   const float inverse_scale = 1.0f / scale;
 #pragma unroll
@@ -171,7 +180,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
                            const torch::Tensor& expert_ids,
                            int64_t first_expert,
-                           int64_t local_experts) {
+                           int64_t local_experts,
+                           double static_scale) {
+  CHECK(std::isfinite(static_scale) && static_scale >= 0.0);
   CHECK(input.defined() && input.device().type() == torch::kPrivateUse1);
   check_gpu_contiguous(input, input.device(), torch::kBFloat16);
   check_gpu_contiguous(expert_ids, input.device(), torch::kInt64);
@@ -193,7 +204,9 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
       torch::empty({local_experts, capacity, input.size(1)},
                    input.options().dtype(torch::kFloat8_e4m3fn));
   torch::Tensor scales =
-      torch::empty({local_experts, capacity, input.size(1) / kGroupSize},
+      torch::empty({local_experts,
+                    capacity,
+                    static_scale > 0.0 ? 1 : input.size(1) / kGroupSize},
                    input.options().dtype(torch::kFloat32));
   torch::Tensor counts =
       torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
@@ -213,7 +226,8 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
       static_cast<int32_t>(expert_ids.size(1)),
       static_cast<int32_t>(first_expert),
       static_cast<int32_t>(local_experts),
-      static_cast<int32_t>(capacity));
+      static_cast<int32_t>(capacity),
+      static_cast<float>(static_scale));
   check_musa_kernel_launch("V4.1 W4A8 group128 dispatch");
   return {output, scales, counts, rows};
 }
@@ -221,7 +235,9 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
 std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
     const torch::Tensor& gate_up,
     const torch::Tensor& counts,
-    double limit) {
+    double limit,
+    double static_scale) {
+  CHECK(std::isfinite(static_scale) && static_scale >= 0.0);
   CHECK(gate_up.defined() && gate_up.device().type() == torch::kPrivateUse1);
   check_gpu_contiguous(gate_up, gate_up.device(), torch::kBFloat16);
   check_gpu_contiguous(counts, gate_up.device(), torch::kInt32);
@@ -237,9 +253,11 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
   torch::Tensor output =
       torch::empty({gate_up.size(0), gate_up.size(1), intermediate},
                    gate_up.options().dtype(torch::kFloat8_e4m3fn));
-  torch::Tensor scales = torch::empty(
-      {gate_up.size(0), gate_up.size(1), intermediate / kGroupSize},
-      gate_up.options().dtype(torch::kFloat32));
+  torch::Tensor scales =
+      torch::empty({gate_up.size(0),
+                    gate_up.size(1),
+                    static_scale > 0.0 ? 1 : intermediate / kGroupSize},
+                   gate_up.options().dtype(torch::kFloat32));
   const dim3 grid(static_cast<uint32_t>(intermediate / kGroupSize),
                   static_cast<uint32_t>((gate_up.size(1) + 3) / 4),
                   static_cast<uint32_t>(gate_up.size(0)));
@@ -253,7 +271,8 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
       scales.data_ptr<float>(),
       static_cast<int32_t>(intermediate),
       static_cast<int32_t>(gate_up.size(1)),
-      static_cast<float>(limit));
+      static_cast<float>(limit),
+      static_cast<float>(static_scale));
   check_musa_kernel_launch("V4.1 W4A8 SwiGLU group128 quantization");
   return {output, scales};
 }

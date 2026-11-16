@@ -95,12 +95,28 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
       pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_w4a8_dispatch",
              &xllm::kernel::musa::deepseek_v41_w4a8_dispatch,
+             pybind11::arg("input"),
+             pybind11::arg("expert_ids"),
+             pybind11::arg("first_expert"),
+             pybind11::arg("local_experts"),
+             pybind11::arg("static_scale") = 0.0,
              pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_w4a8_gemm",
              &xllm::kernel::musa::deepseek_v41_w4a8_masked_gemm,
+             pybind11::arg("input"),
+             pybind11::arg("input_scale"),
+             pybind11::arg("weight"),
+             pybind11::arg("weight_scale"),
+             pybind11::arg("counts"),
+             pybind11::arg("library_path"),
+             pybind11::arg("per_token_scale") = false,
              pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_w4a8_swiglu_quant",
              &xllm::kernel::musa::deepseek_v41_w4a8_swiglu_quant,
+             pybind11::arg("gate_up"),
+             pybind11::arg("counts"),
+             pybind11::arg("limit"),
+             pybind11::arg("static_scale") = 0.0,
              pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_w4a8_combine",
              &xllm::kernel::musa::deepseek_v41_w4a8_combine,

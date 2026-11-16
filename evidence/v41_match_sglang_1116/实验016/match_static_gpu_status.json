@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"job.json\": {\"pid\": 63144, \"start_ticks\": \"519561587\", \"at\": \"2026-11-16T21:26:19.996942+08:00\"}, \"child.json\": {\"pid\": 63145, \"start_ticks\": \"519561590\", \"command\": [\"python3\", \"/expt/builds/static_w4a8_checks_v2/validate_static_w4a8.py\", \"--fixture\", \"/work/correctness/fixtures/w4afp8_mt_layer0_experts0_1.safetensors\", \"--gemm-so\", \"/expt/builds/static_w4a8_mate_v1/output/libdeepseek_v41_w4a8_static.so\", \"--output\", \"/expt/builds/static_w4a8_checks_v2/gpu_v1/result.json\"]}, \"finished.json\": {\"exit_code\": 0, \"at\": \"2026-11-16T21:26:31.360917+08:00\"}, \"result.json\": {\"status\": \"PASS\", \"real_weight_cases\": 24, \"graph_cases\": [{\"rows\": 1, \"replays\": 3, \"changed_input_and_route\": true}, {\"rows\": 4, \"replays\": 3, \"changed_input_and_route\": true}, {\"rows\": 6, \"replays\": 3, \"changed_input_and_route\": true}]}, \"worker.log\": \"\", \"test.log\": \"I20261116 21:26:30.169569 63145 validate_static_w4a8.py:142] Static W4A8 passed 24 real-weight cases and 3 Graph buckets\\n\"}\n",
+  "stderr": ""
+}

@@ -1,0 +1,9 @@
+{
+  "sglang_commit": "7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6",
+  "source_archive": "sglang\u56e2\u961f\u7684\u5de5\u4f5c\u7684\u590d\u73b0\u548c\u6027\u80fd\u6d4b\u901f\u7ed3\u679c/00_\u53c2\u8003\u8bc1\u636e/\u5f53\u524d\u7f13\u5b58\u955c\u50cf\u6e90\u7801/sglang_image_cpu_source.tar.gz",
+  "sha256": {
+    "backend.py": "cbe1f6112c04aebbde87f5bdda7c601a410455ef112bc262ee72df577f5dcbff",
+    "scales.py": "eeabf24f5aa89ea3bcc9372e419b0f59da0987655a1ea7212ddef0fbfeba9c4e",
+    "public_mate.py": "067eecfa3fb81077c86925e7caf714118948d96ba5f3a8fd652983a748812379"
+  }
+}

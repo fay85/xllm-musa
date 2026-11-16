@@ -16,7 +16,8 @@ torch::Tensor deepseek_v41_w4a8_masked_gemm(const torch::Tensor& input,
                                             const torch::Tensor& weight,
                                             const torch::Tensor& weight_scale,
                                             const torch::Tensor& counts,
-                                            const std::string& library_path) {
+                                            const std::string& library_path,
+                                            bool per_token_scale) {
   CHECK(input.defined() && input.device().type() == torch::kPrivateUse1);
   CHECK_EQ(input.dim(), 3);
   CHECK_EQ(input.scalar_type(), torch::kFloat8_e4m3fn);
@@ -33,7 +34,7 @@ torch::Tensor deepseek_v41_w4a8_masked_gemm(const torch::Tensor& input,
   CHECK_EQ(input.size(1) % 128, 0);
   CHECK_EQ(input_scale.size(0), input.size(0));
   CHECK_EQ(input_scale.size(1), input.size(1));
-  CHECK_EQ(input_scale.size(2), input.size(2) / 128);
+  CHECK_EQ(input_scale.size(2), per_token_scale ? 1 : input.size(2) / 128);
   CHECK_EQ(weight.size(0), input.size(0));
   CHECK_EQ(weight.size(2) * 2, input.size(2));
   CHECK_EQ(weight_scale.size(0), weight.size(0));
@@ -58,7 +59,9 @@ torch::Tensor deepseek_v41_w4a8_masked_gemm(const torch::Tensor& input,
                    input.options().dtype(torch::kBFloat16));
   const ffi::Function run = get_function_from_file(
       library_path,
-      "mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup");
+      per_token_scale
+          ? "mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken"
+          : "mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apergroup");
   TvmffiStreamGuard stream_guard(input.device());
   run(to_ffi_tensor(input),
       to_ffi_tensor(input_scale),

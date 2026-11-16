@@ -1,0 +1,111 @@
+{
+  "status": "CURRENT_Q4_BOUNDARY_EVENTS_VALID_NOT_EXCLUSIVE_GPU_BUSY_TIME",
+  "summary": {
+    "V41/step": {
+      "rows": 232,
+      "pids": [
+        53746,
+        53747,
+        53748,
+        53749,
+        53750,
+        53751,
+        53752,
+        53753
+      ],
+      "gpu_mean_ms": 72.15346379310344,
+      "gpu_median_ms": 72.1274,
+      "gpu_min_ms": 70.7872,
+      "gpu_max_ms": 74.4167,
+      "host_mean_ms": 72.46714874568966,
+      "host_median_ms": 72.43179,
+      "q_counts": {
+        "4": 232
+      }
+    },
+    "V41/Engram/hash_lookup": {
+      "rows": 232,
+      "pids": [
+        53746,
+        53747,
+        53748,
+        53749,
+        53750,
+        53751,
+        53752,
+        53753
+      ],
+      "gpu_mean_ms": 2.275209482758621,
+      "gpu_median_ms": 2.06812,
+      "gpu_min_ms": 1.36948,
+      "gpu_max_ms": 4.47372,
+      "host_mean_ms": 0.5787317155172413,
+      "host_median_ms": 0.5137134999999999,
+      "q_counts": {
+        "-1": 232
+      }
+    },
+    "V41/full_decode_graph_replay": {
+      "rows": 232,
+      "pids": [
+        53746,
+        53747,
+        53748,
+        53749,
+        53750,
+        53751,
+        53752,
+        53753
+      ],
+      "gpu_mean_ms": 67.84642068965518,
+      "gpu_median_ms": 67.82895,
+      "gpu_min_ms": 66.903,
+      "gpu_max_ms": 68.9514,
+      "host_mean_ms": 0.8876839827586207,
+      "host_median_ms": 0.489909,
+      "q_counts": {
+        "-1": 232
+      }
+    }
+  },
+  "phase_metrics": [
+    {
+      "phase": "warmup",
+      "requests": 1,
+      "TPOT_ms": 57.72220590973601,
+      "TTFT_ms": 373.1002826243639,
+      "E2E_s": 15.092262789607048,
+      "output_tps": 16.96233385071248
+    },
+    {
+      "phase": "measured",
+      "requests": 5,
+      "TPOT_ms": 39.121964622800256,
+      "TTFT_ms": 439.7913444787264,
+      "E2E_s": 10.415892323292791,
+      "output_tps": 24.577827041041292
+    },
+    {
+      "phase": "diagnostic",
+      "requests": 2,
+      "TPOT_ms": 38.658642065802624,
+      "TTFT_ms": 356.24963138252497,
+      "E2E_s": 10.214203358162194,
+      "output_tps": 25.06313914294939
+    },
+    {
+      "phase": "off_after",
+      "requests": 2,
+      "TPOT_ms": 38.67159409302414,
+      "TTFT_ms": 373.1184587813914,
+      "E2E_s": 10.234374952502549,
+      "output_tps": 25.013740574103345
+    }
+  ],
+  "q_counts": {
+    "4": 232
+  },
+  "file_count": 8,
+  "rows": 696,
+  "scope": "per-rank samples are concurrent; no summing across GPUs. Graph contains waits/collectives; does not measure draft/sampling/service independently."
+}

@@ -346,6 +346,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     auto& moe = result.moe;
     moe.expert_format = layer::DeepseekV41ExpertFormat::W4AFP8_MT;
     moe.w4a8_so_path = w4a8_path_;
+    moe.w4a8_static_activation =
+        util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
     moe.dense = false;
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());
@@ -448,6 +450,18 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
       }
       if (config.moe.expert_format ==
           layer::DeepseekV41ExpertFormat::W4AFP8_MT) {
+        if (config.moe.w4a8_static_activation) {
+          moe.expert_input_scale = {
+              checkpoint.int4_input_scale(ffn + "experts",
+                                          {"w1", "w3"},
+                                          config.moe.first_expert,
+                                          args_.n_routed_experts() / ep_size()),
+              checkpoint.int4_input_scale(
+                  ffn + "experts",
+                  {"w2"},
+                  config.moe.first_expert,
+                  args_.n_routed_experts() / ep_size())};
+        }
         std::tie(moe.expert[0], moe.scale[0]) =
             checkpoint.int4_experts(ffn + "experts",
                                     {"w1", "w3"},

@@ -31,6 +31,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--patched-include", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--activation", choices=("group128", "static"), default="group128")
     args = parser.parse_args()
     if os.environ.get("MATE_MUSA_ARCH_LIST") != "3.1":
         raise ValueError("Explicit MATE_MUSA_ARCH_LIST=3.1 is required")
@@ -62,7 +63,7 @@ def main() -> None:
         "--num-dwords-of-load-in-mutation=64",
     ]
     flags_digest = hashlib.sha256(json.dumps(delivery_flags).encode()).hexdigest()[:12]
-    recipe = (1, 128)
+    recipe = (1, 128) if args.activation == "group128" else (1, -1)
     spec = gen_masked_moe_gemm_mixed_dtype_spec(torch.bfloat16, recipe, "K")
     spec.name += "_sglang_" + digest[:16] + "_flags_" + flags_digest
     spec.extra_cuda_cflags = delivery_flags
@@ -73,7 +74,7 @@ def main() -> None:
     library = spec.build(verbose=True)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    target = output / "libdeepseek_v41_w4a8_group128.so"
+    target = output / f"libdeepseek_v41_w4a8_{args.activation}.so"
     shutil.copy2(library, target)
     source_root = Path(mate.__file__).resolve().parent
     source_files = [source_root / "jit/gemm/masked_moe_gemm_mixed_dtype.py", header]

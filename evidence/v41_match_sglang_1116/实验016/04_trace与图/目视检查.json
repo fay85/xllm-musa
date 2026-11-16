@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-16T21:45:07.820787+08:00",
+  "images": [
+    "真实CPU区间与GPU时间线.png",
+    "完整实际C++调用链_ENTRY_COUNT.png"
+  ],
+  "opened_and_reviewed": true,
+  "limitations": [
+    "COUNT is not time",
+    "heavy profiling perturbation",
+    "target Graph GPU nodes incomplete"
+  ]
+}

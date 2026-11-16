@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"run\": \"p16_spec3_static_activation_v1\", \"binary_sha256\": \"eda9a53809f68b8c8949fb5f2fa482ece0f77d5c8afe0255a9eeef3fff966555\", \"static_mate_sha256\": \"ec95aa472eaa7d785972eef8627dc5558421e9e4a30aadcd8ebeeda4d6551ab3\", \"prepared_only\": true}\n",
+  "stderr": ""
+}

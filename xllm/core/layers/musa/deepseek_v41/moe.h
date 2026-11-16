@@ -39,6 +39,7 @@ struct DeepseekV41MoeConfig {
   bool verify_custom_allreduce = false;
   bool shared_expert_tp_reduce = false;
   bool decode_packed_shared_gate_up = false;
+  bool w4a8_static_activation = false;
   int64_t first_expert = 0;
   int64_t topk = 6;
   int64_t image_token_id = 129264;
@@ -55,6 +56,7 @@ struct DeepseekV41MoeWeights {
   std::vector<torch::Tensor> shared;
   std::array<torch::Tensor, 3> expert;
   std::array<torch::Tensor, 3> scale;
+  std::array<double, 2> expert_input_scale = {0.0, 0.0};
   torch::Tensor gate;
   torch::Tensor bias;
   std::optional<torch::Tensor> vision_bias;
@@ -118,13 +120,16 @@ class DeepseekV41Moe final {
                                               config_.scale,
                                               config_.gate_cache_fp32_weight);
     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
-      w4a8_ = std::make_unique<DeepseekV41W4A8Experts>(weights_.expert[0],
-                                                       weights_.scale[0],
-                                                       weights_.expert[1],
-                                                       weights_.scale[1],
-                                                       config_.first_expert,
-                                                       config_.limit,
-                                                       config_.w4a8_so_path);
+      w4a8_ = std::make_unique<DeepseekV41W4A8Experts>(
+          weights_.expert[0],
+          weights_.scale[0],
+          weights_.expert[1],
+          weights_.scale[1],
+          config_.first_expert,
+          config_.limit,
+          config_.w4a8_so_path,
+          weights_.expert_input_scale[0],
+          weights_.expert_input_scale[1]);
       return;
     }
     CHECK(!config_.bmm_so_path.empty());

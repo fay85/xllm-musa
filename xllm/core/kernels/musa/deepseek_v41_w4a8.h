@@ -18,12 +18,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
                            const torch::Tensor& expert_ids,
                            int64_t first_expert,
-                           int64_t local_experts);
+                           int64_t local_experts,
+                           double static_scale = 0.0);
 
 std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
     const torch::Tensor& gate_up,
     const torch::Tensor& counts,
-    double limit);
+    double limit,
+    double static_scale = 0.0);
 
 torch::Tensor deepseek_v41_w4a8_combine(const torch::Tensor& expert_output,
                                         const torch::Tensor& expert_ids,
@@ -36,6 +38,7 @@ torch::Tensor deepseek_v41_w4a8_masked_gemm(const torch::Tensor& input,
                                             const torch::Tensor& weight,
                                             const torch::Tensor& weight_scale,
                                             const torch::Tensor& counts,
-                                            const std::string& library_path);
+                                            const std::string& library_path,
+                                            bool per_token_scale = false);
 
 }  // namespace xllm::kernel::musa

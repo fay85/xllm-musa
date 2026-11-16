@@ -11,6 +11,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -168,6 +170,33 @@ class DeepseekV41Checkpoint final {
       }
     }
     return {weights, scales};
+  }
+
+  // SGLang MusaW4AFP8Backend reduces checkpoint input scales over the
+  // local expert partition after loading. These CPU reads happen once;
+  // no online model activation or routing is copied to the host.
+  double int4_input_scale(const std::string& prefix,
+                          const std::vector<std::string>& projections,
+                          int64_t first,
+                          int64_t count) const {
+    CHECK_GE(first, 0);
+    CHECK_GT(count, 0);
+    CHECK(!projections.empty());
+    double maximum = 0.0;
+    for (int64_t index = first; index < first + count; ++index) {
+      for (const std::string& projection : projections) {
+        const torch::Tensor scale =
+            tensor(prefix + "." + std::to_string(index) + "." + projection +
+                   ".input_scale");
+        CHECK(scale.device().is_cpu());
+        CHECK_EQ(scale.scalar_type(), torch::kBFloat16);
+        CHECK_EQ(scale.numel(), 1);
+        const double value = scale.item<double>();
+        CHECK(std::isfinite(value) && value > 0.0);
+        maximum = std::max(maximum, value);
+      }
+    }
+    return maximum;
   }
 
   static torch::Tensor dequant_fp8(const torch::Tensor& weight,

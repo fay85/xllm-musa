@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/static_w4a8_v1/source_manifest.json\", \"binary\": \"/expt/artifacts/static_w4a8_v1/bin/xllm\", \"sha256\": \"eda9a53809f68b8c8949fb5f2fa482ece0f77d5c8afe0255a9eeef3fff966555\", \"bytes\": 341485400, \"small_checks\": \"Static W4A8 GPU checks pending; do not launch model before passing\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

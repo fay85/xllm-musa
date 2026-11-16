@@ -27,14 +27,19 @@ class DeepseekV41W4A8Experts final {
                          torch::Tensor down_scale,
                          int64_t first_expert,
                          double limit,
-                         std::string library_path)
+                         std::string library_path,
+                         double gate_up_input_scale = 0.0,
+                         double down_input_scale = 0.0)
       : gate_up_(std::move(gate_up)),
         gate_up_scale_(std::move(gate_up_scale)),
         down_(std::move(down)),
         down_scale_(std::move(down_scale)),
         first_expert_(first_expert),
         limit_(limit),
-        library_path_(std::move(library_path)) {
+        library_path_(std::move(library_path)),
+        gate_up_input_scale_(gate_up_input_scale),
+        down_input_scale_(down_input_scale) {
+    CHECK_EQ(gate_up_input_scale_ > 0.0, down_input_scale_ > 0.0);
     CHECK_EQ(gate_up_.dim(), 3);
     CHECK_EQ(down_.dim(), 3);
     CHECK_EQ(gate_up_.size(0), down_.size(0));
@@ -53,23 +58,27 @@ class DeepseekV41W4A8Experts final {
         kernel::musa::deepseek_v41_w4a8_dispatch(input.contiguous(),
                                                  ids.contiguous(),
                                                  first_expert_,
-                                                 gate_up_.size(0));
+                                                 gate_up_.size(0),
+                                                 gate_up_input_scale_);
     const torch::Tensor gate_up =
         kernel::musa::deepseek_v41_w4a8_masked_gemm(dispatched,
                                                     input_scale,
                                                     gate_up_,
                                                     gate_up_scale_,
                                                     counts,
-                                                    library_path_);
+                                                    library_path_,
+                                                    gate_up_input_scale_ > 0.0);
     auto [activation, activation_scale] =
-        kernel::musa::deepseek_v41_w4a8_swiglu_quant(gate_up, counts, limit_);
+        kernel::musa::deepseek_v41_w4a8_swiglu_quant(
+            gate_up, counts, limit_, down_input_scale_);
     const torch::Tensor down =
         kernel::musa::deepseek_v41_w4a8_masked_gemm(activation,
                                                     activation_scale,
                                                     down_,
                                                     down_scale_,
                                                     counts,
-                                                    library_path_);
+                                                    library_path_,
+                                                    down_input_scale_ > 0.0);
     return kernel::musa::deepseek_v41_w4a8_combine(down,
                                                    ids.contiguous(),
                                                    route_rows,
@@ -85,6 +94,8 @@ class DeepseekV41W4A8Experts final {
   int64_t first_expert_;
   double limit_;
   std::string library_path_;
+  double gate_up_input_scale_ = 0.0;
+  double down_input_scale_ = 0.0;
 };
 
 }  // namespace xllm::layer

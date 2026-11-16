@@ -1,0 +1,476 @@
+[
+  {
+    "original": "01_目的与验收.md",
+    "bytes": 1371,
+    "sha256": "20c0788265c7bc3c150a8b3c082fb4fa878f176ee164f2b1f44eb4b8718556f7",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/01_目的与验收.md"
+  },
+  {
+    "original": "05_结论与下一步.md",
+    "bytes": 3415,
+    "sha256": "1be7cf3891c933ef6588762bf64e6781b3954b8709e03ad4f837a40e7aaad99d",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/05_结论与下一步.md"
+  },
+  {
+    "original": "match_p15_post_sj10.json",
+    "bytes": 5696,
+    "sha256": "945dc3d09220533c514f274a1d9d172fcfdc9f1ee3a8b43a38907cdd59761e68",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/match_p15_post_sj10.json"
+  },
+  {
+    "original": "match_p15_post_sj9.json",
+    "bytes": 4635,
+    "sha256": "6fc4a8d7e3d0611712176dd301ce9625be323228fa533bf6f8f99dfefddc0e0f",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/match_p15_post_sj9.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/active.json",
+    "bytes": 993,
+    "sha256": "28edc502096424f3724d94346f9a191da851c6f80995e422fa74aaa3d028f4c2",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/active.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/basic_1_sse.jsonl",
+    "bytes": 1581,
+    "sha256": "76a3b30aa6843b8828617e83b7128adafec4bede3df51e4f9a998015133464f9",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/basic_2_sse.jsonl",
+    "bytes": 1302,
+    "sha256": "b6a9bc5568e7618658b5974fa981a2d094acfa916cf9c18448c17f36d1d64307",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "e1fe9a0930b5a0d5d7d1d69671d09f97ea18ed19afe9d68d6bc8f5ab7a357325",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/basic_gate.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10144,
+    "sha256": "7f1d6e2d45aff0fc5012ed0284355399305053ecf56919f95ffd8d3f092f3fe7",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2361,
+    "sha256": "50b8c2210cea75e897cfdc9cac99a7b40509437856b3adebc915c6abba9dc965",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "62ad2c331dcc5ffbb30e54f5127c2e029346a57ae62289df55b959f15df39fba",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3636,
+    "sha256": "ef5ab4fd7c755da857b84ab393617266301b9b90db240caf051efe2bf0676518",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "a47a1b693213146e9a53951852a4d74003437291b1e7499ae5e098d98c7c7a30",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "5e9353f7d38ff85786d1f74566d07ddc9866e3613fd8fd87d7839b33e7cc10ba",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "ef3c74807415ea858540795c57c5be723c91d41d944f18d071a08eae267bdc15",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166928,
+    "sha256": "944cb563d05080ed3b79465de948ec8de1ade79dfc1daeadbc2d270f08f2756c",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "60588fef01c8ca758500e930725839d0a9666de2ff698cff16b10386da90c804",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/diagnostic.log",
+    "bytes": 19389,
+    "sha256": "c1e550bdad4dfd766040ec7a0416fea8eda35034ff241bec0ef7ed50f89bb48d",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/diagnostic.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/diagnostic.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/finished.json",
+    "bytes": 64,
+    "sha256": "daafe25e67ee918c220edadfe00db7f441cec703cd9790839b476b6915704b67",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/finished.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/identity.json",
+    "bytes": 286268,
+    "sha256": "8eb7200c006f0db722cc24aa2a14f404dc920db8737b61dfb8d3b20cc349d4f1",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/identity.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/job.json",
+    "bytes": 149,
+    "sha256": "1253a27f95f953fb9489b67c2e34dc2935b65b6019350099137b022309b6833f",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/job.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 12022,
+    "sha256": "b97402ab8f192e20c0583171b114f98755629c7589d20a7e220477cb8dcec09d",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2359,
+    "sha256": "213169c0209da7ea80923b1727ac1a3456f55380fa0743ca7e4e559166b4785e",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "40e0e28f9ff368eedb8783ff6190f4fcf2a585ef3164cfdb4ac006218be116ef",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3637,
+    "sha256": "b6768c26c95c3e1958be9192b20d4312d590a22e2466b399c7e3a7fec78d6f8a",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "0cc53d31d7df6de56f9284d27f54090d881d29896e094d3e5df84e2e82faea68",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 875,
+    "sha256": "4a96a8c4f039a65e38282b11943bb2c3e979c973efe458cbad6acc58aa113a5d",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 834,
+    "sha256": "83034d70c2e05a17ee8fde14eacf1388bf644f7d6f9ec22407571cbece589aaa",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167286,
+    "sha256": "0a40e942672b4d544b077a7ae693d0826e74508b15767b6937350260a28866be",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "792ddc29b74d30be153f14b6b1bb266fcca2d879bf6903e11638794a081ec4d5",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/measured.log",
+    "bytes": 22449,
+    "sha256": "e5a4be8ecff20f8a2753f873702b5028833b86522c25e534ae96148cc6b27edd",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/measured.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/measured.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10140,
+    "sha256": "48234d09468162d28b53b95d5607738884f96d54d600812794adb1a1de470688",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2360,
+    "sha256": "7d1034b096a9c0ca4235504e8ea6e9bb76c019a68385f5d455e24459713eb585",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "9fdb325a667c2bbc33eb0c23e5f572ebe003ea668ca76e6dbe11e762aa296f9f",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3626,
+    "sha256": "e46d41315565e7b8e05c65714f1c084d47f627918ec1c402bc4442abd09e35d3",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "0b0c3cc702039ce7b60dc0c685566d07ac575b4d435eef9fef614a50126cf2e9",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 880,
+    "sha256": "adb6afd6281c895a16bcea8d23b963d9ce9c6b409f331eeb4e04a183316c1ae9",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "212f39cf712fbb6aa3532f70aaecd3ea74acaa10546942572095292b89b233e6",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166918,
+    "sha256": "9e3fdbc6d2ee695f67ec7350da652b0b719ece5e2ca62c897e597df36b37e7a7",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "513683c358acf1b7547513f6b0c3dd4be917a4b3ba091201c0c521b0bdb1a41d",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/off_after.log",
+    "bytes": 19384,
+    "sha256": "2af4f6c50049f828698821b6e5522375b270d8cbde161be3dfd5ded1728ecc4d",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/off_after.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/off_after.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/status.json",
+    "bytes": 6821,
+    "sha256": "3de17807affd63111075cc3984060be18069a8a6e6a95cec359782df5e935f51",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/status.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/summary.json",
+    "bytes": 559,
+    "sha256": "a262a5797571392e20d9e59a64a5cc7e77fa9fc060851343bf89676072122b53",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/summary.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9505,
+    "sha256": "232f4e79ef01c974a783231cd4ae807c640d24f01293d870f7ae1e0aba9ae751",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2357,
+    "sha256": "d56a2d1d869d7ac4863b6c02a73d8402ea733b46d1eba06670dd9c18bd9eaddd",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "de3503d02655b8279f88a559e8a07b47c7a6c7290ca964662dc0af1076f6a1e2",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3645,
+    "sha256": "83d4e462989f5dde5c393e0b6534f7ae94a750f12f633642dcfcbbfcedfd25bf",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "6cd4ca1d24377b1ef4480b952888ddf7c1d24389b2f0fe984dfa51f110b198d7",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 872,
+    "sha256": "7e4b53d53f50707c6be7fb0e6f97c3d2bc4d0ea5c3b6c1e30d777e7feb7621b4",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "604291d7c809eee6a5e40eccef07b58ac6e93973f0a790617f0159ff901733bc",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166819,
+    "sha256": "c749aa1a470ac4e7498b0238e19c4d74f7c7132d13164396b6137ab23a2a75b1",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "a93af2bc8ac5c5c2088b2434aeda6f7c45e6c4571505599d5d6cb91d6afe2b34",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/client/warmup.log",
+    "bytes": 18330,
+    "sha256": "40b8296eee45992e2d6891cd007f44fe6f4c1499280a899d7939cb9e3641256c",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/client/warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/client/warmup.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53746.140588104012272.jsonl",
+    "bytes": 25610,
+    "sha256": "4f5900dafcb197586128f6c842b5ab479feb30e91fcf77051bae7526beba7ad1",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53746.140588104012272.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53747.140615903834608.jsonl",
+    "bytes": 25608,
+    "sha256": "03e91654d56722cab36b1967dcb8974faf867df8fd05ff92580fe6cfc249971d",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53747.140615903834608.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53748.140248575091184.jsonl",
+    "bytes": 25609,
+    "sha256": "2deafb788957e34901d9affdd60bcabdb1ea5e5534ee3183045e32d41361bf9e",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53748.140248575091184.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53749.139780423655920.jsonl",
+    "bytes": 25612,
+    "sha256": "f184f5e961754f09713ffb4fc11c0f08150dc6af7357ad13d18c7f7a5d058b06",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53749.139780423655920.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53750.140366711869936.jsonl",
+    "bytes": 25609,
+    "sha256": "926a2412f6663e1c321ba40f0cfd28239c71f331283494fcde97d787174e3084",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53750.140366711869936.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53751.140675655901680.jsonl",
+    "bytes": 25605,
+    "sha256": "635d823aadf1fbe3421d25ecb57f66c12ca853343e231ecb54da3abf7d88bfef",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53751.140675655901680.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53752.140392666214896.jsonl",
+    "bytes": 25604,
+    "sha256": "e89e940056823cd006ea88144f2c024278c2f642a1b2c18ea6dddb0e1d8a0089",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53752.140392666214896.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/light_timing/target.53753.140585444803056.jsonl",
+    "bytes": 25607,
+    "sha256": "79873b6f2eb9853d208ea479e0a313896d48ed9116a7c3bb528b984d3f8dba2e",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/light_timing/target.53753.140585444803056.jsonl"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj10/rank0.log",
+    "bytes": 246920,
+    "sha256": "594931808b8aae2b48bbe946108a79d4d54512c070d3701a66b34075e5fe3a26",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj10/role_config.json",
+    "bytes": 52339,
+    "sha256": "df56059e4f4d07e95cf24d3df61373167d30473d84585ec8815bd0566dc2823b",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9087,
+    "sha256": "801e16e67d61c09b149bbee34e4822ca53d0b545026770ac92f2bf6317fef5af",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj10/status.json",
+    "bytes": 272,
+    "sha256": "5b92f24639b80327b93fafb6307b45de35cc27fb5b8ff5388e84a323067f849a",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "146e87647b61721fbe71cb9cc576e301d42d21856b5854866f0b7420196e57b7",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj9/rank0.log",
+    "bytes": 194888,
+    "sha256": "83ee518734c379fc50e176087d0625204c5a198a6aa1225c743b8677cb6b646a",
+    "lossless_gzip": "当前q4轻量计时原始原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj9/role_config.json",
+    "bytes": 49603,
+    "sha256": "89fcfab84767c356ea8fa6528be17b5a2e6b8ccfb07ee1eba53b33e5cefaf31c",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9289,
+    "sha256": "ff25a004554921f44a9f64055181ef45cb5818f1989b1bc111f304368deefaff",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj9/status.json",
+    "bytes": 260,
+    "sha256": "4e8de99a22280ce73d3d586615d50dfd4b05d2818704fd9681e682feaa97e683",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "b9fdd44c7919748f5224f1a34ff7410127f01fb9e3df3f19d0642088790482f8",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据/timing_analysis.json",
+    "bytes": 2542,
+    "sha256": "4f284199c119340241eaf91efb5b4664d22c285a5491c2601c41500c763149dc",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据/timing_analysis.json"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据.tar.gz",
+    "bytes": 215645,
+    "sha256": "6ec99d2f034112715e722b6532bbea5bf3b71023cd22f1f3a9d2409167f4431d",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "当前q4轻量计时原始原始证据校验.json",
+    "bytes": 234,
+    "sha256": "afcc0b7358a04f67a7d3735222b50f8dda95ef1f53db885b7b94f0c0fbaa4460",
+    "git_path": "evidence/v41_match_sglang_1116/实验015/当前q4轻量计时原始原始证据校验.json"
+  }
+]

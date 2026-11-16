@@ -1,0 +1,17 @@
+{
+  "status": "SPEC_PREFIX_SCREEN_ONLY_NOT_FORMAL",
+  "accuracy_status": "\u4ec5\u901a\u8fc7\u57fa\u7840\u529f\u80fd\u68c0\u67e5\uff0c\u672a\u5b8c\u6210\u6a21\u578b\u7cbe\u5ea6\u9a8c\u6536",
+  "mean_TTFT_ms": 468.79252698272467,
+  "mean_TPOT_ms_per_token": 40.86473895529029,
+  "TPOT_sample_stdev_ms": 0.26324062373011614,
+  "mean_E2E_s": 10.88930096058175,
+  "output_tokens_per_latency_sum_second": 23.509314411154218,
+  "screen_requests": 2,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "eda9a53809f68b8c8949fb5f2fa482ece0f77d5c8afe0255a9eeef3fff966555",
+  "identity_correction": "Client template had stale E13 SHA literal; role config and ELF bytes independently verified. Raw original retained; request data and metrics unchanged."
+}
