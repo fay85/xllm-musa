@@ -1,0 +1,35 @@
+{
+    "wall_start": 5197624.088095571,
+    "points": [
+        {
+            "t": 10.576212,
+            "cum_completion": 256,
+            "cum_new_prompt": 256,
+            "cum_cached_prompt": 0
+        },
+        {
+            "t": 20.988755,
+            "cum_completion": 512,
+            "cum_new_prompt": 512,
+            "cum_cached_prompt": 0
+        },
+        {
+            "t": 31.232642,
+            "cum_completion": 768,
+            "cum_new_prompt": 768,
+            "cum_cached_prompt": 0
+        },
+        {
+            "t": 41.428956,
+            "cum_completion": 1024,
+            "cum_new_prompt": 1024,
+            "cum_cached_prompt": 0
+        },
+        {
+            "t": 51.616392,
+            "cum_completion": 1280,
+            "cum_new_prompt": 1280,
+            "cum_cached_prompt": 0
+        }
+    ]
+}

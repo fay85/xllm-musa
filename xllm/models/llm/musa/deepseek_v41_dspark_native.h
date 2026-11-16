@@ -348,6 +348,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     moe.w4a8_so_path = w4a8_path_;
     moe.w4a8_static_activation =
         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
+    moe.w4a8_valid_prefix_swiglu =
+        util::get_bool_env("XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU", false);
     moe.dense = false;
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());

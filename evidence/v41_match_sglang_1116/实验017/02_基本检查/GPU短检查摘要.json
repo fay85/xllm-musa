@@ -1,0 +1,33 @@
+{
+  "finished.json": {
+    "exit_code": 0,
+    "at": "2026-11-16T21:50:01.514115+08:00"
+  },
+  "job.json": {
+    "pid": 6464,
+    "start_ticks": "519702941",
+    "at": "2026-11-16T21:49:53.536782+08:00"
+  },
+  "child.json": {
+    "pid": 6465,
+    "start_ticks": "519702944",
+    "command": [
+      "python3",
+      "/expt/builds/valid_prefix_swiglu_checks_v1/validate_valid_prefix_swiglu.py",
+      "--output",
+      "/expt/builds/valid_prefix_swiglu_checks_v1/gpu_v1/result.json"
+    ]
+  },
+  "result": {
+    "status": "PASS",
+    "cases": 48,
+    "graphs": 9,
+    "standalone_event_ms_off_on_off": [
+      0.035146400928497315,
+      0.00945959985256195,
+      0.035190401077270506
+    ],
+    "timing_scope": "Standalone eager allocation+kernel stream span, not end-to-end performance"
+  },
+  "log": "I20261116 21:50:00.479561 6465 validate_valid_prefix_swiglu.py:89] Passed 48 exact FP8/scale comparisons and 9 changed-input graph replays\n"
+}

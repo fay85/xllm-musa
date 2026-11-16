@@ -117,6 +117,7 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
              pybind11::arg("counts"),
              pybind11::arg("limit"),
              pybind11::arg("static_scale") = 0.0,
+             pybind11::arg("valid_prefix") = false,
              pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_w4a8_combine",
              &xllm::kernel::musa::deepseek_v41_w4a8_combine,

@@ -1,0 +1,63 @@
+{
+  "metrics": {
+    "off": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 427.9088594019413,
+      "mean_TPOT_ms_per_token": 39.26793221603422,
+      "TPOT_sample_stdev_ms": 0.16768735659525866,
+      "mean_E2E_s": 10.441231574490667,
+      "output_tokens_per_latency_sum_second": 24.518180463063615,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "6ca28eb912c08ea4a5b272cedd5ed927dc57c0ca95c0c40071cc603c7aa5bfe2"
+    },
+    "on": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 449.96025282889605,
+      "mean_TPOT_ms_per_token": 38.71777208996754,
+      "TPOT_sample_stdev_ms": 0.24948443395075973,
+      "mean_E2E_s": 10.322992135770619,
+      "output_tokens_per_latency_sum_second": 24.799011433218478,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "6ca28eb912c08ea4a5b272cedd5ed927dc57c0ca95c0c40071cc603c7aa5bfe2"
+    },
+    "reverse": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 469.19769421219826,
+      "mean_TPOT_ms_per_token": 39.24453126303121,
+      "TPOT_sample_stdev_ms": 0.24329207343325057,
+      "mean_E2E_s": 10.476553166285157,
+      "output_tokens_per_latency_sum_second": 24.435517668524763,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "6ca28eb912c08ea4a5b272cedd5ed927dc57c0ca95c0c40071cc603c7aa5bfe2"
+    }
+  },
+  "relative_gain": {
+    "off": {
+      "tpot_reduction_percent": 1.4010417534591535,
+      "output_increase_percent": 1.1453989033889833
+    },
+    "reverse": {
+      "tpot_reduction_percent": 1.342248604100127,
+      "output_increase_percent": 1.4875631841511083
+    }
+  },
+  "not_final_acceptance": true
+}

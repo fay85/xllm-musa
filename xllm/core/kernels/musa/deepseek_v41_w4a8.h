@@ -25,7 +25,8 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
     const torch::Tensor& gate_up,
     const torch::Tensor& counts,
     double limit,
-    double static_scale = 0.0);
+    double static_scale = 0.0,
+    bool valid_prefix = false);
 
 torch::Tensor deepseek_v41_w4a8_combine(const torch::Tensor& expert_output,
                                         const torch::Tensor& expert_ids,

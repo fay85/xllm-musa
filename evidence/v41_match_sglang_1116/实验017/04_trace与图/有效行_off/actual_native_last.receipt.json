@@ -1,0 +1,52 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "fa8467c57e475235610497b8de76fb69fcaa12e28483169c872dd9142226b90d",
+  "native_stacks_sha256": "827915c175d7e1f1c9481b98d1965c61e1c932cde3f7ed14801f5631783572f4",
+  "symbols_sha256": "1fdfd55e828d14bc17b33de047719cd3aa2d785fe786eff253132e2e11129574",
+  "symbolization_binary_sha256": "6ca28eb912c08ea4a5b272cedd5ed927dc57c0ca95c0c40071cc603c7aa5bfe2",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/DSpark/layer/0",
+    "pid": 5816,
+    "tid": 7660,
+    "ts": 3980261866000.909,
+    "dur": 8891.918,
+    "args": {
+      "External id": 10778,
+      "Record function id": 11454,
+      "finished": true,
+      "Ev Idx": 10777
+    }
+  },
+  "step_selection": "outermost matching semantic scope; nested calls retained",
+  "step_prefix": "V41/DSpark/layer/0",
+  "selected_scope": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/DSpark/layer/0",
+    "pid": 5816,
+    "tid": 7660,
+    "ts": 3980261866000.909,
+    "dur": 8891.918,
+    "args": {
+      "External id": 10778,
+      "Record function id": 11454,
+      "finished": true,
+      "Ev Idx": 10777
+    }
+  },
+  "gpu_selection": "runtime correlation for scope",
+  "actual_intervals": 824,
+  "native_entry_samples": 574,
+  "include_aten_entries": true,
+  "include_runtime_intervals": true,
+  "operation_leaf_provenance": "Actual same-ID RecordFunction names, not invented native symbols",
+  "output_sha256": "b3e3168b182c809027cc91f5eb1bc007f59b990fd36f7f797ada2c35642ffb67",
+  "verification": {
+    "slices": 824,
+    "native_entry_samples": 574,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

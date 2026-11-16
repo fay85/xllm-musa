@@ -29,7 +29,8 @@ class DeepseekV41W4A8Experts final {
                          double limit,
                          std::string library_path,
                          double gate_up_input_scale = 0.0,
-                         double down_input_scale = 0.0)
+                         double down_input_scale = 0.0,
+                         bool valid_prefix_swiglu = false)
       : gate_up_(std::move(gate_up)),
         gate_up_scale_(std::move(gate_up_scale)),
         down_(std::move(down)),
@@ -38,7 +39,8 @@ class DeepseekV41W4A8Experts final {
         limit_(limit),
         library_path_(std::move(library_path)),
         gate_up_input_scale_(gate_up_input_scale),
-        down_input_scale_(down_input_scale) {
+        down_input_scale_(down_input_scale),
+        valid_prefix_swiglu_(valid_prefix_swiglu) {
     CHECK_EQ(gate_up_input_scale_ > 0.0, down_input_scale_ > 0.0);
     CHECK_EQ(gate_up_.dim(), 3);
     CHECK_EQ(down_.dim(), 3);
@@ -70,7 +72,11 @@ class DeepseekV41W4A8Experts final {
                                                     gate_up_input_scale_ > 0.0);
     auto [activation, activation_scale] =
         kernel::musa::deepseek_v41_w4a8_swiglu_quant(
-            gate_up, counts, limit_, down_input_scale_);
+            gate_up,
+            counts,
+            limit_,
+            down_input_scale_,
+            valid_prefix_swiglu_ && input.size(0) <= 8);
     const torch::Tensor down =
         kernel::musa::deepseek_v41_w4a8_masked_gemm(activation,
                                                     activation_scale,
@@ -96,6 +102,7 @@ class DeepseekV41W4A8Experts final {
   std::string library_path_;
   double gate_up_input_scale_ = 0.0;
   double down_input_scale_ = 0.0;
+  bool valid_prefix_swiglu_ = false;
 };
 
 }  // namespace xllm::layer

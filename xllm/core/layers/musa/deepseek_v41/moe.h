@@ -40,6 +40,7 @@ struct DeepseekV41MoeConfig {
   bool shared_expert_tp_reduce = false;
   bool decode_packed_shared_gate_up = false;
   bool w4a8_static_activation = false;
+  bool w4a8_valid_prefix_swiglu = false;
   int64_t first_expert = 0;
   int64_t topk = 6;
   int64_t image_token_id = 129264;
@@ -129,7 +130,8 @@ class DeepseekV41Moe final {
           config_.limit,
           config_.w4a8_so_path,
           weights_.expert_input_scale[0],
-          weights_.expert_input_scale[1]);
+          weights_.expert_input_scale[1],
+          config_.w4a8_valid_prefix_swiglu);
       return;
     }
     CHECK(!config_.bmm_so_path.empty());

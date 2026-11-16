@@ -86,6 +86,7 @@ __global__ void dispatch_quant_kernel(const c10::BFloat16* input,
 
 // The delivery kernel keeps SwiGLU in FP32 until FP8 quantization. Its
 // group128 scale floor is 1e-10, unlike the input quantizer's 1e-4 floor.
+template <bool ValidPrefix>
 __global__ void swiglu_quant_kernel(const c10::BFloat16* gate_up,
                                     const int32_t* counts,
                                     c10::Float8_e4m3fn* output,
@@ -95,43 +96,52 @@ __global__ void swiglu_quant_kernel(const c10::BFloat16* gate_up,
                                     float limit,
                                     float static_scale) {
   const int32_t expert = blockIdx.z;
-  const int32_t row = blockIdx.y * 4 + threadIdx.y;
-  if (row >= counts[expert]) {
+  const int32_t first_row = blockIdx.y * 4 + threadIdx.y;
+  const int32_t count = counts[expert];
+  if (first_row >= count) {
     return;
   }
   const int32_t group = blockIdx.x;
   const int32_t lane = threadIdx.x;
-  const int64_t offset = static_cast<int64_t>(expert) * capacity + row;
-  float values[4];
-  float maximum = 0.0f;
+  // Keep the GEMM's padded physical layout. For small decode batches only,
+  // one CTA per expert/group walks valid rows instead of launching padded CTAs.
+  // All lanes of a warp follow the same count, including the empty-expert case.
+  const int32_t row_end = ValidPrefix ? count : first_row + 1;
+  for (int32_t row = first_row; row < row_end; row += 4) {
+    const int64_t offset = static_cast<int64_t>(expert) * capacity + row;
+    float values[4];
+    float maximum = 0.0f;
 #pragma unroll
-  for (int32_t item = 0; item < 4; ++item) {
-    const int32_t column = group * kGroupSize + lane + item * 32;
-    const float gate = fminf(
-        static_cast<float>(gate_up[offset * 2 * intermediate + column]), limit);
-    const float up = fminf(
-        limit,
-        fmaxf(-limit,
+    for (int32_t item = 0; item < 4; ++item) {
+      const int32_t column = group * kGroupSize + lane + item * 32;
+      const float gate =
+          fminf(static_cast<float>(gate_up[offset * 2 * intermediate + column]),
+                limit);
+      const float up = fminf(
+          limit,
+          fmaxf(
+              -limit,
               static_cast<float>(
                   gate_up[offset * 2 * intermediate + intermediate + column])));
-    values[item] = (gate / (1.0f + __expf(-gate))) * up;
-    maximum = fmaxf(maximum, fabsf(values[item]));
-  }
-  const float scale = static_scale > 0.0f
-                          ? static_scale
-                          : fmaxf(warp_max(maximum), 1.0e-10f) / kFp8Max;
-  if (lane == 0 && (static_scale == 0.0f || group == 0)) {
-    scales[static_scale > 0.0f ? offset
-                               : offset * (intermediate / kGroupSize) + group] =
-        scale;
-  }
-  const float inverse_scale = 1.0f / scale;
+      values[item] = (gate / (1.0f + __expf(-gate))) * up;
+      maximum = fmaxf(maximum, fabsf(values[item]));
+    }
+    const float scale = static_scale > 0.0f
+                            ? static_scale
+                            : fmaxf(warp_max(maximum), 1.0e-10f) / kFp8Max;
+    if (lane == 0 && (static_scale == 0.0f || group == 0)) {
+      scales[static_scale > 0.0f
+                 ? offset
+                 : offset * (intermediate / kGroupSize) + group] = scale;
+    }
+    const float inverse_scale = 1.0f / scale;
 #pragma unroll
-  for (int32_t item = 0; item < 4; ++item) {
-    const int32_t column = group * kGroupSize + lane + item * 32;
-    const float value =
-        fminf(kFp8Max, fmaxf(-kFp8Max, values[item] * inverse_scale));
-    output[offset * intermediate + column] = c10::Float8_e4m3fn(value);
+    for (int32_t item = 0; item < 4; ++item) {
+      const int32_t column = group * kGroupSize + lane + item * 32;
+      const float value =
+          fminf(kFp8Max, fmaxf(-kFp8Max, values[item] * inverse_scale));
+      output[offset * intermediate + column] = c10::Float8_e4m3fn(value);
+    }
   }
 }
 
@@ -236,7 +246,8 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
     const torch::Tensor& gate_up,
     const torch::Tensor& counts,
     double limit,
-    double static_scale) {
+    double static_scale,
+    bool valid_prefix) {
   CHECK(std::isfinite(static_scale) && static_scale >= 0.0);
   CHECK(gate_up.defined() && gate_up.device().type() == torch::kPrivateUse1);
   check_gpu_contiguous(gate_up, gate_up.device(), torch::kBFloat16);
@@ -258,21 +269,33 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
                     gate_up.size(1),
                     static_scale > 0.0 ? 1 : intermediate / kGroupSize},
                    gate_up.options().dtype(torch::kFloat32));
-  const dim3 grid(static_cast<uint32_t>(intermediate / kGroupSize),
-                  static_cast<uint32_t>((gate_up.size(1) + 3) / 4),
-                  static_cast<uint32_t>(gate_up.size(0)));
-  swiglu_quant_kernel<<<grid,
-                        dim3(32, 4),
-                        0,
-                        current_musa_stream(gate_up.device())>>>(
-      gate_up.data_ptr<c10::BFloat16>(),
-      counts.data_ptr<int32_t>(),
-      output.data_ptr<c10::Float8_e4m3fn>(),
-      scales.data_ptr<float>(),
-      static_cast<int32_t>(intermediate),
-      static_cast<int32_t>(gate_up.size(1)),
-      static_cast<float>(limit),
-      static_cast<float>(static_scale));
+  const dim3 grid(
+      static_cast<uint32_t>(intermediate / kGroupSize),
+      static_cast<uint32_t>(valid_prefix ? 1 : (gate_up.size(1) + 3) / 4),
+      static_cast<uint32_t>(gate_up.size(0)));
+  if (valid_prefix) {
+    swiglu_quant_kernel<true>
+        <<<grid, dim3(32, 4), 0, current_musa_stream(gate_up.device())>>>(
+            gate_up.data_ptr<c10::BFloat16>(),
+            counts.data_ptr<int32_t>(),
+            output.data_ptr<c10::Float8_e4m3fn>(),
+            scales.data_ptr<float>(),
+            static_cast<int32_t>(intermediate),
+            static_cast<int32_t>(gate_up.size(1)),
+            static_cast<float>(limit),
+            static_cast<float>(static_scale));
+  } else {
+    swiglu_quant_kernel<false>
+        <<<grid, dim3(32, 4), 0, current_musa_stream(gate_up.device())>>>(
+            gate_up.data_ptr<c10::BFloat16>(),
+            counts.data_ptr<int32_t>(),
+            output.data_ptr<c10::Float8_e4m3fn>(),
+            scales.data_ptr<float>(),
+            static_cast<int32_t>(intermediate),
+            static_cast<int32_t>(gate_up.size(1)),
+            static_cast<float>(limit),
+            static_cast<float>(static_scale));
+  }
   check_musa_kernel_launch("V4.1 W4A8 SwiGLU group128 quantization");
   return {output, scales};
 }

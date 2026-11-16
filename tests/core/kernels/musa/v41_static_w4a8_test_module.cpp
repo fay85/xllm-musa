@@ -9,7 +9,13 @@ SPDX-License-Identifier: Apache-2.0
 PYBIND11_MODULE(v41_static_w4a8_test_module, module) {
   module.def("dispatch", &xllm::kernel::musa::deepseek_v41_w4a8_dispatch);
   module.def("gemm", &xllm::kernel::musa::deepseek_v41_w4a8_masked_gemm);
-  module.def("swiglu", &xllm::kernel::musa::deepseek_v41_w4a8_swiglu_quant);
+  module.def("swiglu",
+             &xllm::kernel::musa::deepseek_v41_w4a8_swiglu_quant,
+             pybind11::arg("gate_up"),
+             pybind11::arg("counts"),
+             pybind11::arg("limit"),
+             pybind11::arg("static_scale"),
+             pybind11::arg("valid_prefix") = false);
   module.def("combine", &xllm::kernel::musa::deepseek_v41_w4a8_combine);
   using Experts = xllm::layer::DeepseekV41W4A8Experts;
   pybind11::class_<Experts>(module, "Experts")

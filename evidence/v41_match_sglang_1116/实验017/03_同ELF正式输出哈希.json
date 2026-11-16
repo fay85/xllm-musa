@@ -1,0 +1,78 @@
+{
+  "off": [
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    }
+  ],
+  "on": [
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    },
+    {
+      "content_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+      "content_bytes": 1441,
+      "success": 1,
+      "input_tokens": 256,
+      "output_tokens": 256
+    }
+  ],
+  "same_generated_content_all_10": true,
+  "scope": "Fixed performance input only, not model accuracy acceptance"
+}

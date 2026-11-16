@@ -1,0 +1,148 @@
+{
+  "off": {
+    "swiglu_count": 12,
+    "kernel_names": [
+      "void xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel<false>(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float, float)"
+    ],
+    "grids": {
+      "[18, 32, 16]": 12
+    },
+    "swiglu_durations_us": [
+      11.6,
+      12.28,
+      15.96,
+      13.64,
+      15.56,
+      10.96,
+      13.16,
+      14.32,
+      16.44,
+      11.2,
+      15.16,
+      16.4
+    ],
+    "top_aten_counts": [
+      [
+        "aten::as_strided",
+        1850
+      ],
+      [
+        "aten::empty",
+        1738
+      ],
+      [
+        "aten::view",
+        952
+      ],
+      [
+        "aten::empty_strided",
+        893
+      ],
+      [
+        "aten::to",
+        701
+      ],
+      [
+        "aten::empty_like",
+        680
+      ],
+      [
+        "aten::expand",
+        635
+      ],
+      [
+        "aten::copy_",
+        611
+      ],
+      [
+        "aten::_copy_from",
+        527
+      ],
+      [
+        "aten::expand_as",
+        527
+      ],
+      [
+        "aten::reshape",
+        499
+      ],
+      [
+        "aten::alias",
+        416
+      ]
+    ]
+  },
+  "on": {
+    "swiglu_count": 12,
+    "kernel_names": [
+      "void xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel<true>(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float, float)"
+    ],
+    "grids": {
+      "[18, 1, 16]": 12
+    },
+    "swiglu_durations_us": [
+      10.201,
+      4.12,
+      9.4,
+      11.44,
+      9.96,
+      2.48,
+      4.2,
+      3.48,
+      9.4,
+      3.84,
+      10.88,
+      10.04
+    ],
+    "top_aten_counts": [
+      [
+        "aten::as_strided",
+        1850
+      ],
+      [
+        "aten::empty",
+        1738
+      ],
+      [
+        "aten::view",
+        952
+      ],
+      [
+        "aten::empty_strided",
+        893
+      ],
+      [
+        "aten::to",
+        701
+      ],
+      [
+        "aten::empty_like",
+        680
+      ],
+      [
+        "aten::expand",
+        635
+      ],
+      [
+        "aten::copy_",
+        611
+      ],
+      [
+        "aten::_copy_from",
+        527
+      ],
+      [
+        "aten::expand_as",
+        527
+      ],
+      [
+        "aten::reshape",
+        499
+      ],
+      [
+        "aten::alias",
+        416
+      ]
+    ]
+  }
+}

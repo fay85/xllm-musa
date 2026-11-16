@@ -1,0 +1,442 @@
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 0,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 0,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 1,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 1,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 4,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 4,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 6,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 6,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 17,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 17,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 128,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "default",
+      "max_count": 128,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 0,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 0,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 1,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 1,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 4,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 4,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 6,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 6,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 17,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 17,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 128,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 128,
+      "stream": "nondefault",
+      "max_count": 128,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 0,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 0,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 1,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 1,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 4,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 4,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 6,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 6,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 17,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 17,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 256,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "default",
+      "max_count": 256,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 0,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 0,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 1,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 1,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 4,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 4,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 6,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 6,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 17,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 17,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 256,
+      "static_scale": 0.0,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    },
+    {
+      "capacity": 256,
+      "stream": "nondefault",
+      "max_count": 256,
+      "static_scale": 0.125,
+      "fp8_bytes_equal": true,
+      "scales_equal": true
+    }
+  ],
+  "graphs": [
+    {
+      "max_count": 1,
+      "replay": 0,
+      "passed": true
+    },
+    {
+      "max_count": 1,
+      "replay": 1,
+      "passed": true
+    },
+    {
+      "max_count": 1,
+      "replay": 2,
+      "passed": true
+    },
+    {
+      "max_count": 4,
+      "replay": 0,
+      "passed": true
+    },
+    {
+      "max_count": 4,
+      "replay": 1,
+      "passed": true
+    },
+    {
+      "max_count": 4,
+      "replay": 2,
+      "passed": true
+    },
+    {
+      "max_count": 6,
+      "replay": 0,
+      "passed": true
+    },
+    {
+      "max_count": 6,
+      "replay": 1,
+      "passed": true
+    },
+    {
+      "max_count": 6,
+      "replay": 2,
+      "passed": true
+    }
+  ],
+  "standalone_event_ms_off_on_off": [
+    0.035146400928497315,
+    0.00945959985256195,
+    0.035190401077270506
+  ],
+  "timing_scope": "Standalone eager allocation+kernel stream span, not end-to-end performance"
+}

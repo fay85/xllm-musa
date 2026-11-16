@@ -1,0 +1,1407 @@
+{
+  "status": "ALL16_GPU_EVENTS_NATIVE_CPU_VALID_FULL_VERIFY_GRAPH_GPU_NODE_COVERAGE_LIMITED",
+  "binary_sha256": "6ca28eb912c08ea4a5b272cedd5ed927dc57c0ca95c0c40071cc603c7aa5bfe2",
+  "selected": [
+    {
+      "host": "sj9",
+      "trace": "/expt/runs/p17_prefix_off_v1/trace_analysis/sj9/rank0.pt.trace.json",
+      "sidecar": "/expt/runs/p17_prefix_off_v1/trace_analysis/sj9/rank0.native_stacks.jsonl"
+    },
+    {
+      "host": "sj10",
+      "trace": "/expt/runs/p17_prefix_off_v1/trace_analysis/sj10/rank0.pt.trace.json",
+      "sidecar": "/expt/runs/p17_prefix_off_v1/trace_analysis/sj10/rank0.native_stacks.jsonl"
+    }
+  ],
+  "ranks": [
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank0_6690_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6690.jsonl",
+      "pid": 6690,
+      "events": 77748,
+      "gpu_kernels": 7692,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244171112.544,
+          "dur": 7579118.352
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank1_6691_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6691.jsonl",
+      "pid": 6691,
+      "events": 77732,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244171399.998,
+          "dur": 7578810.082
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank2_6692_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6692.jsonl",
+      "pid": 6692,
+      "events": 77721,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244171319.429,
+          "dur": 7578915.362
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank3_6693_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6693.jsonl",
+      "pid": 6693,
+      "events": 77732,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244171524.393,
+          "dur": 7578697.072
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank4_6694_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6694.jsonl",
+      "pid": 6694,
+      "events": 77734,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244172212.191,
+          "dur": 7577799.772
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank5_6695_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6695.jsonl",
+      "pid": 6695,
+      "events": 77720,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244172396.047,
+          "dur": 7577985.828
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank6_6696_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6696.jsonl",
+      "pid": 6696,
+      "events": 77720,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244171904.365,
+          "dur": 7579003.638
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj9",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj9/xllm_rank7_6697_1794837279304.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj9/native_cpp_stacks_6697.jsonl",
+      "pid": 6697,
+      "events": 77732,
+      "gpu_kernels": 7691,
+      "aten_calls": 38121,
+      "steps": [
+        {
+          "name": "V41/step/q=256/kv=256",
+          "ts": 3980244173352.019,
+          "dur": 7576933.468
+        }
+      ],
+      "matched_native_record_ids": 38919,
+      "top_aten_counts": [
+        [
+          "aten::empty",
+          4457
+        ],
+        [
+          "aten::as_strided",
+          3519
+        ],
+        [
+          "aten::to",
+          2428
+        ],
+        [
+          "aten::view",
+          1949
+        ],
+        [
+          "aten::item",
+          1835
+        ],
+        [
+          "aten::_local_scalar_dense",
+          1835
+        ],
+        [
+          "aten::empty_strided",
+          1579
+        ],
+        [
+          "aten::empty_like",
+          1483
+        ],
+        [
+          "aten::reshape",
+          1314
+        ],
+        [
+          "aten::copy_",
+          1223
+        ],
+        [
+          "aten::expand",
+          1195
+        ],
+        [
+          "aten::alias",
+          974
+        ],
+        [
+          "aten::_copy_from",
+          947
+        ],
+        [
+          "aten::expand_as",
+          947
+        ],
+        [
+          "aten::_to_copy",
+          929
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank0_5816_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5816.jsonl",
+      "pid": 5816,
+      "events": 27005,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258113110.746,
+          "dur": 1910018.595
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261329690.767,
+          "dur": 83672.06
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261762581.279,
+          "dur": 83128.965
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261897180.862,
+          "dur": 82778.665
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank1_5817_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5817.jsonl",
+      "pid": 5817,
+      "events": 27011,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258111938.372,
+          "dur": 1911136.33
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261329934.073,
+          "dur": 83404.799
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261761455.202,
+          "dur": 84295.138
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261897125.052,
+          "dur": 82783.702
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank2_5818_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5818.jsonl",
+      "pid": 5818,
+      "events": 27013,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258117817.897,
+          "dur": 1905234.769
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261328777.989,
+          "dur": 84540.188
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261761651.927,
+          "dur": 84053.945
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261897299.936,
+          "dur": 82597.607
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank3_5819_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5819.jsonl",
+      "pid": 5819,
+      "events": 27017,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258115290.725,
+          "dur": 1907846.045
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261328994.161,
+          "dur": 84286.877
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261761383.689,
+          "dur": 84382.703
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261897262.788,
+          "dur": 82711.178
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank4_5820_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5820.jsonl",
+      "pid": 5820,
+      "events": 26991,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258110480.521,
+          "dur": 1912644.032
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261329108.024,
+          "dur": 84200.103
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261761571.587,
+          "dur": 84200.424
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261897825.271,
+          "dur": 82170.647
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank5_5821_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5821.jsonl",
+      "pid": 5821,
+      "events": 27007,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258115040.918,
+          "dur": 1908017.22
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261329130.426,
+          "dur": 84224.217
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261761498.623,
+          "dur": 84222.645
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261897314.521,
+          "dur": 82641.339
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank6_5822_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5822.jsonl",
+      "pid": 5822,
+      "events": 26971,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258114949.245,
+          "dur": 1908211.087
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261329800.039,
+          "dur": 83526.612
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261762860.184,
+          "dur": 82915.93
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261898225.85,
+          "dur": 81716.659
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    },
+    {
+      "host": "sj10",
+      "file": "/expt/profiling/p17_prefix_off_v1/sj10/xllm_rank7_5823_1794837287999.pt.trace.json",
+      "sidecar": "/expt/profiling/p17_prefix_off_v1/sj10/native_cpp_stacks_5823.jsonl",
+      "pid": 5823,
+      "events": 26977,
+      "gpu_kernels": 2417,
+      "aten_calls": 13911,
+      "steps": [
+        {
+          "name": "V41/step/q=4/kv=260",
+          "ts": 3980258154784.124,
+          "dur": 1868249.542
+        },
+        {
+          "name": "V41/step/q=4/kv=261",
+          "ts": 3980261328987.925,
+          "dur": 84309.009
+        },
+        {
+          "name": "V41/step/q=4/kv=263",
+          "ts": 3980261761445.86,
+          "dur": 84256.844
+        },
+        {
+          "name": "V41/step/q=4/kv=265",
+          "ts": 3980261898967.262,
+          "dur": 81007.428
+        }
+      ],
+      "matched_native_record_ids": 14158,
+      "top_aten_counts": [
+        [
+          "aten::as_strided",
+          1850
+        ],
+        [
+          "aten::empty",
+          1738
+        ],
+        [
+          "aten::view",
+          952
+        ],
+        [
+          "aten::empty_strided",
+          893
+        ],
+        [
+          "aten::to",
+          701
+        ],
+        [
+          "aten::empty_like",
+          680
+        ],
+        [
+          "aten::expand",
+          635
+        ],
+        [
+          "aten::copy_",
+          611
+        ],
+        [
+          "aten::_copy_from",
+          527
+        ],
+        [
+          "aten::expand_as",
+          527
+        ],
+        [
+          "aten::reshape",
+          499
+        ],
+        [
+          "aten::alias",
+          416
+        ],
+        [
+          "aten::_to_copy",
+          373
+        ],
+        [
+          "aten::transpose",
+          264
+        ],
+        [
+          "aten::select",
+          263
+        ]
+      ]
+    }
+  ],
+  "profile_workload": [
+    256,
+    8
+  ],
+  "scope": "Counts and paths; heavy profiler changes timing, do not infer unprofiled Amdahl fractions"
+}

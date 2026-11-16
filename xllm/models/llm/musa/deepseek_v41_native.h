@@ -1002,6 +1002,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     moe.w4a8_so_path = w4a8_path_;
     moe.w4a8_static_activation =
         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
+    moe.w4a8_valid_prefix_swiglu =
+        util::get_bool_env("XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU", false);
     moe.decode_packed_shared_gate_up =
         util::get_bool_env("XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP", false);
     moe.dense =

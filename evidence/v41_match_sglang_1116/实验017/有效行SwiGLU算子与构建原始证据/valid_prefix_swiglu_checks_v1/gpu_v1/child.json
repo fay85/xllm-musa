@@ -1,0 +1,1 @@
+{"pid": 6465, "start_ticks": "519702944", "command": ["python3", "/expt/builds/valid_prefix_swiglu_checks_v1/validate_valid_prefix_swiglu.py", "--output", "/expt/builds/valid_prefix_swiglu_checks_v1/gpu_v1/result.json"]}

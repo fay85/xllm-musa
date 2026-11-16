@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-16T22:06:09.210953+08:00",
+  "opened": [
+    "\u6709\u6548\u884c_off/Perfetto\u56fe/\u771f\u5b9eCPU\u533a\u95f4\u4e0eGPU\u65f6\u95f4\u7ebf.png",
+    "\u6709\u6548\u884c_on/Perfetto\u56fe/\u771f\u5b9eCPU\u533a\u95f4\u4e0eGPU\u65f6\u95f4\u7ebf.png",
+    "\u6709\u6548\u884c_on/Perfetto\u56fe/\u5b8c\u6574\u5b9e\u9645C++\u8c03\u7528\u94fe_ENTRY_COUNT.png"
+  ],
+  "native_entries_same": 574,
+  "interpretation": "COUNT is entry count, not time; visible draft grid shrinks while launch counts stay fixed; full target Graph GPU node coverage remains incomplete"
+}

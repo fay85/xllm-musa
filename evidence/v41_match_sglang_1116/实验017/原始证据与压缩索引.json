@@ -1,0 +1,1481 @@
+[
+  {
+    "original": "00_参考依据/match_sg_w4a8_ll_prep.py",
+    "bytes": 1790,
+    "sha256": "3fc0681f1233a9d600e9e350d325d6746b2038f5ef7e4b3ceb35ff7e208b3e05",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/00_参考依据/match_sg_w4a8_ll_prep.py"
+  },
+  {
+    "original": "00_参考依据/sha256.json",
+    "bytes": 96,
+    "sha256": "ba0435efb96add9d5d2fce040561eb19cf45ecfd11be1714794d721aba911537",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/00_参考依据/sha256.json"
+  },
+  {
+    "original": "00_参考依据/源码核对说明.md",
+    "bytes": 1048,
+    "sha256": "b09a635e4dbaa3f4065f6ccc14454971bc72c96e1bddcbd225f20ae8b6986229",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/00_参考依据/源码核对说明.md"
+  },
+  {
+    "original": "00_目标与假设.md",
+    "bytes": 1554,
+    "sha256": "e8da0cf36eca6fdb5a00bd8e50115b9204ef9f48170b3b8859b37a2d733a4673",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/00_目标与假设.md"
+  },
+  {
+    "original": "01_代码与构建/valid_prefix_swiglu_v1_build_launch.json",
+    "bytes": 180,
+    "sha256": "6c7a246810167461153b4e62c2e59d35d85f2cd3c111cbaa5f3fdddf9e692126",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/01_代码与构建/valid_prefix_swiglu_v1_build_launch.json"
+  },
+  {
+    "original": "01_代码与构建/valid_prefix_swiglu_v1_files.json",
+    "bytes": 6351,
+    "sha256": "0d2460d32d1db631efc822c54f6051294a3be434464cdfe8cf1de11a26b11b51",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/01_代码与构建/valid_prefix_swiglu_v1_files.json"
+  },
+  {
+    "original": "01_代码与构建/valid_prefix_swiglu_v1_tracked.patch",
+    "bytes": 13882,
+    "sha256": "b2a3edf8c63ea4b457f77c276cbcbf51e04b406d860ac9265eb875fcfef842e5",
+    "lossless_gzip": "01_代码与构建/valid_prefix_swiglu_v1_tracked.patch.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/01_代码与构建/valid_prefix_swiglu_v1_tracked.patch.gz"
+  },
+  {
+    "original": "02_基本检查/GPU短检查摘要.json",
+    "bytes": 946,
+    "sha256": "07ba784fa5839f27afacc88365f327737e8f3b3bfc32d53bef19deb9563f4994",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/02_基本检查/GPU短检查摘要.json"
+  },
+  {
+    "original": "02_基本检查/检查结论.md",
+    "bytes": 300,
+    "sha256": "5c81a9dc6dca9439fce412aada0830dcc0f45bf5684093e10027b3c302909942",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/02_基本检查/检查结论.md"
+  },
+  {
+    "original": "03_三组正式性能.json",
+    "bytes": 2194,
+    "sha256": "732498d9b22e96a03ef4c8278f48edb94a6490306c1ca405d48048518d3eae3f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/03_三组正式性能.json"
+  },
+  {
+    "original": "03_同ELF正式输出哈希.json",
+    "bytes": 2226,
+    "sha256": "060064a52879126ac244b0096c5e46bc6113c387f5d5ffb7d05733c428680f97",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/03_同ELF正式输出哈希.json"
+  },
+  {
+    "original": "04_trace与图/有效行_off/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 654,
+    "sha256": "752a1e3397d132efcdf6b3e4fabe5cd278a9949927554b6b334c781fc5763869",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/Perfetto图/Perfetto实际轨道.json"
+  },
+  {
+    "original": "04_trace与图/有效行_off/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1295,
+    "sha256": "ada04db4403e9d0bd83fb1c4429367bf8c7b759831925648626635dea49c4331",
+    "lossless_gzip": "04_trace与图/有效行_off/Perfetto图/Perfetto页面文本.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "original": "04_trace与图/有效行_off/Perfetto图/rendered.json",
+    "bytes": 1212,
+    "sha256": "beb45728d24c162baa86a5e6a395d8b6f617d39c23d32261209ea8ec92ea1305",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/Perfetto图/rendered.json"
+  },
+  {
+    "original": "04_trace与图/有效行_off/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 270457,
+    "sha256": "f87acaa5695a7f8a000614c0b40f2f2853ae332b093399b81a020eab32e0c0ae",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png"
+  },
+  {
+    "original": "04_trace与图/有效行_off/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 222346,
+    "sha256": "21d74e934aaf490b1250b613e261a2eef902c601c98fd79baab883d1040096c8",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png"
+  },
+  {
+    "original": "04_trace与图/有效行_off/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 142698,
+    "sha256": "442685edee979834f2f7c137e09a925b21e992434f143b2f84b55da70dfd3ee7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/Perfetto图/真实CPU区间与GPU时间线.png"
+  },
+  {
+    "original": "04_trace与图/有效行_off/actual_native_last.pftrace",
+    "bytes": 2631350,
+    "sha256": "b3e3168b182c809027cc91f5eb1bc007f59b990fd36f7f797ada2c35642ffb67",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "04_trace与图/有效行_off/actual_native_last.receipt.json",
+    "bytes": 1723,
+    "sha256": "5f0e6d15b59ab272f5f1a429a1c5241c54d9811c2d1078aec9f6f1ae54eff19d",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_off/actual_native_last.receipt.json"
+  },
+  {
+    "original": "04_trace与图/有效行_on/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 574,
+    "sha256": "9562100abb2ff3bb2d4c2ec56ae4bf22c4eeb8217d60c6fd633a887fabc9cdf3",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/Perfetto图/Perfetto实际轨道.json"
+  },
+  {
+    "original": "04_trace与图/有效行_on/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1242,
+    "sha256": "7f6351b7913bf3406d611df7dd12bacc1691f0fb56ffe98999ee97d759f7006c",
+    "lossless_gzip": "04_trace与图/有效行_on/Perfetto图/Perfetto页面文本.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "original": "04_trace与图/有效行_on/Perfetto图/rendered.json",
+    "bytes": 1213,
+    "sha256": "d8f32dc30491b8271eceadbf74e50dec8c4f0b82cdc785bbf12e8260d67bbfb2",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/Perfetto图/rendered.json"
+  },
+  {
+    "original": "04_trace与图/有效行_on/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 270457,
+    "sha256": "f87acaa5695a7f8a000614c0b40f2f2853ae332b093399b81a020eab32e0c0ae",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png"
+  },
+  {
+    "original": "04_trace与图/有效行_on/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 219206,
+    "sha256": "b422a6536a529e4edea7a390a1a6601914f277aedbf9f59657aa280c5875957b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png"
+  },
+  {
+    "original": "04_trace与图/有效行_on/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 139565,
+    "sha256": "ea508227d53c634c5055ea8f52ea0f563b1db226b357249b03cf4a7e92f0ca8f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/Perfetto图/真实CPU区间与GPU时间线.png"
+  },
+  {
+    "original": "04_trace与图/有效行_on/actual_native_last.pftrace",
+    "bytes": 2628946,
+    "sha256": "5128061d3ac27d002bacae836d3d059facec21b55ecce33206d70990f6907b78",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "04_trace与图/有效行_on/actual_native_last.receipt.json",
+    "bytes": 1727,
+    "sha256": "9f23119c5a2b68aeef9e0f8b175215bdac44f590d6f8eb48bbd71eae657f331b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行_on/actual_native_last.receipt.json"
+  },
+  {
+    "original": "04_trace与图/有效行kernel与ATen对比.json",
+    "bytes": 2304,
+    "sha256": "4515fc230effb8bbc2aa9341407ac71b2d8f119e2437825af363f1cf480f0ac5",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/有效行kernel与ATen对比.json"
+  },
+  {
+    "original": "04_trace与图/目视检查.json",
+    "bytes": 576,
+    "sha256": "20fb304e92ea88c6f31b955c11d006584c73846f7909638ec55bbe35e2fd0f74",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/04_trace与图/目视检查.json"
+  },
+  {
+    "original": "05_结论与读图说明.md",
+    "bytes": 5995,
+    "sha256": "8b7c574944de86b5d7ef3aed41271891ce5ba435e181e61df35c3121765bbf58",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/05_结论与读图说明.md"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/build/artifact_manifest.json",
+    "bytes": 453,
+    "sha256": "e317a0074df5d9d1fb121fe8a65919290f52a8246c6459a6de7290eed02626c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/build/artifact_manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/build/build.log",
+    "bytes": 55955,
+    "sha256": "f94a42a3e6f94c79c13a57531ed86cc851cff669faf982f456d6fb5964cf12a5",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/build/build.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/build/build.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "cd4396c16b8f977744c05df0096ac49efdbde806daaa04c85b22b1475550b8ae",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/build/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/build/job.json",
+    "bytes": 379,
+    "sha256": "38e129c1e1a85b827248b94002fd9d2a162e60948b7eda7685ee48ad1e1b43c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/build/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/build/source_manifest.json",
+    "bytes": 6652,
+    "sha256": "49af6f938bbd1a9bbb27ae075ab57c1da5497a828f105f4637435a80ec922647",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/build/source_manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/active.json",
+    "bytes": 975,
+    "sha256": "b498522dae6b29f734acca75888f4f956267a28d35fb8e135f5d65615a7fcabb",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/active.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1582,
+    "sha256": "6c45113e9309e5af54638ad08cdb04f8fb1917da17d8c74786a9e7c4d2070a5d",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1303,
+    "sha256": "aab2b32dfb639df8e9fbbb64bdff9968741476268a107ea42391426b5f2a0a8e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/basic_gate.json",
+    "bytes": 1870,
+    "sha256": "f2cfb2e4e8e05d8565a34eb497f2737a42639680cb7a4ef68a02f23c4b2e388d",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/basic_gate.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "1dedd5b6fa3fa9702d3f67587eefb332e043a084da572a957aa46ceb519ff2a9",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11954,
+    "sha256": "ed6ba0c8ee3b048ebc1a0830be63c22bd6daea3602f2ac100900aeeb5ff4c7a7",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2345,
+    "sha256": "d0d17adbac47e3c5e8b05322b27b7a37490f91b19daf280d958563102b46eaff",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "8a6be5b05d7799eebe4653139ecd6858abe477d271ea664002199c9c46fb29da",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3634,
+    "sha256": "707a71d915a4516c26a90745ebde815e81f95af5a061d7cb747434b73dda048f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "ffcbe31a9ba2d9f60e19f061c5c3b91e9408f2519c4626e57502a8c774079af9",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 878,
+    "sha256": "201464eeba0f6dafdca42946396dd2d4799a428147fbdb66f5c75bd78195c9a0",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 831,
+    "sha256": "bd7de3ac03a5a67e9e5079a6256ab1d5d0622f65899f2f6420696da1ce89a6c3",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167290,
+    "sha256": "42af51f8b15f2f7fded1645c90a3dad6eca0af33f2b3b7ef658af3ad0d95fdc6",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "60c35c97428732440a533319be9987ede809057e15f7aa564ce5d20ce8cac19b",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal.log",
+    "bytes": 22367,
+    "sha256": "8bf7f7af6e6a70dede8be4cf59863cfb2b65fdf5fdacc968b647fbb011a768dc",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9482,
+    "sha256": "a8040dd28222c3ee665b66d181b669b23ece4f95cfef5b0246689c982d7bd69e",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2352,
+    "sha256": "aa64eaffc295c46ffa2ee875d7cad382e64827541531582ab0fb135754d1408b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "edd511dcf4aaada9150396c6a4da2d9990b980dd65da14bc0ea8668193c7cca5",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3640,
+    "sha256": "2c228e956b39944cc8a65068df8da4d7e4a5db82d1aa0257c4ec2c4276c00eb9",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "2fad1226c1fededfd077399693c91e4b08186d8a17a83d6114e8ebb134430e72",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "26f8a2ff4acdd9826f35b64f30fb4d120c45b965eba292e2ce796def8e635c4e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 214,
+    "sha256": "e6ac054814d2c5c033fd6e1c72d2629f71bfc9024e31c660c6c72b4e9d8cfc13",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166814,
+    "sha256": "bd1d3a745ab0784bd33aaa047a4a8ec925987ff7e95c68b2ab5af09a6429241e",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "5256512f3e6c2f9e62aed2b2d8fdc538962140db20d3f07904fbf5320fe97602",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup.log",
+    "bytes": 18302,
+    "sha256": "87dfa969d8b5b9033f1f2148aeaacccf07f8c077bae53ffac08d2a9688ed87b0",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/identity.json",
+    "bytes": 286283,
+    "sha256": "8668b2d60f20365240adcbb9ce46e0a22cc20c41d609afe96c8a003469807a8e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/job.json",
+    "bytes": 130,
+    "sha256": "2ce250cde36404b073afd4280e89a3ab0d10bf9a6fd59efc6eb920d693a47461",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/status.json",
+    "bytes": 3586,
+    "sha256": "3a927712078e26cc8b373ae8f0f460d5485a28b13a0caf5ef7c8dc3627099f95",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/formal_client/summary.json",
+    "bytes": 547,
+    "sha256": "8a9a4c26795e5771b13e1b68cd8a13b44f168f09841b8e47623ccf3d11935e1d",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/formal_client/summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/child.json",
+    "bytes": 220,
+    "sha256": "286dd930d6b295da8a9585799b1b1acd9edb2e81a0f8682173738295e2b329dc",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/child.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/finished.json",
+    "bytes": 58,
+    "sha256": "aa6669daeebed384af591dade01cd4b8f464295d0b575c42b3c629c5b3cd837f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/job.json",
+    "bytes": 83,
+    "sha256": "46ea8f4182cc5f2ee1bb7e9ff16f17221371203a26fba310b541834ee0258dd5",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/result.json",
+    "bytes": 9251,
+    "sha256": "0ab1d81b3d3fcfac2f5ca380d844f6bf21a75f2272670e08268cd56808370eab",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/test.log",
+    "bytes": 139,
+    "sha256": "e7c97198634047a8f849b4c25d35297203c6d2e0dde9ed554a15cd7241f62e08",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/test.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/test.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/gpu_checks/worker.py",
+    "bytes": 881,
+    "sha256": "290e73d10fdac66a225bf8c67f8d7c96f81943fd92e6467f3fd0eed8edefacc4",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/gpu_checks/worker.py"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 247273,
+    "sha256": "d9e100f57ef90d8dbe6503ef2e37fbfce626436c335fb958cd62d7deb6c9be08",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 49542,
+    "sha256": "f5c0845bacf13e50360e206bb9bffc456e1ad246eae61e409f7aa97a7171276e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9143,
+    "sha256": "6b4f9b7cedf6db9bb8e2c0a0b2145c01c534724fc3b0f9fe5de2b9d2722154c3",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/status.json",
+    "bytes": 264,
+    "sha256": "562ad230217a501a48c037fc5ecf4d217761b65d16c0556f6362188fff0afa22",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "23e3933a023d793534af157ce3fe5987cd04dbf07548955b68550db325f41732",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 195949,
+    "sha256": "da5a8d1f5449fdfaed2d09793f76863cf139416bfdc9ceef76a7feb63e6fa752",
+    "lossless_gzip": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 49518,
+    "sha256": "a20aa8c3ad29b176e2d6ab75d1485575073541331694f02b1f2ad39dbfb31055",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9345,
+    "sha256": "92a872e9931e6d6bce86777c116bdab63ca4e53f0f5ee942b2d51f792e031a2b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/status.json",
+    "bytes": 264,
+    "sha256": "e1fce7a9c3b6db66747c31ac6d6de1596575d40743ec9ac1d833f715cbe27692",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 108,
+    "sha256": "34ce85dacc150c0cd5a65fb713468bea92b2fabac0ece2af8a3b7f82e680c5e2",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "c60f4411aa6fc03088f1ab9236b90f5e30becfb1826d60fe125b44612aa04ee3",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "feca1bdf4c961933d96fabc8e9b6c1893843e09d1e134030ac55cef71dee7110",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/manifest.json",
+    "bytes": 7114,
+    "sha256": "f5e3a64aab5a84b38e26f9285881888371116b3f48fd0e869fc13dc850af6da4",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2497,
+    "sha256": "cb6ebe187e5b8f16fc4b1e409520c543064ee1ccbd373765a20ac96eb96107fc",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/off_after_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "671e839ae1aed0d0bf546a952e9fdfeb828853658804e5bc3d0bb342e0db82bc",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/off_before_1_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2500,
+    "sha256": "dbbc14bd4ee328591b0a5e3632c6127c1ec4986a952582974f02ffad11d10fb6",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/off_before_2_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2491,
+    "sha256": "d87431e918a36c882472cd6a90a918c564e328e17b0cf94327a3426c0c818299",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/profiled_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/request.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/requests.json",
+    "bytes": 1762,
+    "sha256": "a445d5ac0724dc44a2c7e5b071279da9d63230fe1df1a1c71cf5be6d222bfe25",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/requests.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "7ae0cb17018beaafc2d44c911820e394330bfa8869d5ecf94d24a03f816ec23a",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/start_profile.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "82aa34cfe8f4189874d17c9f1f14b4691716cd843f80e037364d93a740fe395b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace/stop_profile.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 27606,
+    "sha256": "44e65b8fdf991a3f267b35f42540ef51a606d6aa2f085a6b3ac840e140d11105",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace_analysis/all_rank_validation.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 176112,
+    "sha256": "1fdfd55e828d14bc17b33de047719cd3aa2d785fe786eff253132e2e11129574",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据/trace_analysis/resolved_symbols.json"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 13405461,
+    "sha256": "827915c175d7e1f1c9481b98d1965c61e1c932cde3f7ed14801f5631783572f4",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 6895242,
+    "sha256": "fa8467c57e475235610497b8de76fb69fcaa12e28483169c872dd9142226b90d",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 18939803,
+    "sha256": "12e008784a029973d5f367cdfb90a0b69642e03f0ad5e38ed39ed04c4377eb19",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20024680,
+    "sha256": "74246749aea968d94dd65c787716fe6e978d6ed88f8c718dda60b9f80380cb8f",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据.tar.gz",
+    "bytes": 5204018,
+    "sha256": "05407715a6cbd7af36875deb8a056e580c55b34df5dc4eb3aafd5b8512682058",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_off_正式与trace原始证据校验.json",
+    "bytes": 216,
+    "sha256": "4481d75e73199de49aae851484bc37a10fc49dc6700fd97f5cbab0fc1893d408",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_off_正式与trace原始证据校验.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/build/artifact_manifest.json",
+    "bytes": 453,
+    "sha256": "e317a0074df5d9d1fb121fe8a65919290f52a8246c6459a6de7290eed02626c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/build/artifact_manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/build/build.log",
+    "bytes": 55955,
+    "sha256": "f94a42a3e6f94c79c13a57531ed86cc851cff669faf982f456d6fb5964cf12a5",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/build/build.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/build/build.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "cd4396c16b8f977744c05df0096ac49efdbde806daaa04c85b22b1475550b8ae",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/build/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/build/job.json",
+    "bytes": 379,
+    "sha256": "38e129c1e1a85b827248b94002fd9d2a162e60948b7eda7685ee48ad1e1b43c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/build/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/build/source_manifest.json",
+    "bytes": 6652,
+    "sha256": "49af6f938bbd1a9bbb27ae075ab57c1da5497a828f105f4637435a80ec922647",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/build/source_manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/active.json",
+    "bytes": 974,
+    "sha256": "8b98012ebd1fc309a078d68fa92bf5d07f9661e6519c7cf7c0f41d33c008be4c",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/active.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1580,
+    "sha256": "f5d0b9273fa95bf670ad957959ec07c8c08908f4d36bb59ee3684c4dd91fa759",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1304,
+    "sha256": "69d0d6e3a8308b9d9abec33b763207c2e667b92d792ea20d705d0f610bf14a26",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "dbb899b024203e9b377a4baab2a89f504c8b9cec955ce26ef9a7e94a3327c0d7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/basic_gate.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "9e09653c8d343c6265e383d4da42679e0fe8e9d36fd87c87c83081b7ffb3f70a",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11944,
+    "sha256": "e3ad95707df6c42bfd3192d0ae6b775ffe6d3fbd188ae0b0a8cbd23bb1367ca0",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2344,
+    "sha256": "b8764878a65006cd3e1383a7f0b59b2381058aa202f743b78ff852df48b46ba6",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "0505c073e3c17e3e981a6bdbabd884ae440fc1dda7d5f271bd2b83435bda23ae",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3637,
+    "sha256": "38fee7848b4fb972534db622425226c67610cf6af4f1105120ba9e35e2289385",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "6d58ecb587228fbd3cc7eeded42b679cdfbbba22c7f7702c6c0b547734140468",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "92f700b15c8106c13e90226074cd8b54c4e3793d4428069e075d7afa388fcf0c",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 835,
+    "sha256": "c8379dff3f14b0bfda35371d3c97fce672e206add07b2fe99ab4f321d2d0e097",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167294,
+    "sha256": "b7120a85d2f254e52c81082a3d63587218a2203a7b4a261cd4be79e1fc7ce988",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "e95e656770bfaf4d6a25a95424c8b6714895084729ad7787de958f41735dc334",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal.log",
+    "bytes": 22356,
+    "sha256": "5eaa6b02fe6153e5046c64ebdaa0a50949cd666c91aea324b9d0f046786eb748",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9473,
+    "sha256": "a20e7129b55335476e27d0dd72528024f17f6d79c1ff033d34da50879fd30bed",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2351,
+    "sha256": "793cb3d27733a11f38bffe4284a9f58ed0499d50ac3359e457953b9c4847999b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "bc696bbbe45c797d16ff07e8e81676e5e8770b6d764fe8be9ef7242037092f9c",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3623,
+    "sha256": "c14ac67840ec6c153a9a5aa11501eff0094359284dab5baa76f0e63a2e3734e9",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 663,
+    "sha256": "57d2c1804d933e0824c85d08467d2eb555e6792d8bc126daf145379f8afeb1ad",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "cbae7a2902aa22e9cd2de789fdfb180e8345ed6d91691ae6fd168eb79fa62416",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "665ada0fbe6cf71362fa8e97472851e7036a639909ce9945f6c95130650a093a",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166797,
+    "sha256": "b0b9109b21df78c0e50436542e8fb3d02995deda4a68d54856403a2c958a7757",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "4406874ebba8c22a6dc168a32bfc1912c131f0c13a0577e151701d6fdc5f797e",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup.log",
+    "bytes": 18292,
+    "sha256": "182c0b0b551583670fd2b567d6763a2ed473482eeb65018a5c3fc3241f6d4efa",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/identity.json",
+    "bytes": 286283,
+    "sha256": "8668b2d60f20365240adcbb9ce46e0a22cc20c41d609afe96c8a003469807a8e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/job.json",
+    "bytes": 129,
+    "sha256": "70d77822f3f69eecc8ea7adf1bb1b30dcefd9029454e7890fb01ec2dced18a8b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/status.json",
+    "bytes": 3586,
+    "sha256": "b32aeb391aa6d69a6315f6c5ebc38b906fa6ca9d792377f29d92a4b041d93403",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/formal_client/summary.json",
+    "bytes": 548,
+    "sha256": "56080d5d66ce4a264bd32528d806dd8a8d6e156e11f63bd701427e18a3eb5fbe",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/formal_client/summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/child.json",
+    "bytes": 220,
+    "sha256": "286dd930d6b295da8a9585799b1b1acd9edb2e81a0f8682173738295e2b329dc",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/child.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/finished.json",
+    "bytes": 58,
+    "sha256": "aa6669daeebed384af591dade01cd4b8f464295d0b575c42b3c629c5b3cd837f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/job.json",
+    "bytes": 83,
+    "sha256": "46ea8f4182cc5f2ee1bb7e9ff16f17221371203a26fba310b541834ee0258dd5",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/result.json",
+    "bytes": 9251,
+    "sha256": "0ab1d81b3d3fcfac2f5ca380d844f6bf21a75f2272670e08268cd56808370eab",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/test.log",
+    "bytes": 139,
+    "sha256": "e7c97198634047a8f849b4c25d35297203c6d2e0dde9ed554a15cd7241f62e08",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/test.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/test.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/gpu_checks/worker.py",
+    "bytes": 881,
+    "sha256": "290e73d10fdac66a225bf8c67f8d7c96f81943fd92e6467f3fd0eed8edefacc4",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/gpu_checks/worker.py"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 247384,
+    "sha256": "f83322b97accb33546e54ac84c8d20063129d02239a823d5143456f41ab7a27a",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 49508,
+    "sha256": "fc6b120a59abd4f89587613f791980c5c4bd11f6b785ea0755418f4aa93feaee",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9151,
+    "sha256": "305c0488085f334e8cab0140f3aa57b3995f2a04e2aae7b3f6cf54b54ef67d77",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/status.json",
+    "bytes": 269,
+    "sha256": "17b14aff890554fc7c3cd62c89d5b51c8fcb82b7fde39230b6beaaa5ba192bfc",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "6f4761575f5f1246a879a0d9a33a916e3256c5c380556add4480c695459946b8",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 195699,
+    "sha256": "3423ab0d9395ac1b9b7796f64b0ea377d41a867597a5a9f4458e6191b4d7c7c9",
+    "lossless_gzip": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 49484,
+    "sha256": "fdfab6eafe306bd4b1ce371a7c35c8f2f8c37bd2c4ea5ccc968450c0e1add322",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9353,
+    "sha256": "401e81aff3b588fb015c4755e6ba319a87e708b1fd04f445a2d7d4d2ae73c392",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/status.json",
+    "bytes": 269,
+    "sha256": "e29ee4ac41cfa63cc99c00bcbb11b05547f4e815eebfb3d5a48d8a83a0e41326",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "c10c85090e8ec9356f5b57b4239b31cd2bdb2f29a6dd0a5597d6021e2579ee8a",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "82a524386e5c0f9cfcc27e9920518394e8b9cff74b1fa755f408c0066a870d84",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "4443ece0b65315fb085415cabb657df96f00182b1a59daea88774eed9aa0a78c",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/manifest.json",
+    "bytes": 7114,
+    "sha256": "38de43c8dea3681bc9de7fbc8c05f631e5a0b468ffcc037533ff3491b0cbe132",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2495,
+    "sha256": "712d56f588c7c768d70e0bf601c225a9fbbeba1d0b53c0d9417bf6f13fec50f4",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/off_after_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2497,
+    "sha256": "4d2a6f193f803ee523dfa05721e1c63adfcf7a58342421c06de2cb6810a1f404",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/off_before_1_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "2906e8c676b94bc8a0f63c768756a5bf8f19a84412fe8c9b28e8d1c684813614",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/off_before_2_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2492,
+    "sha256": "f03426591e90135efaacdab49f40fd6cd19f0d14cf31efcb3d94d00381ab1035",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/profiled_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/request.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/requests.json",
+    "bytes": 1760,
+    "sha256": "06cb92c9aebfab99317ec0215290dc58fff3d7a6eef4548f752fb00943761847",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/requests.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/start_profile.json",
+    "bytes": 311,
+    "sha256": "90049806a2ebf3ae46b94ba728c99512ec6c74baf3d24c1ff334b327a15194b7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/start_profile.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "44bff0d9d1cfa255b0962aff8ac7dc1f729660fb335466f4c8994046e9997238",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace/stop_profile.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 27615,
+    "sha256": "c8121bfe929979c4eca63234c837e8ec3fdddd7095686c1257d2c6625a9dac9e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace_analysis/all_rank_validation.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 176112,
+    "sha256": "1fdfd55e828d14bc17b33de047719cd3aa2d785fe786eff253132e2e11129574",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据/trace_analysis/resolved_symbols.json"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 13420088,
+    "sha256": "0129becca399d156199f1ff8861957199654ff7b8830c358dca445f4b4595d59",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 6937771,
+    "sha256": "00b5939b128330abf7eb1a9b35beac8b0911764be8e84fcb91c72139c249d021",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 18978859,
+    "sha256": "670de26d9714c5c8f469a50492538a32d9118502b50b3761ef7a1305e985bf2c",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20147918,
+    "sha256": "adc8c1f2e183b2b452454b92c69fae193c8314a6281670dc193917de9b310801",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据.tar.gz",
+    "bytes": 5195119,
+    "sha256": "1cda5f916a61b319ec19f7aace5e4a62f36c35ae9641afbbe316bbb46af29cd5",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_on_正式与trace原始证据校验.json",
+    "bytes": 215,
+    "sha256": "ddbe6648478feba730ec2239845bb1a8c4c2b9bc3faa67426305e33c4e04c692",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_on_正式与trace原始证据校验.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/active.json",
+    "bytes": 983,
+    "sha256": "47457888f9de25b24f8a17d84dc517fbd39268c4773bf2f2bd00f4066c657c80",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/active.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1583,
+    "sha256": "3d0c7d04416abba3e0fcc767e547e76a7ec52d476901b58cddc9e482ce8428e7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1304,
+    "sha256": "04b74c0c4ad6acff16a06177423bfd7829fb0320ad739b69005ba6c3020f0b72",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/basic_gate.json",
+    "bytes": 1872,
+    "sha256": "f6690321bf71e0ba732ae6ecec6b4fa764077697464a2c048fdf7ab9b98cab94",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/basic_gate.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "9414db2178a3517de6fd73bdb52c1eee5846f01adafd2be069062a9d03552131",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11993,
+    "sha256": "5c57850601410f8237fbd8c0581579197aa20c2022815bf5a8d9dabdccc2c322",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2353,
+    "sha256": "396132c22545834a81bab06db7779fe924463aea26cb0eaeb2f8a90ce58318d7",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "3f61d52d8a93975c4e41b9f84106531f1fb2ae77f8d32b5e9089a1fcad9b6966",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3627,
+    "sha256": "dd34719e207144f0a6b0c55d3575322e625044a57825711e4358f8fa91a168a1",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "42e2c1f2507fd748dd5a33792200f7764cc97362eb6e9bfdb9419442596cf254",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 875,
+    "sha256": "527df94512ba3181e1aec9b0656f643267535c2e12b42147decff39fdd1e90f6",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 834,
+    "sha256": "02292d9def099dd634ff55800d9552c87f0877e0f2944e3cdfacefc5a1beb76a",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167276,
+    "sha256": "1e6c4449735b9a064cf79c4f34fba69d39fddc01c22ebfbe560a96bf880a5155",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "4c2c9c4a287b1afff026c428911b0c861f1ec724ec2b7021cbe86e23b4e143ba",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal.log",
+    "bytes": 22414,
+    "sha256": "f357452885553adf81736d9871078d4089b1760b8e51e77373f336d3f107b3be",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9539,
+    "sha256": "e9f715f1c9d3c5344d220b64a2011bd847e340eea27dcec68f762e69e6004179",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2360,
+    "sha256": "3f596f6e580ce60bcba7ede2050558475d04eb411974a517cbeb3eba6774663f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "ccf4eff21dfa1f049cf331ed2c0f06ed64950cdce7bfa76e2b6d8f978d795d1d",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3623,
+    "sha256": "a9dc2f3b2975257947b30aa9b5e995a577c14ad4b1b58986fe2178fb8dfcdbd6",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "6691192f949825d44cc7a95736c2560af22d5e7fdd3a93a15eec6ac8a7ce05ca",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 872,
+    "sha256": "881137e842b3c28b881c1bf80db4dcf93652657101cecc82933ddf16016cf80c",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 214,
+    "sha256": "546a48092878f72f97cb932ec86f95389e742452b0136be1959fd937867519fa",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166800,
+    "sha256": "97acf5da1e2bfabbe41f9193dc670dcf2025f0f96c2c8c713e13b4cb2f7f768a",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "f6e74b2504dad85eecfd2624d87ec78e1b252bfbc13ff606b94f48a5fec96599",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup.log",
+    "bytes": 18367,
+    "sha256": "25b63e3c0b961e852e07c40a3b9a17af9e2c62640ce9ba3764f973844104d5e4",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/identity.json",
+    "bytes": 286283,
+    "sha256": "8668b2d60f20365240adcbb9ce46e0a22cc20c41d609afe96c8a003469807a8e",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/job.json",
+    "bytes": 138,
+    "sha256": "f37bb1ade8306436199ec2bb7611a1adfa0adb71bd127da661f2f9c4e6321af8",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/job.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/status.json",
+    "bytes": 3600,
+    "sha256": "5c46f48c24ed8c870a56d40e6dd09d29771aadad98c9e0674168f3145a068072",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/formal_client/summary.json",
+    "bytes": 548,
+    "sha256": "ae4ed5862aefdcb58a2c5c9833909beda6a3f9199917e0c0145a58d20759fac3",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/formal_client/summary.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/rank0.log",
+    "bytes": 235348,
+    "sha256": "1a76c3adca3c6344f3fca2c395b1ca6a3857c4dc7f79ba9a0272b69636bd65b0",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/role_config.json",
+    "bytes": 49780,
+    "sha256": "7a3da9dfbd4157fc8894d6565aa3a5b4a339e1b6e3e68979ebb07ff9b55ff450",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9151,
+    "sha256": "8159603d3a65dbd635a4288a44c7abf1869ac2fd7f619449db560e2479c6888b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/status.json",
+    "bytes": 251,
+    "sha256": "d5d4d011a00416758619a0ff2f1bfa80b29da38d0667e0cc506f940528abd4e5",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "159aa33d6a4a19358edeb0cd883f5ed6b9f2b376ef12ca1f4881ce9037791f53",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/rank0.log",
+    "bytes": 160244,
+    "sha256": "d0e00de79bd8a28cfd85e50d605c7e42ff5037199013fcfd4831cf271e5af8e6",
+    "lossless_gzip": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/role_config.json",
+    "bytes": 49756,
+    "sha256": "8754d47907f52a4bb392c67974547254d697d5950854cfdb5672660424a03000",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9353,
+    "sha256": "058c8456e15c3b2343def09e64fae0ed1878282faad0ad88d99745dee6de0f66",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/status.json",
+    "bytes": 266,
+    "sha256": "d30cf073be6a9324369866bcef0cd97450217141d1ab2956ee0f54c1b363d233",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "3388cba67b934cc80d8a87f1b202d767abb02355f89a30c98558f9a10308ab15",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据.tar.gz",
+    "bytes": 157752,
+    "sha256": "2ffe9f20025164180ece6c653134fdde35fe8af269e1bae944f3da49218e5200",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU_reverse_正式原始证据校验.json",
+    "bytes": 223,
+    "sha256": "d1f20d9d5b393c4588078aece7d94ef5566d2e1d5679c9b3cd8c63895ab59011",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU_reverse_正式原始证据校验.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/commands.json",
+    "bytes": 15502,
+    "sha256": "f000e863d20ddb2918248ddbfd0fe8821c86740911b52455f12980586da2a10a",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/commands.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/finished.json",
+    "bytes": 164,
+    "sha256": "8a439e843a766559dcf668d0d1e7a5cfddcd6157d02dd09d3459e0d3abd02ea2",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/child.json",
+    "bytes": 220,
+    "sha256": "286dd930d6b295da8a9585799b1b1acd9edb2e81a0f8682173738295e2b329dc",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/child.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/finished.json",
+    "bytes": 58,
+    "sha256": "aa6669daeebed384af591dade01cd4b8f464295d0b575c42b3c629c5b3cd837f",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/finished.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/job.json",
+    "bytes": 83,
+    "sha256": "46ea8f4182cc5f2ee1bb7e9ff16f17221371203a26fba310b541834ee0258dd5",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/job.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/result.json",
+    "bytes": 9251,
+    "sha256": "0ab1d81b3d3fcfac2f5ca380d844f6bf21a75f2272670e08268cd56808370eab",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/result.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/test.log",
+    "bytes": 139,
+    "sha256": "e7c97198634047a8f849b4c25d35297203c6d2e0dde9ed554a15cd7241f62e08",
+    "lossless_gzip": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/test.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/test.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/worker.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/worker.py",
+    "bytes": 881,
+    "sha256": "290e73d10fdac66a225bf8c67f8d7c96f81943fd92e6467f3fd0eed8edefacc4",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/gpu_v1/worker.py"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/import.log",
+    "bytes": 72,
+    "sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "lossless_gzip": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/import.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/import.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/job.json",
+    "bytes": 91,
+    "sha256": "5a9954f2a895a6eeb6453124872674df2de6d7f49e20cf6015c94245c2f63647",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/job.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/link.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/link.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/module_compile.log",
+    "bytes": 3528,
+    "sha256": "1805cedfc995d6d439e4c98113ac7efad0e39bbbd0a94c18aefe270ba0c9fda9",
+    "lossless_gzip": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/module_compile.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/module_compile.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/production_object_manifest.json",
+    "bytes": 5416,
+    "sha256": "61705a95b098df9d75924e65963a420075a4e1d07835b99a4eea4d2de082baf9",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/production_object_manifest.json"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/v41_static_w4a8_test_module.cpp",
+    "bytes": 1452,
+    "sha256": "3b2616d668a01ab43aeb8858b10d6d1bee63a0fabaf03e9aff31464ad37f037b",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/v41_static_w4a8_test_module.cpp"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/validate_valid_prefix_swiglu.py",
+    "bytes": 4261,
+    "sha256": "ef85d218d64c08963ee5923333ec484429d64485832a7b360ad6b72123496430",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/validate_valid_prefix_swiglu.py"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/worker.log.gz"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/worker.py",
+    "bytes": 3023,
+    "sha256": "ce5859250dc2567685c4173ca96b8e8c0015f9574854fdb31086ea6397701642",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据/valid_prefix_swiglu_checks_v1/worker.py"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据.tar.gz",
+    "bytes": 7663,
+    "sha256": "7082cc063748f7b65498c3ff5d3e7f88bd36c327ef20fe6625793c230252747a",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "有效行SwiGLU算子与构建原始证据校验.json",
+    "bytes": 216,
+    "sha256": "9ca7b4d9c80c867cac330866b4b5fdb09eb4282e74fb9188c7f121e6c83db3e1",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/有效行SwiGLU算子与构建原始证据校验.json"
+  },
+  {
+    "original": "清理后_sj10.json",
+    "bytes": 5696,
+    "sha256": "1fe1e8f3109eb8d22048e8459fe7738c668afa8d250bca621541587e579b6801",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/清理后_sj10.json"
+  },
+  {
+    "original": "清理后_sj9.json",
+    "bytes": 4635,
+    "sha256": "d2a98c44948d53cd4e5932b0ced90f67e57c2fe22085670b84198cea5d089f01",
+    "git_path": "evidence/v41_match_sglang_1116/实验017/清理后_sj9.json"
+  }
+]

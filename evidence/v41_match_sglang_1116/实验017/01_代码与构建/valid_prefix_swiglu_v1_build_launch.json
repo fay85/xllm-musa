@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 6092, \"start_ticks\": \"519688372\", \"root\": \"/expt/builds/valid_prefix_swiglu_v1\", \"changed_files\": 51}\n",
+  "stderr": ""
+}
