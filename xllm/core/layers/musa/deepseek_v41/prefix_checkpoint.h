@@ -24,8 +24,14 @@ struct DeepseekV41PrefixSavedRows {
 // It does not repair non-causal verify math or commit scheduler/draft state.
 class DeepseekV41PrefixCheckpoint final {
  public:
-  DeepseekV41PrefixCheckpoint(int64_t begin, int64_t tokens, int64_t max_bytes)
-      : begin_(begin), tokens_(tokens), max_bytes_(max_bytes) {
+  DeepseekV41PrefixCheckpoint(int64_t begin,
+                              int64_t tokens,
+                              int64_t max_bytes,
+                              bool fused_snapshot = false)
+      : begin_(begin),
+        tokens_(tokens),
+        max_bytes_(max_bytes),
+        fused_snapshot_(fused_snapshot) {
     CHECK_GE(begin_, 0);
     CHECK_GT(tokens_, 0);
     CHECK_LE(tokens_, 6);
@@ -47,6 +53,10 @@ class DeepseekV41PrefixCheckpoint final {
     }
     if (!ring) {
       CHECK_LE(first + count, table.size(1) * cache.size(1));
+    }
+    if (fused_snapshot_) {
+      save_fused(cache, table, ratio, ring, false, cache.size(1), count);
+      return;
     }
     torch::DeviceGuard guard(cache.device());
     const torch::Tensor logical =
@@ -71,6 +81,10 @@ class DeepseekV41PrefixCheckpoint final {
     const int64_t first = begin_ + begin_ % 2;
     const int64_t count = (begin_ + tokens_ - first + 1) / 2;
     if (count == 0) {
+      return;
+    }
+    if (fused_snapshot_) {
+      save_fused(state, swa_table, 1, true, true, swa_block_size, count);
       return;
     }
     torch::DeviceGuard guard(state.device());
@@ -117,6 +131,25 @@ class DeepseekV41PrefixCheckpoint final {
     CHECK(table.scalar_type() == torch::kInt32 ||
           table.scalar_type() == torch::kInt64);
   }
+  void save_fused(const torch::Tensor& cache,
+                  const torch::Tensor& table,
+                  int64_t ratio,
+                  bool ring,
+                  bool recurrent,
+                  int64_t swa_block_size,
+                  int64_t count) {
+    const int64_t bytes = count * cache.size(2) * cache.element_size();
+    CHECK_LE(bytes, max_bytes_ - saved_bytes_);
+    auto rows = kernel::musa::deepseek_v41_snapshot_prefix(
+        cache, table, begin_, tokens_, ratio, ring, recurrent, swa_block_size);
+    CHECK_EQ(rows[0].numel(), count);
+    saved_bytes_ += bytes;
+    saved_.emplace_back(
+        DeepseekV41PrefixSavedRows{cache.view({-1, cache.size(2)}),
+                                   std::move(rows[0]),
+                                   std::move(rows[1]),
+                                   std::move(rows[2])});
+  }
   void save(torch::Tensor target,
             torch::Tensor slots,
             torch::Tensor prefix_lengths) {
@@ -138,6 +171,7 @@ class DeepseekV41PrefixCheckpoint final {
   int64_t max_bytes_;
   int64_t saved_bytes_ = 0;
   bool restored_ = false;
+  bool fused_snapshot_ = false;
   std::vector<DeepseekV41PrefixSavedRows> saved_;
 };
 }  // namespace xllm::layer

@@ -1,0 +1,4243 @@
+{
+  "status": "PASS_ACTUAL_RATIO2_PREFIX_RESTORE",
+  "cases": [
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": false,
+          "relative_rms": 4.058184543964671e-08,
+          "max_absolute": 1.5133991837501526e-09
+        },
+        "compressor_score_state": {
+          "exact": false,
+          "relative_rms": 4.126819774796786e-08,
+          "max_absolute": 1.280568540096283e-09
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": false,
+          "relative_rms": 4.099364048215648e-08,
+          "max_absolute": 1.5133991837501526e-09
+        },
+        "compressor_score_state": {
+          "exact": false,
+          "relative_rms": 4.175615586632375e-08,
+          "max_absolute": 1.0477378964424133e-09
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": false,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 31,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": false,
+          "relative_rms": 4.1342381962294894e-08,
+          "max_absolute": 9.313225746154785e-10
+        },
+        "compressor_score_state": {
+          "exact": false,
+          "relative_rms": 3.88987437816013e-08,
+          "max_absolute": 9.313225746154785e-10
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 32,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 127,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": false,
+          "relative_rms": 4.223414862281061e-08,
+          "max_absolute": 1.3969838619232178e-09
+        },
+        "compressor_score_state": {
+          "exact": false,
+          "relative_rms": 4.06955038556589e-08,
+          "max_absolute": 1.0477378964424133e-09
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 128,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 257,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 0,
+      "checkpoint_bytes": 22272,
+      "prefix_output": null,
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 1,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 2,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 3,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 4,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 5,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "nondefault_stream": true,
+      "begin": 511,
+      "verified_inputs": 6,
+      "accepted_inputs": 6,
+      "checkpoint_bytes": 22272,
+      "prefix_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "state_before_next": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_kv_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "compressor_score_state": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "untouched_rows_exact": {
+        "swa": true,
+        "key": true,
+        "index": true,
+        "compressor_kv_state": true,
+        "compressor_score_state": true
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    }
+  ],
+  "scope": "One actual native Attention layer with MATE sparse/AOT indexer; ring overwrite, compressed-page permutation, even/odd positions, all acceptance lengths, next-token continuation. Model/scheduler/draft integration is not covered.",
+  "accuracy_scope": "\u4ec5\u901a\u8fc7\u57fa\u7840\u529f\u80fd\u68c0\u67e5\uff0c\u672a\u5b8c\u6210\u6a21\u578b\u7cbe\u5ea6\u9a8c\u6536"
+}

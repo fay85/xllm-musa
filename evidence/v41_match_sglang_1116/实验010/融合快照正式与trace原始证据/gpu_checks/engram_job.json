@@ -1,0 +1,17 @@
+{
+  "stage": "engram",
+  "pid": 49314,
+  "start_ticks": "518946104",
+  "command": [
+    "python3",
+    "/expt/builds/fused_prefix_snapshot_v1/gpu_checks/validate_prefix_engram.py",
+    "--output",
+    "/expt/builds/fused_prefix_snapshot_v1/gpu_checks/actual_engram.json",
+    "--metadata",
+    "/work/artifacts/model_view_w4afp8_mt_1017/engram_hash_state.native",
+    "--library-directory",
+    "/work/artifacts/native_stage_i/lib/engram_hash",
+    "--fused-snapshot"
+  ],
+  "at": "2026-11-16T19:43:45.166289+08:00"
+}

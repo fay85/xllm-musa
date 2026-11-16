@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 48232, \"start_ticks\": \"518904998\", \"root\": \"/expt/builds/fused_prefix_snapshot_native_v1\", \"changed_files\": 35}\n",
+  "stderr": ""
+}

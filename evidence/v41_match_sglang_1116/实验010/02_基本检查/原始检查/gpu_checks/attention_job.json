@@ -1,0 +1,17 @@
+{
+  "stage": "attention",
+  "pid": 49115,
+  "start_ticks": "518944921",
+  "command": [
+    "python3",
+    "/expt/builds/fused_prefix_snapshot_v1/gpu_checks/validate_prefix_checkpoint.py",
+    "--output",
+    "/expt/builds/fused_prefix_snapshot_v1/gpu_checks/actual_attention.json",
+    "--sparse-so",
+    "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+    "--indexer-dir",
+    "/work/artifacts/native_stage_i/lib/indexer",
+    "--fused-snapshot"
+  ],
+  "at": "2026-11-16T19:43:33.328937+08:00"
+}

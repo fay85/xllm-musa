@@ -40,8 +40,8 @@ def _metrics(actual: torch.Tensor, expected: torch.Tensor) -> dict:
     return {"exact": torch.equal(a, b), "relative_rms": float(delta.square().mean().sqrt() / b.square().mean().sqrt().clamp_min(1e-12)), "max_absolute": float(delta.abs().max())}
 
 
-def _checkpoint(cache: object, swa: torch.Tensor, table: torch.Tensor, begin: int) -> object:
-    result = native.PrefixCheckpoint(begin, 6, 64 * 1024 * 1024)
+def _checkpoint(cache: object, swa: torch.Tensor, table: torch.Tensor, begin: int, fused: bool = False) -> object:
+    result = native.PrefixCheckpoint(begin, 6, 64 * 1024 * 1024, fused)
     result.add_paged(cache.swa, swa, 1, True)
     result.add_paged(cache.key, table, 2, False)
     result.add_paged(cache.index, table, 2, False)
@@ -55,6 +55,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sparse-so", required=True)
     parser.add_argument("--indexer-dir", required=True)
+    parser.add_argument("--fused-snapshot", action="store_true")
     args = parser.parse_args()
     assert torch.musa.device_count() == 1
     torch.set_num_threads(1)
@@ -102,7 +103,7 @@ def main() -> None:
                     proposals = _random((7, 5120))
                     for accepted in range(7):
                         trial, reference = _clone(base), _clone(base)
-                        checkpoint = _checkpoint(trial, swa, table, begin)
+                        checkpoint = _checkpoint(trial, swa, table, begin, args.fused_snapshot)
                         verified = layer.forward(proposals[:6], torch.arange(begin, begin + 6, device=device), rope, trial, swa, table, table, begin + 6, native.NativeV41AttentionRuntime())
                         checkpoint.restore_suffix(accepted)
                         prefix_error = None

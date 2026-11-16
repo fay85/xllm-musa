@@ -1,0 +1,12 @@
+{
+  "version": "clang-format 20.1.6",
+  "checked_files": [
+    "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/03_代码/xllm-musa/tests/core/kernels/musa/v41_prefix_checkpoint_test_module.cpp",
+    "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/03_代码/xllm-musa/xllm/core/kernels/musa/deepseek_v41_prefix_restore.cu",
+    "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/03_代码/xllm-musa/xllm/core/kernels/musa/deepseek_v41_prefix_restore.h",
+    "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/03_代码/xllm-musa/xllm/core/layers/musa/deepseek_v41/prefix_checkpoint.h",
+    "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/03_代码/xllm-musa/xllm/models/llm/musa/deepseek_v41_native.h"
+  ],
+  "status": "PASS",
+  "at": "2026-11-16T19:53:42.771052+08:00"
+}

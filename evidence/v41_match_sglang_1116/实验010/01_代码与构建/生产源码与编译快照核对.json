@@ -1,0 +1,78 @@
+{
+  "status": "PASS",
+  "entries": [
+    {
+      "file": "xllm/core/kernels/musa/CMakeLists.txt",
+      "sha256": "c56f122d015ac88aba0cd1644b9ca353aebaefb8ef060c4344bea40f652d4ad8"
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v41_pair_pool.cu",
+      "sha256": "318b41642f14193ebf54b946622869bc91b48bcb4c959f1c80723254f54a586c"
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v41_pair_pool.h",
+      "sha256": "d0f344b632366eb275a9bfa45cea23c899e6d12fd4726adf5fcc458632cab65c"
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v41_prefix_restore.cu",
+      "sha256": "013d8c94bb79cf4df89139365ff35f7aa538e78e3488dfc93d8792671ffd8652"
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v41_prefix_restore.h",
+      "sha256": "3480dbf9678ae5e6111f3f02f6ce625495ec333a2a49dab4ed2b162e55f0ffe2"
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v41_sparse_attention.cpp",
+      "sha256": "503e2f4ba1a94e3ae03fedb4732e2e5b32e8d934fae2c20c57e606751c8b1cf1"
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v41_sparse_attention.h",
+      "sha256": "1a96560faeb7b111199222edac008b9de77c7228d59dc77e19db330dab9edc06"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/attention.h",
+      "sha256": "7096676c68bcf263201e88face86c0f676fae0fe51feade6501b84211e807557"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/compressor.h",
+      "sha256": "3b2037861a91073e5eadf0b6abaae71966406117a3488b56a1d357595845bcd8"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/decode_graph.h",
+      "sha256": "2d16e0d7dfffb1d5720cb8063a2779b6667dfa9a05880d155ceb96d45218d979"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/decoder.h",
+      "sha256": "9210b67f8c5ee75723b1ed927e1003c77a6188197e7fe1f74660f4ae55f2c742"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/light_timing.h",
+      "sha256": "62d755e85b8b072dbeb95d52a4857f307c515e435b2fe4fd95edb98cd15a48aa"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/moe.h",
+      "sha256": "9b0ee8d962d44a294c10d1d901b30cac20030edcfbc2844e3cf5b5700f75fe41"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/paged_attention.h",
+      "sha256": "573ee80c8e9fe58cc54f9726a497e29a285d8ca187b47e4ead3774182668963a"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/prefix_checkpoint.h",
+      "sha256": "79e0c90dc32bd5f1b801e7687a5ad68759e936d7c44988043b8c3e48b56cadbe"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/text_model.h",
+      "sha256": "3b46ddf847a1b6c6c17d01ad8d745fe7efa5e9cc5e1c4bd9a6ba373a9feac4dc"
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/token_cache.h",
+      "sha256": "a9102c960181f7cb752fb8da46ce909c1fd9679ab91aa512b6e3bf6d2062be46"
+    },
+    {
+      "file": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "sha256": "6654e14690cce2c1e0b56463254614563018d5006ccd7b22ba733187569b21b8"
+    }
+  ],
+  "note": "Only production xllm sources compared; later test CLI fixtures tracked separately."
+}

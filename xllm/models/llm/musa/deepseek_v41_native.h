@@ -71,6 +71,9 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     selective_spec_commit_ =
         util::get_bool_env("XLLM_DSV41_SPEC_SELECTIVE_COMMIT", false);
     CHECK(!selective_spec_commit_ || native_dspark_);
+    fused_spec_snapshot_ =
+        util::get_bool_env("XLLM_DSV41_FUSED_SPEC_SNAPSHOT", false);
+    CHECK(!fused_spec_snapshot_ || selective_spec_commit_);
     verify_custom_allreduce_ =
         util::get_bool_env("XLLM_DSV41_VERIFY_CUSTOM_AR", false);
     CHECK(!verify_custom_allreduce_ ||
@@ -632,7 +635,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     if (selective_spec_commit_) {
       pending->prefix_checkpoint =
           std::make_unique<layer::DeepseekV41PrefixCheckpoint>(
-              begin, tokens.numel(), /*max_bytes=*/64 * 1024 * 1024);
+              begin,
+              tokens.numel(),
+              /*max_bytes=*/64 * 1024 * 1024,
+              fused_spec_snapshot_);
     } else {
       pending->checkpoint = std::make_unique<layer::DeepseekV41StateCheckpoint>(
           /*max_bytes=*/64 * 1024 * 1024);
@@ -730,7 +736,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     const int32_t policy =
         static_cast<int32_t>(native_dspark_) |
         (static_cast<int32_t>(selective_spec_commit_) << 1) |
-        (static_cast<int32_t>(verify_custom_allreduce_) << 2);
+        (static_cast<int32_t>(verify_custom_allreduce_) << 2) |
+        (static_cast<int32_t>(fused_spec_snapshot_) << 3);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -1273,6 +1280,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   torch::Tensor history_swa_;
   bool native_dspark_ = false;
   bool selective_spec_commit_ = false;
+  bool fused_spec_snapshot_ = false;
   bool replaying_ = false;
   std::unique_ptr<PendingVerification> pending_verification_;
   std::unique_ptr<AuxHiddenCapture> auxiliary_;

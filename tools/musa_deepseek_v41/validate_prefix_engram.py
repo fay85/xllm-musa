@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--library-directory", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--fused-snapshot", action="store_true")
     args = parser.parse_args()
     assert torch.musa.device_count() == 1
     torch.set_num_threads(1)
@@ -52,7 +53,7 @@ def main() -> None:
                         target.bind_history(actual)
                         ids = torch.randint(0, assets[0].numel(), (7,), device="musa:0")
                         positions = torch.arange(begin, begin + 7, device="musa:0")
-                        checkpoint = native.PrefixCheckpoint(begin, 6, 4096)
+                        checkpoint = native.PrefixCheckpoint(begin, 6, 4096, args.fused_snapshot)
                         checkpoint.add_paged(actual.view(5, 128, 1), table, 1, True)
                         out, mask = target.forward(ids[:6], positions[:6], table, 128, begin, None)
                         checkpoint.restore_suffix(accepted)

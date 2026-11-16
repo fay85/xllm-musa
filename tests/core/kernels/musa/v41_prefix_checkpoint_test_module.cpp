@@ -9,7 +9,11 @@ SPDX-License-Identifier: Apache-2.0
 PYBIND11_MODULE(v41_prefix_checkpoint_test_module, module) {
   using Checkpoint = xllm::layer::DeepseekV41PrefixCheckpoint;
   pybind11::class_<Checkpoint>(module, "PrefixCheckpoint")
-      .def(pybind11::init<int64_t, int64_t, int64_t>())
+      .def(pybind11::init<int64_t, int64_t, int64_t, bool>(),
+           pybind11::arg("begin"),
+           pybind11::arg("tokens"),
+           pybind11::arg("max_bytes"),
+           pybind11::arg("fused_snapshot") = false)
       .def("add_paged", &Checkpoint::add_paged)
       .def("add_recurrent", &Checkpoint::add_recurrent)
       .def("restore_suffix", &Checkpoint::restore_suffix)
