@@ -626,6 +626,7 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
             << ", scale_slot_size: " << kv_cache_cap.scale_slot_size()
             << ", linear_slot_size: " << kv_cache_cap.linear_slot_size()
             << ", linear_blocks: " << kv_cache_cap.num_linear_state_blocks()
+            << ", linear_ckpt_slots: " << kv_cache_cap.num_linear_ckpt_blocks()
             << ", state_slots: "
             << ((has_linear_attention_layers(args_) ||
                  kv_cache_cap.kpool_tail_slot_size() > 0)
@@ -733,11 +734,23 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       .num_embedding_blocks(
           static_cast<uint32_t>(kv_cache_shape.key_cache_shape()[0]))
       .instance_is_decode(options_.instance_role() == InstanceRole::DECODE);
+  const int64_t full_attn_layers =
+      kv_cache_cap.num_full_attention_layers() > 0
+          ? kv_cache_cap.num_full_attention_layers()
+          : kv_cache_cap.n_layers();
+  if (full_attn_layers > 0 && kv_cache_cap.slot_size() > 0 &&
+      !kv_cache_shape.has_grouped_cache_layout()) {
+    options.logical_kv_bytes_per_token(
+        static_cast<uint64_t>(full_attn_layers) *
+        static_cast<uint64_t>(kv_cache_cap.slot_size()));
+  }
   if (enable_state_cache) {
     // The unified state slot pool spans all physical slots [0, N); it can
     // contain GDN state and KPool tail state.
     options.linear_state_num_slots(
         static_cast<int32_t>(kv_cache_cap.num_linear_state_blocks()));
+    options.linear_state_ckpt_slots(
+        static_cast<uint32_t>(kv_cache_cap.num_linear_ckpt_blocks()));
   }
   if (util::is_deepseek_v4_model_type(args_.model_type())) {
     constexpr uint32_t kManagerTypeBlockManagerImpl = 0;

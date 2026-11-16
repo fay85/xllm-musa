@@ -149,6 +149,8 @@ void PrefillFirstPolicy::schedule(
       state.prefill_queue.sort(fcfs_cmp);
       if (is_prefill_instance && state.prefill_queue.size() > 1) {
         const absl::Time now = absl::Now();
+        const size_t max_chunk =
+            std::max<size_t>(1, options_.max_tokens_per_chunk_for_prefill());
         std::unordered_map<const Request*, double> srpt_scores;
         srpt_scores.reserve(state.prefill_queue.size());
         for (const std::shared_ptr<Request>& req : state.prefill_queue) {
@@ -159,8 +161,12 @@ void PrefillFirstPolicy::schedule(
               estimate_remaining_prefill_tokens(req, state, block_pool);
           const double wait_ms =
               std::max(0.0, absl::ToDoubleMilliseconds(now - req->created_time()));
+          // Prioritize single-chunk completions (e.g., prefix-cache hits) with
+          // gentle anti-starvation (2 tokens/ms, so a 24k cold prompt only
+          // overtakes a fresh 6k hit after ~9s instead of 1.8s).
+          const double fast_bonus = rem <= max_chunk ? 0.0 : 4096.0;
           srpt_scores.emplace(req.get(),
-                              static_cast<double>(rem) - 10.0 * wait_ms);
+                              static_cast<double>(rem) + fast_bonus - 2.0 * wait_ms);
         }
         state.prefill_queue.sort(
             [&srpt_scores, &fcfs_cmp](const std::shared_ptr<Request>& a,
@@ -216,6 +222,8 @@ void PrefillFirstPolicy::schedule(
   // while chunk_queue still has multiple chunks remaining.
   std::vector<size_t> reserved_full_footprint(
       static_cast<size_t>(state.options.dp_size()), 0);
+  static thread_local const Request* last_deferred_chunk_req = nullptr;
+  static thread_local int32_t consecutive_fast_passes = 0;
   bool fast_single_chunk_first = false;
   if (is_prefill_instance && batch_mode_.enable_chunked_prefill &&
       !state.chunk_queue.empty() && !state.prefill_queue.empty() &&
@@ -226,8 +234,14 @@ void PrefillFirstPolicy::schedule(
         state.prefill_queue.top(), state, block_pool);
     const size_t rem_chunk = estimate_remaining_prefill_tokens(
         state.chunk_queue.top(), state, block_pool);
+    const Request* chunk_top_ptr = state.chunk_queue.top().get();
+    if (chunk_top_ptr != last_deferred_chunk_req) {
+      last_deferred_chunk_req = chunk_top_ptr;
+      consecutive_fast_passes = 0;
+    }
     if (rem_new > 0 && rem_new <= max_chunk && rem_chunk > max_chunk &&
-        rem_new * 2 <= rem_chunk) {
+        rem_new < rem_chunk && consecutive_fast_passes < 3) {
+      ++consecutive_fast_passes;
       fast_single_chunk_first = true;
       const size_t block_size =
           static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
@@ -251,6 +265,11 @@ void PrefillFirstPolicy::schedule(
     schedule_prefill_from_queue(
         &state.chunk_queue, state, budget, finished, reserved_full_footprint);
   } else {
+    if (is_prefill_instance && !state.chunk_queue.empty()) {
+      // Reset fast-pass burst counter whenever chunk_queue advances a chunk.
+      last_deferred_chunk_req = nullptr;
+      consecutive_fast_passes = 0;
+    }
     schedule_prefill_from_queue(
         &state.chunk_queue, state, budget, finished, reserved_full_footprint);
     // Then new prefill requests.

@@ -1780,9 +1780,19 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
   ForwardInput target_prepared;
   ForwardInput draft_prepared;
 
+  static const bool profile_prefill = [] {
+    const char* env = std::getenv("XLLM_PROFILE_MTP_PREFILL");
+    return env != nullptr && std::string(env) == "1";
+  }();
   // run the target model to get first token and hidden states
   ForwardOutput output =
       run_worker_no_sync(*impl_, input, target_prepared).value();
+  if (profile_prefill) {
+    compute_stream_->synchronize();
+    LOG(INFO) << "[MTP_PREFILL_PROFILE] tokens=" << input.token_ids.numel()
+              << " target_ms=" << timer.elapsed_milliseconds();
+    timer.reset();
+  }
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
 
@@ -1819,6 +1829,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
       record_current_metadata_ready_event(prefill_input, *compute_stream_);
     }
   }
+  if (profile_prefill) {
+    LOG(INFO) << "[MTP_PREFILL_PROFILE] prep_draft_input_ms="
+              << timer.elapsed_milliseconds();
+  }
   // generate kv cache for draft model
   timer.reset();
   ForwardOutput draft_output =
@@ -1826,6 +1840,11 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
   {
     c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
     process_draft_sample_output(draft_output.sample_output);
+  }
+  if (profile_prefill) {
+    compute_stream_->synchronize();
+    LOG(INFO) << "[MTP_PREFILL_PROFILE] draft_ms="
+              << timer.elapsed_milliseconds();
   }
   COUNTER_ADD(speculative_execution_latency_seconds_draft,
               timer.elapsed_seconds());

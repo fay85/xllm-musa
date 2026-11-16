@@ -626,22 +626,36 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
       attn_metadata.kv_cu_seq_lens.contiguous();
   const int32_t batch_size =
       static_cast<int32_t>(attn_metadata.block_table.size(0));
-  torch::Tensor scheduler_metadata =
-      xllm::kernel::musa::fa3_prefill_scheduler_metadata(
-          query.device(),
-          batch_size,
-          static_cast<int32_t>(num_heads_),
-          static_cast<int32_t>(num_kv_heads_),
-          static_cast<int32_t>(head_size_),
-          static_cast<int32_t>(head_size_),
-          static_cast<int32_t>(attn_metadata.max_query_len),
-          static_cast<int32_t>(attn_metadata.max_seq_len),
-          static_cast<int32_t>(sliding_window_),
-          /*window_size_right=*/0,
-          cu_seqlens_q,
-          cu_seqlens_k_new,
-          seqused_k,
-          k_cache.scalar_type());
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3_metadata;
+  torch::Tensor scheduler_metadata;
+  if (fa3_metadata.share_fa3_scheduler_metadata &&
+      fa3_metadata.fa3_scheduler_metadata.defined() &&
+      fa3_metadata.fa3_scheduler_metadata.device() == query.device() &&
+      fa3_metadata.fa3_scheduler_metadata.numel() ==
+          fa3_scheduler_metadata_numel(batch_size)) {
+    scheduler_metadata = fa3_metadata.fa3_scheduler_metadata;
+  }
+  if (!scheduler_metadata.defined()) {
+    scheduler_metadata =
+        xllm::kernel::musa::fa3_prefill_scheduler_metadata(
+            query.device(),
+            batch_size,
+            static_cast<int32_t>(num_heads_),
+            static_cast<int32_t>(num_kv_heads_),
+            static_cast<int32_t>(head_size_),
+            static_cast<int32_t>(head_size_),
+            static_cast<int32_t>(attn_metadata.max_query_len),
+            static_cast<int32_t>(attn_metadata.max_seq_len),
+            static_cast<int32_t>(sliding_window_),
+            /*window_size_right=*/0,
+            cu_seqlens_q,
+            cu_seqlens_k_new,
+            seqused_k,
+            k_cache.scalar_type());
+    if (fa3_metadata.share_fa3_scheduler_metadata) {
+      fa3_metadata.fa3_scheduler_metadata = scheduler_metadata;
+    }
+  }
 
   torch::Tensor lse_tensor;
   if (output_lse.has_value() && output_lse->defined()) {
