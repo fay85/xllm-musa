@@ -1,0 +1,628 @@
+[
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 891,
+    "sha256": "78ed3df9e0a730b823d3461f3d5cdb2c9d45a8f6df8e759febf0279944ff8b0a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/Perfetto图/Perfetto实际轨道.json"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1448,
+    "sha256": "c03073e58138a4bf2d8c115f95b9dedd66c6ce73361b66dba62581ffcdf6fc8f",
+    "lossless_gzip": "04_trace与图/proposal3完整targetGraph/Perfetto图/Perfetto页面文本.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/Perfetto图/rendered.json",
+    "bytes": 1190,
+    "sha256": "b3dc6d20945f5ae62542db88c23f29772c7f0b092b47766cd36b910ea6d96756",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/Perfetto图/rendered.json"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 217318,
+    "sha256": "7e1b3054505265cf18575d173fdd4e1e037d2b74c77ab64bf7355f6eae7dbdbc",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 203172,
+    "sha256": "fa25d7a73020f4a5d93d182260bacb7376cc688ffb3399bc8e0110024809186b",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 118737,
+    "sha256": "68fd07693e70f94dadd4f147c40b4c98e15f48fe3d58cfd5cf0ae9e715676335",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/Perfetto图/真实CPU区间与GPU时间线.png"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/actual_native_last.pftrace",
+    "bytes": 13250446,
+    "sha256": "ca2b6db9d410ad6b120fb18d05a0649fe5e058d961eb690bd5d0eaaca5086ac6",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "04_trace与图/proposal3完整targetGraph/actual_native_last.receipt.json",
+    "bytes": 1402,
+    "sha256": "ca376ce93598cb814c92b0fc0a7075f05d03cc5f6348750c31db1c06192ff836",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/04_trace与图/proposal3完整targetGraph/actual_native_last.receipt.json"
+  },
+  {
+    "original": "05_结论与读图说明.md",
+    "bytes": 3735,
+    "sha256": "845bc759f3e971dc4a29128dfd54f5020ebb84ea73b67e020f403d6d2c22d78a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/05_结论与读图说明.md"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/build/artifact_manifest.json",
+    "bytes": 485,
+    "sha256": "b3b04297371e13f380fe8f99443497b72d26a086deb924852c8ff3a19eff6e2a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/build/artifact_manifest.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/build/build.log",
+    "bytes": 52668,
+    "sha256": "46134fd17b1198aa292de30253f3962dff92e57fdf612d4e669ec967aa5254d5",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/build/build.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/build/build.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "a5f89ee8270810b188ebab776d09b09be712229dbf47dc5171f199d50fa33eba",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/build/finished.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/build/job.json",
+    "bytes": 380,
+    "sha256": "b2b8d93a68dc9129dcdd9a6b392eff9fb4fc17b835c3e5d2a2b40073d15abb17",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/build/job.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/build/source_manifest.json",
+    "bytes": 4524,
+    "sha256": "8e63f8df0c76440eef5a71626600dd62b86a7f7c1ddfe7df6d4c3a109f14b915",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/build/source_manifest.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/active.json",
+    "bytes": 980,
+    "sha256": "fee5874132f602f8df5aca8b121b64967dc03c74d027c7450fd05da9ebc53d3b",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/active.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/basic_1_sse.jsonl",
+    "bytes": 1582,
+    "sha256": "ba72f995b5ca4d0842df16c34fd21feab6deb6813d4ebcd28b12a20a2602cdba",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/basic_2_sse.jsonl",
+    "bytes": 1303,
+    "sha256": "b49a3d4d94ecc35fe40412ccce5368554fd25c6f5233db20a2bb52e2aa5d5a7c",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "729f04ac8b187a38a1d7e05ee7e4ad38892a026e206b32bcaa595510c6b18e7f",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/basic_gate.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/finished.json",
+    "bytes": 64,
+    "sha256": "61b22c0b922f286b46924918b81c4f7c7ee3e1544fd46d142d7764ba0210636b",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/finished.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/identity.json",
+    "bytes": 286279,
+    "sha256": "cd534bec31d4ae277d83d138cf7cfee3be1939964f2b94af71298b359b1fd2fe",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/identity.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/job.json",
+    "bytes": 142,
+    "sha256": "9c482d6893e7c883427c0957a8235e448b72c5533b873c26b2dbb28043257016",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/job.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10092,
+    "sha256": "2d91e29ec67db577cf293360df26e0e59d1b0a6d9abc254f8611b101f982c8cd",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2350,
+    "sha256": "7694f7035076162ce5c32eb13704c2c54df51fda7475fed9ad9bb771999b3f62",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "92872ea68ce03200ec63e96f9d88808a3950d1bda3d004c1b8303480f6d54e16",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3650,
+    "sha256": "9cf3004766601db7ab56adaaa8c14d066006442d1373668a71c2a9f0187381c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "229c1b3d424d41ed9c83495796abd6fd653106a8b7e87bda2738a4d9e074c50e",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "5eb004e7c7ead0b998fa5a51c4fb2a076b6ac1beb6178d63fd7db8bf294fedcd",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "39c99e2d4803ce7a6fa19f0034aa5dbbdc9daf106acf30ee288f133cd2595a7e",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166958,
+    "sha256": "a3f8188673cb3ca0e8a6d4d2d343f1f18a58e0698f31c79fe6d9c4e83fac5555",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "bfa8f546cdcb4c538ab3a0fa55530f6aa6a2103c938066e5a6ac9887014c6900",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen.log",
+    "bytes": 19338,
+    "sha256": "3362805f4d38d5fbc13c1f2615b8e624d7fb896f6f0d06f2cf347d8788719b10",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9507,
+    "sha256": "ad455b5dd0ae9205e0179b148720428162ca43cd7ea62a709f5faee9d08cbdad",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2357,
+    "sha256": "6297af257444afdd360c0d71e4f5ab76da0e5db52639afdec3020405ac58575a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "c221a0a68ca3089859de96d20535c6ce1d44f3a9a7bcb469a501c59392ea164e",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3650,
+    "sha256": "6f9b9576f0ff853fd39aea5d798525a01cdf1ff66de465b3c01711fc036e35e9",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "220f751623e664a8c139bd0d5b7f48066c7d9047236ce7ebaeea2c49da8662aa",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "d16ebc1d0838aaff954ae2fbf8b46522b45d57905fc8a8ba7918f8d49da6903c",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "b71a47180abb9bdb6e551ce8a8ca24b17d9301c579e55b9e5a6e78f33e031567",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166834,
+    "sha256": "4531e189db3769031339f40167334037d331014e71e764ed888b41284c5e0548",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "d7c75500d3df665d2fbef2dfa1a38e266062e22ae00a9f2ca77d6bb0b83979c5",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/screen_warmup.log",
+    "bytes": 18332,
+    "sha256": "6781b948812028f8fdf741495f51414cd3acaa8509585c37278223fad3107933",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/client/screen_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/screen_warmup.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/status.json",
+    "bytes": 3021,
+    "sha256": "4000c40aed38424c25d4de18a5942e6fe35b29cfe23ddb319124ed17359ef261",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/status.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/client/summary.json",
+    "bytes": 541,
+    "sha256": "15f184812c8a43bcb0af64c4fc771180b75ef351732f9dee11de102b9dafcfcd",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/client/summary.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/active.json",
+    "bytes": 987,
+    "sha256": "a0b1878f5853d5a10745a4532ceac3cbb9264396a3f9642d0ed2781c8731ded8",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/active.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "729f04ac8b187a38a1d7e05ee7e4ad38892a026e206b32bcaa595510c6b18e7f",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/basic_gate.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "bdabd31eada1db56eada1bf704d16c363f40b4a917b1edc3bb57204063cf4785",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/finished.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 12019,
+    "sha256": "45ad5da42446fa1cf4c4d73882f159b30666b7d4774a306dc5141d572427e8d0",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2357,
+    "sha256": "b20ad38a3f1269cf5eea15cef42ac1baa2431a01408b37c55992329bdd4757b5",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "cbe4525ad00e8c1cadc4d0056a3c060f8ce08d000303268f7e790337f58e814c",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3645,
+    "sha256": "19e843a3b333313aa47c91c97ce6d97cd32b8aa08384de4846b79e53c7b2ef57",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "60ab4f7591a29f4ba4da40ec113d8279af90ef6eb0fc33c9e6da907fee216e83",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 878,
+    "sha256": "9aa177704f7ce29c001162fbd597b76cc937508edbdc1a4cb164fd633adddb29",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 834,
+    "sha256": "fba920f828891518ca18d8d1441ca1df62e8a66e213f56657fbea5c0c7875b89",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167311,
+    "sha256": "2a9b2caf242fd8cedc49d08c43ebb7e2f264a857a42fc8d578372611070a5a99",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "c7dcd30c00677470a487491889cfb590421032079c327d9f7d3f9921086686ea",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal.log",
+    "bytes": 22456,
+    "sha256": "6a512ce03ed84be97f2ae11f71bd7934078cec7863a5b6ca0058716fc0088c76",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9523,
+    "sha256": "a1599345e9eede1354ed20fba5e54ff0e14d54fb837bba4e7dcecf531131ed52",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2364,
+    "sha256": "68df6896a281b50a1382557cf81892003de28cf8d7d67991766fdf0bc9958c8a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "88b311a870e8bd43142dc055628b0a012f54e2b4f6c3c9aed9e504a4496d561b",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3641,
+    "sha256": "7e8d7e38bbf8f814621af43cca2fe2de16332d3c40ac74cd90ed9c46b9cf0e5a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "4c033b0ba8c676950508f660f30a4e2750a91c838cf32ca3976e2692e121bea2",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "a2ab065943a3e0e00bbefb3f671bb3df885f9271105062831361302b200178be",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 214,
+    "sha256": "6f1b6e798d7246f5c64d053cba9cf657116aa99a836279a296d4e17a29ee8b46",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166827,
+    "sha256": "86fceea64f525d7467bb0da8c16b11ebb5bda7a696266bc65495d2545f79b159",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "22e1282dbfa7dbd434babc699141e16c8d8807f51f9dd80e6878c34db919fe3a",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup.log",
+    "bytes": 18355,
+    "sha256": "0e226a56e283c3f581ab039734d9e99f01068b9fa7cf4b419e0935b771280f9c",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/formal_client/formal_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/identity.json",
+    "bytes": 286279,
+    "sha256": "cd534bec31d4ae277d83d138cf7cfee3be1939964f2b94af71298b359b1fd2fe",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/identity.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/job.json",
+    "bytes": 142,
+    "sha256": "17e3fadcb47a40caa0e121c81805405a8e791b7213ca84c11018541d2a023b91",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/job.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/status.json",
+    "bytes": 3606,
+    "sha256": "b98f2d0e6d5a73fce920c953d788f030f9d4ac194d6ebac959325941de153316",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/status.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/formal_client/summary.json",
+    "bytes": 547,
+    "sha256": "ddfbbd180dcccfae181bf7a4fccd54ac9116feaa68bc57d1b8f76aab24c9707e",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/formal_client/summary.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 256087,
+    "sha256": "53d9df177d05ae09b3f52ad6b990079a4171e8fcab19c3d77d1aef3bbd648118",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 48069,
+    "sha256": "a7298a9e29419d14f43ed20c1f4ad7ae54c43ce2df1ca1a7766536114c5e6f83",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9135,
+    "sha256": "e13541e337dcd2f4e6910fbcff2036e49272fa14faf35a57d6b7b856c3ff5b18",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj10/status.json",
+    "bytes": 269,
+    "sha256": "dfeb0ed13389220a0b2bad5457686e46a54f4c11381f9c6207b1f5fd09edeadb",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "4407b2659ffc952cc800a8e0413a3aa50976d95b288b8bea32a2dd9b8177c64b",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 221677,
+    "sha256": "7a6720160b052fb392dafba25531389db645d137541d4c4d6650a69412491395",
+    "lossless_gzip": "多行Graphspec3正式与trace原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 48045,
+    "sha256": "c22233be5b69476cda21146cb498f2789993bc00115ef218b16a31643e2bda39",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9337,
+    "sha256": "7416e2cd813ec53c9c9d5381adf67ec6ae1add1fbc43167f6ec0b3115617e19a",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj9/status.json",
+    "bytes": 269,
+    "sha256": "f8ae1d2001ae33d24b1bf6cb3f21fa4dd5d7b07af661876f210487d45ff55039",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "2496fcfc698764a6bf65315e639e4807644ca0f411036ebd00fc681deaa30beb",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "011f9fa869df3895a3a5a6e13f79932a3eb42f5e02b786096e8f333359b156da",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/finished.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "b7d3b36792780e490de676c9ba96a577bda458de2457796edb472b88e6027591",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/job.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/manifest.json",
+    "bytes": 7538,
+    "sha256": "21c8e2f616424b16434ae1fb8781bbabeb5c55711f3205f8f77ee2479cb3db29",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/manifest.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2499,
+    "sha256": "583377116fdbc3a27c753816fd2951acd034c8e74e909c734299720ec5804eaa",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/off_after_sse.jsonl"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2497,
+    "sha256": "1e0e6a912b6bcceb2ffa25c62e4efb135812c290305c621a512bec1cde6c19b1",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/off_before_1_sse.jsonl"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2495,
+    "sha256": "4b7d021c210c14a40fc2d82e3966d5118b91c8a7a55158749720b6bf15f637f2",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/off_before_2_sse.jsonl"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2491,
+    "sha256": "2a38770758ca9c6e1b90e8c6c9b51dd1cb3e678ce36b0b597959c71b44b04509",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/profiled_sse.jsonl"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/request.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/requests.json",
+    "bytes": 1752,
+    "sha256": "0f8580bd732de00787be08181887de9447c825a6f30acfd2360df8aa36865dd0",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/requests.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "a8ae57e804862015d9bb0f9df89c379859c739f9fd1dd197c752db82678e60bb",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/start_profile.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace/stop_profile.json",
+    "bytes": 312,
+    "sha256": "37f2f1e3a3f1a445e4abc67168dd7caef2658b4244956b09d10f5ad154506e08",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace/stop_profile.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 28156,
+    "sha256": "654dc17627f0b4cd8a9c44b4c849d98fd6f06cc5b551d503962c5c9b1bb616c4",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace_analysis/all_rank_validation.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 177831,
+    "sha256": "1a9e4e858f3c457cf59d99e30cccb403416abdcd521665d1526013a4f85c1459",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据/trace_analysis/resolved_symbols.json"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 18877261,
+    "sha256": "30eae22612207e08f38ec60d5e33aa5d764ff336ae7fbc4fbd7b05f05d21f2d5",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 14353401,
+    "sha256": "8c82575fff36a5fcbc65eeec657a7d971319f8b8f06b996adba6fb238d21d654",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 18913153,
+    "sha256": "ddfe60e9161a36142f3deb02355a74d8b5f81264c17ebc3fff2bfc14134238ea",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20148321,
+    "sha256": "2f97685c218524fa010ee72a9d66752eca0e08dcbc15a0dbbc22891e6e7f835b",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据.tar.gz",
+    "bytes": 6377540,
+    "sha256": "c31dc76361a2ccc92f5692e6aec8956d29869059df252210e023f0ccfec1b6fd",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行Graphspec3正式与trace原始证据校验.json",
+    "bytes": 228,
+    "sha256": "6a7783e1ba85c728e6f33a5136cb86969b43173ae391726cb056e49eba3fe835",
+    "git_path": "evidence/v41_match_sglang_1116/实验009/多行Graphspec3正式与trace原始证据校验.json"
+  }
+]
