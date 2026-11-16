@@ -176,8 +176,11 @@ def main() -> None:
                         "Dispatch inverse map is not a valid bijection"
                     )
                 xq, xs = _quantize(inputs[token_rows], 1e-4)
+                # TorchMUSA 2.9.0 lacks advanced indexing for Float8. Casting
+                # first preserves every FP8 value exactly and keeps the oracle
+                # on the GPU without changing its tolerances.
                 torch.testing.assert_close(
-                    q[expert, slots].float(), xq.float(), atol=0, rtol=0
+                    q[expert].float()[slots], xq.float(), atol=0, rtol=0
                 )
                 torch.testing.assert_close(
                     input_scale[expert, slots], xs, atol=0, rtol=0
@@ -199,11 +202,11 @@ def main() -> None:
                     scale_down[expert, slots], a_scale, atol=1e-8, rtol=2e-6
                 )
                 activation_error = _error(
-                    _dequantize(q_down[expert, slots], scale_down[expert, slots]),
+                    _dequantize(q_down[expert].float()[slots], scale_down[expert, slots]),
                     _dequantize(aq, a_scale),
                 )
                 expected_down = (
-                    _dequantize(q_down[expert, slots], scale_down[expert, slots])
+                    _dequantize(q_down[expert].float()[slots], scale_down[expert, slots])
                     @ decoded[2][expert].T
                 ).to(torch.bfloat16)
                 down_error = _error(result_down[expert, slots], expected_down)

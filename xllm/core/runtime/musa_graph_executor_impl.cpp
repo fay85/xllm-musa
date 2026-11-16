@@ -2956,6 +2956,9 @@ MusaGraphExecutorImpl::MusaGraphExecutorImpl(CausalLM* model,
                                              const torch::Device& device,
                                              const runtime::Options& options)
     : model_(model), args_(args), device_(device), options_(options) {
+  CHECK(!::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool() ||
+        supports_graph_vmm_pool())
+      << "Graph VMM pools require TorchMUSA allocator ownership queries";
   // Keep one pool per executor instance so all captured graphs can reuse it,
   // while avoiding cross-instance stale-handle reuse.
   graph_pool_ = at::musa::graph_pool_handle();

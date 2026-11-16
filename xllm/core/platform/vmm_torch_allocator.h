@@ -311,17 +311,91 @@ class VMMTorchAllocator
 #include <torch_musa/csrc/core/MUSACachingAllocator.h>
 #include <torch_musa/csrc/core/MUSAStream.h>
 
-#include "shared_vmm_allocator.h"
+#include <type_traits>
+
+#include "core/platform/shared_vmm_allocator.h"
 
 namespace xllm {
+
+namespace detail {
+
+// TorchMUSA 2.9.0 and 2.9.1 expose different virtual allocator methods.
+// Detect the actual emptyCache signature instead of guessing from a package
+// version. Only raw allocation is supported by this allocator; these methods
+// preserve the existing fatal diagnostics for unexpected calls.
+template <typename Allocator,
+          bool Legacy = std::is_invocable_v<decltype(&Allocator::emptyCache),
+                                            Allocator*> >
+class MusaVmmAllocatorApi;
+
+template <typename Allocator>
+class MusaVmmAllocatorApi<Allocator, false> : public Allocator {
+ public:
+  double getMemoryFraction(c10::DeviceIndex /*device*/) override {
+    LOG(FATAL) << "VMMTorchAllocator::getMemoryFraction() called unexpectedly!";
+    return 1.0;
+  }
+
+  void enable(bool /*value*/) override {
+    LOG(FATAL) << "VMMTorchAllocator::enable() called unexpectedly!";
+  }
+
+  bool isEnabled() const override {
+    LOG(FATAL) << "VMMTorchAllocator::isEnabled() called unexpectedly!";
+    return true;
+  }
+
+  void emptyCache(c10::MempoolId_t /*mempool_id*/ = {0, 0}) override {
+    LOG(FATAL) << "VMMTorchAllocator::emptyCache() called unexpectedly!";
+  }
+
+  c10::musa::MUSACachingAllocator::SnapshotInfo snapshot(
+      c10::MempoolId_t /*mempool_id*/ = {0, 0}) override {
+    LOG(FATAL) << "VMMTorchAllocator::snapshot() called unexpectedly!";
+    return {};
+  }
+
+  void recordHistory(
+      bool /*enabled*/,
+      c10::musa::MUSACachingAllocator::CreateContextFn /*context_recorder*/,
+      size_t /*alloc_trace_max_entries*/,
+      c10::musa::MUSACachingAllocator::RecordContext /*when*/,
+      bool /*clearHistory*/) override {
+    LOG(FATAL) << "VMMTorchAllocator::recordHistory() called unexpectedly!";
+  }
+};
+
+template <typename Allocator>
+class MusaVmmAllocatorApi<Allocator, true> : public Allocator {
+ public:
+  void emptyCache() override {
+    LOG(FATAL) << "VMMTorchAllocator::emptyCache() called unexpectedly!";
+  }
+
+  c10::musa::MUSACachingAllocator::SnapshotInfo snapshot() override {
+    LOG(FATAL) << "VMMTorchAllocator::snapshot() called unexpectedly!";
+    return {};
+  }
+
+  void recordHistory(
+      bool /*enabled*/,
+      c10::musa::MUSACachingAllocator::CreateContextFn /*context_recorder*/,
+      size_t /*alloc_trace_max_entries*/,
+      c10::musa::MUSACachingAllocator::RecordContext /*when*/) override {
+    LOG(FATAL) << "VMMTorchAllocator::recordHistory() called unexpectedly!";
+  }
+};
+
+}  // namespace detail
 
 /**
  * @brief VMMTorchAllocator (MUSA) - PyTorch MemPool-compatible wrapper around
  * SharedVMMAllocator. Only raw_alloc/raw_alloc_with_stream/raw_delete are
  * expected at runtime; other overrides satisfy the interface.
  */
-class VMMTorchAllocator
-    : public c10::musa::MUSACachingAllocator::MUSAAllocator {
+class VMMTorchAllocator final
+    : public detail::MusaVmmAllocatorApi<
+          c10::musa::MUSACachingAllocator::MUSAAllocator> {
  public:
   explicit VMMTorchAllocator(SharedVMMAllocator* vmm_allocator)
       : vmm_allocator_(vmm_allocator) {}
@@ -343,8 +417,7 @@ class VMMTorchAllocator
     return ptr;
   }
 
-  void* raw_alloc_with_stream(size_t nbytes,
-                              musaStream_t /*stream*/) override {
+  void* raw_alloc_with_stream(size_t nbytes, musaStream_t /*stream*/) override {
     void* ptr = vmm_allocator_->allocate(nbytes);
     total_allocated_ += nbytes;
     alloc_count_++;
@@ -401,23 +474,9 @@ class VMMTorchAllocator
     LOG(FATAL) << "VMMTorchAllocator::resetPeakStats() called unexpectedly!";
   }
 
-  double getMemoryFraction(c10::DeviceIndex /*device*/) override {
-    LOG(FATAL) << "VMMTorchAllocator::getMemoryFraction() called unexpectedly!";
-    return 1.0;
-  }
-
   void setMemoryFraction(double /*fraction*/,
                          c10::DeviceIndex /*device*/) override {
     LOG(FATAL) << "VMMTorchAllocator::setMemoryFraction() called unexpectedly!";
-  }
-
-  void enable(bool /*value*/) override {
-    LOG(FATAL) << "VMMTorchAllocator::enable() called unexpectedly!";
-  }
-
-  bool isEnabled() const override {
-    LOG(FATAL) << "VMMTorchAllocator::isEnabled() called unexpectedly!";
-    return true;
   }
 
   void cacheInfo(c10::DeviceIndex /*device*/, size_t* largestBlock) override {
@@ -520,29 +579,8 @@ class VMMTorchAllocator
     return nullptr;
   }
 
-  void emptyCache(c10::MempoolId_t /*mempool_id*/ = {0, 0}) override {
-    LOG(FATAL) << "VMMTorchAllocator::emptyCache() called unexpectedly!";
-  }
-
-  c10::musa::MUSACachingAllocator::SnapshotInfo snapshot(
-      c10::MempoolId_t /*mempool_id*/ = {0, 0}) override {
-    LOG(FATAL) << "VMMTorchAllocator::snapshot() called unexpectedly!";
-    return {};
-  }
-
-  void recordHistory(
-      bool /*enabled*/,
-      c10::musa::MUSACachingAllocator::CreateContextFn /*context_recorder*/,
-      size_t /*alloc_trace_max_entries*/,
-      c10::musa::MUSACachingAllocator::RecordContext /*when*/,
-      bool /*clearHistory*/) override {
-    LOG(FATAL) << "VMMTorchAllocator::recordHistory() called unexpectedly!";
-  }
-
  private:
-  static void raw_deleter(void* ptr) {
-    (void)ptr;
-  }
+  static void raw_deleter(void* ptr) { (void)ptr; }
 
   SharedVMMAllocator* vmm_allocator_;
   size_t total_allocated_ = 0;

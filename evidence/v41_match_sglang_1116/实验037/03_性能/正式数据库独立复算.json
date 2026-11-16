@@ -1,0 +1,59 @@
+{
+  "requests": [
+    {
+      "request_id": null,
+      "success": 1,
+      "prompt_tokens": 256,
+      "completion_tokens": 256,
+      "latency": 8.31854341365397,
+      "first_chunk_latency": 0.4305635364726186,
+      "time_per_output_token": 0.030933254420319023,
+      "response_sha256": "577cabe6b93cfdc892359bf0124709b6286bb6be0621e97289b3b90d42b7bc65"
+    },
+    {
+      "request_id": null,
+      "success": 1,
+      "prompt_tokens": 256,
+      "completion_tokens": 256,
+      "latency": 8.064807467162609,
+      "first_chunk_latency": 0.2527214214205742,
+      "time_per_output_token": 0.030635631551929547,
+      "response_sha256": "c53ab85abf718e5c98f36a52f29193558a09126b09dfea1332b200e1da5adad0"
+    },
+    {
+      "request_id": null,
+      "success": 1,
+      "prompt_tokens": 256,
+      "completion_tokens": 256,
+      "latency": 8.018040376715362,
+      "first_chunk_latency": 0.2594525143504143,
+      "time_per_output_token": 0.030425834754372345,
+      "response_sha256": "0b7262606c3e36b0ec49d750f831752096d20da54dd52acff3f5ca8371596c3f"
+    },
+    {
+      "request_id": null,
+      "success": 1,
+      "prompt_tokens": 256,
+      "completion_tokens": 256,
+      "latency": 7.975870564579964,
+      "first_chunk_latency": 0.26877347379922867,
+      "time_per_output_token": 0.030223910159924452,
+      "response_sha256": "f50cccea6df37f9e683dc171ab24b84c7d74ad65c6a8444b765e8f3a97c467f9"
+    },
+    {
+      "request_id": null,
+      "success": 1,
+      "prompt_tokens": 256,
+      "completion_tokens": 256,
+      "latency": 8.13542609103024,
+      "first_chunk_latency": 0.2681165365502238,
+      "time_per_output_token": 0.030852194331294183,
+      "response_sha256": "4ae106dc5e712035c202ec754236bd26d54024acac461f9417ebeaac4edd85e0"
+    }
+  ],
+  "mean_TTFT_ms": 295.9254965186119,
+  "mean_TPOT_ms": 30.61416504356791,
+  "output_tokens_per_second": 31.59504012037605,
+  "database_sha256": "bf205bd8bdf4dc79cb38d9cb77d82f8abce10f876c0c0fdc17148fa95c56d446",
+  "independently_recomputed": true
+}

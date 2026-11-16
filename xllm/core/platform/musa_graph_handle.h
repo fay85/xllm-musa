@@ -23,6 +23,7 @@ limitations under the License.
 #include <cstdint>
 #include <mutex>
 #include <thread>
+#include <type_traits>
 #include <unordered_set>
 
 // The installed native MUSAGraph header expects this stream alias.
@@ -49,6 +50,9 @@ class MusaGraphHandle final : public at::musa::MUSAGraph {
   void capture_begin(c10::musa::MempoolId_t pool = {0, 0},
                      musaStreamCaptureMode mode = musaStreamCaptureModeGlobal,
                      bool owns_user_pool_ref = false) {
+    CHECK(!owns_user_pool_ref || supports_user_pool_refs())
+        << "This TorchMUSA allocator cannot verify user MemPool references; "
+           "disable graph VMM pools before capture";
     at::musa::MUSAGraph::capture_begin(pool, mode);
     if (owns_user_pool_ref) {
       pool_ref_.mark_captured();
@@ -89,18 +93,44 @@ class MusaGraphHandle final : public at::musa::MUSAGraph {
     auto& registry = captured_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     registry.graphs.erase(this);
-    pool_ref_.reset([this]() { at::musa::MUSAGraph::reset(); },
-                    [this]() {
-                      return c10::musa::MUSACachingAllocator::getPoolUseCount(
-                          capture_dev_, mempool_id_);
-                    },
-                    [this]() {
-                      c10::musa::MUSACachingAllocator::releasePool(capture_dev_,
-                                                                   mempool_id_);
-                    });
+    reset_with_allocator(c10::musa::MUSACachingAllocator::get());
+  }
+
+  static constexpr bool supports_user_pool_refs() {
+    using Allocator =
+        std::remove_pointer_t<decltype(c10::musa::MUSACachingAllocator::get())>;
+    return allocator_has_pool_use_count<Allocator>();
   }
 
  private:
+  template <typename Allocator>
+  static constexpr bool allocator_has_pool_use_count() {
+    return requires(Allocator& allocator,
+                    c10::DeviceIndex device,
+                    c10::musa::MempoolId_t pool) {
+      allocator.getPoolUseCount(device, pool);
+    };
+  }
+
+  template <typename Allocator>
+  void reset_with_allocator(Allocator* allocator) {
+    if constexpr (allocator_has_pool_use_count<Allocator>()) {
+      pool_ref_.reset([this]() { at::musa::MUSAGraph::reset(); },
+                      [this, allocator]() {
+                        return allocator->getPoolUseCount(capture_dev_,
+                                                          mempool_id_);
+                      },
+                      [this, allocator]() {
+                        allocator->releasePool(capture_dev_, mempool_id_);
+                      });
+    } else {
+      // Older TorchMUSA supports ordinary native graph-owned pools, but not
+      // the reference-count check needed by our custom VMM allocator.
+      // capture_begin rejects user-owned pools before starting capture.
+      at::musa::MUSAGraph::reset();
+    }
+  }
+
   struct CapturedRegistry {
     std::mutex mutex;
     // Non-owning references: capture_end inserts; reset/destruction erase under

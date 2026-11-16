@@ -22,6 +22,7 @@ limitations under the License.
 #include <memory>
 #include <mutex>
 
+#include "core/platform/musa_graph_handle.h"
 #include "core/platform/shared_vmm_allocator.h"
 #include "core/platform/vmm_torch_allocator.h"
 
@@ -33,6 +34,8 @@ class MusaVmmCapturePool final {
  public:
   explicit MusaVmmCapturePool(int32_t device_index, size_t reserve_size = 0)
       : device_index_(device_index), torch_allocator_(&allocator_) {
+    CHECK(MusaGraphHandle::supports_user_pool_refs())
+        << "This TorchMUSA allocator does not support graph VMM pool ownership";
     c10::musa::MUSAGuard guard(device_index_);
     allocator_.init(device_index_, reserve_size);
   }

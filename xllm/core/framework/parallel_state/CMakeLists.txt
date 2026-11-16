@@ -17,6 +17,7 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_process_group.h>
     $<$<BOOL:${USE_MUSA}>:musa_process_group.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_custom_all_reduce.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_native_collectives.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_custom_all_reduce_policy.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>>:cuda_process_group.h>
     $<$<BOOL:${USE_ILU}>:ilu_process_group.h>
@@ -52,3 +53,16 @@ cc_library(
     gflags::gflags
     glog::glog
 )
+
+if(USE_MUSA)
+  # mccl.h exposes BF16/FP8 enum values only with a host architecture macro.
+  # This matches the repository's mp_31 device compilation default; deployments
+  # targeting another MUSA architecture must set the corresponding MCCL value.
+  set(XLLM_MUSA_MARCH_TYPE 310 CACHE STRING
+      "MCCL host API architecture (310 for mp_31)")
+  target_compile_definitions(parallel_state PRIVATE
+                            MARCH_TYPE=${XLLM_MUSA_MARCH_TYPE})
+  find_library(XLLM_MCCL_LIBRARY mccl
+               HINTS "${MUSA_PATH}/lib" "${MUSA_PATH}/lib64" REQUIRED)
+  target_link_libraries(parallel_state PUBLIC ${XLLM_MCCL_LIBRARY})
+endif()

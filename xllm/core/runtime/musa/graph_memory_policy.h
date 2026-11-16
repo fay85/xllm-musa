@@ -15,10 +15,14 @@ limitations under the License.
 
 #pragma once
 
+#include "core/platform/musa_graph_handle.h"
+
 namespace xllm::runtime::musa {
 
 // Both full Decode and piecewise Prefill captures use a fresh logical MemPool.
 // Physical storage is shared only within the same executor and phase.
-inline constexpr bool supports_graph_vmm_pool() { return true; }
+inline constexpr bool supports_graph_vmm_pool() {
+  return MusaGraphHandle::supports_user_pool_refs();
+}
 
 }  // namespace xllm::runtime::musa

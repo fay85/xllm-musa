@@ -19,6 +19,7 @@ limitations under the License.
 #include <torch_musa/csrc/distributed/ProcessGroupMCCL.h>
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#include "core/framework/parallel_state/musa/musa_native_collectives.h"
 #include "core/framework/parallel_state/process_group.h"
 #include "core/util/env_var.h"
 
@@ -53,6 +54,7 @@ class ProcessGroupImpl : public ProcessGroup {
         store, rank, rank_size, pg_options);
     custom_all_reduce_ = std::make_unique<MusaCustomAllReduce>(
         rank, rank_size, group_name, device, store);
+    init_native_collectives(rank, rank_size, group_name, device, store);
   }
 
   // The caller already resolved this rank's position inside group_ranks.
@@ -81,26 +83,64 @@ class ProcessGroupImpl : public ProcessGroup {
       custom_all_reduce_ = std::make_unique<MusaCustomAllReduce>(
           local_rank, rank_size, group_name, device, store);
     }
+    init_native_collectives(local_rank, rank_size, group_name, device, store);
   }
 
   // Work::wait first establishes the MCCL -> caller-stream dependency. A
   // synchronous driver wait then enforces host completion without Work's
   // optional 10-ms polling loop. Explicit opt-in; async APIs are unchanged.
   void allreduce(torch::Tensor& input) override {
-    ProcessGroup::allreduce(input);
+    if (native_collectives_) {
+      native_collectives_->allreduce(input);
+    } else {
+      ProcessGroup::allreduce(input);
+    }
     finish_sync_collective();
   }
 
   void allgather(const torch::Tensor& input,
                  std::vector<torch::Tensor>& outputs) override {
-    ProcessGroup::allgather(input, outputs);
+    if (native_collectives_) {
+      CHECK_EQ(outputs.size(), world_size());
+      for (const auto& output : outputs) {
+        CHECK_EQ(output.device(), input.device());
+        CHECK_EQ(output.scalar_type(), input.scalar_type());
+        CHECK_EQ(output.sizes(), input.sizes());
+      }
+      torch::DeviceGuard guard(device());
+      torch::Tensor gathered = native_collectives_->allgather(input);
+      for (int32_t rank = 0; rank < world_size(); ++rank) {
+        outputs[rank].copy_(gathered[rank]);
+      }
+    } else {
+      ProcessGroup::allgather(input, outputs);
+    }
     finish_sync_collective();
   }
 
   torch::Tensor allgather_base_sync(const torch::Tensor& input) override {
-    torch::Tensor output = ProcessGroup::allgather_base_sync(input);
+    torch::Tensor output = native_collectives_
+                               ? native_collectives_->allgather(input)
+                               : ProcessGroup::allgather_base_sync(input);
     finish_sync_collective();
     return output;
+  }
+
+  void broadcast(torch::Tensor& input, int32_t root_rank = 0) override {
+    if (native_collectives_) {
+      native_collectives_->broadcast(input, root_rank);
+    } else {
+      ProcessGroup::broadcast(input, root_rank);
+    }
+  }
+
+  void reduce_scatter(const torch::Tensor& input,
+                      torch::Tensor& output) override {
+    if (native_collectives_) {
+      native_collectives_->reduce_scatter(input, output);
+    } else {
+      ProcessGroup::reduce_scatter(input, output);
+    }
   }
 
   std::optional<torch::Tensor> allreduce_custom(
@@ -129,6 +169,18 @@ class ProcessGroupImpl : public ProcessGroup {
   }
 
  private:
+  void init_native_collectives(int32_t rank,
+                               int32_t world_size,
+                               const std::string& group_name,
+                               const torch::Device& device,
+                               const c10::intrusive_ptr<c10d::Store>& store) {
+    if (util::get_bool_env("XLLM_MUSA_NATIVE_SYNC_COLLECTIVES", false)) {
+      CHECK(!sync_collective_stream_)
+          << "Native graph collectives cannot use host stream synchronization";
+      native_collectives_ = std::make_unique<MusaNativeCollectives>(
+          rank, world_size, group_name, device, store);
+    }
+  }
   void finish_sync_collective() const {
     if (sync_collective_stream_) {
       torch::DeviceGuard guard(device());
@@ -138,6 +190,7 @@ class ProcessGroupImpl : public ProcessGroup {
   const bool sync_collective_stream_ =
       util::get_bool_env("XLLM_MUSA_SYNC_COLLECTIVE_STREAM", false);
   std::unique_ptr<MusaCustomAllReduce> custom_all_reduce_;
+  std::unique_ptr<MusaNativeCollectives> native_collectives_;
 };
 
 }  // namespace xllm
