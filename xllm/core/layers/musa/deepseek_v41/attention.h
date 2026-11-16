@@ -249,6 +249,27 @@ class DeepseekV41Attention final {
     return projection_.project_output(attention, positions, rope_table);
   }
 
+  torch::Tensor forward_draft_block_static(
+      const torch::Tensor& hidden,
+      const torch::Tensor& positions,
+      const torch::Tensor& rope_table,
+      const torch::Tensor& swa_cache,
+      const torch::Tensor& swa_table,
+      const torch::Tensor& previous_context) {
+    CHECK(config_.mode == DeepseekV41AttentionMode::SWA);
+    CHECK_EQ(config_.ratio, 0);
+    auto [query, current_kv, ignored_qr] =
+        projection_.prepare(hidden, positions, rope_table);
+    const torch::Tensor attention =
+        DeepseekV41PagedAttention(swa_cache,
+                                  config_.window,
+                                  config_.scale,
+                                  config_.sparse_library_path)
+            .forward_draft_block_static(
+                query, current_kv, swa_table, previous_context, weights_.sink);
+    return projection_.project_output(attention, positions, rope_table);
+  }
+
   void write_draft_context(const torch::Tensor& hidden,
                            const torch::Tensor& positions,
                            const torch::Tensor& rope_table,

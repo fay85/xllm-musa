@@ -1,0 +1,6 @@
+{
+  "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.h": "3ac092ec6db6fa677609f35027529797f08e6757e152134a9527bbc814c0cc5c",
+  "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.cu": "8021170f418813ebde931bdb579d70dd465c1dacbd8dd03d2473e049d2547d67",
+  "v41_draft_read_test_module.cpp": "e9cb33297dfe2f55e2d5e0fa1c4e91ed526671be229de2533908276795633632",
+  "worker.py": "cf4ed82aadc59e18c2b226eef3d8fd9d9f2e0232f966467ca46dea8b0f9d0ffb"
+}

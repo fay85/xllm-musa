@@ -1,0 +1,1111 @@
+{
+  "status": "PASS_NONCAUSAL_DRAFT_READ_AND_MATE_GRAPH",
+  "count": 144,
+  "cases": [
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 0,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 1,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 31,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 32,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 127,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 255,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 511,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 512,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 513,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 1024,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 0,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 1,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 31,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 32,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 127,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 255,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 511,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 512,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 513,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 1024,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 0,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 1,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 31,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 32,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 127,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 255,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 511,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 512,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 513,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 1024,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 0,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 1,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 31,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 32,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 127,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 255,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 511,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 512,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 513,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 1024,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 0,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 1,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 31,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 32,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 127,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 255,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 511,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 512,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 513,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 1024,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 0,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 1,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 31,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 32,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 127,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 255,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 511,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 512,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 513,
+      "nondefault": false,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 1024,
+      "nondefault": false,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 0,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 1,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 31,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 32,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 127,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 255,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 511,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 512,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 513,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 1,
+      "context": 1024,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 0,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 1,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 31,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 32,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 127,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 255,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 511,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 512,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 513,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 2,
+      "context": 1024,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 0,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 1,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 31,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 32,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 127,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 255,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 511,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 512,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 513,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 3,
+      "context": 1024,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 0,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 1,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 31,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 32,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 127,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 255,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 511,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 512,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 513,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 4,
+      "context": 1024,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 0,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 1,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 31,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 32,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 127,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 255,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 511,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 512,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 513,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 5,
+      "context": 1024,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 0,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 1,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 31,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 32,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 127,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 255,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 511,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 512,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 513,
+      "nondefault": true,
+      "table_dtype": "torch.int32",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "eager_exact_and_real_mate",
+      "q": 6,
+      "context": 1024,
+      "nondefault": true,
+      "table_dtype": "torch.int64",
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 1,
+      "context": 0,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 1,
+      "context": 255,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 1,
+      "context": 512,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 1,
+      "context": 33,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 2,
+      "context": 0,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 2,
+      "context": 255,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 2,
+      "context": 512,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 2,
+      "context": 33,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 3,
+      "context": 0,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 3,
+      "context": 255,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 3,
+      "context": 512,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 3,
+      "context": 33,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 4,
+      "context": 0,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 4,
+      "context": 255,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 4,
+      "context": 512,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 4,
+      "context": 33,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 5,
+      "context": 0,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 5,
+      "context": 255,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 5,
+      "context": 512,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 5,
+      "context": 33,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 6,
+      "context": 0,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 6,
+      "context": 255,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 6,
+      "context": 512,
+      "cache_unchanged": true
+    },
+    {
+      "kind": "real_graph_dynamic_inputs_exact",
+      "q": 6,
+      "context": 33,
+      "cache_unchanged": true
+    }
+  ],
+  "scope": "Draft SWA rows/picks and actual MATE attention; no full-model accuracy claim"
+}

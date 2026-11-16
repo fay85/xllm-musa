@@ -1,0 +1,1197 @@
+[
+  {
+    "original": "01_代码与构建/draft_graph_v1_build_launch.json",
+    "bytes": 173,
+    "sha256": "f261ac3cdfa2bdf69f8789b91874ca2c24e786a520600eb798810f03fecc0020",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/01_代码与构建/draft_graph_v1_build_launch.json"
+  },
+  {
+    "original": "01_代码与构建/draft_graph_v1_files.json",
+    "bytes": 5262,
+    "sha256": "1690020164feaad5f744ff1f32d3bbbcadd59e4f70f59265173f8ad75db7a023",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/01_代码与构建/draft_graph_v1_files.json"
+  },
+  {
+    "original": "01_代码与构建/draft_graph_v1_tracked.patch",
+    "bytes": 17458,
+    "sha256": "beca069b4c7de0eed325a076d9d3ff1042f2cef36323e2dbde6304697e7ddd60",
+    "lossless_gzip": "01_代码与构建/draft_graph_v1_tracked.patch.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/01_代码与构建/draft_graph_v1_tracked.patch.gz"
+  },
+  {
+    "original": "01_代码与构建/当前源码与实际ELF构建清单核对.json",
+    "bytes": 11816,
+    "sha256": "884441a7c6427275e614cc3521d8ccfcb9df4d97fc8ab7623c8fe8c53ed6e247",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/01_代码与构建/当前源码与实际ELF构建清单核对.json"
+  },
+  {
+    "original": "01_目的与验收.md",
+    "bytes": 1056,
+    "sha256": "f09ca59e204573a72e07f4f2a351d1a7f2c479c7596c01270b99220fc894836f",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/01_目的与验收.md"
+  },
+  {
+    "original": "03_结果对比/同ELF反向控制与静态draft.json",
+    "bytes": 6606,
+    "sha256": "d9238eb9b80c306051d7d9ea5c0757284ba26d231c69c0e63b8dfc40cfba8695",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/03_结果对比/同ELF反向控制与静态draft.json"
+  },
+  {
+    "original": "04_trace与图/目视检查.json",
+    "bytes": 233,
+    "sha256": "74f3dd6c21eddffa4c5c7f4c6d29534842e44063f7aec7defdcdd52c96fa679b",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/目视检查.json"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 574,
+    "sha256": "dffb35607800ea7b984acec90fdac773b61f6fc7f52c305bbe6e8416f0b49a1c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/Perfetto图/Perfetto实际轨道.json"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1242,
+    "sha256": "0f9692ae9f5506695891b0e0e8ddee96ccbe997c76f1df739a364fd9eed60148",
+    "lossless_gzip": "04_trace与图/静态非因果draft读取/Perfetto图/Perfetto页面文本.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/Perfetto图/rendered.json",
+    "bytes": 1239,
+    "sha256": "0c5280f3c854aa1dbf8de973b95647bb776f206bee42ee819ab49e7bbc083fd8",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/Perfetto图/rendered.json"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 270465,
+    "sha256": "f3092f19831f58c7f7977de3efb596860c71eb46bbb5b77325b0fc69c722c085",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 215649,
+    "sha256": "0ed327ee96a0d77541e79734d10ac6fff91432ca52c84f2c0de6e3512942d197",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 136133,
+    "sha256": "803703af87bbf8f37a497f222db2799b597d86c106c325a96993cf00d094a0e4",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/Perfetto图/真实CPU区间与GPU时间线.png"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/actual_native_last.pftrace",
+    "bytes": 2629990,
+    "sha256": "5c100aadd116198e30671ae9d457b78caf4f535fff030c5f98d5640a73d0d300",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/actual_native_last.receipt.json",
+    "bytes": 1727,
+    "sha256": "af15cf9c8eb85f903d43f08f8acc1badb4f44fcea95498ce1eaf59866d7e3c39",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/actual_native_last.receipt.json"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/本地WASM缺失.log",
+    "bytes": 3869,
+    "sha256": "8cdf59e575d83c5250585da81f5ba97c19e74e42fc708adf3610bfdcc44b14f6",
+    "lossless_gzip": "04_trace与图/静态非因果draft读取/本地WASM缺失.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/本地WASM缺失.log.gz"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/第二次UI超时.log",
+    "bytes": 3829,
+    "sha256": "891b7bd0b8a9ee526e21b04c19422fbf5311f36f596546291bea5dee983479ca",
+    "lossless_gzip": "04_trace与图/静态非因果draft读取/第二次UI超时.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/第二次UI超时.log.gz"
+  },
+  {
+    "original": "04_trace与图/静态非因果draft读取/首次UI超时.log",
+    "bytes": 3924,
+    "sha256": "cd132f38a9189ab60cd839b6d984c70c694971c6c694feb74faf98429e78fd24",
+    "lossless_gzip": "04_trace与图/静态非因果draft读取/首次UI超时.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/04_trace与图/静态非因果draft读取/首次UI超时.log.gz"
+  },
+  {
+    "original": "05_结论与读图说明.md",
+    "bytes": 4860,
+    "sha256": "f5d37994e650218591a27f0022bd40e273f0dc3425734fdf33aba81fd27a8ef6",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/05_结论与读图说明.md"
+  },
+  {
+    "original": "SGLang参考代码指纹.json",
+    "bytes": 627,
+    "sha256": "41b10e2a72537da3cedf1a5237ecc7b89e2cdc9670dfd9e3e06e0e64727b20a6",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/SGLang参考代码指纹.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/active.json",
+    "bytes": 992,
+    "sha256": "eb4388e6a74f834df9a8fe5f233fdc57d4f0ab7a14cffc971699e12dd52131f9",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/active.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1579,
+    "sha256": "ae33407d6c41b212ce60fb19618af7d90ccc37448563efa570d7c8d9842d64fd",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1304,
+    "sha256": "6590f8764193f1a49a2863a60fcc1ce3478826aa726a02a9773032248e14a52b",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "8fb3be6dc6f91127713bcba6429d8d0d2a878c128e413d833afd663498aa6656",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/basic_gate.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "881f476d3af82bfd39ad03e07b6170508d3bde8fbce40136dbbcf7cf67815bd1",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/finished.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 12039,
+    "sha256": "bd4cbb79e0de0b4d7f82097671a58b163b52ced7b73867d9d27d8470d5c62851",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2362,
+    "sha256": "e8324a00ef27847788706ad8d10584abcad4aa97c121a030c9798473ea05076a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "af619c9bddd1b67cb07aececa26b23bec19a56567ea3798adcab05e9d17d0401",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3638,
+    "sha256": "c4eef5f1dac9346e41e3a430f5b09d8a42cb347e82e9463b30e55824cc0b2db4",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "76c5671ac7eb2493c4eca0e7058bfbd9b0b4dad3bb8c5c2fe8ea24861d102f20",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 878,
+    "sha256": "035cbe11d65a5acef09f6b031cf202a933f68127e5c504d7b2b41ead1b3cce84",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 834,
+    "sha256": "79c88a533d110b479966befa00961f3c7a41d0f6a93e0d2c7ad741b29e8d7d17",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167295,
+    "sha256": "5f594c62a376611caf6485c0a1aecf8a0f42c407d434d3b4459d519c9930d336",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "619b9ee3b0a52eeabd4338117411c0782e533249202efe7f9d6dc595288ffe53",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal.log",
+    "bytes": 22469,
+    "sha256": "736ec9c9674721189c43465142f150587268f8415c5852bd600862fb18c77504",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9563,
+    "sha256": "cced063c4d4f7ce31b210b8de4f0dd629715057508a3079ee66d0cb30f44b4b5",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2369,
+    "sha256": "e5f6eac1ab76628a9151f0b946bad3cf66b8d627b328115f41668e47149f2497",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "4abf7e74a4980404d667b63f86f052c0057e5672a9b76798a6090e319a3d23d5",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3620,
+    "sha256": "f896c9b036d0d35f949899fd407a9fc6a20cc354d4c274fa4636757bb1b3bcdc",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 663,
+    "sha256": "2275626c26e39a3f0ad943087f4ca6e490b1ccbcab391dfd473178cd60be97cb",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 872,
+    "sha256": "1d1092d1d203ec2debb830ed33b860b1237ca69836e48015ec961d7420a1e741",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "6058d2ce3078627eed6d5588bf930b967ba2b8438cdd0b94448f47161a68a22d",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166788,
+    "sha256": "5ab04065484b07b261e472636462245f015717693a5d96f7fe7f625986bd0a5c",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "158729fc18c8da1683f7ec170d476a20c372212e25abb6decf940df7bc5fc404",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/formal_warmup.log",
+    "bytes": 18400,
+    "sha256": "9ed8136fcdda10089504f2f5969382ae053a20cd20084856a65fe8b8711649d6",
+    "lossless_gzip": "静态draft反向控制原始证据/formal_client/formal_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/identity.json",
+    "bytes": 286273,
+    "sha256": "14c44356efbd655f144d07802d52264feb70e696337cd40837877e5e9ba73fe7",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/identity.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/job.json",
+    "bytes": 147,
+    "sha256": "2f4971c2a07c2ddc72adc2cdfc26f9a2feef201f3c6a594fb8b08a14d89a1a20",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/job.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/status.json",
+    "bytes": 3617,
+    "sha256": "683dcd87a87daef40a11f284a007150b80ec50a3c8b0f2fbb6312dd671e1b0e8",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/status.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/formal_client/summary.json",
+    "bytes": 547,
+    "sha256": "1c3bdf3fa5e22c961338798f539dbf54fee6751ff240d8f676c0194221e8baef",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/formal_client/summary.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj10/rank0.log",
+    "bytes": 235240,
+    "sha256": "c1b3c1c3a88d3b58d86f3be6e071ac421feb114155596086c7fcfcd50e473fda",
+    "lossless_gzip": "静态draft反向控制原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj10/role_config.json",
+    "bytes": 49561,
+    "sha256": "1ab3ff8b266dfd6535a8605349efc14a0efaa121ffedb56261c27a8ff3734903",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9087,
+    "sha256": "8e162a6c94c3bcf1ef61e7ad15ca1d2a34172e694638c6d8e51930c71fb850fc",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj10/status.json",
+    "bytes": 272,
+    "sha256": "f81f2f921486a9c071cc071dfcd40396b59d230f94c1ae1b4e7e4a7edaea52ca",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "e210f0123e84ced216f59933d1dc70d232e57ee060e72e84e84f6a7be686e66a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj9/rank0.log",
+    "bytes": 160392,
+    "sha256": "695a519b17d4f94ea5aada39faffdded1e7e8fa5821fbb55fa3bfade3dce0b91",
+    "lossless_gzip": "静态draft反向控制原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj9/role_config.json",
+    "bytes": 49537,
+    "sha256": "33efdf682ee8a2873d1d672ee0e0d541d046924770dda63d9c16fee8f287554f",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9289,
+    "sha256": "d71061db1259d43cdbaf29eafcde34720fa3e69d28d257b2d535a9ba23730765",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj9/status.json",
+    "bytes": 272,
+    "sha256": "dccb2ba57d734f4dd079a495dc4daeea3899b2dd53adce37b02a950a043b892c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "ffc167bac2f3f7eceb25ac90dca45a1597769ce0710e02809889b1647b8250fc",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "静态draft反向控制原始证据.tar.gz",
+    "bytes": 130795,
+    "sha256": "1722054cdd2ab780d2d57348240008d861e834d83f4bb24b7074281c8a9b7b64",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "静态draft反向控制原始证据校验.json",
+    "bytes": 232,
+    "sha256": "88d905e1bb4b4058d8e5f017370b82dcc896bc0bd3450d07aedbe70fd56bf42d",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft反向控制原始证据校验.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/build/artifact_manifest.json",
+    "bytes": 507,
+    "sha256": "ca63d59bbdeb07ed99d7986a7980b6d71b0694a28863a5b329b3cfaf6ef3de2d",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/build/artifact_manifest.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/build/build.log",
+    "bytes": 52796,
+    "sha256": "d60b43a63c1fce0939d5549e65e122339fd12b9af87a66a57d2b13facccb0b64",
+    "lossless_gzip": "静态draft正式与trace原始证据/build/build.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/build/build.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "713d96cf08a5aede1e64ebc0b765ceea0f068567206149d753d6ddf96dbe6b71",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/build/finished.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/build/job.json",
+    "bytes": 380,
+    "sha256": "514a2d6aa45555fbc6c147d9cba562d42f40f65c3ddf15c62ca3e1a8f9c3f805",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/build/job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/build/source_manifest.json",
+    "bytes": 5560,
+    "sha256": "61a6e445752564a12455968c6e841d8defb0b4e846d3c3deff33c1e54be66572",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/build/source_manifest.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/active.json",
+    "bytes": 976,
+    "sha256": "02cfa6599b5d370e8f96fda69400583095e288e293872e980ac2e59ce9a21533",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/active.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/basic_1_sse.jsonl",
+    "bytes": 1581,
+    "sha256": "2f25154c1c674b0e6796a52dca062f467f7ecbde2ff00cfcc24f4c33155f67bc",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/basic_2_sse.jsonl",
+    "bytes": 1304,
+    "sha256": "91f2111a92fb75217899a30a466dad503224d89853ea7f19ab3c080b29f71dc3",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "5a4d161fc28676bc265fc0e46289fc185602e505573b861b760ceb3072f64d9c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/basic_gate.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/finished.json",
+    "bytes": 64,
+    "sha256": "e4fe548acf11f286e5009cf0096c7ebf7cefbc0eba0de987892d5c3cd6c7aff4",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/finished.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/identity.json",
+    "bytes": 286273,
+    "sha256": "14c44356efbd655f144d07802d52264feb70e696337cd40837877e5e9ba73fe7",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/identity.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/job.json",
+    "bytes": 138,
+    "sha256": "64b58d8dd12b6c2e9de343f1a9c25fdce613243a2cbd66c991e51aa3fe783f47",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10069,
+    "sha256": "c8e0e39e7d0856e4c37b4069cdbc6eb77c2031a580513c5a7e7772a01364ec49",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2346,
+    "sha256": "ae28f6228e95d3a6e897edf56fc6bca79781dcae97c78042c22392c496cb0096",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "2466be168d2c07e3bfa5670061a5666316fb1529cee6367cd4571ce3786236ac",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3639,
+    "sha256": "5c3b635d0426570488c287664091fc5f704ac442392dd03d61bd651f8401d9c3",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 664,
+    "sha256": "7882a2c9dd62df5364948d0f569f6673c71184ab4ea00a6275a71ce9bfc58102",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 878,
+    "sha256": "985f624c8801177b36b3ef27db79ec5bf7c1d7cba9bcfd2ff1d856895ff99953",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "9ce6b024e5511a22ae2bd74780f1f6e291844b45de6d83ae88afb5413477416d",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166926,
+    "sha256": "a4eef574c9c2c5978d65955465cd0b166f630d3c3834c7ce9c74378719ce0735",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "d8753e7cf2cc9aa8ddb5485a30de63ab7e6f04707db5333c16ab4c9eac9d6f47",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen.log",
+    "bytes": 19311,
+    "sha256": "830875d6da4c3f57d59e98ebea9f6c7039b76e0f30ef676042f61de27cef38d8",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9487,
+    "sha256": "3850b9061e7ce27755212838280a42a64187060d0046c1dcad7e4416751d1ffb",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2353,
+    "sha256": "edecdab27f1f272ec8f225a502cf252b2adf981c60cdaf46d78f26bd905aeb53",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "d9fca377f2889fcbd876c4876c6ed3391dba63fa53a2b048f2f406d504b6d759",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3633,
+    "sha256": "b120a427e55bdda2394834ef0c9cc5cfd923677435dfeb6b82cc567f2015c680",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "332a89aae77f754bdc013140e67938cce89f7e14db7653f5ff4243104d7eac8c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "94f3793ca403a48fc1e538dfd245cd29684622799d6f3827782e60de70340930",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "881d4c64129046d2462408a75f3b4e129d42b59ebc2c532e99940c7b0732573c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166797,
+    "sha256": "2440b0abfc7511fb0f855e15b91c39db6fa2998f55c95bd101c6cc1cfa0b2cd2",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "c44d1d232876f7ef5b6448f5938367e588f7d29a6e2f377e1767382d80b0fe39",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/screen_warmup.log",
+    "bytes": 18308,
+    "sha256": "f8e2bb163fb10c32d816700b4d93cec79dbb2c726af244ca2eb25f0686865323",
+    "lossless_gzip": "静态draft正式与trace原始证据/client/screen_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/screen_warmup.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/status.json",
+    "bytes": 3010,
+    "sha256": "23d8c170a024d75b7d08deab7fd632034952739040afa049fb6ccb3150d0b36a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/status.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/client/summary.json",
+    "bytes": 540,
+    "sha256": "d44bb266a72ade4c80d9dbea94b5fb1f12072f84e5f748f37ad541008892f717",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/client/summary.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/active.json",
+    "bytes": 983,
+    "sha256": "4cfec99d81b506bb6f66abd7fdf5fbe555ede47aa025ecea2e343af594ff6eba",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/active.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "5a4d161fc28676bc265fc0e46289fc185602e505573b861b760ceb3072f64d9c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/basic_gate.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "a111660dc234e2d84b43ad824c23e5353e36d91a0858b8909f5a5074659bd367",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/finished.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11992,
+    "sha256": "af52237d271d9821cdb39dcd6011feca959afdfd00bf39e98d6296e6d983bea7",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2353,
+    "sha256": "c6e9263a1b8d2e8b166ad5a706410768194eeaeb52693f53d4a15f15f013efea",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "f7a6fe46295c825c6d12c04375d63de488c13c4b4042b439f0fd76dda92d7c4d",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3636,
+    "sha256": "b1faea249fed8d8b9604482eaccaa4aff1efc47ca4a121670ad0329c0cf9b473",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 665,
+    "sha256": "2f800ff958cd62b03ff56e7f1bdb649d14eb84674375131068da8c0ac956f8d1",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "d028ec6a7bf11e39dc2852d5998dbd2ee6d82b3b1042a97196b06ea6f0d4f68a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 835,
+    "sha256": "a0bf0426292a50464a73c55d216040185b61bded3a029bf43dd54aecb6097dd0",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167286,
+    "sha256": "1e36b44f066b803c922a7f254352f0eb79930d42c4b566297a3f18ddf8dfcb2b",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "bfe4d5ad5cb867fc150915f0dcef39ad43ea66a6560b918ef51404a5febf1d4b",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal.log",
+    "bytes": 22413,
+    "sha256": "9aabca9935b5c04f72f2715becf3bca7d92d62bd2dba3fe452074d232372c2a7",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9502,
+    "sha256": "e0f99b77603367e2966f90d0c85a419f90b126bf9dc9ffb8d1f38bb73cbf6d8e",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2360,
+    "sha256": "fca6567c6e134c6c83e39ed5f3fc4ac9a6dc497b84a99e2285e1bdd6b80fe001",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "f512db282d5198aed3c8b13299b2b4ab9e6fb983e2345544e0cc3c36ec6402ea",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3642,
+    "sha256": "be02c8440795ba0719f291294daffce08923c9cece540c23538365d2f2be4a9f",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "a939c05ef0e921e834d9ead2062221fba4b579da21161fc78f639a22f77e585c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 872,
+    "sha256": "68c43fabcb7eca9db3378a65ccbec25a6cf0315aa30760835080f8bfe197f65e",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "202d6c12732f2119823e9126322aaebf3677aabbd028c830a3be966c2305ea44",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166814,
+    "sha256": "3151a4ccb70c657ad3cdb27d3576ec11083e87aae4083f63feeb07c0c2ee7f79",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "0c805bb90a27db02b325e586445aeddc51afc9d1a78601e417bf369eafdc9561",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/formal_warmup.log",
+    "bytes": 18318,
+    "sha256": "67b38970dab10c56aa37c2e27d1f54bcf13ebcbe842c6bdb39972824ed8c30d4",
+    "lossless_gzip": "静态draft正式与trace原始证据/formal_client/formal_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/identity.json",
+    "bytes": 286273,
+    "sha256": "14c44356efbd655f144d07802d52264feb70e696337cd40837877e5e9ba73fe7",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/identity.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/job.json",
+    "bytes": 138,
+    "sha256": "b91ea2f667de236fdacb5ffce4d389c06ce049868ecc1149cd32836cc93b21a6",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/status.json",
+    "bytes": 3603,
+    "sha256": "72780d2f1383e525112408279a56737ca2195979a39208aa19418bc5e9b88a01",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/status.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/formal_client/summary.json",
+    "bytes": 548,
+    "sha256": "ebb5bf633fb508ec7217e2f70e192ce4f34a2ac23cfdc712d4a73fdfb186daec",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/formal_client/summary.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/active.json",
+    "bytes": 415,
+    "sha256": "b218e510ab07e8804bcb644f81a8678b179756d290f927a2d3b5e5aeae6d9d99",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/active.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/draft_read.json",
+    "bytes": 25316,
+    "sha256": "8693ba1ab539e94a48f2dd9165e02bece2cd0d54f544489ab4d5fe79628acb22",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/draft_read.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/draft_read.log",
+    "bytes": 337,
+    "sha256": "bc157c5a140ab546d6b0e996845d12366120701c5bb8e66b83116729cea7ee05",
+    "lossless_gzip": "静态draft正式与trace原始证据/gpu_checks/draft_read.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/draft_read.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/draft_read_finished.json",
+    "bytes": 64,
+    "sha256": "d9eb9e8d2b4157012082bdce0e2a15d86bfd7309d4bfb492a939435de0309c0a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/draft_read_finished.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/draft_read_job.json",
+    "bytes": 415,
+    "sha256": "b218e510ab07e8804bcb644f81a8678b179756d290f927a2d3b5e5aeae6d9d99",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/draft_read_job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/finished.json",
+    "bytes": 64,
+    "sha256": "ad6c778939d503a50a01c8ef1c437ff19e3f7ea89ccc89cae00d2c7b472edb44",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/finished.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/source_sha256.json",
+    "bytes": 98,
+    "sha256": "ad55feeb8915e0b182e79c3befa84bec1faee5243fddeedbef52bea5e4a7ad32",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/source_sha256.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/validate_draft_read.py",
+    "bytes": 7278,
+    "sha256": "d3c70797e548f2af7b7411797b0634ece532bec9730c274ed2676056eaf3f418",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/validate_draft_read.py"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "静态draft正式与trace原始证据/gpu_checks/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/worker.py",
+    "bytes": 1463,
+    "sha256": "c61ed92943c0b6605500412193585243f96f9d9eb5ab8d6b8edc36d5de966d88",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/worker.py"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/gpu_checks/worker_launch.json",
+    "bytes": 92,
+    "sha256": "76b157e958f9aa788225d44fa128fd0ce039064148a89b8ded859b6cde2d9bcc",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/gpu_checks/worker_launch.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 257053,
+    "sha256": "f3ede1c393c88ddfd917b8e867a5863dcc0ea43d0846d906a2b90aca3cf64af2",
+    "lossless_gzip": "静态draft正式与trace原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 49231,
+    "sha256": "d5fd0a270e3941ba798d731370c0d70b610d0f656e99fa4a27c3a0c8517be102",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9087,
+    "sha256": "2f5d0d732736d023e275b3e816421fa54f56000003f3c2e4c1c9f6cd95177313",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj10/status.json",
+    "bytes": 251,
+    "sha256": "62eafee30727278badc045d2e4bbb996ee00bcefe32b0cacadcb4403c6224031",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "ba8462c02cb39df11de653eeb8d8864ff3e6b69066bb7f9dda02a19a30179549",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 221845,
+    "sha256": "62cb77a27ce177f431cf7a954cdcc7dfa4ed613f24794013cbdbdf88ccd79944",
+    "lossless_gzip": "静态draft正式与trace原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 49207,
+    "sha256": "5fc68758ce9ea9c70326464d0fdddd1ee659eaf258b7754e2bcbe5cefe207751",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9289,
+    "sha256": "70658ad7977877ad5e6b0005a9cd8a70dd743e59679cb316e115821c82858d13",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj9/status.json",
+    "bytes": 272,
+    "sha256": "75f85e3833ac95baf0ce5fa8b5465d114f2ea56a0da72023b6dbea7eabf42aa7",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "dcf7668ef2fd70c263bb468580914ac4ab5ee7746701b8cabaa8f64bb305d2d9",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "d7b69e51747464bce22447d4b74d4236fb625ab24ccd49ca8d2dcdf399ac1a61",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/finished.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "75eea7369f5f4abeec8756a5f314b7c76e0d069cf54530f30c7a2914b8826aae",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/job.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/manifest.json",
+    "bytes": 7402,
+    "sha256": "86e30783398c9c9e1ead6ae93dca9285b7c4dd3f5c94b9368e451d55fe26742f",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/manifest.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "a196c36168020029915cf448cefe30a0ec2f7d15dc9da27f050fc3bfb20275fa",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/off_after_sse.jsonl"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "ff44f0be4e98faa60f986e58323e44a494eff4b68213b2a97511d97c28d00126",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/off_before_1_sse.jsonl"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "183f5e71541ec467be1a8e616ba9ae1b0ca4a77ca98574710c77778d087b2c2c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/off_before_2_sse.jsonl"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2492,
+    "sha256": "478ae9ee6df8f2c353b4f1bda21e55f43999580cec2686e98d284db5a321bdc8",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/profiled_sse.jsonl"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/request.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/requests.json",
+    "bytes": 1758,
+    "sha256": "83cda998c97d1199fb84b039ba1088bf6728dc2084998c26d4aec11f7bfaa592",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/requests.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "312fac1d50c3320c799c3d5022a52370fdebc4a6d8d4fde71ab8ed8b021b49a6",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/start_profile.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "a8d75f3ad375ef6b17451505e8179542bbaf49f6758bbf7144509ecf71ffbfc0",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace/stop_profile.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 27940,
+    "sha256": "fab0d61d2875654954ca9d7da858d54c0e1d6630e328207eb82f22bf5bc10c14",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace_analysis/all_rank_validation.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 176046,
+    "sha256": "904aca7154f8477aa107b984dba8c03281ef89d8aecb615ff3eb164b42d954ce",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据/trace_analysis/resolved_symbols.json"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 13197224,
+    "sha256": "5253fe3b1653f2d6126ac7a236a1084d8813a976ff428bb76fb820580ac4a1ad",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 6938731,
+    "sha256": "ac326415540651c6b955438c4e3f440e61a610e7fcc1a5645c35e5a0dd2e03f7",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 18716035,
+    "sha256": "9174024f3c08dbab71151d5ed4d5bfccf82f8d0e6045f362e87ee380b56cf287",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "静态draft正式与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20147624,
+    "sha256": "96e94be0339d069878e2dfa2f47e8d4b775efc485c7b11f382ed995f5ae20508",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "静态draft正式与trace原始证据.tar.gz",
+    "bytes": 5274403,
+    "sha256": "f89b320a772cb3068d4de8f19d968d6657e021315c2055d419445d4e4b77881a",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "静态draft正式与trace原始证据校验.json",
+    "bytes": 224,
+    "sha256": "2eda7840678671cdebd3c66dc2d42c7364fb7b03241c320088bbddda99cef987",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/静态draft正式与trace原始证据校验.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/commands.json",
+    "bytes": 18202,
+    "sha256": "2e6c85e34f3e8aa633fc8244752e83d4b113052a861406b63d275a9cc9b00dc6",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/commands.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/finished.json",
+    "bytes": 164,
+    "sha256": "7b0b1d2a1e3aed644f043583fe0951a6dbdc0432bea859a05794548953f454ec",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/finished.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/active.json",
+    "bytes": 415,
+    "sha256": "b218e510ab07e8804bcb644f81a8678b179756d290f927a2d3b5e5aeae6d9d99",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/active.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/draft_read.json",
+    "bytes": 25316,
+    "sha256": "8693ba1ab539e94a48f2dd9165e02bece2cd0d54f544489ab4d5fe79628acb22",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/draft_read.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/draft_read.log",
+    "bytes": 337,
+    "sha256": "bc157c5a140ab546d6b0e996845d12366120701c5bb8e66b83116729cea7ee05",
+    "lossless_gzip": "非因果draft读取GPU检查/gpu_checks/draft_read.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/draft_read.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/draft_read_finished.json",
+    "bytes": 64,
+    "sha256": "d9eb9e8d2b4157012082bdce0e2a15d86bfd7309d4bfb492a939435de0309c0a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/draft_read_finished.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/draft_read_job.json",
+    "bytes": 415,
+    "sha256": "b218e510ab07e8804bcb644f81a8678b179756d290f927a2d3b5e5aeae6d9d99",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/draft_read_job.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/finished.json",
+    "bytes": 64,
+    "sha256": "ad6c778939d503a50a01c8ef1c437ff19e3f7ea89ccc89cae00d2c7b472edb44",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/finished.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/source_sha256.json",
+    "bytes": 98,
+    "sha256": "ad55feeb8915e0b182e79c3befa84bec1faee5243fddeedbef52bea5e4a7ad32",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/source_sha256.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/validate_draft_read.py",
+    "bytes": 7278,
+    "sha256": "d3c70797e548f2af7b7411797b0634ece532bec9730c274ed2676056eaf3f418",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/validate_draft_read.py"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "非因果draft读取GPU检查/gpu_checks/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/worker.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/worker.py",
+    "bytes": 1463,
+    "sha256": "c61ed92943c0b6605500412193585243f96f9d9eb5ab8d6b8edc36d5de966d88",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/worker.py"
+  },
+  {
+    "original": "非因果draft读取GPU检查/gpu_checks/worker_launch.json",
+    "bytes": 92,
+    "sha256": "76b157e958f9aa788225d44fa128fd0ce039064148a89b8ded859b6cde2d9bcc",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/gpu_checks/worker_launch.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/import.log",
+    "bytes": 72,
+    "sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "lossless_gzip": "非因果draft读取GPU检查/import.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/import.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/job.json",
+    "bytes": 92,
+    "sha256": "8823c79fbf6008ea9d68f0d072ec03bd92849b6d9df5e339e5e90a17ba76f8bf",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/job.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/kernel_compile.log",
+    "bytes": 20946,
+    "sha256": "4b4734863d097f3bd6b2b28725a9b4c24e50166b299e637c313ab4237a80e9ca",
+    "lossless_gzip": "非因果draft读取GPU检查/kernel_compile.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/kernel_compile.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "非因果draft读取GPU检查/link.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/link.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/module_compile.log",
+    "bytes": 3489,
+    "sha256": "dc8618ae5ff60c7113ab1e0a8a610b8235d222b5868fb11c0b489a8dd57307ba",
+    "lossless_gzip": "非因果draft读取GPU检查/module_compile.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/module_compile.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/source_manifest.json",
+    "bytes": 444,
+    "sha256": "039df88ee95cba73a6742b4feca5cc50613d1a063293033c9fe629a73e0a0824",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/source_manifest.json"
+  },
+  {
+    "original": "非因果draft读取GPU检查/v41_draft_read_test_module.cpp",
+    "bytes": 1216,
+    "sha256": "e9cb33297dfe2f55e2d5e0fa1c4e91ed526671be229de2533908276795633632",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/v41_draft_read_test_module.cpp"
+  },
+  {
+    "original": "非因果draft读取GPU检查/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "非因果draft读取GPU检查/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/worker.log.gz"
+  },
+  {
+    "original": "非因果draft读取GPU检查/worker.py",
+    "bytes": 2468,
+    "sha256": "cf4ed82aadc59e18c2b226eef3d8fd9d9f2e0232f966467ca46dea8b0f9d0ffb",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/worker.py"
+  },
+  {
+    "original": "非因果draft读取GPU检查/xllm/core/kernels/musa/deepseek_v41_swa_decode_read.cu",
+    "bytes": 11461,
+    "sha256": "8021170f418813ebde931bdb579d70dd465c1dacbd8dd03d2473e049d2547d67",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/xllm/core/kernels/musa/deepseek_v41_swa_decode_read.cu"
+  },
+  {
+    "original": "非因果draft读取GPU检查/xllm/core/kernels/musa/deepseek_v41_swa_decode_read.h",
+    "bytes": 1927,
+    "sha256": "3ac092ec6db6fa677609f35027529797f08e6757e152134a9527bbc814c0cc5c",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查/xllm/core/kernels/musa/deepseek_v41_swa_decode_read.h"
+  },
+  {
+    "original": "非因果draft读取GPU检查.tar.gz",
+    "bytes": 12306,
+    "sha256": "0e082891f82c11e00297d8bf8984d513a808fdb3b2b2b5ee0cfba89b8a155031",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "非因果draft读取GPU检查校验.json",
+    "bytes": 208,
+    "sha256": "0d21d7af6303395c6571a4a32e14efeafd9098a0e654a6c3e2bb3277644c9e5a",
+    "git_path": "evidence/v41_match_sglang_1116/实验013/非因果draft读取GPU检查校验.json"
+  }
+]

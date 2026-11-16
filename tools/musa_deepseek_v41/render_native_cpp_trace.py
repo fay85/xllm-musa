@@ -29,7 +29,7 @@ async def _render(args: argparse.Namespace, receipt: dict) -> None:
         )
         page = await context.new_page()
         await page.goto(
-            "https://ui.perfetto.dev", wait_until="domcontentloaded", timeout=60000
+            args.ui_url, wait_until="domcontentloaded", timeout=60000
         )
         await page.locator("input.trace_file").set_input_files(str(args.trace))
         await page.wait_for_function(
@@ -84,6 +84,7 @@ async def _render(args: argparse.Namespace, receipt: dict) -> None:
         json.dumps(
             {
                 "status": "RENDERED_REAL_INTERVALS_AND_NATIVE_ENTRY_COUNT_WITH_PERFETTO_UI",
+                "ui_url": args.ui_url,
                 "trace": str(args.trace),
                 "output_sha256": receipt["output_sha256"],
                 "native_entry_samples": receipt["native_entry_samples"],
@@ -102,6 +103,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--browser-profile", type=Path, required=True)
     parser.add_argument("--chromium", default="/usr/bin/chromium")
+    parser.add_argument("--ui-url", default="https://ui.perfetto.dev")
     args = parser.parse_args()
     receipt = json.loads(args.receipt.read_text())
     if (

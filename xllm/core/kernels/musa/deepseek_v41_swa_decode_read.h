@@ -18,6 +18,16 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 
+// DSpark queries attend to all proposed rows, not a causal prefix. The
+// previous-context scalar is device-resident so graph replay can update it.
+// Returns chronological rows and per-query picks without modifying the cache.
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_swa_draft_read(
+    const torch::Tensor& cache,
+    const torch::Tensor& current_kv,
+    const torch::Tensor& table,
+    const torch::Tensor& previous_context,
+    int64_t window);
+
 // Read-only q1 construction. Returns chronological rows, sparse picks, and
 // the physical commit slot; the caller must run attention before writing KV.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>

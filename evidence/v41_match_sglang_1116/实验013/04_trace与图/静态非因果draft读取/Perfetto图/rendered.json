@@ -1,0 +1,23 @@
+{
+  "status": "RENDERED_REAL_INTERVALS_AND_NATIVE_ENTRY_COUNT_WITH_PERFETTO_UI",
+  "ui_url": "http://127.0.0.1:18766",
+  "trace": "/home/xiaopang/\u684c\u9762/Albert\u5206\u4eab/20261021\u4ecexllm\u5f00\u59cb/\u738b\u5bb6\u660e/20261111\u540e\u7eed\u63a8\u8fdbCpp\u5427/\u4ee5sglang_mt\u5de5\u4f5c\u4e3a\u6bcd\u672c\u53bb\u505a/20261116\u540e\u7eed\u5982\u4f55\u6b63\u786e\u63a8\u8fdb\u5e76\u77e5\u9053\u8fb9\u754c\u5927\u6982\u5728\u54ea\u91cc/\u8ffd\u5e73sglang\u751a\u81f3\u8d85\u8d8a\u5b83/02_\u5b9e\u9a8c\u8bb0\u5f55/\u5b9e\u9a8c_013/04_trace\u4e0e\u56fe/\u9759\u6001\u975e\u56e0\u679cdraft\u8bfb\u53d6/actual_native_last.pftrace",
+  "output_sha256": "5c100aadd116198e30671ae9d457b78caf4f535fff030c5f98d5640a73d0d300",
+  "native_entry_samples": 574,
+  "selected_cpu_interval": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/DSpark/layer/0",
+    "pid": 19788,
+    "tid": 21627,
+    "ts": 3975933948017.165,
+    "dur": 9105.775,
+    "args": {
+      "External id": 10778,
+      "Record function id": 11454,
+      "finished": true,
+      "Ev Idx": 10777
+    }
+  },
+  "boundary": "Entry counts identify real C++ callers; widths are not CPU-time samples. CPU/GPU interval timings are copied from the actual Kineto trace."
+}

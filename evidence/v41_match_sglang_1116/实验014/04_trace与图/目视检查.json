@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-16T21:04:33.729289+08:00",
+  "status": "ACTUALLY_VIEWED_CPU_GPU_AND_FULL_NATIVE_COUNT",
+  "native_entries": 3,
+  "counts_boundary": "replayed graph omits inner native/ATen events; do not claim three-layer computation removed",
+  "ui": "Perfetto v59.1-79997ada9 cached official UI localhost18766"
+}

@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-16T20:59:03.610581+08:00",
+  "status": "ACTUALLY_VIEWED_CPU_GPU_AND_FULL_NATIVE_COUNT",
+  "native_entries": 574,
+  "count_not_cpu_time": true,
+  "ui": "Perfetto v59.1-79997ada9 cached official UI; localhost18766"
+}

@@ -9,6 +9,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -96,11 +97,13 @@ class DeepseekV41DraftModel final {
     return projected;
   }
 
-  torch::Tensor forward(const torch::Tensor& tokens,
-                        const torch::Tensor& positions,
-                        const std::vector<torch::Tensor>& swa_caches,
-                        const torch::Tensor& table,
-                        int64_t previous_context) {
+  torch::Tensor forward(
+      const torch::Tensor& tokens,
+      const torch::Tensor& positions,
+      const std::vector<torch::Tensor>& swa_caches,
+      const torch::Tensor& table,
+      int64_t previous_context,
+      const std::optional<torch::Tensor>& device_context = std::nullopt) {
     CHECK_EQ(tokens.dim(), 1);
     CHECK_GT(tokens.numel(), 0);
     CHECK_LE(tokens.numel(), 8);
@@ -126,7 +129,8 @@ class DeepseekV41DraftModel final {
                                               swa_caches[index],
                                               table,
                                               previous_context,
-                                              tokens);
+                                              tokens,
+                                              device_context);
     }
     const torch::Tensor merged = kernel::musa::deepseek_v4_hc_pre_combine(
         hidden.contiguous(), pre_mix.contiguous());

@@ -1,0 +1,262 @@
+{
+  "at": "2026-11-16T21:03:17.091609+08:00",
+  "status": "ALL_COMPILED_CPP_FILES_MATCH_TOOL_ONLY_DIFF_EXPLAINED",
+  "files": [
+    {
+      "path": "tests/core/kernels/musa/CMakeLists.txt",
+      "expected": "b2c59fd389ad701aee13d7eaeac4ef7e8ef5e470acfebde6419290b210404ada",
+      "actual": "b2c59fd389ad701aee13d7eaeac4ef7e8ef5e470acfebde6419290b210404ada",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/musa_python_kernel_test_module.cpp",
+      "expected": "4fd1df8246e2794df7c982ac365736b6b506acdba31a4012e1449b7f4d410a7d",
+      "actual": "4fd1df8246e2794df7c982ac365736b6b506acdba31a4012e1449b7f4d410a7d",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/v41_attention_layout_test_module.cpp",
+      "expected": "4acf8ba93c57359abb84ca1029b8be97f42d4840df7ad8e0b7b2c9d44ce722ca",
+      "actual": "4acf8ba93c57359abb84ca1029b8be97f42d4840df7ad8e0b7b2c9d44ce722ca",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/v41_decode_graph_inputs_test_module.cpp",
+      "expected": "da7698d601bcc1416f5e9adede8a84cdd8d07d17afa1af5aed86f483a81913dc",
+      "actual": "da7698d601bcc1416f5e9adede8a84cdd8d07d17afa1af5aed86f483a81913dc",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/v41_draft_read_test_module.cpp",
+      "expected": "e9cb33297dfe2f55e2d5e0fa1c4e91ed526671be229de2533908276795633632",
+      "actual": "e9cb33297dfe2f55e2d5e0fa1c4e91ed526671be229de2533908276795633632",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/v41_prefix_checkpoint_test_module.cpp",
+      "expected": "05e2a7e26893529edcf87a6373dff498ba3503ada8f72ff662b9d917643a9810",
+      "actual": "05e2a7e26893529edcf87a6373dff498ba3503ada8f72ff662b9d917643a9810",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/v41_verify_collective_test_module.cpp",
+      "expected": "199a04cb2173e8fbab5b5167d2eeed21d2f63357ab8f539b5ecd0049ef7af478",
+      "actual": "199a04cb2173e8fbab5b5167d2eeed21d2f63357ab8f539b5ecd0049ef7af478",
+      "match": true
+    },
+    {
+      "path": "tests/core/kernels/musa/v41_verify_graph_inputs_test_module.cpp",
+      "expected": "2327870960db6a79257bbb0ed82259885ebe97dd3fb82ebc101578f572c2745c",
+      "actual": "2327870960db6a79257bbb0ed82259885ebe97dd3fb82ebc101578f572c2745c",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_sparse_mate.py",
+      "expected": "05b2cbdf39d96215931f35a67cb10868c851d303d582380d69da2d1feed4a806",
+      "actual": "05b2cbdf39d96215931f35a67cb10868c851d303d582380d69da2d1feed4a806",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/convert_native_cpp_trace.py",
+      "expected": "0cf4c810fdbd3335801923fa1f9089390893c3e4062b3f3a405c7e682ac6ac9d",
+      "actual": "5f79d21e106f96cb0faf48cd162543e3f6279d7c8f6a0e5cb0bb0befa76b95a1",
+      "match": false
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_attention_replication.py",
+      "expected": "4d07cc231e1b063c62ac066948f8758127c2e6579457ceea86b5d9711eefc781",
+      "actual": "4d07cc231e1b063c62ac066948f8758127c2e6579457ceea86b5d9711eefc781",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_decode_graph_inputs.py",
+      "expected": "243e65abb965fe7074c3daa694b9f466e1e7e56d01dbee437daddabc7ff141ce",
+      "actual": "243e65abb965fe7074c3daa694b9f466e1e7e56d01dbee437daddabc7ff141ce",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_draft_read.py",
+      "expected": "d3c70797e548f2af7b7411797b0634ece532bec9730c274ed2676056eaf3f418",
+      "actual": "d3c70797e548f2af7b7411797b0634ece532bec9730c274ed2676056eaf3f418",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_fused_prefix_snapshot.py",
+      "expected": "3970ecdde62ab49e545387acd306019c288843a432cb04c90d9f2b0c8c4cefed",
+      "actual": "3970ecdde62ab49e545387acd306019c288843a432cb04c90d9f2b0c8c4cefed",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_native_sparse_mate.py",
+      "expected": "9697ef88d7d95e0e8588624eeb80d5f0ef22329fd15391c510abde14172281b9",
+      "actual": "9697ef88d7d95e0e8588624eeb80d5f0ef22329fd15391c510abde14172281b9",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_prefix_checkpoint.py",
+      "expected": "2cd33f05becabe06b90ccbf064ee7633fb96c751040b34aa1a31643be1cd5243",
+      "actual": "2cd33f05becabe06b90ccbf064ee7633fb96c751040b34aa1a31643be1cd5243",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_prefix_engram.py",
+      "expected": "7f9ab8ae67f25e4b41e6d17c63397cece54f64809da8287c622a919c218295ed",
+      "actual": "7f9ab8ae67f25e4b41e6d17c63397cece54f64809da8287c622a919c218295ed",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_verify_collective.py",
+      "expected": "9672ef4ea60e8bddbc5c77571a215b62acf3820a37f796cc0985c8cd82fd3e4c",
+      "actual": "9672ef4ea60e8bddbc5c77571a215b62acf3820a37f796cc0985c8cd82fd3e4c",
+      "match": true
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_verify_graph_attention.py",
+      "expected": "51b5f1f194fb80bfb928b86e83394bea3f1e2a0c5611c384814cea3421b0193b",
+      "actual": "51b5f1f194fb80bfb928b86e83394bea3f1e2a0c5611c384814cea3421b0193b",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/CMakeLists.txt",
+      "expected": "c56f122d015ac88aba0cd1644b9ca353aebaefb8ef060c4344bea40f652d4ad8",
+      "actual": "c56f122d015ac88aba0cd1644b9ca353aebaefb8ef060c4344bea40f652d4ad8",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_pair_pool.cu",
+      "expected": "318b41642f14193ebf54b946622869bc91b48bcb4c959f1c80723254f54a586c",
+      "actual": "318b41642f14193ebf54b946622869bc91b48bcb4c959f1c80723254f54a586c",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_pair_pool.h",
+      "expected": "d0f344b632366eb275a9bfa45cea23c899e6d12fd4726adf5fcc458632cab65c",
+      "actual": "d0f344b632366eb275a9bfa45cea23c899e6d12fd4726adf5fcc458632cab65c",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_prefix_restore.cu",
+      "expected": "013d8c94bb79cf4df89139365ff35f7aa538e78e3488dfc93d8792671ffd8652",
+      "actual": "013d8c94bb79cf4df89139365ff35f7aa538e78e3488dfc93d8792671ffd8652",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_prefix_restore.h",
+      "expected": "3480dbf9678ae5e6111f3f02f6ce625495ec333a2a49dab4ed2b162e55f0ffe2",
+      "actual": "3480dbf9678ae5e6111f3f02f6ce625495ec333a2a49dab4ed2b162e55f0ffe2",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_sparse_attention.cpp",
+      "expected": "503e2f4ba1a94e3ae03fedb4732e2e5b32e8d934fae2c20c57e606751c8b1cf1",
+      "actual": "503e2f4ba1a94e3ae03fedb4732e2e5b32e8d934fae2c20c57e606751c8b1cf1",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_sparse_attention.h",
+      "expected": "1a96560faeb7b111199222edac008b9de77c7228d59dc77e19db330dab9edc06",
+      "actual": "1a96560faeb7b111199222edac008b9de77c7228d59dc77e19db330dab9edc06",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.cu",
+      "expected": "8021170f418813ebde931bdb579d70dd465c1dacbd8dd03d2473e049d2547d67",
+      "actual": "8021170f418813ebde931bdb579d70dd465c1dacbd8dd03d2473e049d2547d67",
+      "match": true
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.h",
+      "expected": "3ac092ec6db6fa677609f35027529797f08e6757e152134a9527bbc814c0cc5c",
+      "actual": "3ac092ec6db6fa677609f35027529797f08e6757e152134a9527bbc814c0cc5c",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention.h",
+      "expected": "c6c221589eb33d4df6f15e3beb2c8fc6aee94a03ffbdef82b2aa3b27bd640ae0",
+      "actual": "c6c221589eb33d4df6f15e3beb2c8fc6aee94a03ffbdef82b2aa3b27bd640ae0",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/compressor.h",
+      "expected": "3b2037861a91073e5eadf0b6abaae71966406117a3488b56a1d357595845bcd8",
+      "actual": "3b2037861a91073e5eadf0b6abaae71966406117a3488b56a1d357595845bcd8",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/decode_graph.h",
+      "expected": "2d16e0d7dfffb1d5720cb8063a2779b6667dfa9a05880d155ceb96d45218d979",
+      "actual": "2d16e0d7dfffb1d5720cb8063a2779b6667dfa9a05880d155ceb96d45218d979",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/decoder.h",
+      "expected": "e7f945e02a16eb1ca0f2b01cc153fb57199a3cb538d829a3cbd88d7c457cf54a",
+      "actual": "e7f945e02a16eb1ca0f2b01cc153fb57199a3cb538d829a3cbd88d7c457cf54a",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/draft_graph.h",
+      "expected": "222b5c898de09678d4707517463492c57f77bd9c1879857485fc8e54e99bf969",
+      "actual": "222b5c898de09678d4707517463492c57f77bd9c1879857485fc8e54e99bf969",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/draft_model.h",
+      "expected": "ba58fd3ae5b246d4532cfe99799bd5ebf8595fc9f624ee5900d9825043b05209",
+      "actual": "ba58fd3ae5b246d4532cfe99799bd5ebf8595fc9f624ee5900d9825043b05209",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/light_timing.h",
+      "expected": "62d755e85b8b072dbeb95d52a4857f307c515e435b2fe4fd95edb98cd15a48aa",
+      "actual": "62d755e85b8b072dbeb95d52a4857f307c515e435b2fe4fd95edb98cd15a48aa",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/moe.h",
+      "expected": "9b0ee8d962d44a294c10d1d901b30cac20030edcfbc2844e3cf5b5700f75fe41",
+      "actual": "9b0ee8d962d44a294c10d1d901b30cac20030edcfbc2844e3cf5b5700f75fe41",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/paged_attention.h",
+      "expected": "14042cadfcc4ebd748ab94c6b23daab58e083d0a04dc5925e9daf171fd93ece7",
+      "actual": "14042cadfcc4ebd748ab94c6b23daab58e083d0a04dc5925e9daf171fd93ece7",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/prefix_checkpoint.h",
+      "expected": "79e0c90dc32bd5f1b801e7687a5ad68759e936d7c44988043b8c3e48b56cadbe",
+      "actual": "79e0c90dc32bd5f1b801e7687a5ad68759e936d7c44988043b8c3e48b56cadbe",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/text_model.h",
+      "expected": "3b46ddf847a1b6c6c17d01ad8d745fe7efa5e9cc5e1c4bd9a6ba373a9feac4dc",
+      "actual": "3b46ddf847a1b6c6c17d01ad8d745fe7efa5e9cc5e1c4bd9a6ba373a9feac4dc",
+      "match": true
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/token_cache.h",
+      "expected": "a9102c960181f7cb752fb8da46ce909c1fd9679ab91aa512b6e3bf6d2062be46",
+      "actual": "a9102c960181f7cb752fb8da46ce909c1fd9679ab91aa512b6e3bf6d2062be46",
+      "match": true
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+      "expected": "9527974d70a9d7c13c5a0c8f5836272f6e4ffb82bdda5083a52dd12cec9a925a",
+      "actual": "9527974d70a9d7c13c5a0c8f5836272f6e4ffb82bdda5083a52dd12cec9a925a",
+      "match": true
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "expected": "6654e14690cce2c1e0b56463254614563018d5006ccd7b22ba733187569b21b8",
+      "actual": "6654e14690cce2c1e0b56463254614563018d5006ccd7b22ba733187569b21b8",
+      "match": true
+    }
+  ],
+  "post_build_tool_only": {
+    "convert_native_cpp_trace.py": "E12 added optional --step-prefix for draft; analysis-only, not linked into ELF",
+    "render_native_cpp_trace.py": "E13 adds optional --ui-url; analysis-only, not linked into ELF"
+  }
+}

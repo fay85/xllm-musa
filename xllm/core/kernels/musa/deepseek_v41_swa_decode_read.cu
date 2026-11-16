@@ -20,6 +20,44 @@ limitations under the License.
 namespace xllm::kernel::musa {
 namespace {
 
+__global__ void swa_draft_read_kernel(const c10::BFloat16* cache,
+                                      const c10::BFloat16* current,
+                                      const int64_t* table,
+                                      const int64_t* previous_context,
+                                      c10::BFloat16* rows,
+                                      int64_t* picks,
+                                      int64_t physical_blocks,
+                                      int64_t block_size,
+                                      int64_t table_columns,
+                                      int64_t width,
+                                      int64_t window,
+                                      int64_t queries) {
+  const int64_t context = previous_context[0];
+  CUDA_KERNEL_ASSERT(context >= 0);
+  const int64_t row = blockIdx.x;
+  const int64_t position = context - window + row;
+  int64_t slot = 0;
+  if (row < window && position >= 0) {
+    const int64_t block = table[(position / block_size) % table_columns];
+    const int64_t read_block = block < 0 ? 0 : block;
+    CUDA_KERNEL_ASSERT(read_block < physical_blocks);
+    slot = read_block * block_size + position % block_size;
+  }
+  for (int64_t column = threadIdx.x; column < width; column += blockDim.x) {
+    c10::BFloat16 value = static_cast<c10::BFloat16>(0.0f);
+    if (row >= window) {
+      value = current[(row - window) * width + column];
+    } else if (position >= 0) {
+      value = cache[slot * width + column];
+    }
+    rows[row * width + column] = value;
+  }
+  if (threadIdx.x < queries) {
+    // Every draft query sees every proposed KV row, including future rows.
+    picks[threadIdx.x * (window + queries) + row] = position >= 0 ? row : -1;
+  }
+}
+
 __global__ void swa_decode_read_kernel(const c10::BFloat16* cache,
                                        const c10::BFloat16* current,
                                        const int64_t* table,
@@ -82,6 +120,65 @@ __global__ void swa_decode_read_kernel(const c10::BFloat16* cache,
 }
 
 }  // namespace
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_swa_draft_read(
+    const torch::Tensor& cache,
+    const torch::Tensor& current_kv,
+    const torch::Tensor& table,
+    const torch::Tensor& previous_context,
+    int64_t window) {
+  CHECK(cache.defined() && current_kv.defined() && table.defined() &&
+        previous_context.defined());
+  CHECK(cache.device().type() == torch::kPrivateUse1);
+  CHECK_EQ(current_kv.device(), cache.device());
+  CHECK_EQ(table.device(), cache.device());
+  CHECK_EQ(previous_context.device(), cache.device());
+  CHECK_EQ(cache.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(current_kv.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(previous_context.scalar_type(), torch::kInt64);
+  CHECK_EQ(cache.dim(), 3);
+  CHECK_GT(cache.size(0), 0);
+  CHECK_GT(cache.size(1), 0);
+  CHECK_GT(cache.size(2), 0);
+  CHECK_EQ(current_kv.dim(), 2);
+  CHECK_GT(current_kv.size(0), 0);
+  CHECK_LE(current_kv.size(0), 8);
+  CHECK_EQ(current_kv.size(1), cache.size(2));
+  CHECK(cache.is_contiguous() && current_kv.is_contiguous());
+  CHECK_EQ(previous_context.numel(), 1);
+  CHECK(previous_context.is_contiguous());
+  CHECK_EQ(table.dim(), 2);
+  CHECK_EQ(table.size(0), 1);
+  CHECK_GT(table.size(1), 0);
+  CHECK(table.scalar_type() == torch::kInt32 ||
+        table.scalar_type() == torch::kInt64);
+  CHECK_GT(window, 0);
+  CHECK_GE(table.size(1) * cache.size(1), window);
+  torch::DeviceGuard guard(cache.device());
+  const torch::Tensor pages = table.to(torch::kInt64).contiguous();
+  const int64_t queries = current_kv.size(0);
+  const int64_t count = window + queries;
+  torch::Tensor rows = torch::empty({count, cache.size(2)}, cache.options());
+  torch::Tensor picks = torch::empty({queries, count}, pages.options());
+  swa_draft_read_kernel<<<static_cast<uint32_t>(count),
+                          128,
+                          0,
+                          current_musa_stream(cache.device())>>>(
+      cache.data_ptr<c10::BFloat16>(),
+      current_kv.data_ptr<c10::BFloat16>(),
+      pages.data_ptr<int64_t>(),
+      previous_context.data_ptr<int64_t>(),
+      rows.data_ptr<c10::BFloat16>(),
+      picks.data_ptr<int64_t>(),
+      cache.size(0),
+      cache.size(1),
+      table.size(1),
+      cache.size(2),
+      window,
+      queries);
+  check_musa_kernel_launch("V4.1 fused noncausal draft SWA read");
+  return {rows, picks};
+}
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 deepseek_v41_swa_decode_read(const torch::Tensor& cache,

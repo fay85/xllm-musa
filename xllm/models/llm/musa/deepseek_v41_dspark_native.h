@@ -18,6 +18,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model_context.h"
+#include "core/layers/musa/deepseek_v41/draft_graph.h"
 #include "core/layers/musa/deepseek_v41/draft_model.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
 #include "core/platform/musa_model_compute_stream.h"
@@ -54,6 +55,10 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_DRAFT_CUSTOM_AR", false);
     CHECK(!draft_custom_allreduce_ ||
           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true));
+    static_draft_ = util::get_bool_env("XLLM_DSV41_STATIC_DRAFT", false);
+    full_draft_graph_ =
+        util::get_bool_env("XLLM_DSV41_FULL_DRAFT_GRAPH", false);
+    CHECK(!full_draft_graph_ || (static_draft_ && draft_custom_allreduce_));
   }
 
   void load_model(std::unique_ptr<ModelLoader> loader) override {
@@ -118,6 +123,9 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
           confidence_weight_.sizes(),
           torch::IntArrayRef({1, args_.hidden_size() + args_.markov_rank()}));
     }
+    if (static_draft_) {
+      draft_graph_ = std::make_unique<layer::DeepseekV41DraftGraph>();
+    }
     LOG(INFO)
         << "Native V4.1 DSpark checkpoint loaded:3 pure-SWA stages, experts="
         << args_.n_routed_experts() << ", topk=" << args_.num_experts_per_tok()
@@ -156,8 +164,27 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     }
     const torch::Tensor table =
         params.multi_block_tables[0].to(device(), /*non_blocking=*/true);
-    torch::Tensor hidden = model_->forward(
-        tokens, positions, swa_caches(caches), table, kv.value() - q.value());
+    torch::Tensor hidden;
+    if (static_draft_) {
+      hidden =
+          draft_graph_->run(tokens,
+                            positions,
+                            swa_caches(caches),
+                            table,
+                            kv.value() - q.value(),
+                            full_draft_graph_,
+                            [this](const layer::DeepseekV41DraftInputs& input) {
+                              return model_->forward(input.tokens,
+                                                     input.positions,
+                                                     input.caches,
+                                                     input.table,
+                                                     /*previous_context=*/0,
+                                                     input.previous_context);
+                            });
+    } else {
+      hidden = model_->forward(
+          tokens, positions, swa_caches(caches), table, kv.value() - q.value());
+    }
     if (stream.has_value()) {
       stream->record_output(hidden);
       stream->finish();
@@ -249,7 +276,9 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   }
 
   void initialize_draft_collective_policy() const {
-    const int32_t policy = static_cast<int32_t>(draft_custom_allreduce_);
+    const int32_t policy = static_cast<int32_t>(draft_custom_allreduce_) |
+                           (static_cast<int32_t>(static_draft_) << 1) |
+                           (static_cast<int32_t>(full_draft_graph_) << 2);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -268,7 +297,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
       CHECK_EQ(tp_group_->rank(), ep_group_->rank());
     }
     LOG(INFO) << "Native V4.1 draft TP/EP custom allreduce="
-              << draft_custom_allreduce_
+              << draft_custom_allreduce_ << ", static_inputs=" << static_draft_
+              << ", full_draft_graph=" << full_draft_graph_
               << "; shared expert remains replicated";
   }
 
@@ -451,10 +481,13 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   std::string mhc_path_;
   std::string sparse_path_;
   bool draft_custom_allreduce_ = false;
+  bool static_draft_ = false;
+  bool full_draft_graph_ = false;
   torch::Tensor markov_embed_;
   torch::Tensor markov_head_;
   torch::Tensor confidence_weight_;
   std::unique_ptr<layer::DeepseekV41DraftModel> model_;
+  std::unique_ptr<layer::DeepseekV41DraftGraph> draft_graph_;
 };
 inline const bool kDeepseekV41NativeDraftRegistered = []() {
   ModelRegistry::register_causallm_factory(

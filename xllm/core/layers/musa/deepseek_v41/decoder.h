@@ -185,20 +185,29 @@ class DeepseekV41Decoder final {
       const torch::Tensor& swa_cache,
       const torch::Tensor& swa_table,
       int64_t previous_context,
-      const torch::Tensor& input_ids) {
+      const torch::Tensor& input_ids,
+      const std::optional<torch::Tensor>& device_context = std::nullopt) {
     CHECK(engram_ == nullptr);
     CHECK_EQ(config_.attention.ratio, 0);
     CHECK(!config_.decode_ffn_tail_graph)
         << "The first DSpark body only supports explicit eager block execution";
     auto [attn_input, attn_pre, attn_post, attn_comb] =
         attention_hc_.prepare(hidden, carried_pre);
+    const torch::Tensor normalized = norm(attn_input, weights_.input_norm);
     const torch::Tensor attn_output =
-        attention_.forward_draft_block(norm(attn_input, weights_.input_norm),
-                                       positions,
-                                       rope_table,
-                                       swa_cache,
-                                       swa_table,
-                                       previous_context);
+        device_context.has_value()
+            ? attention_.forward_draft_block_static(normalized,
+                                                    positions,
+                                                    rope_table,
+                                                    swa_cache,
+                                                    swa_table,
+                                                    device_context.value())
+            : attention_.forward_draft_block(normalized,
+                                             positions,
+                                             rope_table,
+                                             swa_cache,
+                                             swa_table,
+                                             previous_context);
     return forward_tail(
         attn_output, hidden, attn_pre, attn_post, attn_comb, input_ids);
   }

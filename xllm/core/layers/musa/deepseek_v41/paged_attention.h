@@ -269,6 +269,18 @@ class DeepseekV41PagedAttention final {
     return attention_.forward(query, rows, picks, sink);
   }
 
+  torch::Tensor forward_draft_block_static(
+      const torch::Tensor& query,
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      const torch::Tensor& previous_context,
+      const torch::Tensor& sink) {
+    const DeepseekV41ProfileRange range("V41/DSpark/noncausal_SWA_fused_read");
+    auto [rows, picks] = kernel::musa::deepseek_v41_swa_draft_read(
+        cache_, current_kv, block_table, previous_context, window_);
+    return attention_.forward(query, rows, picks, sink);
+  }
+
   void commit_draft_context(const torch::Tensor& slots,
                             const torch::Tensor& values) {
     CHECK(slots.defined() && values.defined());

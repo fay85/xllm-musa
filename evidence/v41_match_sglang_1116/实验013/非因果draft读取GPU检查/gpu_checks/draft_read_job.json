@@ -1,0 +1,14 @@
+{
+  "stage": "draft_read",
+  "pid": 23825,
+  "start_ticks": "519238669",
+  "command": [
+    "python3",
+    "/expt/builds/draft_read_checks_v1/gpu_checks/validate_draft_read.py",
+    "--output",
+    "/expt/builds/draft_read_checks_v1/gpu_checks/draft_read.json",
+    "--sparse-library",
+    "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so"
+  ],
+  "at": "2026-11-16T20:32:30.814026+08:00"
+}

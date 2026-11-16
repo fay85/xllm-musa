@@ -1,0 +1,10 @@
+{
+  "source_commit": "7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6",
+  "file": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/sglang团队的工作的复现和性能测速结果/00_参考证据/代码对照摘录/sglang/sglang/srt/speculative/dspark_components/dspark_draft.py",
+  "sha256": "e3f631cc039e21388059538eaea7ea9626c0b249106f374707aa7f098c84fe14",
+  "relevant_lines": [
+    425,
+    505
+  ],
+  "observed": "Draft ForwardBatch TARGET_VERIFY goes through decode_cuda_graph_runner eligibility; CPU context metadata and sampling staging outside runner; preserve own V4.1 noncausal/cache semantics"
+}
