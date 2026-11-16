@@ -1,0 +1,98 @@
+[
+  {
+    "experts": 384,
+    "q": 1,
+    "graph": false,
+    "rank_mean_us": 208.41624975204468,
+    "rank_min_us": 208.28121185302734,
+    "rank_max_us": 208.5464096069336
+  },
+  {
+    "experts": 384,
+    "q": 1,
+    "graph": true,
+    "rank_mean_us": 446.64814949035645,
+    "rank_min_us": 446.25518798828125,
+    "rank_max_us": 448.00838470458984
+  },
+  {
+    "experts": 384,
+    "q": 4,
+    "graph": false,
+    "rank_mean_us": 227.43815183639526,
+    "rank_min_us": 227.13199615478516,
+    "rank_max_us": 227.62760162353516
+  },
+  {
+    "experts": 384,
+    "q": 4,
+    "graph": true,
+    "rank_mean_us": 316.97195529937744,
+    "rank_min_us": 316.8252182006836,
+    "rank_max_us": 317.11280822753906
+  },
+  {
+    "experts": 384,
+    "q": 6,
+    "graph": false,
+    "rank_mean_us": 215.29639959335327,
+    "rank_min_us": 215.0436019897461,
+    "rank_max_us": 215.73040008544922
+  },
+  {
+    "experts": 384,
+    "q": 6,
+    "graph": true,
+    "rank_mean_us": 309.4898056983948,
+    "rank_min_us": 309.1283988952637,
+    "rank_max_us": 309.7256088256836
+  },
+  {
+    "experts": 128,
+    "q": 1,
+    "graph": false,
+    "rank_mean_us": 123.25875043869019,
+    "rank_min_us": 123.12319755554199,
+    "rank_max_us": 123.52080345153809
+  },
+  {
+    "experts": 128,
+    "q": 1,
+    "graph": true,
+    "rank_mean_us": 242.2669005393982,
+    "rank_min_us": 242.0631980895996,
+    "rank_max_us": 242.50478744506836
+  },
+  {
+    "experts": 128,
+    "q": 4,
+    "graph": false,
+    "rank_mean_us": 117.67529964447021,
+    "rank_min_us": 117.59719848632812,
+    "rank_max_us": 117.81519889831543
+  },
+  {
+    "experts": 128,
+    "q": 4,
+    "graph": true,
+    "rank_mean_us": 241.32530212402344,
+    "rank_min_us": 240.9783935546875,
+    "rank_max_us": 241.50800704956055
+  },
+  {
+    "experts": 128,
+    "q": 6,
+    "graph": false,
+    "rank_mean_us": 116.68990135192871,
+    "rank_min_us": 116.51200294494629,
+    "rank_max_us": 116.82640075683594
+  },
+  {
+    "experts": 128,
+    "q": 6,
+    "graph": true,
+    "rank_mean_us": 241.93685054779053,
+    "rank_min_us": 241.71878814697266,
+    "rank_max_us": 242.17321395874023
+  }
+]

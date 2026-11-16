@@ -1,0 +1,21 @@
+{
+  "status": "READY_DEPENDENCY_SG_ENV_ONLY",
+  "production_model_enabled": false,
+  "full_model_performance_measured": false,
+  "cpu_import_torch291": true,
+  "runtime_compatibility": {
+    "torch291_musa51": "MTShmem initialization fails",
+    "torch291_musa438": "target eager works; Graph API unsupported",
+    "torch290_musa438": "Python and C++ bridge all direct checks pass"
+  },
+  "python_reference_checks_per_rank": 84,
+  "cpp_bridge_checks_per_rank": 84,
+  "ranks": 8,
+  "graph_dynamic_replays_per_rank_per_path": 24,
+  "lower_bound_q4_384_experts_us_per_pair": 61.377410888671875,
+  "lower_bound_configuration": "40 dispatch/combine pairs per Graph, identity expert, 10 warmups + 100 timed replays, 8rank mean",
+  "native_module_sha256": "11a75d6bb29336fb94972764c4e57f933a15e03d82d7a974ddd94a4b63f6f70a",
+  "temporary_container_deleted": true,
+  "champion": "E34 unchanged; TPOT31.513458681ms/output30.219836551tps/TTFT435.324972868ms",
+  "goal_achieved": false
+}

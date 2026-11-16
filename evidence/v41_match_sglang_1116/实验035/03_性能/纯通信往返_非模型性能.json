@@ -1,0 +1,146 @@
+[
+  {
+    "experts": 384,
+    "q": 1,
+    "pairs_per_graph": 1,
+    "rank_mean_device_us": 272.20210313796997,
+    "rank_max_device_us": 272.43120193481445,
+    "rank_mean_wall_us": 273.16262712702155
+  },
+  {
+    "experts": 384,
+    "q": 1,
+    "pairs_per_graph": 10,
+    "rank_mean_device_us": 101.28542137145996,
+    "rank_max_device_us": 101.32388305664062,
+    "rank_mean_wall_us": 101.39318706933409
+  },
+  {
+    "experts": 384,
+    "q": 1,
+    "pairs_per_graph": 40,
+    "rank_mean_device_us": 61.00812292098999,
+    "rank_max_device_us": 61.01087951660156,
+    "rank_mean_wall_us": 61.04312255047262
+  },
+  {
+    "experts": 384,
+    "q": 4,
+    "pairs_per_graph": 1,
+    "rank_mean_device_us": 251.09479904174805,
+    "rank_max_device_us": 251.40480041503906,
+    "rank_mean_wall_us": 252.02429038472474
+  },
+  {
+    "experts": 384,
+    "q": 4,
+    "pairs_per_graph": 10,
+    "rank_mean_device_us": 73.46866035461426,
+    "rank_max_device_us": 73.50508117675781,
+    "rank_mean_wall_us": 73.58896278310567
+  },
+  {
+    "experts": 384,
+    "q": 4,
+    "pairs_per_graph": 40,
+    "rank_mean_device_us": 61.377410888671875,
+    "rank_max_device_us": 61.38541030883789,
+    "rank_mean_wall_us": 61.41135573852807
+  },
+  {
+    "experts": 384,
+    "q": 6,
+    "pairs_per_graph": 1,
+    "rank_mean_device_us": 210.477557182312,
+    "rank_max_device_us": 211.0803985595703,
+    "rank_mean_wall_us": 211.33683738298714
+  },
+  {
+    "experts": 384,
+    "q": 6,
+    "pairs_per_graph": 10,
+    "rank_mean_device_us": 81.02539157867432,
+    "rank_max_device_us": 81.05540466308594,
+    "rank_mean_wall_us": 81.13731269259006
+  },
+  {
+    "experts": 384,
+    "q": 6,
+    "pairs_per_graph": 40,
+    "rank_mean_device_us": 80.84083080291748,
+    "rank_max_device_us": 80.84539794921875,
+    "rank_mean_wall_us": 80.87178380810656
+  },
+  {
+    "experts": 128,
+    "q": 1,
+    "pairs_per_graph": 1,
+    "rank_mean_device_us": 198.14990520477295,
+    "rank_max_device_us": 198.36360931396484,
+    "rank_mean_wall_us": 198.97198537364602
+  },
+  {
+    "experts": 128,
+    "q": 1,
+    "pairs_per_graph": 10,
+    "rank_mean_device_us": 58.18446588516235,
+    "rank_max_device_us": 58.20199966430664,
+    "rank_mean_wall_us": 58.28447546809912
+  },
+  {
+    "experts": 128,
+    "q": 1,
+    "pairs_per_graph": 40,
+    "rank_mean_device_us": 46.146028995513916,
+    "rank_max_device_us": 46.15019989013672,
+    "rank_mean_wall_us": 46.17760531255044
+  },
+  {
+    "experts": 128,
+    "q": 4,
+    "pairs_per_graph": 1,
+    "rank_mean_device_us": 189.330153465271,
+    "rank_max_device_us": 189.52001571655273,
+    "rank_mean_wall_us": 190.18479040823877
+  },
+  {
+    "experts": 128,
+    "q": 4,
+    "pairs_per_graph": 10,
+    "rank_mean_device_us": 58.59856462478638,
+    "rank_max_device_us": 58.61283874511719,
+    "rank_mean_wall_us": 58.69776930194348
+  },
+  {
+    "experts": 128,
+    "q": 4,
+    "pairs_per_graph": 40,
+    "rank_mean_device_us": 47.49575901031494,
+    "rank_max_device_us": 47.503089904785156,
+    "rank_mean_wall_us": 47.526767331874
+  },
+  {
+    "experts": 128,
+    "q": 6,
+    "pairs_per_graph": 1,
+    "rank_mean_device_us": 189.03304815292358,
+    "rank_max_device_us": 189.38758850097656,
+    "rank_mean_wall_us": 189.91669174283743
+  },
+  {
+    "experts": 128,
+    "q": 6,
+    "pairs_per_graph": 10,
+    "rank_mean_device_us": 61.11146020889282,
+    "rank_max_device_us": 61.13948059082031,
+    "rank_mean_wall_us": 61.209230800159276
+  },
+  {
+    "experts": 128,
+    "q": 6,
+    "pairs_per_graph": 40,
+    "rank_mean_device_us": 50.738532066345215,
+    "rank_max_device_us": 50.74467849731445,
+    "rank_mean_wall_us": 50.77060320763849
+  }
+]

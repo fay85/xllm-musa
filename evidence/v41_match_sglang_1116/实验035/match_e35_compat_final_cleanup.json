@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T04:18:36.313267+08:00\", \"cid\": \"20275eb5a484f74c01cb49437728ae76573991e4201ef72c8851a5339e693070\", \"identity\": {\"pid\": 43436, \"start_ticks\": \"521968729\", \"exe\": \"/usr/bin/sleep\", \"exe_sha256\": \"b9aec374a2b2a175a182f615291ad408820b7fb8c663a184e37fa3492d3f8eff\", \"cmdline\": \"/bin/sleep infinity \", \"cgroup\": \"0::/system.slice/docker-20275eb5a484f74c01cb49437728ae76573991e4201ef72c8851a5339e693070.scope\\n\"}, \"signal\": \"one SIGKILL to idle container PID1 sleep after ineffective TERM\", \"reason\": \"all GPU test ranks already exited0; PID1 sleep ignored default TERM; archive complete\", \"state_after\": {\"Status\": \"exited\", \"Running\": false, \"Paused\": false, \"Restarting\": false, \"OOMKilled\": false, \"Dead\": false, \"Pid\": 0, \"ExitCode\": 137, \"Error\": \"\", \"StartedAt\": \"2026-11-16T20:07:31.385211923Z\", \"FinishedAt\": \"2026-11-16T20:18:36.223135052Z\"}, \"deleted\": true}\n",
+  "stderr": ""
+}
