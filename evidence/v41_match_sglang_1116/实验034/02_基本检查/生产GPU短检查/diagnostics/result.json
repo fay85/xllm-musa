@@ -1,0 +1,2664 @@
+{
+  "status": "PASS",
+  "metadata_checks": [
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int32",
+      "capacity": 80,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": null,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 0,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 3,
+      "start": 2048
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 1
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 127
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 255
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "dtype": "torch.int64",
+      "capacity": 80,
+      "start": 2048
+    }
+  ],
+  "dynamic_graphs": [
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 2,
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 2,
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 2,
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 3,
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 3,
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 3,
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 5,
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 5,
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 5,
+      "capacity": 80,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 511
+    }
+  ],
+  "attention_and_commit_checks": [
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 0,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 31,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 127,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 255,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 511,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 2048,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 0,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 31,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 127,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 255,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 511,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 2048,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 0,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 31,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 127,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 255,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 511,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 2048,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 0,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 31,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 127,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 255,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 511,
+      "default_stream": false
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 2048,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 0,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 31,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 127,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 255,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 511,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 2048,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 0,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 31,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 127,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 255,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 511,
+      "default_stream": false
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 2048,
+      "default_stream": false
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 0,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 31,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 127,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 255,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 511,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": null,
+      "start": 2048,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 0,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 31,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 127,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 255,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 511,
+      "default_stream": true
+    },
+    {
+      "q": 1,
+      "capacity": 80,
+      "start": 2048,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 0,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 31,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 127,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 255,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 511,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": null,
+      "start": 2048,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 0,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 31,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 127,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 255,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 511,
+      "default_stream": true
+    },
+    {
+      "q": 4,
+      "capacity": 80,
+      "start": 2048,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 0,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 31,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 127,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 255,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 511,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": null,
+      "start": 2048,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 0,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 31,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 127,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 255,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 511,
+      "default_stream": true
+    },
+    {
+      "q": 6,
+      "capacity": 80,
+      "start": 2048,
+      "default_stream": true
+    }
+  ],
+  "attention_dynamic_graphs": [
+    {
+      "capacity": null,
+      "start": 0
+    },
+    {
+      "capacity": null,
+      "start": 31
+    },
+    {
+      "capacity": null,
+      "start": 511
+    },
+    {
+      "capacity": 80,
+      "start": 0
+    },
+    {
+      "capacity": 80,
+      "start": 31
+    },
+    {
+      "capacity": 80,
+      "start": 511
+    }
+  ],
+  "scope": "Native multi-query causal SWA including masked commit; not full model precision"
+}

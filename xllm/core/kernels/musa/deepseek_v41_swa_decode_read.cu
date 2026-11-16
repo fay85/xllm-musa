@@ -58,7 +58,7 @@ __global__ void swa_draft_read_kernel(const c10::BFloat16* cache,
   }
 }
 
-__global__ void swa_decode_read_kernel(const c10::BFloat16* cache,
+__global__ void swa_verify_read_kernel(const c10::BFloat16* cache,
                                        const c10::BFloat16* current,
                                        const int64_t* table,
                                        const int64_t* positions,
@@ -73,7 +73,8 @@ __global__ void swa_decode_read_kernel(const c10::BFloat16* cache,
                                        int64_t width,
                                        int64_t window,
                                        int64_t compressed_rows,
-                                       int64_t extra_columns) {
+                                       int64_t extra_columns,
+                                       int64_t queries) {
   const int64_t position = positions[0];
   CUDA_KERNEL_ASSERT(position >= 0);
   const int64_t row = blockIdx.x;
@@ -92,30 +93,40 @@ __global__ void swa_decode_read_kernel(const c10::BFloat16* cache,
       if (history_position >= 0) {
         value = cache[physical * width + column];
       }
-    } else if (row == window) {
-      value = current[column];
+    } else if (row < window + queries) {
+      value = current[(row - window) * width + column];
     } else {
-      value = compressed[(row - window - 1) * width + column];
+      value = compressed[(row - window - queries) * width + column];
     }
     rows[row * width + column] = value;
   }
   if (row != 0) {
     return;
   }
-  for (int64_t column = threadIdx.x; column < window; column += blockDim.x) {
-    picks[column] = position - window + 1 + column >= 0 ? column + 1 : -1;
+  for (int64_t index = threadIdx.x; index < queries * (window + extra_columns);
+       index += blockDim.x) {
+    const int64_t query = index / (window + extra_columns);
+    const int64_t column = index % (window + extra_columns);
+    CUDA_KERNEL_ASSERT(positions[query] == position + query);
+    int64_t pick = -1;
+    if (column < window) {
+      pick =
+          position + query - window + 1 + column >= 0 ? query + column + 1 : -1;
+    } else {
+      const int64_t selected = extra[query * extra_columns + column - window];
+      pick = selected >= 0 && selected < compressed_rows
+                 ? selected + window + queries
+                 : -1;
+    }
+    picks[index] = pick;
   }
-  for (int64_t column = threadIdx.x; column < extra_columns;
-       column += blockDim.x) {
-    const int64_t index = extra[column];
-    picks[window + column] =
-        index >= 0 && index < compressed_rows ? index + window + 1 : -1;
-  }
-  if (threadIdx.x == 0) {
-    const int64_t block = table[(position / block_size) % table_columns];
+  if (threadIdx.x < queries) {
+    const int64_t current_position = positions[threadIdx.x];
+    const int64_t block =
+        table[(current_position / block_size) % table_columns];
     CUDA_KERNEL_ASSERT(block < physical_blocks);
     // Preserve invalid-write sign; the existing scatter filters invalid slots.
-    slot[0] = block * block_size + position % block_size;
+    slot[threadIdx.x] = block * block_size + current_position % block_size;
   }
 }
 
@@ -181,7 +192,7 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_swa_draft_read(
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
-deepseek_v41_swa_decode_read(const torch::Tensor& cache,
+deepseek_v41_swa_verify_read(const torch::Tensor& cache,
                              const torch::Tensor& current_kv,
                              const torch::Tensor& table,
                              const torch::Tensor& positions,
@@ -198,7 +209,9 @@ deepseek_v41_swa_decode_read(const torch::Tensor& cache,
   CHECK_EQ(current_kv.scalar_type(), torch::kBFloat16);
   CHECK_EQ(cache.dim(), 3);
   CHECK_EQ(current_kv.dim(), 2);
-  CHECK_EQ(current_kv.size(0), 1);
+  CHECK_GT(current_kv.size(0), 0);
+  CHECK_LE(current_kv.size(0), 6);
+  CHECK_LE(current_kv.size(0), cache.size(1));
   CHECK_EQ(current_kv.size(1), cache.size(2));
   CHECK(cache.is_contiguous() && current_kv.is_contiguous());
   CHECK_GT(cache.size(0), 0);
@@ -210,7 +223,7 @@ deepseek_v41_swa_decode_read(const torch::Tensor& cache,
   CHECK(table.scalar_type() == torch::kInt64 ||
         table.scalar_type() == torch::kInt32);
   CHECK_EQ(positions.dim(), 1);
-  CHECK_EQ(positions.numel(), 1);
+  CHECK_EQ(positions.numel(), current_kv.size(0));
   CHECK(positions.scalar_type() == torch::kInt64 ||
         positions.scalar_type() == torch::kInt32);
   CHECK_GT(window, 0);
@@ -233,18 +246,19 @@ deepseek_v41_swa_decode_read(const torch::Tensor& cache,
     CHECK(extra->scalar_type() == torch::kInt64 ||
           extra->scalar_type() == torch::kInt32);
     CHECK_EQ(extra->dim(), 2);
-    CHECK_EQ(extra->size(0), 1);
+    CHECK_EQ(extra->size(0), current_kv.size(0));
     extra_long = extra->to(torch::kInt64).contiguous();
     compressed_rows = compressed->size(0);
     extra_columns = extra->size(1);
   }
-  const int64_t rows_count = window + 1 + compressed_rows;
+  const int64_t queries = current_kv.size(0);
+  const int64_t rows_count = window + queries + compressed_rows;
   torch::Tensor rows =
       torch::empty({rows_count, cache.size(2)}, cache.options());
   torch::Tensor picks =
-      torch::empty({1, window + extra_columns}, pages.options());
-  torch::Tensor slot = torch::empty({1}, pages.options());
-  swa_decode_read_kernel<<<static_cast<uint32_t>(rows_count),
+      torch::empty({queries, window + extra_columns}, pages.options());
+  torch::Tensor slot = torch::empty({queries}, pages.options());
+  swa_verify_read_kernel<<<static_cast<uint32_t>(rows_count),
                            128,
                            0,
                            current_musa_stream(cache.device())>>>(
@@ -263,9 +277,23 @@ deepseek_v41_swa_decode_read(const torch::Tensor& cache,
       cache.size(2),
       window,
       compressed_rows,
-      extra_columns);
-  check_musa_kernel_launch("V4.1 q1 fused SWA read and picks");
+      extra_columns,
+      queries);
+  check_musa_kernel_launch("V4.1 causal verify fused SWA read and picks");
   return {rows, picks, slot};
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v41_swa_decode_read(const torch::Tensor& cache,
+                             const torch::Tensor& current_kv,
+                             const torch::Tensor& table,
+                             const torch::Tensor& positions,
+                             int64_t window,
+                             const std::optional<torch::Tensor>& compressed,
+                             const std::optional<torch::Tensor>& extra) {
+  CHECK_EQ(current_kv.size(0), 1);
+  return deepseek_v41_swa_verify_read(
+      cache, current_kv, table, positions, window, compressed, extra);
 }
 
 }  // namespace xllm::kernel::musa

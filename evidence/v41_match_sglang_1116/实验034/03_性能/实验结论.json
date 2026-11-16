@@ -1,0 +1,43 @@
+{
+  "decision": "PHASE_PROMOTION_NOT_FINAL",
+  "metrics": {
+    "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 435.3249728679657,
+    "mean_TPOT_ms_per_token": 31.513458681018914,
+    "TPOT_sample_stdev_ms": 0.24103658985808302,
+    "mean_E2E_s": 8.471256936527789,
+    "output_tokens_per_latency_sum_second": 30.21983655059926,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "94fc34da932e72a6e4e8bbebb811b5e5652987f38d2a01ffd0ef1c4479b3401f"
+  },
+  "output_gain_percent": 10.748331119471688,
+  "tpot_reduction_percent": 10.264198466393404,
+  "formal_output_hashes": [
+    "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536"
+  ],
+  "speculation_pairs": [
+    [
+      147,
+      330
+    ]
+  ],
+  "graph_nodes": {
+    "off": 5591,
+    "on": 4047
+  },
+  "long_smoke": {
+    "input": 2048,
+    "output": 256,
+    "E2E_s": 16.675628018565476,
+    "first_content_s": 2.6182562597095966,
+    "post_checks_passed": true
+  },
+  "reverse_required": false,
+  "final_acceptance": false
+}

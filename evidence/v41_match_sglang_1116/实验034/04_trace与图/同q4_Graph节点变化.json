@@ -1,0 +1,274 @@
+{
+  "off": {
+    "pid": 36457,
+    "step": {
+      "name": "V41/step/q=4/kv=265",
+      "ts": 4000725016838.613,
+      "dur": 92344.358
+    },
+    "kernels": 5591,
+    "fused_verify_reads": [],
+    "interval_union_profiled_us": 62026.98779296875,
+    "span_profiled_us": 73426.419921875,
+    "all_ranks_graph_nodes": [
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ],
+      [
+        5591,
+        5591,
+        5591,
+        5591
+      ]
+    ]
+  },
+  "on": {
+    "pid": 45241,
+    "step": {
+      "name": "V41/step/q=4/kv=265",
+      "ts": 4001089436224.885,
+      "dur": 75594.201
+    },
+    "kernels": 4047,
+    "fused_verify_reads": [
+      {
+        "name": "xllm::kernel::musa::(anonymous namespace)::swa_verify_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long, long)",
+        "count": 40,
+        "sum_us": 1924.0839999999996,
+        "max_us": 54.601
+      }
+    ],
+    "interval_union_profiled_us": 53316.52978515625,
+    "span_profiled_us": 61676.0751953125,
+    "all_ranks_graph_nodes": [
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ],
+      [
+        4047,
+        4047,
+        4047,
+        4047
+      ]
+    ]
+  },
+  "kernel_count_changes": [
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorModOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 176,
+      "on": 16,
+      "delta": -160
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::AddOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 212,
+      "on": 54,
+      "delta": -158
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::SubOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 121,
+      "on": 1,
+      "delta": -120
+    },
+    {
+      "name": "void at::musa::(anonymous namespace)::arange_kernel<long, long>(long*, long, long, long)",
+      "off": 89,
+      "on": 9,
+      "delta": -80
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::ClipOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 96,
+      "on": 16,
+      "delta": -80
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::MulOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 96,
+      "on": 16,
+      "delta": -80
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorDivOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 159,
+      "on": 79,
+      "delta": -80
+    },
+    {
+      "name": "void musa::dnn::binary::kernel_binary<long, musa::dnn::binary::AddOp, long, long, long, 128>(long*, long const*, long const*, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 96,
+      "on": 16,
+      "delta": -80
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 120,
+      "on": 40,
+      "delta": -80
+    },
+    {
+      "name": "void at::native::(anonymous namespace)::IndexSelectKernel<int, long>(int*, long*, int*, long, long, long, long, unsigned int)",
+      "off": 96,
+      "on": 16,
+      "delta": -80
+    },
+    {
+      "name": "void musa::dnn::(anonymous namespace)::KernelFill<long, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long)",
+      "off": 118,
+      "on": 40,
+      "delta": -78
+    },
+    {
+      "name": "void musa::dnn::(anonymous namespace)::KernelConcatNy<short, 2, 8, false, musa::dnn::FastDivmodU32, true>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, musa::dnn::Array<int, 2>, long, long, long)",
+      "off": 78,
+      "on": 0,
+      "delta": -78
+    },
+    {
+      "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, long, long, long, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+      "off": 118,
+      "on": 40,
+      "delta": -78
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 138,
+      "on": 98,
+      "delta": -40
+    },
+    {
+      "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, __mt_bfloat16, __mt_bfloat16, __mt_bfloat16, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+      "off": 48,
+      "on": 8,
+      "delta": -40
+    },
+    {
+      "name": "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)",
+      "off": 48,
+      "on": 8,
+      "delta": -40
+    },
+    {
+      "name": "void musa::dnn::binary::kernel_binary_vlen1<long, musa::dnn::binary::AddOp, long, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 40,
+      "on": 0,
+      "delta": -40
+    },
+    {
+      "name": "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)",
+      "off": 49,
+      "on": 9,
+      "delta": -40
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::LTOp, int, bool, int, 128>(bool*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 38,
+      "on": 0,
+      "delta": -38
+    },
+    {
+      "name": "void musa::dnn::binary::kernel_binary<bool, musa::dnn::binary::AndOp, bool, bool, bool, 128>(bool*, bool const*, bool const*, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 78,
+      "on": 40,
+      "delta": -38
+    },
+    {
+      "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::GEOp, int, bool, int, 128>(bool*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "off": 38,
+      "on": 0,
+      "delta": -38
+    },
+    {
+      "name": "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<long, 2, 2, false, musa::dnn::FastDivmodU32, 1024>(long*, musa::dnn::(anonymous namespace)::ArrayInput<long>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)",
+      "off": 38,
+      "on": 0,
+      "delta": -38
+    },
+    {
+      "name": "xllm::kernel::musa::(anonymous namespace)::swa_verify_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long, long)",
+      "off": 0,
+      "on": 40,
+      "delta": 40
+    }
+  ],
+  "scope": "Same last q4 target Graph; actual correlated GPU nodes. Heavy profiler timings are not unprofiled costs or Amdahl fractions."
+}

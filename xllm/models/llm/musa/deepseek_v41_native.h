@@ -992,6 +992,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_DECODE_PACKED_QKV", false);
     attention.decode_fused_swa_read =
         util::get_bool_env("XLLM_DSV41_DECODE_FUSED_SWA_READ", false);
+    attention.verify_fused_swa_read =
+        util::get_bool_env("XLLM_DSV41_VERIFY_FUSED_SWA_READ", false);
     attention.decode_cache_read_reuse =
         util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false);
     attention.short_context_indexer =

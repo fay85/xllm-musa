@@ -39,4 +39,15 @@ deepseek_v41_swa_decode_read(const torch::Tensor& cache,
                              const std::optional<torch::Tensor>& compressed,
                              const std::optional<torch::Tensor>& extra);
 
+// Read-only causal verification block (1..6 consecutive positions). The
+// returned slots preserve negative scheduler padding for masked scatter.
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v41_swa_verify_read(const torch::Tensor& cache,
+                             const torch::Tensor& current_kv,
+                             const torch::Tensor& table,
+                             const torch::Tensor& positions,
+                             int64_t window,
+                             const std::optional<torch::Tensor>& compressed,
+                             const std::optional<torch::Tensor>& extra);
+
 }  // namespace xllm::kernel::musa

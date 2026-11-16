@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/verify_swa_read_native_v1/source_manifest.json\", \"binary\": \"/expt/artifacts/verify_swa_read_native_v1/bin/xllm\", \"sha256\": \"94fc34da932e72a6e4e8bbebb811b5e5652987f38d2a01ffd0ef1c4479b3401f\", \"bytes\": 341553632, \"small_checks\": \"E34 multi-query SWA production checks pending\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

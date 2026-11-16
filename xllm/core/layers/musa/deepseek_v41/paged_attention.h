@@ -36,11 +36,13 @@ class DeepseekV41PagedAttention final {
                             double scale,
                             std::string sparse_library_path = {},
                             bool single_token_scatter = true,
-                            bool fused_decode_read = false)
+                            bool fused_decode_read = false,
+                            bool fused_verify_read = false)
       : cache_(std::move(cache)),
         window_(window),
         single_token_scatter_(single_token_scatter),
         fused_decode_read_(fused_decode_read),
+        fused_verify_read_(fused_verify_read),
         attention_(scale, 32 * 1024 * 1024, std::move(sparse_library_path)) {
     CHECK(cache_.defined());
     CHECK(cache_.device().type() == torch::kPrivateUse1);
@@ -127,6 +129,20 @@ class DeepseekV41PagedAttention final {
     torch::DeviceGuard guard(cache_.device());
     if (query.size(0) == 0) {
       return torch::empty_like(query);
+    }
+    if (fused_verify_read_ && static_verify) {
+      CHECK_EQ(window_floor, 0);
+      auto [rows, picks, slots] =
+          kernel::musa::deepseek_v41_swa_verify_read(cache_,
+                                                     current_kv,
+                                                     block_table,
+                                                     query_positions,
+                                                     window_,
+                                                     compressed_kv,
+                                                     compressed_picks);
+      const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+      kernel::musa::deepseek_v4_scatter_cache(cache_, slots, current_kv);
+      return result;
     }
     if (fused_decode_read_ && query.size(0) == 1) {
       CHECK_EQ(window_floor, 0) << "Bounded replay is a prefill-only path";
@@ -352,6 +368,7 @@ class DeepseekV41PagedAttention final {
   int64_t window_;
   bool single_token_scatter_;
   bool fused_decode_read_ = false;
+  bool fused_verify_read_ = false;
   DeepseekV41SparseAttention attention_;
 };
 

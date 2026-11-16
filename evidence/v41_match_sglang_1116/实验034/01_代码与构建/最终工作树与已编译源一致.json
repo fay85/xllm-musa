@@ -1,0 +1,9 @@
+{
+  "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.cu": "aa96f67fa700328fcd61138ffc719f9b3b72ac6771e4300410541c171b5dd41e",
+  "xllm/core/kernels/musa/deepseek_v41_swa_decode_read.h": "67fc073cf6ea22c9b077a0fbcc3ff19580689ed7ebc171c7d46c34a92ec17c3d",
+  "xllm/core/layers/musa/deepseek_v41/attention.h": "178e309613a0be7d71fdec0f0a75ba2a75b4624a5e04e512e3dc41202f9a57dc",
+  "xllm/core/layers/musa/deepseek_v41/paged_attention.h": "c8c87b59ab4d8d1366e70a8e816b6d5ce87e1226dfc28dfaa9e5bf128dde41cc",
+  "xllm/models/llm/musa/deepseek_v41_native.h": "d32d52f01b2b7878705106e6913e287f194bf798657f789e7fc91f21dafd423e",
+  "tests/core/kernels/musa/v41_verify_read_test_module.cpp": "ef18f23cc85c8f0cda03a4320b5095f95832ce39fdb66c52400be39c36f0b7a6",
+  "tools/musa_deepseek_v41/validate_verify_swa_read.py": "1bdda588d8b4239d4c219b4111e923069cd4ca445616d4943663396a0dba872a"
+}

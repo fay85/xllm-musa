@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p34_verify_swa_read_on_v1_evidence.tar.gz\", \"bytes\": 6341450, \"sha256\": \"9585fd9e6d538da73283c49c1fdb270f74a355054a3d5d571cd4e01e7af1a53b\", \"at\": \"2026-11-17T03:44:13.050646+08:00\"}\n",
+  "stderr": "addr2line: DWARF error: invalid or unhandled FORM value: 0x23\n"
+}

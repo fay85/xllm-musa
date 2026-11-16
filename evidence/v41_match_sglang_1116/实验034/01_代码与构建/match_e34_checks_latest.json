@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"job.json\": {\"pid\": 41330, \"start_ticks\": \"521746934\", \"at\": \"2026-11-17T03:30:33.463000+08:00\"}, \"child.json\": {\"pid\": 41331, \"start_ticks\": \"521746937\"}, \"finished.json\": {\"exit_code\": 0, \"at\": \"2026-11-17T03:30:44.390042+08:00\"}, \"summary\": {\"metadata_checks\": 336, \"dynamic_graphs\": 36, \"attention_and_commit_checks\": 72, \"attention_dynamic_graphs\": 6}, \"pass\": \"PASS\", \"live\": false, \"tail\": \"I20261117 03:30:43.147190 41331 validate_verify_swa_read.py:139] PASS: metadata=336 graph=36 attention/cache=72 attention_graph=6\\n\"}\n",
+  "stderr": ""
+}

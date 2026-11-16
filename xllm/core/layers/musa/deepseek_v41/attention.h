@@ -52,6 +52,7 @@ struct DeepseekV41AttentionConfig {
   bool decode_cache_read_reuse = false;
   bool short_context_indexer = false;
   bool decode_fused_swa_read = false;
+  bool verify_fused_swa_read = false;
   bool decode_packed_qkv = false;
   bool verify_skinny_projection = false;
   std::string sparse_library_path;
@@ -432,7 +433,8 @@ class DeepseekV41Attention final {
                                   config_.scale,
                                   config_.sparse_library_path,
                                   /*single_token_scatter=*/true,
-                                  config_.decode_fused_swa_read)
+                                  config_.decode_fused_swa_read,
+                                  config_.verify_fused_swa_read)
             .forward_with_window_floor(
                 query,
                 current_kv,

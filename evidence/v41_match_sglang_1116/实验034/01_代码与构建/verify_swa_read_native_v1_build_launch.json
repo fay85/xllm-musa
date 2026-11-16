@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 41110, \"start_ticks\": \"521733466\", \"root\": \"/expt/builds/verify_swa_read_native_v1\", \"changed_files\": 84}\n",
+  "stderr": ""
+}

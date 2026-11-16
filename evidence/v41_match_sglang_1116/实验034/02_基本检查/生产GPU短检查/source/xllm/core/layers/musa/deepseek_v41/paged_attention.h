@@ -1,0 +1,375 @@
+/* Copyright 2026 The xLLM Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+==============================================================================*/
+#pragma once
+
+#include <glog/logging.h>
+#include <torch/torch.h>
+#include <torch/utils.h>
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <utility>
+
+#include "core/kernels/musa/deepseek_v41_swa_decode_read.h"
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
+#include "core/layers/musa/deepseek_v41/csa2_attention.h"
+#include "core/layers/musa/deepseek_v41/profile_range.h"
+
+namespace xllm::layer {
+
+// Native chronological SWA gather, sparse sink attention, and deferred ring
+// commit. Uses the actual scheduler's paged tensor views and preserves their
+// physical layout for host swap/P-D transfer. C1/eager; no model Python call.
+// The caller supplies committed compressed rows and source-layer top-k picks.
+class DeepseekV41PagedAttention final {
+ public:
+  DeepseekV41PagedAttention(torch::Tensor cache,
+                            int64_t window,
+                            double scale,
+                            std::string sparse_library_path = {},
+                            bool single_token_scatter = true,
+                            bool fused_decode_read = false,
+                            bool fused_verify_read = false)
+      : cache_(std::move(cache)),
+        window_(window),
+        single_token_scatter_(single_token_scatter),
+        fused_decode_read_(fused_decode_read),
+        fused_verify_read_(fused_verify_read),
+        attention_(scale, 32 * 1024 * 1024, std::move(sparse_library_path)) {
+    CHECK(cache_.defined());
+    CHECK(cache_.device().type() == torch::kPrivateUse1);
+    CHECK_EQ(cache_.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(cache_.dim(), 3);
+    CHECK(cache_.is_contiguous());
+    CHECK_GT(cache_.size(0), 0);
+    CHECK_GT(cache_.size(1), 0);
+    CHECK_GT(cache_.size(2), 0);
+    CHECK_GT(window_, 0);
+  }
+
+  torch::Tensor forward(const torch::Tensor& query,
+                        const torch::Tensor& current_kv,
+                        const torch::Tensor& block_table,
+                        int64_t context_length,
+                        const torch::Tensor& sink,
+                        const std::optional<torch::Tensor>& compressed_kv,
+                        const std::optional<torch::Tensor>& compressed_picks) {
+    CHECK(!fused_decode_read_)
+        << "Fused read requires explicit query positions";
+    return forward_with_positions(query,
+                                  current_kv,
+                                  block_table,
+                                  context_length,
+                                  sink,
+                                  compressed_kv,
+                                  compressed_picks,
+                                  torch::Tensor{});
+  }
+
+  torch::Tensor forward_with_positions(
+      const torch::Tensor& query,
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      int64_t context_length,
+      const torch::Tensor& sink,
+      const std::optional<torch::Tensor>& compressed_kv,
+      const std::optional<torch::Tensor>& compressed_picks,
+      const torch::Tensor& query_positions) {
+    return forward_with_window_floor(query,
+                                     current_kv,
+                                     block_table,
+                                     context_length,
+                                     sink,
+                                     compressed_kv,
+                                     compressed_picks,
+                                     query_positions,
+                                     /*window_floor=*/0);
+  }
+
+  torch::Tensor forward_with_window_floor(
+      const torch::Tensor& query,
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      int64_t context_length,
+      const torch::Tensor& sink,
+      const std::optional<torch::Tensor>& compressed_kv,
+      const std::optional<torch::Tensor>& compressed_picks,
+      const torch::Tensor& query_positions,
+      int64_t window_floor,
+      bool static_verify = false) {
+    const DeepseekV41ProfileRange range("V41/Attention/SWA_sparse_and_commit");
+    CHECK(query.defined() && current_kv.defined() && block_table.defined());
+    CHECK_EQ(query.device(), cache_.device());
+    CHECK_EQ(current_kv.device(), cache_.device());
+    CHECK_EQ(block_table.device(), cache_.device());
+    CHECK_EQ(query.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(current_kv.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(query.dim(), 3);
+    CHECK_EQ(query.size(2), cache_.size(2));
+    CHECK_EQ(current_kv.sizes(),
+             torch::IntArrayRef({query.size(0), cache_.size(2)}));
+    CHECK_EQ(block_table.dim(), 2);
+    CHECK_EQ(block_table.size(0), 1) << "Native paged attention currently C1";
+    CHECK_GT(block_table.size(1), 0);
+    CHECK(block_table.scalar_type() == torch::kInt32 ||
+          block_table.scalar_type() == torch::kInt64);
+    CHECK_GE(block_table.size(1) * cache_.size(1), window_);
+    CHECK_GE(context_length, query.size(0));
+    CHECK_GE(window_floor, 0);
+    CHECK_LE(window_floor, context_length - query.size(0));
+    CHECK_EQ(compressed_kv.has_value(), compressed_picks.has_value());
+    torch::DeviceGuard guard(cache_.device());
+    if (query.size(0) == 0) {
+      return torch::empty_like(query);
+    }
+    if (fused_verify_read_ && static_verify) {
+      CHECK_EQ(window_floor, 0);
+      auto [rows, picks, slots] =
+          kernel::musa::deepseek_v41_swa_verify_read(cache_,
+                                                     current_kv,
+                                                     block_table,
+                                                     query_positions,
+                                                     window_,
+                                                     compressed_kv,
+                                                     compressed_picks);
+      const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+      kernel::musa::deepseek_v4_scatter_cache(cache_, slots, current_kv);
+      return result;
+    }
+    if (fused_decode_read_ && query.size(0) == 1) {
+      CHECK_EQ(window_floor, 0) << "Bounded replay is a prefill-only path";
+      auto [rows, picks, slot] = prepare_decode_read(current_kv,
+                                                     block_table,
+                                                     query_positions,
+                                                     compressed_kv,
+                                                     compressed_picks);
+      const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+      commit(slot, current_kv);
+      return result;
+    }
+    const int64_t previous = context_length - query.size(0);
+    const auto indices_options =
+        torch::TensorOptions().device(cache_.device()).dtype(torch::kInt64);
+    if (static_verify) {
+      CHECK_EQ(window_floor, 0);
+      CHECK_LE(query.size(0), 6);
+      CHECK_LE(query.size(0), cache_.size(1));
+      CHECK(query_positions.defined() && query_positions.is_contiguous());
+      CHECK_EQ(query_positions.device(), cache_.device());
+      CHECK_EQ(query_positions.scalar_type(), torch::kInt64);
+      CHECK_EQ(query_positions.numel(), query.size(0));
+    }
+    const torch::Tensor dynamic_previous =
+        static_verify ? query_positions.narrow(0, 0, 1) : torch::Tensor{};
+    const torch::Tensor ring_positions =
+        static_verify
+            ? torch::arange(window_, indices_options) + dynamic_previous -
+                  window_
+            : torch::arange(window_, indices_options) + previous - window_;
+    const torch::Tensor flat_cache = cache_.view({-1, cache_.size(2)});
+    const torch::Tensor gathered =
+        flat_cache.index_select(0,
+                                physical_slots(block_table,
+                                               ring_positions.clamp_min(0),
+                                               /*padding_read=*/true));
+    const torch::Tensor ring =
+        torch::where(ring_positions.ge(0).unsqueeze(-1), gathered, 0);
+    torch::Tensor rows = torch::cat({ring, current_kv}, 0);
+    const torch::Tensor positions =
+        static_verify
+            ? query_positions
+            : torch::arange(query.size(0), indices_options) + previous;
+    const torch::Tensor desired = positions.unsqueeze(-1) - window_ + 1 +
+                                  torch::arange(window_, indices_options);
+    const torch::Tensor relative = static_verify
+                                       ? desired - dynamic_previous + window_
+                                       : desired - previous + window_;
+    torch::Tensor picks = torch::where(desired.ge(window_floor), relative, -1);
+    if (compressed_kv.has_value()) {
+      const torch::Tensor& compressed = compressed_kv.value();
+      const torch::Tensor& extra = compressed_picks.value();
+      CHECK(compressed.defined() && extra.defined());
+      CHECK_EQ(compressed.device(), cache_.device());
+      CHECK_EQ(extra.device(), cache_.device());
+      CHECK_EQ(compressed.scalar_type(), torch::kBFloat16);
+      CHECK(extra.scalar_type() == torch::kInt32 ||
+            extra.scalar_type() == torch::kInt64);
+      CHECK_EQ(compressed.dim(), 2);
+      CHECK_EQ(compressed.size(1), cache_.size(2));
+      CHECK_EQ(extra.dim(), 2);
+      CHECK_EQ(extra.size(0), query.size(0));
+      const torch::Tensor valid =
+          extra.ge(0).logical_and(extra.lt(compressed.size(0)));
+      const torch::Tensor mapped =
+          torch::where(valid, extra.to(torch::kInt64) + rows.size(0), -1);
+      picks = torch::cat({picks, mapped}, -1);
+      rows = torch::cat({rows, compressed}, 0);
+    }
+    // Always read before committing this chunk, including M=1. The oldest
+    // ring candidate overwritten by a decode token is outside its window.
+    const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+    if (static_verify) {
+      // Consecutive <=6 rows cannot wrap a physical block twice. Reuse V4's
+      // production scatter, which masks invalid slots, without dynamic
+      // boolean indexing or the prefill duplicate/latest-wins sort.
+      kernel::musa::deepseek_v4_scatter_cache(
+          cache_,
+          physical_slots(block_table, positions, /*padding_read=*/false),
+          current_kv);
+      return result;
+    }
+    commit(physical_slots(block_table, positions, /*padding_read=*/false),
+           current_kv);
+    return result;
+  }
+
+  // DSpark queries share one left-context window and see the entire anchor /
+  // noise block non-causally. Proposals must never write into accepted history.
+  torch::Tensor forward_draft_block(const torch::Tensor& query,
+                                    const torch::Tensor& current_kv,
+                                    const torch::Tensor& block_table,
+                                    int64_t previous_context,
+                                    const torch::Tensor& sink) {
+    const DeepseekV41ProfileRange range("V41/DSpark/noncausal_SWA");
+    CHECK(query.defined() && current_kv.defined() && block_table.defined());
+    CHECK_EQ(query.device(), cache_.device());
+    CHECK_EQ(current_kv.device(), cache_.device());
+    CHECK_EQ(block_table.device(), cache_.device());
+    CHECK_EQ(query.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(current_kv.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(query.dim(), 3);
+    CHECK_EQ(query.size(2), cache_.size(2));
+    CHECK_EQ(current_kv.sizes(),
+             torch::IntArrayRef({query.size(0), cache_.size(2)}));
+    CHECK_GT(query.size(0), 0);
+    CHECK_LE(query.size(0), 8);
+    CHECK_EQ(block_table.dim(), 2);
+    CHECK_EQ(block_table.size(0), 1);
+    CHECK_GT(block_table.size(1), 0);
+    CHECK(block_table.scalar_type() == torch::kInt32 ||
+          block_table.scalar_type() == torch::kInt64);
+    CHECK_GE(block_table.size(1) * cache_.size(1), window_);
+    CHECK_GE(previous_context, 0);
+    torch::DeviceGuard guard(cache_.device());
+    const torch::Tensor ring_positions =
+        torch::arange(window_, cache_.options().dtype(torch::kInt64)) +
+        previous_context - window_;
+    const torch::Tensor gathered =
+        cache_.view({-1, cache_.size(2)})
+            .index_select(0,
+                          physical_slots(block_table,
+                                         ring_positions.clamp_min(0),
+                                         /*padding_read=*/true));
+    const torch::Tensor ring =
+        torch::where(ring_positions.ge(0).unsqueeze(-1), gathered, 0);
+    const torch::Tensor rows = torch::cat({ring, current_kv}, 0);
+    const torch::Tensor positions =
+        torch::cat({ring_positions,
+                    torch::arange(query.size(0), ring_positions.options()) +
+                        previous_context},
+                   0);
+    const torch::Tensor columns =
+        torch::arange(rows.size(0), ring_positions.options());
+    const torch::Tensor picks = torch::where(positions.ge(0), columns, -1)
+                                    .unsqueeze(0)
+                                    .expand({query.size(0), rows.size(0)})
+                                    .contiguous();
+    return attention_.forward(query, rows, picks, sink);
+  }
+
+  torch::Tensor forward_draft_block_static(
+      const torch::Tensor& query,
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      const torch::Tensor& previous_context,
+      const torch::Tensor& sink) {
+    const DeepseekV41ProfileRange range("V41/DSpark/noncausal_SWA_fused_read");
+    auto [rows, picks] = kernel::musa::deepseek_v41_swa_draft_read(
+        cache_, current_kv, block_table, previous_context, window_);
+    return attention_.forward(query, rows, picks, sink);
+  }
+
+  void commit_draft_context(const torch::Tensor& slots,
+                            const torch::Tensor& values) {
+    CHECK(slots.defined() && values.defined());
+    CHECK_EQ(slots.device(), cache_.device());
+    CHECK_EQ(values.device(), cache_.device());
+    CHECK_EQ(slots.dim(), 1);
+    CHECK(slots.scalar_type() == torch::kInt32 ||
+          slots.scalar_type() == torch::kInt64);
+    CHECK_EQ(values.scalar_type(), cache_.scalar_type());
+    CHECK_EQ(values.sizes(),
+             torch::IntArrayRef({slots.size(0), cache_.size(2)}));
+    torch::DeviceGuard guard(cache_.device());
+    commit(slots.to(torch::kInt64), values);
+  }
+
+ private:
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> prepare_decode_read(
+      const torch::Tensor& current_kv,
+      const torch::Tensor& block_table,
+      const torch::Tensor& positions,
+      const std::optional<torch::Tensor>& compressed,
+      const std::optional<torch::Tensor>& picks) const {
+    const DeepseekV41ProfileRange range(
+        "V41/Attention/SWA_decode_read_metadata");
+    return kernel::musa::deepseek_v41_swa_decode_read(
+        cache_, current_kv, block_table, positions, window_, compressed, picks);
+  }
+
+  torch::Tensor physical_slots(const torch::Tensor& table,
+                               const torch::Tensor& positions,
+                               bool padding_read) const {
+    const int64_t block_size = cache_.size(1);
+    const torch::Tensor columns =
+        torch::floor_divide(positions, block_size).remainder(table.size(1));
+    const torch::Tensor blocks =
+        table.select(0, 0).index_select(0, columns).to(torch::kInt64);
+    // Read-side ring candidates may refer to unused scheduler padding. Write
+    // slots retain the sign and are filtered rather than corrupting block 0.
+    return (padding_read ? blocks.clamp_min(0) : blocks) * block_size +
+           positions.remainder(block_size);
+  }
+
+  void commit(const torch::Tensor& slots, const torch::Tensor& values) {
+    const DeepseekV41ProfileRange range("V41/Attention/SWA_commit");
+    // A single update has no duplicate slots to order. Keep the original
+    // stable latest-wins path for prefill chunks, which may wrap the ring.
+    if (single_token_scatter_ && slots.numel() == 1) {
+      kernel::musa::deepseek_v4_scatter_single_cache_native(
+          cache_, slots, values);
+      return;
+    }
+    const torch::Tensor order =
+        torch::argsort(slots, /*stable=*/true, /*dim=*/0, /*descending=*/false);
+    const torch::Tensor sorted = slots.index_select(0, order);
+    torch::Tensor keep =
+        sorted.ge(0).logical_and(sorted.lt(cache_.size(0) * cache_.size(1)));
+    if (sorted.numel() > 1) {
+      keep.narrow(0, 0, sorted.numel() - 1)
+          .logical_and_(sorted.narrow(0, 0, sorted.numel() - 1)
+                            .ne(sorted.narrow(0, 1, sorted.numel() - 1)));
+    }
+    const torch::Tensor latest = order.index({keep});
+    cache_.view({-1, cache_.size(2)})
+        .index_copy_(
+            0, slots.index_select(0, latest), values.index_select(0, latest));
+  }
+
+  torch::Tensor cache_;
+  int64_t window_;
+  bool single_token_scatter_;
+  bool fused_decode_read_ = false;
+  bool fused_verify_read_ = false;
+  DeepseekV41SparseAttention attention_;
+};
+
+}  // namespace xllm::layer
