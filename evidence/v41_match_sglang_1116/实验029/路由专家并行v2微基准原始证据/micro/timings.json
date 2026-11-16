@@ -1,0 +1,128 @@
+[
+  {
+    "rows": 1,
+    "parallel": false,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      98.7841796875,
+      98.5486831665039,
+      98.83909606933594,
+      98.4778060913086,
+      99.18122100830078
+    ],
+    "label": "off"
+  },
+  {
+    "rows": 1,
+    "parallel": true,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      40.09056091308594,
+      40.36213684082031,
+      40.278900146484375,
+      40.396400451660156,
+      40.24863815307617
+    ],
+    "label": "on"
+  },
+  {
+    "rows": 1,
+    "parallel": false,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      98.08480072021484,
+      98.7109146118164,
+      98.73347473144531,
+      98.73468017578125,
+      99.0024185180664
+    ],
+    "label": "reverse_off"
+  },
+  {
+    "rows": 4,
+    "parallel": false,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      97.83200073242188,
+      98.08527374267578,
+      98.36451721191406,
+      97.5553970336914,
+      104.19660186767578
+    ],
+    "label": "off"
+  },
+  {
+    "rows": 4,
+    "parallel": true,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      40.46934127807617,
+      40.767940521240234,
+      40.43861770629883,
+      40.488101959228516,
+      40.50771713256836
+    ],
+    "label": "on"
+  },
+  {
+    "rows": 4,
+    "parallel": false,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      97.39190673828125,
+      97.44244384765625,
+      97.50060272216797,
+      97.25077819824219,
+      97.89734649658203
+    ],
+    "label": "reverse_off"
+  },
+  {
+    "rows": 6,
+    "parallel": false,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      96.91142272949219,
+      97.03422546386719,
+      97.20358276367188,
+      97.28099822998047,
+      97.27189636230469
+    ],
+    "label": "off"
+  },
+  {
+    "rows": 6,
+    "parallel": true,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      42.27116012573242,
+      42.364280700683594,
+      42.32583999633789,
+      42.441741943359375,
+      42.76173782348633
+    ],
+    "label": "on"
+  },
+  {
+    "rows": 6,
+    "parallel": false,
+    "graph_calls": 40,
+    "replays_per_window": 50,
+    "microseconds_per_gate": [
+      97.14189910888672,
+      97.00315856933594,
+      97.34381866455078,
+      97.39652252197266,
+      97.1411361694336
+    ],
+    "label": "reverse_off"
+  }
+]

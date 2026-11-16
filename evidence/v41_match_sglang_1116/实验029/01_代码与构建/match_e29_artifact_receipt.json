@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/parallel_gate_native_v2/source_manifest.json\", \"binary\": \"/expt/artifacts/parallel_gate_native_v2/bin/xllm\", \"sha256\": \"a4392541b8287268a3bd7fa888f06f89a943ae280ddc5bd54bfe8eb67a1bcc59\", \"bytes\": 341532752, \"small_checks\": \"E29 v2 gate 640 exact + 18 Graph checks; model checks pending\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

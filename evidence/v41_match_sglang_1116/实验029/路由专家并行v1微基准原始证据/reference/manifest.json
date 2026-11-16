@@ -1,0 +1,10 @@
+[
+  {
+    "path": "/donor/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/ops/routing_ops.py",
+    "sha256": "79f34922cdfc7abf2f394adf2280e3ca06d8a2f4affe4616f39681f6038ed841"
+  },
+  {
+    "path": "/donor/sglang/python/sglang/kernels/ops/moe/moe_fused_gate.py",
+    "sha256": "a8d5759ab4d0de822b049fdcfaa36feac49bad750614f5f98ab9352375bf7ed7"
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 9067, \"start_ticks\": \"520932858\", \"root\": \"/expt/builds/parallel_gate_native_v2\", \"changed_files\": 72}\n",
+  "stderr": ""
+}

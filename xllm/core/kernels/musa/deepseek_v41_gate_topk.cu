@@ -23,6 +23,7 @@ limitations under the License.
 
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
+#include "core/util/env_var.h"
 
 namespace xllm::kernel::musa {
 namespace {
@@ -128,6 +129,94 @@ __global__ void v41_gate_kernel(const float* logits,
   }
 }
 
+// Small verify batches benefit from parallelizing the expert dimension, as in
+// SGLang's MUSA fused gate. Keep v41_score, tie breaking, and the serial sum of
+// selected unbiased scores identical to the existing warp-per-token path.
+// One CTA owns each token; every expert has one thread (unused lanes invalid).
+template <int32_t Threads>
+__global__ void v41_gate_block_kernel(const float* logits,
+                                      const float* bias,
+                                      float* weights,
+                                      int64_t* indices,
+                                      int32_t experts,
+                                      int32_t topk,
+                                      bool per_token_bias,
+                                      bool normalize,
+                                      float scale) {
+  constexpr int32_t kWarps = Threads / 32;
+  __shared__ float warp_scores[kWarps];
+  __shared__ int32_t warp_ids[kWarps];
+  __shared__ int32_t selected_id;
+  __shared__ float original_scores[Threads];
+  const int32_t tid = threadIdx.x;
+  const int32_t lane = tid % 32;
+  const int32_t warp = tid / 32;
+  const int64_t token = blockIdx.x;
+  const float* row_logits = logits + token * experts;
+  const float* row_bias = bias + (per_token_bias ? token * experts : 0);
+  bool eligible = tid < experts;
+  const float original = eligible ? v41_score(row_logits[tid]) : 0.0f;
+  original_scores[tid] = original;
+  const float score = eligible ? original + row_bias[tid] : -INFINITY;
+  float total = 0.0f;
+  for (int32_t selected = 0; selected < topk; ++selected) {
+    float best = score;
+    int32_t best_id = eligible ? tid : INT32_MAX;
+#pragma unroll
+    for (int32_t offset = 16; offset > 0; offset /= 2) {
+      const float other = __shfl_xor_sync(0xffffffffu, best, offset, 32);
+      const int32_t other_id =
+          __shfl_xor_sync(0xffffffffu, best_id, offset, 32);
+      if (prefer_candidate(other, other_id, best, best_id)) {
+        best = other;
+        best_id = other_id;
+      }
+    }
+    if (lane == 0) {
+      warp_scores[warp] = best;
+      warp_ids[warp] = best_id;
+    }
+    __syncthreads();
+    if (warp == 0) {
+      best = lane < kWarps ? warp_scores[lane] : -INFINITY;
+      best_id = lane < kWarps ? warp_ids[lane] : INT32_MAX;
+#pragma unroll
+      for (int32_t offset = 16; offset > 0; offset /= 2) {
+        const float other = __shfl_xor_sync(0xffffffffu, best, offset, 32);
+        const int32_t other_id =
+            __shfl_xor_sync(0xffffffffu, best_id, offset, 32);
+        if (prefer_candidate(other, other_id, best, best_id)) {
+          best = other;
+          best_id = other_id;
+        }
+      }
+      if (lane == 0) {
+        selected_id = best_id;
+        // Reuse the unbiased score, never subtract correction bias. The first
+        // CTA barrier also publishes every thread's original_scores entry.
+        const float original = original_scores[best_id];
+        indices[token * topk + selected] = best_id;
+        weights[token * topk + selected] = original;
+        total += original;
+      }
+    }
+    __syncthreads();
+    eligible = eligible && tid != selected_id;
+    // The next iteration's first CTA barrier ensures all selected_id reads
+    // finish before warp 0 can publish a different selected expert.
+  }
+  if (tid == 0) {
+    for (int32_t selected = 0; selected < topk; ++selected) {
+      const int64_t at = token * topk + selected;
+      float weight = weights[at];
+      if (normalize && topk > 1) {
+        weight /= total + 1.0e-20f;
+      }
+      weights[at] = weight * scale;
+    }
+  }
+}
+
 template <int32_t Slots>
 void launch_gate(const torch::Tensor& logits,
                  const torch::Tensor& bias,
@@ -185,7 +274,23 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_gate_topk(
   if (logits.size(0) == 0) {
     return {weights, ids};
   }
-  if (logits.size(1) <= 128) {
+  const bool block_gate =
+      util::get_bool_env("XLLM_DSV41_PARALLEL_GATE_TOPK", false);
+  if (block_gate && logits.size(0) <= 6 && logits.size(1) <= 512) {
+    v41_gate_block_kernel<512><<<dim3(static_cast<uint32_t>(logits.size(0))),
+                                 dim3(512),
+                                 0,
+                                 current_musa_stream(logits.device())>>>(
+        logits.data_ptr<float>(),
+        bias.data_ptr<float>(),
+        weights.data_ptr<float>(),
+        ids.data_ptr<int64_t>(),
+        static_cast<int32_t>(logits.size(1)),
+        static_cast<int32_t>(topk),
+        bias.dim() == 2,
+        normalize,
+        static_cast<float>(scale));
+  } else if (logits.size(1) <= 128) {
     launch_gate<4>(logits, bias, weights, ids, topk, normalize, scale);
   } else if (logits.size(1) <= 256) {
     launch_gate<8>(logits, bias, weights, ids, topk, normalize, scale);

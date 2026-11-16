@@ -1,0 +1,52 @@
+{
+  "status": "MICRO_ONLY_NOT_PROMOTED",
+  "checks": 640,
+  "graph_checks": 18,
+  "results": [
+    {
+      "rows": 1,
+      "label": "off",
+      "median_us": 98.69989776611328
+    },
+    {
+      "rows": 1,
+      "label": "on",
+      "median_us": 51.7104606628418
+    },
+    {
+      "rows": 1,
+      "label": "reverse_off",
+      "median_us": 98.05169677734375
+    },
+    {
+      "rows": 4,
+      "label": "off",
+      "median_us": 97.316162109375
+    },
+    {
+      "rows": 4,
+      "label": "on",
+      "median_us": 53.65999984741211
+    },
+    {
+      "rows": 4,
+      "label": "reverse_off",
+      "median_us": 97.66264343261719
+    },
+    {
+      "rows": 6,
+      "label": "off",
+      "median_us": 97.25896453857422
+    },
+    {
+      "rows": 6,
+      "label": "on",
+      "median_us": 53.64912033081055
+    },
+    {
+      "rows": 6,
+      "label": "reverse_off",
+      "median_us": 97.67247772216797
+    }
+  ]
+}

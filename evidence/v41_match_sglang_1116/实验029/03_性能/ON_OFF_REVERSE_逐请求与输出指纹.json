@@ -1,0 +1,533 @@
+{
+  "off": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 354.3049234896898,
+      "mean_TPOT_ms_per_token": 37.46262432313433,
+      "TPOT_sample_stdev_ms": 0.2542363248463132,
+      "mean_E2E_s": 9.907274125888943,
+      "output_tokens_per_latency_sum_second": 25.83959994919693,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4392541b8287268a3bd7fa888f06f89a943ae280ddc5bd54bfe8eb67a1bcc59"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.00643197260797,
+        "first_chunk_latency": 0.35391502548009157,
+        "time_per_output_token": 0.037853007635795605,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-6vTrMtWznuJSvug74foavk"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-6vTrMtWznuJSvug74foavk"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.93775587156415,
+        "first_chunk_latency": 0.354434285312891,
+        "time_per_output_token": 0.037581653279416705,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-9jNPrySRb38fErQT4AR2yy"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-9jNPrySRb38fErQT4AR2yy"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.86192868463695,
+        "first_chunk_latency": 0.35235097352415323,
+        "time_per_output_token": 0.03729246161220705,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-iBizQDZtaf7uX95LT4XNVH"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-iBizQDZtaf7uX95LT4XNVH"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.876328557729721,
+        "first_chunk_latency": 0.3532694326713681,
+        "time_per_output_token": 0.03734532990218962,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-YpK9MEBdWqAQaDffTtXiuC"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-YpK9MEBdWqAQaDffTtXiuC"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.853925542905927,
+        "first_chunk_latency": 0.3575549004599452,
+        "time_per_output_token": 0.03724066918606267,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-XyttM26nbBjyZffHaKtFTp"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-XyttM26nbBjyZffHaKtFTp"
+        }
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-zLpfG94XdTrptPrtztF69p"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-dtNPFDKYby6cbd2UWZqygG"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-Py7aVQBr86x5pvrDnggdBB"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-hci9tTapMB6bNP45xFT8UJ"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-6vTrMtWznuJSvug74foavk"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-9jNPrySRb38fErQT4AR2yy"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-iBizQDZtaf7uX95LT4XNVH"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-YpK9MEBdWqAQaDffTtXiuC"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-XyttM26nbBjyZffHaKtFTp"
+      }
+    ]
+  },
+  "on": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 483.06743297725916,
+      "mean_TPOT_ms_per_token": 36.383470265450434,
+      "TPOT_sample_stdev_ms": 0.22527397690012008,
+      "mean_E2E_s": 9.760852350667118,
+      "output_tokens_per_latency_sum_second": 26.22721774728037,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4392541b8287268a3bd7fa888f06f89a943ae280ddc5bd54bfe8eb67a1bcc59"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.889321776106954,
+        "first_chunk_latency": 0.5739819351583719,
+        "time_per_output_token": 0.036530744474308166,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-wNXoogu5tpWWkKpXDkY9JR"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-wNXoogu5tpWWkKpXDkY9JR"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.806294348090887,
+        "first_chunk_latency": 0.5597153641283512,
+        "time_per_output_token": 0.03626109405475504,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-bopHSBvGxeZnf3RGhNfaDq"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-bopHSBvGxeZnf3RGhNfaDq"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.671970249153674,
+        "first_chunk_latency": 0.361415708437562,
+        "time_per_output_token": 0.036511978591043576,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-xHXhRxgkQAnA6Upce3cVuL"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-xHXhRxgkQAnA6Upce3cVuL"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.74491866119206,
+        "first_chunk_latency": 0.5536874001845717,
+        "time_per_output_token": 0.03604404416081368,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-aC3aUobPutTzYUv33CMNLF"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-aC3aUobPutTzYUv33CMNLF"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.691756718792021,
+        "first_chunk_latency": 0.3665367569774389,
+        "time_per_output_token": 0.0365694900463317,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-PwoJ65TBcsgUcFD9Xvro3H"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-PwoJ65TBcsgUcFD9Xvro3H"
+        }
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-cyFFMbVrpDftZr6QWj738K"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-2Xk4pRFmnLtXTAkeA9pjRT"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-CD3tnoKRD8ZGSURxuYb2NS"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-nHp4MRVDnN4ExgNoSe3GP3"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-wNXoogu5tpWWkKpXDkY9JR"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-bopHSBvGxeZnf3RGhNfaDq"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-xHXhRxgkQAnA6Upce3cVuL"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-aC3aUobPutTzYUv33CMNLF"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-PwoJ65TBcsgUcFD9Xvro3H"
+      }
+    ]
+  },
+  "reverse": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 403.9922533556819,
+      "mean_TPOT_ms_per_token": 37.521441894419056,
+      "TPOT_sample_stdev_ms": 0.1342423447616746,
+      "mean_E2E_s": 9.97195993643254,
+      "output_tokens_per_latency_sum_second": 25.671984407468827,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4392541b8287268a3bd7fa888f06f89a943ae280ddc5bd54bfe8eb67a1bcc59"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.998351654969156,
+        "first_chunk_latency": 0.3791863899677992,
+        "time_per_output_token": 0.037722216725495514,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-2oJBVj8uttjCSHxJXQvfwN"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-2oJBVj8uttjCSHxJXQvfwN"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.922904135659337,
+        "first_chunk_latency": 0.35220425203442574,
+        "time_per_output_token": 0.037532156406372204,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-FJDhvqffeX9vmGzwnpcKjK"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-FJDhvqffeX9vmGzwnpcKjK"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.10912892781198,
+        "first_chunk_latency": 0.5431431317701936,
+        "time_per_output_token": 0.037513669788399165,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-Ggvbh6gAYuFMC3LPPwcCxk"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-Ggvbh6gAYuFMC3LPPwcCxk"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.946631238795817,
+        "first_chunk_latency": 0.38585736975073814,
+        "time_per_output_token": 0.03749323085900031,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-dJLSLA9yXz9B6nqis3UBz3"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-dJLSLA9yXz9B6nqis3UBz3"
+        }
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.882783724926412,
+        "first_chunk_latency": 0.35957012325525284,
+        "time_per_output_token": 0.037345935692828076,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "server_ids": [
+          "chatcmpl-12481178814234374860-CtdJjekCYaQG3XAPKnnA5t"
+        ],
+        "usage": null,
+        "finish_reasons": [
+          "length"
+        ],
+        "speculation": {
+          "accepted": 147,
+          "proposed": 330,
+          "server_id": "chatcmpl-12481178814234374860-CtdJjekCYaQG3XAPKnnA5t"
+        }
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-xQomZiy6abMvSa95CBzyuh"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-i48RJsB8jaooFsPxJFr9rd"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-9YxVCBLQKu7cWLZTHHKYiC"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-XgRthWmDPDF3N9WQndRcQ5"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-2oJBVj8uttjCSHxJXQvfwN"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-FJDhvqffeX9vmGzwnpcKjK"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-Ggvbh6gAYuFMC3LPPwcCxk"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-dJLSLA9yXz9B6nqis3UBz3"
+      },
+      {
+        "accepted": 147,
+        "proposed": 330,
+        "server_id": "chatcmpl-12481178814234374860-CtdJjekCYaQG3XAPKnnA5t"
+      }
+    ]
+  }
+}
