@@ -45,8 +45,6 @@ WAIT_READY="${GLM5_WAIT_READY:-1}"
 WAIT_TIMEOUT_SEC="${GLM5_WAIT_TIMEOUT_SEC:-180}"
 TORCH_PROFILE="${GLM5_TORCH_PROFILE:-0}"
 PROFILE_DIR="${GLM5_PROFILE_DIR:-${LOG_DIR}/traces}"
-PROFILE_CALLSTACK="${GLM5_PROFILE_CALLSTACK:-0}"
-CALLSTACK_PRELOAD_SO="${GLM5_CALLSTACK_PRELOAD_SO:-}"
 
 export FLASHINFER_OPS_PATH="${GLM5_FLASHINFER_OPS_PATH:-${REPO_ROOT}/build/mate_sparse_ops}"
 OPS_BACKUP_DIR="${GLM5_OPS_BACKUP_DIR:-/opt/mate027_cache/glm5_3_mate_sparse_ops}"
@@ -228,9 +226,6 @@ if [[ "${TORCH_PROFILE}" == "1" ]]; then
     "--profile_backend=torch"
     "--profile_dir=${PROFILE_DIR}"
   )
-  if [[ "${PROFILE_CALLSTACK}" == "1" ]] && [[ -n "${CALLSTACK_PRELOAD_SO}" ]] && [[ -f "${CALLSTACK_PRELOAD_SO}" ]]; then
-    export LD_PRELOAD="${CALLSTACK_PRELOAD_SO}${LD_PRELOAD:+:${LD_PRELOAD}}"
-  fi
 fi
 
 echo "Binary: ${XLLM_BIN}"
@@ -239,7 +234,6 @@ echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 p
 echo "Logs: ${LOG_DIR}/rank_*.log"
 if [[ "${TORCH_PROFILE}" == "1" ]]; then
   echo "Torch profile dir: ${PROFILE_DIR}"
-  echo "LD_PRELOAD: ${LD_PRELOAD:-<none>}"
 fi
 
 for ((r = 0; r < NNODES; ++r)); do

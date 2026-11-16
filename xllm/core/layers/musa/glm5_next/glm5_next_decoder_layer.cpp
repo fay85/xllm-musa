@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <string>
@@ -213,6 +214,7 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
   torch::Tensor attention_input;
   if (has_pending) {
     PendingMHC& pending = pending_mhc->value();
+    RECORD_USER_SCOPE("nn.Module: MHCPre_post_pre_norm");
     std::tie(attention_input,
              residual_attention,
              attention_hc.post,
@@ -225,21 +227,27 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     pending_mhc->reset();
   } else {
     residual_attention = hidden_states;
-    attention_hc = attn_hc_pre_->forward(hidden_states);
+    {
+      RECORD_USER_SCOPE("nn.Module: MHCPre_forward");
+      attention_hc = attn_hc_pre_->forward(hidden_states);
+    }
     attention_input =
-        attention_hc.output.numel() == 0
-            ? attention_hc.output
-            : std::get<0>(input_norm_->forward(attention_hc.output));
+        attention_hc.output.numel() == 0 ? attention_hc.output : ([&]() {
+          RECORD_USER_SCOPE("nn.Module: RMSNorm_input");
+          return std::get<0>(input_norm_->forward(attention_hc.output));
+        })();
   }
 
   torch::Tensor attention_output;
   if (linear_attention_) {
+    RECORD_USER_SCOPE("nn.Module: Glm5NextLinearAttention");
     attention_output = linear_attention_->forward(
         attention_input, attn_metadata, kv_cache, input_params);
   } else {
     if (!enable_indexer_) {
       CHECK_NOTNULL(shared_selection);
     }
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA");
     auto [output, selection] =
         mla_attention_->forward(positions,
                                 attention_input,
@@ -255,21 +263,28 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
   torch::Tensor ffn_input;
   torch::Tensor residual_ffn;
   MHCPreOutput ffn_hc;
-  std::tie(ffn_input, residual_ffn, ffn_hc.post, ffn_hc.comb) =
-      ffn_hc_pre_->post_pre_norm(attention_output,
-                                 residual_attention,
-                                 attention_hc.post,
-                                 attention_hc.comb,
-                                 post_norm_->weight());
+  {
+    RECORD_USER_SCOPE("nn.Module: MHCPre_post_pre_norm");
+    std::tie(ffn_input, residual_ffn, ffn_hc.post, ffn_hc.comb) =
+        ffn_hc_pre_->post_pre_norm(attention_output,
+                                   residual_attention,
+                                   attention_hc.post,
+                                   attention_hc.comb,
+                                   post_norm_->weight());
+  }
   torch::Tensor ffn_output;
   if (dense_mlp_) {
-    ffn_output = use_prefill_cp && ffn_input.size(0) == 0
-                     ? torch::empty_like(ffn_input)
-                     : dense_mlp_->forward(ffn_input);
+    if (use_prefill_cp && ffn_input.size(0) == 0) {
+      ffn_output = torch::empty_like(ffn_input);
+    } else {
+      RECORD_USER_SCOPE("nn.Module: DeepseekV2MLP");
+      ffn_output = dense_mlp_->forward(ffn_input);
+    }
   } else {
     torch::Tensor ffn_input_2d = ffn_input.reshape({-1, ffn_input.size(-1)});
     const bool is_prefill =
         attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
+    RECORD_USER_SCOPE("nn.Module: MoEGate");
     auto [topk_weights, topk_ids] =
         sparse_gate_->forward(ffn_input_2d, is_prefill);
     ModelInputParams moe_input_params = input_params;
@@ -287,14 +302,17 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     if (use_prefill_cp) {
       token_shard = make_routed_moe_token_shard(attn_metadata, positions);
     }
-    ffn_output = sparse_moe_->forward_with_selected_experts(
-        ffn_input_2d,
-        topk_weights,
-        topk_ids,
-        moe_input_params,
-        /*skip_tp_allreduce=*/false,
-        /*output_buffer=*/{},
-        token_shard ? &token_shard.value() : nullptr);
+    {
+      RECORD_USER_SCOPE("nn.Module: DeepEPMoE");
+      ffn_output = sparse_moe_->forward_with_selected_experts(
+          ffn_input_2d,
+          topk_weights,
+          topk_ids,
+          moe_input_params,
+          /*skip_tp_allreduce=*/false,
+          /*output_buffer=*/{},
+          token_shard ? &token_shard.value() : nullptr);
+    }
     ffn_output = ffn_output.reshape(ffn_input.sizes());
   }
   if (!is_last_layer && pending_mhc != nullptr) {
@@ -302,8 +320,11 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
         PendingMHC{ffn_output, residual_ffn, ffn_hc.post, ffn_hc.comb});
     return ffn_output;
   }
-  std::tie(hidden_states, std::ignore) =
-      hc_post_->forward(ffn_output, residual_ffn, ffn_hc.post, ffn_hc.comb);
+  {
+    RECORD_USER_SCOPE("nn.Module: MHCPost");
+    std::tie(hidden_states, std::ignore) =
+        hc_post_->forward(ffn_output, residual_ffn, ffn_hc.post, ffn_hc.comb);
+  }
   return hidden_states;
 }
 

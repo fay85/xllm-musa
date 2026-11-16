@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
 
@@ -124,6 +125,7 @@ class Glm5NextModelImpl final
                       torch::Tensor positions,
                       std::vector<KVCache>& kv_caches,
                       const ModelInputParams& input_params) override {
+    RECORD_USER_SCOPE("nn.Module: Glm5NextModel_0");
     torch::NoGradGuard no_grad;
     CHECK_EQ(kv_caches.size(), layers_.size());
     const bool use_prefill_cp =
@@ -218,7 +220,10 @@ class Glm5NextModelImpl final
             : (tokens.numel() == 0
                    ? torch::empty({0, model_args_.hidden_size()},
                                   norm_->weight().options())
-                   : embed_tokens_(tokens));
+                   : ([&]() {
+                       RECORD_USER_SCOPE("nn.Module: VocabParallelEmbedding_0");
+                       return embed_tokens_(tokens);
+                     })());
     hidden_states = kernel::musa::mhc_expand(hidden_states, hc_mult_);
     std::optional<torch::Tensor> residual;
     std::optional<layer::PendingMHC> pending_mhc;
@@ -228,6 +233,9 @@ class Glm5NextModelImpl final
               static_cast<uint32_t>(layer_id))) {
         return ModelOutput();
       }
+      const std::string layer_name =
+          "nn.Module: Glm5NextDecoderLayer_" + std::to_string(layer_id);
+      RECORD_USER_SCOPE(layer_name.c_str());
       hidden_states = layers_[layer_id]->forward(
           hidden_states,
           residual,
@@ -248,9 +256,11 @@ class Glm5NextModelImpl final
     hidden_states = kernel::musa::mhc_contract_mean(hidden_states);
     // CP4 restores/selects request outputs in the CausalLM LM Head path; the
     // model itself continues to return Plain local rows to the executor.
-    return ModelOutput(hidden_states.numel() == 0
-                           ? hidden_states
-                           : std::get<0>(norm_->forward(hidden_states)));
+    if (hidden_states.numel() != 0) {
+      RECORD_USER_SCOPE("nn.Module: RMSNorm_22");
+      hidden_states = std::get<0>(norm_->forward(hidden_states));
+    }
+    return ModelOutput(hidden_states);
   }
 
   bool last_forward_used_prefill_cp() const { return last_forward_prefill_cp_; }

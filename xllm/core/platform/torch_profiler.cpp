@@ -87,7 +87,7 @@ bool TorchProfiler::start() {
     const tp::ProfilerConfig config(tp::ProfilerState::KINETO,
                                     /*report_input_shapes=*/false,
                                     /*profile_memory=*/false,
-                                    /*with_stack=*/false,
+                                    /*with_stack=*/true,
                                     /*with_flops=*/false,
                                     /*with_modules=*/false);
     ap::prepareProfiler(config, activities);
