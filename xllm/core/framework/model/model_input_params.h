@@ -1102,6 +1102,8 @@ struct ModelInputParams {
           safe_to(table, table.options().device(torch::kCPU), true));
     }
     params.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
+    params.skip_pcp_gather = skip_pcp_gather;
+    params.pcp_input_is_sharded = pcp_input_is_sharded;
     if (!params.embedding.linear_state_indices.defined() &&
         !params.embedding.linear_state_ids.empty()) {
       params.embedding.linear_state_indices =
@@ -1340,6 +1342,11 @@ struct ModelInputParams {
 
   // Flag for graph capture/replay mode.
   bool enable_graph = false;
+
+  // Skip the trailing PCP hidden-state allgather on intermediate prefill chunks
+  // when only the local shard is needed by the MTP draft model.
+  bool skip_pcp_gather = false;
+  bool pcp_input_is_sharded = false;
 };
 
 }  // namespace xllm

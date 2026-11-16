@@ -206,7 +206,9 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     if (pcp_context.has_value()) {
       embedding =
           layer::musa_pcp::shard_rows(embedding, *pcp_context, /*dim=*/0);
-      hidden = layer::musa_pcp::shard_rows(hidden, *pcp_context, /*dim=*/0);
+      if (!input_params.pcp_input_is_sharded) {
+        hidden = layer::musa_pcp::shard_rows(hidden, *pcp_context, /*dim=*/0);
+      }
       positions = layer::musa_pcp::shard_rows(
           positions, *pcp_context, /*dim=*/positions.dim() - 1);
       layer_metadata = &pcp_context->local_metadata;
@@ -272,7 +274,12 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     mtp_hidden = new_mtp_hidden;
 #if defined(USE_MUSA)
     if (pcp_context.has_value()) {
-      mtp_hidden = layer::musa_pcp::finish(mtp_hidden, *pcp_context);
+      if (input_params.skip_pcp_gather) {
+        mtp_hidden =
+            layer::musa_pcp::finish_state_only(mtp_hidden, *pcp_context);
+      } else {
+        mtp_hidden = layer::musa_pcp::finish(mtp_hidden, *pcp_context);
+      }
     }
 #endif
     return ModelOutput(mtp_hidden);

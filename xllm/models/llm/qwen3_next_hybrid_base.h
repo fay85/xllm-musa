@@ -248,7 +248,11 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
 #if defined(USE_MUSA)
     if (pcp_context.has_value()) {
-      h = layer::musa_pcp::finish(h, *pcp_context);
+      if (input_params.skip_pcp_gather) {
+        h = layer::musa_pcp::finish_state_only(h, *pcp_context);
+      } else {
+        h = layer::musa_pcp::finish(h, *pcp_context);
+      }
     }
 #endif
     return aux_capture_.finalize(h);

@@ -43,6 +43,7 @@ limitations under the License.
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/eplb/eplb_utils.h"
 #include "core/framework/kv_cache/kv_cache_estimation.h"
@@ -1784,9 +1785,22 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
     const char* env = std::getenv("XLLM_PROFILE_MTP_PREFILL");
     return env != nullptr && std::string(env) == "1";
   }();
+  const bool has_selected_tokens =
+      input.sampling_params.selected_token_idxes.defined();
+  const int64_t max_chunk_tokens =
+      ::xllm::SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  const bool skip_pcp_gather =
+      parallel_args_.cp_size() > 1 && !has_selected_tokens &&
+      input.input_params.meta.num_sequences == 1 && max_chunk_tokens > 0 &&
+      input.token_ids.defined() &&
+      input.token_ids.numel() == max_chunk_tokens;
+  ForwardInput target_input = input;
+  if (skip_pcp_gather) {
+    target_input.input_params.skip_pcp_gather = true;
+  }
   // run the target model to get first token and hidden states
   ForwardOutput output =
-      run_worker_no_sync(*impl_, input, target_prepared).value();
+      run_worker_no_sync(*impl_, target_input, target_prepared).value();
   if (profile_prefill) {
     compute_stream_->synchronize();
     LOG(INFO) << "[MTP_PREFILL_PROFILE] tokens=" << input.token_ids.numel()
@@ -1817,7 +1831,12 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
       broadcast_spec_tokens(output.sample_output.next_tokens, parallel_args_);
     }
     if (embeddings.defined()) {
-      prefill_input.input_params.embedding.input_embedding = embeddings.clone();
+      prefill_input.input_params.embedding.input_embedding =
+          has_selected_tokens ? embeddings.clone() : std::move(embeddings);
+    }
+    if (skip_pcp_gather) {
+      prefill_input.input_params.skip_pcp_gather = true;
+      prefill_input.input_params.pcp_input_is_sharded = true;
     }
     if (output.sample_output.next_tokens.defined()) {
       replace_host_token_placeholders(prefill_input,

@@ -398,6 +398,7 @@ class MusaGraph final {
 
   uint32_t padded_num_tokens_ = 0;
   uint32_t captured_actual_tokens_ = 0;
+  uint32_t captured_result_tokens_ = 0;
 
   std::unique_ptr<ModelGraphMetadataState> model_graph_metadata_state_;
 

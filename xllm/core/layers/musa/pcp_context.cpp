@@ -200,8 +200,12 @@ void broadcast_rows(torch::Tensor& rows, int32_t root_rank, Context& context) {
     return;
   }
   if (context.cp_rank == root_rank) {
-    context.cp_group->broadcast_async(rows, root_rank);
+    c10::intrusive_ptr<c10d::Work> work =
+        context.cp_group->broadcast_async(rows, root_rank);
     context.in_flight_sends.emplace_back(rows);
+    if (work.defined()) {
+      context.in_flight_send_works.emplace_back(std::move(work));
+    }
     return;
   }
   context.cp_group->broadcast(rows, root_rank);
@@ -542,8 +546,7 @@ void defer_final_state(const torch::Tensor& cache,
   context.deferred_states.emplace_back(std::move(deferred));
 }
 
-torch::Tensor finish(const torch::Tensor& local_hidden_states,
-                     Context& context) {
+void complete_deferred_transfers(Context& context) {
   const int32_t root_rank = last_rank(context);
   for (DeferredKv& deferred : context.deferred_kv) {
     broadcast_rows(deferred.rows, root_rank, context);
@@ -561,7 +564,28 @@ torch::Tensor finish(const torch::Tensor& local_hidden_states,
   }
   context.deferred_kv.clear();
   context.deferred_states.clear();
+}
+
+torch::Tensor finish_state_only(const torch::Tensor& local_hidden_states,
+                                Context& context) {
+  complete_deferred_transfers(context);
+  // Join async MCCL sends onto the active compute/capture stream before
+  // exiting the forward pass, since gather_rows is skipped here.
+  for (auto& work : context.in_flight_send_works) {
+    if (work.defined()) {
+      work->wait();
+    }
+  }
+  context.in_flight_send_works.clear();
+  context.in_flight_sends.clear();
+  return local_hidden_states;
+}
+
+torch::Tensor finish(const torch::Tensor& local_hidden_states,
+                     Context& context) {
+  complete_deferred_transfers(context);
   torch::Tensor hidden_states = gather_rows(local_hidden_states, context);
+  context.in_flight_send_works.clear();
   context.in_flight_sends.clear();
   return hidden_states;
 }

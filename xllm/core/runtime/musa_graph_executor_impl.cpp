@@ -967,8 +967,12 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
             /*dim=*/0, /*start=*/0, /*end=*/validity_rows);
   }
   if (embedding.defined()) {
+    const uint32_t emb_rows =
+        params.pcp_input_is_sharded
+            ? static_cast<uint32_t>(embedding.size(0))
+            : padded_num_tokens;
     params_for_capture.embedding.input_embedding =
-        persistent_embedding(padded_num_tokens);
+        persistent_embedding(emb_rows);
   }
   if (mtp_token_embedding.defined()) {
     params_for_capture.embedding.mtp_token_embedding =
@@ -2748,6 +2752,8 @@ bool MusaGraph::capture(CausalLM* model,
           graph_params_opt.value());
 
       // Store result in persistent buffer
+      captured_result_tokens_ =
+          static_cast<uint32_t>(forward_result.hidden_states.size(0));
       persistent_param_.set_hidden_states(forward_result.hidden_states);
       if (should_capture_graph_aux_hidden_states(args, options) &&
           forward_result.aux_hidden_states.defined()) {
@@ -2886,7 +2892,12 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     runner_params.actual_num_tokens = actual_num_tokens;
     runner_params.attn_metadata = replay_params_opt->attn_metadata;
     piecewise_graph_->replay(runner_params);
-    return ModelOutput(get_hidden_states(actual_num_tokens));
+    const uint32_t output_tokens =
+        (captured_result_tokens_ > 0 &&
+         captured_result_tokens_ < captured_actual_tokens_)
+            ? captured_result_tokens_
+            : actual_num_tokens;
+    return ModelOutput(get_hidden_states(output_tokens));
   }
 
   {
@@ -4060,6 +4071,10 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
   // the host query lengths, so each length layout is captured separately.
   if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
     key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
+  }
+  if (options_.cp_size() > 1) {
+    key.emplace_back(params.skip_pcp_gather ? 1 : 0);
+    key.emplace_back(params.pcp_input_is_sharded ? 1 : 0);
   }
   return key;
 }

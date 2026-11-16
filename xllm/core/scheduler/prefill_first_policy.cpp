@@ -161,12 +161,18 @@ void PrefillFirstPolicy::schedule(
               estimate_remaining_prefill_tokens(req, state, block_pool);
           const double wait_ms =
               std::max(0.0, absl::ToDoubleMilliseconds(now - req->created_time()));
-          // Prioritize single-chunk completions (e.g., prefix-cache hits) with
-          // gentle anti-starvation (2 tokens/ms, so a 24k cold prompt only
-          // overtakes a fresh 6k hit after ~9s instead of 1.8s).
-          const double fast_bonus = rem <= max_chunk ? 0.0 : 4096.0;
-          srpt_scores.emplace(req.get(),
-                              static_cast<double>(rem) + fast_bonus - 2.0 * wait_ms);
+          // Keep single-chunk completions (e.g., prefix-cache hits) in a
+          // fast lane with gentle aging, while multi-chunk cold requests age
+          // aggressively (10 tokens/ms) so 30k-37k prompts do not starve for
+          // 10+ seconds behind 15k-23k requests and inflate p95 tail latency.
+          const bool is_fast = rem <= max_chunk;
+          const double multi_floor = static_cast<double>(max_chunk) + 1024.0;
+          const double score =
+              is_fast
+                  ? (static_cast<double>(rem) - 2.0 * wait_ms)
+                  : std::max(multi_floor,
+                             static_cast<double>(max_chunk + rem) - 10.0 * wait_ms);
+          srpt_scores.emplace(req.get(), score);
         }
         state.prefill_queue.sort(
             [&srpt_scores, &fcfs_cmp](const std::shared_ptr<Request>& a,
@@ -240,7 +246,7 @@ void PrefillFirstPolicy::schedule(
       consecutive_fast_passes = 0;
     }
     if (rem_new > 0 && rem_new <= max_chunk && rem_chunk > max_chunk &&
-        rem_new < rem_chunk && consecutive_fast_passes < 3) {
+        rem_new < rem_chunk && consecutive_fast_passes < 2) {
       ++consecutive_fast_passes;
       fast_single_chunk_first = true;
       const size_t block_size =

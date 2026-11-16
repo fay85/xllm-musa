@@ -55,15 +55,25 @@ torch::Tensor Qwen3_5VisionAttentionImpl::forward(
   xllm::kernel::RotaryParams rotary_params;
   rotary_params.q = q.to(torch::kFloat32);
   rotary_params.k = k.to(torch::kFloat32);
-  rotary_params.sin = m_sin_pos.to(torch::kFloat32);
-  rotary_params.cos = m_cos_pos.to(torch::kFloat32);
+  rotary_params.sin = m_sin_pos.scalar_type() == torch::kFloat32
+                          ? m_sin_pos
+                          : m_sin_pos.to(torch::kFloat32);
+  rotary_params.cos = m_cos_pos.scalar_type() == torch::kFloat32
+                          ? m_cos_pos
+                          : m_cos_pos.to(torch::kFloat32);
   rotary_params.interleaved = false;
   rotary_params.discrete = false;
-  rotary_params.position_ids =
-      torch::arange(
-          q.size(0),
-          torch::TensorOptions().dtype(torch::kInt64).device(q.device()))
-          .contiguous();
+  static thread_local torch::Tensor cached_pos_ids;
+  const int64_t total_tokens = q.size(0);
+  if (!cached_pos_ids.defined() || cached_pos_ids.device() != q.device() ||
+      cached_pos_ids.numel() < total_tokens) {
+    cached_pos_ids =
+        torch::arange(
+            total_tokens,
+            torch::TensorOptions().dtype(torch::kInt64).device(q.device()))
+            .contiguous();
+  }
+  rotary_params.position_ids = cached_pos_ids.slice(/*dim=*/0, 0, total_tokens);
   rotary_params.cu_query_lens = std::nullopt;
   rotary_params.max_query_len = max_seqlen;
   xllm::kernel::apply_rotary(rotary_params);
@@ -71,34 +81,94 @@ torch::Tensor Qwen3_5VisionAttentionImpl::forward(
   k = rotary_params.k.to(hidden_states.scalar_type());
 
   v = v.view({batch * sequence, v.size(2), v.size(3)});
-  torch::Tensor output = torch::zeros_like(q);
+  torch::Tensor output;
   const int32_t num_sequences = static_cast<int32_t>(cu_seq_len_vec.size()) - 1;
-  for (int32_t index = 0; index < num_sequences; ++index) {
-    const int32_t start = cu_seq_len_vec[index];
-    const int32_t end = cu_seq_len_vec[index + 1];
-    if (end <= start) {
-      continue;
-    }
-
-    // Fused non-causal attention per image, like the NPU and MLU vision
-    // paths. The MUSA SDPA kernel never materializes the [heads, n, n]
-    // scores, which for a 1344x672 image alone take 760 MiB in fp32.
-    const torch::Tensor q_i =
-        q.slice(/*dim=*/0, start, end).permute({1, 0, 2}).unsqueeze(0);
-    const torch::Tensor k_i =
-        k.slice(/*dim=*/0, start, end).permute({1, 0, 2}).unsqueeze(0);
-    const torch::Tensor v_i =
-        v.slice(/*dim=*/0, start, end).permute({1, 0, 2}).unsqueeze(0);
-    const torch::Tensor out_i =
-        torch::scaled_dot_product_attention(q_i,
-                                            k_i,
-                                            v_i,
+  bool batched_sdpa_done = false;
+  if (batch == 1 && num_sequences == 1 && cu_seq_len_vec[0] == 0 &&
+      cu_seq_len_vec[1] == total_tokens && total_tokens > 0) {
+    const torch::Tensor q_b = q.permute({1, 0, 2}).unsqueeze(0);
+    const torch::Tensor k_b = k.permute({1, 0, 2}).unsqueeze(0);
+    const torch::Tensor v_b = v.permute({1, 0, 2}).unsqueeze(0);
+    const torch::Tensor out_b =
+        torch::scaled_dot_product_attention(q_b,
+                                            k_b,
+                                            v_b,
                                             /*attn_mask=*/std::nullopt,
                                             /*dropout_p=*/0.0,
                                             /*is_causal=*/false,
                                             /*scale=*/scale_);
-    output.slice(/*dim=*/0, start, end)
-        .copy_(out_i.squeeze(/*dim=*/0).permute({1, 0, 2}));
+    output = out_b.squeeze(/*dim=*/0).permute({1, 0, 2}).contiguous();
+    batched_sdpa_done = true;
+  } else if (batch == 1 && num_sequences > 1 && cu_seq_len_vec[0] == 0 &&
+             cu_seq_len_vec.back() == total_tokens) {
+    const int32_t first_len = cu_seq_len_vec[1] - cu_seq_len_vec[0];
+    bool equal_lens = first_len > 0;
+    for (int32_t i = 1; i < num_sequences && equal_lens; ++i) {
+      if (cu_seq_len_vec[i + 1] - cu_seq_len_vec[i] != first_len) {
+        equal_lens = false;
+      }
+    }
+    if (equal_lens) {
+      const torch::Tensor q_b =
+          q.view({num_sequences,
+                  first_len,
+                  num_attention_heads_per_partition_,
+                  head_dim})
+              .transpose(1, 2);
+      const torch::Tensor k_b =
+          k.view({num_sequences,
+                  first_len,
+                  num_attention_heads_per_partition_,
+                  head_dim})
+              .transpose(1, 2);
+      const torch::Tensor v_b =
+          v.view({num_sequences,
+                  first_len,
+                  num_attention_heads_per_partition_,
+                  head_dim})
+              .transpose(1, 2);
+      const torch::Tensor out_b =
+          torch::scaled_dot_product_attention(q_b,
+                                              k_b,
+                                              v_b,
+                                              /*attn_mask=*/std::nullopt,
+                                              /*dropout_p=*/0.0,
+                                              /*is_causal=*/false,
+                                              /*scale=*/scale_);
+      output = out_b.transpose(1, 2).reshape(
+          {total_tokens, num_attention_heads_per_partition_, head_dim});
+      batched_sdpa_done = true;
+    }
+  }
+  if (!batched_sdpa_done) {
+    output = torch::zeros_like(q);
+    for (int32_t index = 0; index < num_sequences; ++index) {
+      const int32_t start = cu_seq_len_vec[index];
+      const int32_t end = cu_seq_len_vec[index + 1];
+      if (end <= start) {
+        continue;
+      }
+
+      // Fused non-causal attention per image, like the NPU and MLU vision
+      // paths. The MUSA SDPA kernel never materializes the [heads, n, n]
+      // scores, which for a 1344x672 image alone take 760 MiB in fp32.
+      const torch::Tensor q_i =
+          q.slice(/*dim=*/0, start, end).permute({1, 0, 2}).unsqueeze(0);
+      const torch::Tensor k_i =
+          k.slice(/*dim=*/0, start, end).permute({1, 0, 2}).unsqueeze(0);
+      const torch::Tensor v_i =
+          v.slice(/*dim=*/0, start, end).permute({1, 0, 2}).unsqueeze(0);
+      const torch::Tensor out_i =
+          torch::scaled_dot_product_attention(q_i,
+                                              k_i,
+                                              v_i,
+                                              /*attn_mask=*/std::nullopt,
+                                              /*dropout_p=*/0.0,
+                                              /*is_causal=*/false,
+                                              /*scale=*/scale_);
+      output.slice(/*dim=*/0, start, end)
+          .copy_(out_i.squeeze(/*dim=*/0).permute({1, 0, 2}));
+    }
   }
 
   output = output.view({batch, sequence, -1});

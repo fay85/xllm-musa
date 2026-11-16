@@ -73,6 +73,7 @@ struct Context final {
   // reuse their memory before the transfer stream reads them, so they live
   // until the final gather joins that stream.
   std::vector<torch::Tensor> in_flight_sends;
+  std::vector<c10::intrusive_ptr<c10d::Work>> in_flight_send_works;
 };
 
 // Emplaces a context when the batch is one fresh prefill long enough to split
@@ -140,5 +141,10 @@ void defer_final_state(const torch::Tensor& cache,
 // states of every row in rank order.
 torch::Tensor finish(const torch::Tensor& local_hidden_states,
                      Context& context);
+
+// Completes the deferred KV and recurrent-state copies without gathering hidden
+// states across ranks (for intermediate chunks where logits/bootstrap are absent).
+torch::Tensor finish_state_only(const torch::Tensor& local_hidden_states,
+                                Context& context);
 
 }  // namespace xllm::layer::musa_pcp
