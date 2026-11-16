@@ -1,0 +1,16 @@
+{
+  "worker_pid": 58651,
+  "pid": 58652,
+  "start_ticks": "518514677",
+  "command": [
+    "python3",
+    "/expt/builds/prefix_checkpoint_v1/small_checks_v3/validate_prefix_engram.py",
+    "--output",
+    "/expt/builds/prefix_checkpoint_v1/small_checks_v3/actual_engram.json",
+    "--metadata",
+    "/work/artifacts/model_view_w4afp8_mt_1017/engram_hash_state.native",
+    "--library-directory",
+    "/work/artifacts/native_stage_i/lib/engram_hash"
+  ],
+  "started_at": "2026-11-16T18:31:50.889876+08:00"
+}

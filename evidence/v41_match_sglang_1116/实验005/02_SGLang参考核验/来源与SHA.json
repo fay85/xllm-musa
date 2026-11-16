@@ -1,0 +1,31 @@
+{
+  "sglang_head": "7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6",
+  "files": [
+    {
+      "path": "sglang/srt/speculative/dspark_components/dspark_verify.py",
+      "sha256": "ef0c23b5ae11b929d61a2144d2b26c88285741069b19514993aea15c6d4882b5",
+      "matches_frozen_delivery": true
+    },
+    {
+      "path": "sglang/srt/mem_cache/deepseek_v4_compress_state.py",
+      "sha256": "d9218ed5d16eb52b2931c2191619c8195c1404c72c3f63d90b8a6ca7c71c64e4",
+      "matches_frozen_delivery": true
+    },
+    {
+      "path": "sglang/srt/layers/attention/dsv4/compressor_v2.py",
+      "sha256": "26b5f0c2759e539ca1fe2edda811cef3ca05445c6e3b7e23ee2fd7ebd4397815",
+      "matches_frozen_delivery": true
+    },
+    {
+      "path": "sglang/srt/layers/attention/deepseek_v4_backend.py",
+      "sha256": "d9350a9710da82ef4ea0da660c5e841875774326da747db02891669c13aea793",
+      "matches_frozen_delivery": true
+    },
+    {
+      "path": "sglang/kernels/ops/speculative/dspark/dspark_verify_window.py",
+      "sha256": "31503049871b4b49d8e5df2c4da4f77dcb1ba6b9e972cce09ed9418d32e93b05",
+      "matches_frozen_delivery": true
+    }
+  ],
+  "source": "本地已冻结的交付镜像源码归档，不以远端可变/donor内容作为最终身份"
+}

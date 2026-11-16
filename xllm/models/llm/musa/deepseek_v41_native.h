@@ -36,6 +36,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/decode_graph.h"
 #include "core/layers/musa/deepseek_v41/engram_embedding.h"
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
+#include "core/layers/musa/deepseek_v41/prefix_checkpoint.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
 #include "core/layers/musa/deepseek_v41/state_checkpoint.h"
 #include "core/layers/musa/deepseek_v41/text_model.h"
@@ -67,6 +68,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     replicated_attention_ =
         util::get_bool_env("XLLM_DSV41_REPLICATED_ATTENTION", false);
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+    selective_spec_commit_ =
+        util::get_bool_env("XLLM_DSV41_SPEC_SELECTIVE_COMMIT", false);
+    CHECK(!selective_spec_commit_ || native_dspark_);
+
     CHECK(!replicated_attention_ || !native_dspark_)
         << "Replicated Attention is initially ordinary C1 target only";
     full_decode_graph_ =
@@ -169,6 +174,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK(!model_);
     torch::DeviceGuard guard(device());
     torch::NoGradGuard no_grad;
+    initialize_speculative_commit_policy();
     initialize_attention_replication_policy();
     initialize_decode_ep_policy();
     initialize_ffn_tail_graph_policy();
@@ -522,6 +528,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
  private:
   struct PendingVerification {
     std::unique_ptr<layer::DeepseekV41StateCheckpoint> checkpoint;
+    std::unique_ptr<layer::DeepseekV41PrefixCheckpoint> prefix_checkpoint;
     torch::Tensor tokens;
     torch::Tensor positions;
     ModelInputParams parameters;
@@ -568,20 +575,28 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
             << "Accepted scheduler length disagrees with next verification "
                "position";
         auto previous = std::move(pending_verification_);
-        previous->checkpoint->restore();
-        ModelInputParams replay = previous->parameters;
-        replay.is_spec_verify = false;
-        replay.attention.host.q_seq_lens = {0, static_cast<int32_t>(accepted)};
-        replay.attention.host.kv_seq_lens = {0, static_cast<int32_t>(begin)};
-        replay.attention.host.q_cu_seq_lens = replay.attention.host.q_seq_lens;
-        replay.num_accepted_tokens_host.clear();
-        replay.num_accepted_tokens = torch::Tensor{};
-        replaying_ = true;
-        forward(previous->tokens.narrow(0, 0, accepted),
-                previous->positions.narrow(0, 0, accepted),
-                kv_caches,
-                replay);
-        replaying_ = false;
+        if (previous->prefix_checkpoint) {
+          const layer::DeepseekV41ProfileRange range(
+              "V41/DSpark/restore_rejected_suffix");
+          previous->prefix_checkpoint->restore_suffix(accepted);
+        } else {
+          previous->checkpoint->restore();
+          ModelInputParams replay = previous->parameters;
+          replay.is_spec_verify = false;
+          replay.attention.host.q_seq_lens = {0,
+                                              static_cast<int32_t>(accepted)};
+          replay.attention.host.kv_seq_lens = {0, static_cast<int32_t>(begin)};
+          replay.attention.host.q_cu_seq_lens =
+              replay.attention.host.q_seq_lens;
+          replay.num_accepted_tokens_host.clear();
+          replay.num_accepted_tokens = torch::Tensor{};
+          replaying_ = true;
+          forward(previous->tokens.narrow(0, 0, accepted),
+                  previous->positions.narrow(0, 0, accepted),
+                  kv_caches,
+                  replay);
+          replaying_ = false;
+        }
       }
     }
     if (!params.is_spec_verify) {
@@ -601,61 +616,84 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       history_swa_ = swa;
     }
     auto pending = std::make_unique<PendingVerification>();
-    pending->checkpoint = std::make_unique<layer::DeepseekV41StateCheckpoint>(
-        /*max_bytes=*/64 * 1024 * 1024);
+    if (selective_spec_commit_) {
+      pending->prefix_checkpoint =
+          std::make_unique<layer::DeepseekV41PrefixCheckpoint>(
+              begin, tokens.numel(), /*max_bytes=*/64 * 1024 * 1024);
+    } else {
+      pending->checkpoint = std::make_unique<layer::DeepseekV41StateCheckpoint>(
+          /*max_bytes=*/64 * 1024 * 1024);
+    }
+    const layer::DeepseekV41ProfileRange snapshot_range(
+        "V41/DSpark/snapshot_target_state");
     std::unordered_set<uintptr_t> saved;
     const auto unique_tensor = [&](const torch::Tensor& value) {
       return value.defined() && value.numel() > 0 &&
              saved.insert(reinterpret_cast<uintptr_t>(value.data_ptr())).second;
     };
-    const torch::Tensor rows =
-        torch::arange(tokens.numel(),
-                      swa_table.options().dtype(torch::kInt64)) +
-        begin;
-    const torch::Tensor columns =
-        torch::floor_divide(rows, caches[0].swa.size(1))
-            .remainder(swa_table.size(1));
-    const torch::Tensor state_pages =
-        swa_table.select(0, 0).index_select(0, columns).contiguous();
+    const auto save_paged = [&](const torch::Tensor& cache,
+                                const torch::Tensor& table,
+                                int64_t ratio,
+                                bool ring) {
+      if (pending->prefix_checkpoint) {
+        pending->prefix_checkpoint->add_paged(cache, table, ratio, ring);
+      } else {
+        const int64_t first = begin / ratio;
+        const int64_t count = context / ratio - first;
+        pending->checkpoint->add_paged(cache, table, first, count, ring);
+      }
+    };
+    torch::Tensor state_pages;
+    if (!selective_spec_commit_) {
+      const torch::Tensor rows =
+          torch::arange(tokens.numel(),
+                        swa_table.options().dtype(torch::kInt64)) +
+          begin;
+      const torch::Tensor columns =
+          torch::floor_divide(rows, caches[0].swa.size(1))
+              .remainder(swa_table.size(1));
+      state_pages =
+          swa_table.select(0, 0).index_select(0, columns).contiguous();
+    }
+    const auto save_recurrent = [&](const torch::Tensor& state) {
+      if (pending->prefix_checkpoint) {
+        pending->prefix_checkpoint->add_recurrent(
+            state, swa_table, caches[0].swa.size(1));
+      } else {
+        pending->checkpoint->add_blocks(state, state_pages);
+      }
+    };
     for (size_t index = 0; index < caches.size(); ++index) {
       const auto& cache = caches[index];
       if (unique_tensor(cache.swa)) {
-        pending->checkpoint->add_paged(
-            cache.swa, swa_table, begin, tokens.numel(), true);
+        save_paged(cache.swa, swa_table, /*ratio=*/1, /*ring=*/true);
       }
       const int64_t ratio = args_.compress_ratios()[index];
       if (ratio > 0) {
         CHECK(ratio == 1 || ratio == 2);
         const torch::Tensor& table = ratio == 1 ? c1_table : c2_table;
-        const int64_t first = begin / ratio;
-        const int64_t count = context / ratio - first;
         if (unique_tensor(cache.key)) {
-          pending->checkpoint->add_paged(cache.key, table, first, count, false);
+          save_paged(cache.key, table, ratio, /*ring=*/false);
         }
         if (unique_tensor(cache.index)) {
-          pending->checkpoint->add_paged(
-              cache.index, table, first, count, false);
+          save_paged(cache.index, table, ratio, /*ring=*/false);
         }
       }
       if (cache.compressor_kv_state.has_value() &&
           unique_tensor(cache.compressor_kv_state.value())) {
-        pending->checkpoint->add_blocks(cache.compressor_kv_state.value(),
-                                        state_pages);
+        save_recurrent(cache.compressor_kv_state.value());
       }
       if (cache.compressor_score_state.has_value() &&
           unique_tensor(cache.compressor_score_state.value())) {
-        pending->checkpoint->add_blocks(cache.compressor_score_state.value(),
-                                        state_pages);
+        save_recurrent(cache.compressor_score_state.value());
       }
     }
     if (engram_hash_) {
       const torch::Tensor& swa = caches[0].swa;
-      pending->checkpoint->add_paged(
-          engram_hash_->history().view({swa.size(0), swa.size(1), 1}),
-          swa_table,
-          begin,
-          tokens.numel(),
-          true);
+      save_paged(engram_hash_->history().view({swa.size(0), swa.size(1), 1}),
+                 swa_table,
+                 /*ratio=*/1,
+                 /*ring=*/true);
     }
     pending->tokens = tokens.clone();
     pending->positions = positions.clone();
@@ -665,12 +703,33 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     }
     pending->request_id = request;
     pending->begin = begin;
-    LOG_FIRST_N(INFO, 1)
-        << "Native DSpark target checkpoint bytes="
-        << pending->checkpoint->saved_bytes()
-        << "; accepted input replay is eager, rejected state never reused";
+    LOG_FIRST_N(INFO, 1) << "Native DSpark target checkpoint bytes="
+                         << (pending->prefix_checkpoint
+                                 ? pending->prefix_checkpoint->saved_bytes()
+                                 : pending->checkpoint->saved_bytes())
+                         << "; selective_commit=" << selective_spec_commit_
+                         << "; rejected writes restored, accepted prefix "
+                         << (selective_spec_commit_ ? "retained"
+                                                    : "replayed eagerly");
     pending_verification_ = std::move(pending);
   }
+  void initialize_speculative_commit_policy() {
+    const int32_t policy = static_cast<int32_t>(native_dspark_) |
+                           (static_cast<int32_t>(selective_spec_commit_) << 1);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local =
+          torch::tensor({policy}, options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], policy)
+            << "Native DSpark cache commit policy differs across TP ranks";
+      }
+    }
+  }
+
   void initialize_ffn_tail_graph_policy() {
     const bool enabled =
         util::get_bool_env("XLLM_DSV41_DECODE_FFN_TAIL_GRAPH", false);
@@ -1195,6 +1254,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   std::unique_ptr<layer::DeepseekV41EngramHash> engram_hash_;
   torch::Tensor history_swa_;
   bool native_dspark_ = false;
+  bool selective_spec_commit_ = false;
   bool replaying_ = false;
   std::unique_ptr<PendingVerification> pending_verification_;
   std::unique_ptr<AuxHiddenCapture> auxiliary_;

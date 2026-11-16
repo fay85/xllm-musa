@@ -1,0 +1,9 @@
+{
+  "source_base": "9ce7f8498fd4275183587a81cba39c72d527025e",
+  "source_delta_manifest": "/expt/builds/native_spec_commit_v1/source_manifest.json",
+  "binary": "/expt/artifacts/native_spec_commit_v1/bin/xllm",
+  "sha256": "c6e61a606b4395ce3c4e15fa4c231ee9cb8fff763c9362f8ef2135c0c6c6a81d",
+  "bytes": 341382912,
+  "small_checks": "84 actual Attention and 84 actual AOT Engram prefix rollback checks PASS; full-model validation pending",
+  "status": "COMPILED_NOT_YET_VALIDATED"
+}

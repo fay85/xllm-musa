@@ -1,0 +1,16 @@
+{
+  "worker_pid": 57917,
+  "pid": 57918,
+  "start_ticks": "518484559",
+  "command": [
+    "python3",
+    "/expt/builds/prefix_checkpoint_v1/small_checks_v2/validate_prefix_checkpoint.py",
+    "--output",
+    "/expt/builds/prefix_checkpoint_v1/small_checks_v2/actual_attention.json",
+    "--sparse-so",
+    "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+    "--indexer-dir",
+    "/work/artifacts/native_stage_i/lib/indexer"
+  ],
+  "started_at": "2026-11-16T18:26:49.716212+08:00"
+}

@@ -1,0 +1,479 @@
+{
+  "selective": {
+    "screen": {
+      "status": "SPEC_PREFIX_SCREEN_ONLY_NOT_FORMAL",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 464.3910713493824,
+      "mean_TPOT_ms_per_token": 122.14397663688834,
+      "TPOT_sample_stdev_ms": 2.594921514605303,
+      "mean_E2E_s": 31.61110511375591,
+      "output_tokens_per_latency_sum_second": 8.098419814136737,
+      "screen_requests": 2,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "c6e61a606b4395ce3c4e15fa4c231ee9cb8fff763c9362f8ef2135c0c6c6a81d"
+    },
+    "256output_request_counters": [
+      {
+        "prompt_tokens": "256",
+        "generated_tokens": "256",
+        "speculative_accepted_tokens": "99",
+        "speculative_proposed_tokens": "156",
+        "speculative_token_acceptance_rate": "0.6346"
+      },
+      {
+        "prompt_tokens": "256",
+        "generated_tokens": "256",
+        "speculative_accepted_tokens": "99",
+        "speculative_proposed_tokens": "156",
+        "speculative_token_acceptance_rate": "0.6346"
+      },
+      {
+        "prompt_tokens": "256",
+        "generated_tokens": "256",
+        "speculative_accepted_tokens": "99",
+        "speculative_proposed_tokens": "156",
+        "speculative_token_acceptance_rate": "0.6346"
+      }
+    ],
+    "trace_outer_steps": [
+      {
+        "name": "V41/step/q=2/kv=258",
+        "ts": 3968521621217.494,
+        "dur": 10189856.258
+      },
+      {
+        "name": "V41/step/q=2/kv=260",
+        "ts": 3968533409672.62,
+        "dur": 738246.582
+      },
+      {
+        "name": "V41/step/q=2/kv=261",
+        "ts": 3968534194749.078,
+        "dur": 731960.693
+      },
+      {
+        "name": "V41/step/q=2/kv=263",
+        "ts": 3968534977088.761,
+        "dur": 732539.148
+      }
+    ],
+    "trace_all_target_steps": 4,
+    "last_outer_step": {
+      "name": "V41/step/q=2/kv=263",
+      "ts": 3968534977088.761,
+      "dur": 732539.148
+    },
+    "last_outer_aten_counts": {
+      "aten::empty": 4718,
+      "aten::as_strided": 3550,
+      "aten::to": 2645,
+      "aten::item": 2426,
+      "aten::_local_scalar_dense": 2426,
+      "aten::view": 1965,
+      "aten::empty_strided": 1613,
+      "aten::empty_like": 1519,
+      "aten::reshape": 1283,
+      "aten::copy_": 1266,
+      "aten::expand": 1229,
+      "aten::add": 1039,
+      "aten::_copy_from": 987,
+      "aten::expand_as": 987,
+      "aten::_to_copy": 970,
+      "aten::alias": 961,
+      "aten::transpose": 698,
+      "aten::remainder": 632,
+      "aten::unsqueeze": 609,
+      "aten::mul": 584,
+      "aten::index_select": 571,
+      "aten::resize_": 550,
+      "aten::result_type": 515,
+      "aten::where": 450,
+      "aten::arange": 446,
+      "aten::floor_divide": 428,
+      "aten::slice": 372,
+      "aten::narrow": 365,
+      "aten::sub": 352,
+      "aten::linear": 349,
+      "aten::t": 349,
+      "aten::matmul": 349,
+      "aten::mm": 349,
+      "aten::flatten": 322,
+      "aten::clone": 293,
+      "aten::select": 256,
+      "aten::fill_": 245,
+      "aten::repeat_interleave": 240,
+      "aten::scalar_tensor": 205,
+      "aten::permute": 200,
+      "aten::cat": 198,
+      "aten::ge": 198,
+      "aten::lt": 164,
+      "aten::sum": 160,
+      "aten::div": 160,
+      "aten::clamp_min": 126,
+      "aten::logical_and": 118,
+      "aten::rsqrt": 80,
+      "aten::clamp": 63,
+      "aten::squeeze": 48,
+      "aten::index_copy_": 48,
+      "aten::contiguous": 47,
+      "aten::zero_": 42,
+      "aten::zeros": 41,
+      "aten::argsort": 41,
+      "aten::sort": 41,
+      "aten::ne": 41,
+      "aten::eq": 41,
+      "aten::logical_and_": 40,
+      "aten::index": 40,
+      "aten::nonzero": 40,
+      "aten::einsum": 40,
+      "aten::_reshape_alias": 40,
+      "aten::bmm": 40,
+      "aten::add_": 40,
+      "aten::full": 39,
+      "aten::unbind": 3,
+      "aten::mean": 3,
+      "aten::embedding": 1,
+      "aten::amax": 1,
+      "aten::any": 1,
+      "aten::masked_fill_": 1,
+      "aten::gather": 1,
+      "aten::zeros_like": 1,
+      "aten::gt": 1,
+      "aten::scatter_": 1,
+      "aten::_unsafe_view": 1
+    },
+    "last_outer_kernel_count": 8299,
+    "last_outer_target_forward_calls": 1,
+    "profile_requests": [
+      {
+        "label": "off_before_1",
+        "E2E_s": 1.1357640521600842,
+        "first_json_s": 0.3545821914449334,
+        "first_content_s": 0.35465680807828903,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_before_2",
+        "E2E_s": 1.1056179348379374,
+        "first_json_s": 0.34258747566491365,
+        "first_content_s": 0.34266137052327394,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "profiled",
+        "E2E_s": 28.420805250294507,
+        "first_json_s": 9.40013204794377,
+        "first_content_s": 9.40020914748311,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_after",
+        "E2E_s": 1.194984839297831,
+        "first_json_s": 0.3698992086574435,
+        "first_content_s": 0.36997515708208084,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "normal_exit_codes": {
+      "sj9": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "sj10": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "replay": {
+    "screen": {
+      "status": "SPEC_PREFIX_SCREEN_ONLY_NOT_FORMAL",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 454.14313580840826,
+      "mean_TPOT_ms_per_token": 231.2997298369951,
+      "TPOT_sample_stdev_ms": 0.2467365221646895,
+      "mean_E2E_s": 59.43557424424216,
+      "output_tokens_per_latency_sum_second": 4.307184766954617,
+      "screen_requests": 2,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "c6e61a606b4395ce3c4e15fa4c231ee9cb8fff763c9362f8ef2135c0c6c6a81d"
+    },
+    "256output_request_counters": [
+      {
+        "prompt_tokens": "256",
+        "generated_tokens": "256",
+        "speculative_accepted_tokens": "96",
+        "speculative_proposed_tokens": "160",
+        "speculative_token_acceptance_rate": "0.6000"
+      },
+      {
+        "prompt_tokens": "256",
+        "generated_tokens": "256",
+        "speculative_accepted_tokens": "96",
+        "speculative_proposed_tokens": "160",
+        "speculative_token_acceptance_rate": "0.6000"
+      },
+      {
+        "prompt_tokens": "256",
+        "generated_tokens": "256",
+        "speculative_accepted_tokens": "96",
+        "speculative_proposed_tokens": "160",
+        "speculative_token_acceptance_rate": "0.6000"
+      }
+    ],
+    "trace_outer_steps": [
+      {
+        "name": "V41/step/q=2/kv=258",
+        "ts": 3969339499607.058,
+        "dur": 10461060.966
+      },
+      {
+        "name": "V41/step/q=2/kv=260",
+        "ts": 3969351553395.801,
+        "dur": 9110381.545
+      },
+      {
+        "name": "V41/step/q=2/kv=261",
+        "ts": 3969360710870.888,
+        "dur": 2058307.263
+      },
+      {
+        "name": "V41/step/q=2/kv=263",
+        "ts": 3969362820053.481,
+        "dur": 1568503.438
+      }
+    ],
+    "trace_all_target_steps": 7,
+    "last_outer_step": {
+      "name": "V41/step/q=2/kv=263",
+      "ts": 3969362820053.481,
+      "dur": 1568503.438
+    },
+    "last_outer_aten_counts": {
+      "aten::empty": 9643,
+      "aten::as_strided": 7205,
+      "aten::to": 5229,
+      "aten::item": 4113,
+      "aten::_local_scalar_dense": 4113,
+      "aten::view": 3923,
+      "aten::empty_strided": 3166,
+      "aten::empty_like": 3038,
+      "aten::reshape": 2621,
+      "aten::copy_": 2472,
+      "aten::expand": 2401,
+      "aten::alias": 1922,
+      "aten::_copy_from": 1917,
+      "aten::expand_as": 1917,
+      "aten::_to_copy": 1885,
+      "aten::add": 1677,
+      "aten::transpose": 1396,
+      "aten::unsqueeze": 1218,
+      "aten::resize_": 1205,
+      "aten::remainder": 1038,
+      "aten::index_select": 1027,
+      "aten::result_type": 972,
+      "aten::where": 900,
+      "aten::mul": 826,
+      "aten::arange": 772,
+      "aten::slice": 746,
+      "aten::floor_divide": 736,
+      "aten::narrow": 732,
+      "aten::linear": 698,
+      "aten::t": 698,
+      "aten::matmul": 698,
+      "aten::mm": 698,
+      "aten::flatten": 644,
+      "aten::clone": 581,
+      "aten::select": 507,
+      "aten::fill_": 490,
+      "aten::sub": 484,
+      "aten::repeat_interleave": 480,
+      "aten::ge": 451,
+      "aten::scalar_tensor": 410,
+      "aten::permute": 400,
+      "aten::cat": 396,
+      "aten::lt": 383,
+      "aten::sum": 320,
+      "aten::div": 320,
+      "aten::logical_and": 291,
+      "aten::clamp_min": 252,
+      "aten::rsqrt": 160,
+      "aten::index_copy_": 151,
+      "aten::sort": 137,
+      "aten::index": 135,
+      "aten::nonzero": 135,
+      "aten::squeeze": 96,
+      "aten::contiguous": 94,
+      "aten::zero_": 84,
+      "aten::zeros": 82,
+      "aten::argsort": 82,
+      "aten::ne": 82,
+      "aten::eq": 82,
+      "aten::logical_and_": 80,
+      "aten::einsum": 80,
+      "aten::_reshape_alias": 80,
+      "aten::bmm": 80,
+      "aten::add_": 80,
+      "aten::full": 78,
+      "aten::unique_consecutive": 55,
+      "aten::clamp": 16,
+      "aten::unbind": 6,
+      "aten::mean": 6,
+      "aten::embedding": 2,
+      "aten::amax": 2,
+      "aten::any": 2,
+      "aten::masked_fill_": 2,
+      "aten::gather": 2,
+      "aten::zeros_like": 2,
+      "aten::gt": 2,
+      "aten::scatter_": 2,
+      "aten::_unsafe_view": 2
+    },
+    "last_outer_kernel_count": 16121,
+    "last_outer_target_forward_calls": 2,
+    "profile_requests": [
+      {
+        "label": "off_before_1",
+        "E2E_s": 1.7318911850452423,
+        "first_json_s": 0.35735518019646406,
+        "first_content_s": 0.3574286736547947,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_before_2",
+        "E2E_s": 1.7356054950505495,
+        "first_json_s": 0.3386721983551979,
+        "first_content_s": 0.3387482073158026,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "profiled",
+        "E2E_s": 39.23524932656437,
+        "first_json_s": 9.42140928376466,
+        "first_content_s": 9.421495457179844,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_after",
+        "E2E_s": 1.7906861454248428,
+        "first_json_s": 0.38254194147884846,
+        "first_content_s": 0.382616407237947,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "normal_exit_codes": {
+      "sj9": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "sj10": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}

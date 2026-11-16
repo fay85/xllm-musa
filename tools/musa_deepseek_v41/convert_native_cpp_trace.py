@@ -94,7 +94,21 @@ def main() -> None:
         and row.get("cat") in ("cpu_op", "user_annotation")
         and row.get("name", "").startswith("V41/step/")
     ]
-    step = steps[0 if args.step == "first" else -1]
+    # The replay-based speculative path calls target.forward recursively to
+    # rebuild an accepted prefix. Select the outer request step, not its last
+    # nested replay: otherwise the comparison silently omits current verify.
+    outer_steps = []
+    boundaries: dict[tuple[int, int], float] = {}
+    for row in sorted(steps, key=lambda item: (item["ts"], -item["dur"])):
+        key = row["pid"], row["tid"]
+        end = row["ts"] + row["dur"]
+        if end <= boundaries.get(key, float("-inf")) + 0.001:
+            continue
+        outer_steps.append(row)
+        boundaries[key] = end
+    if not outer_steps:
+        raise ValueError("No outer target step in the trace")
+    step = outer_steps[0 if args.step == "first" else -1]
     begin, end = step["ts"], step["ts"] + step["dur"]
     selected_scope = None
     if args.scope:
@@ -288,6 +302,7 @@ def main() -> None:
         "symbols_sha256": _sha(args.resolved_symbols),
         "symbolization_binary_sha256": args.binary_sha256,
         "selected_step": step,
+        "step_selection": "outermost target forward; nested accepted-prefix replay retained",
         "selected_scope": selected_scope,
         "gpu_selection": (
             "runtime correlation for scope"

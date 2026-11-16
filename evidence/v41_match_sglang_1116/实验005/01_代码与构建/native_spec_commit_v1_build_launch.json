@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 58129, \"start_ticks\": \"518504212\", \"root\": \"/expt/builds/native_spec_commit_v1\", \"changed_files\": 27}\n",
+  "stderr": ""
+}

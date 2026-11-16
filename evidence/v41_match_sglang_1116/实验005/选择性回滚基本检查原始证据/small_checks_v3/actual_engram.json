@@ -1,0 +1,594 @@
+{
+  "status": "PASS_ACTUAL_AOT_ENGRAM_PREFIX_RESTORE",
+  "cases": [
+    {
+      "begin": 0,
+      "accepted_inputs": 0,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 1,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 2,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 3,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 4,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 5,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 6,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 0,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 1,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 2,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 3,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 4,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 5,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 6,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 0,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 1,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 2,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 3,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 4,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 5,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 6,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 0,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 1,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 2,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 3,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 4,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 5,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 6,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 0,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 1,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 2,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 3,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 4,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 5,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 6,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 0,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 1,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 2,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 3,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 4,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 5,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 6,
+      "nondefault": false,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 0,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 1,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 2,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 3,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 4,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 5,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 0,
+      "accepted_inputs": 6,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 0,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 1,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 2,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 3,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 4,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 5,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 31,
+      "accepted_inputs": 6,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 0,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 1,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 2,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 3,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 4,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 5,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 127,
+      "accepted_inputs": 6,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 0,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 1,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 2,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 3,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 4,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 5,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 128,
+      "accepted_inputs": 6,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 0,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 1,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 2,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 3,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 4,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 5,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 255,
+      "accepted_inputs": 6,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 0,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 1,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 2,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 3,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 4,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 5,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    },
+    {
+      "begin": 257,
+      "accepted_inputs": 6,
+      "nondefault": true,
+      "hash_mask_history_next_token_exact": true,
+      "saved_bytes": 24
+    }
+  ],
+  "accuracy_scope": "\u4ec5\u901a\u8fc7\u57fa\u7840\u529f\u80fd\u68c0\u67e5\uff0c\u672a\u5b8c\u6210\u6a21\u578b\u7cbe\u5ea6\u9a8c\u6536"
+}

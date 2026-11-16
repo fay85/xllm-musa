@@ -1,0 +1,16 @@
+{
+  "status": "SPEC_PREFIX_SCREEN_ONLY_NOT_FORMAL",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 454.14313580840826,
+  "mean_TPOT_ms_per_token": 231.2997298369951,
+  "TPOT_sample_stdev_ms": 0.2467365221646895,
+  "mean_E2E_s": 59.43557424424216,
+  "output_tokens_per_latency_sum_second": 4.307184766954617,
+  "screen_requests": 2,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "c6e61a606b4395ce3c4e15fa4c231ee9cb8fff763c9362f8ef2135c0c6c6a81d"
+}

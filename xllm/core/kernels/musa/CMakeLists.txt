@@ -116,6 +116,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   deepseek_v41_engram_gather.cpp
   deepseek_v41_engram_hash.cpp
   deepseek_v41_pair_pool.cu
+  deepseek_v41_prefix_restore.cu
   deepseek_v41_sparse_attention.cpp
   deepseek_v41_decode_moe.cu
   deepseek_v4_shared_expert_gate.cu
