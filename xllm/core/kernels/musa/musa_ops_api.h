@@ -301,6 +301,13 @@ torch::Tensor matmul(torch::Tensor a,
                      std::optional<torch::Tensor> bias,
                      std::optional<torch::Tensor> output_buf = std::nullopt);
 
+// Opt-in V4.1 q4 verify projections measured against the generic GEMM.
+// Only BF16 [4, 5120] inputs with [288|512, 5120] weights are eligible.
+bool deepseek_v41_q4_projection_supported(const torch::Tensor& input,
+                                          const torch::Tensor& weight);
+torch::Tensor deepseek_v41_q4_projection(const torch::Tensor& input,
+                                         const torch::Tensor& weight);
+
 // output[M, N] = input[M, K] * weight[N, K]^T for BF16 projections with at
 // most 8 rows and 256 output columns, where muDNN launches too few blocks.
 bool skinny_bf16_gemm_supported(const torch::Tensor& input,

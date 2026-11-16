@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "scope": "Isolated actual production Dense+Shared, q4, QDQ retained; not full Graph timings or kernel counts",
+  "results": [
+    {
+      "variant": "off",
+      "gpu_kernels": 27,
+      "aten_linear": 12,
+      "skinny_kernels": 0,
+      "kernel_counts": {
+        "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)": 9,
+        "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_384_64x16B128_epilogue_stage4_btmenc": 9,
+        "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<short, 2, 8, false, musa::dnn::FastDivmodU32, 1024>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)": 3,
+        "xllm::kernel::musa::(anonymous namespace)::deepseek_v4_shared_swiglu_kernel(c10::BFloat16 const*, c10::BFloat16*, long, long, float)": 3,
+        "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc": 3
+      }
+    },
+    {
+      "variant": "on",
+      "gpu_kernels": 27,
+      "aten_linear": 3,
+      "skinny_kernels": 9,
+      "kernel_counts": {
+        "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)": 9,
+        "void xllm::kernel::musa::(anonymous namespace)::skinny_gemm_kernel<4>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int)": 9,
+        "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<short, 2, 8, false, musa::dnn::FastDivmodU32, 1024>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)": 3,
+        "xllm::kernel::musa::(anonymous namespace)::deepseek_v4_shared_swiglu_kernel(c10::BFloat16 const*, c10::BFloat16*, long, long, float)": 3,
+        "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+本目录是阶段实验证据。大trace/ELF与完整归档保存在NFS `/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116`；SHA与路径见原始证据索引。正式性能必须查看本项结论中的边界，不能把微基准或阶段收益当成最终验收。

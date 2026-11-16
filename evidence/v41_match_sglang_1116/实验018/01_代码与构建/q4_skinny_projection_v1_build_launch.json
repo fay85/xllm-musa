@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 31638, \"start_ticks\": \"519939950\", \"root\": \"/expt/builds/q4_skinny_projection_v1\", \"changed_files\": 56}\n",
+  "stderr": ""
+}

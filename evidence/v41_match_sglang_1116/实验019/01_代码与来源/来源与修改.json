@@ -1,0 +1,26 @@
+{
+  "sources": [
+    {
+      "source": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/01_参考/sglang_hardware_kernels/sglang/python/sglang/kernels/ops/quantization/fp8_kernel.py",
+      "sha256": "544dbccd31234b0d3aa456ac71efee9ee7e1e4c25f17913695b04c6467eaa4cc",
+      "function": "_reduce_block_fp8_split_k",
+      "start_line": 1286,
+      "end_line": 1297
+    },
+    {
+      "source": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/01_参考/sglang_hardware_kernels/sglang/python/sglang/kernels/ops/quantization/musa_decode_quant_gemm.py",
+      "sha256": "8642bfd8994a37b8a90a7990f332c7653f4911b4461664e46f49042bc7177d5c",
+      "function": "_quant_gemm_kernel",
+      "start_line": 8,
+      "end_line": 32
+    },
+    {
+      "source": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/01_参考/sglang_hardware_kernels/sglang/python/sglang/kernels/ops/quantization/musa_decode_quant_gemm.py",
+      "sha256": "8642bfd8994a37b8a90a7990f332c7653f4911b4461664e46f49042bc7177d5c",
+      "function": "fused_decode_quant_gemm",
+      "start_line": 35,
+      "end_line": 44
+    }
+  ],
+  "modification": "Only activation clamp minimum 1e-10 -> 1e-4 to preserve existing xLLM block32 QDQ contract; extracted dependency function unchanged; no whole model change yet"
+}

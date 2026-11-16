@@ -39,6 +39,7 @@ struct DeepseekV41MoeConfig {
   bool verify_custom_allreduce = false;
   bool shared_expert_tp_reduce = false;
   bool decode_packed_shared_gate_up = false;
+  bool verify_skinny_projection = false;
   bool w4a8_static_activation = false;
   bool w4a8_valid_prefix_swiglu = false;
   int64_t first_expert = 0;
@@ -80,7 +81,8 @@ class DeepseekV41Moe final {
                 shared_weight(2),
                 config_.limit,
                 config_.original_fp8_activation,
-                config_.decode_packed_shared_gate_up),
+                config_.decode_packed_shared_gate_up,
+                config_.verify_skinny_projection),
         ep_group_(ep_group) {
     if (config_.dense) {
       return;

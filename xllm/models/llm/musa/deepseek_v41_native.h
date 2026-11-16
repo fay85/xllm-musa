@@ -974,6 +974,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     attention.candidate_block_size = args_.candidate_block_size();
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
+    attention.verify_skinny_projection =
+        util::get_bool_env("XLLM_DSV41_VERIFY_SKINNY_PROJECTION", false);
     attention.decode_packed_qkv =
         util::get_bool_env("XLLM_DSV41_DECODE_PACKED_QKV", false);
     attention.decode_fused_swa_read =
@@ -1004,6 +1006,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
     moe.w4a8_valid_prefix_swiglu =
         util::get_bool_env("XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU", false);
+    moe.verify_skinny_projection = attention.verify_skinny_projection;
     moe.decode_packed_shared_gate_up =
         util::get_bool_env("XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP", false);
     moe.dense =

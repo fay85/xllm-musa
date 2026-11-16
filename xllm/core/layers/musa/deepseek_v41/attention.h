@@ -52,6 +52,7 @@ struct DeepseekV41AttentionConfig {
   bool decode_cache_read_reuse = false;
   bool decode_fused_swa_read = false;
   bool decode_packed_qkv = false;
+  bool verify_skinny_projection = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
 };
@@ -111,7 +112,8 @@ class DeepseekV41Attention final {
                     config_.output_rank,
                     config_.epsilon,
                     config_.original_fp8_activation,
-                    config_.decode_packed_qkv) {
+                    config_.decode_packed_qkv,
+                    config_.verify_skinny_projection) {
     CHECK_GE(config_.layer, 0);
     CHECK_GT(config_.window, 0);
     CHECK(weights_.sink.defined());

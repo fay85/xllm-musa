@@ -129,4 +129,29 @@ void skinny_bf16_gemm(const torch::Tensor& input,
   C10_CUDA_CHECK(cudaGetLastError());
 }
 
+bool deepseek_v41_q4_projection_supported(const torch::Tensor& input,
+                                          const torch::Tensor& weight) {
+  return input.dim() == 2 && weight.dim() == 2 &&
+         input.device().type() == torch::kPrivateUse1 &&
+         input.device() == weight.device() &&
+         input.scalar_type() == torch::kBFloat16 &&
+         weight.scalar_type() == torch::kBFloat16 && input.size(0) == 4 &&
+         input.size(1) == 5120 && weight.size(1) == 5120 &&
+         (weight.size(0) == 288 || weight.size(0) == 512) &&
+         input.is_contiguous() && weight.is_contiguous() &&
+         is_16b_aligned(input) && is_16b_aligned(weight);
+}
+
+torch::Tensor deepseek_v41_q4_projection(const torch::Tensor& input,
+                                         const torch::Tensor& weight) {
+  CHECK(deepseek_v41_q4_projection_supported(input, weight));
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  torch::Tensor output =
+      torch::empty({input.size(0), weight.size(0)}, input.options());
+  launch_skinny_gemm<4>(
+      input, weight, output, at::cuda::getCurrentCUDAStream());
+  C10_CUDA_CHECK(cudaGetLastError());
+  return output;
+}
+
 }  // namespace xllm::kernel::musa

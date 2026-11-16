@@ -37,11 +37,12 @@ class DeepseekV41AttentionProjection final {
                                  int64_t output_rank,
                                  double epsilon,
                                  bool original_fp8_activation,
-                                 bool decode_packed_qkv = false)
+                                 bool decode_packed_qkv = false,
+                                 bool verify_skinny_projection = false)
       : weights_(check_weights(std::move(weights))),
         q_a_(weights_[0], original_fp8_activation),
         q_b_(weights_[2], original_fp8_activation),
-        kv_(weights_[3], original_fp8_activation),
+        kv_(weights_[3], original_fp8_activation, verify_skinny_projection),
         o_b_(weights_[6], original_fp8_activation),
         heads_(heads),
         groups_(groups),

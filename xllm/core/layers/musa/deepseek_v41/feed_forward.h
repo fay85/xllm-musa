@@ -29,9 +29,12 @@ namespace xllm::layer {
 // dequantized BF16 weight is a carrier; this does not claim an FP8 GEMM.
 class DeepseekV41Dense final {
  public:
-  DeepseekV41Dense(torch::Tensor weight, bool original_fp8_activation)
+  DeepseekV41Dense(torch::Tensor weight,
+                   bool original_fp8_activation,
+                   bool verify_skinny_projection = false)
       : weight_(std::move(weight)),
-        original_fp8_activation_(original_fp8_activation) {
+        original_fp8_activation_(original_fp8_activation),
+        verify_skinny_projection_(verify_skinny_projection) {
     CHECK(weight_.defined());
     CHECK(weight_.device().type() == torch::kPrivateUse1);
     CHECK_EQ(weight_.scalar_type(), torch::kBFloat16);
@@ -55,12 +58,23 @@ class DeepseekV41Dense final {
                           input.reshape({-1, weight_.size(1)}).contiguous()))
               .reshape(input.sizes());
     }
-    return torch::linear(value, weight_);
+    return project(value, weight_, verify_skinny_projection_);
+  }
+
+  static torch::Tensor project(const torch::Tensor& input,
+                               const torch::Tensor& weight,
+                               bool verify_skinny_projection) {
+    if (verify_skinny_projection &&
+        kernel::musa::deepseek_v41_q4_projection_supported(input, weight)) {
+      return kernel::musa::deepseek_v41_q4_projection(input, weight);
+    }
+    return torch::linear(input, weight);
   }
 
  private:
   torch::Tensor weight_;
   bool original_fp8_activation_;
+  bool verify_skinny_projection_;
 };
 
 // BF16 shared/dense expert, with the same gate/up/down GEMMs and activation
@@ -72,12 +86,14 @@ class DeepseekV41SharedMlp final {
                        torch::Tensor down,
                        double limit,
                        bool original_fp8_activation = false,
-                       bool decode_packed_gate_up = false)
+                       bool decode_packed_gate_up = false,
+                       bool verify_skinny_projection = false)
       : gate_(std::move(gate)),
         up_(std::move(up)),
         down_(std::move(down)),
         limit_(limit),
-        original_fp8_activation_(original_fp8_activation) {
+        original_fp8_activation_(original_fp8_activation),
+        verify_skinny_projection_(verify_skinny_projection) {
     CHECK(gate_.defined() && up_.defined() && down_.defined());
     CHECK(gate_.device().type() == torch::kPrivateUse1);
     CHECK_EQ(gate_.scalar_type(), torch::kBFloat16);
@@ -116,7 +132,9 @@ class DeepseekV41SharedMlp final {
       packed = torch::linear(value, packed_gate_up_);
     } else {
       packed = torch::cat(
-          {torch::linear(value, gate_), torch::linear(value, up_)}, -1);
+          {DeepseekV41Dense::project(value, gate_, verify_skinny_projection_),
+           DeepseekV41Dense::project(value, up_, verify_skinny_projection_)},
+          -1);
     }
     const torch::Tensor activation =
         torch::empty({input.size(0), gate_.size(0)}, input.options());
@@ -139,6 +157,7 @@ class DeepseekV41SharedMlp final {
   torch::Tensor down_;
   double limit_;
   bool original_fp8_activation_;
+  bool verify_skinny_projection_;
 };
 
 // Small-M original-FP4 routed expert. No Python forward is called here.

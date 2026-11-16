@@ -1,0 +1,305 @@
+{
+  "off": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 436.63234133273363,
+      "mean_TPOT_ms_per_token": 38.635780751412995,
+      "TPOT_sample_stdev_ms": 0.3012081702748115,
+      "mean_E2E_s": 10.288756432943046,
+      "output_tokens_per_latency_sum_second": 24.881529820292627,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.51627669017762,
+        "first_chunk_latency": 0.5536775281652808,
+        "time_per_output_token": 0.039069016321617016,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.4494191063568,
+        "first_chunk_latency": 0.5473149800673127,
+        "time_per_output_token": 0.03883178088740975,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.145338861271739,
+        "first_chunk_latency": 0.3571334406733513,
+        "time_per_output_token": 0.038385119296464265,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.157387395389378,
+        "first_chunk_latency": 0.36219014693051577,
+        "time_per_output_token": 0.03841253822925044,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.175360111519694,
+        "first_chunk_latency": 0.36284561082720757,
+        "time_per_output_token": 0.038480449022323476,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      }
+    ]
+  },
+  "on": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 444.6908012032509,
+      "mean_TPOT_ms_per_token": 37.58864450177141,
+      "TPOT_sample_stdev_ms": 0.40136822950047846,
+      "mean_E2E_s": 10.02979514915496,
+      "output_tokens_per_latency_sum_second": 25.523951007271442,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.080673194490373,
+        "first_chunk_latency": 0.3769590016454458,
+        "time_per_output_token": 0.03805378114841148,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.212381252087653,
+        "first_chunk_latency": 0.555760151706636,
+        "time_per_output_token": 0.03786910235443536,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.157612005248666,
+        "first_chunk_latency": 0.5580384219065309,
+        "time_per_output_token": 0.03764538660134171,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.884978357702494,
+        "first_chunk_latency": 0.374072453007102,
+        "time_per_output_token": 0.037297670214491735,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.81333093624562,
+        "first_chunk_latency": 0.3586239777505398,
+        "time_per_output_token": 0.03707728219017679,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      }
+    ]
+  },
+  "reverse": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 400.0360481441021,
+      "mean_TPOT_ms_per_token": 38.49309693145401,
+      "TPOT_sample_stdev_ms": 0.28644461402326116,
+      "mean_E2E_s": 10.215775765664876,
+      "output_tokens_per_latency_sum_second": 25.059281436111153,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.322368962690234,
+        "first_chunk_latency": 0.3837819453328848,
+        "time_per_output_token": 0.03897485104846019,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.169304875656962,
+        "first_chunk_latency": 0.34636841528117657,
+        "time_per_output_token": 0.03852131945245406,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.136034118942916,
+        "first_chunk_latency": 0.3494980102404952,
+        "time_per_output_token": 0.038378572975303615,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.321485442109406,
+        "first_chunk_latency": 0.5675860978662968,
+        "time_per_output_token": 0.03825058566369847,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.129685428924859,
+        "first_chunk_latency": 0.35294577199965715,
+        "time_per_output_token": 0.03834015551735373,
+        "request_id": null,
+        "output_sha256": "5823a73afd295428875f9192d036f82c369d7b80a1d562f1d41672a56c71b889",
+        "text_chars": 1441
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      },
+      {
+        "accepted": 142,
+        "proposed": 339
+      }
+    ]
+  }
+}

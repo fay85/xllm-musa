@@ -1,0 +1,2268 @@
+[
+  {
+    "experiment": 18,
+    "path": "00_目标与假设.md",
+    "bytes": 2729,
+    "sha256": "aab3dd6f3413e78d2057a7226f1f709698a6437ec272fb5c716b2756b53d2abe",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "01_代码与构建/deepseek_v41_small_gemm.cu",
+    "bytes": 4985,
+    "sha256": "46d51eeb4a9a612e522861f63cf61bd297d7c277d790009be86008add50389aa",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "01_代码与构建/isolated_build_launch.json",
+    "bytes": 96,
+    "sha256": "1f460720ce65825ae06fa1222b61550e22d31b3ca2a9a8f06b37b29230bd2e59",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "01_代码与构建/q4_skinny_projection_v1_build_launch.json",
+    "bytes": 182,
+    "sha256": "117d55831ef62154427bb48b12ebeabdfad9d1fc4b5c16eff015e74096564134",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "01_代码与构建/q4_skinny_projection_v1_files.json",
+    "bytes": 6956,
+    "sha256": "a3c616633054971dba01abe9c6568f6711447a9f5ff3b7261dd1638ea03d2dea",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "01_代码与构建/q4_skinny_projection_v1_tracked.patch",
+    "bytes": 10461,
+    "sha256": "4ce94d32a0c076cf715928dd47754be12723b4e3d631f885f97ab23780a11a51",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "01_代码与构建/v41_small_gemm_test_module.cpp",
+    "bytes": 861,
+    "sha256": "a48a97aaf7951842a091510ceccbb6ee1927f945c44955e2c1daaaf7ffdada39",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/原始torch投影微基准.json",
+    "bytes": 11205,
+    "sha256": "88451bdad17562e6a0db15b9ad7011a645a4757b2f88fc8060ec99645c0c2ab7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/原始包校验.json",
+    "bytes": 176,
+    "sha256": "3acbea22dbd77dae96c9c2b6075c4384b976cad1dd3fc1f6d28e712a09fd99a7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/实际模型text_config核验.json",
+    "bytes": 2571,
+    "sha256": "ba1ba5bd4a6fbfafcebd01d77d4f88a33839bfb39aa64dcd31770d0c4155bc36",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影微基准与生产检查原始证据.tar.gz",
+    "bytes": 29818,
+    "sha256": "aab0d5e59d6a5c50290c194c3e81b89c5d33f9f7173a561b30d46b280c01a95b",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/commands.json",
+    "bytes": 15419,
+    "sha256": "ed9138beb8a182e0b7cdf864fdf29c38a1a7e29db0254c953797c7e922dd42fd",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/finished.json",
+    "bytes": 162,
+    "sha256": "dde74df2618192edee46697c49e8877154331f73ec0bef19f93ee99b640c85c5",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/child.json",
+    "bytes": 203,
+    "sha256": "75905e0ab8d7644c3bc548ffbea804efda3bc86d13eca5bfcef40ecf36d6ee46",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/finished.json",
+    "bytes": 58,
+    "sha256": "c824a762134e3b873cf3b6dbf514e01b4bab7c74ca35dc8e3a89f710d06ca55d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/job.json",
+    "bytes": 84,
+    "sha256": "3324a21be8953fb393de98969c91dc2c3735af17717683b1b7d5724d1a76cd50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/result.json",
+    "bytes": 9547,
+    "sha256": "a6ae28788760ea7b4372241e3c271521f69347f785bbf2de9c34090bf2d0d7e7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/test.log",
+    "bytes": 54,
+    "sha256": "5e510c6bd9e53d102c80649e50a0adf4175e2edf86c98678ca715a42b9cd301e",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/test.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/gpu_v1/worker.py",
+    "bytes": 869,
+    "sha256": "05f7b43a4cfe63bed949c2feb102b8178ac4f9efbea85308ae906523194b8df3",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/import.log",
+    "bytes": 72,
+    "sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/import.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/job.json",
+    "bytes": 92,
+    "sha256": "b925f71318ebc0165fe73a438ff4ec26b01961aec711da399c72abde022f6efe",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/link.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/module_compile.log",
+    "bytes": 3510,
+    "sha256": "15c9e71e511524b2138f4f9c25e08811bc35528d5511ece3d2c33c951b5f58ff",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/module_compile.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/production_object_manifest.json",
+    "bytes": 2644,
+    "sha256": "4249aeccc5d649ea544cb84895d9e9acb86337e369983dfe32feca82ab1f64b7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/v41_q4_projection_test_module.cpp",
+    "bytes": 1069,
+    "sha256": "97ca8487576c7b2b5df0d3e1d97efe3e2ab43c9963ac65c17dcae87d7ca4cda5",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/validate_q4_projection.py",
+    "bytes": 3545,
+    "sha256": "0c1bf23fd04bce53b09bc3114a0c04d841fc2a4a22b8a557d9cb974ec7a54352",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/q4_projection_checks_v1/worker.py",
+    "bytes": 2916,
+    "sha256": "2231d5787ed88151402a0ede328547cf5c8f8d34720c5c56f6052aaf9d708f2f",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/commands.json",
+    "bytes": 18160,
+    "sha256": "b2e6070cb1750eeb15dec7273af933beae1f803baace22112622dde27c0b6a5e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/deepseek_v41_small_gemm.cu",
+    "bytes": 4985,
+    "sha256": "46d51eeb4a9a612e522861f63cf61bd297d7c277d790009be86008add50389aa",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/finished.json",
+    "bytes": 162,
+    "sha256": "a550b8ac9c81488f83470947f7c548ed4d3789afd5b94f64a1dc86e5444ec76d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/import.log",
+    "bytes": 72,
+    "sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/import.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/job.json",
+    "bytes": 92,
+    "sha256": "237f95aee11081108498da37f3f0b0abdab27c4b7616437bc905c15ebe6e754c",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/kernel_compile.log",
+    "bytes": 2897,
+    "sha256": "20c7fdcaf739abee1352de61bed6ebabc7d582e1ecb1d5d2241aeccc623161b3",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/kernel_compile.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/link.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/module_compile.log",
+    "bytes": 3489,
+    "sha256": "ed3a1aae9c160b562c6ae6dbb6d63623868b417f7a89563a203dac213f789f45",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/module_compile.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/v41_small_gemm_test_module.cpp",
+    "bytes": 861,
+    "sha256": "a48a97aaf7951842a091510ceccbb6ee1927f945c44955e2c1daaaf7ffdada39",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/builds/small_gemm_checks_v1/worker.py",
+    "bytes": 2986,
+    "sha256": "5502cdd27170a7d28daccccb0cca43167bda61b85de32d504a6463eb0be22eb0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/child.json",
+    "bytes": 42,
+    "sha256": "96909ca646dafe49b16d866ec2c6a278226f2ff483ae767744ebb39de0865317",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/finished.json",
+    "bytes": 58,
+    "sha256": "2f60fb7dd1e4c36df18b3a2b4d007487949eb71865e55e32c1e5f28228e7eee2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/job.json",
+    "bytes": 84,
+    "sha256": "b77d628c2fe060ff590fdfdc9d221ef02af44db34d571a5713d850d0b862b492",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/partial.json",
+    "bytes": 4459,
+    "sha256": "e34a43a04268bd39bc6f4abfb60d0b99a836c88be4ba2376b24e515c309923cb",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/probe.log",
+    "bytes": 38,
+    "sha256": "6c3f42094ab4d788ce415d3c5ac2c0a9400816cc88a56e5e3729abfe2dad0a16",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/probe.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/probe.py",
+    "bytes": 1796,
+    "sha256": "59cdc46f97a65340831510dd70f34fde834145e1b33e94e373c588c5991d43ff",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/result.json",
+    "bytes": 5098,
+    "sha256": "c1ee774eac7f875f19b0b5aa0911f7f4d5c4068a53cfddd7dcf7a27e9ddc2f09",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_amortized_v1/worker.py",
+    "bytes": 480,
+    "sha256": "9e8a64af7a3a2ae1f2408109f32cb8900d5b0e45629aa6385796b5370a509b35",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/child.json",
+    "bytes": 42,
+    "sha256": "7f57805e81e387989a0cc2b8f9470bfe852e60218b0f5ccc1faffb43d7c66df1",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/finished.json",
+    "bytes": 58,
+    "sha256": "37906bd6692ec8ebe74dfba02e694ec26ece52cf91099f4adde48347d3474bc0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/job.json",
+    "bytes": 84,
+    "sha256": "730cd2ba4a248a928090d01d04af910b819eb1c4af86f6aa271c6a3816feda82",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/probe.log",
+    "bytes": 34,
+    "sha256": "5e22fe55c621479c4beff5c23ab538a4a1149cdb1cad4643fb7c1b36f9f960ab",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/probe.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/probe.py",
+    "bytes": 2226,
+    "sha256": "2d28797b769003213d427da440d317c2c8606a4a5d79618c98d4b1e3bfc490c5",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/result.json",
+    "bytes": 9776,
+    "sha256": "d2c323dd1578a97c741908987a0faaaa28442ad69549fc2224b918327bf44bb0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_dense_q4_v1/worker.py",
+    "bytes": 479,
+    "sha256": "4bbfd6104ed03cc55652af2e352a3ba6db62d265b4e7a430e4d365b45fba0476",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/child.json",
+    "bytes": 42,
+    "sha256": "7739a23a4bf78ecf92314a30fb21b79e2964eb388518a0ecb85ec98bba53d584",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/finished.json",
+    "bytes": 58,
+    "sha256": "704385299cfc980738a4b07c626a3d57426c7d1691246229ec3373558ae4040f",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/job.json",
+    "bytes": 84,
+    "sha256": "cbaeec32e65788f4cb5b1fab63bdb5989aeb3d55c69688a82efe7510898cb3c0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/partial.json",
+    "bytes": 2298,
+    "sha256": "b2b53099e7cb79413dde52d50ab7483cb9351b9352fc307c8078e73786b44472",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/probe.log",
+    "bytes": 37,
+    "sha256": "ae00a73580e3d95d71af35186c75d85b811ba1ff37190ae65dd6fefef1b30b10",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/probe.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/probe.py",
+    "bytes": 1904,
+    "sha256": "1f6c22ae5e6a033d20d6cc6d2e4c0aff8258428237d3a295c964b8df0ada3e4a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/result.json",
+    "bytes": 2377,
+    "sha256": "2cf689080a9788811ab73be5254078b4a620137b85694c440c02f69890e99ef4",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_mate_bf16_v1/worker.py",
+    "bytes": 480,
+    "sha256": "db97f701efd5ffbc6adc00f649451505d86b0c25fe30a046836067c71e5e0f4b",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/child.json",
+    "bytes": 42,
+    "sha256": "c19acbe3a1dc5efae5efc51e1d38687d66ca918ac1c0ac386e58a3cdd1b23ff1",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/finished.json",
+    "bytes": 58,
+    "sha256": "40298f636816eed725676b58ee56e3b5d8754f05be366c3f2a7b5b9da5880fcc",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/job.json",
+    "bytes": 84,
+    "sha256": "13c2821a34094c3fb894a8280aff3317cc43b7318c3c750b11b514285e70fa92",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/partial.json",
+    "bytes": 72,
+    "sha256": "80d148157971b6c5cd11b863855265b4be4bb30bd48cac37d6cf39d9728f3040",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/probe.log",
+    "bytes": 70,
+    "sha256": "fa6da8b0fb30f879276360f2eaf93e46fd6dae5b22e0357fa37c65c86206169c",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/probe.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/probe.py",
+    "bytes": 3301,
+    "sha256": "a2596ba7a02e61032f6aa0fa15edc2e40a5aab53e2f14ee365d9e7a26fe4c59a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/result.json",
+    "bytes": 35651,
+    "sha256": "76e4cabe1c3b6fe3f261bac6150e5af573d03bed1d1b5dbd502d57f914251a9a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/投影检查原始证据/diagnostics/e18_small_gemm_v1/worker.py",
+    "bytes": 481,
+    "sha256": "becd9c4582fd8a5c7fb617921237e63748f07f65acc9029d006ba1ca7841aef2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/诊断_amortized_status.json",
+    "bytes": 4103,
+    "sha256": "5ec0efbc0ccda57ddb8b4f0d36bf0c26c7d5e66c9fc2caf435264b1332a8a9ce",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/诊断_build_status.json",
+    "bytes": 3577,
+    "sha256": "da5ccfb97e4ac63da02b02006d08bc827ba0de0f9781b043c38e8439885695c7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/诊断_mate_status.json",
+    "bytes": 3607,
+    "sha256": "1a866060214eb70f78a0ebe6b5336d30428bb83ae7b833d4ccad331809668acd",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "02_基本检查/诊断_small_status.json",
+    "bytes": 11574,
+    "sha256": "7129f07e579cb96883644c2fb37173d63602201d52f472b3e872bd075a798ce6",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "03_性能/OFF_ON_反向逐请求与输出指纹.json",
+    "bytes": 9249,
+    "sha256": "ff2335a0b38af89e9d8ef1970fb7a92581d970928b7e4204dd8476e25b486526",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "03_性能/三组正式性能与收益.json",
+    "bytes": 2309,
+    "sha256": "8652a301d32785d33a2a4e87950a3166732d07aff7d7461f07ef0bc469378044",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 805,
+    "sha256": "ce739bfc21270c316f0b4378c7e1448024040f5d753ea071461eb8e55eb60c53",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1389,
+    "sha256": "27c3e0e2d609ece2529dd0436e4e00b22dd07ea42e7fb431882bd1c8610e4d20",
+    "included": true,
+    "compressed_path": "04_trace与图/q4投影_off/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/Perfetto图/rendered.json",
+    "bytes": 1210,
+    "sha256": "dba425d8975a22043beaf48583b7cc51414becd947ae989e5eddd95b49c2e404",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 248135,
+    "sha256": "1e123ca4cb0918839d623db957b253eaacfb8a8d8f2236e84fb5281463d690a0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 192750,
+    "sha256": "307fd2d7116c1da73f95c8ab81d748087bb1256d0029094052b3617646e954a7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 108070,
+    "sha256": "dc0bc24681f9e14c1e6dee77126164592950a7d5594a1a7d396248f44343d16e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/actual_native_last.pftrace",
+    "bytes": 2083305,
+    "sha256": "d7927b7dab3e3d9c3073b7677c37c5b881f0fefafe3aa655e5acd82933083adc",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_off/actual_native_last.receipt.json",
+    "bytes": 1417,
+    "sha256": "c027615276f477b8e6c56a87516363b85967eb8c5c2653b10643dd6e297026b0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 805,
+    "sha256": "98c14ced04530b6ee3b44a1e66bc4b0a071b0845b0c995167f2b038fe4e64962",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1389,
+    "sha256": "2d434be08693b634178f2716400315d80c45beb57c5c1a6bd98bcd6c6fedaa5d",
+    "included": true,
+    "compressed_path": "04_trace与图/q4投影_on/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/Perfetto图/rendered.json",
+    "bytes": 1211,
+    "sha256": "44132c71b52eddaf14ff379446448baf2fe0a0f662bc106e1d705ea6f798fe8b",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 248135,
+    "sha256": "1e123ca4cb0918839d623db957b253eaacfb8a8d8f2236e84fb5281463d690a0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 193896,
+    "sha256": "6f633e8fbe642a339c9a5a9477de938796f611f758d86988688409a7fd90826e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 109104,
+    "sha256": "5d574af511629fb368c95a74261178f400d3b5a09c719b10fde26e7ad21c9aab",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/actual_native_last.pftrace",
+    "bytes": 2080860,
+    "sha256": "32754b218119a16614948936908a65fc43b728457f728b21b32741787576dc4c",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/q4投影_on/actual_native_last.receipt.json",
+    "bytes": 1419,
+    "sha256": "6cb6bd7b506821de50fd961960b41052d4d7386c88472a9538cd89c3d533d505",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/child.json",
+    "bytes": 42,
+    "sha256": "4cf02f105839b85a6c0f3ebf96db18a4d6056e84c2e27fc80af1dd0596d19b94",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/finished.json",
+    "bytes": 58,
+    "sha256": "87339f99d7ae93f575374e62c9d60c0687644d57511ef30cedc61042d1d76d5f",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/job.json",
+    "bytes": 84,
+    "sha256": "c014fedc6f5dc7b909feda285f8c81258a1939e73c3d4d60b66bc6a3abdbd530",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/off.pt.trace.json",
+    "bytes": 112426,
+    "sha256": "aaeea8f1b24eddea2ea79aed8b27a2b2536dffb9e953ef7040dd2f06e00e8390",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/on.pt.trace.json",
+    "bytes": 78968,
+    "sha256": "431f830881cfd469ec2e135e6317780fe2cdd0545b2a733cc7e6fab21f3d5010",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/probe.log",
+    "bytes": 1643,
+    "sha256": "32d282a747575408bcb20608a61d816c3f751b47fd6755805f80247b65c54acf",
+    "included": true,
+    "compressed_path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/probe.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/probe.py",
+    "bytes": 1862,
+    "sha256": "7e9239571e6583318e15bb66f0c3fa725a3e70617b4cfa4c93416c610d6f0a30",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/result.json",
+    "bytes": 1972,
+    "sha256": "4b247870c06088b8017d6681f718f77f258b4a8fdc7d7ddad34f3c334b233db0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace/e18_operator_trace_v1/worker.py",
+    "bytes": 482,
+    "sha256": "96e20a522769cd957383bba6108ad048364946dd0e3fbb3cb2d8d24528a62571",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace.tar.gz",
+    "bytes": 15236,
+    "sha256": "5483ded9df1813e0c75f166310d572d442b87a8d06fa8860823754106822da4a",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/实际C++算子trace校验.json",
+    "bytes": 207,
+    "sha256": "89197ed5664f7029efbb7edb7e7d054aa4ef0db3d3328d6a6f457898205fbe2d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/独立生产算子实际调用次数.png",
+    "bytes": 52562,
+    "sha256": "6bdf3594928a0a410752e827c1ddaecb48406a03724bf94eb0c48c7dc8cdf38d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "04_trace与图/长图校准后的投影微基准.png",
+    "bytes": 65195,
+    "sha256": "d532219b9bd358c389d29827b9e5e9987d589bcbf2aa011a80d255bdb6361e3e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "05_结论与读图说明.md",
+    "bytes": 6042,
+    "sha256": "d42bd96c9fd0935d16360d326933e47eff3643e58d04447c43476426d3a51602",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/build/artifact_manifest.json",
+    "bytes": 449,
+    "sha256": "237cbe553d3003c7ac2b815faf986b506cd3a466f7d3fcdeac8593c54591dd3f",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/build/build.log",
+    "bytes": 141343,
+    "sha256": "b8fb41366f59eb3ab7fff8c066b2044419f1600aaa8d5f7ae9cad562c9cef417",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/build/build.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "6c23c584a769526f30d36057309bdfdb2bbd5071b351663f62794d7deb636ecb",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/build/job.json",
+    "bytes": 380,
+    "sha256": "ee6784a54a105ee1cc095cc12f71c3627208c6b0b6fcde8ff45c1a1889907179",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/build/source_manifest.json",
+    "bytes": 7260,
+    "sha256": "ff06e478d874d2e3506d315c3cbde9bdf3be474c64ae5e72d431c4653db69f9a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/active.json",
+    "bytes": 979,
+    "sha256": "fb9d9780114559cf3901efa44cfe0d3a7d93bf89d04e877c62522aa8ca2d629a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1582,
+    "sha256": "9ebdb5854d9fae8b31a026af1805e2ef6031b756df026910f9a3d1b9e8e54024",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1303,
+    "sha256": "51e8e824b077b3c58cdef5086bf4c12d5ee36b300010073b9c1dad5eb85b7506",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "5f4785f4d90bf5018d8ac3b6984f95a47a8fa2cfb8177c69c6523e23d0e3279a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "e053c85ac7d399f4d255551a07dad26e0e02383b276851e55e3f7baa4d3a3880",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11976,
+    "sha256": "8b4dc2e603359798c2bb6e22dce4ef9e05f041697629292c950601af3dbc442a",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2349,
+    "sha256": "1b147ac754c5ad7de309647bdcb3bb110039695ee2ff67fca10a20b337da25d5",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "4d1044f6f92387fdf58853b3421ca3d302bae1adb37e8d289fb3a3b00dee177c",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3635,
+    "sha256": "6c2c9c3b415291a36bf72b493138412beb085ea6c6c86e254f41cb33402d7aff",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "9d09e51b69f7fd3d1c03efa1e1078087ab1d23947dd4412734aa8dab39246d3a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 869,
+    "sha256": "0eee52116e83d2c3de7e9994a7294a368720f3340649a7a0c92774704460aeb1",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 833,
+    "sha256": "ccf8cd651e0db701c6d07968d6fda9fc668dc05b459abf54afa91b60fa16bf29",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167283,
+    "sha256": "f5ee9e1e2829e24f71a0128de2ef9324acca58593b8accc099ae6be6be8e7f4d",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "14504a4ed37a655001b4598193820c3dee4a00764a6780bd336224235d79b312",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal.log",
+    "bytes": 22393,
+    "sha256": "544d4404eda2e331ae8b54d15c5cd9d4b1c2ac0c766995188871776f230e7572",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9521,
+    "sha256": "b120c8cf118089673bf09c0cbf5e7bcef3659933a3dbb59b8613a0f3b4b9558a",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2356,
+    "sha256": "ff486b1a30f410647e519cbd23b6c49c258cbd1d564b5a57ccc55320b360f451",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "91e0f368c0f21d4213955d63dd71769542a84e75bdce9e10f1f426edbce2bcc6",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3643,
+    "sha256": "930b242e59961bbf2cfd5824be6139cf00afbfb210b5b3007e31bbf9858ab9b8",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "b58b9832f525b97c8f7d888342c4bd20eb1563de0afe8b3e12d723f018cefbc3",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "ea2648ab143f3f31e8668151a98dbb76d3cbb128a288774b00e18485b4b60eaa",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 214,
+    "sha256": "a863dd11e55cd0d756cc10d5cb744733e52f10a20269aba9cb6f89a9ec76cb12",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166819,
+    "sha256": "ceb02237305d6e23685bc8b447de5c8235339ad3b7dfbee61e947beddea6a353",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "46dc5def4c53168be8ff0697ba7af62becb5760eea762338738dd28d17c51373",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup.log",
+    "bytes": 18345,
+    "sha256": "22fbcdc040af4ca31fa5c8bba48ca877e264b1667b3d6187a081b9cf71d8715c",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/identity.json",
+    "bytes": 286316,
+    "sha256": "a6a4d424e2a1ee3394965ff8190d44d5d8de943fc53c3e6dc298d2203a955828",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/job.json",
+    "bytes": 134,
+    "sha256": "61ba07f410e23feafe69097b65bf612859aa63ed8568788de3528951cea627f9",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/status.json",
+    "bytes": 3591,
+    "sha256": "904aad77d665ec24d15ae79671cf3b0f93aa391be45ea2b888fab226a8d9cf7a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/formal_client/summary.json",
+    "bytes": 548,
+    "sha256": "ff86cf604ee7c120786dbf92535ebf744ba235a8b7363208930b074134dab6a5",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/child.json",
+    "bytes": 203,
+    "sha256": "75905e0ab8d7644c3bc548ffbea804efda3bc86d13eca5bfcef40ecf36d6ee46",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/finished.json",
+    "bytes": 58,
+    "sha256": "c824a762134e3b873cf3b6dbf514e01b4bab7c74ca35dc8e3a89f710d06ca55d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/job.json",
+    "bytes": 84,
+    "sha256": "3324a21be8953fb393de98969c91dc2c3735af17717683b1b7d5724d1a76cd50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/result.json",
+    "bytes": 9547,
+    "sha256": "a6ae28788760ea7b4372241e3c271521f69347f785bbf2de9c34090bf2d0d7e7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/test.log",
+    "bytes": 54,
+    "sha256": "5e510c6bd9e53d102c80649e50a0adf4175e2edf86c98678ca715a42b9cd301e",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/gpu_checks/test.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/gpu_checks/worker.py",
+    "bytes": 869,
+    "sha256": "05f7b43a4cfe63bed949c2feb102b8178ac4f9efbea85308ae906523194b8df3",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 248184,
+    "sha256": "93373229719ebb687f83fcc75c513ea20d5b61e6f1ecab4f9f425a0e4bf473cf",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 50114,
+    "sha256": "ad4ae3d01c6e4903b81fc9725fcddbd7dc248ff1ebdc07a9fd59dc5fb770e683",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9159,
+    "sha256": "5545de68a4a60e109e2397e71eb24a263a9c4f60ce2428c77635305fab19d177",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj10/status.json",
+    "bytes": 269,
+    "sha256": "109ab0817c0ec4d6dd8335e1f04a4f514bfca2707088b857a7f6c0ee0454c2b4",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "098b9645e9a90aa92c9b6c624a0e8e15ce2029725122944b05c6aacc5216a0f4",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 195852,
+    "sha256": "1e48f30996d41bf9972ec821b7eaf41e791362032a78b48953590a0d771ef933",
+    "included": true,
+    "compressed_path": "q4投影_off_正式与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 50090,
+    "sha256": "2e2a08797d1a569e3842363a2904cd164580ebc9a51bb23bb42b595a528f4cf0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9361,
+    "sha256": "018e17984a2c7bbf05b4610cf91d3c0d63bc892ae3e031f7ce9124a4a18e93bf",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj9/status.json",
+    "bytes": 260,
+    "sha256": "6b3ed09368150dd1aea259d8bbac876210d88585066277e411c64e6af787b687",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "b34485855e67d84e2c7d9c9be8548fbb4aeadf08c8306ddba11eb7f5d524cfd1",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "4c9984da74cea205b4f7e91fdd26c41ff7b0ba6772bc61fca45e9672646d04da",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "657a4ca0b8190a6b703db48a5ce7898b69885b8150de7e67e7e0da3be7bb0441",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/manifest.json",
+    "bytes": 7274,
+    "sha256": "c2da6b5340fb7ad7515636e7d2ad8c61d11796f4f7614cb46b13dbfc3ae814e7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2496,
+    "sha256": "da00725a106610fbdc3bb65a952b15bbd9cef36c4840e63898d4ddcf5e2e3eb2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "d7e59e3947141bcdb4c4a949371c17053c3c6ebf35d759d0c36ab102ed9ee116",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "72dfbc5d07c4519d7c0b487676ea78628a296b13026039cd9cdd4633476409ef",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2491,
+    "sha256": "74fc7a0ad6a64d619f755f12f49456d2fed48d88fcbe15ff5569a2674a3464ed",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/requests.json",
+    "bytes": 1757,
+    "sha256": "224ee0d8bb785d62e0a91d0b1b806da21a4d1096eda64269b306d6a3cb76e5d3",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "1f7ffcb20ae07e8754a1a0571d7c250ee311fe4a3cfffffb12b968ad7c6d41a7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "1b0cea043c464a18f89d7b2fdb12f8a16e30d361c0148e6b837818fc6a417e50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 27791,
+    "sha256": "6be5dcc0edcc18dbc1c93659a4b39d8772cf04d2ef456b941aec1edf579d6bf7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 176234,
+    "sha256": "a9884594b0426a66e102c2aff14604789598619d2b502718de4139944920d163",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 13459786,
+    "sha256": "cbb59b4c5a1e06c71965e0900ef5310a5fae5fac260715676dde253e24b9aecd",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 6938314,
+    "sha256": "b39b63d84279126d6946a1401eacdbc7e9a79948c3fbeebd18e39df763925205",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 19026512,
+    "sha256": "5eae412a7aea49ef25209b27fbaa901651a8ddf438f4ea3b0a77811a2515dbf6",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20150172,
+    "sha256": "e2f4cdf936a24258d00648e565a061f39ab7aef4d87519ac26101a994ab6327c",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据.tar.gz",
+    "bytes": 5218332,
+    "sha256": "c9d09bae6b7b5251f88df2ae0962310612825f2a76b880b442ac75fdfa821ea9",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_off_正式与trace原始证据校验.json",
+    "bytes": 220,
+    "sha256": "6e4f22e2c745e9d8e92b013694621b3801bd147dfb2af914fc9c0de172b440db",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/build/artifact_manifest.json",
+    "bytes": 449,
+    "sha256": "237cbe553d3003c7ac2b815faf986b506cd3a466f7d3fcdeac8593c54591dd3f",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/build/build.log",
+    "bytes": 141343,
+    "sha256": "b8fb41366f59eb3ab7fff8c066b2044419f1600aaa8d5f7ae9cad562c9cef417",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/build/build.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "6c23c584a769526f30d36057309bdfdb2bbd5071b351663f62794d7deb636ecb",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/build/job.json",
+    "bytes": 380,
+    "sha256": "ee6784a54a105ee1cc095cc12f71c3627208c6b0b6fcde8ff45c1a1889907179",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/build/source_manifest.json",
+    "bytes": 7260,
+    "sha256": "ff06e478d874d2e3506d315c3cbde9bdf3be474c64ae5e72d431c4653db69f9a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/active.json",
+    "bytes": 978,
+    "sha256": "3a06158d33c55d4d194b518de9267efc2e80a7e1cda125e459b62e88f760144c",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1580,
+    "sha256": "b36252a688a6a2b32e41d87ed4e3803c109bc892029815c8a8338fab2c1acba9",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1304,
+    "sha256": "8d70ea847f44fff505a7167199790fc83592ec318aff8d4cc86983a46798589e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/basic_gate.json",
+    "bytes": 1871,
+    "sha256": "6c9b8e34a2bb4e05f5e742a3a7c1217737732c5e773c0ac8268d72deafe194bf",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "00eef35e6fe3a05a4121bef2231307b6738609ddac6ef57aad67f9d49e28e831",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11965,
+    "sha256": "7dbfa533873184cc5280c705f907b0b8c7e4c1a3a805aec16192ac28003d6a6b",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2348,
+    "sha256": "70f81ce9a9095752b0e3f2545e67e68ff60e4d77cee8c24f08ac2790b4df83fd",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "9d4c5296fe586773d637aead2c420a2015f3752a1bba3e25bbff0022d91139be",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3627,
+    "sha256": "d5efc2b5d8a87b7d3e54abf9931ef5a51e0718f499561aff21ccb09ab671dbc2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 664,
+    "sha256": "d0cc0a6f15c6428b121cd85b365c72cfcf304edc0ae7c391279975439dba38f5",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 879,
+    "sha256": "c880cc8cc1e7e5eb891b647f2c93cda588baf0920b9da673d15c1b4a940a7597",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 835,
+    "sha256": "49c5d71c4e489a1ffd70e215c92609e3174a769f14622877d6b3755400074181",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167266,
+    "sha256": "32503c4ad25d13015de974749f0dc215133377383c2b678676a661ea0b9993e6",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "0a18f56996cd3bdeb72892ec5eca4b7232c3e0b473d38ded0901662489904bc2",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal.log",
+    "bytes": 22381,
+    "sha256": "1bc68aee0f0ebafc87f0a73bd84e34648610f533bac10d753e53f65f4228b3cb",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9516,
+    "sha256": "fec3888499ca16516687191cbc3bce0147cd0265829a92dbb87615a93000a243",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2355,
+    "sha256": "d72fa29cd3030f9b40c8f912d1e7cac2616ba996c6e560267dcf2432ed82ab81",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "1593ec9cbdee12e4f98063d261c15649da5fddf1c045c7cb6e307a704f87755a",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3633,
+    "sha256": "82db75bbe32aadf94196cb3fd53b9ab7434cc0ee0811818cff54aa8703bcc36d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "a12bbde1121e3276fff7e31ce40ed73981467aa653846b31c35809cf6b694def",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 872,
+    "sha256": "4f2eb52f79c60c67561e82b89c77cb862da9d5baa12b9088379e920903eafa64",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "0cc1367f65a245d269eb0f993321d9878c1fb39c6904367ea60e578e9e495494",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166799,
+    "sha256": "484876a58540c622c252a753719f35bfadd29c7e4bc391b56734264278c5158b",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "1b103187c324118d6abedbdf503653d498f5f456d445dd21e789a2d8b6666dd6",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup.log",
+    "bytes": 18339,
+    "sha256": "6f14ee14151e5d3a8a09de58f40f9a4ed1ff4e8e88862b70a0c1e16d7a3a5652",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/identity.json",
+    "bytes": 286316,
+    "sha256": "a6a4d424e2a1ee3394965ff8190d44d5d8de943fc53c3e6dc298d2203a955828",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/job.json",
+    "bytes": 133,
+    "sha256": "a22e418e2169e02c2932ed22fadbe935077d57826b2650ca2762b9a375b0d63e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/status.json",
+    "bytes": 3585,
+    "sha256": "f614fd69dad33a41191ece1f9341e06c313364cac45352565edf50e3df55344d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/formal_client/summary.json",
+    "bytes": 546,
+    "sha256": "d5470667fd98b57c9eba02461ec59f383723241ae496772c5d92a347513e1463",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/child.json",
+    "bytes": 203,
+    "sha256": "75905e0ab8d7644c3bc548ffbea804efda3bc86d13eca5bfcef40ecf36d6ee46",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/finished.json",
+    "bytes": 58,
+    "sha256": "c824a762134e3b873cf3b6dbf514e01b4bab7c74ca35dc8e3a89f710d06ca55d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/job.json",
+    "bytes": 84,
+    "sha256": "3324a21be8953fb393de98969c91dc2c3735af17717683b1b7d5724d1a76cd50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/result.json",
+    "bytes": 9547,
+    "sha256": "a6ae28788760ea7b4372241e3c271521f69347f785bbf2de9c34090bf2d0d7e7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/test.log",
+    "bytes": 54,
+    "sha256": "5e510c6bd9e53d102c80649e50a0adf4175e2edf86c98678ca715a42b9cd301e",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/gpu_checks/test.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/gpu_checks/worker.py",
+    "bytes": 869,
+    "sha256": "05f7b43a4cfe63bed949c2feb102b8178ac4f9efbea85308ae906523194b8df3",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 272113,
+    "sha256": "a3fc1a9c77a6373d8a75eb03b22d7092d19aa54ee8ec7106b3f6b6f6927925e8",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 50080,
+    "sha256": "baa96722c8d8a049658fe28bbebc9e3bd76bebe527ce5f79e6e460b1f840cc62",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9159,
+    "sha256": "f3e7a644835fabd94d97ca0daa7d12c8ce342d611804429e4338807eea67ed37",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj10/status.json",
+    "bytes": 251,
+    "sha256": "a772ac58a87614ae7d1e138418dda7a6e1f3a8ddebe74d374108158ed36c6c9d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "5fe61b9dc48c1821f0ed5b3756fb2ad7f95bde53fd9b314f298dafd9680a60e9",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 195843,
+    "sha256": "fda62088eb7dfcab16abb843d355ea5ac753c51e82ed813e01f137bc80f2593a",
+    "included": true,
+    "compressed_path": "q4投影_on_正式与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 50056,
+    "sha256": "b9ae68ec6c686635ef61eefbf5a34d8f7c130f64ba061362bad326ab70e29314",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9361,
+    "sha256": "9122c5ed4b8caf1933dcc14b69eccd463dbafa79327abc3daa25aab1771fe045",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj9/status.json",
+    "bytes": 251,
+    "sha256": "ea0f450e60ef87331f813a3e043e69072e693bc621ec2ecd6afe5899ddddf34e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "f394638d39404cde82090fee102992d200f825a351a13e24db04afa9fc5008c9",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "2ea8d0dc4f0d3b74680213fa2acaa1cebc0d0e6a42683c74b036936f67cd9d07",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "92e3595d459ab6dfeb268bc0d392311315c69e7b1b1beefcd85768b4cbf632c2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/manifest.json",
+    "bytes": 7242,
+    "sha256": "2d074a5e9b3e0317758d74c61a63734fceeff6f5f554c1f5ce102cf03ef49a57",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2497,
+    "sha256": "087b2350f761f1033ce0cde0f2cb49518b6cd7b6501757638f02bd20b9338e54",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2497,
+    "sha256": "8d579c7f17f428df3780b7dce274c276bc135c013732a2046c5fa6c8c9413748",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2500,
+    "sha256": "73bef544c043b35523f737678543789cca2ee20d9d7588defa029ab77fb621f8",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2490,
+    "sha256": "9848b074f484ec65e2d75f7ed7fe64d81e29a79fe8e8c915375aa49f967ccc26",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/requests.json",
+    "bytes": 1758,
+    "sha256": "2167ad64e6faa559bb1675d4dfb2d9b7ef50ae193b2008356c4cf8a9b42e80d7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "ce0d8568fd00c02f3574d7118cfc2af9c655784f4e25e220e2f908a31d15b607",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "00efb91e6486b7e527a5afb9085126edfaa542cac9485a317313bfb4ca64cc5f",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 27762,
+    "sha256": "4224b03523459c10cbf05500243ebe42997553f2eee960548e7747e1c13b1a82",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 176234,
+    "sha256": "a9884594b0426a66e102c2aff14604789598619d2b502718de4139944920d163",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 13460513,
+    "sha256": "0de61da54a7210ea0b16565064fe15d437f00af9bdc694684250225810f3acd7",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 6940227,
+    "sha256": "2a532f29a3e2011665e509afd8e352b3ae1a3ff0e71b1c0f3b19156ab841b818",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 19026512,
+    "sha256": "78323c9347f8fef7f1b93428b334af1596a9d853ce815ada30a80ef45ffaa266",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20149139,
+    "sha256": "4a8e1aaafe62be6c53a18786382bfe1c9937c84d54f7d4139cc83590192afb7d",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据.tar.gz",
+    "bytes": 5221334,
+    "sha256": "2692f9e37da00ce7f4601eea7465fbcafc38e107b920524da376f95f885ca183",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_on_正式与trace原始证据校验.json",
+    "bytes": 219,
+    "sha256": "81c3c55d5e284a79f5e55821fa7827c978a836f809beeedd84ee3a5b1a04756d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/active.json",
+    "bytes": 987,
+    "sha256": "cadbe4bdc6c0a3a459ab79e78da79a8100f677fb65f29cd4e3241be69c167dd2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/basic_1_sse.jsonl",
+    "bytes": 1578,
+    "sha256": "893b1aadf1b8981c532d9a5f4ce319f7316f88aca0b2a1dd59545f55f4be5b2e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/basic_2_sse.jsonl",
+    "bytes": 1301,
+    "sha256": "215d52d0c793ed4913814c41b4b891e99d781bd0ffaf0ab04aa5a742a6e69861",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/basic_gate.json",
+    "bytes": 1868,
+    "sha256": "04817e517b00f7c1533345ec84a8b0a067d74386bd42c6c1db86b6ab83cd661b",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "420bbb0979e6d1f0fa9a63de0343ab9dfd5b95290ff6055631c14450febb15e7",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 12013,
+    "sha256": "5e9c651eafe37c83e637e06acf9bf30d38be8c15df6b472c3b27cc225cc4bec5",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2357,
+    "sha256": "6a3d5b68266abf13d729955fa9f98ef46ef3e143911072a221f955a1380f3a75",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "fa16c88153c812f025d6e3509c81ae8544ef90901a66d79d672d7c8c580b56b2",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3634,
+    "sha256": "4d81202935977e62f0c4f9010ce5ab46e0fffb1e6e201d3aaa3c1385319ee401",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "50000fb94ecb4a0a49600b3dc61aaf5654ed59167d1daf6119f72c0a922145a6",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 878,
+    "sha256": "f2d4399dbf09294302105f97936f7ec65607770db7ee84c58508369502d25329",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 835,
+    "sha256": "f78ab8b4d4711534b43bccd32efd4f2a4c06efa1fcadab98762620d29ec34f15",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 167290,
+    "sha256": "b7341081021c10ffcd2ee7e4fe7e55f63b7202663133374b65c84731c6eff81d",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5143,
+    "sha256": "2275bb5b5305b8a3c1c3f4b879c0c9412541c39d48fb0608428e857d48eca6ed",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal.log",
+    "bytes": 22438,
+    "sha256": "066a36b274903e9413cfd91d16b8c28a623ac45c2f06020936483b5e2b277284",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9558,
+    "sha256": "d2ee8d47d0f5656d7a419639b2839dd33dc6a2a22ea5e28258fb63f553fac632",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2364,
+    "sha256": "e2cb0145fbe827bcf13fb156930c4bbac8fb3ac1809fef4228054fe41ba04f88",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 45056,
+    "sha256": "60e06d13fc1e061eda415a828d51f2f496b3ee71b55081cb945a3331999cd18c",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3631,
+    "sha256": "30a41208f074b3947b62cb1e5ab1e24e2874127414016f84f0a3857743d53d23",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 664,
+    "sha256": "451130e87024856c97149b3ecf944097876c94ae931af7c6dd1ed0678382ce15",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 880,
+    "sha256": "e59b6a9debecbbab828be8011aa993a4028d933b78ffd0bbdd903ce9ec19a609",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "27d4db57a0b04796b7359acca20f1159d1526fd52d1abd2fb74a69e61d8383db",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166783,
+    "sha256": "a285a0b8c448a5955aef0a33f0986713f56d96ae6a1e0f0577d35d53555af518",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "9c3780130d665229ba903e970a110d3f528ed8d1c402b0557bf830e3d81d9dcc",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup.log",
+    "bytes": 18390,
+    "sha256": "5193ed16ed29f5d9e836dd63ef1e06cf69d22f573f3546d7550cb2f446ad1ef9",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/formal_client/formal_warmup.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/identity.json",
+    "bytes": 286316,
+    "sha256": "a6a4d424e2a1ee3394965ff8190d44d5d8de943fc53c3e6dc298d2203a955828",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/job.json",
+    "bytes": 142,
+    "sha256": "98105c0abe3400581920d9917502edacb266d7876191b85709af9b6e4a413f33",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/status.json",
+    "bytes": 3610,
+    "sha256": "77309a8027fe7416ec39a18dc89a061a07540466ebb0bbae8feea2b759ec04a6",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/formal_client/summary.json",
+    "bytes": 547,
+    "sha256": "abc87c2591c9204ad34309e70124225617668ebafe2cb036825cc1ed2d7d6c2e",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj10/rank0.log",
+    "bytes": 234554,
+    "sha256": "46f0b7e03849dbba088b5b4bb3832ba75fc150155142bf0b70a0d9a0f0387911",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj10/role_config.json",
+    "bytes": 50341,
+    "sha256": "54634ab9a9779851ddb7873e64c69a727580427891994caa182464b92c6be43b",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9159,
+    "sha256": "941e3229a9f21d1b4cbc49c475393577a287f1a0fd47d7ecff50b54d19f7024d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj10/status.json",
+    "bytes": 272,
+    "sha256": "80800dd1a0d5946735eb6bd6347dbba90492cf855b3346fb1422fc030459d9de",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "5fd41bbef8505b738ee88dfdeab6859fa402d8d8a4865a5b8685d4eb71068f04",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj9/rank0.log",
+    "bytes": 160382,
+    "sha256": "814a8e18c9e5d17134a87c3736b297a764ad96a5c4cde5b9c9f026111fef250e",
+    "included": true,
+    "compressed_path": "q4投影_reverse_正式原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj9/role_config.json",
+    "bytes": 50317,
+    "sha256": "b90efce326c17e9189bf2f381656a09ee2e276358b490223b1fd1f5807dd480d",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9361,
+    "sha256": "db9db70114f3f24bf974abb58084b111655089d9de856ab876fc1e5f187935d6",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj9/status.json",
+    "bytes": 272,
+    "sha256": "29e1a397b3605e8d4620ee1304ecc7883f318c00bbec048591f1b20ed2a43fe3",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "8eef651d0724ea58251a39868cff3469937dca580fca33e4f9871c9e0896c9f0",
+    "included": true
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据.tar.gz",
+    "bytes": 157532,
+    "sha256": "d68f298150488f68095bff01c101dcaa76d65999dd1dc2d50ef8cebacc47632e",
+    "included": false
+  },
+  {
+    "experiment": 18,
+    "path": "q4投影_reverse_正式原始证据校验.json",
+    "bytes": 227,
+    "sha256": "2289829996aa550ea671840b272dde6c35a7b7e2aadc0dc44dbdc4511a379b92",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "00_目标与当前结论.md",
+    "bytes": 2842,
+    "sha256": "e9d72e105b8b1fb73114551a8450d484633deb567431eeb1759616ae553b4e17",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "01_代码与来源/sglang_fused_fp8_reference.py",
+    "bytes": 2786,
+    "sha256": "aac09a47d36b2bb8bcb8a710e44e7e8ece64c88eaa7e7bc24017493f2186bf2a",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "01_代码与来源/来源与修改.json",
+    "bytes": 1509,
+    "sha256": "ea553cfd0b616e3ee18ff94b912997cdb64d02219f18236dfd7b7d51c5d8dc39",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/__pycache__/match_e19_fp8_reference.cpython-310.pyc",
+    "bytes": 2453,
+    "sha256": "dbc157e3148d129afeb1c90be5e34c3d86bc3616e1cc045d455daca8dadfb8a1",
+    "included": false
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/child.json",
+    "bytes": 42,
+    "sha256": "d902547739c1a0e990d6c82d57e2fc694385d86b9a504d4d28ba74072e2a3c58",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/finished.json",
+    "bytes": 58,
+    "sha256": "1d87989f9b2716dd7a77798c8980a4177c914e59d0aaeb6f2135da1d69aa6595",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/job.json",
+    "bytes": 84,
+    "sha256": "22802a3786f44abe2b283e813a0a0c3bbc720295261c8ce3121e3becee268ce6",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/match_e19_fp8_probe.py",
+    "bytes": 2678,
+    "sha256": "3593c4f6f6c46d91231e1d1325a2062d5786c013c77548677afdf169bc4880fe",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/match_e19_fp8_reference.py",
+    "bytes": 2786,
+    "sha256": "aac09a47d36b2bb8bcb8a710e44e7e8ece64c88eaa7e7bc24017493f2186bf2a",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/partial.json",
+    "bytes": 16209,
+    "sha256": "dd3d96686fb873d2d368b569d57b4a0e94c7a52c1d5aca3d9adfcc43c58d22ad",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/probe.log",
+    "bytes": 2855,
+    "sha256": "a52ca01d34c2db3c0552459f522b70c2532abb15ae28a83cdf0f8911833e329c",
+    "included": true,
+    "compressed_path": "FP8投影微基准原始证据/e19_fp8_projection_v1/probe.log.gz"
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/result.json",
+    "bytes": 16337,
+    "sha256": "86ff2eb6d82a2970794eef94b166c77799bf5211757d2b86cace95d1a0f8a3e8",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "included": true,
+    "compressed_path": "FP8投影微基准原始证据/e19_fp8_projection_v1/worker.log.gz"
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据/e19_fp8_projection_v1/worker.py",
+    "bytes": 496,
+    "sha256": "2e93f5e430ea3838005e698d740985ed16022bbba450becea969fe63be47d036",
+    "included": true
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据.tar.gz",
+    "bytes": 7811,
+    "sha256": "3bf124bb8766a6dd32cbbe13e5bed1e2be9bc4c7313436cff00b6be3a8accb0f",
+    "included": false
+  },
+  {
+    "experiment": 19,
+    "path": "FP8投影微基准原始证据校验.json",
+    "bytes": 206,
+    "sha256": "9d1ccfcd20736ca878b2ffff546cf62f8395adfae71a662f2038e2ac57865ae0",
+    "included": true
+  }
+]

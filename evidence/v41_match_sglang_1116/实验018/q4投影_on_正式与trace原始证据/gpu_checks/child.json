@@ -1,0 +1,1 @@
+{"pid": 34335, "start_ticks": "519966136", "command": ["python3", "/expt/builds/q4_projection_checks_v1/validate_q4_projection.py", "--output", "/expt/builds/q4_projection_checks_v1/gpu_v1/result.json"]}

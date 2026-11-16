@@ -1,0 +1,64 @@
+{
+  "metrics": {
+    "off": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 436.63234133273363,
+      "mean_TPOT_ms_per_token": 38.635780751412995,
+      "TPOT_sample_stdev_ms": 0.3012081702748115,
+      "mean_E2E_s": 10.288756432943046,
+      "output_tokens_per_latency_sum_second": 24.881529820292627,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+    },
+    "on": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 444.6908012032509,
+      "mean_TPOT_ms_per_token": 37.58864450177141,
+      "TPOT_sample_stdev_ms": 0.40136822950047846,
+      "mean_E2E_s": 10.02979514915496,
+      "output_tokens_per_latency_sum_second": 25.523951007271442,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+    },
+    "reverse": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 400.0360481441021,
+      "mean_TPOT_ms_per_token": 38.49309693145401,
+      "TPOT_sample_stdev_ms": 0.28644461402326116,
+      "mean_E2E_s": 10.215775765664876,
+      "output_tokens_per_latency_sum_second": 25.059281436111153,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+    }
+  },
+  "relative_gains": {
+    "off": {
+      "tpot_reduction_percent": 2.71027588747067,
+      "output_increase_percent": 2.581919968823132
+    },
+    "reverse": {
+      "tpot_reduction_percent": 2.349648383171632,
+      "output_increase_percent": 1.8542813062895291
+    }
+  },
+  "precision_boundary": "Output text differs between ON and OFF; acceptance count differs; no full precision acceptance",
+  "final_acceptance": false
+}
