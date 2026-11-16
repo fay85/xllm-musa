@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "[{\"host\": \"sj9\", \"changed_flags\": 8, \"source_binary\": \"/expt/artifacts/native_sg438_mccl_v1/bin/xllm\", \"sha256\": \"6468707445ac26b74f6e8766dd20b13b5567e367a3d172d482aff777b0d09293\"}, {\"host\": \"sj10\", \"changed_flags\": 8, \"source_binary\": \"/expt/artifacts/native_sg438_mccl_v1/bin/xllm\", \"sha256\": \"6468707445ac26b74f6e8766dd20b13b5567e367a3d172d482aff777b0d09293\"}]\n",
+  "stderr": ""
+}

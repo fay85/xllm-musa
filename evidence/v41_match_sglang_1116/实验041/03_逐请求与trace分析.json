@@ -1,0 +1,2031 @@
+{
+  "control": {
+    "summary": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 331.7648574709892,
+      "mean_TPOT_ms_per_token": 27.84329805596202,
+      "TPOT_sample_stdev_ms": 0.3380317900060745,
+      "mean_E2E_s": 7.431805861741305,
+      "output_tokens_per_latency_sum_second": 34.44654028408892,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "6468707445ac26b74f6e8766dd20b13b5567e367a3d172d482aff777b0d09293"
+    },
+    "requests": [
+      {
+        "request_id": "chatcmpl-12481178814234374860-aCXfmub8zBbyjrKvXxCbga",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.4337769923731685,
+        "TTFT_ms": 437.0606141164899,
+        "TPOT_ms": 27.438103444143838,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-UhXkGytX4dsYNhQY77LyoD",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.33407820109278,
+        "TTFT_ms": 291.51316452771425,
+        "TPOT_ms": 27.617902104176725,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-2sLE2n5cJnKT2v8pbKmpkP",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.59747155290097,
+        "TTFT_ms": 433.86171013116837,
+        "TPOT_ms": 28.092587618705103,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-bY4u5UNqoHaJjTNXd72Vak",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.3382800770923495,
+        "TTFT_ms": 248.66972211748362,
+        "TPOT_ms": 27.802393548921042,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-UzNEwRF2CUycWkEfVWQUen",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.455422485247254,
+        "TTFT_ms": 247.71907646209002,
+        "TPOT_ms": 28.26550356386339,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      }
+    ],
+    "proposal": 3,
+    "basic": [
+      {
+        "question": "只回答计算结果：1.3＋2.9 等于多少？",
+        "expected": "4.2",
+        "answer": "4.2",
+        "passed": true,
+        "usage": {
+          "prompt_tokens": 19,
+          "completion_tokens": 4,
+          "total_tokens": 23,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "first_SSE_json_s": 6.724580208770931,
+        "first_content_s": 6.7246074471622705,
+        "finish_reason": "stop",
+        "request": {
+          "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+          "messages": [
+            {
+              "role": "user",
+              "content": "只回答计算结果：1.3＋2.9 等于多少？"
+            }
+          ],
+          "temperature": 0,
+          "top_p": 1,
+          "reasoning_effort": "none",
+          "chat_template_kwargs": {
+            "thinking_mode": "chat"
+          },
+          "max_tokens": 64,
+          "ignore_eos": false,
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        }
+      },
+      {
+        "question": "只回答计算结果：7×8 等于多少？",
+        "expected": "56",
+        "answer": "56",
+        "passed": true,
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 2,
+          "total_tokens": 17,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "first_SSE_json_s": 1.0567584708333015,
+        "first_content_s": 1.0567882331088185,
+        "finish_reason": "stop",
+        "request": {
+          "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+          "messages": [
+            {
+              "role": "user",
+              "content": "只回答计算结果：7×8 等于多少？"
+            }
+          ],
+          "temperature": 0,
+          "top_p": 1,
+          "reasoning_effort": "none",
+          "chat_template_kwargs": {
+            "thinking_mode": "chat"
+          },
+          "max_tokens": 64,
+          "ignore_eos": false,
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        }
+      }
+    ],
+    "tool_summary": {
+      "Test Duration (s)": 37.1603,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.1346,
+      "Avg Latency (s)": 7.4318,
+      "Avg Input Tokens": 256.0,
+      "Output Throughput (tok/s)": 34.4453,
+      "Total Throughput (tok/s)": 68.8907,
+      "Avg TTFT (ms)": 331.76,
+      "Avg TPOT (ms)": 27.84,
+      "Avg ITL (ms)": 57.26,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0,
+      "KV Cache Hit Rate (%)": 0.0,
+      "Avg Decoded Tok/Iter": 2.04,
+      "Spec. Accept Rate": 0.5098
+    },
+    "scope_notes": {
+      "distinct_outputs_within_formal": 1,
+      "decode_wall_ms_per_proposal_round": 56.80032803416252,
+      "round_time_scope": "draft+verify+cache+host+streaming, changing generated tokens; not isolated GPU time"
+    },
+    "trace_validation": "ALL16_GPU_NATIVE_VALID_TARGET_GRAPH_KERNELS_CORRELATED",
+    "D_rank0_last_graph": {
+      "correlation": 14939263,
+      "launch_ts": 4011906019695.073,
+      "launch_duration_us": 466.075,
+      "kernels": 4047,
+      "span_us": 52925.49609375,
+      "kernel_interval_union_us": 44020.9482421875,
+      "sum_kernel_us": 44020.95599999995,
+      "top_kernels_by_sum_us": [
+        {
+          "name": "void mutlass::device_kernel<mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false> >(mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false>::Params)",
+          "count": 80,
+          "sum_us": 4401.8910000000005,
+          "max_us": 126.08
+        },
+        {
+          "name": "void vllm::cross_device_reduce_1stage<float, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, float*, int, int)",
+          "count": 40,
+          "sum_us": 2866.5999999999995,
+          "max_us": 185.32
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::batch_gemm_small_m_nt_tt_kernel<float, (musa::dnn::GemmTransposeType)2, 512, 4, 32, 64, 512, 4, false>(float*, float const*, float const*, float const*, float const*, float*, unsigned int*, int, int, int, int, int, int, int, int, long, long, long, long, float, float, float, int, int, musa::dnn::FastDivmodU32)",
+          "count": 46,
+          "sum_us": 2824.7239999999997,
+          "max_us": 64.24
+        },
+        {
+          "name": "mcclKernel_AllGather_RING_SIMPLE_Sum_int8_t(mcclWorkElem)",
+          "count": 1,
+          "sum_us": 2037.123,
+          "max_us": 2037.123
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::swa_verify_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long, long)",
+          "count": 40,
+          "sum_us": 1807.247,
+          "max_us": 47.04
+        },
+        {
+          "name": "void vllm::cross_device_reduce_1stage<__mt_bfloat16, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, __mt_bfloat16*, int, int)",
+          "count": 40,
+          "sum_us": 1593.8009999999995,
+          "max_us": 51.52
+        },
+        {
+          "name": "void mutlass::device_kernel<mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u> >(mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u>::Params)",
+          "count": 80,
+          "sum_us": 1534.565,
+          "max_us": 20.0
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::v41_gate_block_kernel<512>(float const*, float const*, float*, long*, int, int, bool, bool, float)",
+          "count": 40,
+          "sum_us": 1446.5230000000001,
+          "max_us": 36.88
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_32x128B128_epilogue_stage3_btmenc",
+          "count": 88,
+          "sum_us": 1438.801,
+          "max_us": 19.04
+        },
+        {
+          "name": "dsa_prefill_kernel",
+          "count": 40,
+          "sum_us": 1401.9219999999993,
+          "max_us": 36.76
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyGeneralOutContiguousKernel<4, int, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long)",
+          "count": 240,
+          "sum_us": 1398.9229999999993,
+          "max_us": 8.16
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::skinny_gemm_kernel<4>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int)",
+          "count": 120,
+          "sum_us": 1398.8020000000006,
+          "max_us": 17.16
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)",
+          "count": 330,
+          "sum_us": 1156.9210000000003,
+          "max_us": 5.4
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::rmsnorm_vec8_kernel<__mt_bfloat16, false, true>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int, int, long, long, long, float, float)",
+          "count": 169,
+          "sum_us": 1106.6400000000008,
+          "max_us": 9.44
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_64x32B128_epilogue_stage5_btmenc",
+          "count": 40,
+          "sum_us": 1059.7230000000002,
+          "max_us": 28.6
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::CastOp, float, float, __mt_bfloat16, 128>(float*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 246,
+          "sum_us": 1021.3609999999998,
+          "max_us": 8.4
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc",
+          "count": 42,
+          "sum_us": 977.1629999999999,
+          "max_us": 236.481
+        },
+        {
+          "name": "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 32, 4, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)",
+          "count": 160,
+          "sum_us": 932.1639999999993,
+          "max_us": 8.32
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nn_tce_256_64x32B128_epilogue_stage5_btmenc",
+          "count": 40,
+          "sum_us": 817.5200000000002,
+          "max_us": 20.76
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::hc_metadata_warp_kernel(float const*, float const*, float const*, float*, float*, float*, long, float)",
+          "count": 80,
+          "sum_us": 802.084,
+          "max_us": 10.4
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyTransposeKernelAlign<8, short, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long, long, long, long)",
+          "count": 40,
+          "sum_us": 758.0809999999998,
+          "max_us": 20.24
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_partial_rope_kernel<float>(float const*, float const*, float const*, float*, long, long, long, long, long, long, bool)",
+          "count": 120,
+          "sum_us": 634.4400000000003,
+          "max_us": 6.6
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorDivOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 79,
+          "sum_us": 607.5599999999998,
+          "max_us": 11.8
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::CastOp, float, __mt_bfloat16, float, 128>(__mt_bfloat16*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 160,
+          "sum_us": 554.36,
+          "max_us": 4.8
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::dispatch_quant_kernel(c10::BFloat16 const*, long const*, c10::Float8_e4m3fn*, float*, int*, int*, int, int, int, int, int, float)",
+          "count": 40,
+          "sum_us": 531.1610000000001,
+          "max_us": 15.32
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_post_2d_h4_kernel<c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, float const*, c10::BFloat16*, long)",
+          "count": 80,
+          "sum_us": 508.84000000000003,
+          "max_us": 6.76
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::RsqrtOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 80,
+          "sum_us": 403.08,
+          "max_us": 5.64
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexSelectVectorKernel<float, long, true, 128>(float*, long*, float*, long, long, long, long, unsigned int)",
+          "count": 120,
+          "sum_us": 390.6009999999999,
+          "max_us": 4.76
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary_mid_align_right_broadcast_one_dim<float, musa::dnn::binary::MulOp, float, float, float, 4, 128>(float*, float*, float*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, musa::dnn::FastDivmodU32, long, long)",
+          "count": 80,
+          "sum_us": 386.802,
+          "max_us": 5.56
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<short, 2, 8, false, musa::dnn::FastDivmodU32, 1024>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)",
+          "count": 40,
+          "sum_us": 373.35999999999996,
+          "max_us": 9.68
+        },
+        {
+          "name": "indexer_score",
+          "count": 8,
+          "sum_us": 372.84,
+          "max_us": 51.32
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_combine_kernel<c10::BFloat16>(c10::BFloat16 const*, float const*, c10::BFloat16*, long, long, long)",
+          "count": 81,
+          "sum_us": 358.2010000000001,
+          "max_us": 5.4
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 98,
+          "sum_us": 348.00000000000006,
+          "max_us": 4.36
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::TrueDivOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 80,
+          "sum_us": 326.963,
+          "max_us": 4.56
+        },
+        {
+          "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, float, float, float, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+          "count": 41,
+          "sum_us": 323.961,
+          "max_us": 8.72
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel<true>(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float, float)",
+          "count": 40,
+          "sum_us": 322.4409999999999,
+          "max_us": 9.08
+        },
+        {
+          "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, long, long, long, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+          "count": 40,
+          "sum_us": 299.041,
+          "max_us": 8.0
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::AddOp, float, float, double, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 80,
+          "sum_us": 292.24,
+          "max_us": 3.96
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_64x64B128_epilogue_stage4_btmenc",
+          "count": 8,
+          "sum_us": 280.361,
+          "max_us": 35.52
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary<bool, musa::dnn::binary::AndOp, bool, bool, bool, 128>(bool*, bool const*, bool const*, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 230.99999999999994,
+          "max_us": 6.2
+        },
+        {
+          "name": "indexer_radix_select",
+          "count": 8,
+          "sum_us": 230.8,
+          "max_us": 30.6
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::deepseek_v4_shared_swiglu_kernel(c10::BFloat16 const*, c10::BFloat16*, long, long, float)",
+          "count": 40,
+          "sum_us": 227.76000000000002,
+          "max_us": 6.0
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::combine_kernel(c10::BFloat16 const*, long const*, int const*, float const*, float*, int, int, int, int)",
+          "count": 40,
+          "sum_us": 208.44,
+          "max_us": 6.56
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 48,
+          "sum_us": 198.2,
+          "max_us": 4.64
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::AddOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 54,
+          "sum_us": 195.04000000000008,
+          "max_us": 4.52
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 188.31999999999994,
+          "max_us": 5.2
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary<float, musa::dnn::binary::AddOp, float, float, float, 128>(float*, float const*, float const*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 186.59999999999994,
+          "max_us": 4.92
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::CastOp, long, int, long, 128>(int*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 48,
+          "sum_us": 184.08,
+          "max_us": 4.44
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::pair_pool_kernel(float const*, float const*, long const*, float const*, float const*, c10::BFloat16*, long*, long, long const*, long, long, long)",
+          "count": 3,
+          "sum_us": 167.401,
+          "max_us": 56.001
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<int, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, long)",
+          "count": 58,
+          "sum_us": 165.71999999999989,
+          "max_us": 3.12
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<int, 2, 4, false, musa::dnn::FastDivmodU32, 512>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)",
+          "count": 18,
+          "sum_us": 158.28,
+          "max_us": 9.16
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)",
+          "count": 40,
+          "sum_us": 157.36,
+          "max_us": 4.36
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::EQOp, int, bool, int, 128>(bool*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 151.56,
+          "max_us": 4.4
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<long, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long)",
+          "count": 40,
+          "sum_us": 130.47999999999996,
+          "max_us": 3.56
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<false, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)",
+          "count": 12,
+          "sum_us": 107.04,
+          "max_us": 9.6
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorModOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 93.52199999999998,
+          "max_us": 8.24
+        },
+        {
+          "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, __mt_bfloat16, __mt_bfloat16, __mt_bfloat16, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+          "count": 8,
+          "sum_us": 92.601,
+          "max_us": 13.08
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatNy<int, 1, 4, false, musa::dnn::FastDivmodU32, true>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 1>, musa::dnn::Array<int, 1>, long, long, long)",
+          "count": 21,
+          "sum_us": 79.19999999999999,
+          "max_us": 4.0
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexElementwiseKernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})",
+          "count": 8,
+          "sum_us": 68.96,
+          "max_us": 10.6
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_384_64x16B128_epilogue_stage4_btmenc",
+          "count": 5,
+          "sum_us": 60.35999999999999,
+          "max_us": 18.56
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::ClipOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 57.72,
+          "max_us": 4.2
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary<long, musa::dnn::binary::AddOp, long, long, long, 128>(long*, long const*, long const*, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 56.68000000000001,
+          "max_us": 4.64
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::MulOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 48.76,
+          "max_us": 4.36
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexSelectKernel<int, long>(int*, long*, int*, long, long, long, long, unsigned int)",
+          "count": 16,
+          "sum_us": 45.12000000000001,
+          "max_us": 3.6
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::engram_gate_kernel<c10::BFloat16, c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, bool const*, c10::BFloat16*)",
+          "count": 2,
+          "sum_us": 37.92,
+          "max_us": 18.96
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<true, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)",
+          "count": 4,
+          "sum_us": 36.6,
+          "max_us": 9.2
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::MulOp, float, __mt_bfloat16, double, 128>(__mt_bfloat16*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 8,
+          "sum_us": 35.6,
+          "max_us": 4.96
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)",
+          "count": 9,
+          "sum_us": 33.921,
+          "max_us": 4.24
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<float, long, unsigned int, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)",
+          "count": 4,
+          "sum_us": 32.56,
+          "max_us": 9.16
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)",
+          "count": 8,
+          "sum_us": 27.839999999999996,
+          "max_us": 4.4
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::arange_kernel<long>(long*, long, long, int)",
+          "count": 9,
+          "sum_us": 27.04,
+          "max_us": 4.04
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::park_pair_tail_kernel(float const*, float const*, long const*, float*, float*, long, long const*, long, long, long, long)",
+          "count": 3,
+          "sum_us": 25.200000000000003,
+          "max_us": 8.4
+        },
+        {
+          "name": "void musa::dnn::ScanPartSumShflABCKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::FastDivmodU32>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, long, int, int, musa::dnn::FastDivmodU32)",
+          "count": 4,
+          "sum_us": 22.04,
+          "max_us": 6.92
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<float, unsigned int, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)",
+          "count": 4,
+          "sum_us": 21.32,
+          "max_us": 7.0
+        },
+        {
+          "name": "void musa::dnn::reduce_abc::ReduceABCKernel<__mt_bfloat16, float, __mt_bfloat16, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<__mt_bfloat16, float, __mt_bfloat16, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)3>, (musa::dnn::ReduceMode)3, 1, 8, musa::dnn::FastDivmodU32>(__mt_bfloat16*, __mt_bfloat16*, __mt_bfloat16*, __mt_bfloat16 const*, long, long, long, musa::dnn::ReduceOp<__mt_bfloat16, float, __mt_bfloat16, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)3>, musa::dnn::FastDivmodU32)",
+          "count": 3,
+          "sum_us": 19.76,
+          "max_us": 7.2
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, false, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)",
+          "count": 3,
+          "sum_us": 17.6,
+          "max_us": 6.24
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::scatter_kernel<bool, long, musa::dnn::FastDivmodU64, (musa::dnn::ScatterImpl::Mode)0, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, int, musa::dnn::Array<musa::dnn::FastDivmodU64, 10>)",
+          "count": 1,
+          "sum_us": 10.16,
+          "max_us": 10.16
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<16, signed char, musa::dnn::FastDivmodU32, signed char, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)",
+          "count": 1,
+          "sum_us": 8.92,
+          "max_us": 8.92
+        },
+        {
+          "name": "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})",
+          "count": 1,
+          "sum_us": 8.76,
+          "max_us": 8.76
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatNy<short, 4, 8, false, musa::dnn::FastDivmodU32, true>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 4>, musa::dnn::Array<int, 4>, long, long, long)",
+          "count": 2,
+          "sum_us": 7.640000000000001,
+          "max_us": 4.32
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<float, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)",
+          "count": 2,
+          "sum_us": 6.800000000000001,
+          "max_us": 3.6
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary_vlen1<long, musa::dnn::binary::EQOp, long, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 6.68,
+          "max_us": 6.68
+        },
+        {
+          "name": "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>, (musa::dnn::ReduceMode)0, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>)",
+          "count": 1,
+          "sum_us": 6.56,
+          "max_us": 6.56
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, true, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)",
+          "count": 1,
+          "sum_us": 5.28,
+          "max_us": 5.28
+        },
+        {
+          "name": "void musa::dnn::reduce_column::ReduceSmallColKernel<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>, (musa::dnn::ReduceMode)7, 8>(bool*, bool*, bool*, unsigned int __vector(4), long, int, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>)",
+          "count": 1,
+          "sum_us": 5.2,
+          "max_us": 5.2
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFillNoncontiguous<float, false, false, false, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)",
+          "count": 1,
+          "sum_us": 5.0,
+          "max_us": 5.0
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)",
+          "count": 1,
+          "sum_us": 4.48,
+          "max_us": 4.48
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::NEOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 4.32,
+          "max_us": 4.32
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::GTOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 4.16,
+          "max_us": 4.16
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::SubOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 4.0,
+          "max_us": 4.0
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<bool, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long)",
+          "count": 1,
+          "sum_us": 3.92,
+          "max_us": 3.92
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<float, true, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)",
+          "count": 1,
+          "sum_us": 3.84,
+          "max_us": 3.84
+        }
+      ],
+      "stream_counts": {
+        "22": 4047
+      }
+    },
+    "D_rank0_last_step": {
+      "name": "V41/step/q=4/kv=265",
+      "ts": 4011906011440.338,
+      "dur": 64893.695
+    },
+    "profiler_requests": [
+      {
+        "label": "off_before_1",
+        "E2E_s": 0.6828806512057781,
+        "first_json_s": 0.4445360014215112,
+        "first_content_s": 0.444608835503459,
+        "content": "Keeping experiment records helps engineers because it creates",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_before_2",
+        "E2E_s": 0.4812690634280443,
+        "first_json_s": 0.24336443189531565,
+        "first_content_s": 0.24344404600560665,
+        "content": "Keeping experiment records helps engineers because it creates",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "profiled",
+        "E2E_s": 18.458934227004647,
+        "first_json_s": 9.695175480097532,
+        "first_content_s": 9.695253450423479,
+        "content": "Keeping experiment records helps engineers because it creates",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_after",
+        "E2E_s": 0.7415414024144411,
+        "first_json_s": 0.4657533848658204,
+        "first_content_s": 0.46582898311316967,
+        "content": "Keeping experiment records helps engineers because it creates",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "long_smoke": {
+      "latency_s": 44.2368282917887,
+      "first_content_s": 1.7171825980767608,
+      "usage": {
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "total_tokens": 2304,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "content": "Keeping experiment records helps engineers because it turns a one-time trial into reusable knowledge. When an engineer writes down what was tested, how it was set up, which materials and tools were used, and what happened, the team can later understand the result without relying on memory or guesswork. This matters because engineering decisions often depend on small details, and a forgotten detail can make a result impossible to interpret or reproduce.\n\nRecords also support reproducibility, which is a core part of good engineering practice. If a test fails, a clear record shows exactly what was done so the failure can be repeated, checked, and traced to its cause. If a test succeeds, the record allows others to repeat it and confirm that the result is real rather than accidental. Reproducibility is especially important when designs must meet safety, quality, or regulatory requirements.\n\nIn addition, experiment records help engineers compare options over time. They can review past results to see which design changes improved performance, which ones made no difference, and which ones caused problems. This reduces wasted effort because engineers do not have to repeat old experiments, and it helps them avoid repeating old mistakes. Records also make it easier to spot trends, such as a part failing only under certain temperatures or a process working only within a narrow range.\n\nClear",
+      "finish_reason": "length",
+      "scope": "One bounded long-shape cache/Graph bucket smoke, not formal performance round"
+    },
+    "post_long": [
+      {
+        "name": "arithmetic1",
+        "content": "4.2",
+        "usage": {
+          "prompt_tokens": 19,
+          "completion_tokens": 4,
+          "total_tokens": 23,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "passed": true,
+        "elapsed_s": 0.27472082432359457
+      },
+      {
+        "name": "arithmetic2",
+        "content": "56",
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 2,
+          "total_tokens": 17,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "passed": true,
+        "elapsed_s": 0.24565120600163937
+      },
+      {
+        "name": "short_bucket_return",
+        "content": "Keeping experiment records helps engineers because it creates",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "passed": true,
+        "elapsed_s": 0.4860131125897169
+      }
+    ]
+  },
+  "candidate": {
+    "summary": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 304.98222690075636,
+      "mean_TPOT_ms_per_token": 28.79522318349165,
+      "TPOT_sample_stdev_ms": 0.21810715972700767,
+      "mean_E2E_s": 7.6477641386911275,
+      "output_tokens_per_latency_sum_second": 33.47383566719318,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "6468707445ac26b74f6e8766dd20b13b5567e367a3d172d482aff777b0d09293"
+    },
+    "requests": [
+      {
+        "request_id": "chatcmpl-12481178814234374860-UQ5X5Jkbq7r7FgdtXqyABQ",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.7872897405177355,
+        "TTFT_ms": 461.87784522771835,
+        "TPOT_ms": 28.727105471725558,
+        "accepted": 131,
+        "proposed": 625,
+        "proposal_rounds": 125,
+        "content_sha256": "ea3043376726d88f1439f3b5aa644ab0d4a1815ee6b5c0e85405fea35e46b0f8",
+        "content": "Keeping experiment records helps engineers because it preserves the exact details of what was tested, how it was tested, and what happened, which allows them to reproduce results and verify that a design or process behaves as expected. Detailed records also make it easier to identify the root cause of failures, since engineers can compare successful and unsuccessful trials and spot which variables changed. They support informed decision-making by providing evidence that can be reviewed when choosing between design options, and they protect the team when questions arise later about whether a test was performed correctly or whether specifications were met. Records also save time and money by preventing repeated experiments and by helping new team members understand prior work without starting from scratch. In addition, good documentation supports safety, quality, and regulatory requirements, since it provides an auditable trail showing that tests were planned, executed, and evaluated consistently. Finally, keeping records turns individual experience into shared organizational knowledge, so lessons learned from one project can be applied to future projects and continuous improvement efforts.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录益处的技术性说明，不涉及政治或色情元素。\n[规则]无</ds_safety>Safe# 最终回答\n\nKeeping experiment records helps engineers",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-y9tGd7cStETjUF3UZU8sY7",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.536539540626109,
+        "TTFT_ms": 263.3155891671777,
+        "TPOT_ms": 28.522446868466396,
+        "accepted": 131,
+        "proposed": 625,
+        "proposal_rounds": 125,
+        "content_sha256": "ea3043376726d88f1439f3b5aa644ab0d4a1815ee6b5c0e85405fea35e46b0f8",
+        "content": "Keeping experiment records helps engineers because it preserves the exact details of what was tested, how it was tested, and what happened, which allows them to reproduce results and verify that a design or process behaves as expected. Detailed records also make it easier to identify the root cause of failures, since engineers can compare successful and unsuccessful trials and spot which variables changed. They support informed decision-making by providing evidence that can be reviewed when choosing between design options, and they protect the team when questions arise later about whether a test was performed correctly or whether specifications were met. Records also save time and money by preventing repeated experiments and by helping new team members understand prior work without starting from scratch. In addition, good documentation supports safety, quality, and regulatory requirements, since it provides an auditable trail showing that tests were planned, executed, and evaluated consistently. Finally, keeping records turns individual experience into shared organizational knowledge, so lessons learned from one project can be applied to future projects and continuous improvement efforts.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录益处的技术性说明，不涉及政治或色情元素。\n[规则]无</ds_safety>Safe# 最终回答\n\nKeeping experiment records helps engineers",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-e6vsFnz36uFyWCqEKEsd4S",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.62394056096673,
+        "TTFT_ms": 263.81811685860157,
+        "TPOT_ms": 28.86322527101227,
+        "accepted": 131,
+        "proposed": 625,
+        "proposal_rounds": 125,
+        "content_sha256": "ea3043376726d88f1439f3b5aa644ab0d4a1815ee6b5c0e85405fea35e46b0f8",
+        "content": "Keeping experiment records helps engineers because it preserves the exact details of what was tested, how it was tested, and what happened, which allows them to reproduce results and verify that a design or process behaves as expected. Detailed records also make it easier to identify the root cause of failures, since engineers can compare successful and unsuccessful trials and spot which variables changed. They support informed decision-making by providing evidence that can be reviewed when choosing between design options, and they protect the team when questions arise later about whether a test was performed correctly or whether specifications were met. Records also save time and money by preventing repeated experiments and by helping new team members understand prior work without starting from scratch. In addition, good documentation supports safety, quality, and regulatory requirements, since it provides an auditable trail showing that tests were planned, executed, and evaluated consistently. Finally, keeping records turns individual experience into shared organizational knowledge, so lessons learned from one project can be applied to future projects and continuous improvement efforts.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录益处的技术性说明，不涉及政治或色情元素。\n[规则]无</ds_safety>Safe# 最终回答\n\nKeeping experiment records helps engineers",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-uwCRMJJSU3dPSSjxzditC9",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.696838719770312,
+        "TTFT_ms": 271.7698225751519,
+        "TPOT_ms": 29.11791724390259,
+        "accepted": 131,
+        "proposed": 625,
+        "proposal_rounds": 125,
+        "content_sha256": "ea3043376726d88f1439f3b5aa644ab0d4a1815ee6b5c0e85405fea35e46b0f8",
+        "content": "Keeping experiment records helps engineers because it preserves the exact details of what was tested, how it was tested, and what happened, which allows them to reproduce results and verify that a design or process behaves as expected. Detailed records also make it easier to identify the root cause of failures, since engineers can compare successful and unsuccessful trials and spot which variables changed. They support informed decision-making by providing evidence that can be reviewed when choosing between design options, and they protect the team when questions arise later about whether a test was performed correctly or whether specifications were met. Records also save time and money by preventing repeated experiments and by helping new team members understand prior work without starting from scratch. In addition, good documentation supports safety, quality, and regulatory requirements, since it provides an auditable trail showing that tests were planned, executed, and evaluated consistently. Finally, keeping records turns individual experience into shared organizational knowledge, so lessons learned from one project can be applied to future projects and continuous improvement efforts.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录益处的技术性说明，不涉及政治或色情元素。\n[规则]无</ds_safety>Safe# 最终回答\n\nKeeping experiment records helps engineers",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-7iWazWhLKudA4ZqiZW3jkZ",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.59421213157475,
+        "TTFT_ms": 264.1297606751323,
+        "TPOT_ms": 28.74542106235144,
+        "accepted": 131,
+        "proposed": 625,
+        "proposal_rounds": 125,
+        "content_sha256": "ea3043376726d88f1439f3b5aa644ab0d4a1815ee6b5c0e85405fea35e46b0f8",
+        "content": "Keeping experiment records helps engineers because it preserves the exact details of what was tested, how it was tested, and what happened, which allows them to reproduce results and verify that a design or process behaves as expected. Detailed records also make it easier to identify the root cause of failures, since engineers can compare successful and unsuccessful trials and spot which variables changed. They support informed decision-making by providing evidence that can be reviewed when choosing between design options, and they protect the team when questions arise later about whether a test was performed correctly or whether specifications were met. Records also save time and money by preventing repeated experiments and by helping new team members understand prior work without starting from scratch. In addition, good documentation supports safety, quality, and regulatory requirements, since it provides an auditable trail showing that tests were planned, executed, and evaluated consistently. Finally, keeping records turns individual experience into shared organizational knowledge, so lessons learned from one project can be applied to future projects and continuous improvement efforts.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录益处的技术性说明，不涉及政治或色情元素。\n[规则]无</ds_safety>Safe# 最终回答\n\nKeeping experiment records helps engineers",
+        "usage": null
+      }
+    ],
+    "proposal": 5,
+    "basic": [
+      {
+        "question": "只回答计算结果：1.3＋2.9 等于多少？",
+        "expected": "4.2",
+        "answer": "4.2",
+        "passed": true,
+        "usage": {
+          "prompt_tokens": 19,
+          "completion_tokens": 4,
+          "total_tokens": 23,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "first_SSE_json_s": 6.477926376275718,
+        "first_content_s": 6.477959233336151,
+        "finish_reason": "stop",
+        "request": {
+          "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+          "messages": [
+            {
+              "role": "user",
+              "content": "只回答计算结果：1.3＋2.9 等于多少？"
+            }
+          ],
+          "temperature": 0,
+          "top_p": 1,
+          "reasoning_effort": "none",
+          "chat_template_kwargs": {
+            "thinking_mode": "chat"
+          },
+          "max_tokens": 64,
+          "ignore_eos": false,
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        }
+      },
+      {
+        "question": "只回答计算结果：7×8 等于多少？",
+        "expected": "56",
+        "answer": "56",
+        "passed": true,
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 2,
+          "total_tokens": 17,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "first_SSE_json_s": 1.1475707441568375,
+        "first_content_s": 1.1476062946021557,
+        "finish_reason": "stop",
+        "request": {
+          "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+          "messages": [
+            {
+              "role": "user",
+              "content": "只回答计算结果：7×8 等于多少？"
+            }
+          ],
+          "temperature": 0,
+          "top_p": 1,
+          "reasoning_effort": "none",
+          "chat_template_kwargs": {
+            "thinking_mode": "chat"
+          },
+          "max_tokens": 64,
+          "ignore_eos": false,
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        }
+      }
+    ],
+    "tool_summary": {
+      "Test Duration (s)": 38.2396,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.1308,
+      "Avg Latency (s)": 7.6478,
+      "Avg Input Tokens": 256.0,
+      "Output Throughput (tok/s)": 33.4731,
+      "Total Throughput (tok/s)": 66.9462,
+      "Avg TTFT (ms)": 304.98,
+      "Avg TPOT (ms)": 28.8,
+      "Avg ITL (ms)": 59.21,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0,
+      "KV Cache Hit Rate (%)": 0.0,
+      "Avg Decoded Tok/Iter": 2.04,
+      "Spec. Accept Rate": 0.5098
+    },
+    "scope_notes": {
+      "distinct_outputs_within_formal": 1,
+      "decode_wall_ms_per_proposal_round": 58.742255294322966,
+      "round_time_scope": "draft+verify+cache+host+streaming, changing generated tokens; not isolated GPU time"
+    },
+    "trace_validation": "ALL16_GPU_NATIVE_VALID_TARGET_GRAPH_KERNELS_CORRELATED",
+    "D_rank0_last_graph": {
+      "correlation": 15098033,
+      "launch_ts": 4012912699253.491,
+      "launch_duration_us": 1308.928,
+      "kernels": 4047,
+      "span_us": 56260.3623046875,
+      "kernel_interval_union_us": 47430.9111328125,
+      "sum_kernel_us": 47430.90199999994,
+      "top_kernels_by_sum_us": [
+        {
+          "name": "void mutlass::device_kernel<mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false> >(mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false>::Params)",
+          "count": 80,
+          "sum_us": 5380.133999999999,
+          "max_us": 152.48
+        },
+        {
+          "name": "void vllm::cross_device_reduce_1stage<float, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, float*, int, int)",
+          "count": 40,
+          "sum_us": 3515.8470000000007,
+          "max_us": 186.241
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::batch_gemm_small_m_nt_tt_kernel<float, (musa::dnn::GemmTransposeType)2, 512, 4, 32, 64, 512, 4, false>(float*, float const*, float const*, float const*, float const*, float*, unsigned int*, int, int, int, int, int, int, int, int, long, long, long, long, float, float, float, int, int, musa::dnn::FastDivmodU32)",
+          "count": 46,
+          "sum_us": 2710.4470000000006,
+          "max_us": 64.92
+        },
+        {
+          "name": "mcclKernel_AllGather_RING_SIMPLE_Sum_int8_t(mcclWorkElem)",
+          "count": 1,
+          "sum_us": 2470.925,
+          "max_us": 2470.925
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::swa_verify_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long, long)",
+          "count": 40,
+          "sum_us": 2415.926,
+          "max_us": 65.28
+        },
+        {
+          "name": "void vllm::cross_device_reduce_1stage<__mt_bfloat16, 8>(vllm::RankData*, vllm::RankSignals, vllm::Signal*, __mt_bfloat16*, int, int)",
+          "count": 40,
+          "sum_us": 2303.645,
+          "max_us": 96.88
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_384_64x16B128_epilogue_stage4_btmenc",
+          "count": 125,
+          "sum_us": 1953.4440000000006,
+          "max_us": 18.681
+        },
+        {
+          "name": "void mutlass::device_kernel<mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u> >(mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u>::Params)",
+          "count": 80,
+          "sum_us": 1486.4869999999999,
+          "max_us": 19.96
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_32x128B128_epilogue_stage3_btmenc",
+          "count": 88,
+          "sum_us": 1416.923,
+          "max_us": 18.36
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::v41_gate_block_kernel<512>(float const*, float const*, float*, long*, int, int, bool, bool, float)",
+          "count": 40,
+          "sum_us": 1403.2799999999997,
+          "max_us": 37.28
+        },
+        {
+          "name": "dsa_prefill_kernel",
+          "count": 40,
+          "sum_us": 1348.522,
+          "max_us": 36.0
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyGeneralOutContiguousKernel<4, int, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long)",
+          "count": 240,
+          "sum_us": 1342.642,
+          "max_us": 7.96
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)",
+          "count": 330,
+          "sum_us": 1136.3209999999992,
+          "max_us": 5.24
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::rmsnorm_vec8_kernel<__mt_bfloat16, false, true>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int, int, long, long, long, float, float)",
+          "count": 169,
+          "sum_us": 1084.6439999999993,
+          "max_us": 9.0
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_256_64x32B128_epilogue_stage5_btmenc",
+          "count": 40,
+          "sum_us": 1045.8819999999996,
+          "max_us": 29.24
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::CastOp, float, float, __mt_bfloat16, 128>(float*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 246,
+          "sum_us": 991.8820000000007,
+          "max_us": 8.44
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3_btmenc",
+          "count": 42,
+          "sum_us": 975.0399999999998,
+          "max_us": 235.92
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nn_tce_256_64x32B128_epilogue_stage5_btmenc",
+          "count": 40,
+          "sum_us": 786.9600000000003,
+          "max_us": 20.88
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyTransposeKernelAlign<8, short, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long, long, long, long)",
+          "count": 40,
+          "sum_us": 764.6039999999998,
+          "max_us": 20.64
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::hc_metadata_warp_kernel(float const*, float const*, float const*, float*, float*, float*, long, float)",
+          "count": 80,
+          "sum_us": 757.1610000000002,
+          "max_us": 10.24
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_partial_rope_kernel<float>(float const*, float const*, float const*, float*, long, long, long, long, long, long, bool)",
+          "count": 120,
+          "sum_us": 607.2020000000002,
+          "max_us": 6.52
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorDivOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 79,
+          "sum_us": 606.4399999999999,
+          "max_us": 15.48
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::dispatch_quant_kernel(c10::BFloat16 const*, long const*, c10::Float8_e4m3fn*, float*, int*, int*, int, int, int, int, int, float)",
+          "count": 40,
+          "sum_us": 554.5610000000001,
+          "max_us": 15.24
+        },
+        {
+          "name": "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 32, 4, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)",
+          "count": 80,
+          "sum_us": 522.323,
+          "max_us": 8.081
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::CastOp, float, __mt_bfloat16, float, 128>(__mt_bfloat16*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 160,
+          "sum_us": 505.35999999999973,
+          "max_us": 5.0
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::RsqrtOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 80,
+          "sum_us": 492.0400000000003,
+          "max_us": 6.72
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_post_2d_h4_kernel<c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, float const*, float const*, c10::BFloat16*, long)",
+          "count": 80,
+          "sum_us": 473.28099999999995,
+          "max_us": 6.68
+        },
+        {
+          "name": "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 16, 1, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)",
+          "count": 80,
+          "sum_us": 449.8010000000002,
+          "max_us": 6.08
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary_mid_align_right_broadcast_one_dim<float, musa::dnn::binary::MulOp, float, float, float, 4, 128>(float*, float*, float*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, musa::dnn::FastDivmodU32, long, long)",
+          "count": 80,
+          "sum_us": 387.1999999999999,
+          "max_us": 5.6
+        },
+        {
+          "name": "indexer_score",
+          "count": 8,
+          "sum_us": 362.681,
+          "max_us": 49.161
+        },
+        {
+          "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, float, float, float, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+          "count": 41,
+          "sum_us": 360.20000000000005,
+          "max_us": 9.6
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::dsv4_hc_pre_combine_kernel<c10::BFloat16>(c10::BFloat16 const*, float const*, c10::BFloat16*, long, long, long)",
+          "count": 81,
+          "sum_us": 356.0,
+          "max_us": 5.08
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<short, 2, 8, false, musa::dnn::FastDivmodU32, 1024>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)",
+          "count": 40,
+          "sum_us": 354.48100000000005,
+          "max_us": 9.4
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::TrueDivOp, float, float, float, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 80,
+          "sum_us": 348.00199999999995,
+          "max_us": 5.08
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexSelectVectorKernel<float, long, true, 128>(float*, long*, float*, long, long, long, long, unsigned int)",
+          "count": 120,
+          "sum_us": 345.442,
+          "max_us": 5.24
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 98,
+          "sum_us": 340.3619999999999,
+          "max_us": 4.36
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel<true>(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float, float)",
+          "count": 40,
+          "sum_us": 339.8800000000001,
+          "max_us": 12.36
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::AddOp, float, float, double, 128>(float*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 80,
+          "sum_us": 327.84099999999995,
+          "max_us": 4.56
+        },
+        {
+          "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, long, long, long, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+          "count": 40,
+          "sum_us": 320.24000000000007,
+          "max_us": 8.32
+        },
+        {
+          "name": "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_64x64B128_epilogue_stage4_btmenc",
+          "count": 8,
+          "sum_us": 268.081,
+          "max_us": 35.401
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary<bool, musa::dnn::binary::AndOp, bool, bool, bool, 128>(bool*, bool const*, bool const*, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 228.96099999999996,
+          "max_us": 6.36
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::deepseek_v4_shared_swiglu_kernel(c10::BFloat16 const*, c10::BFloat16*, long, long, float)",
+          "count": 40,
+          "sum_us": 224.52,
+          "max_us": 6.0
+        },
+        {
+          "name": "indexer_radix_select",
+          "count": 8,
+          "sum_us": 222.28099999999998,
+          "max_us": 29.92
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::combine_kernel(c10::BFloat16 const*, long const*, int const*, float const*, float*, int, int, int, int)",
+          "count": 40,
+          "sum_us": 208.60000000000002,
+          "max_us": 6.2
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::LTOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 48,
+          "sum_us": 204.40000000000003,
+          "max_us": 4.92
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::AddOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 54,
+          "sum_us": 191.96099999999996,
+          "max_us": 4.08
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::GEOp, long, bool, long, 128>(bool*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 185.63999999999996,
+          "max_us": 5.08
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::CastOp, long, int, long, 128>(int*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 48,
+          "sum_us": 178.2,
+          "max_us": 4.2
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary<float, musa::dnn::binary::AddOp, float, float, float, 128>(float*, float const*, float const*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 175.40100000000004,
+          "max_us": 4.76
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::EQOp, int, bool, int, 128>(bool*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 40,
+          "sum_us": 160.35999999999996,
+          "max_us": 4.56
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::pair_pool_kernel(float const*, float const*, long const*, float const*, float const*, c10::BFloat16*, long*, long, long const*, long, long, long)",
+          "count": 3,
+          "sum_us": 159.24099999999999,
+          "max_us": 54.64
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatLastSmallDim<int, 2, 4, false, musa::dnn::FastDivmodU32, 512>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 2>, long, long, long, int, int, int, int)",
+          "count": 18,
+          "sum_us": 157.72,
+          "max_us": 9.2
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<int, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, long)",
+          "count": 58,
+          "sum_us": 152.48000000000002,
+          "max_us": 3.0
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::dsv4_scatter_cache_kernel<long, uint4>(char const*, char*, long const*, long, long, long)",
+          "count": 40,
+          "sum_us": 152.001,
+          "max_us": 4.32
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<long, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long)",
+          "count": 40,
+          "sum_us": 127.0,
+          "max_us": 3.48
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::FloorModOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 106.92,
+          "max_us": 10.88
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<false, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)",
+          "count": 12,
+          "sum_us": 106.52,
+          "max_us": 9.56
+        },
+        {
+          "name": "void musa::dnn::internal::KernelTernaryElem<musa::dnn::internal::SelectOp, bool, __mt_bfloat16, __mt_bfloat16, __mt_bfloat16, bool, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32> >(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool, bool, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float, float)",
+          "count": 8,
+          "sum_us": 89.8,
+          "max_us": 12.8
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatNy<int, 1, 4, false, musa::dnn::FastDivmodU32, true>(int*, musa::dnn::(anonymous namespace)::ArrayInput<int>, musa::dnn::Array<musa::dnn::FastDivmodU32, 1>, musa::dnn::Array<int, 1>, long, long, long)",
+          "count": 21,
+          "sum_us": 78.6,
+          "max_us": 4.08
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexElementwiseKernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1}>(long, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, long, long, long)::{lambda(int)#1})",
+          "count": 8,
+          "sum_us": 71.64,
+          "max_us": 10.8
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary<long, musa::dnn::binary::AddOp, long, long, long, 128>(long*, long const*, long const*, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 58.080000000000005,
+          "max_us": 4.84
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::ClipOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 57.08,
+          "max_us": 4.2
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::MulOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 16,
+          "sum_us": 50.919999999999995,
+          "max_us": 4.64
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexSelectKernel<int, long>(int*, long*, int*, long, long, long, long, unsigned int)",
+          "count": 16,
+          "sum_us": 44.0,
+          "max_us": 3.48
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::engram_gate_kernel<c10::BFloat16, c10::BFloat16>(c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, bool const*, c10::BFloat16*)",
+          "count": 2,
+          "sum_us": 36.84,
+          "max_us": 19.2
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::MulOp, float, __mt_bfloat16, double, 128>(__mt_bfloat16*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 8,
+          "sum_us": 36.199999999999996,
+          "max_us": 4.88
+        },
+        {
+          "name": "void xllm::kernel::musa::(anonymous namespace)::attention_fp4_quant_kernel<true, true>(c10::BFloat16 const*, c10::BFloat16*, unsigned char*, unsigned char*, long, int, long const*, float const*, long, long, long)",
+          "count": 4,
+          "sum_us": 36.08,
+          "max_us": 9.68
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)",
+          "count": 9,
+          "sum_us": 34.160000000000004,
+          "max_us": 4.28
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::glbl_shuffle_kernel<float, long, unsigned int, 8, 256, 1024, 64, 16, musa::dnn::FastDivmodU32>(void*, void*, void*, void*, void*, int, long, int, long, int, int, int, int, musa::dnn::FastDivmodU32)",
+          "count": 4,
+          "sum_us": 31.48,
+          "max_us": 9.16
+        },
+        {
+          "name": "void at::native::(anonymous namespace)::arange_kernel<long>(long*, long, long, int)",
+          "count": 9,
+          "sum_us": 28.361,
+          "max_us": 4.28
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)",
+          "count": 8,
+          "sum_us": 26.84,
+          "max_us": 4.28
+        },
+        {
+          "name": "xllm::kernel::musa::(anonymous namespace)::park_pair_tail_kernel(float const*, float const*, long const*, float*, float*, long, long const*, long, long, long, long)",
+          "count": 3,
+          "sum_us": 23.281,
+          "max_us": 7.84
+        },
+        {
+          "name": "void musa::dnn::ScanPartSumShflABCKernel<int, int, int, musa::dnn::ScanOp<musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int, int, int, (musa::dnn::ScanMode)0, (musa::dnn::ScanOpType)0>, 1024, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::FastDivmodU32>(void*, void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, int, long, int, int, musa::dnn::FastDivmodU32)",
+          "count": 4,
+          "sum_us": 21.04,
+          "max_us": 6.44
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::radix_sort_local_kernel<float, unsigned int, 256, musa::dnn::FastDivmodU32>(int volatile*, void*, int, long, int, long, int, int, int, musa::dnn::FastDivmodU32)",
+          "count": 4,
+          "sum_us": 19.96,
+          "max_us": 6.56
+        },
+        {
+          "name": "void musa::dnn::reduce_abc::ReduceABCKernel<__mt_bfloat16, float, __mt_bfloat16, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<__mt_bfloat16, float, __mt_bfloat16, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)3>, (musa::dnn::ReduceMode)3, 1, 8, musa::dnn::FastDivmodU32>(__mt_bfloat16*, __mt_bfloat16*, __mt_bfloat16*, __mt_bfloat16 const*, long, long, long, musa::dnn::ReduceOp<__mt_bfloat16, float, __mt_bfloat16, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)3>, musa::dnn::FastDivmodU32)",
+          "count": 3,
+          "sum_us": 19.56,
+          "max_us": 7.08
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, false, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)",
+          "count": 3,
+          "sum_us": 17.4,
+          "max_us": 6.08
+        },
+        {
+          "name": "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})",
+          "count": 1,
+          "sum_us": 10.32,
+          "max_us": 10.32
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::scatter_kernel<bool, long, musa::dnn::FastDivmodU64, (musa::dnn::ScatterImpl::Mode)0, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, int, musa::dnn::Array<musa::dnn::FastDivmodU64, 10>)",
+          "count": 1,
+          "sum_us": 10.28,
+          "max_us": 10.28
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyLastBroadcastKernel<16, signed char, musa::dnn::FastDivmodU32, signed char, 128>(void*, void const*, long, long, long, musa::dnn::FastDivmodU32)",
+          "count": 1,
+          "sum_us": 8.72,
+          "max_us": 8.72
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelConcatNy<short, 4, 8, false, musa::dnn::FastDivmodU32, true>(short*, musa::dnn::(anonymous namespace)::ArrayInput<short>, musa::dnn::Array<musa::dnn::FastDivmodU32, 4>, musa::dnn::Array<int, 4>, long, long, long)",
+          "count": 2,
+          "sum_us": 7.800000000000001,
+          "max_us": 4.4
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<float, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)",
+          "count": 2,
+          "sum_us": 6.4,
+          "max_us": 3.32
+        },
+        {
+          "name": "void musa::dnn::reduce_column::ReduceColumnShflKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>, (musa::dnn::ReduceMode)0, 64, 16, 4, true>(float*, float*, float*, float const*, long, int, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)0>)",
+          "count": 1,
+          "sum_us": 6.24,
+          "max_us": 6.24
+        },
+        {
+          "name": "void musa::dnn::binary::kernel_binary_vlen1<long, musa::dnn::binary::EQOp, long, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, bool>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 5.96,
+          "max_us": 5.96
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::CopyLastContiguousKernel<8, short, true, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, short, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long, long)",
+          "count": 1,
+          "sum_us": 5.4,
+          "max_us": 5.4
+        },
+        {
+          "name": "void musa::dnn::reduce_column::ReduceSmallColKernel<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>, (musa::dnn::ReduceMode)7, 8>(bool*, bool*, bool*, unsigned int __vector(4), long, int, musa::dnn::ReduceOp<bool, bool, bool, musa::dnn::ReduceType<bool, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)7>)",
+          "count": 1,
+          "sum_us": 5.36,
+          "max_us": 5.36
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFillNoncontiguous<float, false, false, false, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)",
+          "count": 1,
+          "sum_us": 4.88,
+          "max_us": 4.88
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::fill_indices_kernel<long, musa::dnn::FastDivmodU32>(long*, long*, long, long, long, musa::dnn::FastDivmodU32, musa::dnn::FastDivmodU32)",
+          "count": 1,
+          "sum_us": 4.44,
+          "max_us": 4.44
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::NEOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 4.24,
+          "max_us": 4.24
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::GTOp, float, bool, double, 128>(bool*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 3.96,
+          "max_us": 3.96
+        },
+        {
+          "name": "void musa::dnn::unary::kernel_unary<long, musa::dnn::unary::SubOp, long, long, long, 128>(long*, long const*, unsigned long, long, long, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+          "count": 1,
+          "sum_us": 3.84,
+          "max_us": 3.84
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<float, true, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, float, long)",
+          "count": 1,
+          "sum_us": 3.72,
+          "max_us": 3.72
+        },
+        {
+          "name": "void musa::dnn::(anonymous namespace)::KernelFill<bool, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, bool, long)",
+          "count": 1,
+          "sum_us": 3.68,
+          "max_us": 3.68
+        }
+      ],
+      "stream_counts": {
+        "22": 4047
+      }
+    },
+    "D_rank0_last_step": {
+      "name": "V41/step/q=6/kv=268",
+      "ts": 4012913182958.552,
+      "dur": 67578.417
+    },
+    "profiler_requests": [
+      {
+        "label": "off_before_1",
+        "E2E_s": 0.4992515118792653,
+        "first_json_s": 0.25829005893319845,
+        "first_content_s": 0.2583644250407815,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_before_2",
+        "E2E_s": 0.48499959520995617,
+        "first_json_s": 0.24738456681370735,
+        "first_content_s": 0.24746389966458082,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "profiled",
+        "E2E_s": 18.570050025358796,
+        "first_json_s": 9.758170678280294,
+        "first_content_s": 9.758252205327153,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      },
+      {
+        "label": "off_after",
+        "E2E_s": 0.5263905050233006,
+        "first_json_s": 0.25401934422552586,
+        "first_content_s": 0.25409561302512884,
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "long_smoke": {
+      "latency_s": 54.78250238485634,
+      "first_content_s": 1.7934880703687668,
+      "usage": {
+        "prompt_tokens": 2048,
+        "completion_tokens": 256,
+        "total_tokens": 2304,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "content": "Keeping experiment records helps engineers because it turns a one-time observation into a reliable source of knowledge that can be reviewed, trusted, and reused. When an engineer writes down what was tested, how it was tested, what materials and settings were used, and what results were observed, the work becomes reproducible. This matters because an experiment that cannot be repeated cannot be fully verified, and engineering decisions often depend on confirming that a result is real rather than accidental.\n\nRecords also help engineers detect and correct mistakes. By comparing planned steps with what actually happened, they can spot deviations, instrument errors, or missing measurements before those problems lead to faulty conclusions. Clear records make it easier to separate what was measured from what was assumed, which reduces the risk of overconfidence in incomplete data.\n\nIn addition, experiment records support learning over time. Engineers often return to earlier work when a design fails, a test gives unexpected results, or a new project resembles an old one. Good records preserve the reasoning behind choices, not just the final numbers, so future engineers can understand why a particular approach was taken and whether it should be repeated or avoided.\n\nRecords also improve communication and accountability. Team members can review each other’s work, managers can evaluate progress, and new engineers can get up to speed without relying on",
+      "finish_reason": "length",
+      "scope": "One bounded long-shape cache/Graph bucket smoke, not formal performance round"
+    },
+    "post_long": [
+      {
+        "name": "arithmetic1",
+        "content": "4.2",
+        "usage": {
+          "prompt_tokens": 19,
+          "completion_tokens": 4,
+          "total_tokens": 23,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "passed": true,
+        "elapsed_s": 0.2839412894099951
+      },
+      {
+        "name": "arithmetic2",
+        "content": "56",
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 2,
+          "total_tokens": 17,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "passed": true,
+        "elapsed_s": 0.2444778699427843
+      },
+      {
+        "name": "short_bucket_return",
+        "content": "Keeping experiment records helps engineers because it preserves",
+        "usage": {
+          "prompt_tokens": 256,
+          "completion_tokens": 8,
+          "total_tokens": 264,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "passed": true,
+        "elapsed_s": 0.5031279223039746
+      }
+    ]
+  },
+  "reverse": {
+    "summary": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 336.50507498532534,
+      "mean_TPOT_ms_per_token": 27.435171279106655,
+      "TPOT_sample_stdev_ms": 0.23360630862554077,
+      "mean_E2E_s": 7.332473751157522,
+      "output_tokens_per_latency_sum_second": 34.913183284097975,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "6468707445ac26b74f6e8766dd20b13b5567e367a3d172d482aff777b0d09293"
+    },
+    "requests": [
+      {
+        "request_id": "chatcmpl-12481178814234374860-rfzmfnSdzzyfY7ERCMxLzG",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.422274864278734,
+        "TTFT_ms": 435.5945084244013,
+        "TPOT_ms": 27.398746493546405,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-8EGzDeCMwrmgqiQpjmcJjN",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.258971228264272,
+        "TTFT_ms": 253.49195022135973,
+        "TPOT_ms": 27.47246775703103,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-nbASWKcJ3PBLntLy6rsKDD",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.567123017273843,
+        "TTFT_ms": 474.6001223102212,
+        "TPOT_ms": 27.813815274367144,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-5UYejssyLVU2CStjrBZDAV",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.206837721168995,
+        "TTFT_ms": 256.8215196952224,
+        "TPOT_ms": 27.25496549597558,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      },
+      {
+        "request_id": "chatcmpl-12481178814234374860-ZchhbhgPJYpPoWcgXbTgC6",
+        "success": true,
+        "input": 256,
+        "output": 256,
+        "finish_reason": "length",
+        "latency_s": 7.207161924801767,
+        "TTFT_ms": 262.0172742754221,
+        "TPOT_ms": 27.23586137461312,
+        "accepted": 130,
+        "proposed": 375,
+        "proposal_rounds": 125,
+        "content_sha256": "4b449e3c96505eb7d11c50bfa7d2852792e151fc64035453526de579c426e225",
+        "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually tested, observed, and changed. Engineering work often involves many variables, iterations, and small adjustments, and without written records it becomes difficult to remember exactly which configuration produced a given result. Detailed records allow engineers to reproduce experiments later, which is essential for verifying that a result is real and not a one-time anomaly. Records also support troubleshooting, because when something fails, engineers can trace back through prior tests to identify what changed and when. They improve communication and collaboration, since colleagues can review, audit, or continue work without relying on someone's personal recollection. Good records also protect against wasted effort by preventing repeated tests and by capturing lessons learned from failed approaches. In addition, they provide evidence for design decisions, safety reviews, patents, and regulatory compliance, and they help engineers identify patterns and improve processes over time. Ultimately, keeping experiment records turns individual experience into durable organizational knowledge that supports accuracy, accountability, and continuous improvement.<ds_safety>[用户未成年]否\n[分类]其他\n[判定]内容为工程实验记录对工程师作用的通用说明，不涉及政治或色情元素，安全。\n[规则]无</ds_safety>Safe# 最终回答\n",
+        "usage": null
+      }
+    ],
+    "proposal": 3,
+    "basic": [
+      {
+        "question": "只回答计算结果：1.3＋2.9 等于多少？",
+        "expected": "4.2",
+        "answer": "4.2",
+        "passed": true,
+        "usage": {
+          "prompt_tokens": 19,
+          "completion_tokens": 4,
+          "total_tokens": 23,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "first_SSE_json_s": 6.288911445997655,
+        "first_content_s": 6.2889383947476745,
+        "finish_reason": "stop",
+        "request": {
+          "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+          "messages": [
+            {
+              "role": "user",
+              "content": "只回答计算结果：1.3＋2.9 等于多少？"
+            }
+          ],
+          "temperature": 0,
+          "top_p": 1,
+          "reasoning_effort": "none",
+          "chat_template_kwargs": {
+            "thinking_mode": "chat"
+          },
+          "max_tokens": 64,
+          "ignore_eos": false,
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        }
+      },
+      {
+        "question": "只回答计算结果：7×8 等于多少？",
+        "expected": "56",
+        "answer": "56",
+        "passed": true,
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 2,
+          "total_tokens": 17,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "first_SSE_json_s": 1.0897764898836613,
+        "first_content_s": 1.0898060724139214,
+        "finish_reason": "stop",
+        "request": {
+          "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+          "messages": [
+            {
+              "role": "user",
+              "content": "只回答计算结果：7×8 等于多少？"
+            }
+          ],
+          "temperature": 0,
+          "top_p": 1,
+          "reasoning_effort": "none",
+          "chat_template_kwargs": {
+            "thinking_mode": "chat"
+          },
+          "max_tokens": 64,
+          "ignore_eos": false,
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        }
+      }
+    ],
+    "tool_summary": {
+      "Test Duration (s)": 36.6639,
+      "Concurrency": 1,
+      "Request Rate (req/s)": -1.0,
+      "Total Requests": 5,
+      "Success Requests": 5,
+      "Failed Requests": 0,
+      "Stream Requests": 5,
+      "Non-Stream Requests": 0,
+      "Req Throughput (req/s)": 0.1364,
+      "Avg Latency (s)": 7.3325,
+      "Avg Input Tokens": 256.0,
+      "Output Throughput (tok/s)": 34.9117,
+      "Total Throughput (tok/s)": 69.8234,
+      "Avg TTFT (ms)": 336.51,
+      "Avg TPOT (ms)": 27.44,
+      "Avg ITL (ms)": 56.42,
+      "Avg Output Tokens": 256.0,
+      "Input Throughput (tok/s)": 0.0,
+      "KV Cache Hit Rate (%)": 0.0,
+      "Avg Decoded Tok/Iter": 2.04,
+      "Spec. Accept Rate": 0.5098
+    },
+    "scope_notes": {
+      "distinct_outputs_within_formal": 1,
+      "decode_wall_ms_per_proposal_round": 55.967749409377575,
+      "round_time_scope": "draft+verify+cache+host+streaming, changing generated tokens; not isolated GPU time"
+    }
+  },
+  "differences": {
+    "control": {
+      "TPOT_reduction_pct": -3.418866276604038,
+      "output_increase_pct": -2.823809325620541,
+      "E2E_reduction_pct": -2.9058654244666027,
+      "same_output": false
+    },
+    "reverse": {
+      "TPOT_reduction_pct": -4.957329737615845,
+      "output_increase_pct": -4.122647898338105,
+      "E2E_reduction_pct": -4.29991839362307,
+      "same_output": false
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/e40_sg_dense_sources.tar.gz\", \"bytes\": 28286, \"sha256\": \"29f1c64f4fd8923748fe000cd1d98a09427a844ee77951b3c93267751b213e7a\", \"manifest\": {\"source\": \"/workspace/sglang\", \"head\": \"7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6\", \"commit_command_exit\": 0, \"files\": [{\"path\": \"python/sglang/srt/layers/quantization/fp8_utils.py\", \"bytes\": 95567, \"sha256\": \"c6efdf1e495d1807cd7cc2ece8b8766ed97ae19ccc3bd8247173140f454aad14\"}, {\"path\": \"python/sglang/srt/layers/quantization/w4afp8.py\", \"bytes\": 7173, \"sha256\": \"1a17ef949490a933737f283dba71d1e79965a31b8eb8912a4ec7f0c238b95643\"}, {\"path\": \"python/sglang/kernels/ops/quantization/musa_decode_quant_gemm.py\", \"bytes\": 4223, \"sha256\": \"8642bfd8994a37b8a90a7990f332c7653f4911b4461664e46f49042bc7177d5c\"}, {\"path\": \"python/sglang/kernels/ops/quantization/musa_mate_block128.py\", \"bytes\": 4646, \"sha256\": \"b59fc68a5312603032eb3b6e2708f37474e5f357f957d1e29aeff1d4f808c58d\"}]}}\n",
+  "stderr": ""
+}

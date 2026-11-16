@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T07:04:53.152081+08:00\", \"assumption\": \"Only listed 2D linears retain original FP8 and decoded FP32 scales; grouped O-A remains BF16; no duplicate BF16 carriers kept\", \"groups_saved_GiB\": {\"layers_attention\": 3.4532546997070312, \"layers_shared\": 1.3132095336914062, \"mtp_attention\": 0.25899410247802734, \"mtp_shared\": 0.09849071502685547}, \"total_saved_GiB\": 5.12394905090332, \"full_DP_parameter_storage_GiB_before\": 71.95018000155687, \"full_DP_parameter_storage_GiB_after\": 66.82623095065355, \"excluded\": \"Graph/cache/runtime/load peaks still need verification, not allocation permission\"}\n",
+  "stderr": ""
+}

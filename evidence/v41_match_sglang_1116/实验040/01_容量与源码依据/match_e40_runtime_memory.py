@@ -1,0 +1,3 @@
+from pathlib import Path
+import json,subprocess,datetime,socket
+h='sj9' if socket.gethostname()=='worker32007' else 'sj10';r=Path('/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116');run=r/'runs/p39_static_activation_on_v1';g=subprocess.run(['timeout','20','mthreads-gmi'],text=True,capture_output=True,timeout=25);v={'at':datetime.datetime.now().astimezone().isoformat(),'host':h,'gmi_stdout':g.stdout,'gmi_stderr':g.stderr,'exit_code':g.returncode,'run':'p39_static_activation_on_v1','phase':json.loads((run/'formal_client/active.json').read_text())['phase']};(r/'diagnostics/e40_dp8_memory_budget'/f'{h}_runtime_gmi.json').write_text(json.dumps(v,indent=2));print(json.dumps(v))

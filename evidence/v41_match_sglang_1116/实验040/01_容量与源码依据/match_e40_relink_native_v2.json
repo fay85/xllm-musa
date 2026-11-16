@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"exit_code\": 0, \"at\": \"2026-11-17T07:21:39.339847+08:00\", \"source_manifest\": \"/expt/builds/e40_prequant_native_v1/source_manifest.json\", \"objects_reused_from\": \"/expt/builds/e40_prequant_native_v1\", \"bytes\": 775720, \"sha256\": \"3f3e84463b8f18b2b8843d3b33a2c4ee19b23c1f7c2ddfa54109d61d10fdb9ce\"}\n",
+  "stderr": ""
+}

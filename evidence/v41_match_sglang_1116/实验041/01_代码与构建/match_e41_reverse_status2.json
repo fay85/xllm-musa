@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T07:06:11.762815+08:00\", \"formal_client/active.json\": {\"phase\": \"formal_warmup\", \"count\": 1, \"input_tokens\": 256, \"started_at\": \"2026-11-17T07:06:07.533471+08:00\"}, \"sj9/status.json\": {\"at\": \"2026-11-17T07:06:10.591811+08:00\", \"pids\": [40918, 40919, 40920, 40921, 40922, 40923, 40924, 40925], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}, \"sj10/status.json\": {\"at\": \"2026-11-17T07:06:11.128849+08:00\", \"pids\": [32033, 32034, 32035, 32036, 32037, 32038, 32039, 32040], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}}\n",
+  "stderr": ""
+}

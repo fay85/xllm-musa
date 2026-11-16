@@ -1,0 +1,15 @@
+{
+  "archive": "/expt/exports/e40_native_prequant_checks_v2.tar.gz",
+  "bytes": 27884,
+  "sha256": "3d7bb5b4f6ff37a6cba0e7bce6d8b340b7b9deeaa84cab6b1892fc237a3839b8",
+  "summary": {
+    "e40_prequant_native_gpu_v2": {
+      "checks": 72,
+      "max_RMS": 0.000330418988596648
+    },
+    "e40_prequant_native_graph_v2": {
+      "checks": 36,
+      "max_RMS": 0.00019998049538116902
+    }
+  }
+}

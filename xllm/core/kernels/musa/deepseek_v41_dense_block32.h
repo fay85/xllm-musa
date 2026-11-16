@@ -5,6 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 #include <torch/torch.h>
 
+#include <cstdint>
 #include <string>
 
 namespace xllm::kernel::musa {
@@ -15,5 +16,14 @@ torch::Tensor deepseek_v41_dense_block32(const torch::Tensor& input,
                                          const torch::Tensor& weight,
                                          const torch::Tensor& weight_scale,
                                          const std::string& directory);
+
+// Separate quantization avoids redoing activation quantization in every N tile.
+// Directory contains shape-specific AOT exports; only rows 1..8 are supported.
+torch::Tensor deepseek_v41_dense_prequant_block32(
+    const torch::Tensor& input,
+    const torch::Tensor& weight,
+    const torch::Tensor& weight_scale,
+    int64_t splits,
+    const std::string& directory);
 
 }  // namespace xllm::kernel::musa

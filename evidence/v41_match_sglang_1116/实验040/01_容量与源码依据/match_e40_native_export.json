@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/e40_native_prequant_checks_v1.tar.gz\", \"bytes\": 27341, \"sha256\": \"ff78fc9ce6ca8302ac12962d41466245192b8444493084460d10adec1441a0c4\", \"summary\": {\"e40_prequant_native_gpu_v1\": {\"checks\": 72, \"max_RMS\": 0.000330418988596648}, \"e40_prequant_native_graph_v1\": {\"checks\": 36, \"max_RMS\": 0.00019998049538116902}}}\n",
+  "stderr": ""
+}

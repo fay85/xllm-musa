@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p41_static_activation_proposal5_v1_evidence.tar.gz\", \"bytes\": 6455463, \"sha256\": \"b1713b73069443d876f56d4a633e8d6484712ce7bd1fbd3b684425215c9123b3\", \"at\": \"2026-11-17T07:01:51.606760+08:00\"}\n",
+  "stderr": "addr2line: DWARF error: invalid or unhandled FORM value: 0x23\n"
+}
