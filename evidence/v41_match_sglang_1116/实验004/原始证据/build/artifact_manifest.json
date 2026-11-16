@@ -1,0 +1,9 @@
+{
+  "source_base": "9ce7f8498fd4275183587a81cba39c72d527025e",
+  "source_delta_manifest": "/expt/builds/attention_replica_v1/source_manifest.json",
+  "binary": "/expt/artifacts/attention_replica_v1/bin/xllm",
+  "sha256": "2ff1368fbb7f32eabe8d5bb9896376e04a926f2ca110cdbdc4cdf19a29f082bc",
+  "bytes": 341323992,
+  "small_checks": "H64 sparse and full-versus-sharded Attention still need GPU validation",
+  "status": "COMPILED_NOT_YET_VALIDATED"
+}

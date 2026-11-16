@@ -100,3 +100,13 @@ cc_test(
   DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
        GTest::gtest_main glog::glog
 )
+
+# Isolated Attention head-layout and TP projection checks.
+pybind_extension(
+  NAME v41_attention_layout_test_module
+  SRCS v41_attention_layout_test_module.cpp
+  DEPS :cuda_kernels :util :platform tvm_ffi musa_python torch_python Python::Module torch glog::glog
+)
+target_include_directories(v41_attention_layout_test_module PRIVATE
+  "${PROJECT_SOURCE_DIR}/xllm"
+)

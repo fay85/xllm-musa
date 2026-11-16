@@ -1,0 +1,1407 @@
+{
+  "basis": "T13 frozen official mt safetensors headers; changes only wq_b/wo_a/wo_b/sink slice, keeps Engram+embed+head TP8 and routed EP8",
+  "extra_runtime_GiB": 7.6562583446502686,
+  "tensors": [
+    {
+      "name": "layers.0.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.0.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.0.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.0.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.1.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.1.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.1.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.1.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.2.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.2.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.2.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.2.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.3.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.3.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.3.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.3.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.4.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.4.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.4.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.4.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.5.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.5.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.5.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.5.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.6.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.6.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.6.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.6.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.7.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.7.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.7.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.7.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.8.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.8.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.8.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.8.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.9.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.9.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.9.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.9.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.10.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.10.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.10.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.10.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.11.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.11.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.11.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.11.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.12.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.12.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.12.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.12.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.13.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.13.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.13.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.13.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.14.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.14.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.14.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.14.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.15.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.15.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.15.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.15.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.16.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.16.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.16.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.16.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.17.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.17.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.17.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.17.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.18.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.18.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.18.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.18.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.19.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.19.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.19.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.19.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.20.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.20.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.20.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.20.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.21.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.21.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.21.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.21.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.22.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.22.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.22.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.22.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.23.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.23.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.23.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.23.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.24.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.24.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.24.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.24.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.25.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.25.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.25.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.25.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.26.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.26.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.26.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.26.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.27.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.27.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.27.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.27.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.28.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.28.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.28.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.28.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.29.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.29.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.29.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.29.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.30.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.30.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.30.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.30.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.31.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.31.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.31.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.31.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.32.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.32.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.32.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.32.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.33.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.33.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.33.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.33.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.34.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.34.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.34.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.34.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.35.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.35.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.35.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.35.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.36.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.36.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.36.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.36.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.37.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.37.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.37.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.37.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.38.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.38.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.38.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.38.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    },
+    {
+      "name": "layers.39.attn.wq_b.weight",
+      "shape": [
+        32768,
+        1280
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.39.attn.wo_a.weight",
+      "shape": [
+        8192,
+        4096
+      ],
+      "replicated_runtime_bytes": 67108864,
+      "tp8_runtime_bytes": 8388608
+    },
+    {
+      "name": "layers.39.attn.wo_b.weight",
+      "shape": [
+        5120,
+        8192
+      ],
+      "replicated_runtime_bytes": 83886080,
+      "tp8_runtime_bytes": 10485760
+    },
+    {
+      "name": "layers.39.attn.attn_sink",
+      "shape": [
+        64
+      ],
+      "replicated_runtime_bytes": 256,
+      "tp8_runtime_bytes": 32
+    }
+  ],
+  "limits": "additional to current allocation; activation, Graph pool and sparse H64 workspace must be budgeted separately"
+}

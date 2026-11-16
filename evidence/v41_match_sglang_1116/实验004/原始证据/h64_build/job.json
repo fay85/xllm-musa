@@ -1,0 +1,15 @@
+{
+  "pid": 49377,
+  "start_ticks": "518199506",
+  "command": [
+    "python3",
+    "/workspace/xllm-mt-main/tools/musa_deepseek_v41/build_sparse_mate.py",
+    "--donor-root",
+    "/donor",
+    "--output",
+    "/expt/builds/attention_replica_v1/sparse_h64/artifact",
+    "--heads",
+    "64"
+  ],
+  "at": "2026-11-16T17:39:19.207599+08:00"
+}

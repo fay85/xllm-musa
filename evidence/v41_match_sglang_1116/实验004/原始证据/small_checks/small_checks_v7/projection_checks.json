@@ -1,0 +1,192 @@
+{
+  "status": "PASS_ATTENTION_REPLICATION_PROJECTIONS",
+  "cases": [
+    {
+      "rows": 1,
+      "query": {
+        "relative_rms": 8.465542123303749e-06,
+        "max_abs": 0.0009765625
+      },
+      "output_sum": {
+        "relative_rms": 0.002539656590670347,
+        "max_abs": 0.03125
+      },
+      "replicated_projection_checks": [
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "rows": 3,
+      "query": {
+        "relative_rms": 1.7942013073479757e-05,
+        "max_abs": 0.00390625
+      },
+      "output_sum": {
+        "relative_rms": 0.0025732286740094423,
+        "max_abs": 0.03125
+      },
+      "replicated_projection_checks": [
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        },
+        {
+          "kv": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          },
+          "qr": {
+            "relative_rms": 0.0,
+            "max_abs": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "scope": "Actual native projection code, FP8 block32 QDQ retained; H8 outputs summed locally on GPU. Does not substitute for 8-rank communication or full-model tests."
+}

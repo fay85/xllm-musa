@@ -9,8 +9,9 @@ SPDX-License-Identifier: Apache-2.0
 
 namespace xllm::kernel::musa {
 
-// H8/D512 MATE sparse MLA operating directly on the existing V4.1 QDQ BF16
-// cache carrier. No additional KV quantization or change of index semantics.
+// H8 or H64/D512 MATE sparse MLA operating directly on the existing V4.1 QDQ
+// BF16 cache carrier. No additional KV quantization or change of index
+// semantics.
 torch::Tensor deepseek_v41_mate_sparse_attention(
     const torch::Tensor& query,
     const torch::Tensor& kv,

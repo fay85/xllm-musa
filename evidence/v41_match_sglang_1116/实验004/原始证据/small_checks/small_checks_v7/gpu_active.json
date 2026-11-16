@@ -1,0 +1,11 @@
+{
+  "name": "projection",
+  "pid": 50252,
+  "start_ticks": "518287597",
+  "command": [
+    "python3",
+    "/expt/builds/attention_replica_v1/small_checks_v7/validate_attention_replication.py",
+    "--output",
+    "/expt/builds/attention_replica_v1/small_checks_v7/projection_checks.json"
+  ]
+}

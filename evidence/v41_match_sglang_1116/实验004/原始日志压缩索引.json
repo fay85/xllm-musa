@@ -1,0 +1,260 @@
+[
+  {
+    "source": "04_trace与图/Perfetto图/Perfetto页面文本.txt",
+    "gz": "04_trace与图/Perfetto图/Perfetto页面文本.txt.gz",
+    "uncompressed_sha256": "7e3b6d716badedecf73843a6ac36e8ee92f8d2fceddf88aa87db87654d18f566",
+    "bytes": 1346
+  },
+  {
+    "source": "原始证据/h64_build/worker.log",
+    "gz": "原始证据/h64_build/worker.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/h64_build/build.log",
+    "gz": "原始证据/h64_build/build.log.gz",
+    "uncompressed_sha256": "1f0c475121f9ef6d14d6dd86ca3efc351bcbba5351e168ff647a03cebb729137",
+    "bytes": 1294
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v4/import.log",
+    "gz": "原始证据/small_checks/small_checks_v4/import.log.gz",
+    "uncompressed_sha256": "3341297218ddec671ce87d11c9738e4c6c3812324662bde2e86e2ba77f415b69",
+    "bytes": 361
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v4/link.log",
+    "gz": "原始证据/small_checks/small_checks_v4/link.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v3/import.log",
+    "gz": "原始证据/small_checks/small_checks_v3/import.log.gz",
+    "uncompressed_sha256": "73ade348d0b776fb7bd34d3d14da2eb4faa987e7e794f054f4487cf87ebd8967",
+    "bytes": 324
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v3/link.log",
+    "gz": "原始证据/small_checks/small_checks_v3/link.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v2/worker.log",
+    "gz": "原始证据/small_checks/small_checks_v2/worker.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v2/link.log",
+    "gz": "原始证据/small_checks/small_checks_v2/link.log.gz",
+    "uncompressed_sha256": "b378a284d0bb9a5e4b2a55614affba059a1a6bc14bfbf3c32bb5a2518967612d",
+    "bytes": 28053
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v6/import.log",
+    "gz": "原始证据/small_checks/small_checks_v6/import.log.gz",
+    "uncompressed_sha256": "05751f1e938931cf35a634b623d0d0a2af395f611959ea785760bfbffe6f137f",
+    "bytes": 290
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v6/link.log",
+    "gz": "原始证据/small_checks/small_checks_v6/link.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks/worker.log",
+    "gz": "原始证据/small_checks/small_checks/worker.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks/link.log",
+    "gz": "原始证据/small_checks/small_checks/link.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks/sparse_h64.log",
+    "gz": "原始证据/small_checks/small_checks/sparse_h64.log.gz",
+    "uncompressed_sha256": "ebecac065b496b19cf72a7a4945f9b4166b7d8d3b04b0b2b5ed0e803e418bc99",
+    "bytes": 1131
+  },
+  {
+    "source": "原始证据/small_checks/small_checks/compile.log",
+    "gz": "原始证据/small_checks/small_checks/compile.log.gz",
+    "uncompressed_sha256": "f2a4788d1377e5a478cb6af6aeaf1a87f32cfb14e60d70e79fcd68d894239e4c",
+    "bytes": 3559
+  },
+  {
+    "source": "原始证据/small_checks/small_checks/gpu_worker.log",
+    "gz": "原始证据/small_checks/small_checks/gpu_worker.log.gz",
+    "uncompressed_sha256": "8f33879d97a8c2ac0e450189e8d34d11ce9a49e109661d62046a1f8b6289a2e5",
+    "bytes": 537
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v5/import.log",
+    "gz": "原始证据/small_checks/small_checks_v5/import.log.gz",
+    "uncompressed_sha256": "c8b2d5873d6a3de60b26392d40cf7a5731e10ef27efb3bf95639144c1e08a0f2",
+    "bytes": 311
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v5/link.log",
+    "gz": "原始证据/small_checks/small_checks_v5/link.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v7/projection.log",
+    "gz": "原始证据/small_checks/small_checks_v7/projection.log.gz",
+    "uncompressed_sha256": "60d91adad180f3488f98f71beb260a95c548fbd70e281a00020ae3fbee407310",
+    "bytes": 117
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v7/import.log",
+    "gz": "原始证据/small_checks/small_checks_v7/import.log.gz",
+    "uncompressed_sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "bytes": 72
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v7/link.log",
+    "gz": "原始证据/small_checks/small_checks_v7/link.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v7/sparse_h64.log",
+    "gz": "原始证据/small_checks/small_checks_v7/sparse_h64.log.gz",
+    "uncompressed_sha256": "ccfa29f660c0c4a690c4a18fa980830bde724786d118d01e9cb0710a4c9f0fa4",
+    "bytes": 1474
+  },
+  {
+    "source": "原始证据/small_checks/small_checks_v7/gpu_worker.log",
+    "gz": "原始证据/small_checks/small_checks_v7/gpu_worker.log.gz",
+    "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "原始证据/build/build.log",
+    "gz": "原始证据/build/build.log.gz",
+    "uncompressed_sha256": "6aaf1d47022442744f36f7e3e130a5fafd950d622319163c27510a8e93f3df7b",
+    "bytes": 56099
+  },
+  {
+    "source": "原始证据/roles/sj9/rank0.log",
+    "gz": "原始证据/roles/sj9/rank0.log.gz",
+    "uncompressed_sha256": "2b4f99b1226b05d036d75451ad750c2893e20f4f7cf9d94dd682326e0625410f",
+    "bytes": 181326
+  },
+  {
+    "source": "原始证据/roles/sj10/rank0.log",
+    "gz": "原始证据/roles/sj10/rank0.log.gz",
+    "uncompressed_sha256": "496d8acf623b769ed039e2198cc581eb0adf178daa0f8177a4fccf06b50d83ff",
+    "bytes": 97510
+  },
+  {
+    "source": "原始证据/client/measured.log",
+    "gz": "原始证据/client/measured.log.gz",
+    "uncompressed_sha256": "d7105d6d493e8784d63320d625cc05863a6f4db32b4a9443b6ac2fb0569ba847",
+    "bytes": 22093
+  },
+  {
+    "source": "原始证据/client/screen.log",
+    "gz": "原始证据/client/screen.log.gz",
+    "uncompressed_sha256": "8414f47d5cf35c6a0ff990dab47f8c2b0dfda00e7d361b558bd531804870c54c",
+    "bytes": 18776
+  },
+  {
+    "source": "原始证据/client/screen_warmup.log",
+    "gz": "原始证据/client/screen_warmup.log.gz",
+    "uncompressed_sha256": "9b1f24dd162addce269c414de7c9b4d2b0f29cae81ca2f221081841846571204",
+    "bytes": 17818
+  },
+  {
+    "source": "原始证据/client/warmup.log",
+    "gz": "原始证据/client/warmup.log.gz",
+    "uncompressed_sha256": "e2779dc5a70267531a4a6e847e8a14c285b8c017b5523a855037ae749ef36a59",
+    "bytes": 17776
+  },
+  {
+    "source": "原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "gz": "原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "uncompressed_sha256": "bd706c6e0df13db101ebe880011f6e3b0a8e109c5d9d028763ea10f6457a4b47",
+    "bytes": 167269
+  },
+  {
+    "source": "原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "gz": "原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "uncompressed_sha256": "d728521057a3c8c7032e6b9fbc8c10d968bab017c179c3822ece220cdb22a4c4",
+    "bytes": 11604
+  },
+  {
+    "source": "原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "gz": "原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "uncompressed_sha256": "56211e04210eca8a05736544b66bb691f92700a9fa17f6123e0a867179016b7d",
+    "bytes": 4909
+  },
+  {
+    "source": "原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "gz": "原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "uncompressed_sha256": "110d8b3d0b6a155d4ecb3931fa1410635a48abceb46f928ebbab7b3a58371d72",
+    "bytes": 166808
+  },
+  {
+    "source": "原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "gz": "原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "uncompressed_sha256": "9cd07e5b9b7ca30b850c0138cd323c4e9261627e4243c21ec5bbce6a92d5ef77",
+    "bytes": 9204
+  },
+  {
+    "source": "原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "gz": "原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "uncompressed_sha256": "e3a403d6f76f47a61b63fe62ab87572bcf2ee97be921ef8f90daf62e04d15fe3",
+    "bytes": 4909
+  },
+  {
+    "source": "原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "gz": "原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "uncompressed_sha256": "e0df4067935d76a3935d2e858080226df69b042eab6d647c6d21592c2b74bc31",
+    "bytes": 166793
+  },
+  {
+    "source": "原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "gz": "原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "uncompressed_sha256": "69ba4573609c55312e160c3189671a7dc0d70d0d66052147e04c2ea78638ea48",
+    "bytes": 9239
+  },
+  {
+    "source": "原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "gz": "原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "uncompressed_sha256": "10f60e8dbe97da6ffc96d7db5026cee0c63eaa3e53a5fabd66e1947bd0280d9d",
+    "bytes": 4909
+  },
+  {
+    "source": "原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "gz": "原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "uncompressed_sha256": "94ca7fb86ad3155550ddc964b0b3f2a125a7190af47777e0fc9a9af66b89cb03",
+    "bytes": 166899
+  },
+  {
+    "source": "原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "gz": "原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "uncompressed_sha256": "11a36357c6101c8e021bdcaa4c9c233c2e919e3d71b0fb29131aefebec0fe379",
+    "bytes": 9776
+  },
+  {
+    "source": "原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "gz": "原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "uncompressed_sha256": "8cc5f83ef53a5d735ce80a97a4fcfe5bfd86eb05e7ba32854796c454fa76d471",
+    "bytes": 4909
+  },
+  {
+    "source": "01_代码与构建/attention_replica_v1_tracked.patch",
+    "gz": "01_代码与构建/attention_replica_v1_tracked.patch.gz",
+    "uncompressed_sha256": "1dc55acbca127832ea988dc1a89ee9ee1837a81d509a14495caa7129ef92387c",
+    "bytes": 14252
+  }
+]

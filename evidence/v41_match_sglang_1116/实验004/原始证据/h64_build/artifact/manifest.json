@@ -1,0 +1,41 @@
+{
+  "library": "/expt/builds/attention_replica_v1/sparse_h64/artifact/libdeepseek_v41_sparse_h64_bf16.so",
+  "sha256": "a1f754eeaeb312183cf0e754c923c9aa0b34e3dd95f5b9bbe5b0eee4b11576ce",
+  "bytes": 77664,
+  "target": {
+    "kind": "musa",
+    "arch": "mp_31"
+  },
+  "parameters": {
+    "num_heads": 64,
+    "dim": 512,
+    "has_attn_sink": true,
+    "has_topk_length": false,
+    "is_persistence": false
+  },
+  "source_reference": "JD delivery SGLang7c97bb0/MATE source overlay",
+  "invalid_index_fix": "bounded robust load zero-fills seq_len_kv instead of reading row0",
+  "patched_source_sha256": "15c36e1a8b656c06b0f7917c6f0479f1ad66ec0f2a08e59eaaf3f31e3f51d14f",
+  "source_sha256": {
+    "mate/sparse_mla/tilelang/sparse_mla_model1_fwd_pipelined.py": "0add859b7b7ab2448e232c7f10902657fe22a8211f73eeba53f80b3505482b94",
+    "mate/sparse_mla/tilelang/sparse_mla_prefill_common.py": "9f19f34bd35f69e2fedcb75fb4a1038085c7f2f5a0e4cd92cbc554b8b529b7fa",
+    "tilelang/jit/adapter/tvm_ffi.py": "8bb5868e0180d5cc63c5c38010479fef2a26a57ef664a37f48e079f221059c2e"
+  },
+  "compiler_flags": [
+    "-fmusa-flush-denormals-to-zero",
+    "-fno-signed-zeros",
+    "-fno-strict-aliasing",
+    "-mllvm",
+    "-misched=mtgpu-max-ilp",
+    "-mllvm",
+    "-mtgpu-if-convert=1",
+    "-mllvm",
+    "-mtgpu-tiny-offset-hint=1",
+    "-mllvm",
+    "-mtgpu-combine-fop-instr=1",
+    "-mllvm",
+    "-mtgpu-load-store-2d=1"
+  ],
+  "status": "BUILT_NOT_YET_NUMERICALLY_VALIDATED",
+  "entry": "main(q,kv,indices,out,max_logits,lse,sink,sm_scale_log2,persistent_blocks)"
+}

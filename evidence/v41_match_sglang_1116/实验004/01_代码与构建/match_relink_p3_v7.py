@@ -1,0 +1,10 @@
+from pathlib import Path
+import subprocess,json,shutil,sysconfig,datetime,os,hashlib
+base=Path('/expt/builds/attention_replica_v1');old=base/'small_checks';r=base/'small_checks_v7';r.mkdir(exist_ok=False)
+for p in old.glob('*.py'):shutil.copy2(p,r/p.name)
+b=Path('/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310');cmd=json.loads((old/'commands.json').read_text())[-1];target=r/('v41_attention_layout_test_module'+sysconfig.get_config_var('EXT_SUFFIX'));cmd[cmd.index('-o')+1]=str(target);i=next(i for i,x in enumerate(cmd) if x.endswith('libcuda_kernels.a'));cmd+=['-lssl','-lcrypto','-lz','-lrt'];cmd[i:i+1]=['-Wl,--start-group',cmd[i],str(b/'xllm/core/util/libutil.a'),str(b/'xllm/core/platform/libplatform.a'),str(b/'xllm/proto/libxllm_proto.a'),str(b.parent/'reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a'),str(b/'third_party/brpc/output/lib/libbrpc.a'),*[str(x) for x in sorted((b.parent/'reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib').glob('libabsl*.a'))],'-Wl,--end-group'];(r/'link_command.json').write_text(json.dumps(cmd,indent=2))
+with (r/'link.log').open('wb') as f:p=subprocess.run(cmd,cwd=b,stdout=f,stderr=subprocess.STDOUT)
+state={'exit_code':p.returncode,'at':datetime.datetime.now().astimezone().isoformat(),'artifact_exists':target.exists()}
+if target.exists():state.update(size=target.stat().st_size,sha256=hashlib.sha256(target.read_bytes()).hexdigest())
+(r/'finished.json').write_text(json.dumps(state,indent=2));print(json.dumps(state));assert p.returncode==0 and target.exists()
+cfg=json.loads(Path('/expt/runs/p2_full_decode_graph_v1/sj9/role_config.json').read_text());env=dict(os.environ,LD_LIBRARY_PATH=cfg['ranks'][0]['environment']['LD_LIBRARY_PATH'],LD_PRELOAD='',PYTHONPATH=str(r),MUSA_VISIBLE_DEVICES='-1');p=subprocess.run(['python3','-c','import torch,torch_musa; import v41_attention_layout_test_module; print("IMPORT_PASS")'],env=env,capture_output=True,text=True);(r/'import.log').write_text(p.stdout+p.stderr);print(p.stdout,p.stderr);assert p.returncode==0

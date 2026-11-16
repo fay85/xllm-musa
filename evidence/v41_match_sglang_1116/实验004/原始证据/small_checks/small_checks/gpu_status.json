@@ -1,0 +1,21 @@
+[
+  {
+    "name": "sparse_h64",
+    "pid": 49621,
+    "start_ticks": "518228140",
+    "command": [
+      "python3",
+      "/expt/builds/attention_replica_v1/small_checks/validate_native_sparse_mate.py",
+      "--module",
+      "v41_attention_layout_test_module",
+      "--heads",
+      "64",
+      "--graph",
+      "--library",
+      "/expt/builds/attention_replica_v1/sparse_h64/artifact/libdeepseek_v41_sparse_h64_bf16.so",
+      "--output",
+      "/expt/builds/attention_replica_v1/small_checks/sparse_h64_checks.json"
+    ],
+    "exit_code": 1
+  }
+]

@@ -1,0 +1,82 @@
+{
+  "champion": {
+    "last_step_ms": 59.408162,
+    "last_step_name": "V41/step/q=1/kv=263",
+    "step_count": 7,
+    "ranges": [
+      [
+        "V41/Engram/hash_lookup",
+        "user_annotation",
+        1.86444
+      ],
+      [
+        "V41/full_decode_graph_replay",
+        "user_annotation",
+        0.456491
+      ],
+      [
+        "musaStreamSynchronize",
+        "privateuse1_runtime",
+        54.485536999999994
+      ],
+      [
+        "musaStreamSynchronize",
+        "privateuse1_runtime",
+        0.447669
+      ],
+      [
+        "musaStreamSynchronize",
+        "privateuse1_runtime",
+        0.000721
+      ],
+      [
+        "musaGraphLaunch",
+        "privateuse1_runtime",
+        0.402945
+      ]
+    ],
+    "all_trace_kernel_count": 299,
+    "last_aten_count": 310,
+    "graph_visible": 1
+  },
+  "replica": {
+    "last_step_ms": 63.688742,
+    "last_step_name": "V41/step/q=1/kv=263",
+    "step_count": 7,
+    "ranges": [
+      [
+        "V41/Engram/hash_lookup",
+        "user_annotation",
+        2.008006
+      ],
+      [
+        "V41/full_decode_graph_replay",
+        "user_annotation",
+        0.37859
+      ],
+      [
+        "musaStreamSynchronize",
+        "privateuse1_runtime",
+        58.920648
+      ],
+      [
+        "musaStreamSynchronize",
+        "privateuse1_runtime",
+        0.13661500000000001
+      ],
+      [
+        "musaStreamSynchronize",
+        "privateuse1_runtime",
+        0.000761
+      ],
+      [
+        "musaGraphLaunch",
+        "privateuse1_runtime",
+        0.31329700000000005
+      ]
+    ],
+    "all_trace_kernel_count": 299,
+    "last_aten_count": 310,
+    "graph_visible": 1
+  }
+}

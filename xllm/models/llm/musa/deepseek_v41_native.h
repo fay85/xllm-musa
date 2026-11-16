@@ -64,7 +64,11 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK_EQ(context.get_parallel_args().cp_size(), 1);
     CHECK_EQ(context.get_parallel_args().dp_size(), 1);
     CHECK(!ExecutionConfig::get_instance().enable_graph());
+    replicated_attention_ =
+        util::get_bool_env("XLLM_DSV41_REPLICATED_ATTENTION", false);
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+    CHECK(!replicated_attention_ || !native_dspark_)
+        << "Replicated Attention is initially ordinary C1 target only";
     full_decode_graph_ =
         util::get_bool_env("XLLM_DSV41_FULL_DECODE_GRAPH", false);
     static_decode_ = full_decode_graph_ ||
@@ -129,7 +133,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     if (sparse_library != nullptr) {
       sparse_path_ = sparse_library;
       CHECK(std::filesystem::is_regular_file(sparse_path_));
-      CHECK_EQ(args_.n_heads() / tp_size(), 8);
+      CHECK_EQ(args_.n_heads() / attention_tp_size(),
+               replicated_attention_ ? 64 : 8);
       CHECK_EQ(args_.head_dim(), 512);
     }
     const char* mhc_directory = std::getenv("XLLM_DSV41_MATE_MHC_DIR");
@@ -164,6 +169,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK(!model_);
     torch::DeviceGuard guard(device());
     torch::NoGradGuard no_grad;
+    initialize_attention_replication_policy();
     initialize_decode_ep_policy();
     initialize_ffn_tail_graph_policy();
     initialize_shared_expert_tp_policy();
@@ -219,7 +225,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         std::move(compressed_rope),
         tp_group_,
         expert_reduction_group(),
-        bounded_replay_);
+        bounded_replay_,
+        replicated_attention_);
     if (static_decode_) {
       std::vector<int64_t> ratios;
       ratios.reserve(args_.n_layers());
@@ -810,6 +817,35 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     return ep_group_;
   }
 
+  int64_t attention_tp_size() const {
+    return replicated_attention_ ? 1 : tp_size();
+  }
+
+  void initialize_attention_replication_policy() {
+    if (tp_size() > 1) {
+      const torch::Tensor local =
+          torch::tensor({replicated_attention_ ? int64_t{1} : int64_t{0}},
+                        options_.dtype(torch::kInt64));
+      const torch::Tensor choices =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      const int64_t* values = choices.data_ptr<int64_t>();
+      for (int64_t index = 0; index < choices.numel(); ++index) {
+        CHECK_EQ(values[index], replicated_attention_ ? 1 : 0)
+            << "Attention replication policy must match all world ranks";
+      }
+    }
+    if (replicated_attention_) {
+      CHECK_EQ(tp_size(), 8);
+      CHECK_EQ(ep_size(), 8);
+      CHECK_EQ(args_.n_heads(), 64);
+      CHECK(expert_format_ == layer::DeepseekV41ExpertFormat::W4AFP8_MT);
+      CHECK(!sparse_path_.empty());
+      LOG(INFO) << "V4.1 replicated Attention TP1 on all 8 ranks; "
+                   "Engram/embedding/head remain TP8, experts EP8. "
+                   "This is replicated C1 execution, not DP8 scheduling.";
+    }
+  }
+
   int64_t tp_size() const {
     return tp_group_ == nullptr ? 1 : tp_group_->world_size();
   }
@@ -845,8 +881,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         attention.mode = layer::DeepseekV41AttentionMode::REUSE;
       }
     }
-    attention.heads = args_.n_heads() / tp_size();
-    attention.groups = args_.o_groups() / tp_size();
+    attention.heads = args_.n_heads() / attention_tp_size();
+    attention.groups = args_.o_groups() / attention_tp_size();
     attention.output_rank = args_.o_lora_rank();
     attention.window = args_.window_size();
     attention.index_heads = args_.index_n_heads();
@@ -907,18 +943,22 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     const std::string attention = prefix + "attn.";
     layer::DeepseekV41DecoderWeights weights;
     auto& attn = weights.attention;
+    const std::optional<int64_t> head_shard =
+        replicated_attention_ ? std::nullopt : std::optional<int64_t>{0};
+    const std::optional<int64_t> output_shard =
+        replicated_attention_ ? std::nullopt : std::optional<int64_t>{1};
     attn.projection = {
         checkpoint.dense(attention + "wq_a"),
         checkpoint.copy(attention + "q_norm.weight", torch::kBFloat16),
-        checkpoint.dense(attention + "wq_b", /*shard_dim=*/0),
+        checkpoint.dense(attention + "wq_b", head_shard),
         checkpoint.dense(attention + "wkv"),
         checkpoint.copy(attention + "kv_norm.weight", torch::kBFloat16),
-        checkpoint.dense(attention + "wo_a", /*shard_dim=*/0),
-        checkpoint.dense(attention + "wo_b", /*shard_dim=*/1)};
+        checkpoint.dense(attention + "wo_a", head_shard),
+        checkpoint.dense(attention + "wo_b", output_shard)};
     const std::string sink_name = checkpoint.has(attention + "attn_sink")
                                       ? attention + "attn_sink"
                                       : attention + "attn_sink.weight";
-    attn.sink = checkpoint.copy(sink_name, torch::kFloat32, /*shard_dim=*/0);
+    attn.sink = checkpoint.copy(sink_name, torch::kFloat32, head_shard);
     const bool full =
         config.attention.mode == layer::DeepseekV41AttentionMode::FULL;
     if (full ||
@@ -1161,6 +1201,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   std::unique_ptr<layer::DeepseekV41TextModel> model_;
   bool static_decode_ = false;
   bool full_decode_graph_ = false;
+  bool replicated_attention_ = false;
   // Graphs retain weight/cache pointers; destroy before model and Engram
   // assets.
   std::unique_ptr<layer::DeepseekV41DecodeGraph> decode_graph_;

@@ -1,0 +1,8 @@
+{
+  "decision": "REJECTED_STANDALONE_READY_DEPENDENCY",
+  "tpot_increase_pct": 6.861338827272556,
+  "e2e_increase_pct": 6.693909785810881,
+  "output_change_pct": -6.273938033809956,
+  "champion_unchanged": "p2_full_decode_graph_v1",
+  "limits": "Single candidate formal round is negative; not an optimized DP8/DeepEP verdict"
+}

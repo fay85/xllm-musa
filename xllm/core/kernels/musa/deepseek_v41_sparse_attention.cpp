@@ -36,10 +36,11 @@ torch::Tensor deepseek_v41_mate_sparse_attention(
   CHECK_EQ(kv.dim(), 2);
   CHECK_EQ(indices.dim(), 2);
   CHECK_EQ(sink.dim(), 1);
-  CHECK_EQ(query.size(1), 8);
+  const int64_t heads = query.size(1);
+  CHECK(heads == 8 || heads == 64);
   CHECK_EQ(query.size(2), 512);
   CHECK_EQ(kv.size(1), 512);
-  CHECK_EQ(sink.size(0), 8);
+  CHECK_EQ(sink.size(0), heads);
   CHECK_EQ(indices.size(0), query.size(0));
   CHECK_GT(kv.size(0), 0);
   CHECK_LE(kv.size(0), std::numeric_limits<int32_t>::max());
@@ -67,8 +68,8 @@ torch::Tensor deepseek_v41_mate_sparse_attention(
   const torch::Tensor keys = kv.contiguous().unsqueeze(1);
   picks = picks.contiguous().unsqueeze(1);
   const torch::Tensor bias = sink.contiguous();
-  const torch::Tensor max_logits =
-      torch::empty({query.size(0), 8}, query.options().dtype(torch::kFloat32));
+  const torch::Tensor max_logits = torch::empty(
+      {query.size(0), heads}, query.options().dtype(torch::kFloat32));
   const torch::Tensor lse = torch::empty_like(max_logits);
   const ffi::Function run = get_function_from_file(library_path, "main");
   // The kernel uses exp2 internally. The sink remains the original logit;

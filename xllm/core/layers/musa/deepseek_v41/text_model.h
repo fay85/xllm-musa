@@ -42,7 +42,8 @@ class DeepseekV41TextModel final {
                        torch::Tensor compressed_rope,
                        ProcessGroup* attention_group = nullptr,
                        ProcessGroup* expert_group = nullptr,
-                       bool bounded_replay = false)
+                       bool bounded_replay = false,
+                       bool replicated_attention = false)
       : embedding_(std::move(embedding)),
         norm_(std::move(norm)),
         head_(std::move(head)),
@@ -90,11 +91,11 @@ class DeepseekV41TextModel final {
       CHECK_EQ(configs[index].attention.epsilon, norm_epsilon_);
       compressed_layers_.emplace_back(configs[index].attention.ratio > 0);
       source_ratios_.emplace_back(configs[index].attention.ratio);
-      layers_.emplace_back(
-          std::make_unique<DeepseekV41Decoder>(std::move(configs[index]),
-                                               std::move(weights[index]),
-                                               attention_group_,
-                                               expert_group));
+      layers_.emplace_back(std::make_unique<DeepseekV41Decoder>(
+          std::move(configs[index]),
+          std::move(weights[index]),
+          replicated_attention ? nullptr : attention_group_,
+          expert_group));
     }
   }
 

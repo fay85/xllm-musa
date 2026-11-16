@@ -1,0 +1,9 @@
+{
+  "verified": true,
+  "files": [
+    "Perfetto图/真实CPU区间与GPU时间线.png",
+    "Perfetto图/完整实际C++调用链_ENTRY_COUNT.png"
+  ],
+  "visible": "63.69ms runtime wait and native COUNT313; graph GPU internals incomplete",
+  "at": "2026-11-16T18:06:32.901480+08:00"
+}

@@ -1,6 +1,6 @@
 # Copyright 2026 The xLLM Authors. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Build the pinned delivery's H8/D512 MATE sparse kernel without GPUs.
+"""Build the pinned delivery's H8 or H64/D512 sparse kernel without GPUs.
 
 Serve through native C++ TVM-FFI; Python is strictly an offline build tool.
 The input is already the V4.1 QDQ BF16 cache carrier, without another cast to
@@ -28,6 +28,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--donor-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--heads", type=int, choices=(8, 64), default=8)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(args.donor_root))
@@ -60,7 +61,7 @@ def main() -> None:
     factory.target = {"kind": "musa", "arch": "mp_31"}
     factory.execution_backend = "tvm_ffi"
     parameters = {
-        "num_heads": 8,
+        "num_heads": args.heads,
         "dim": 512,
         "has_attn_sink": True,
         "has_topk_length": False,
@@ -72,7 +73,7 @@ def main() -> None:
     source = Path(compiled._tilelang_cache_path) / "executable.so"
     if not source.is_file():
         raise FileNotFoundError(f"No standalone native executable at {source}")
-    library = args.output / "libdeepseek_v41_sparse_h8_bf16.so"
+    library = args.output / f"libdeepseek_v41_sparse_h{args.heads}_bf16.so"
     shutil.copyfile(source, library)
     source_files = [
         "mate/sparse_mla/tilelang/sparse_mla_model1_fwd_pipelined.py",
