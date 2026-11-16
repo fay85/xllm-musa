@@ -1,0 +1,101 @@
+[
+  {
+    "original": "00_目标与假设.md",
+    "bytes": 891,
+    "sha256": "ee85b019a0352b712e1ebdc819332fa26ecfe7076e2927a8d30ce54b4a5aca91",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/00_目标与假设.md"
+  },
+  {
+    "original": "05_结论与下一步.md",
+    "bytes": 1905,
+    "sha256": "c17c0948b2e57afcc63a39570656660df1e118b1b1c92cec94c228f74e8a6b6d",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/05_结论与下一步.md"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/__pycache__/match_e25_fp8_reference.cpython-310.pyc",
+    "bytes": 2457,
+    "sha256": "e319c3179bc6af85e29ad30552f67b161f8cd95dfbdbe8436cd753a7e29b3b27",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/__pycache__/match_e25_fp8_reference.cpython-310.pyc"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/child.json",
+    "bytes": 42,
+    "sha256": "f7908fe6537e68099ffa18c6d9c4d7051ab5ca809267609895fb720241724486",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/child.json"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/finished.json",
+    "bytes": 58,
+    "sha256": "4b020eaa9d0d029424b68a1b151579a1cec9edaceb6111c81617b0e2c527bb1a",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/finished.json"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/job.json",
+    "bytes": 84,
+    "sha256": "b51c73eb5f8856c7033e0a2ca4f73e51f033b733cbadd1117471b1882a6e13ae",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/job.json"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/match_e25_fp8_probe.py",
+    "bytes": 3027,
+    "sha256": "f46b91272e05e06140e45bbc094370c0d9f3253b91ef2f76a9fefe8e3bbba3fc",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/match_e25_fp8_probe.py"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/match_e25_fp8_reference.py",
+    "bytes": 2786,
+    "sha256": "aac09a47d36b2bb8bcb8a710e44e7e8ece64c88eaa7e7bc24017493f2186bf2a",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/match_e25_fp8_reference.py.gz",
+    "lossless_gzip": "H64FP8投影微基准原始证据/diagnostic/match_e25_fp8_reference.py.gz"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/partial.json",
+    "bytes": 6686,
+    "sha256": "ce6c8d960c215d57276d6edaffa5d6ed22fdfc389da14c2f125056ce1a44261b",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/partial.json"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/probe.log",
+    "bytes": 1873,
+    "sha256": "fb244f4aaf8e794f1b644f927c6c37a27ea5dd312dc821094a78346bcf70db09",
+    "lossless_gzip": "H64FP8投影微基准原始证据/diagnostic/probe.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/probe.log.gz"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/result.json",
+    "bytes": 6814,
+    "sha256": "d150e50f8ba76906b3b20ace3396cece6e467eef2ca8c1c8bee810720d96e133",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/result.json"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "H64FP8投影微基准原始证据/diagnostic/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/worker.log.gz"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据/diagnostic/worker.py",
+    "bytes": 500,
+    "sha256": "f61976d9a490f014868975490bb98f0fe09eca61feff65f46895947084ec2b2f",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据/diagnostic/worker.py"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据.tar.gz",
+    "bytes": 6930,
+    "sha256": "7d2c494f3c2c258a556b7557f2b9cb46208a8b72bbbe133c9ba04b6e20e786cd",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "H64FP8投影微基准原始证据校验.json",
+    "bytes": 212,
+    "sha256": "7902d626e2b35b116892b39ba7f227d101fd4564fb70543b863cca97907b8623",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/H64FP8投影微基准原始证据校验.json"
+  },
+  {
+    "original": "来源manifest.json",
+    "bytes": 198,
+    "sha256": "80428ba77673a31d819895f8f252c5790957640c41cf7b502a381be1a8fa74cf",
+    "git_path": "evidence/v41_match_sglang_1116/实验025/来源manifest.json"
+  }
+]

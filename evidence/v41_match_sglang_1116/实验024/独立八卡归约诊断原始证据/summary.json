@@ -1,0 +1,227 @@
+{
+  "status": "PASS_DIAGNOSTIC_NOT_MODEL_BENCHMARK",
+  "rows": [
+    {
+      "case": "bf16_1",
+      "custom": true,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 40960,
+      "mccl_includes_clone": false,
+      "rank_median_graph_ms": [
+        0.22597999572753907,
+        0.22303199768066406,
+        0.2286639928817749,
+        0.22473199367523194,
+        0.22668399810791015,
+        0.22484400272369384,
+        0.22221999168395995,
+        0.22832400798797609
+      ],
+      "max_rank_median_graph_ms": 0.2286639928817749,
+      "max_rank_us_per_reduction": 228.6639928817749,
+      "checks": 32
+    },
+    {
+      "case": "fp32_1",
+      "custom": true,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 81920,
+      "mccl_includes_clone": false,
+      "rank_median_graph_ms": [
+        0.2543720006942749,
+        0.25470800399780275,
+        0.2551600217819214,
+        0.25238399505615233,
+        0.25694801807403567,
+        0.2546720027923584,
+        0.255511999130249,
+        0.25624799728393555
+      ],
+      "max_rank_median_graph_ms": 0.25694801807403567,
+      "max_rank_us_per_reduction": 256.94801807403564,
+      "checks": 32
+    },
+    {
+      "case": "bf16_40",
+      "custom": true,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 1638400,
+      "mccl_includes_clone": false,
+      "rank_median_graph_ms": [
+        1.96839599609375,
+        1.9676080703735352,
+        1.9695119857788086,
+        1.9658601760864258,
+        1.9674039840698243,
+        1.9689838409423828,
+        1.969576072692871,
+        1.9684879302978515
+      ],
+      "max_rank_median_graph_ms": 1.969576072692871,
+      "max_rank_us_per_reduction": 49.23940181732178,
+      "checks": 1280
+    },
+    {
+      "case": "fp32_40",
+      "custom": true,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 3276800,
+      "mccl_includes_clone": false,
+      "rank_median_graph_ms": [
+        1.7345958709716798,
+        1.7356800079345702,
+        1.7384599685668944,
+        1.7361440658569336,
+        1.728424072265625,
+        1.743120002746582,
+        1.7372119903564454,
+        1.7409521102905274
+      ],
+      "max_rank_median_graph_ms": 1.743120002746582,
+      "max_rank_us_per_reduction": 43.57800006866455,
+      "checks": 1280
+    },
+    {
+      "case": "mixed_80",
+      "custom": true,
+      "reductions_per_graph": 80,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 4915200,
+      "mccl_includes_clone": false,
+      "rank_median_graph_ms": [
+        3.3511280059814452,
+        3.3444839477539063,
+        3.34835205078125,
+        3.3571678161621095,
+        3.358123779296875,
+        3.3454036712646484,
+        3.3444801330566407,
+        3.3536441802978514
+      ],
+      "max_rank_median_graph_ms": 3.358123779296875,
+      "max_rank_us_per_reduction": 41.97654724121094,
+      "checks": 2560
+    },
+    {
+      "case": "bf16_1",
+      "custom": false,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 40960,
+      "mccl_includes_clone": true,
+      "rank_median_graph_ms": [
+        0.5872519969940185,
+        0.5682919979095459,
+        0.573523998260498,
+        0.5887000083923339,
+        0.5712160110473633,
+        0.595967960357666,
+        0.5925879955291748,
+        0.5718519687652588
+      ],
+      "max_rank_median_graph_ms": 0.595967960357666,
+      "max_rank_us_per_reduction": 595.967960357666,
+      "checks": 32
+    },
+    {
+      "case": "fp32_1",
+      "custom": false,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 81920,
+      "mccl_includes_clone": true,
+      "rank_median_graph_ms": [
+        0.6243760108947753,
+        0.6350279808044433,
+        0.6273200035095214,
+        0.6269080162048339,
+        0.6108359813690185,
+        0.6209400177001954,
+        0.6238920211791992,
+        0.6328360080718994
+      ],
+      "max_rank_median_graph_ms": 0.6350279808044433,
+      "max_rank_us_per_reduction": 635.0279808044434,
+      "checks": 32
+    },
+    {
+      "case": "bf16_40",
+      "custom": false,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 1638400,
+      "mccl_includes_clone": true,
+      "rank_median_graph_ms": [
+        4.943887710571289,
+        4.959575653076172,
+        4.940304183959961,
+        4.936991882324219,
+        4.9541877746582035,
+        4.954756164550782,
+        4.966704177856445,
+        4.974372100830078
+      ],
+      "max_rank_median_graph_ms": 4.974372100830078,
+      "max_rank_us_per_reduction": 124.35930252075195,
+      "checks": 1280
+    },
+    {
+      "case": "fp32_40",
+      "custom": false,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 3276800,
+      "mccl_includes_clone": true,
+      "rank_median_graph_ms": [
+        4.795975875854492,
+        4.800127792358398,
+        4.793479919433594,
+        4.8198200225830075,
+        4.781964111328125,
+        4.783547973632812,
+        4.814244079589844,
+        4.812644195556641
+      ],
+      "max_rank_median_graph_ms": 4.8198200225830075,
+      "max_rank_us_per_reduction": 120.4955005645752,
+      "checks": 1280
+    },
+    {
+      "case": "mixed_80",
+      "custom": false,
+      "reductions_per_graph": 80,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 4915200,
+      "mccl_includes_clone": true,
+      "rank_median_graph_ms": [
+        9.059336090087891,
+        9.04742431640625,
+        9.025503540039063,
+        9.081108093261719,
+        9.060884094238281,
+        9.024044036865234,
+        9.046611785888672,
+        9.041587829589844
+      ],
+      "max_rank_median_graph_ms": 9.081108093261719,
+      "max_rank_us_per_reduction": 113.51385116577148,
+      "checks": 2560
+    }
+  ],
+  "total_exact_checks": 10368,
+  "all8_exit0": true
+}

@@ -424,6 +424,9 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
            &NativeCompressor::forward,
            pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeIndexer = xllm::layer::DeepseekV41Indexer;
+  module.def("v41_select_all_visible",
+             &NativeIndexer::select_all_visible,
+             pybind11::call_guard<pybind11::gil_scoped_release>());
   pybind11::class_<NativeIndexer>(module, "NativeV41Indexer")
       .def(pybind11::init<std::vector<torch::Tensor>,
                           int64_t,

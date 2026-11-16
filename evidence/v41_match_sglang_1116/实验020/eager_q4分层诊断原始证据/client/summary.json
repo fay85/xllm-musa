@@ -1,0 +1,16 @@
+{
+  "status": "EAGER_SCOPES_DIAGNOSTIC_COMPLETE_NOT_GRAPH_PERCENTAGES",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 454.43457132205367,
+  "mean_TPOT_ms_per_token": 50.52945443301224,
+  "TPOT_sample_stdev_ms": 0.4462018363219521,
+  "mean_E2E_s": 13.339445451740175,
+  "output_tokens_per_latency_sum_second": 19.19120258230854,
+  "formal_requests": 2,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "a4f9ff81ef37d9daf3c14456f4c5ef1c0eaa06efc743bd451dcf173118147cab"
+}

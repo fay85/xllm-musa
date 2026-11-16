@@ -1,0 +1,228 @@
+{
+  "off": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 435.34995149821043,
+      "mean_TPOT_ms_per_token": 37.23245077127335,
+      "TPOT_sample_stdev_ms": 0.1942855781559769,
+      "mean_E2E_s": 9.929624898172914,
+      "output_tokens_per_latency_sum_second": 25.781437126301203,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "f0d590211d759f41b5d7b76b0cb7ddb215e16d3aa492c38b9652a9042d64dfcf"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.111809903755784,
+        "first_chunk_latency": 0.5518436590209603,
+        "time_per_output_token": 0.037490063704842445,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.887632828205824,
+        "first_chunk_latency": 0.35963502153754234,
+        "time_per_output_token": 0.03736469728105209,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.806578846648335,
+        "first_chunk_latency": 0.3569028340280056,
+        "time_per_output_token": 0.03705755299066796,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 9.805926935747266,
+        "first_chunk_latency": 0.3599637607112527,
+        "time_per_output_token": 0.037042992843278486,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 10.036175976507366,
+        "first_chunk_latency": 0.5484044821932912,
+        "time_per_output_token": 0.03720694703652578,
+        "request_id": null,
+        "output_sha256": "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536",
+        "text_chars": 1251
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      },
+      {
+        "accepted": 147,
+        "proposed": 330
+      }
+    ]
+  },
+  "on": {
+    "metrics": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 439.5243763923645,
+      "mean_TPOT_ms_per_token": 42.31555353265767,
+      "TPOT_sample_stdev_ms": 0.3173970407603682,
+      "mean_E2E_s": 11.229990527220071,
+      "output_tokens_per_latency_sum_second": 22.796101152488824,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "f0d590211d759f41b5d7b76b0cb7ddb215e16d3aa492c38b9652a9042d64dfcf"
+    },
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 11.471045498736203,
+        "first_chunk_latency": 0.5436127241700888,
+        "time_per_output_token": 0.04285267754731809,
+        "request_id": null,
+        "output_sha256": "acad4eac589e874dbb1b59a6c039746027bdc89caa4ea0302ad987d7a1946777",
+        "text_chars": 1310
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 11.137770355679095,
+        "first_chunk_latency": 0.37673890870064497,
+        "time_per_output_token": 0.042200123321484116,
+        "request_id": null,
+        "output_sha256": "acad4eac589e874dbb1b59a6c039746027bdc89caa4ea0302ad987d7a1946777",
+        "text_chars": 1310
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 11.095354238525033,
+        "first_chunk_latency": 0.3671885607764125,
+        "time_per_output_token": 0.04207123795195537,
+        "request_id": null,
+        "output_sha256": "acad4eac589e874dbb1b59a6c039746027bdc89caa4ea0302ad987d7a1946777",
+        "text_chars": 1310
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 11.345159185118973,
+        "first_chunk_latency": 0.5483937561511993,
+        "time_per_output_token": 0.04234025658418735,
+        "request_id": null,
+        "output_sha256": "acad4eac589e874dbb1b59a6c039746027bdc89caa4ea0302ad987d7a1946777",
+        "text_chars": 1310
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 11.100623358041048,
+        "first_chunk_latency": 0.36168793216347694,
+        "time_per_output_token": 0.042113472258343415,
+        "request_id": null,
+        "output_sha256": "acad4eac589e874dbb1b59a6c039746027bdc89caa4ea0302ad987d7a1946777",
+        "text_chars": 1310
+      }
+    ],
+    "server_256_records_including_warmup": [
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      },
+      {
+        "accepted": 134,
+        "proposed": 363
+      }
+    ]
+  }
+}

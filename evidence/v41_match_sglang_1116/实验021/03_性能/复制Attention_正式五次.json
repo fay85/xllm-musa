@@ -1,0 +1,113 @@
+{
+  "sj9": {
+    "terminal": null,
+    "last_log": "perature: 0, num_prefix_cache_tokens: 0\nI20261116 23:33:44.668151 15825 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-3iLD7FEQxmK5EAnDtiFCog, released_swa=0, free_swa=3\n"
+  },
+  "sj10": {
+    "terminal": null,
+    "last_log": "g tpot: 42.1ms, generation speed: 23.8 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 134, speculative_proposed_tokens: 363, speculative_token_acceptance_rate: 0.3691\n"
+  },
+  "job.json": "{\n  \"pid\": 11667,\n  \"start_ticks\": \"520313722\",\n  \"started_at\": \"2026-11-16T23:30:34.205857+08:00\",\n  \"run\": \"p21_replica_on_v2\"\n}",
+  "finished.json": "{\n  \"at\": \"2026-11-16T23:33:56.464679+08:00\",\n  \"exit_code\": 0\n}",
+  "summary.json": "{\n  \"status\": \"FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND\",\n  \"accuracy_status\": \"仅通过基础功能检查，未完成模型精度验收\",\n  \"mean_TTFT_ms\": 439.5243763923645,\n  \"mean_TPOT_ms_per_token\": 42.31555353265767,\n  \"TPOT_sample_stdev_ms\": 0.3173970407603682,\n  \"mean_E2E_s\": 11.229990527220071,\n  \"output_tokens_per_latency_sum_second\": 22.796101152488824,\n  \"formal_requests\": 5,\n  \"input_output\": [\n    256,\n    256\n  ],\n  \"profiler_on\": false,\n  \"binary_sha256\": \"f0d590211d759f41b5d7b76b0cb7ddb215e16d3aa492c38b9652a9042d64dfcf\"\n}",
+  "basic_gate.json": [
+    {
+      "answer": "4.2",
+      "passed": true
+    },
+    {
+      "answer": "56",
+      "passed": true
+    }
+  ],
+  "client_verified_live": false,
+  "metrics": {
+    "screen_warmup": {
+      "rows": [
+        [
+          1,
+          256,
+          256,
+          15.943269782699645,
+          0.37635616306215525
+        ]
+      ],
+      "tpot_ms": 61.04672007700976,
+      "output_tps": 16.056932077872172
+    },
+    "screen": {
+      "rows": [
+        [
+          1,
+          256,
+          256,
+          11.509930499829352,
+          0.5653806664049625
+        ],
+        [
+          1,
+          256,
+          256,
+          11.409037438221276,
+          0.5503171617165208
+        ]
+      ],
+      "tpot_ms": 42.75151001946891,
+      "output_tps": 22.339574861482536
+    },
+    "formal_warmup": {
+      "rows": [
+        [
+          1,
+          256,
+          256,
+          11.232933222316206,
+          0.37662611808627844
+        ]
+      ],
+      "tpot_ms": 42.57375334992128,
+      "output_tps": 22.790129250604892
+    },
+    "formal": {
+      "rows": [
+        [
+          1,
+          256,
+          256,
+          11.471045498736203,
+          0.5436127241700888
+        ],
+        [
+          1,
+          256,
+          256,
+          11.137770355679095,
+          0.37673890870064497
+        ],
+        [
+          1,
+          256,
+          256,
+          11.095354238525033,
+          0.3671885607764125
+        ],
+        [
+          1,
+          256,
+          256,
+          11.345159185118973,
+          0.5483937561511993
+        ],
+        [
+          1,
+          256,
+          256,
+          11.100623358041048,
+          0.36168793216347694
+        ]
+      ],
+      "tpot_ms": 42.31555353265767,
+      "output_tps": 22.796101152488824
+    }
+  }
+}

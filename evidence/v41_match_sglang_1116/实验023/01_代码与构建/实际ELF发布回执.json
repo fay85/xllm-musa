@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/short_indexer_q4_v1/source_manifest.json\", \"binary\": \"/expt/artifacts/short_indexer_q4_v1/bin/xllm\", \"sha256\": \"ca62940f3480d37f252dc2cefa70e97d8d74b21d9d05989182d7324727f189b4\", \"bytes\": 341506776, \"small_checks\": \"E23 all-visible selection and actual Attention/cache Graph checks pending\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

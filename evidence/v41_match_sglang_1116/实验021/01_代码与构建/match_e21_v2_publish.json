@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/replica_verify_q4_v2/source_manifest.json\", \"binary\": \"/expt/artifacts/replica_verify_q4_v2/bin/xllm\", \"sha256\": \"f0d590211d759f41b5d7b76b0cb7ddb215e16d3aa492c38b9652a9042d64dfcf\", \"bytes\": 341498592, \"small_checks\": \"E21 H64/H8 routing and q4 GPU checks pending; no model before checks\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

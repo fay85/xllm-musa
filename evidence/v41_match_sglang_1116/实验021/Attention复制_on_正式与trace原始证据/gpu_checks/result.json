@@ -1,0 +1,88 @@
+{
+  "status": "PASS_H64_H8_PAIR",
+  "cases": [
+    {
+      "rows": 4,
+      "trial": 0,
+      "rms": {
+        "target_eager": 0.0020630843937397003,
+        "draft_eager": 0.002195353154093027,
+        "target_graph": 0.0020630843937397003,
+        "draft_graph": 0.002195353154093027
+      }
+    },
+    {
+      "rows": 4,
+      "trial": 1,
+      "rms": {
+        "target_eager": 0.002134334994480014,
+        "draft_eager": 0.002135355258360505,
+        "target_graph": 0.002134334994480014,
+        "draft_graph": 0.002135355258360505
+      }
+    },
+    {
+      "rows": 4,
+      "trial": 2,
+      "rms": {
+        "target_eager": 0.002154619200155139,
+        "draft_eager": 0.0022286041639745235,
+        "target_graph": 0.002154619200155139,
+        "draft_graph": 0.0022286041639745235
+      }
+    },
+    {
+      "rows": 4,
+      "trial": 3,
+      "rms": {
+        "target_eager": 0.0,
+        "draft_eager": 0.0,
+        "target_graph": 0.0,
+        "draft_graph": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "trial": 0,
+      "rms": {
+        "target_eager": 0.0021651366259902716,
+        "draft_eager": 0.002118067815899849,
+        "target_graph": 0.0021651366259902716,
+        "draft_graph": 0.002118067815899849
+      }
+    },
+    {
+      "rows": 6,
+      "trial": 1,
+      "rms": {
+        "target_eager": 0.002109297551214695,
+        "draft_eager": 0.0021288630086928606,
+        "target_graph": 0.002109297551214695,
+        "draft_graph": 0.0021288630086928606
+      }
+    },
+    {
+      "rows": 6,
+      "trial": 2,
+      "rms": {
+        "target_eager": 0.0021015536040067673,
+        "draft_eager": 0.0021243433002382517,
+        "target_graph": 0.0021015536040067673,
+        "draft_graph": 0.0021243433002382517
+      }
+    },
+    {
+      "rows": 6,
+      "trial": 3,
+      "rms": {
+        "target_eager": 0.0,
+        "draft_eager": 0.0,
+        "target_graph": 0.0,
+        "draft_graph": 0.0
+      }
+    }
+  ],
+  "h8": "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+  "h64": "/expt/artifacts/attention_replica_v1/lib/libdeepseek_v41_sparse_h64_bf16.so",
+  "scope": "Native sparse API, q4/q6, changed inputs, invalid masks, same-process dual libraries and Graph; not model precision."
+}

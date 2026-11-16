@@ -148,6 +148,40 @@ class DeepseekV41Indexer final {
     return result;
   }
 
+  // Finite-score short-context specialization. Call only when ALL compressed
+  // rows fit in top-k and ALL blocks fit in the candidate budget. This omits
+  // scoring, never cache publication. Non-finite valid model activations are
+  // outside this optimization's numerical contract; padding is still masked.
+  static std::tuple<torch::Tensor, torch::Tensor> select_all_visible(
+      const torch::Tensor& visible,
+      int64_t width,
+      int64_t block_size,
+      const std::optional<torch::Tensor>& candidates) {
+    CHECK(visible.defined());
+    CHECK_EQ(visible.dim(), 1);
+    CHECK_EQ(visible.scalar_type(), torch::kInt64);
+    CHECK(visible.device().type() == torch::kPrivateUse1);
+    CHECK_GE(width, 0);
+    CHECK_GT(block_size, 0);
+    torch::DeviceGuard guard(visible.device());
+    const torch::Tensor columns =
+        torch::arange(width, visible.options()).unsqueeze(0);
+    torch::Tensor valid = columns.lt(visible.unsqueeze(-1));
+    if (candidates.has_value()) {
+      CHECK_EQ(candidates->device(), visible.device());
+      CHECK_EQ(candidates->scalar_type(), torch::kBool);
+      CHECK_EQ(candidates->sizes(),
+               torch::IntArrayRef({visible.size(0), width}));
+      valid = valid.logical_and(*candidates);
+    }
+    const torch::Tensor indices =
+        torch::where(valid, columns, -1).to(torch::kInt32);
+    const torch::Tensor candidate_limit =
+        torch::floor_divide(visible + block_size - 1, block_size) * block_size;
+    const torch::Tensor pool = columns.lt(candidate_limit.unsqueeze(-1));
+    return {indices, pool};
+  }
+
   // Returns zero-based compressed row IDs. The paged attention component
   // applies its own window offset. Stable ties preserve chunk invariance.
   torch::Tensor select(const torch::Tensor& scores,

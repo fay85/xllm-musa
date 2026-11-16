@@ -1,0 +1,1 @@
+{"pid": 24229, "start_ticks": "520389921", "command": ["python3", "/workspace/xllm-mt-main/tools/musa_deepseek_v41/validate_small_batch_mhc_graph.py", "--fixture", "/work/correctness/fixtures/w4afp8_mt_layer0_mhc.safetensors", "--library-directory", "/work/artifacts/native_stage_i/lib/mate", "--output", "/expt/builds/mhc_q4_graph_checks_v1/result.json"]}

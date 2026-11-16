@@ -1,0 +1,7 @@
+{
+  "state": "PREPARED_NO_GPU_STARTED",
+  "source_sha256": "f03b2f7c92ed73b769f2a8a92a31686019d9ee892b68e50ceecbdb14928ae1c8",
+  "hyper_connection_sha256": "a11580239c31fc501a83a7a9bb14041201d6dfab6a0e2c7792eae6b6f2591b20",
+  "fixture": "/work/correctness/fixtures/w4afp8_mt_layer0_mhc.safetensors",
+  "module": "/work/artifacts/native_mhc_small_batch/lib/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so"
+}

@@ -7,6 +7,18 @@ SPDX-License-Identifier: Apache-2.0
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
 #include "core/layers/musa/deepseek_v41/prefix_checkpoint.h"
 PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
+  using NativeIndexer = xllm::layer::DeepseekV41Indexer;
+  module.def("v41_select_all_visible", &NativeIndexer::select_all_visible);
+  pybind11::class_<NativeIndexer>(module, "NativeV41Indexer")
+      .def(pybind11::init<std::vector<torch::Tensor>,
+                          int64_t,
+                          int64_t,
+                          double,
+                          bool,
+                          std::string>())
+      .def("select", &NativeIndexer::select)
+      .def("candidates", &NativeIndexer::candidates);
+
   using Checkpoint = xllm::layer::DeepseekV41PrefixCheckpoint;
   pybind11::class_<Checkpoint>(module, "PrefixCheckpoint")
       .def(pybind11::init<int64_t, int64_t, int64_t>())
@@ -30,6 +42,8 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
                      &NativeAttentionConfig::indexer_score_directory)
       .def_readwrite("decode_cache_read_reuse",
                      &NativeAttentionConfig::decode_cache_read_reuse)
+      .def_readwrite("short_context_indexer",
+                     &NativeAttentionConfig::short_context_indexer)
       .def_readwrite("decode_fused_swa_read",
                      &NativeAttentionConfig::decode_fused_swa_read)
       .def_readwrite("layer", &NativeAttentionConfig::layer)

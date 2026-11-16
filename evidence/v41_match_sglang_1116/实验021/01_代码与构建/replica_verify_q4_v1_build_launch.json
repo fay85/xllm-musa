@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 362, \"start_ticks\": \"520241231\", \"root\": \"/expt/builds/replica_verify_q4_v1\", \"changed_files\": 58}\n",
+  "stderr": ""
+}

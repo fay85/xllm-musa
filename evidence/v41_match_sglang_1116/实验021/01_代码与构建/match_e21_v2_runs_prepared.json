@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"binary_sha256\": \"f0d590211d759f41b5d7b76b0cb7ddb215e16d3aa492c38b9652a9042d64dfcf\", \"prepared\": [\"p21_replica_off_v2\", \"p21_replica_on_v2\"]}\n",
+  "stderr": ""
+}

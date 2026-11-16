@@ -83,8 +83,6 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         << "Verification custom reduction requires native DSpark and both "
            "validated TP/EP custom policies";
 
-    CHECK(!replicated_attention_ || !native_dspark_)
-        << "Replicated Attention is initially ordinary C1 target only";
     full_decode_graph_ =
         util::get_bool_env("XLLM_DSV41_FULL_DECODE_GRAPH", false);
     static_decode_ = full_decode_graph_ ||
@@ -149,6 +147,20 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       CHECK_EQ(args_.engram_head_dim(), 256);
     }
     const char* sparse_library = std::getenv("XLLM_DSV41_MATE_SPARSE_SO");
+    // Target and draft can have different head counts. Keep the draft's H8
+    // library unchanged when the target uses replicated H64 attention.
+    const char* target_sparse_library =
+        std::getenv("XLLM_DSV41_TARGET_MATE_SPARSE_SO");
+    CHECK(!replicated_attention_ || !native_dspark_ ||
+          (selective_spec_commit_ && verify_custom_allreduce_ &&
+           target_sparse_library != nullptr))
+        << "Replicated speculative target requires selective cache commit, "
+           "verification reduction, and a target-only H64 sparse library; "
+           "the draft keeps its independent H8 attention";
+    if (target_sparse_library != nullptr) {
+      CHECK_NE(target_sparse_library[0], '\0');
+      sparse_library = target_sparse_library;
+    }
     if (sparse_library != nullptr) {
       sparse_path_ = sparse_library;
       CHECK(std::filesystem::is_regular_file(sparse_path_));
@@ -982,6 +994,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_DECODE_FUSED_SWA_READ", false);
     attention.decode_cache_read_reuse =
         util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false);
+    attention.short_context_indexer =
+        util::get_bool_env("XLLM_DSV41_SHORT_CONTEXT_INDEXER", false);
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     config.hc_epsilon = args_.hc_eps();
     config.mhc_prenorm_directory = mhc_path_;

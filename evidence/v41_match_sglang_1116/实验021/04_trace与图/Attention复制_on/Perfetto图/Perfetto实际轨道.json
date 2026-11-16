@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Global Track Events",
+    "uri": null
+  },
+  {
+    "name": "CPU runtime / driver thread 8707",
+    "uri": "/track_event_6"
+  },
+  {
+    "name": "CPU runtime / driver thread 8766",
+    "uri": "/track_event_2"
+  },
+  {
+    "name": "GPU kernel stream 0",
+    "uri": "/track_event_3"
+  },
+  {
+    "name": "GPU kernel stream 20",
+    "uri": "/track_event_5"
+  },
+  {
+    "name": "GPU kernel stream 26",
+    "uri": "/track_event_4"
+  },
+  {
+    "name": "Native C++ / ATen thread 8766",
+    "uri": "/track_event_1"
+  },
+  {
+    "name": "Process 6927",
+    "uri": "/process_1"
+  },
+  {
+    "name": "Thread 8766",
+    "uri": "/thread_2"
+  },
+  {
+    "name": "Thread 8766 Callstacks",
+    "uri": "/process_1/thread_2_stack_samples_xllm.native_cpp.RecordFunction_entry_backtrace.COUNT"
+  }
+]

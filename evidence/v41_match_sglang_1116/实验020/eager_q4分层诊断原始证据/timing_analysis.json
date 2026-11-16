@@ -1,0 +1,397 @@
+{
+  "status": "EAGER_Q4_SCOPE_SPANS_NOT_GRAPH_PERCENTAGES",
+  "summary": {
+    "V41/step": {
+      "rows": 56,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 108.83598214285715,
+      "gpu_median_ms": 110.30799999999999,
+      "gpu_min_ms": 100.157,
+      "gpu_max_ms": 117.109,
+      "host_mean_ms": 108.98534144642858,
+      "host_median_ms": 110.557304,
+      "q_counts": {
+        "4": 56
+      }
+    },
+    "V41/DSpark/snapshot_target_state": {
+      "rows": 56,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.78986,
+      "gpu_median_ms": 0.76386,
+      "gpu_min_ms": 0.53564,
+      "gpu_max_ms": 1.31416,
+      "host_mean_ms": 0.9135582678571429,
+      "host_median_ms": 0.901161,
+      "q_counts": {
+        "-1": 56
+      }
+    },
+    "V41/Engram/hash_lookup": {
+      "rows": 56,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 1.9524064285714287,
+      "gpu_median_ms": 1.71248,
+      "gpu_min_ms": 0.99056,
+      "gpu_max_ms": 3.76992,
+      "host_mean_ms": 0.6461433571428572,
+      "host_median_ms": 0.501982,
+      "q_counts": {
+        "-1": 56
+      }
+    },
+    "V41/layer": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 2.6039984285714284,
+      "gpu_median_ms": 2.55226,
+      "gpu_min_ms": 1.43028,
+      "gpu_max_ms": 4.753,
+      "host_mean_ms": 2.348538385267857,
+      "host_median_ms": 2.212793,
+      "q_counts": {
+        "-1": 2240
+      }
+    },
+    "V41/mHC/prepare": {
+      "rows": 4480,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.12269810714285714,
+      "gpu_median_ms": 0.12032,
+      "gpu_min_ms": 0.11068,
+      "gpu_max_ms": 0.91896,
+      "host_mean_ms": 0.15947680044642856,
+      "host_median_ms": 0.148727,
+      "q_counts": {
+        "-1": 4480
+      }
+    },
+    "V41/Attention": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.8609603928571429,
+      "gpu_median_ms": 0.65698,
+      "gpu_min_ms": 0.52576,
+      "gpu_max_ms": 3.32728,
+      "host_mean_ms": 1.5181483,
+      "host_median_ms": 1.3864285,
+      "q_counts": {
+        "-1": 2240
+      }
+    },
+    "V41/Attention/SWA_sparse_and_commit": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.39278891071428573,
+      "gpu_median_ms": 0.33596,
+      "gpu_min_ms": 0.23668,
+      "gpu_max_ms": 1.80056,
+      "host_mean_ms": 0.7195846678571428,
+      "host_median_ms": 0.7031540000000001,
+      "q_counts": {
+        "-1": 2240
+      }
+    },
+    "V41/Attention/TP_allreduce": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.8029765892857142,
+      "gpu_median_ms": 0.8914599999999999,
+      "gpu_min_ms": 0.05168,
+      "gpu_max_ms": 2.10264,
+      "host_mean_ms": 0.02625263794642857,
+      "host_median_ms": 0.024024,
+      "q_counts": {
+        "4": 2240
+      }
+    },
+    "V41/mHC/post": {
+      "rows": 4480,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.008709026785714285,
+      "gpu_median_ms": 0.00848,
+      "gpu_min_ms": 0.00652,
+      "gpu_max_ms": 0.07156,
+      "host_mean_ms": 0.016832431249999998,
+      "host_median_ms": 0.014491,
+      "q_counts": {
+        "-1": 4480
+      }
+    },
+    "V41/MoE": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.6340089642857143,
+      "gpu_median_ms": 0.6155999999999999,
+      "gpu_min_ms": 0.42144,
+      "gpu_max_ms": 1.58532,
+      "host_mean_ms": 0.3830960214285714,
+      "host_median_ms": 0.37207599999999996,
+      "q_counts": {
+        "-1": 2240
+      }
+    },
+    "V41/MoE/W4A8_routed": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.17131551785714286,
+      "gpu_median_ms": 0.17093999999999998,
+      "gpu_min_ms": 0.05264,
+      "gpu_max_ms": 0.45148,
+      "host_mean_ms": 0.09072348794642857,
+      "host_median_ms": 0.08569199999999999,
+      "q_counts": {
+        "-1": 2240
+      }
+    },
+    "V41/MoE/EP_allreduce": {
+      "rows": 2240,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.148042625,
+      "gpu_median_ms": 0.13326,
+      "gpu_min_ms": 0.04076,
+      "gpu_max_ms": 1.21164,
+      "host_mean_ms": 0.025761828125,
+      "host_median_ms": 0.0228025,
+      "q_counts": {
+        "4": 2240
+      }
+    },
+    "V41/Attention/compressor": {
+      "rows": 224,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.19313303571428572,
+      "gpu_median_ms": 0.24114000000000002,
+      "gpu_min_ms": 0.02628,
+      "gpu_max_ms": 0.4906,
+      "host_mean_ms": 0.10313821875,
+      "host_median_ms": 0.105135,
+      "q_counts": {
+        "-1": 224
+      }
+    },
+    "V41/Attention/compressed_cache_commit": {
+      "rows": 448,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.049763660714285715,
+      "gpu_median_ms": 0.0473,
+      "gpu_min_ms": 0.0348,
+      "gpu_max_ms": 0.16568,
+      "host_mean_ms": 0.09966670758928571,
+      "host_median_ms": 0.09575700000000001,
+      "q_counts": {
+        "-1": 448
+      }
+    },
+    "V41/Attention/compressed_cache_materialize": {
+      "rows": 448,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.084324375,
+      "gpu_median_ms": 0.07228,
+      "gpu_min_ms": 0.05888,
+      "gpu_max_ms": 0.53256,
+      "host_mean_ms": 0.172633921875,
+      "host_median_ms": 0.167599,
+      "q_counts": {
+        "-1": 448
+      }
+    },
+    "V41/DSpark/restore_rejected_suffix": {
+      "rows": 48,
+      "pids": [
+        59803,
+        59804,
+        59805,
+        59806,
+        59807,
+        59808,
+        59809,
+        59810
+      ],
+      "gpu_mean_ms": 0.2743675,
+      "gpu_median_ms": 0.31501999999999997,
+      "gpu_min_ms": 0.00264,
+      "gpu_max_ms": 0.41092,
+      "host_mean_ms": 0.20891027083333333,
+      "host_median_ms": 0.23734349999999999,
+      "q_counts": {
+        "-1": 48
+      }
+    }
+  },
+  "phase_metrics": [
+    {
+      "phase": "warmup",
+      "requests": 1,
+      "TPOT_ms": 53.58173460790924,
+      "TTFT_ms": 557.251064106822,
+      "E2E_s": 14.220593389123678,
+      "output_tps": 18.002061728014542
+    },
+    {
+      "phase": "measured",
+      "requests": 2,
+      "TPOT_ms": 50.52945443301224,
+      "TTFT_ms": 454.43457132205367,
+      "E2E_s": 13.339445451740175,
+      "output_tps": 19.19120258230854
+    },
+    {
+      "phase": "diagnostic",
+      "requests": 2,
+      "TPOT_ms": 51.33292813621023,
+      "TTFT_ms": 356.19639744982123,
+      "E2E_s": 13.44609307218343,
+      "output_tps": 19.038987654309736
+    },
+    {
+      "phase": "off_after",
+      "requests": 2,
+      "TPOT_ms": 50.809801103291555,
+      "TTFT_ms": 453.7302306853235,
+      "E2E_s": 13.41022951202467,
+      "output_tps": 19.08990444723188
+    }
+  ],
+  "q_counts": {
+    "4": 56
+  },
+  "file_count": 8,
+  "rows": 25976,
+  "scope": "per-rank samples are concurrent; no summing across GPUs. Graph contains waits/collectives; does not measure draft/sampling/service independently."
+}

@@ -1,0 +1,222 @@
+{
+  "status": "PASS_SMALL_BATCH_MHC_UPDATED_INPUT_GRAPH",
+  "cases": [
+    {
+      "part": "attn",
+      "rows": 4,
+      "trial": 0,
+      "metadata_max_abs": [
+        1.1920928955078125e-07,
+        7.450580596923828e-09,
+        5.960464477539063e-08
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 4,
+      "trial": 1,
+      "metadata_max_abs": [
+        1.4901161193847656e-08,
+        0.0,
+        1.1920928955078125e-07
+      ],
+      "combined_max_abs": 0.001953125,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 4,
+      "trial": 2,
+      "metadata_max_abs": [
+        5.587935447692871e-09,
+        2.9802322387695312e-08,
+        5.960464477539063e-08
+      ],
+      "combined_max_abs": 1.52587890625e-05,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "trial": 0,
+      "metadata_max_abs": [
+        1.1175870895385742e-08,
+        0.0,
+        5.960464477539063e-08
+      ],
+      "combined_max_abs": 0.00048828125,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "trial": 1,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        5.960464477539063e-08
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "trial": 2,
+      "metadata_max_abs": [
+        7.450580596923828e-09,
+        0.0,
+        2.9802322387695312e-08
+      ],
+      "combined_max_abs": 0.001953125,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "trial": 0,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "trial": 1,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "trial": 2,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "trial": 0,
+      "metadata_max_abs": [
+        1.1920928955078125e-07,
+        5.960464477539063e-08,
+        1.3969838619232178e-09
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "trial": 1,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        1.6298145055770874e-09
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "trial": 2,
+      "metadata_max_abs": [
+        2.2351741790771484e-08,
+        5.960464477539063e-08,
+        2.3283064365386963e-09
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "trial": 0,
+      "metadata_max_abs": [
+        0.0,
+        5.960464477539063e-08,
+        4.6566128730773926e-09
+      ],
+      "combined_max_abs": 1.52587890625e-05,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "trial": 1,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        1.6298145055770874e-09
+      ],
+      "combined_max_abs": 1.52587890625e-05,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "trial": 2,
+      "metadata_max_abs": [
+        1.1175870895385742e-08,
+        0.0,
+        3.725290298461914e-09
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "trial": 0,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "trial": 1,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "trial": 2,
+      "metadata_max_abs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "combined_max_abs": 0.0,
+      "carried_pre_exact": true
+    }
+  ],
+  "scope": "Actual native MATE MHC preparation/combine; q4/q6 and q9 normal-path boundary. No full-model precision claim."
+}

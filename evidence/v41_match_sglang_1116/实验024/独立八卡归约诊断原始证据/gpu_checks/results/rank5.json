@@ -1,0 +1,277 @@
+{
+  "rank": 5,
+  "records": [
+    {
+      "case": "bf16_1",
+      "custom": true,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 40960,
+      "exact_checks": 4,
+      "samples": [
+        {
+          "graph_ms": 0.22484400272369384,
+          "host_ms": 0.2322198823094368,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.23263199329376222,
+          "host_ms": 0.23711789399385452,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.2216639995574951,
+          "host_ms": 0.2283964306116104,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": false
+    },
+    {
+      "case": "fp32_1",
+      "custom": true,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 81920,
+      "exact_checks": 4,
+      "samples": [
+        {
+          "graph_ms": 0.2546720027923584,
+          "host_ms": 0.2611772157251835,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.2537440061569214,
+          "host_ms": 0.26120729744434357,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.25581200122833253,
+          "host_ms": 0.26202332228422165,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": false
+    },
+    {
+      "case": "bf16_40",
+      "custom": true,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 1638400,
+      "exact_checks": 160,
+      "samples": [
+        {
+          "graph_ms": 1.9697879791259765,
+          "host_ms": 1.9835696555674076,
+          "replays": 10
+        },
+        {
+          "graph_ms": 1.9689838409423828,
+          "host_ms": 1.9772788509726524,
+          "replays": 10
+        },
+        {
+          "graph_ms": 1.9608039855957031,
+          "host_ms": 1.9664564169943333,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": false
+    },
+    {
+      "case": "fp32_40",
+      "custom": true,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 3276800,
+      "exact_checks": 160,
+      "samples": [
+        {
+          "graph_ms": 1.7319040298461914,
+          "host_ms": 1.742538157850504,
+          "replays": 10
+        },
+        {
+          "graph_ms": 1.7619640350341796,
+          "host_ms": 1.7698902636766434,
+          "replays": 10
+        },
+        {
+          "graph_ms": 1.743120002746582,
+          "host_ms": 1.747890841215849,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": false
+    },
+    {
+      "case": "mixed_80",
+      "custom": true,
+      "reductions_per_graph": 80,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 4915200,
+      "exact_checks": 320,
+      "samples": [
+        {
+          "graph_ms": 3.3454036712646484,
+          "host_ms": 3.3586042933166027,
+          "replays": 10
+        },
+        {
+          "graph_ms": 3.344007873535156,
+          "host_ms": 3.3717019483447075,
+          "replays": 10
+        },
+        {
+          "graph_ms": 3.3502761840820314,
+          "host_ms": 3.369359578937292,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": false
+    },
+    {
+      "case": "bf16_1",
+      "custom": false,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 40960,
+      "exact_checks": 4,
+      "samples": [
+        {
+          "graph_ms": 0.6153719902038575,
+          "host_ms": 0.6259570829570293,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.595967960357666,
+          "host_ms": 0.6172046065330505,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.5766560077667237,
+          "host_ms": 0.6116515956819057,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": true
+    },
+    {
+      "case": "fp32_1",
+      "custom": false,
+      "reductions_per_graph": 1,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 81920,
+      "exact_checks": 4,
+      "samples": [
+        {
+          "graph_ms": 0.641156005859375,
+          "host_ms": 0.6583771668374538,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.6209400177001954,
+          "host_ms": 0.6583842448890209,
+          "replays": 10
+        },
+        {
+          "graph_ms": 0.5924439907073975,
+          "host_ms": 0.6251820363104343,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": true
+    },
+    {
+      "case": "bf16_40",
+      "custom": false,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 1638400,
+      "exact_checks": 160,
+      "samples": [
+        {
+          "graph_ms": 4.943012237548828,
+          "host_ms": 4.966951347887516,
+          "replays": 10
+        },
+        {
+          "graph_ms": 4.971812057495117,
+          "host_ms": 5.014287773519754,
+          "replays": 10
+        },
+        {
+          "graph_ms": 4.954756164550782,
+          "host_ms": 4.979689512401819,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": true
+    },
+    {
+      "case": "fp32_40",
+      "custom": false,
+      "reductions_per_graph": 40,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 3276800,
+      "exact_checks": 160,
+      "samples": [
+        {
+          "graph_ms": 4.79699592590332,
+          "host_ms": 4.824460111558437,
+          "replays": 10
+        },
+        {
+          "graph_ms": 4.783547973632812,
+          "host_ms": 4.833189677447081,
+          "replays": 10
+        },
+        {
+          "graph_ms": 4.6316162109375,
+          "host_ms": 4.69087278470397,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": true
+    },
+    {
+      "case": "mixed_80",
+      "custom": false,
+      "reductions_per_graph": 80,
+      "rows": 4,
+      "width": 5120,
+      "payload_bytes": 4915200,
+      "exact_checks": 320,
+      "samples": [
+        {
+          "graph_ms": 8.997392272949218,
+          "host_ms": 9.069239161908627,
+          "replays": 10
+        },
+        {
+          "graph_ms": 9.024044036865234,
+          "host_ms": 9.073764644563198,
+          "replays": 10
+        },
+        {
+          "graph_ms": 9.057608032226563,
+          "host_ms": 9.091314673423767,
+          "replays": 10
+        }
+      ],
+      "mccl_includes_clone": true
+    }
+  ],
+  "status": "PASS",
+  "scope": "Isolated contiguous q4 reductions; no layer compute or model rank skew. MCCL reference includes clone, custom does not. Not model critical-path share."
+}

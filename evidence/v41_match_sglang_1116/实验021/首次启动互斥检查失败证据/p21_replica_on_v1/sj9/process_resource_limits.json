@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-16T23:24:37.303062+08:00",
+  "RLIMIT_CORE": [
+    0,
+    0
+  ],
+  "scope": "Only owned supervisor/children. No host-global kernel setting, no driver/toolkit modification."
+}

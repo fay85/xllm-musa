@@ -1,0 +1,562 @@
+[
+  {
+    "original": "00_目的与当前边界.md",
+    "bytes": 1359,
+    "sha256": "469c22922aa9af33a688525aa6c50e8cc109eeca1dd13b2e020b15342109c400",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/00_目的与当前边界.md"
+  },
+  {
+    "original": "05_结论与下一步.md",
+    "bytes": 2208,
+    "sha256": "5f068441be568692ebb389c5b7df042ca374d4384350a8776df37d48c6a5d7b9",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/05_结论与下一步.md"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/active.json",
+    "bytes": 979,
+    "sha256": "21f2e50ea0e9924e8bc2aef2b69a08ffdedd67da3feda1dc3752e5eee7c361d6",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/active.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/basic_1_sse.jsonl",
+    "bytes": 1583,
+    "sha256": "33c07d4fdb1fea93d0f3aafdf5c0847baea630117170723982db3659d4e52bef",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/basic_1_sse.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/basic_1_sse.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/basic_2_sse.jsonl",
+    "bytes": 1304,
+    "sha256": "66a88f8027af73f250df4311f4947fad6b2b092d3d515f6bb8a5265fdc289b16",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/basic_2_sse.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/basic_2_sse.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/basic_gate.json",
+    "bytes": 1872,
+    "sha256": "d2d1aeea9bd47547bc7552ca6cd9d57ef547ed2d90dc4411427e9d6e4714831f",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/basic_gate.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10077,
+    "sha256": "8b622e2414029704b0bd0e90c83cc5b915b2bced77aac8b67ce259ab683ac714",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2347,
+    "sha256": "511c26e4b61836afa90efd576ad7e8f0caccf21ce786ef91579b8d0b670cb163",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "786bfc238543756296b2d310c08b07e925bcc4cc36848a9bdbc3f4900e37f0b7",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3640,
+    "sha256": "2c5c5841ae272b772ba2819344a17754ee41b2b1065b5c850f256e57c59ee45b",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "06e4ffbcacf33086a49c4c023267e620d2f344b762e13d89c60dd2dead0eec99",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "ccffc7d84ac1c8e5e4a97ed7e4bfc02fc316e8a87cdfa5c46fd818c163984d51",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "270d3b2438408ccb8f2b6db21c82cd985108534afd528100dc118e3eac7a3dc5",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166941,
+    "sha256": "cc033f252a7cb7f9e9ba35d7565531959ee0aa7954fdc699c61ac9920960116f",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "4ec47d22a8bc626394a537c75337122d9610486a6ea1172a9b525c2703c8f6b2",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/diagnostic.log",
+    "bytes": 19320,
+    "sha256": "bc3578def438f3001aeab913a27a8dd2f2c107d6b708ab52d9124f95f708a49b",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/diagnostic.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/diagnostic.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/finished.json",
+    "bytes": 64,
+    "sha256": "ede78c4dc67be1384369ac0d16e063856b0005f053a71bbb6f8af034d15ee88e",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/finished.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/identity.json",
+    "bytes": 286274,
+    "sha256": "4d000314d2e9652487ac68e8fc7a201d16a6bb1154e9a42ca54cd3a531661488",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/identity.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/job.json",
+    "bytes": 135,
+    "sha256": "e46b58ede597e6f3defdd73fd92ade39ee7f373c682ab99cf20f1ed4464c9a62",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/job.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10066,
+    "sha256": "a1557430f0fa00b753c82899c8b66f6765bbe6f04aae38c7f2da398de73e7354",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2345,
+    "sha256": "12fd027115d5557ebad853aa1ca60ae0a742108d77fad24aecda39619cf07278",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "cf86e1a1b25aca6d259f8571a9c4c53688f339083e702a15bb1c995ec0a3fa66",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3641,
+    "sha256": "79203a6df205afb6435e84c215f54dc105ec8b2970a4f726d0134f6d5b20d74e",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "3264ebbb1430ac6d8f0fd5352f783d9fbfbfba7134e3e524631019d3c921a243",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 875,
+    "sha256": "22d58824de57d2d614b977457b2f213540c4be9fc5c5a840c44fe58def8c784c",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 368,
+    "sha256": "f1f67669bf91f5d14f4a530f5ae7a787bc55be2c5b4fb8209fce86f65d745cef",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166933,
+    "sha256": "7e8745b82502a93e0b7ea488e300b38e5fdfd468ab9628179e6ba2ee9bfac2e5",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "294b05a0c8b1d45f4ca3b986a88881fd8ea7a052e07d3c2d77b51c7bb50e0229",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/measured.log",
+    "bytes": 19307,
+    "sha256": "f9de7992d69fdac799c6e8ab15b1fd874cbe88996ff38093a43660251b289fb5",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/measured.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/measured.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10071,
+    "sha256": "21818ce773fdb65f3be51c581b0e848a0b299430f104cdc39a5200f84c3253ec",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2346,
+    "sha256": "4596db51a6626c8667ae5de9724c6742969ae4a28002e5d6c172d495f564d2b7",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 81920,
+    "sha256": "167d0dfca61d2875b4d9789f9cbad9cf9fbc7be220a68895243ca4fbebb9241f",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3641,
+    "sha256": "e96d6ce79c6cbfab111eacdd29f6daaa84f8b59597541d4341d109f8b1ab8297",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "4eda7fb9dadbfc9a8dde6cc10dd59c236a4df92362244d17e88124b4343485b9",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 875,
+    "sha256": "504ab0bc8ea41fc6406fe330dd4d41e5d4603ca0743a9a2e790360576d387d67",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "75e32fe27f86c2e3a11359723e54dc4c43bf125ee8ab644fd7c68293a0268fd4",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166947,
+    "sha256": "0a8a3862a99c3471d040a21d68699d7eeff1824643babe57e51831d21909401b",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "9230ec9dc03bb3fc65be25a9632f07dbf0846a2d7cddbea6288e6c0eaff44b43",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/off_after.log",
+    "bytes": 19313,
+    "sha256": "87b841ef73b4eebc31d3427aefa7807e900e4c9b8c80cf729379dc2f6fcfc968",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/off_after.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/off_after.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/status.json",
+    "bytes": 6187,
+    "sha256": "1ad6dfbe5a0c2b15be5c9fd1a1ed4f22269342d17a9e4ad7877ad13f301f9680",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/status.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/summary.json",
+    "bytes": 559,
+    "sha256": "43106e59696a32a464230da0aba28814e96ab02b6ab929158776e5b9ea0ae5ed",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/summary.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9418,
+    "sha256": "770771bd4a13275504fce0d15b3e32968737d456741f29385dc1bb9f74b57568",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2343,
+    "sha256": "095d88453f2a06eea32bc71161c126a1f14fa5b181f430a7e9a0ce876b8263cb",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "a0fc2d48eee45055ecec521eaee7bc94042c15ce3b18c9608ebcdd0a84305691",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3651,
+    "sha256": "31fd710afa4c23d6187746bcf0a5fdaa27b63912d5bd6ca71696364f1cddb91a",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "95b370e773ad7288f8aec35aa70ce727b4b940f2d9df88e3107fbaf92e4f0905",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "da27e2e4edc22104f779f227bb721a4bab592a4068ed7b4f8012ae26f4579d82",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "44e60472019dade0b828b3cbbcad9182abbacfe85bc308fccbeb3e27e712669f",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166826,
+    "sha256": "ef6d147b60e3da59e5bd9746616838cfaba1d1df19d1f85b430b685a2c2e107e",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "dfaac2d0a71813822c1d6f47f4c1118157a2da6d513dc3c2a939e10e87ba14dc",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/client/warmup.log",
+    "bytes": 18229,
+    "sha256": "f392603b929e2a88b5e7ed1da42555f84f5ff8df632ba652fbe13fcf8df6b631",
+    "lossless_gzip": "eager_q4分层诊断原始证据/client/warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/client/warmup.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/child.json",
+    "bytes": 42,
+    "sha256": "2cb47868dcf19847fa36730247cd2294b70c81bf0920fad22d632aa5ab53848d",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/child.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/finished.json",
+    "bytes": 58,
+    "sha256": "0a0aab3ed99141f5dda5cdb4e4fc7222f61cbd354dff9a0c86f85bfbadaff6db",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/finished.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/job.json",
+    "bytes": 84,
+    "sha256": "2b0e70fc8921ba159b0015d6ccf2ebc10d6622b402674dd6a7659d9887a55695",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/job.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/probe.log",
+    "bytes": 955,
+    "sha256": "a52dfa702f73e502556c102c5f54c135c8fc5ccf46ea6d349cc0f42fc687edf6",
+    "lossless_gzip": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/probe.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/probe.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/probe.py",
+    "bytes": 958,
+    "sha256": "8396b8324b33dbafe5d1c66c5899e5c708b5fa0f605d406a9ca392b8f91ba154",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/probe.py"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/worker.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/worker.py",
+    "bytes": 485,
+    "sha256": "3202785a4db0eb66cb26a6396f26551b6256e115aae01748cc1688b665a29e9f",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_event_probe_v1/worker.py"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/child.json",
+    "bytes": 42,
+    "sha256": "35e99d4b91cc0290c81acf2773cb15e0a93727bb2cea4205254e180c6c6ceaa3",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/child.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/finished.json",
+    "bytes": 58,
+    "sha256": "3226042a31440fc718d640b3693cc61adaf5d52909b804462396dc5997bfc419",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/finished.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/job.json",
+    "bytes": 84,
+    "sha256": "5cf53f1a0daa631c10023c4f16542a6418f165010f3c50810fbb234a2bd1b6f6",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/job.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/probe.log",
+    "bytes": 722,
+    "sha256": "311e6776d6010143457200c2d96d9ead8bdf5ad4fd9c355774e1839e2d708f81",
+    "lossless_gzip": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/probe.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/probe.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/probe.py",
+    "bytes": 1938,
+    "sha256": "bd56a25a99fed4ea3c78902500aac332c914e895aa4d0059776c782a9e123dad",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/probe.py"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/worker.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/worker.py",
+    "bytes": 494,
+    "sha256": "9f4c6f486b8e6fb3a49e373ef8281340178ba1bd85453753cbd748a9a1664a9c",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/failed_graph_event_probes/e20_graph_external_event_probe_v1/worker.py"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59803.140471695278576.jsonl",
+    "bytes": 947277,
+    "sha256": "7d9d75bd7221fa6745e875523741d1d5f5bcd0b1c3a114c6966b50bf8baa92ed",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59803.140471695278576.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59803.140471695278576.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59804.140659348447728.jsonl",
+    "bytes": 947277,
+    "sha256": "cdee5b2358a64b2a95135bead4481b596ba1082bfd16260c0846c3879eb7e4a6",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59804.140659348447728.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59804.140659348447728.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59805.140120061616624.jsonl",
+    "bytes": 947257,
+    "sha256": "021fc6248e2d111b6d7855045011eb3b71f0ec4d3cfaa4c32fe80ede75a3fbb9",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59805.140120061616624.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59805.140120061616624.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59806.139913173381616.jsonl",
+    "bytes": 947259,
+    "sha256": "d5dc9603d88d7b6c6167e28a9277b228b65b7a57e2dfcd1e4854b35ee14339c6",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59806.139913173381616.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59806.139913173381616.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59807.140650850800112.jsonl",
+    "bytes": 947268,
+    "sha256": "286318bed302575b141e4225b5ebddac2163980702ec328695ba9d86d91e6730",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59807.140650850800112.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59807.140650850800112.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59808.140051233100272.jsonl",
+    "bytes": 947269,
+    "sha256": "0de465806a5ff81027fa22220c6319accb5cab580e974700ade92a6db2211927",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59808.140051233100272.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59808.140051233100272.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59809.140399083487728.jsonl",
+    "bytes": 947333,
+    "sha256": "cc7535f29f27d9dd1efc28d3569458c9dcfa9a210471a35c981c677d0aeabfd8",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59809.140399083487728.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59809.140399083487728.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/light_timing/target.59810.140113484947952.jsonl",
+    "bytes": 947310,
+    "sha256": "3687806b3fd468fe38754f1ed81211aacc3783525f7decb320ecb4f409ead724",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/light_timing/target.59810.140113484947952.jsonl.gz",
+    "lossless_gzip": "eager_q4分层诊断原始证据/light_timing/target.59810.140113484947952.jsonl.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj10/rank0.log",
+    "bytes": 6186722,
+    "sha256": "540e2f62ccec9c2e27b5c51c8842debeb738472460d146f8a242c5da9205b2f0",
+    "lossless_gzip": "eager_q4分层诊断原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj10/role_config.json",
+    "bytes": 52580,
+    "sha256": "881fe35395f0a31253c259a14f9f56092117dbdb93684c184d33f06a054acc3d",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9159,
+    "sha256": "932732ae35d1c1e2cba0f998d17adeab66c7ef4e1ed4be4b4ed9ddb53f109c6a",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj10/status.json",
+    "bytes": 251,
+    "sha256": "1afdcc7de4d7236ddebc746d184159fa6a8dc18495abd43284cc38527bcad048",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "78fb1956c535c88b6479c85e06479437abb3ade356571c941019685f7d724e08",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj9/rank0.log",
+    "bytes": 168989,
+    "sha256": "42aabc96cb7ee1eb98bb4c7bfdca269393de1665c08c64cd45a15838506a8862",
+    "lossless_gzip": "eager_q4分层诊断原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj9/role_config.json",
+    "bytes": 50148,
+    "sha256": "5127d9426a1b0359464fd65f21a41e32ec8e195ba693da9f36b96d3fbb2a581a",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9361,
+    "sha256": "6302effeebf6a9c0f3f32c7cb384a136dc3087efee1e1e697753f52d312023ab",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj9/status.json",
+    "bytes": 272,
+    "sha256": "0d2ba1139019433b8d54d1381555832df1ca7d26d5d051749105fc0f7ab2c481",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "f41333700f723d1d0800e0bb2733d6fbe19c2c214e67a2369cbcb499da35f244",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据/timing_analysis.json",
+    "bytes": 8530,
+    "sha256": "05645dfe44325d709fc6ec369c97858c8160521c5e4ecadfffee05341cf7305b",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据/timing_analysis.json"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据.tar.gz",
+    "bytes": 1002937,
+    "sha256": "d585d8d52fe1528906e8fc79393ae63658cfdde7252b3e245a4e5c5a3d73963b",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "eager_q4分层诊断原始证据校验.json",
+    "bytes": 221,
+    "sha256": "c19ff1a55f4ea4d1ff36b8795697188abb9435b0b1dbf906fd22ae6fafccab89",
+    "git_path": "evidence/v41_match_sglang_1116/实验020/eager_q4分层诊断原始证据校验.json"
+  }
+]

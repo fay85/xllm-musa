@@ -1,0 +1,243 @@
+[
+  {
+    "original": "00_目标与假设.md",
+    "bytes": 1207,
+    "sha256": "da568c23ed17fef8e29ec59958d54b1ea00f232275014ea8db08a06d2590b037",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/00_目标与假设.md"
+  },
+  {
+    "original": "05_结论与下一步.md",
+    "bytes": 2655,
+    "sha256": "760fbb6d47e3c424ac2452f2eaf474fe56cef8291e07fec89e52e2c73c05ad85",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/05_结论与下一步.md"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/benchmark_verify_collective.py",
+    "bytes": 5290,
+    "sha256": "e2f21bc2d14249aedb696818ceea4fbd9bf8bf75e46800cd36cef16977af8d4f",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/benchmark_verify_collective.py"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/commands.json",
+    "bytes": 15615,
+    "sha256": "d33a54dab37e29651daa700e6a64d4678f897357822470ecd15573415241ce73",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/commands.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/compile.log",
+    "bytes": 3538,
+    "sha256": "8e69918700027501c8ff7d78a551326ac8f0ad5c6aa255bb137a9de589140885",
+    "lossless_gzip": "独立八卡归约诊断原始证据/compile.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/compile.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/finished.json",
+    "bytes": 165,
+    "sha256": "d799aa865ea3b19040586cdf63ba68d6aedfda9b72c3a5b11bbda40e40d5de89",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/finished.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/finished.json",
+    "bytes": 178,
+    "sha256": "94a5b8e3fea9bae92aecbdfcff7b35fa2fc00999776b51ecf5db173c4eeb1b25",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/finished.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/job.json",
+    "bytes": 92,
+    "sha256": "da66af96b2988928d6957e17b235dc73f7d396e52b86ab9031e2515c1cf74034",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/job.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank0.log",
+    "bytes": 1475,
+    "sha256": "b2c6e0168f79a2eb8fc1c470bbcce69c46996ff82d83d3b8e4f0c2adc18c330a",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank0.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank1.log",
+    "bytes": 1475,
+    "sha256": "f97be6613a32364b2f8c13b049017141302fb754fd6a3e66cde6f0edacaf41fb",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank1.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank1.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank2.log",
+    "bytes": 1475,
+    "sha256": "0867a273b983caeab026cce859a183312889164e8043ad2c78115d3273dfdf0e",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank2.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank2.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank3.log",
+    "bytes": 1475,
+    "sha256": "fc2683217b09ed8e949c0fb863bb1e5f598e2019631f6b304cfad2de157f7280",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank3.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank3.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank4.log",
+    "bytes": 1475,
+    "sha256": "55f8114b731d1f30f867d5cbaa5d3c0c165c13bd2dc8be0a9ce80ce54780c5b5",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank4.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank4.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank5.log",
+    "bytes": 1475,
+    "sha256": "6a978608392e051a4a6ec81184f6f573cd6d085cec6842016c2dd1e928eb3c3e",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank5.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank5.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank6.log",
+    "bytes": 1475,
+    "sha256": "6da88d9b19aeb697c2abb401bca21e5f774346db082a6cc8b664fac59e9674da",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank6.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank6.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/rank7.log",
+    "bytes": 1475,
+    "sha256": "78d0b3f427f73067de01d54396bc850b5fce117cda4ab147327ca62dfe7fb026",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/rank7.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/rank7.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/ranks.json",
+    "bytes": 586,
+    "sha256": "415820ed80d4c4d384f018baf559766d4a09dddfa118fc1e60dd428941f8f862",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/ranks.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank0.json",
+    "bytes": 6547,
+    "sha256": "a173899086f05e57af472242904383700d147605e7fdf9583a6aa8891973b750",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank0.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank1.json",
+    "bytes": 6554,
+    "sha256": "096bdbe7c160d2a02d5297986144ea59abd6c0c5b3dc0c2f307cb97f7e7e268a",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank1.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank2.json",
+    "bytes": 6548,
+    "sha256": "7965d28d156574d2e48b7771435c4ec469ba2ca37f7cebecd8f6549af52cc7aa",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank2.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank3.json",
+    "bytes": 6554,
+    "sha256": "810d0add68f7ccbcf9624dfa07ad9dd80c22beae8d52c7ef0f0ea070ee4eb62d",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank3.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank4.json",
+    "bytes": 6550,
+    "sha256": "a4f2c6c15b7f8e394e8e5e9b9296e0de1c58d4fa6e0ecc632982c5c91e54f6fb",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank4.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank5.json",
+    "bytes": 6544,
+    "sha256": "6cc426e4849438a1be3fd9c503657ecb829bfc35045511a399fe7979981b3955",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank5.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank6.json",
+    "bytes": 6545,
+    "sha256": "6877856ac35821a782d06602ff0bb7640ae74a93184be9a24a9a0abf1879ab2c",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank6.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/results/rank7.json",
+    "bytes": 6547,
+    "sha256": "35309af0dc81d18cb934eb38f73814d65a35e716de8348bb4a91a07d2cb00138",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/results/rank7.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/status.json",
+    "bytes": 252,
+    "sha256": "affb003bfe829dfdab1f8bfd3062bb67bfcfe7e98a0d5e6b438cda19cecb14b4",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/status.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "独立八卡归约诊断原始证据/gpu_checks/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/gpu_checks/worker.py",
+    "bytes": 2345,
+    "sha256": "d7db6fe630b009f174686253972d2a1f254f3a6133caaa85ad7cdd76daa3c46e",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/gpu_checks/worker.py"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/import.log",
+    "bytes": 72,
+    "sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "lossless_gzip": "独立八卡归约诊断原始证据/import.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/import.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/job.json",
+    "bytes": 92,
+    "sha256": "a88d89bfe5e4d7fadc93fbca0cc15991665c55c35a9bcf3e453566f07fdc4b41",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/job.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "独立八卡归约诊断原始证据/link.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/link.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/manifest.json",
+    "bytes": 300,
+    "sha256": "d158ee524819fc3c601316939a95129fa28b9d1584cb1719a76a43dcd1f8ee92",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/manifest.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/summary.json",
+    "bytes": 6004,
+    "sha256": "ffe0de867ae00addf20a53ca19ceb82f3be7d6849041c596608d9e83130d9c7f",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/summary.json"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/v41_verify_collective_test_module.cpp",
+    "bytes": 5411,
+    "sha256": "33eaac4072a57baedc7c3555e70337f2bd042104af017169808da16be51a0377",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/v41_verify_collective_test_module.cpp"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "独立八卡归约诊断原始证据/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/worker.log.gz"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据/worker.py",
+    "bytes": 2409,
+    "sha256": "efcf49b398edeaba64d55cde68638734b86bf35de9e79a82e25e24b61d9e152f",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据/worker.py"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据.tar.gz",
+    "bytes": 21693,
+    "sha256": "b9475c57ddb0f334e996a6750d0dc3f263cfbb6756006cfc27c4c2b41c53ab92",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "独立八卡归约诊断原始证据校验.json",
+    "bytes": 212,
+    "sha256": "75794ab5d09e4889d29f86c08f2109fb8298d2f842e2fdec62642ccbb2561a62",
+    "git_path": "evidence/v41_match_sglang_1116/实验024/独立八卡归约诊断原始证据校验.json"
+  }
+]

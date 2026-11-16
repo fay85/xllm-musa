@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "core/framework/parallel_state/musa_process_group.h"
 #include "core/platform/musa_graph_handle.h"
@@ -61,6 +62,53 @@ class VerifyCollective final {
     return output_;
   }
 
+  // Independent buffers model 40 Attention and 40 combined MoE reductions.
+  // There is deliberately no model compute between them: this is a lower-bound
+  // diagnostic, not a measurement of the model's exposed communication time.
+  std::vector<torch::Tensor> capture_many(std::vector<torch::Tensor> inputs,
+                                          bool use_custom) {
+    torch::DeviceGuard guard(device_);
+    CHECK(!graph_);
+    CHECK(!inputs.empty());
+    many_inputs_ = std::move(inputs);
+    many_outputs_.clear();
+    many_outputs_.reserve(many_inputs_.size());
+    for (const auto& input : many_inputs_) {
+      CHECK(input.device() == device_);
+      CHECK(input.is_contiguous());
+      CHECK(input.scalar_type() == torch::kBFloat16 ||
+            input.scalar_type() == torch::kFloat32);
+    }
+    for (const auto& input : many_inputs_) {
+      auto warm = use_custom ? custom(input) : mccl(input);
+    }
+    c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
+    graph_ = std::make_unique<xllm::MusaGraphHandle>();
+    graph_->capture_begin();
+    if (use_custom) {
+      for (const auto& input : many_inputs_) {
+        many_outputs_.emplace_back(custom(input));
+      }
+    } else {
+      // The clone is part of this measured reference, so repeated replay never
+      // reduces the preceding replay's result (which would grow as world^N).
+      for (const auto& input : many_inputs_) {
+        many_outputs_.emplace_back(mccl(input));
+      }
+    }
+    graph_->capture_end();
+    xllm::finalize_musa_custom_allreduce_graphs();
+    graph_->replay();
+    return many_outputs_;
+  }
+
+  void replay_many() {
+    CHECK(graph_);
+    CHECK(!many_inputs_.empty());
+    torch::DeviceGuard guard(device_);
+    graph_->replay();
+  }
+
   torch::Tensor replay() {
     CHECK(graph_);
     torch::DeviceGuard guard(device_);
@@ -74,6 +122,8 @@ class VerifyCollective final {
     graph_.reset();
     input_ = torch::Tensor{};
     output_ = torch::Tensor{};
+    many_outputs_.clear();
+    many_inputs_.clear();
   }
 
  private:
@@ -81,6 +131,8 @@ class VerifyCollective final {
   xllm::ProcessGroupImpl group_;
   torch::Tensor input_;
   torch::Tensor output_;
+  std::vector<torch::Tensor> many_inputs_;
+  std::vector<torch::Tensor> many_outputs_;
   std::unique_ptr<xllm::MusaGraphHandle> graph_;
 };
 
@@ -97,6 +149,12 @@ PYBIND11_MODULE(v41_verify_collective_test_module, module) {
            pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("capture",
            &VerifyCollective::capture,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("capture_many",
+           &VerifyCollective::capture_many,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("replay_many",
+           &VerifyCollective::replay_many,
            pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("replay",
            &VerifyCollective::replay,

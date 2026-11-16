@@ -1,0 +1,180 @@
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "width": 0,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 0,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 1,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 1,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 7,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 7,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 8,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 8,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 9,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 9,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 127,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 127,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 256,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 256,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 511,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 511,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "width": 512,
+      "masked": false,
+      "exact": true
+    },
+    {
+      "width": 512,
+      "masked": true,
+      "exact": true
+    },
+    {
+      "rows": 4,
+      "width": 256,
+      "offset": 0,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 4,
+      "width": 256,
+      "offset": 7,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 4,
+      "width": 256,
+      "offset": 252,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 4,
+      "width": 512,
+      "offset": 0,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 4,
+      "width": 512,
+      "offset": 7,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 4,
+      "width": 512,
+      "offset": 508,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 6,
+      "width": 256,
+      "offset": 0,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 6,
+      "width": 256,
+      "offset": 7,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 6,
+      "width": 256,
+      "offset": 250,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 6,
+      "width": 512,
+      "offset": 0,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 6,
+      "width": 512,
+      "offset": 7,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    },
+    {
+      "rows": 6,
+      "width": 512,
+      "offset": 506,
+      "graph_replay_changed_inputs": true,
+      "exact": true
+    }
+  ],
+  "contract": "Finite valid model scores; invalid/future rows masked. Not a proof of whole-model accuracy."
+}

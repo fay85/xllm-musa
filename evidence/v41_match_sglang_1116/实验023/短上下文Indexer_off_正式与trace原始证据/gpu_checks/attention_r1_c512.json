@@ -1,0 +1,538 @@
+{
+  "status": "PASS_SHORT_CONTEXT_INDEXER_ACTUAL_ATTENTION_GRAPH",
+  "compress_ratio": 1,
+  "capacity": 512,
+  "branch": "all_visible",
+  "cases": [
+    {
+      "rows": 4,
+      "parity": 0,
+      "position": 32,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 0,
+      "position": 128,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 0,
+      "position": 256,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 0,
+      "position": 502,
+      "changed_physical_pages": true,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 1,
+      "position": 31,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 1,
+      "position": 127,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 1,
+      "position": 255,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 4,
+      "parity": 1,
+      "position": 501,
+      "changed_physical_pages": true,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 0,
+      "position": 32,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 0,
+      "position": 128,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 0,
+      "position": 256,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 0,
+      "position": 502,
+      "changed_physical_pages": true,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 1,
+      "position": 31,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 1,
+      "position": 127,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 1,
+      "position": 255,
+      "changed_physical_pages": false,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    },
+    {
+      "rows": 6,
+      "parity": 1,
+      "position": 501,
+      "changed_physical_pages": true,
+      "output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      },
+      "states": {
+        "swa": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "key": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        },
+        "index": {
+          "exact": true,
+          "relative_rms": 0.0,
+          "max_absolute": 0.0
+        }
+      },
+      "next_output": {
+        "exact": true,
+        "relative_rms": 0.0,
+        "max_absolute": 0.0
+      }
+    }
+  ],
+  "scope": "Actual Attention and cache mutations; native service performance pending",
+  "accuracy_scope": "\u4ec5\u901a\u8fc7\u57fa\u7840\u529f\u80fd\u68c0\u67e5\uff0c\u672a\u5b8c\u6210\u6a21\u578b\u7cbe\u5ea6\u9a8c\u6536"
+}

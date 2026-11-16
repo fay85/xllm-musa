@@ -1,0 +1,12 @@
+{
+  "xllm/core/kernels/musa/deepseek_v41_pair_pool.h": "d0f344b632366eb275a9bfa45cea23c899e6d12fd4726adf5fcc458632cab65c",
+  "xllm/core/kernels/musa/deepseek_v41_pair_pool.cu": "318b41642f14193ebf54b946622869bc91b48bcb4c959f1c80723254f54a586c",
+  "xllm/core/layers/musa/deepseek_v41/compressor.h": "3b2037861a91073e5eadf0b6abaae71966406117a3488b56a1d357595845bcd8",
+  "xllm/core/layers/musa/deepseek_v41/attention.h": "8ea0fb5117fb5186451a669653f8038ae68e7a7f78b83b539b553afc93499c7e",
+  "xllm/core/layers/musa/deepseek_v41/paged_attention.h": "14042cadfcc4ebd748ab94c6b23daab58e083d0a04dc5925e9daf171fd93ece7",
+  "xllm/core/layers/musa/deepseek_v41/indexer.h": "5a1b95f7be57638fcb855afaa7bc6426803c610060b6e8243b79aeec87938cb9",
+  "v41_verify_graph_inputs_test_module.cpp": "f464d793ba2d7655e1d335a49b6efe1a3a46f7742077f12234c34b8bf7c06297",
+  "validate_short_context_attention.py": "fea94f3d09d1895b909193aba5523d73373fd123cfd494c9a636ac4e4fb7c274",
+  "validate_short_context_selection.py": "5eb96707bad56e1e25c8d493cd45edf12669cc13a3ba7f01caaff37b9a9b3fe3",
+  "worker.py": "aa384802c439e7d653f5be86f4c735f6780a8a60cf16dad66c38ba9ed16bf5ca"
+}

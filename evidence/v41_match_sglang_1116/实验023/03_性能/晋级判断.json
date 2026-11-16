@@ -1,0 +1,10 @@
+{
+  "decision": "INCONCLUSIVE_READY_DEPENDENCY_NOT_CHAMPION",
+  "gains_percent": {
+    "off": 1.0724054795686833,
+    "reverse": 0.9891481448996764
+  },
+  "final_acceptance": false,
+  "retained_champion": "E18",
+  "all_requests_success_actual_256_256": true
+}

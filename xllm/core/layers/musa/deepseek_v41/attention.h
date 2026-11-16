@@ -50,6 +50,7 @@ struct DeepseekV41AttentionConfig {
   double scale = 1.0;
   bool original_fp8_activation = true;
   bool decode_cache_read_reuse = false;
+  bool short_context_indexer = false;
   bool decode_fused_swa_read = false;
   bool decode_packed_qkv = false;
   bool verify_skinny_projection = false;
@@ -130,6 +131,8 @@ class DeepseekV41Attention final {
     CHECK_GE(config_.source_layer, 0);
     CHECK_LE(config_.source_layer, config_.layer);
     CHECK_GT(config_.index_topk, 0);
+    CHECK_GT(config_.candidate_block_size, 0);
+    CHECK_GT(config_.candidate_blocks, 0);
     if (config_.mode == DeepseekV41AttentionMode::FULL) {
       CHECK_EQ(config_.source_layer, config_.layer);
       CHECK_EQ(weights_.indexer.size(), 4);
@@ -345,37 +348,65 @@ class DeepseekV41Attention final {
         CHECK_EQ(shared.materialized_committed, committed);
       }
       if (indexer_) {
-        auto [index_query, head_weights] =
-            indexer_->prepare_query(hidden, qr, positions, rope_table);
-        const torch::Tensor keys =
-            reuse_read ? shared.index_read->materialize()
-                       : DeepseekV41TokenCache(shared.index)
-                             .gather(shared.index_table, committed, committed);
-        const torch::Tensor scores = indexer_->score(index_query,
-                                                     keys,
-                                                     head_weights,
-                                                     positions,
-                                                     committed,
-                                                     config_.ratio);
-        const torch::Tensor visible =
-            torch::floor_divide(positions + 1, config_.ratio);
-        if (config_.layer == config_.candidate_source) {
-          shared.candidates =
-              indexer_->candidates(scores,
-                                   visible,
-                                   config_.candidate_blocks,
-                                   config_.candidate_block_size);
-          shared.candidates_layer = config_.layer;
+        const bool all_fit = config_.short_context_indexer && static_decode &&
+                             committed <= config_.index_topk &&
+                             (committed + config_.candidate_block_size - 1) /
+                                     config_.candidate_block_size <=
+                                 config_.candidate_blocks;
+        if (all_fit) {
+          // Every reachable compressed row fits in both selection budgets.
+          // Compression/index-K publication above remains active so a later
+          // graph bucket can use the ordinary scored path without lost state.
+          const torch::Tensor visible =
+              torch::floor_divide(positions + 1, config_.ratio);
+          std::optional<torch::Tensor> pool;
+          if (config_.layer > config_.candidate_source &&
+              config_.candidate_source >= 0) {
+            CHECK_EQ(shared.candidates_layer, config_.candidate_source);
+            CHECK(shared.candidates.has_value());
+            pool = shared.candidates;
+          }
+          auto [indices, candidates] = DeepseekV41Indexer::select_all_visible(
+              visible, committed, config_.candidate_block_size, pool);
+          shared.topk = std::move(indices);
+          if (config_.layer == config_.candidate_source) {
+            shared.candidates = std::move(candidates);
+            shared.candidates_layer = config_.layer;
+          }
+        } else {
+          auto [index_query, head_weights] =
+              indexer_->prepare_query(hidden, qr, positions, rope_table);
+          const torch::Tensor keys =
+              reuse_read
+                  ? shared.index_read->materialize()
+                  : DeepseekV41TokenCache(shared.index)
+                        .gather(shared.index_table, committed, committed);
+          const torch::Tensor scores = indexer_->score(index_query,
+                                                       keys,
+                                                       head_weights,
+                                                       positions,
+                                                       committed,
+                                                       config_.ratio);
+          const torch::Tensor visible =
+              torch::floor_divide(positions + 1, config_.ratio);
+          if (config_.layer == config_.candidate_source) {
+            shared.candidates =
+                indexer_->candidates(scores,
+                                     visible,
+                                     config_.candidate_blocks,
+                                     config_.candidate_block_size);
+            shared.candidates_layer = config_.layer;
+          }
+          std::optional<torch::Tensor> pool;
+          if (config_.layer > config_.candidate_source &&
+              config_.candidate_source >= 0) {
+            CHECK_EQ(shared.candidates_layer, config_.candidate_source);
+            CHECK(shared.candidates.has_value());
+            pool = shared.candidates;
+          }
+          shared.topk =
+              indexer_->select(scores, visible, config_.index_topk, pool);
         }
-        std::optional<torch::Tensor> pool;
-        if (config_.layer > config_.candidate_source &&
-            config_.candidate_source >= 0) {
-          CHECK_EQ(shared.candidates_layer, config_.candidate_source);
-          CHECK(shared.candidates.has_value());
-          pool = shared.candidates;
-        }
-        shared.topk =
-            indexer_->select(scores, visible, config_.index_topk, pool);
         shared.topk_layer = config_.layer;
       } else {
         CHECK_GE(shared.topk_layer, config_.source_layer);
