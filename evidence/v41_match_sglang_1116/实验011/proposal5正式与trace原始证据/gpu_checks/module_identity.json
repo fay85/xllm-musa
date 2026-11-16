@@ -1,0 +1,9 @@
+{
+  "modules": [
+    {
+      "path": "/expt/builds/fused_prefix_snapshot_v1/v41_prefix_checkpoint_test_module.cpython-310-x86_64-linux-gnu.so",
+      "sha256": "428386db33d9dab8c12d6d225b525e4e43688c9cfe1a1551fd4e8b13a5ac9797",
+      "bytes": 21078008
+    }
+  ]
+}
