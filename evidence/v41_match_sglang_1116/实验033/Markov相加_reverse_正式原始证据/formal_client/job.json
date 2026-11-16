@@ -1,0 +1,6 @@
+{
+  "pid": 27836,
+  "start_ticks": "521659435",
+  "started_at": "2026-11-17T03:14:51.335144+08:00",
+  "run": "p33_markov_fp32_logits_off_reverse_v1"
+}

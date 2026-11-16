@@ -1,0 +1,153 @@
+{
+  "off": {
+    "native_sample_block_records": 336,
+    "aten_counts": {
+      "aten::empty": 72,
+      "aten::to": 24,
+      "aten::embedding": 12,
+      "aten::index_select": 12,
+      "aten::t": 12,
+      "aten::transpose": 24,
+      "aten::as_strided": 60,
+      "aten::matmul": 12,
+      "aten::mm": 12,
+      "aten::alias": 12,
+      "aten::select": 24,
+      "aten::add": 12,
+      "aten::copy_": 12,
+      "aten::_copy_from": 12,
+      "aten::expand_as": 12,
+      "aten::expand": 12
+    },
+    "actual_adds": 12,
+    "last_add_record_id": 13453,
+    "last_add": {
+      "ph": "X",
+      "cat": "cpu_op",
+      "name": "aten::add",
+      "pid": 10541,
+      "tid": 12385,
+      "ts": 3999020447080.314,
+      "dur": 23.053,
+      "args": {
+        "External id": 12777,
+        "Record function id": 13453,
+        "Fwd thread id": 0,
+        "Sequence number": 0,
+        "finished": true,
+        "Ev Idx": 12776
+      }
+    },
+    "correlated_add_kernels": [
+      {
+        "ph": "X",
+        "cat": "kernel",
+        "name": "void musa::dnn::binary::kernel_binary<__mt_bfloat16, musa::dnn::binary::AddOp, float, __mt_bfloat16, __mt_bfloat16, 128>(__mt_bfloat16*, __mt_bfloat16 const*, __mt_bfloat16 const*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+        "pid": 0,
+        "tid": 0,
+        "ts": 3999020447777.619,
+        "dur": 6.6,
+        "args": {
+          "queued": 5216149562406331,
+          "device": 0,
+          "context": 1,
+          "stream": 0,
+          "correlation": 15617470,
+          "registers per thread": 0,
+          "shared memory": 12,
+          "blocks per SM": 0.266667,
+          "warps per SM": 8.533334,
+          "grid": [
+            16,
+            1,
+            1
+          ],
+          "block": [
+            1024,
+            1,
+            1
+          ],
+          "est. achieved occupancy %": 9
+        }
+      }
+    ],
+    "scope": "full 256/8 trace; same 4 target rounds and 12 proposals; COUNT not CPU-time; launch queue gap is profiled observation only"
+  },
+  "on": {
+    "native_sample_block_records": 408,
+    "aten_counts": {
+      "aten::empty": 36,
+      "aten::to": 36,
+      "aten::embedding": 12,
+      "aten::index_select": 12,
+      "aten::t": 12,
+      "aten::transpose": 24,
+      "aten::as_strided": 72,
+      "aten::matmul": 12,
+      "aten::mm": 12,
+      "aten::alias": 12,
+      "aten::_to_copy": 12,
+      "aten::empty_strided": 12,
+      "aten::copy_": 24,
+      "aten::_copy_from": 24,
+      "aten::expand_as": 24,
+      "aten::expand": 24,
+      "aten::select": 24,
+      "aten::add": 12,
+      "aten::argmax": 12
+    },
+    "actual_adds": 12,
+    "last_add_record_id": 13527,
+    "last_add": {
+      "ph": "X",
+      "cat": "cpu_op",
+      "name": "aten::add",
+      "pid": 19345,
+      "tid": 21189,
+      "ts": 3999386833348.988,
+      "dur": 23.514,
+      "args": {
+        "External id": 12851,
+        "Record function id": 13527,
+        "Fwd thread id": 0,
+        "Sequence number": 0,
+        "finished": true,
+        "Ev Idx": 12850
+      }
+    },
+    "correlated_add_kernels": [
+      {
+        "ph": "X",
+        "cat": "kernel",
+        "name": "void musa::dnn::binary::kernel_binary<__mt_bfloat16, musa::dnn::binary::AddOp, float, float, float, 128>(float*, __mt_bfloat16 const*, float const*, long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+        "pid": 0,
+        "tid": 0,
+        "ts": 3999386833816.496,
+        "dur": 5.28,
+        "args": {
+          "queued": 5216515948675508,
+          "device": 0,
+          "context": 1,
+          "stream": 0,
+          "correlation": 15721375,
+          "registers per thread": 0,
+          "shared memory": 12,
+          "blocks per SM": 0.533333,
+          "warps per SM": 17.066668,
+          "grid": [
+            32,
+            1,
+            1
+          ],
+          "block": [
+            1024,
+            1,
+            1
+          ],
+          "est. achieved occupancy %": 18
+        }
+      }
+    ],
+    "scope": "full 256/8 trace; same 4 target rounds and 12 proposals; COUNT not CPU-time; launch queue gap is profiled observation only"
+  }
+}

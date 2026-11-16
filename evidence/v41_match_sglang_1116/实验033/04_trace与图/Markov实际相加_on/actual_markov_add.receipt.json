@@ -1,0 +1,57 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "630479831d367ae823ed5cb204af2c48826575e3e6a38fb8fc61a19714a8aad5",
+  "native_stacks_sha256": "47923efc731b0876fa70a6dac3131e25b895c69c63a4ee01c766fad89dd42ed6",
+  "symbols_sha256": "570eda69efb435d773257ad33ad8eb566e9d206c0eca25c9c0c13503fcf2d39f",
+  "symbolization_binary_sha256": "2f9e4cd3fa9636d701382eb42882db6d7a9e81c80406ed801fb997118796dd8e",
+  "selected_step": {
+    "ph": "X",
+    "cat": "cpu_op",
+    "name": "aten::add",
+    "pid": 19345,
+    "tid": 21189,
+    "ts": 3999386833348.988,
+    "dur": 23.514,
+    "args": {
+      "External id": 12851,
+      "Record function id": 13527,
+      "Fwd thread id": 0,
+      "Sequence number": 0,
+      "finished": true,
+      "Ev Idx": 12850
+    }
+  },
+  "step_selection": "actual RecordFunction ID; GPU kernels linked through runtime correlation",
+  "selected_record_id": 13527,
+  "step_prefix": "V41/step/",
+  "selected_scope": {
+    "ph": "X",
+    "cat": "cpu_op",
+    "name": "aten::add",
+    "pid": 19345,
+    "tid": 21189,
+    "ts": 3999386833348.988,
+    "dur": 23.514,
+    "args": {
+      "External id": 12851,
+      "Record function id": 13527,
+      "Fwd thread id": 0,
+      "Sequence number": 0,
+      "finished": true,
+      "Ev Idx": 12850
+    }
+  },
+  "gpu_selection": "runtime correlation for scope",
+  "actual_intervals": 3,
+  "native_entry_samples": 1,
+  "include_aten_entries": true,
+  "include_runtime_intervals": true,
+  "operation_leaf_provenance": "Actual same-ID RecordFunction names, not invented native symbols",
+  "output_sha256": "75bbe19db26a753b519e508bc2c11f10150d7ebf14bf50abf567f71edd14322f",
+  "verification": {
+    "slices": 3,
+    "native_entry_samples": 1,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

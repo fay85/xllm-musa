@@ -1,0 +1,258 @@
+{
+  "status": "PASS",
+  "chain_checks": [
+    {
+      "vocab": 1024,
+      "batch": 1,
+      "steps": 1,
+      "fp32": false
+    },
+    {
+      "vocab": 1024,
+      "batch": 1,
+      "steps": 1,
+      "fp32": true
+    },
+    {
+      "vocab": 1024,
+      "batch": 1,
+      "steps": 3,
+      "fp32": false
+    },
+    {
+      "vocab": 1024,
+      "batch": 1,
+      "steps": 3,
+      "fp32": true
+    },
+    {
+      "vocab": 1024,
+      "batch": 1,
+      "steps": 5,
+      "fp32": false
+    },
+    {
+      "vocab": 1024,
+      "batch": 1,
+      "steps": 5,
+      "fp32": true
+    },
+    {
+      "vocab": 1024,
+      "batch": 3,
+      "steps": 1,
+      "fp32": false
+    },
+    {
+      "vocab": 1024,
+      "batch": 3,
+      "steps": 1,
+      "fp32": true
+    },
+    {
+      "vocab": 1024,
+      "batch": 3,
+      "steps": 3,
+      "fp32": false
+    },
+    {
+      "vocab": 1024,
+      "batch": 3,
+      "steps": 3,
+      "fp32": true
+    },
+    {
+      "vocab": 1024,
+      "batch": 3,
+      "steps": 5,
+      "fp32": false
+    },
+    {
+      "vocab": 1024,
+      "batch": 3,
+      "steps": 5,
+      "fp32": true
+    },
+    {
+      "vocab": 129280,
+      "batch": 1,
+      "steps": 1,
+      "fp32": false
+    },
+    {
+      "vocab": 129280,
+      "batch": 1,
+      "steps": 1,
+      "fp32": true
+    },
+    {
+      "vocab": 129280,
+      "batch": 1,
+      "steps": 3,
+      "fp32": false
+    },
+    {
+      "vocab": 129280,
+      "batch": 1,
+      "steps": 3,
+      "fp32": true
+    },
+    {
+      "vocab": 129280,
+      "batch": 1,
+      "steps": 5,
+      "fp32": false
+    },
+    {
+      "vocab": 129280,
+      "batch": 1,
+      "steps": 5,
+      "fp32": true
+    },
+    {
+      "vocab": 129280,
+      "batch": 3,
+      "steps": 1,
+      "fp32": false
+    },
+    {
+      "vocab": 129280,
+      "batch": 3,
+      "steps": 1,
+      "fp32": true
+    },
+    {
+      "vocab": 129280,
+      "batch": 3,
+      "steps": 3,
+      "fp32": false
+    },
+    {
+      "vocab": 129280,
+      "batch": 3,
+      "steps": 3,
+      "fp32": true
+    },
+    {
+      "vocab": 129280,
+      "batch": 3,
+      "steps": 5,
+      "fp32": false
+    },
+    {
+      "vocab": 129280,
+      "batch": 3,
+      "steps": 5,
+      "fp32": true
+    }
+  ],
+  "graph_checks": [
+    {
+      "vocab": 1024,
+      "steps": 1,
+      "update": 0
+    },
+    {
+      "vocab": 1024,
+      "steps": 1,
+      "update": 1
+    },
+    {
+      "vocab": 1024,
+      "steps": 1,
+      "update": 2
+    },
+    {
+      "vocab": 1024,
+      "steps": 3,
+      "update": 0
+    },
+    {
+      "vocab": 1024,
+      "steps": 3,
+      "update": 1
+    },
+    {
+      "vocab": 1024,
+      "steps": 3,
+      "update": 2
+    },
+    {
+      "vocab": 1024,
+      "steps": 5,
+      "update": 0
+    },
+    {
+      "vocab": 1024,
+      "steps": 5,
+      "update": 1
+    },
+    {
+      "vocab": 1024,
+      "steps": 5,
+      "update": 2
+    },
+    {
+      "vocab": 129280,
+      "steps": 1,
+      "update": 0
+    },
+    {
+      "vocab": 129280,
+      "steps": 1,
+      "update": 1
+    },
+    {
+      "vocab": 129280,
+      "steps": 1,
+      "update": 2
+    },
+    {
+      "vocab": 129280,
+      "steps": 3,
+      "update": 0
+    },
+    {
+      "vocab": 129280,
+      "steps": 3,
+      "update": 1
+    },
+    {
+      "vocab": 129280,
+      "steps": 3,
+      "update": 2
+    },
+    {
+      "vocab": 129280,
+      "steps": 5,
+      "update": 0
+    },
+    {
+      "vocab": 129280,
+      "steps": 5,
+      "update": 1
+    },
+    {
+      "vocab": 129280,
+      "steps": 5,
+      "update": 2
+    }
+  ],
+  "near_tie": {
+    "bf16": [
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "fp32_add": [
+      [
+        1,
+        1,
+        1
+      ]
+    ]
+  },
+  "scope": "Native Markov + production argmax, not model accuracy or acceptance rate"
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p33_markov_fp32_logits_off_reverse_v1_evidence.tar.gz\", \"bytes\": 245709, \"sha256\": \"c798072f66522e06c3bd9296bd6312e63635e73c0eb8bb7715477fd35a0737d6\", \"at\": \"2026-11-17T03:23:42.597340+08:00\"}\n",
+  "stderr": ""
+}

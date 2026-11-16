@@ -20,6 +20,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 #include "core/framework/model_context.h"
 #include "core/layers/musa/deepseek_v41/draft_graph.h"
 #include "core/layers/musa/deepseek_v41/draft_model.h"
+#include "core/layers/musa/deepseek_v41/markov_head.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
 #include "core/platform/musa_model_compute_stream.h"
 #include "core/util/env_var.h"
@@ -59,6 +60,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     full_draft_graph_ =
         util::get_bool_env("XLLM_DSV41_FULL_DRAFT_GRAPH", false);
     CHECK(!full_draft_graph_ || (static_draft_ && draft_custom_allreduce_));
+    markov_fp32_logits_ =
+        util::get_bool_env("XLLM_DSV41_MARKOV_FP32_LOGITS", false);
   }
 
   void load_model(std::unique_ptr<ModelLoader> loader) override {
@@ -130,6 +133,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
         << "Native V4.1 DSpark checkpoint loaded:3 pure-SWA stages, experts="
         << args_.n_routed_experts() << ", topk=" << args_.num_experts_per_tok()
         << ", tp=" << tp_size() << ", ep=" << ep_size();
+    LOG(INFO) << "Native V4.1 DSpark Markov BF16 GEMM, FP32 logits="
+              << markov_fp32_logits_;
   }
 
   ModelOutput forward(const torch::Tensor& tokens,
@@ -230,9 +235,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     return model_->logits(output);
   }
   torch::Tensor dspark_markov_bias(const torch::Tensor& previous) override {
-    return torch::nn::functional::linear(
-        torch::embedding(markov_embed_, previous.to(torch::kInt64)),
-        markov_head_);
+    return layer::deepseek_v41_markov_bias(
+        previous, markov_embed_, markov_head_, markov_fp32_logits_);
   }
   bool has_dspark_confidence_head() const override {
     return confidence_weight_.defined();
@@ -499,6 +503,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   bool draft_custom_allreduce_ = false;
   bool static_draft_ = false;
   bool full_draft_graph_ = false;
+  bool markov_fp32_logits_ = false;
   torch::Tensor markov_embed_;
   torch::Tensor markov_head_;
   torch::Tensor confidence_weight_;

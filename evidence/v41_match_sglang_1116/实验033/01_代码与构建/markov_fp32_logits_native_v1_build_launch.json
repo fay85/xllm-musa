@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 16941, \"start_ticks\": \"521555402\", \"root\": \"/expt/builds/markov_fp32_logits_native_v1\", \"changed_files\": 82}\n",
+  "stderr": ""
+}

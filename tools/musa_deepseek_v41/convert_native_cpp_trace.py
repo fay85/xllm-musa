@@ -72,6 +72,11 @@ def main() -> None:
     )
     parser.add_argument("--scope-index", type=int, default=0)
     parser.add_argument(
+        "--record-id", type=int,
+        help="Select an actual RecordFunction ID and its correlated GPU kernels; "
+        "use the native sidecar to establish the caller before selecting it",
+    )
+    parser.add_argument(
         "--include-aten",
         action="store_true",
         help="Include actual correlated ATen entry backtraces as COUNT; "
@@ -115,6 +120,19 @@ def main() -> None:
     step = outer_steps[0 if args.step == "first" else -1]
     begin, end = step["ts"], step["ts"] + step["dur"]
     selected_scope = None
+    if args.record_id is not None:
+        if args.scope:
+            raise ValueError("Use either --record-id or --scope")
+        matches = [
+            row for row in events
+            if row.get("ph") == "X"
+            and row.get("cat") in ("cpu_op", "user_annotation")
+            and row.get("args", {}).get("Record function id") == args.record_id
+        ]
+        if len(matches) != 1:
+            raise ValueError("RecordFunction ID must select exactly one actual event")
+        step = selected_scope = matches[0]
+        begin, end = step["ts"], step["ts"] + step["dur"]
     if args.scope:
         candidates = [
             row
@@ -306,7 +324,12 @@ def main() -> None:
         "symbols_sha256": _sha(args.resolved_symbols),
         "symbolization_binary_sha256": args.binary_sha256,
         "selected_step": step,
-        "step_selection": "outermost matching semantic scope; nested calls retained",
+        "step_selection": (
+            "actual RecordFunction ID; GPU kernels linked through runtime correlation"
+            if args.record_id is not None
+            else "outermost matching semantic scope; nested calls retained"
+        ),
+        "selected_record_id": args.record_id,
         "step_prefix": args.step_prefix,
         "selected_scope": selected_scope,
         "gpu_selection": (

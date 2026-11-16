@@ -1,0 +1,5 @@
+{
+  "path": "/workspace/xllm-mt-main/tests/core/kernels/musa/v41_markov_test_module.cpp",
+  "sha256": "db093863643903973494ad56be63476c9fd38c4b90b5e981d2f8a64977140932",
+  "note": "Test wrapper v2 follows production sampler dtype dispatch; model binary unaffected"
+}

@@ -1,0 +1,34 @@
+{
+  "source": "real sample_block native frames + actual RecordFunction ID",
+  "all_add_ids": [
+    2315,
+    2348,
+    2381,
+    5989,
+    6022,
+    6055,
+    9725,
+    9758,
+    9791,
+    13461,
+    13494,
+    13527
+  ],
+  "chosen": {
+    "ph": "X",
+    "cat": "cpu_op",
+    "name": "aten::add",
+    "pid": 19345,
+    "tid": 21189,
+    "ts": 3999386833348.988,
+    "dur": 23.514,
+    "args": {
+      "External id": 12851,
+      "Record function id": 13527,
+      "Fwd thread id": 0,
+      "Sequence number": 0,
+      "finished": true,
+      "Ev Idx": 12850
+    }
+  }
+}

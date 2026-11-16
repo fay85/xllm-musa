@@ -1,0 +1,71 @@
+{
+  "decision": "NO_STABLE_GAIN_DEFAULT_OFF_NOT_CHAMPION",
+  "gains_percent": {
+    "off": -0.8552115342326916,
+    "reverse": -2.320519031584456
+  },
+  "formal_output_hashes": {
+    "off": [
+      "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536"
+    ],
+    "on": [
+      "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536"
+    ],
+    "reverse": [
+      "6609be7466db34d1d71302fb6562771d1a5920650237a4307516e372f2c9d536"
+    ]
+  },
+  "all_text_same": true,
+  "metrics": {
+    "off": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 471.35751117020845,
+      "mean_TPOT_ms_per_token": 34.94997786248432,
+      "TPOT_sample_stdev_ms": 0.16926043899076557,
+      "mean_E2E_s": 9.383601866103708,
+      "output_tokens_per_latency_sum_second": 27.28163488316211,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "2f9e4cd3fa9636d701382eb42882db6d7a9e81c80406ed801fb997118796dd8e"
+    },
+    "on": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 486.26195825636387,
+      "mean_TPOT_ms_per_token": 35.208948147209256,
+      "TPOT_sample_stdev_ms": 0.1996934463510827,
+      "mean_E2E_s": 9.464543735794724,
+      "output_tokens_per_latency_sum_second": 27.048319194914058,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "2f9e4cd3fa9636d701382eb42882db6d7a9e81c80406ed801fb997118796dd8e"
+    },
+    "reverse": {
+      "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 365.5561061576009,
+      "mean_TPOT_ms_per_token": 34.821023886256356,
+      "TPOT_sample_stdev_ms": 0.2593796355590058,
+      "mean_E2E_s": 9.244917197152972,
+      "output_tokens_per_latency_sum_second": 27.69089160461456,
+      "formal_requests": 5,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "2f9e4cd3fa9636d701382eb42882db6d7a9e81c80406ed801fb997118796dd8e"
+    }
+  },
+  "all16_each_run_normal_exit": true,
+  "final_acceptance": false
+}
