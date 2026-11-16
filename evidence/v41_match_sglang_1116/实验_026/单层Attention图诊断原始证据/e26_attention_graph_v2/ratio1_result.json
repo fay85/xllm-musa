@@ -1,0 +1,26 @@
+[
+  {
+    "ratio": 1,
+    "variant": "off",
+    "graph_ms_samples": [
+      1.521939239501953,
+      1.5177056884765625,
+      1.5287664794921876
+    ],
+    "graph_median_ms": 1.521939239501953,
+    "finite_output": true,
+    "scope": "Synthetic weights; single local Attention graph excludes TP communication and model rank skew. No profiler in this process."
+  },
+  {
+    "ratio": 1,
+    "variant": "on",
+    "graph_ms_samples": [
+      1.2186975860595703,
+      1.2166807556152344,
+      1.2171839904785156
+    ],
+    "graph_median_ms": 1.2171839904785156,
+    "finite_output": true,
+    "scope": "Synthetic weights; single local Attention graph excludes TP communication and model rank skew. No profiler in this process."
+  }
+]

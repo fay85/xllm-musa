@@ -66,6 +66,7 @@ class TorchProfiler {
   mutable std::mutex mutex_;
   bool running_ = false;
   bool native_stack_running_ = false;
+  bool refresh_musa_graphs_ = false;
 };
 
 }  // namespace xllm

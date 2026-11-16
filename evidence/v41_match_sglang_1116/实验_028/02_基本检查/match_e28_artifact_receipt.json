@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/graph_profile_refresh_v1/source_manifest.json\", \"binary\": \"/expt/artifacts/graph_profile_refresh_v1/bin/xllm\", \"sha256\": \"b492a1af2c9b8431d8eede30be0d0f1c6117a5f7e6a4a47535f130351c045c65\", \"bytes\": 341516248, \"small_checks\": \"E28 native graph registry, eight-rank collective and model checks pending\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

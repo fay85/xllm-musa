@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 63046, \"start_ticks\": \"520767673\", \"root\": \"/expt/builds/graph_profile_refresh_v1\", \"changed_files\": 68}\n",
+  "stderr": ""
+}

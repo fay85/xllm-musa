@@ -15,8 +15,15 @@ limitations under the License.
 
 #pragma once
 
+#include <torch/torch.h>
 #include <torch_musa/csrc/core/MUSACachingAllocator.h>
+#include <torch_musa/csrc/core/MUSAException.h>
 #include <torch_musa/csrc/core/MUSAStream.h>
+
+#include <cstdint>
+#include <mutex>
+#include <thread>
+#include <unordered_set>
 
 // The installed native MUSAGraph header expects this stream alias.
 namespace at::musa {
@@ -48,7 +55,40 @@ class MusaGraphHandle final : public at::musa::MUSAGraph {
     }
   }
 
+  void capture_end() {
+    at::musa::MUSAGraph::capture_end();
+    auto& registry = captured_registry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    capture_thread_ = std::this_thread::get_id();
+    registry.graphs.insert(this);
+  }
+
+  // Called only on the owning compute thread at a profiler boundary. Native
+  // graphs are not registered in torch_musa's Python WeakSet, so the Python
+  // profiler's automatic re-instantiation cannot discover them. Refreshing
+  // the exec preserves the graph's nodes, addresses, pools and cache contents.
+  // Other worker threads' graphs are deliberately outside this method's scope.
+  static int64_t reinstantiate_current_thread_graphs() {
+    auto& registry = captured_registry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    int64_t count = 0;
+    for (MusaGraphHandle* graph : registry.graphs) {
+      if (graph->capture_thread_ != std::this_thread::get_id()) {
+        continue;
+      }
+      torch::DeviceGuard guard(
+          torch::Device(torch::kPrivateUse1, graph->capture_dev_));
+      C10_MUSA_CHECK(musaDeviceSynchronize());
+      graph->reinstantiate_graph();
+      ++count;
+    }
+    return count;
+  }
+
   void reset() {
+    auto& registry = captured_registry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    registry.graphs.erase(this);
     pool_ref_.reset([this]() { at::musa::MUSAGraph::reset(); },
                     [this]() {
                       return c10::musa::MUSACachingAllocator::getPoolUseCount(
@@ -61,6 +101,19 @@ class MusaGraphHandle final : public at::musa::MUSAGraph {
   }
 
  private:
+  struct CapturedRegistry {
+    std::mutex mutex;
+    // Non-owning references: capture_end inserts; reset/destruction erase under
+    // the same lock held during refresh, so no reset graph can be visited.
+    std::unordered_set<MusaGraphHandle*> graphs;
+  };
+
+  static CapturedRegistry& captured_registry() {
+    static CapturedRegistry registry;
+    return registry;
+  }
+
+  std::thread::id capture_thread_;
   GraphPoolRef pool_ref_;
 };
 

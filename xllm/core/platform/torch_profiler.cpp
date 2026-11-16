@@ -25,6 +25,11 @@ limitations under the License.
 #include <filesystem>
 #include <set>
 
+#if defined(USE_MUSA)
+#include "core/platform/musa_graph_handle.h"
+#include "core/util/env_var.h"
+#endif
+
 namespace xllm {
 namespace {
 
@@ -133,6 +138,18 @@ bool TorchProfiler::start() {
     return false;
   }
 
+#if defined(USE_MUSA)
+  refresh_musa_graphs_ =
+      util::get_bool_env("XLLM_MUSA_PROFILE_REFRESH_GRAPHS", false);
+  if (refresh_musa_graphs_) {
+    // Unexpected graph/device failures propagate: do not silently keep serving
+    // from a partially refreshed graph set or claim a complete trace.
+    const int64_t count =
+        MusaGraphHandle::reinstantiate_current_thread_graphs();
+    LOG(INFO) << "Refreshed " << count
+              << " native MUSA graphs for profiler kernel visibility";
+  }
+#endif
   running_ = true;
   LOG(INFO) << "Torch profiler started (in-process Kineto). The trace will be "
                "written on /stop_profile; no external profiler is required.";
@@ -177,6 +194,15 @@ bool TorchProfiler::stop(const std::string& profile_dir, int32_t rank) {
     return false;
   }
 
+#if defined(USE_MUSA)
+  if (refresh_musa_graphs_) {
+    const int64_t count =
+        MusaGraphHandle::reinstantiate_current_thread_graphs();
+    LOG(INFO) << "Restored " << count
+              << " native MUSA graph execs after profiling";
+    refresh_musa_graphs_ = false;
+  }
+#endif
   LOG(INFO) << "Torch profiler stopped. Trace written to: "
             << std::filesystem::absolute(path).string();
   return stack_saved;

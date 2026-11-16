@@ -136,9 +136,61 @@ class VerifyCollective final {
   std::unique_ptr<xllm::MusaGraphHandle> graph_;
 };
 
+// Minimal native (not Python-registered) graph used to verify profiling
+// lifecycle before changing production profiler or any model graph.
+class NativeProfileGraph final {
+ public:
+  void capture(torch::Tensor input) {
+    CHECK(!graph_);
+    CHECK(input.device().type() == torch::kPrivateUse1);
+    torch::DeviceGuard guard(input.device());
+    input_ = std::move(input);
+    output_ = input_ * input_ + 1;
+    c10::musa::getCurrentMUSAStream(input_.get_device()).synchronize();
+    graph_ = std::make_unique<xllm::MusaGraphHandle>();
+    graph_->capture_begin();
+    output_ = input_ * input_ + 1;
+    graph_->capture_end();
+  }
+
+  torch::Tensor replay() {
+    CHECK(graph_);
+    torch::DeviceGuard guard(input_.device());
+    graph_->replay();
+    return output_;
+  }
+
+  static int64_t reinstantiate_registered() {
+    return xllm::MusaGraphHandle::reinstantiate_current_thread_graphs();
+  }
+
+  void release() { graph_.reset(); }
+
+  void reinstantiate() {
+    CHECK(graph_);
+    torch::DeviceGuard guard(input_.device());
+    c10::musa::getCurrentMUSAStream(input_.get_device()).synchronize();
+    graph_->reinstantiate_graph();
+  }
+
+ private:
+  torch::Tensor input_;
+  torch::Tensor output_;
+  std::unique_ptr<xllm::MusaGraphHandle> graph_;
+};
+
 }  // namespace
 
 PYBIND11_MODULE(v41_verify_collective_test_module, module) {
+  pybind11::class_<NativeProfileGraph>(module, "NativeProfileGraph")
+      .def(pybind11::init<>())
+      .def("capture", &NativeProfileGraph::capture)
+      .def("replay", &NativeProfileGraph::replay)
+      .def("reinstantiate", &NativeProfileGraph::reinstantiate)
+      .def("release", &NativeProfileGraph::release)
+      .def_static("reinstantiate_registered",
+                  &NativeProfileGraph::reinstantiate_registered);
+
   pybind11::class_<VerifyCollective>(module, "VerifyCollective")
       .def(pybind11::init<int32_t, int32_t, int32_t>())
       .def("mccl",

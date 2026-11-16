@@ -1,0 +1,199 @@
+{
+  "graphs": [
+    {
+      "ph": "X",
+      "cat": "privateuse1_runtime",
+      "name": "musaGraphLaunch",
+      "pid": 61590,
+      "tid": 63433,
+      "ts": 3991241914355.803,
+      "dur": 3024.446,
+      "args": {
+        "cbid": 311,
+        "correlation": 15582403
+      }
+    },
+    {
+      "ph": "X",
+      "cat": "privateuse1_runtime",
+      "name": "musaGraphLaunch",
+      "pid": 61590,
+      "tid": 63433,
+      "ts": 3991243357489.379,
+      "dur": 2507.098,
+      "args": {
+        "cbid": 311,
+        "correlation": 15594545
+      }
+    },
+    {
+      "ph": "X",
+      "cat": "privateuse1_runtime",
+      "name": "musaGraphLaunch",
+      "pid": 61590,
+      "tid": 63433,
+      "ts": 3991243800118.723,
+      "dur": 826.84,
+      "args": {
+        "cbid": 311,
+        "correlation": 15607653
+      }
+    },
+    {
+      "ph": "X",
+      "cat": "privateuse1_runtime",
+      "name": "musaGraphLaunch",
+      "pid": 61590,
+      "tid": 63433,
+      "ts": 3991243946065.773,
+      "dur": 1160.416,
+      "args": {
+        "cbid": 311,
+        "correlation": 15620805
+      }
+    }
+  ],
+  "kernel_argkeys": {
+    "queued": 24781,
+    "device": 24781,
+    "context": 24781,
+    "stream": 24781,
+    "correlation": 24781,
+    "registers per thread": 24781,
+    "shared memory": 24781,
+    "blocks per SM": 24781,
+    "warps per SM": 24781,
+    "grid": 24781,
+    "block": 24781,
+    "est. achieved occupancy %": 24781
+  },
+  "correlation_counts": [
+    [
+      15582403,
+      5591
+    ],
+    [
+      15594545,
+      5591
+    ],
+    [
+      15607653,
+      5591
+    ],
+    [
+      15620805,
+      5591
+    ],
+    [
+      15571593,
+      1
+    ],
+    [
+      15571620,
+      1
+    ],
+    [
+      15571641,
+      1
+    ],
+    [
+      15571740,
+      1
+    ]
+  ],
+  "graph_kernel_samples": [
+    {
+      "ph": "X",
+      "cat": "kernel",
+      "name": "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+      "pid": 0,
+      "tid": 26,
+      "ts": 3991241921076.504,
+      "dur": 4.32,
+      "args": {
+        "queued": 5208371032685084,
+        "device": 0,
+        "context": 1,
+        "stream": 26,
+        "correlation": 15582403,
+        "registers per thread": 0,
+        "shared memory": 12,
+        "blocks per SM": 0.066667,
+        "warps per SM": 0.266667,
+        "grid": [
+          4,
+          1,
+          1
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "est. achieved occupancy %": 0
+      }
+    },
+    {
+      "ph": "X",
+      "cat": "kernel",
+      "name": "void at::native::(anonymous namespace)::IndexSelectVectorKernel<__mt_bfloat16, long, true, 128>(__mt_bfloat16*, long*, __mt_bfloat16*, long, long, long, long, unsigned int)",
+      "pid": 0,
+      "tid": 26,
+      "ts": 3991241921082.584,
+      "dur": 4.12,
+      "args": {
+        "queued": 5208371032685084,
+        "device": 0,
+        "context": 1,
+        "stream": 26,
+        "correlation": 15582403,
+        "registers per thread": 0,
+        "shared memory": 12,
+        "blocks per SM": 0.083333,
+        "warps per SM": 2.666667,
+        "grid": [
+          5,
+          1,
+          1
+        ],
+        "block": [
+          16,
+          64,
+          1
+        ],
+        "est. achieved occupancy %": 3
+      }
+    },
+    {
+      "ph": "X",
+      "cat": "kernel",
+      "name": "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)",
+      "pid": 0,
+      "tid": 26,
+      "ts": 3991241921088.584,
+      "dur": 17149.645,
+      "args": {
+        "queued": 5208371032685084,
+        "device": 0,
+        "context": 1,
+        "stream": 26,
+        "correlation": 15582403,
+        "registers per thread": 0,
+        "shared memory": 40972,
+        "blocks per SM": 0.016667,
+        "warps per SM": 0.266667,
+        "grid": [
+          1,
+          1,
+          1
+        ],
+        "block": [
+          512,
+          1,
+          1
+        ],
+        "est. achieved occupancy %": 0
+      }
+    }
+  ]
+}
