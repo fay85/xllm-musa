@@ -157,7 +157,7 @@ class DeepseekV41TextModel final {
     DeepseekV41AttentionRuntime shared;
     shared.decode_capacity = decode_capacity;
     CHECK(decode_capacity == 0 ||
-          (input_ids.numel() == 1 && decode_capacity >= context_length));
+          (input_ids.numel() <= 6 && decode_capacity >= context_length));
     last_output_row_offset_ = 0;
     torch::Tensor active_ids = input_ids;
     torch::Tensor active_positions = positions;

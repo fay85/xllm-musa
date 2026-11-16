@@ -87,7 +87,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     static_decode_ = full_decode_graph_ ||
                      util::get_bool_env("XLLM_DSV41_STATIC_DECODE", false);
     if (static_decode_) {
-      CHECK(!native_dspark_) << "Initial full graph supports target q1 only";
+      CHECK(!native_dspark_ ||
+            (selective_spec_commit_ && verify_custom_allreduce_))
+          << "Static verification requires selective cache commit and "
+             "the validated multirow TP/EP custom communicator";
       CHECK(util::get_bool_env("XLLM_DSV41_DECODE_FUSED_SWA_READ", false));
       CHECK(util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false));
       CHECK(!util::get_bool_env("XLLM_DSV41_DECODE_FFN_TAIL_GRAPH", false));
@@ -249,10 +252,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       }
       decode_graph_ =
           std::make_unique<layer::DeepseekV41DecodeGraph>(std::move(ratios));
-      CHECK(args_.layers_to_capture().empty());
-      LOG(INFO) << "Native V4.1 fixed-capacity q1 Decode enabled, graph="
+      CHECK(native_dspark_ || args_.layers_to_capture().empty());
+      LOG(INFO) << "Native V4.1 fixed-capacity C1 Decode/verify enabled, graph="
                 << full_decode_graph_
-                << ", capacities=512/4096; Prefill stays eager";
+                << ", rows=1..6, capacities=512/4096; Prefill stays eager";
     }
     if (!args_.layers_to_capture().empty()) {
       auxiliary_ = std::make_unique<AuxHiddenCapture>(
@@ -453,7 +456,9 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                               context_lengths.value(),
                                               engram_rows,
                                               mask);
-    } else if (decode_graph_ && tokens.numel() == 1 && context_length <= 4096) {
+    } else if (decode_graph_ && context_length <= 4096 &&
+               (tokens.numel() == 1 ||
+                (params.is_spec_verify && tokens.numel() <= 6))) {
       layer::DeepseekV41DecodeInputs input{tokens,
                                            positions,
                                            caches,
@@ -477,7 +482,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                                 value.context_length,
                                                 value.engram_rows,
                                                 value.engram_mask,
-                                                nullptr,
+                                                auxiliary_.get(),
                                                 capacity);
           });
     } else {

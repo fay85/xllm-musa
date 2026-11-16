@@ -131,3 +131,14 @@ pybind_extension(
 target_include_directories(v41_verify_collective_test_module PRIVATE
   "${PROJECT_SOURCE_DIR}/xllm"
 )
+
+# Actual multirow Attention captured with changing GPU positions/page tables.
+pybind_extension(
+  NAME v41_verify_graph_inputs_test_module
+  SRCS v41_verify_graph_inputs_test_module.cpp
+  DEPS :cuda_kernels :util :platform tvm_ffi musa_python torch_python
+       Python::Module torch glog::glog
+)
+target_include_directories(v41_verify_graph_inputs_test_module PRIVATE
+  "${PROJECT_SOURCE_DIR}/xllm"
+)

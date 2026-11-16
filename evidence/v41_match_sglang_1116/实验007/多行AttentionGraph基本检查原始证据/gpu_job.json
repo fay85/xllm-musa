@@ -1,0 +1,16 @@
+{
+  "worker_pid": 23713,
+  "pid": 23714,
+  "start_ticks": "518752565",
+  "command": [
+    "python3",
+    "/expt/builds/verify_graph_inputs_v1/validate_verify_graph_attention.py",
+    "--output",
+    "/expt/builds/verify_graph_inputs_v1/actual_attention_graph.json",
+    "--sparse-so",
+    "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+    "--indexer-dir",
+    "/work/artifacts/native_stage_i/lib/indexer"
+  ],
+  "started_at": "2026-11-16T19:11:29.772191+08:00"
+}

@@ -33,4 +33,16 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_decode(
     bool closes_pair,
     int64_t block_size);
 
+// Fixed 1..6-row verification. Only start parity is a host graph-bucket key;
+// consecutive absolute positions stay on the device across replays.
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_verify(
+    const torch::Tensor& values,
+    const torch::Tensor& scores,
+    const torch::Tensor& table,
+    torch::Tensor& value_state,
+    torch::Tensor& score_state,
+    const torch::Tensor& positions,
+    bool starts_odd,
+    int64_t block_size);
+
 }  // namespace xllm::kernel::musa

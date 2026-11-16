@@ -202,10 +202,31 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_decode(
     bool closes_pair,
     int64_t block_size) {
   CHECK_EQ(values.size(0), 1);
+  return deepseek_v41_pair_pool_verify(values,
+                                       scores,
+                                       table,
+                                       value_state,
+                                       score_state,
+                                       position,
+                                       closes_pair,
+                                       block_size);
+}
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_verify(
+    const torch::Tensor& values,
+    const torch::Tensor& scores,
+    const torch::Tensor& table,
+    torch::Tensor& value_state,
+    torch::Tensor& score_state,
+    const torch::Tensor& position,
+    bool starts_odd,
+    int64_t block_size) {
+  CHECK_GE(values.size(0), 1);
+  CHECK_LE(values.size(0), 6);
   CHECK(position.defined() && position.is_contiguous());
   CHECK_EQ(position.device(), values.device());
   CHECK_EQ(position.scalar_type(), torch::kInt64);
-  CHECK_EQ(position.numel(), 1);
+  CHECK_EQ(position.numel(), values.size(0));
   // Only the parity is host metadata. The physical slot and output position
   // come from a stable GPU input, updated before every graph replay.
   return pair_pool_impl(values,
@@ -213,7 +234,7 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_decode(
                         table,
                         value_state,
                         score_state,
-                        closes_pair ? 1 : 0,
+                        starts_odd ? 1 : 0,
                         block_size,
                         position);
 }

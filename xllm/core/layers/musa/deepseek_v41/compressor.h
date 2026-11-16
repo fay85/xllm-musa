@@ -91,11 +91,21 @@ class DeepseekV41Compressor final {
       bool closes_pair,
       const torch::Tensor& swa_block_table) {
     CHECK_EQ(input.size(0), 1);
+    return forward_static(input, position, closes_pair, swa_block_table);
+  }
+
+  std::tuple<torch::Tensor, torch::Tensor> forward_static(
+      const torch::Tensor& input,
+      const torch::Tensor& position,
+      bool starts_odd,
+      const torch::Tensor& swa_block_table) {
+    CHECK_GE(input.size(0), 1);
+    CHECK_LE(input.size(0), 6);
     CHECK(position.defined() && position.is_contiguous());
     CHECK_EQ(position.device(), input.device());
     CHECK_EQ(position.scalar_type(), torch::kInt64);
-    CHECK_EQ(position.numel(), 1);
-    return forward_impl(input, closes_pair ? 1 : 0, swa_block_table, position);
+    CHECK_EQ(position.numel(), input.size(0));
+    return forward_impl(input, starts_odd ? 1 : 0, swa_block_table, position);
   }
 
  private:
@@ -138,7 +148,7 @@ class DeepseekV41Compressor final {
     if (decode_position.has_value()) {
       CHECK(fused_pair_pool_);
       auto [pooled, starts] =
-          kernel::musa::deepseek_v41_pair_pool_decode(values,
+          kernel::musa::deepseek_v41_pair_pool_verify(values,
                                                       scores,
                                                       swa_block_table,
                                                       kv_state_.value(),

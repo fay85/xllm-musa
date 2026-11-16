@@ -101,7 +101,8 @@ class DeepseekV41PagedAttention final {
       const std::optional<torch::Tensor>& compressed_kv,
       const std::optional<torch::Tensor>& compressed_picks,
       const torch::Tensor& query_positions,
-      int64_t window_floor) {
+      int64_t window_floor,
+      bool static_verify = false) {
     const DeepseekV41ProfileRange range("V41/Attention/SWA_sparse_and_commit");
     CHECK(query.defined() && current_kv.defined() && block_table.defined());
     CHECK_EQ(query.device(), cache_.device());
@@ -141,8 +142,22 @@ class DeepseekV41PagedAttention final {
     const int64_t previous = context_length - query.size(0);
     const auto indices_options =
         torch::TensorOptions().device(cache_.device()).dtype(torch::kInt64);
+    if (static_verify) {
+      CHECK_EQ(window_floor, 0);
+      CHECK_LE(query.size(0), 6);
+      CHECK_LE(query.size(0), cache_.size(1));
+      CHECK(query_positions.defined() && query_positions.is_contiguous());
+      CHECK_EQ(query_positions.device(), cache_.device());
+      CHECK_EQ(query_positions.scalar_type(), torch::kInt64);
+      CHECK_EQ(query_positions.numel(), query.size(0));
+    }
+    const torch::Tensor dynamic_previous =
+        static_verify ? query_positions.narrow(0, 0, 1) : torch::Tensor{};
     const torch::Tensor ring_positions =
-        torch::arange(window_, indices_options) + previous - window_;
+        static_verify
+            ? torch::arange(window_, indices_options) + dynamic_previous -
+                  window_
+            : torch::arange(window_, indices_options) + previous - window_;
     const torch::Tensor flat_cache = cache_.view({-1, cache_.size(2)});
     const torch::Tensor gathered =
         flat_cache.index_select(0,
@@ -153,11 +168,15 @@ class DeepseekV41PagedAttention final {
         torch::where(ring_positions.ge(0).unsqueeze(-1), gathered, 0);
     torch::Tensor rows = torch::cat({ring, current_kv}, 0);
     const torch::Tensor positions =
-        torch::arange(query.size(0), indices_options) + previous;
+        static_verify
+            ? query_positions
+            : torch::arange(query.size(0), indices_options) + previous;
     const torch::Tensor desired = positions.unsqueeze(-1) - window_ + 1 +
                                   torch::arange(window_, indices_options);
-    torch::Tensor picks = torch::where(
-        desired.ge(window_floor), desired - previous + window_, -1);
+    const torch::Tensor relative = static_verify
+                                       ? desired - dynamic_previous + window_
+                                       : desired - previous + window_;
+    torch::Tensor picks = torch::where(desired.ge(window_floor), relative, -1);
     if (compressed_kv.has_value()) {
       const torch::Tensor& compressed = compressed_kv.value();
       const torch::Tensor& extra = compressed_picks.value();
@@ -181,6 +200,16 @@ class DeepseekV41PagedAttention final {
     // Always read before committing this chunk, including M=1. The oldest
     // ring candidate overwritten by a decode token is outside its window.
     const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+    if (static_verify) {
+      // Consecutive <=6 rows cannot wrap a physical block twice. Reuse V4's
+      // production scatter, which masks invalid slots, without dynamic
+      // boolean indexing or the prefill duplicate/latest-wins sort.
+      kernel::musa::deepseek_v4_scatter_cache(
+          cache_,
+          physical_slots(block_table, positions, /*padding_read=*/false),
+          current_kv);
+      return result;
+    }
     commit(physical_slots(block_table, positions, /*padding_read=*/false),
            current_kv);
     return result;

@@ -58,14 +58,18 @@ class DeepseekV41DecodeGraph final {
   torch::Tensor run(const DeepseekV41DecodeInputs& input,
                     bool replay_graph,
                     const Forward& forward) {
-    CHECK_EQ(input.tokens.numel(), 1);
-    CHECK_EQ(input.positions.numel(), 1);
+    CHECK_GE(input.tokens.numel(), 1);
+    CHECK_LE(input.tokens.numel(), 6);
+    CHECK_EQ(input.positions.numel(), input.tokens.numel());
+    CHECK_GE(input.context_length, input.tokens.numel());
     CHECK_GT(input.context_length, 0);
     CHECK_LE(input.context_length, 4096);
     CHECK_EQ(input.caches.size(), ratios_.size());
     const int64_t capacity = input.context_length <= 512 ? 512 : 4096;
-    const Key key{
-        capacity, (input.context_length - 1) % 2, input.swa_table.size(1)};
+    const Key key{capacity,
+                  (input.context_length - input.tokens.numel()) % 2,
+                  input.swa_table.size(1),
+                  input.tokens.numel()};
     auto it = entries_.find(key);
     if (it == entries_.end()) {
       auto entry = std::make_unique<Entry>();
@@ -92,7 +96,7 @@ class DeepseekV41DecodeGraph final {
     // Destroy graph before its referenced inputs/output.
     std::unique_ptr<MusaGraphHandle> graph;
   };
-  using Key = std::tuple<int64_t, int64_t, int64_t>;
+  using Key = std::tuple<int64_t, int64_t, int64_t, int64_t>;
 
   static torch::Tensor allocate_table(const torch::Tensor& source,
                                       int64_t capacity,
@@ -110,7 +114,8 @@ class DeepseekV41DecodeGraph final {
     DeepseekV41DecodeInputs buffers;
     buffers.tokens = torch::empty_like(input.tokens);
     buffers.positions =
-        torch::empty({1}, input.positions.options().dtype(torch::kInt64));
+        torch::empty({input.positions.numel()},
+                     input.positions.options().dtype(torch::kInt64));
     buffers.caches = input.caches;
     buffers.swa_table = torch::empty_like(input.swa_table);
     // Use each group's actual compressed block size, not the SWA block size.
@@ -207,19 +212,28 @@ class DeepseekV41DecodeGraph final {
   std::unique_ptr<DeepseekV41StateCheckpoint> snapshot(
       const DeepseekV41DecodeInputs& input) const {
     auto state = std::make_unique<DeepseekV41StateCheckpoint>(64 * 1024 * 1024);
-    const int64_t position = input.context_length - 1;
+    const int64_t tokens = input.tokens.numel();
+    const int64_t position = input.context_length - tokens;
     for (size_t index = 0; index < input.caches.size(); ++index) {
       const auto& cache = input.caches[index];
-      state->add_paged(cache.swa, input.swa_table, position, 1, /*ring=*/true);
+      state->add_paged(
+          cache.swa, input.swa_table, position, tokens, /*ring=*/true);
       const int64_t ratio = ratios_[index];
       const torch::Tensor& table =
           ratio == 1 ? input.ratio1_table : input.ratio2_table;
       if (ratio > 0 && cache.key.defined() && cache.key.numel() > 0) {
-        state->add_paged(cache.key, table, position / ratio, 1, /*ring=*/false);
+        state->add_paged(cache.key,
+                         table,
+                         position / ratio,
+                         input.context_length / ratio - position / ratio,
+                         /*ring=*/false);
       }
       if (ratio > 0 && cache.index.defined() && cache.index.numel() > 0) {
-        state->add_paged(
-            cache.index, table, position / ratio, 1, /*ring=*/false);
+        state->add_paged(cache.index,
+                         table,
+                         position / ratio,
+                         input.context_length / ratio - position / ratio,
+                         /*ring=*/false);
       }
       if (cache.compressor_kv_state.has_value()) {
         const torch::Tensor blocks = input.swa_table.flatten().contiguous();
@@ -265,7 +279,8 @@ class DeepseekV41DecodeGraph final {
     }
     LOG(INFO)
         << "Native V4.1 full decoder Graph captured; capacity=" << capacity
-        << ", parity=" << (entry.input.context_length - 1) % 2
+        << ", rows=" << entry.input.tokens.numel() << ", parity="
+        << (entry.input.context_length - entry.input.tokens.numel()) % 2
         << "; warmup/capture cache writes restored; Engram lookup/head outside";
   }
 

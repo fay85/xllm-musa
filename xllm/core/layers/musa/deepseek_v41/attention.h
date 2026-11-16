@@ -293,16 +293,17 @@ class DeepseekV41Attention final {
       CHECK_EQ(shared.source_layer, config_.source_layer);
       CHECK_EQ(shared.ratio, config_.ratio);
       const bool static_decode = shared.decode_capacity > 0;
-      CHECK(!static_decode || hidden.size(0) == 1);
+      CHECK(!static_decode || (hidden.size(0) > 0 && hidden.size(0) <= 6));
       const int64_t committed =
           (static_decode ? shared.decode_capacity : context_length) /
           config_.ratio;
       const std::optional<torch::Tensor> dynamic_visible =
-          static_decode ? std::make_optional(
-                              torch::floor_divide(positions + 1, config_.ratio))
+          static_decode ? std::make_optional(torch::floor_divide(
+                              positions.narrow(0, positions.numel() - 1, 1) + 1,
+                              config_.ratio))
                         : std::nullopt;
-      const bool reuse_read =
-          config_.decode_cache_read_reuse && hidden.size(0) == 1;
+      const bool reuse_read = config_.decode_cache_read_reuse &&
+                              (hidden.size(0) == 1 || static_decode);
       CHECK(!static_decode || reuse_read);
       if (reuse_read) {
         if (!shared.key_read.has_value()) {
@@ -378,15 +379,17 @@ class DeepseekV41Attention final {
                                   config_.sparse_library_path,
                                   /*single_token_scatter=*/true,
                                   config_.decode_fused_swa_read)
-            .forward_with_window_floor(query,
-                                       current_kv,
-                                       swa_table,
-                                       context_length,
-                                       weights_.sink,
-                                       compressed,
-                                       picks,
-                                       positions,
-                                       shared.swa_replay_start);
+            .forward_with_window_floor(
+                query,
+                current_kv,
+                swa_table,
+                context_length,
+                weights_.sink,
+                compressed,
+                picks,
+                positions,
+                shared.swa_replay_start,
+                /*static_verify=*/shared.decode_capacity > 0);
     return attention;
   }
 
@@ -411,7 +414,7 @@ class DeepseekV41Attention final {
                                      /*fused_pair_pool=*/true);
     auto [latent, starts] =
         shared.decode_capacity > 0
-            ? compressor.forward_decode(
+            ? compressor.forward_static(
                   hidden, positions, start_position % 2 == 1, swa_table)
             : compressor.forward(hidden, start_position, swa_table);
     const torch::Tensor index_values =

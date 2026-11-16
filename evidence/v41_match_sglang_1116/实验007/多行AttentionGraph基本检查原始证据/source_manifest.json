@@ -1,0 +1,10 @@
+{
+  "xllm/core/kernels/musa/deepseek_v41_pair_pool.h": "d0f344b632366eb275a9bfa45cea23c899e6d12fd4726adf5fcc458632cab65c",
+  "xllm/core/kernels/musa/deepseek_v41_pair_pool.cu": "318b41642f14193ebf54b946622869bc91b48bcb4c959f1c80723254f54a586c",
+  "xllm/core/layers/musa/deepseek_v41/compressor.h": "3b2037861a91073e5eadf0b6abaae71966406117a3488b56a1d357595845bcd8",
+  "xllm/core/layers/musa/deepseek_v41/attention.h": "7096676c68bcf263201e88face86c0f676fae0fe51feade6501b84211e807557",
+  "xllm/core/layers/musa/deepseek_v41/paged_attention.h": "573ee80c8e9fe58cc54f9726a497e29a285d8ca187b47e4ead3774182668963a",
+  "v41_verify_graph_inputs_test_module.cpp": "2327870960db6a79257bbb0ed82259885ebe97dd3fb82ebc101578f572c2745c",
+  "validate_verify_graph_attention.py": "4895ab8150e01c2dbd9def4143dbd01e97625f1be4845a44215c3037278e5fb5",
+  "worker.py": "f7bfbf4b723c2a89aa8499022542ed6a0369e6653d26b375b91cb54686fbbb17"
+}

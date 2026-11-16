@@ -1,0 +1,19 @@
+{
+  "worker_pid": 23957,
+  "pid": 24157,
+  "start_ticks": "518769760",
+  "ratio": 1,
+  "command": [
+    "python3",
+    "/expt/builds/verify_graph_inputs_v1/other_ratios_v2/validate_verify_graph_attention.py",
+    "--output",
+    "/expt/builds/verify_graph_inputs_v1/other_ratios_v2/actual_attention_graph_ratio1.json",
+    "--sparse-so",
+    "/work/artifacts/native_stage_i/lib/mate/libdeepseek_v41_sparse_h8_bf16.so",
+    "--indexer-dir",
+    "/work/artifacts/native_stage_i/lib/indexer",
+    "--ratio",
+    "1"
+  ],
+  "at": "2026-11-16T19:14:21.719931+08:00"
+}
