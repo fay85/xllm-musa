@@ -1,0 +1,292 @@
+[
+  {
+    "path": "归档校验.json",
+    "original_sha256": "febc16be3ab4e26f0709bc2ec9dbb27ff6ff29f38f98e8390f6542f3ae5a238a",
+    "original_bytes": 7770
+  },
+  {
+    "path": "05_结论与下一步.md",
+    "original_sha256": "53c91db2a0c688f67bd7d9fafa75f96d55a87dd660dcdeb3c236db4d858ef1ec",
+    "original_bytes": 2944
+  },
+  {
+    "path": "00_目标与假设.md",
+    "original_sha256": "5edc0ea3981beb89705b97d0780f66c0c9aa88986977d9bca0290dabb1903ea3",
+    "original_bytes": 882
+  },
+  {
+    "path": "八卡Gather诊断原始证据/manifest.json",
+    "original_sha256": "b547ad89c06b0449326a48aa3bc4b8bea4533666c2222a78df52b6b95deac798",
+    "original_bytes": 290
+  },
+  {
+    "path": "八卡Gather诊断原始证据/worker.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original_bytes": 0
+  },
+  {
+    "path": "八卡Gather诊断原始证据/python_v2_identity.json",
+    "original_sha256": "a4078ed2b06b1751508b98517637834e580a9f6526f178231b3653cf696bbf51",
+    "original_bytes": 230
+  },
+  {
+    "path": "八卡Gather诊断原始证据/benchmark_gather_probe_v2.py",
+    "original_sha256": "8a73cedf1621d26fde72b428581e359e4bbc590b2bb14096c6caaf33c238715a",
+    "original_bytes": 4069
+  },
+  {
+    "path": "八卡Gather诊断原始证据/import.log.gz",
+    "original_sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "original_bytes": 72
+  },
+  {
+    "path": "八卡Gather诊断原始证据/v41_gather_probe_test_module.cpp",
+    "original_sha256": "9d650ccce9ded976bd6ad4d9f857f72605ab9b34679dce0c50d89d9108f87b0d",
+    "original_bytes": 3723
+  },
+  {
+    "path": "八卡Gather诊断原始证据/link.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original_bytes": 0
+  },
+  {
+    "path": "八卡Gather诊断原始证据/summary.json",
+    "original_sha256": "b90fd0b490c0974557fe2c8797b4eb2a09d68feeccf7d13a466d8b67949181a1",
+    "original_bytes": 7053
+  },
+  {
+    "path": "八卡Gather诊断原始证据/finished.json",
+    "original_sha256": "cbcab9daf72e3e8e07810c9890904e7236910531128bab7509e9c85c239c1694",
+    "original_bytes": 165
+  },
+  {
+    "path": "八卡Gather诊断原始证据/commands.json",
+    "original_sha256": "37a97e2ba77f432c6467eb7cdd23f3b8b2aab6a28498888539c2e6c8c3add24b",
+    "original_bytes": 15557
+  },
+  {
+    "path": "八卡Gather诊断原始证据/job.json",
+    "original_sha256": "187f024d5e9df9bb9cffe5fa502a44892a056c57e719bb8545814085947dd8b7",
+    "original_bytes": 91
+  },
+  {
+    "path": "八卡Gather诊断原始证据/compile.log.gz",
+    "original_sha256": "f98bd93427990e1f177b1cdd41e64f40142310c1aedc4aaf697ca36d556c406d",
+    "original_bytes": 3475
+  },
+  {
+    "path": "八卡Gather诊断原始证据/benchmark_gather_probe.py",
+    "original_sha256": "bbdc7b7b1eaa9ddf94f74ca0676db8369d92ce3d0082da4a04182016fe5b20b3",
+    "original_bytes": 3957
+  },
+  {
+    "path": "八卡Gather诊断原始证据/worker.py",
+    "original_sha256": "6712d37c38b933c5ed7f035c21302583a5f304af218294cd8b9b134564ce88c8",
+    "original_bytes": 2382
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank7.log.gz",
+    "original_sha256": "ecb2a8ba5995df3e0b7f7dc6ba47322223d4eb8de469369b1ed82d27625b38d5",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank3.log.gz",
+    "original_sha256": "771861eb78a9849fdf05089237d15859e8c0b020bda6c056371331a378d8aae4",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/worker.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original_bytes": 0
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank4.log.gz",
+    "original_sha256": "0d0621348308c8d50227b2cb6cf22b9ff8182d1e4f0fd056cf995fde60f10e3c",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank1.log.gz",
+    "original_sha256": "bb3c291736e8036788c74d0419875dbf2bcb3434e78be645795c06eff03d164a",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/ranks.json",
+    "original_sha256": "81319db4563251ad7f842aba159753d78b9043b249717d4f2bd860e5a317d1ac",
+    "original_bytes": 586
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/finished.json",
+    "original_sha256": "9186b26ed3e597c47b38f1648e63a6c8d9000dc1876b96195698e185b4adf4d3",
+    "original_bytes": 178
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank2.log.gz",
+    "original_sha256": "0a61c02270dcfb69ea2226c7eae042421e8ba09277bccd188a89fc579a7aad1a",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank6.log.gz",
+    "original_sha256": "ce932fa065db5f6b6f3577a97548e21fac11327ea00c950b236e96f5a05c3e28",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/status.json",
+    "original_sha256": "a1d74ff7d5b73f9c3f8863ca2930325e76978fa73f5526a7cd1d21738e0d48c2",
+    "original_bytes": 252
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank5.log.gz",
+    "original_sha256": "842e832beff1e9ec9ca37fc6e4c3cb8d245d9eae5c3509d2932005f8300abc2d",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/job.json",
+    "original_sha256": "83a6ed6cc2e9997f7ed28172b6c9dc2bd2931865d8c51e7694f0acadef227aca",
+    "original_bytes": 92
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/rank0.log.gz",
+    "original_sha256": "7d04e996faaaededcaeffe52b6cd09e32ab7177d0fd9acfe3bc7a01f355aac2c",
+    "original_bytes": 2476
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/worker.py",
+    "original_sha256": "ef9ff2523d36e92e1f852c86c56f77581db6d0924a76ababf989bf2ffba81c88",
+    "original_bytes": 2406
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank7.json",
+    "original_sha256": "8d64cd9d4adbf3eaefb11e06197d244a8577d312cfa7867d925a9de7ec7431f5",
+    "original_bytes": 24445
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank1.json",
+    "original_sha256": "78333e9a74b84a7517b53ffbdac0b5eec4bea89252424dfca371ecccccc2d64a",
+    "original_bytes": 24429
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank6.json",
+    "original_sha256": "a88634ce1251141a3097a582bfbf761ce41471cd403813b2f8de7ecd42c458b6",
+    "original_bytes": 24441
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank2.json",
+    "original_sha256": "550986181486ce4c6838e28a6c65ad536887df0cfbd9043afa0888969cfeb5b5",
+    "original_bytes": 24445
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank4.json",
+    "original_sha256": "bb6fac994d8eeff0f43acacd7fadfb10d44df973b764562116bff972049e3014",
+    "original_bytes": 24450
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank3.json",
+    "original_sha256": "5f584626cfb2a073b6e71921096329220aaa851a0e912440db64cc4171f99b3c",
+    "original_bytes": 24451
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank5.json",
+    "original_sha256": "e8281b84e74bf673968cc448af21773806a07b1683cf844c76fc7d44a4c60882",
+    "original_bytes": 24447
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks_v2/results/rank0.json",
+    "original_sha256": "cd9e36fcc64dd949e519cc8882b574cd35ca36f87366f9f80ffe118f28328a93",
+    "original_bytes": 24445
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank7.log.gz",
+    "original_sha256": "17dedc59a66de656f0cb2503f124003e7dd7adebf22646fdcc96279c036dd85c",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank3.log.gz",
+    "original_sha256": "687f889ec7f6ed337e8b45e3613947f4d3be4e73ea6362c6ae44798b2efa8977",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/worker.log.gz",
+    "original_sha256": "f49a7e39960b96eb75e612b54ed66b8db6a2f4413e60263e559d393aee9bc594",
+    "original_bytes": 371
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank4.log.gz",
+    "original_sha256": "d6551f0a64a6406bebfd00fa2d70e703c27975c6324ef99077867826cf50c342",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/failure_identity_audit.json",
+    "original_sha256": "630c5dde96acea28d0ce4f90fd00367caaf5bd78cc424c66ba133c9e567b9794",
+    "original_bytes": 5961
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank1.log.gz",
+    "original_sha256": "f5718a73b255e926d73c30bb6214080fc1bb146778f4fb2f1e48a920924e8dad",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/ranks.json",
+    "original_sha256": "8f0628d6ab4ad376439ec8da538d50f3fdad65205633cdb6b0b0a1e26b6a2d5f",
+    "original_bytes": 578
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank2.log.gz",
+    "original_sha256": "1b6bdb1e877b511ea00528bc12c6d9080ab57192920ce8b04653dfbb3988ee06",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank6.log.gz",
+    "original_sha256": "490b3bf2a9c03bcb7abe25f4946bdcdf2372bcb6d749e8db0c5d8dd484c5da7e",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/status.json",
+    "original_sha256": "87d48b5ed40a35f2d0ec07ede8d9a0edd3f9e78f0b8e5b9ea5e1fe5b45227f0a",
+    "original_bytes": 235
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank5.log.gz",
+    "original_sha256": "bf8e0b8497c7de7746af9b53082f0b7067f3d3dbda74cce097449db445c3eef4",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/job.json",
+    "original_sha256": "76907e7ac9251499abb5d9282b5a6353d2687264b189e339a16a8637167891c9",
+    "original_bytes": 91
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/rank0.log.gz",
+    "original_sha256": "fa6041fd94f5ba81e37217d1d6a3528860768b795a884ec2033f9478917299ee",
+    "original_bytes": 2588
+  },
+  {
+    "path": "八卡Gather诊断原始证据/gpu_checks/worker.py",
+    "original_sha256": "fc01c038d409a21da3ba5bc3f24adb577fd2ff953a897da84ef2a55d25c17a91",
+    "original_bytes": 2323
+  },
+  {
+    "path": "01_代码与构建/match_e32_build_latest.json",
+    "original_sha256": "c996f25d6246b05e4ac5a955fc8a7ac74620cf8b03b13e892aa25c324e8ecad8",
+    "original_bytes": 2831
+  },
+  {
+    "path": "01_代码与构建/match_e32_v2_python_upload.json",
+    "original_sha256": "4863ad099fa7ec79c149a6cd8fce6c18c6615af200715b208bed817ee9efc83e",
+    "original_bytes": 121
+  },
+  {
+    "path": "01_代码与构建/match_e32_failure_identity.json",
+    "original_sha256": "79994a459ec88a5e9e31c54152e29072cfbea2b5cf39df5b12fe8bfbf07b71a7",
+    "original_bytes": 5626
+  },
+  {
+    "path": "01_代码与构建/match_e32_post_free_sj9.json",
+    "original_sha256": "3f51512ff693a790825af76b11b7011644585c898fe5158c506f4775b4f3b386",
+    "original_bytes": 214
+  },
+  {
+    "path": "03_性能/八卡结果摘要.json",
+    "original_sha256": "b90fd0b490c0974557fe2c8797b4eb2a09d68feeccf7d13a466d8b67949181a1",
+    "original_bytes": 7053
+  }
+]
