@@ -134,6 +134,14 @@ void ConcurrentBlockManagerImpl::release_out_of_window(Sequence* seq,
   inner_->release_out_of_window(seq, kv_state);
 }
 
+void ConcurrentBlockManagerImpl::publish_linear_checkpoint(
+    Sequence* seq,
+    KVCacheState& kv_state,
+    std::vector<BlockTransferInfo>* swap_transfers) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  inner_->publish_linear_checkpoint(seq, kv_state, swap_transfers);
+}
+
 void ConcurrentBlockManagerImpl::reset_prefix_cache() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   inner_->reset_prefix_cache();

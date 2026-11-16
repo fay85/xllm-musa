@@ -79,6 +79,8 @@ class KVCacheCapacity final {
   PROPERTY(int64_t, linear_ssm_checkpoint_stride) = 1;
   PROPERTY(int64_t, n_layers) = 0;
   PROPERTY(int64_t, num_linear_state_blocks) = 0;
+  PROPERTY(int64_t, num_linear_ckpt_blocks) = 0;
+  PROPERTY(int64_t, linear_ckpt_slot_size) = 0;
   PROPERTY(int64_t, num_full_attention_layers) = 0;
   PROPERTY(int64_t, num_linear_attention_layers) = 0;
 

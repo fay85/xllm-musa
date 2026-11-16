@@ -22,6 +22,8 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
+#include "core/framework/model/model_input_params.h"
 #include "core/framework/request/sequence.h"
 
 namespace xllm {
@@ -88,17 +90,27 @@ LinearStateBlockManager::LinearStateBlockManager(
     bool enable_prefix_cache,
     bool instance_is_decode,
     uint32_t num_speculative_tokens,
-    bool preserve_decode_checkpoint)
+    bool preserve_decode_checkpoint,
+    uint32_t num_ckpt_slots)
     : BlockManagerImpl(make_linear_state_options(num_slots,
                                                  chunk_stride,
                                                  enable_prefix_cache,
                                                  instance_is_decode,
                                                  num_speculative_tokens)),
-      preserve_decode_checkpoint_(preserve_decode_checkpoint) {
+      preserve_decode_checkpoint_(preserve_decode_checkpoint),
+      num_active_slots_(num_slots),
+      num_ckpt_slots_(enable_prefix_cache ? num_ckpt_slots : 0) {
   CHECK_GT(num_slots, 1u)
       << "linear-state leaf needs at least one usable slot (plus padding)";
   CHECK_GT(chunk_stride, 0)
       << "linear-state leaf needs a positive chunk stride";
+  if (num_ckpt_slots_ > 0) {
+    ckpt_free_ids_.reserve(num_ckpt_slots_);
+    for (uint32_t i = num_ckpt_slots_; i > 0; --i) {
+      ckpt_free_ids_.push_back(
+          static_cast<int32_t>(num_active_slots_ + i - 1));
+    }
+  }
 }
 
 std::optional<std::vector<Block>>
@@ -344,7 +356,9 @@ std::optional<std::vector<Block>> LinearStateBlockManager::allocate_prefill(
     return allocated;
   }
 
-  cache_read_source(seq, kv_state);
+  if (num_ckpt_slots_ == 0) {
+    cache_read_source(seq, kv_state);
+  }
   retain_read_source(kv_state);
   std::vector<Block> allocated = BlockManagerImpl::allocate(1);
   if (allocated.empty()) {
@@ -452,6 +466,111 @@ Block LinearStateBlockManager::allocate() {
   return std::move(blocks[0]);
 }
 
+void LinearStateBlockManager::free(int32_t block_id) {
+  if (num_ckpt_slots_ > 0 &&
+      block_id >= static_cast<int32_t>(num_active_slots_)) {
+    std::lock_guard<std::mutex> lock(ckpt_mutex_);
+    ckpt_free_ids_.push_back(block_id);
+    return;
+  }
+  BlockManagerImpl::free(block_id);
+}
+
+void LinearStateBlockManager::deallocate(std::vector<Block>&& blocks) {
+  if (num_ckpt_slots_ == 0) {
+    BlockManagerImpl::deallocate(std::move(blocks));
+    return;
+  }
+  std::vector<Block> active_blocks;
+  active_blocks.reserve(blocks.size());
+  for (auto& block : blocks) {
+    if (!block.is_valid()) {
+      continue;
+    }
+    if (block.id() < static_cast<int32_t>(num_active_slots_)) {
+      active_blocks.emplace_back(std::move(block));
+    }
+  }
+  blocks.clear();
+  if (!active_blocks.empty()) {
+    BlockManagerImpl::deallocate(std::move(active_blocks));
+  }
+}
+
+int32_t LinearStateBlockManager::alloc_ckpt_slot_locked() {
+  std::lock_guard<std::mutex> lock(ckpt_mutex_);
+  if (ckpt_free_ids_.empty()) {
+    return -1;
+  }
+  const int32_t id = ckpt_free_ids_.back();
+  ckpt_free_ids_.pop_back();
+  return id;
+}
+
+void LinearStateBlockManager::publish_linear_checkpoint(
+    Sequence* seq,
+    KVCacheState& kv_state,
+    std::vector<BlockTransferInfo>* swap_transfers) {
+  if (num_ckpt_slots_ == 0 || seq == nullptr || seq->is_graph_warmup() ||
+      prefix_cache_ == nullptr || swap_transfers == nullptr) {
+    return;
+  }
+  const Slice<Block> blocks = kv_state.blocks(BlockType::LINEAR);
+  if (blocks.size() < 2) {
+    return;
+  }
+  const Block& src_block = blocks[blocks.size() - 2];
+  if (!src_block.is_valid() ||
+      src_block.id() >= static_cast<int32_t>(num_active_slots_)) {
+    return;
+  }
+  const size_t chunk_stride = block_size();
+  const size_t cached_tokens = seq->kv_cache_tokens_num();
+  if (cached_tokens == 0 || chunk_stride == 0 ||
+      cached_tokens % chunk_stride != 0) {
+    return;
+  }
+  const size_t total_tokens = seq->num_tokens();
+  if (total_tokens > 0 && cached_tokens < total_tokens) {
+    const size_t next_8k = ((cached_tokens / 8192) + 1) * 8192;
+    if (next_8k < total_tokens ||
+        (cached_tokens >= 8192 && cached_tokens % 8192 != 0)) {
+      return;
+    }
+  }
+  const size_t checkpoint_index = cached_tokens / chunk_stride;
+  if (checkpoint_index <= kv_state.num_cached_blocks(BlockType::LINEAR)) {
+    return;
+  }
+  seq->update_linear_state_hashes(static_cast<uint32_t>(chunk_stride));
+  const Slice<XXH3Key> hashes = seq->linear_state_hashes();
+  CHECK_GE(hashes.size(), checkpoint_index);
+  const XXH3Key& hash_key = hashes[checkpoint_index - 1];
+  if (prefix_cache_->find(hash_key).is_valid()) {
+    kv_state.set_num_cached_blocks(BlockType::LINEAR, checkpoint_index);
+    return;
+  }
+  int32_t ckpt_id = alloc_ckpt_slot_locked();
+  if (ckpt_id < 0) {
+    prefix_cache_->evict(1);
+    ckpt_id = alloc_ckpt_slot_locked();
+  }
+  if (ckpt_id < 0) {
+    return;
+  }
+  Block ckpt_block(ckpt_id, this);
+  ckpt_block.set_hash_value(hash_key.data);
+  std::vector<Block> to_insert;
+  to_insert.emplace_back(std::move(ckpt_block));
+  prefix_cache_->insert(to_insert);
+  kv_state.set_num_cached_blocks(BlockType::LINEAR, checkpoint_index);
+
+  BlockTransferInfo transfer(-1, -1);
+  CHECK(musa::encode_deepseek_v4_prefix_block_copy(
+      BlockType::LINEAR, src_block.id(), ckpt_id, &transfer));
+  swap_transfers->emplace_back(std::move(transfer));
+}
+
 std::vector<Block> LinearStateBlockManager::allocate_shared(
     const Slice<int32_t>& token_ids,
     const Slice<Block>& /*existed_shared_blocks*/,
@@ -466,7 +585,9 @@ std::vector<Block> LinearStateBlockManager::allocate_shared(
           << " decode=" << options_.instance_is_decode()
           << " blocks=" << blocks.size();
   for (const Block& block : blocks) {
-    if (block.is_valid() && mark_used(&usage_accounted_ids_, block.id())) {
+    if (block.is_valid() &&
+        block.id() < static_cast<int32_t>(num_active_slots_) &&
+        mark_used(&usage_accounted_ids_, block.id())) {
       num_used_blocks_.fetch_add(1, std::memory_order_relaxed);
     }
   }

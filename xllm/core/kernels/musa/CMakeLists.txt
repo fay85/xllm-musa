@@ -16,6 +16,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   deepseek_v4_indexer_metadata.h
   musa_tvmffi_stream.h
   gdn_ops.h
+  gdn_int8_checkpoint.h
   llm_decode_metadata_update.h
   attention_runner.h
   global_capture_instance.h
@@ -37,6 +38,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   rope.cu
   mrope.cu
   gdn_state_commit.cu
+  gdn_int8_checkpoint.cu
   ../cuda/block_copy.cu
   ../cuda/norm.cu
   ../cuda/reshape_paged_cache.cu

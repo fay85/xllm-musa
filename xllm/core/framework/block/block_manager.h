@@ -40,6 +40,8 @@ limitations under the License.
 
 namespace xllm {
 
+struct BlockTransferInfo;
+
 class BlockManager {
  public:
   struct Options {
@@ -93,6 +95,7 @@ class BlockManager {
     // for the unified slot pool. Both are ignored unless linear state is on.
     PROPERTY(bool, enable_linear_state) = false;
     PROPERTY(int32_t, linear_state_num_slots) = 0;
+    PROPERTY(uint32_t, linear_state_ckpt_slots) = 0;
     // Keep a completed Decode LINEAR checkpoint until the hierarchy pool can
     // pair it with a Host LINEAR destination.
     PROPERTY(bool, preserve_decode_checkpoint) = false;
@@ -222,6 +225,11 @@ class BlockManager {
   // to every leaf, so non-xtensor leaves are a no-op. This keeps the
   // out-of-band timing free of any dynamic_cast through the composite.
   virtual void reserve_xtensor_padding_blocks() {}
+
+  virtual void publish_linear_checkpoint(
+      Sequence* /*seq*/,
+      KVCacheState& /*kv_state*/,
+      std::vector<BlockTransferInfo>* /*swap_transfers*/) {}
 
  protected:
   // the options for the block manager

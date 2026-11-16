@@ -112,7 +112,9 @@ bool apply_deepseek_v4_prefix_block_copies(
   for (const BlockTransferInfo& transfer : transfers) {
     const DeepseekV4PrefixTransfer decoded =
         decode_deepseek_v4_prefix_transfer(transfer);
-    if (decoded.kind == DeepseekV4PrefixTransferKind::STATE_SNAPSHOT) {
+    if (decoded.kind == DeepseekV4PrefixTransferKind::STATE_SNAPSHOT ||
+        (decoded.kind == DeepseekV4PrefixTransferKind::BLOCK_COPY &&
+         decoded.block_type == BlockType::LINEAR)) {
       continue;
     }
     if (decoded.kind == DeepseekV4PrefixTransferKind::BLOCK_COPY) {

@@ -246,7 +246,8 @@ CompositeBlockManager::LeafMap build_composite_leaves(
                     linear_prefix_cache,
                     is_decode,
                     options.num_speculative_tokens(),
-                    is_decode && options.preserve_decode_checkpoint()),
+                    is_decode && options.preserve_decode_checkpoint(),
+                    options.linear_state_ckpt_slots()),
                 options),
             /*participates_in_admission=*/false,
             /*supports_prefix_cache=*/linear_prefix_cache});
@@ -1103,6 +1104,18 @@ void CompositeBlockManager::cache_blocks(BlockType type,
   CHECK(leaf != nullptr) << "Missing block manager for block type "
                          << static_cast<int32_t>(type);
   leaf->cache(blocks);
+}
+
+void CompositeBlockManager::publish_linear_checkpoint(
+    Sequence* seq,
+    std::vector<BlockTransferInfo>* swap_transfers) {
+  if (seq == nullptr || swap_transfers == nullptr) {
+    return;
+  }
+  BlockManager* leaf = leaf_of(BlockType::LINEAR);
+  if (leaf != nullptr) {
+    leaf->publish_linear_checkpoint(seq, seq->kv_state(), swap_transfers);
+  }
 }
 
 void CompositeBlockManager::trim_prefetch_blocks(Sequence* seq,

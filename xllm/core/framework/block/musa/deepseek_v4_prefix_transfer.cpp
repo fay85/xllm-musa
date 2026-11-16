@@ -60,7 +60,7 @@ bool decode_source(int32_t encoded_source, uint32_t* tag, int32_t* block_id) {
 
 bool is_prefix_block_type(BlockType block_type) {
   return block_type == BlockType::SWA || block_type == BlockType::C4 ||
-         block_type == BlockType::C128;
+         block_type == BlockType::C128 || block_type == BlockType::LINEAR;
 }
 
 }  // namespace

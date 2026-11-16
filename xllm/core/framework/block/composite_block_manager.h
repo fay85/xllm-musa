@@ -98,6 +98,9 @@ class CompositeBlockManager : public BlockManager {
   void cache_for_sequence(Sequence* seq, size_t num_tokens);
   void cache_full_blocks_for_sequence(Sequence* seq);
   void cache_blocks(BlockType type, const std::vector<Block>& blocks);
+  void publish_linear_checkpoint(
+      Sequence* seq,
+      std::vector<BlockTransferInfo>* swap_transfers);
   void trim_prefetch_blocks(Sequence* seq, size_t max_hit_tokens) override;
 
   // Probe every prefix-capable leaf without mounting the returned aliases.

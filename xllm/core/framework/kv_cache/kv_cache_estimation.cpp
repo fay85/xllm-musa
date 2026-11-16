@@ -892,22 +892,69 @@ void init_standard_counts(const ModelArgs& model_args,
         << "including " << kPaddingLinearStateBlocks << " padding slots.";
   }
 #endif
-  int64_t num_linear_state_blocks =
-      calculate_linear_state_blocks(kv_cache_cap->cache_size_in_bytes(),
-                                    total_state_bytes,
-                                    full_cache_block_size_in_bytes,
-                                    effective_max_linear_state_cache_slots);
+  const bool use_musa_int8_ckpt = is_musa_gdn_int8_checkpoint_enabled(
+      options.enable_prefix_cache,
+      options.instance_role,
+      options.is_draft_engine,
+      kv_cache_cap->num_linear_attention_layers() > 0,
+      kv_cache_cap->kpool_tail_slot_size() > 0);
+  if (use_musa_int8_ckpt && kv_cache_cap->linear_ssm_checkpoint_stride() == 1) {
+    const int64_t active_slots =
+        resolve_musa_gdn_active_slots(options.max_seqs_per_batch);
+    int64_t ckpt_slots = resolve_musa_gdn_int8_ckpt_slots(
+        options.enable_prefix_cache,
+        options.instance_role,
+        options.is_draft_engine,
+        true,
+        false,
+        options.max_linear_state_cache_slots);
+    const int64_t head_k_dim = model_args.linear_key_head_dim();
+    const int64_t head_v_dim = model_args.linear_value_head_dim();
+    const int64_t conv_bytes =
+        static_cast<int64_t>(torch::elementSize(options.dtype)) *
+        (head_k_dim * options.n_local_linear_k_heads * 2 +
+         head_v_dim * options.n_local_linear_v_heads) *
+        kv_cache_cap->linear_conv_state_len();
+    const int64_t per_layer_ckpt_bytes =
+        options.n_local_linear_v_heads * head_v_dim * head_k_dim +
+        static_cast<int64_t>(sizeof(uint16_t)) *
+            options.n_local_linear_v_heads * head_k_dim +
+        conv_bytes;
+    const int64_t ckpt_slot_total_bytes =
+        kv_cache_cap->num_linear_attention_layers() * per_layer_ckpt_bytes;
+    const int64_t active_total_bytes = active_slots * total_state_bytes;
+    if (ckpt_slot_total_bytes > 0 &&
+        active_total_bytes + ckpt_slots * ckpt_slot_total_bytes >=
+            kv_cache_cap->cache_size_in_bytes()) {
+      const int64_t remain = std::max<int64_t>(
+          0,
+          kv_cache_cap->cache_size_in_bytes() - active_total_bytes -
+              full_cache_block_size_in_bytes);
+      ckpt_slots = std::max<int64_t>(0, remain / ckpt_slot_total_bytes);
+    }
+    kv_cache_cap->num_linear_state_blocks(active_slots);
+    kv_cache_cap->num_linear_ckpt_blocks(ckpt_slots);
+    kv_cache_cap->linear_ckpt_slot_size(per_layer_ckpt_bytes);
+    kv_cache_cap->linear_cache_size_in_bytes(
+        active_total_bytes + ckpt_slots * ckpt_slot_total_bytes);
+  } else {
+    int64_t num_linear_state_blocks = calculate_linear_state_blocks(
+        kv_cache_cap->cache_size_in_bytes(),
+        total_state_bytes,
+        full_cache_block_size_in_bytes,
+        effective_max_linear_state_cache_slots);
 #if defined(USE_NPU)
-  if (is_qwen3_5_target_model_type(model_args.model_type()) &&
-      kv_cache_cap->num_linear_attention_layers() > 0) {
-    constexpr int64_t kMegaGdnMaxLinearStateBlocks = 1024;
-    num_linear_state_blocks =
-        std::min(num_linear_state_blocks, kMegaGdnMaxLinearStateBlocks);
-  }
+    if (is_qwen3_5_target_model_type(model_args.model_type()) &&
+        kv_cache_cap->num_linear_attention_layers() > 0) {
+      constexpr int64_t kMegaGdnMaxLinearStateBlocks = 1024;
+      num_linear_state_blocks =
+          std::min(num_linear_state_blocks, kMegaGdnMaxLinearStateBlocks);
+    }
 #endif
-  kv_cache_cap->num_linear_state_blocks(num_linear_state_blocks);
-  kv_cache_cap->linear_cache_size_in_bytes(
-      kv_cache_cap->num_linear_state_blocks() * total_state_bytes);
+    kv_cache_cap->num_linear_state_blocks(num_linear_state_blocks);
+    kv_cache_cap->linear_cache_size_in_bytes(
+        kv_cache_cap->num_linear_state_blocks() * total_state_bytes);
+  }
   const int64_t available_full_cache_size_in_bytes =
       kv_cache_cap->cache_size_in_bytes() -
       kv_cache_cap->linear_cache_size_in_bytes();
@@ -938,6 +985,64 @@ void init_standard_counts(const ModelArgs& model_args,
 }
 
 }  // namespace
+
+bool is_musa_gdn_int8_checkpoint_enabled(bool enable_prefix_cache,
+                                         InstanceRole instance_role,
+                                         bool is_draft_engine,
+                                         bool has_linear_attention,
+                                         bool has_kpool_tail) {
+#if defined(USE_MUSA)
+  if (!enable_prefix_cache || instance_role == InstanceRole::DECODE ||
+      is_draft_engine || !has_linear_attention || has_kpool_tail) {
+    return false;
+  }
+  const char* env = std::getenv("XLLM_MUSA_GDN_INT8_CKPT");
+  return env == nullptr || std::string(env) != "0";
+#else
+  (void)enable_prefix_cache;
+  (void)instance_role;
+  (void)is_draft_engine;
+  (void)has_linear_attention;
+  (void)has_kpool_tail;
+  return false;
+#endif
+}
+
+int64_t resolve_musa_gdn_int8_ckpt_slots(
+    bool enable_prefix_cache,
+    InstanceRole instance_role,
+    bool is_draft_engine,
+    bool has_linear_attention,
+    bool has_kpool_tail,
+    int64_t max_linear_state_cache_slots) {
+  if (!is_musa_gdn_int8_checkpoint_enabled(enable_prefix_cache,
+                                           instance_role,
+                                           is_draft_engine,
+                                           has_linear_attention,
+                                           has_kpool_tail)) {
+    return 0;
+  }
+  if (const char* env = std::getenv("XLLM_MUSA_GDN_CKPT_SLOTS")) {
+    const int64_t parsed = std::atoll(env);
+    if (parsed > 0) {
+      return parsed;
+    }
+  }
+  if (max_linear_state_cache_slots > 0) {
+    return max_linear_state_cache_slots;
+  }
+  return 64;
+}
+
+int64_t resolve_musa_gdn_active_slots(int64_t max_seqs_per_batch) {
+  if (const char* env = std::getenv("XLLM_MUSA_GDN_ACTIVE_SLOTS")) {
+    const int64_t parsed = std::atoll(env);
+    if (parsed >= 4) {
+      return parsed;
+    }
+  }
+  return std::max<int64_t>(2 * max_seqs_per_batch + 4, 36);
+}
 
 int64_t estimate_shared_kpool_blocks(const KVCacheCapacity& target_cap,
                                      const KVCacheCapacity& draft_cap,

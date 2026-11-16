@@ -97,6 +97,21 @@ int64_t estimate_layerwise_split_block_count(
     int64_t available_bytes,
     int64_t additional_block_bytes);
 
+bool is_musa_gdn_int8_checkpoint_enabled(bool enable_prefix_cache,
+                                         InstanceRole instance_role,
+                                         bool is_draft_engine,
+                                         bool has_linear_attention,
+                                         bool has_kpool_tail);
+
+int64_t resolve_musa_gdn_int8_ckpt_slots(bool enable_prefix_cache,
+                                         InstanceRole instance_role,
+                                         bool is_draft_engine,
+                                         bool has_linear_attention,
+                                         bool has_kpool_tail,
+                                         int64_t max_linear_state_cache_slots);
+
+int64_t resolve_musa_gdn_active_slots(int64_t max_seqs_per_batch);
+
 KVCacheCapacity estimate_kv_cache_capacity(
     const ModelArgs& model_args,
     const KVCacheEstimateOptions& options);

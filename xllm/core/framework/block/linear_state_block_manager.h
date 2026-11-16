@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -42,7 +43,8 @@ class LinearStateBlockManager final : public BlockManagerImpl {
                                    bool enable_prefix_cache = true,
                                    bool instance_is_decode = false,
                                    uint32_t num_speculative_tokens = 0,
-                                   bool preserve_decode_checkpoint = false);
+                                   bool preserve_decode_checkpoint = false,
+                                   uint32_t num_ckpt_slots = 0);
   ~LinearStateBlockManager() override = default;
 
   std::optional<std::vector<Block>> allocate_for_sequence(
@@ -54,6 +56,12 @@ class LinearStateBlockManager final : public BlockManagerImpl {
 
   using BlockManagerImpl::allocate;
   Block allocate() override;
+  void deallocate(std::vector<Block>&& blocks) override;
+  void free(int32_t block_id) override;
+  void publish_linear_checkpoint(
+      Sequence* seq,
+      KVCacheState& kv_state,
+      std::vector<BlockTransferInfo>* swap_transfers) override;
 
   std::vector<Block> allocate_shared(
       const Slice<int32_t>& token_ids,
@@ -78,7 +86,13 @@ class LinearStateBlockManager final : public BlockManagerImpl {
   // Host offload consumes a completed Decode checkpoint after both the HBM
   // and Host leaves finish allocation. Keep the source in the rolling vector
   // until HierarchyBlockManagerPool moves it into an OffloadBlockPair.
+  int32_t alloc_ckpt_slot_locked();
+
   bool preserve_decode_checkpoint_ = false;
+  uint32_t num_active_slots_ = 0;
+  uint32_t num_ckpt_slots_ = 0;
+  std::mutex ckpt_mutex_;
+  std::vector<int32_t> ckpt_free_ids_;
 
   friend class BlockManagerPoolTestPeer;
 };

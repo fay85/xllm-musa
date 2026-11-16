@@ -101,6 +101,9 @@ limitations under the License.
 #include "models/model_registry.h"
 #include "runtime/forward_params.h"
 #if defined(USE_MUSA)
+#include "framework/block/musa/deepseek_v4_prefix_transfer.h"
+#include "framework/kv_cache/kv_cache_estimation.h"
+#include "kernels/musa/gdn_int8_checkpoint.h"
 #include "runtime/musa/deepseek_v4_prefix_block_copy.h"
 #include "runtime/musa/musa_model_args.h"
 #endif
@@ -582,6 +585,22 @@ bool WorkerImpl::allocate_kv_cache_storage(
   // KV cache over a VMM-backed SleepableAllocator region (see kv_cache.cpp), so
   // sleep()/wake_up() can release / re-acquire it.
   allocate_kv_caches(kv_caches_, kv_cache_shape, create_options);
+#if defined(USE_MUSA)
+  if (enable_linear_attention &&
+      kv_cache_shape.linear_ssm_checkpoint_stride() == 1) {
+    const int64_t gdn_ckpt_slots = resolve_musa_gdn_int8_ckpt_slots(
+        ::xllm::KVCacheConfig::get_instance().enable_prefix_cache(),
+        options_.instance_role(),
+        options_.is_draft_engine() || is_spec_draft_,
+        enable_linear_attention,
+        kv_cache_shape.has_kpool_tail_shape(),
+        ::xllm::KVCacheConfig::get_instance().max_linear_state_cache_slots());
+    if (gdn_ckpt_slots > 0) {
+      xllm::kernel::musa::init_gdn_int8_checkpoint_pool(
+          kv_caches_, gdn_ckpt_slots);
+    }
+  }
+#endif
   init_hierarchy_kv_cache_transfer(kv_cache_shape, create_options);
 
 #if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
@@ -909,6 +928,56 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
     CHECK(params.synchronize_all_layers())
         << "failed to wait for Host cache load before LINEAR state restore";
   }
+#if defined(USE_MUSA)
+  const int64_t gdn_ckpt_slots =
+      xllm::kernel::musa::get_gdn_int8_checkpoint_slots(kv_caches_);
+  if (gdn_ckpt_slots > 0) {
+    for (const BlockTransferInfo& transfer : params.block_copy.swap_blocks) {
+      const musa::DeepseekV4PrefixTransfer decoded =
+          musa::decode_deepseek_v4_prefix_transfer(transfer);
+      if (decoded.kind == musa::DeepseekV4PrefixTransferKind::BLOCK_COPY &&
+          decoded.block_type == BlockType::LINEAR) {
+        xllm::kernel::musa::store_gdn_int8_checkpoint(
+            kv_caches_, decoded.src_block_id, decoded.dst_block_id);
+      }
+    }
+    if (!params.embedding.linear_state_read_ids.empty() &&
+        params.embedding.linear_state_read_ids.size() ==
+            params.embedding.linear_state_ids.size() &&
+        !params.linear_state_validity_mask.empty()) {
+      int64_t active_slots = 0;
+      for (const KVCache& kv : kv_caches_) {
+        const torch::Tensor conv = kv.get_conv_cache();
+        if (conv.defined() && conv.numel() > 0) {
+          active_slots = conv.size(0);
+          break;
+        }
+      }
+      std::vector<int32_t> effective_read_ids =
+          params.embedding.linear_state_read_ids;
+      const size_t repeat = params.linear_state_validity_mask.size() /
+                            params.embedding.linear_state_ids.size();
+      for (size_t row = 0; row < effective_read_ids.size(); ++row) {
+        const int32_t read_id = effective_read_ids[row];
+        if (active_slots > 0 && read_id >= active_slots) {
+          const int32_t write_id = params.embedding.linear_state_ids[row];
+          xllm::kernel::musa::restore_gdn_int8_checkpoint(
+              kv_caches_, write_id, read_id);
+          effective_read_ids[row] = write_id;
+          const auto mbegin =
+              params.linear_state_validity_mask.begin() + row * repeat;
+          std::fill(mbegin, mbegin + repeat, 1);
+        }
+      }
+      restore_linear_state_slots(kv_caches_,
+                                 params.embedding.linear_state_ids,
+                                 effective_read_ids,
+                                 params.linear_state_validity_mask,
+                                 reads_distinct_state);
+      return;
+    }
+  }
+#endif
   // TODO: need remove when all device support none D2D
   restore_linear_state_slots(kv_caches_,
                              params.embedding.linear_state_ids,

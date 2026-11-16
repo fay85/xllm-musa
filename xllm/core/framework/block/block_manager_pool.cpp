@@ -68,6 +68,7 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
       .model_type(options_.model_type())
       .enable_linear_state(options_.enable_linear_state())
       .linear_state_num_slots(options_.linear_state_num_slots())
+      .linear_state_ckpt_slots(options_.linear_state_ckpt_slots())
       .preserve_decode_checkpoint(options_.enable_host_offload() &&
                                   has_host_linear_destination)
       .num_speculative_tokens(options_.num_speculative_tokens())
@@ -290,6 +291,8 @@ bool BlockManagerPool::allocate(Sequence* sequence, size_t num_tokens) {
     return false;
   }
 #if defined(USE_MUSA)
+  composite->publish_linear_checkpoint(sequence,
+                                       &swap_block_transfer_infos_[dp_rank]);
   musa::append_deepseek_v4_prefix_state_restore(
       this, sequence, &swap_block_transfer_infos_[dp_rank]);
   musa::prepare_deepseek_v4_prefix_snapshot(
@@ -415,6 +418,8 @@ bool BlockManagerPool::try_allocate(Sequence* sequence) {
     return false;
   }
 #if defined(USE_MUSA)
+  composite->publish_linear_checkpoint(sequence,
+                                       &swap_block_transfer_infos_[dp_rank]);
   musa::append_deepseek_v4_prefix_state_restore(
       this, sequence, &swap_block_transfer_infos_[dp_rank]);
   musa::prepare_deepseek_v4_prefix_snapshot(
