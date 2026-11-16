@@ -1,0 +1,36 @@
+[
+  {
+    "run": "gpu_checks",
+    "cases_per_rank": 40,
+    "ranks": 8,
+    "graph_buckets_per_rank": 10,
+    "max_custom_relative_rms": 0.0017182696413458479,
+    "exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "run": "gpu_checks_q5",
+    "cases_per_rank": 8,
+    "ranks": 8,
+    "graph_buckets_per_rank": 2,
+    "max_custom_relative_rms": 0.001692873217657439,
+    "exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

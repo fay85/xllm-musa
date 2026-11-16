@@ -1,0 +1,176 @@
+{
+  "before": {
+    "screen": {
+      "status": "SPEC_PREFIX_SCREEN_ONLY_NOT_FORMAL",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 464.3910713493824,
+      "mean_TPOT_ms_per_token": 122.14397663688834,
+      "TPOT_sample_stdev_ms": 2.594921514605303,
+      "mean_E2E_s": 31.61110511375591,
+      "output_tokens_per_latency_sum_second": 8.098419814136737,
+      "screen_requests": 2,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "c6e61a606b4395ce3c4e15fa4c231ee9cb8fff763c9362f8ef2135c0c6c6a81d"
+    },
+    "last_step": {
+      "name": "V41/step/q=2/kv=263",
+      "dur": 732539.148
+    },
+    "communication_kernels": {
+      "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 3,
+      "imcclDevKernel_AllReduce_Sum_bf16_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 40,
+      "imcclDevKernel_AllReduce_Sum_f32_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 40
+    },
+    "all_gpu_kernels": 8299,
+    "top_aten_counts": [
+      [
+        "aten::empty",
+        4718
+      ],
+      [
+        "aten::as_strided",
+        3550
+      ],
+      [
+        "aten::to",
+        2645
+      ],
+      [
+        "aten::item",
+        2426
+      ],
+      [
+        "aten::_local_scalar_dense",
+        2426
+      ],
+      [
+        "aten::view",
+        1965
+      ],
+      [
+        "aten::empty_strided",
+        1613
+      ],
+      [
+        "aten::empty_like",
+        1519
+      ],
+      [
+        "aten::reshape",
+        1283
+      ],
+      [
+        "aten::copy_",
+        1266
+      ]
+    ],
+    "256out_counters": [
+      {
+        "speculative_accepted_tokens": "99",
+        "speculative_proposed_tokens": "156",
+        "speculative_token_acceptance_rate": "0.6346"
+      },
+      {
+        "speculative_accepted_tokens": "99",
+        "speculative_proposed_tokens": "156",
+        "speculative_token_acceptance_rate": "0.6346"
+      },
+      {
+        "speculative_accepted_tokens": "99",
+        "speculative_proposed_tokens": "156",
+        "speculative_token_acceptance_rate": "0.6346"
+      }
+    ]
+  },
+  "after": {
+    "screen": {
+      "status": "SPEC_PREFIX_SCREEN_ONLY_NOT_FORMAL",
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 365.82959024235606,
+      "mean_TPOT_ms_per_token": 92.69538901965407,
+      "TPOT_sample_stdev_ms": 1.0906002039617781,
+      "mean_E2E_s": 24.003153790254146,
+      "output_tokens_per_latency_sum_second": 10.66526516627753,
+      "screen_requests": 2,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "81377115e0abe159a2bdaf0154477beceb9607c790b69f7766191b55d0c657cd"
+    },
+    "last_step": {
+      "name": "V41/step/q=2/kv=263",
+      "dur": 766603.007,
+      "custom_bf16_8rank_kernels": 40,
+      "custom_fp32_8rank_kernels": 40
+    },
+    "communication_kernels": {
+      "imcclDevKernel_AllGather_RING_LL(imcclDevKernelArgsStorage<4096ul>)": 3
+    },
+    "all_gpu_kernels": 8301,
+    "top_aten_counts": [
+      [
+        "aten::empty",
+        4718
+      ],
+      [
+        "aten::as_strided",
+        3550
+      ],
+      [
+        "aten::to",
+        2645
+      ],
+      [
+        "aten::item",
+        2426
+      ],
+      [
+        "aten::_local_scalar_dense",
+        2426
+      ],
+      [
+        "aten::view",
+        1965
+      ],
+      [
+        "aten::empty_strided",
+        1693
+      ],
+      [
+        "aten::empty_like",
+        1599
+      ],
+      [
+        "aten::reshape",
+        1283
+      ],
+      [
+        "aten::copy_",
+        1266
+      ]
+    ],
+    "256out_counters": [
+      {
+        "speculative_accepted_tokens": "106",
+        "speculative_proposed_tokens": "149",
+        "speculative_token_acceptance_rate": "0.7114"
+      },
+      {
+        "speculative_accepted_tokens": "106",
+        "speculative_proposed_tokens": "149",
+        "speculative_token_acceptance_rate": "0.7114"
+      },
+      {
+        "speculative_accepted_tokens": "106",
+        "speculative_proposed_tokens": "149",
+        "speculative_token_acceptance_rate": "0.7114"
+      }
+    ]
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "status": "PASS_REAL_EIGHT_RANK_VERIFY_COLLECTIVE",
+  "rank": 4,
+  "records": [
+    {
+      "rows": 5,
+      "dtype": "torch.bfloat16",
+      "nondefault": false,
+      "exact_pattern": true,
+      "mccl": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "custom": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      }
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.bfloat16",
+      "nondefault": false,
+      "exact_pattern": false,
+      "mccl": {
+        "max_abs": 0.056640625,
+        "relative_rms": 0.0032542028392623257,
+        "exact_expected": false
+      },
+      "custom": {
+        "max_abs": 0.03125,
+        "relative_rms": 0.001692873217657439,
+        "exact_expected": false
+      }
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.float32",
+      "nondefault": false,
+      "exact_pattern": true,
+      "mccl": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "custom": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      }
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.float32",
+      "nondefault": false,
+      "exact_pattern": false,
+      "mccl": {
+        "max_abs": 1.087784767150879e-06,
+        "relative_rms": 4.981966068335138e-08,
+        "exact_expected": false
+      },
+      "custom": {
+        "max_abs": 8.344650268554688e-07,
+        "relative_rms": 4.9000083311727373e-08,
+        "exact_expected": false
+      }
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.bfloat16",
+      "nondefault": true,
+      "exact_pattern": true,
+      "mccl": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "custom": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "capture": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "replays": [
+        {
+          "max_abs": 0.0,
+          "relative_rms": 0.0,
+          "exact_expected": true
+        },
+        {
+          "max_abs": 0.0,
+          "relative_rms": 0.0,
+          "exact_expected": true
+        },
+        {
+          "max_abs": 0.0,
+          "relative_rms": 0.0,
+          "exact_expected": true
+        }
+      ]
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.bfloat16",
+      "nondefault": true,
+      "exact_pattern": false,
+      "mccl": {
+        "max_abs": 0.056640625,
+        "relative_rms": 0.0032542028392623257,
+        "exact_expected": false
+      },
+      "custom": {
+        "max_abs": 0.03125,
+        "relative_rms": 0.001692873217657439,
+        "exact_expected": false
+      }
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.float32",
+      "nondefault": true,
+      "exact_pattern": true,
+      "mccl": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "custom": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "capture": {
+        "max_abs": 0.0,
+        "relative_rms": 0.0,
+        "exact_expected": true
+      },
+      "replays": [
+        {
+          "max_abs": 0.0,
+          "relative_rms": 0.0,
+          "exact_expected": true
+        },
+        {
+          "max_abs": 0.0,
+          "relative_rms": 0.0,
+          "exact_expected": true
+        },
+        {
+          "max_abs": 0.0,
+          "relative_rms": 0.0,
+          "exact_expected": true
+        }
+      ]
+    },
+    {
+      "rows": 5,
+      "dtype": "torch.float32",
+      "nondefault": true,
+      "exact_pattern": false,
+      "mccl": {
+        "max_abs": 1.087784767150879e-06,
+        "relative_rms": 4.981966068335138e-08,
+        "exact_expected": false
+      },
+      "custom": {
+        "max_abs": 8.344650268554688e-07,
+        "relative_rms": 4.9000083311727373e-08,
+        "exact_expected": false
+      }
+    }
+  ],
+  "scope": "BF16 Attention TP and FP32 routed/shared EP payloads; not full-model accuracy"
+}

@@ -45,6 +45,7 @@ struct DeepseekV41DecoderConfig {
   double hc_epsilon = 1e-6;
   std::string mhc_prenorm_directory;
   bool decode_tp_custom_allreduce = false;
+  bool verify_custom_allreduce = false;
   bool decode_mhc_fused_reduce = false;
   bool decode_ffn_tail_graph = false;
   bool decode_ffn_graph_fused_inputs = false;
@@ -320,10 +321,13 @@ class DeepseekV41Decoder final {
           /*context=*/-1,
           /*payload_bytes=*/static_cast<int64_t>(attn_output.nbytes()),
           /*group_size=*/attention_group_->world_size());
-      if (config_.decode_tp_custom_allreduce && attn_output.size(0) == 1) {
+      const int64_t custom_rows = config_.verify_custom_allreduce ? 6 : 1;
+      if (config_.decode_tp_custom_allreduce && attn_output.size(0) > 0 &&
+          attn_output.size(0) <= custom_rows) {
         // Selection follows the existing all-rank TP policy. The native
         // custom collective returns separate storage; consume that result.
-        // Prefill and the routed-expert FP32 reduction keep their MCCL path.
+        // Multirow verification is separately voted across ranks. Larger
+        // Prefill batches retain their established MCCL path.
         std::optional<torch::Tensor> reduced =
             musa_allreduce_tp_custom(attention_group_, attn_output);
         CHECK(reduced.has_value())

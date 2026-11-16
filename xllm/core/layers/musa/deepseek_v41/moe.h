@@ -36,6 +36,7 @@ struct DeepseekV41MoeConfig {
   bool gate_cache_fp32_weight = false;
   bool original_fp8_activation = true;
   bool decode_ep_custom_allreduce = false;
+  bool verify_custom_allreduce = false;
   bool shared_expert_tp_reduce = false;
   bool decode_packed_shared_gate_up = false;
   int64_t first_expert = 0;
@@ -180,7 +181,9 @@ class DeepseekV41Moe final {
           /*context=*/-1,
           /*payload_bytes=*/static_cast<int64_t>(routed.nbytes()),
           /*group_size=*/ep_group_->world_size());
-      if (config_.decode_ep_custom_allreduce && input.size(0) == 1) {
+      const int64_t custom_rows = config_.verify_custom_allreduce ? 6 : 1;
+      if (config_.decode_ep_custom_allreduce && input.size(0) > 0 &&
+          input.size(0) <= custom_rows) {
         CHECK_EQ(routed.scalar_type(), torch::kFloat32);
         std::optional<torch::Tensor> reduced =
             musa_allreduce_tp_custom(ep_group_, routed);

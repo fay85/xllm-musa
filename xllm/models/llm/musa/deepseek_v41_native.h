@@ -71,6 +71,14 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     selective_spec_commit_ =
         util::get_bool_env("XLLM_DSV41_SPEC_SELECTIVE_COMMIT", false);
     CHECK(!selective_spec_commit_ || native_dspark_);
+    verify_custom_allreduce_ =
+        util::get_bool_env("XLLM_DSV41_VERIFY_CUSTOM_AR", false);
+    CHECK(!verify_custom_allreduce_ ||
+          (native_dspark_ &&
+           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true) &&
+           util::get_bool_env("XLLM_DSV41_DECODE_EP_CUSTOM_AR", false)))
+        << "Verification custom reduction requires native DSpark and both "
+           "validated TP/EP custom policies";
 
     CHECK(!replicated_attention_ || !native_dspark_)
         << "Replicated Attention is initially ordinary C1 target only";
@@ -714,8 +722,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     pending_verification_ = std::move(pending);
   }
   void initialize_speculative_commit_policy() {
-    const int32_t policy = static_cast<int32_t>(native_dspark_) |
-                           (static_cast<int32_t>(selective_spec_commit_) << 1);
+    const int32_t policy =
+        static_cast<int32_t>(native_dspark_) |
+        (static_cast<int32_t>(selective_spec_commit_) << 1) |
+        (static_cast<int32_t>(verify_custom_allreduce_) << 2);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -970,10 +980,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     // adding an independent model flag that could disagree between ranks.
     config.decode_tp_custom_allreduce =
         util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true);
+    config.verify_custom_allreduce = verify_custom_allreduce_;
     config.attention.sparse_library_path = sparse_path_;
     config.attention.indexer_score_directory = indexer_aot_path_;
     auto& moe = config.moe;
     moe.decode_ep_custom_allreduce = decode_ep_custom_allreduce_;
+    moe.verify_custom_allreduce = verify_custom_allreduce_;
     moe.expert_format = expert_format_;
     moe.w4a8_so_path = w4a8_path_;
     moe.decode_packed_shared_gate_up =
@@ -1231,6 +1243,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   ProcessGroup* tp_group_;
   ProcessGroup* ep_group_;
   bool decode_ep_custom_allreduce_ = false;
+  bool verify_custom_allreduce_ = false;
   bool decode_ffn_tail_graph_ = false;
   bool decode_ffn_graph_fused_inputs_ = false;
   bool shared_expert_tp_reduce_ = false;

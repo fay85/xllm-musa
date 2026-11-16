@@ -120,3 +120,14 @@ pybind_extension(
 target_include_directories(v41_prefix_checkpoint_test_module PRIVATE
   "${PROJECT_SOURCE_DIR}/xllm"
 )
+
+# Production eight-rank TP/EP payloads and graph IPC buffer registration.
+pybind_extension(
+  NAME v41_verify_collective_test_module
+  SRCS v41_verify_collective_test_module.cpp
+  DEPS :cuda_kernels :parallel_state :config :util :platform musa_python
+       torch_python Python::Module torch glog::glog
+)
+target_include_directories(v41_verify_collective_test_module PRIVATE
+  "${PROJECT_SOURCE_DIR}/xllm"
+)

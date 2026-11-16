@@ -1,0 +1,865 @@
+[
+  {
+    "original": "00_目标与假设.md",
+    "bytes": 1536,
+    "sha256": "79326d42d4b4b9412159dff7f73f28e3e3ab9667d038ddcea4c399e87387d239",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/00_目标与假设.md"
+  },
+  {
+    "original": "01_代码与构建/verify_custom_ar_v1_build_launch.json",
+    "bytes": 178,
+    "sha256": "299cca79a499ea90303f71e8f0a27682347b6983c1203dad3b029a6c13a33bcb",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/01_代码与构建/verify_custom_ar_v1_build_launch.json"
+  },
+  {
+    "original": "01_代码与构建/verify_custom_ar_v1_files.json",
+    "bytes": 3866,
+    "sha256": "a29b9c1d67c4b63d249bf62faae0b3b3cddd5fa519beefce4b185d704aaeb378",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/01_代码与构建/verify_custom_ar_v1_files.json"
+  },
+  {
+    "original": "01_代码与构建/verify_custom_ar_v1_tracked.patch",
+    "bytes": 6335,
+    "sha256": "36d0637578d9b186feadae18e9f937fcf9f11395502d983709de26ee0e3b79dd",
+    "lossless_gzip": "01_代码与构建/verify_custom_ar_v1_tracked.patch.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/01_代码与构建/verify_custom_ar_v1_tracked.patch.gz"
+  },
+  {
+    "original": "03_结果对比/通信前后实际trace与请求计数.json",
+    "bytes": 4206,
+    "sha256": "b9050753b584f5d2e5dac5b938d988a98be52a53f3ff24b1f1086e2d04af7405",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/03_结果对比/通信前后实际trace与请求计数.json"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 884,
+    "sha256": "c950db6b47967f4e47e37e9bca8bdb8911f3934ec4a8097cc564554da37064c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/Perfetto图/Perfetto实际轨道.json"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1443,
+    "sha256": "3a9780e7f509d72890fecfd58ac446869875f5e6ac98fa43de459b2a1dc1da88",
+    "lossless_gzip": "04_trace与图/多行custom通信/Perfetto图/Perfetto页面文本.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/Perfetto图/Perfetto页面文本.txt.gz"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/Perfetto图/rendered.json",
+    "bytes": 1190,
+    "sha256": "73c2d5790bc5a8c7d2e8b14e469867c173d43f8486f06f2e45850e7344684741",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/Perfetto图/rendered.json"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 258975,
+    "sha256": "e45ecde4aaf7e6874c4538cc7936f18d65c3de70ed3a4a4122fd5c034ed726d0",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 221076,
+    "sha256": "cfb17eb31afc78808f0ed64ba0c47311efe8a8d66661f69d1ca68be5f97b0fbb",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 135669,
+    "sha256": "a0c3b93c8a0ec85f49c1f5d78136ef2a1a0eee2962970206b04c3505f652e81e",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/Perfetto图/真实CPU区间与GPU时间线.png"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/actual_native_last.pftrace",
+    "bytes": 175994924,
+    "sha256": "a7619e9d98a8f13d347c19e8951817fa6498b3a74179393929ecd9d0b13f732b",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "04_trace与图/多行custom通信/actual_native_last.receipt.json",
+    "bytes": 1407,
+    "sha256": "f580469e3a60202e287519cb9c4b5d2439bbfc2493685468e2cbf3f8d22e5501",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/04_trace与图/多行custom通信/actual_native_last.receipt.json"
+  },
+  {
+    "original": "05_结论与复盘.md",
+    "bytes": 5887,
+    "sha256": "d2c9da7ed6f0c4e5eb5a9d070f361117328a679c3d1af5e17cd61f9b50ef9aed",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/05_结论与复盘.md"
+  },
+  {
+    "original": "基本检查归档校验.json",
+    "bytes": 774,
+    "sha256": "04a6f1280283d2b6219ef5d02cbca03ef2c941da67da093dcff4226848ee88de",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/基本检查归档校验.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/build/artifact_manifest.json",
+    "bytes": 511,
+    "sha256": "1f082fff07d76e977747d1516517ed463018595d318da0ef82a701f15716860b",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/build/artifact_manifest.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/build/build.log",
+    "bytes": 31636,
+    "sha256": "6f64c580c08b51fbfe73e7cce8ba04c1673cf30b2b25912d2c72020d2e20c6c0",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/build/build.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/build/build.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/build/finished.json",
+    "bytes": 73,
+    "sha256": "0113ab35ff173dae82e8dd3a37c7105a88a52666adf2424b3cb19b8988e007a0",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/build/finished.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/build/job.json",
+    "bytes": 380,
+    "sha256": "75b755a4ade413dcf177ed7147acd5e3c198c8db024ef113c0200412ddf71a0c",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/build/job.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/build/source_manifest.json",
+    "bytes": 4123,
+    "sha256": "cd020c40e441e3a72882fd85cf55c36ee093a4c83856280c9793fa9400c3e217",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/build/source_manifest.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/active.json",
+    "bytes": 976,
+    "sha256": "8a945addb10646096636ef81c0887d4bcfea0e2de1e8b3383332d7083e665b08",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/active.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/basic_1_sse.jsonl",
+    "bytes": 1580,
+    "sha256": "b35f6d19dad082313fabd87a5f470b087a1d1cd5deddfbdc40c7b8a194327122",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/basic_1_sse.jsonl"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/basic_2_sse.jsonl",
+    "bytes": 1303,
+    "sha256": "805e4df18eb3dd970f6c2039ba341fb40c0602c0984a1d025cb91c7a412570fe",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/basic_2_sse.jsonl"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/basic_gate.json",
+    "bytes": 1870,
+    "sha256": "74688e58afcc28afac52a0d0b4899f11ef9a00146fe9d5bc1e41a80ed52dbf59",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/basic_gate.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/finished.json",
+    "bytes": 64,
+    "sha256": "7c2e65d5d3f33686ea3637ca05abd410bbf67b2d845c1643f0ff33782d2ac443",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/finished.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/identity.json",
+    "bytes": 286278,
+    "sha256": "1c040a2a0cbc272ab5688688ba83172ad5b30a3c5a19668d7fd683ff314a8d75",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/identity.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/job.json",
+    "bytes": 137,
+    "sha256": "b334f2e19034e50ca678ef4a78b2bccddfd33bfc8e90453258abd0e367cfe3af",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/job.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 10069,
+    "sha256": "1c36b4ab4f2d00806245165783baa23d0a146b3b26fc6ea342a08bda80ae2b99",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json",
+    "bytes": 2346,
+    "sha256": "2061887a2dbc63069f0a914d29ef34281456c4ccbee40b3934619dcdda0ff19b",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_args.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db",
+    "bytes": 106496,
+    "sha256": "98c4dc0f40d45f719641ec921d8b4fea0bf34bb16a42451b79a8199e8f1417e1",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_data.db"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json",
+    "bytes": 3646,
+    "sha256": "2679baf9862456d33f22a98c16628a1aa12ae905ce3dd7f18d0d63cc328d8fc4",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_percentile.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json",
+    "bytes": 664,
+    "sha256": "bb0f8b56eb845df7c87e3671f380040f991d402e007281a6be4f0c5f3e95f88e",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/benchmark_summary.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "909bfc6bc088200b740b517fb2f253a0389079186f4b2b1f95999bd4f2f57385",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_throughput.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json",
+    "bytes": 369,
+    "sha256": "bf7cea733f8ad4f7966ef94faf4e172bdd4966a6e99ddbc591a3764ae80d47ba",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_2/workload_timeline.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166947,
+    "sha256": "99a74ca9193ba1dcfd24a8981838661740deef1a9158695149edf7ed2ee65cef",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "c97386d57eeee22f9c581bb4dc795e242e577f2bdcf169f639cbaf59d75190e3",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen.log",
+    "bytes": 19311,
+    "sha256": "fe512defb87a17d227f5abb186971c2d045ba1f2e9e5d5fa826716c58883920a",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9467,
+    "sha256": "874666abdb7823911186317faabcdf465e689993a7b11fcbb180703f4b11972e",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2353,
+    "sha256": "d7f907eb25aaed633d538bd8bce271cd4f8e099026496aaa3a78bed29e3caa22",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 53248,
+    "sha256": "8aacaf20b066ddff5bd7ed9fcc4d29b5e4469fae30a7af68875baf73bc04972c",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3651,
+    "sha256": "e7d291ad4884651ee7a078dcb3e6476055c5ab747c26fdc6086fce8acae24d9c",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "392202099de7c151c9f543a5d5ebfa8ae7f128866e6121886a10204382f0c00f",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "5c83df87280c1ea0b4cc2af05809e491729a3a54c13be73cecfb4c38e01ac587",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "b75c0ae9fb9b61d8477dd62fe7349bab87a7f9d95392fa88b7e26d27422f4493",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "bytes": 166835,
+    "sha256": "a2cd6dde50a6b84011fde7e2d007f258246f80689b42dda3f8c45c10d1bac2be",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "f4162418cde60270476c7014666ea34e029c26ff2b197afb07793a061d816c98",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/screen_warmup.log",
+    "bytes": 18288,
+    "sha256": "b2f3d7589d28bd8f9a672d95a09d43ad8bc10c544f7fcfec9ad80d1026b39d6a",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/client/screen_warmup.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/screen_warmup.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/status.json",
+    "bytes": 3009,
+    "sha256": "b7819ddd247a3af6d721eaceff5f14037b3cf3a1bbeec97e2d73dcad4cfe89da",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/status.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/client/summary.json",
+    "bytes": 539,
+    "sha256": "a18f716c747249cf6be1e8971bd319c8ca13803d1b1b6b9cb96e3e65c9c971c5",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/client/summary.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj10/rank0.log",
+    "bytes": 3781300,
+    "sha256": "bbb0cfc525c04c3b252442172f079068100851427fefec64db05f5ea4e62c82f",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/roles/sj10/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj10/rank0.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj10/result.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj10/role_config.json",
+    "bytes": 47912,
+    "sha256": "fbe74319e3e76a77d89fc208c99ac0a08836d5209de3518d92a8c181706ef307",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj10/role_config.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj10/runtime_identity.json",
+    "bytes": 9119,
+    "sha256": "f89d43af9bda69d78449d83f2ac42f01c2b17734506676c1636e391e582cda15",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj10/runtime_identity.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj10/status.json",
+    "bytes": 264,
+    "sha256": "e643122bca6d03ed4ab2eaee680bf6c9b4c5a032f335eb972acbe5deb91f703d",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj10/status.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj10/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "becb64f64fef70e632cecde1114509a3396b1456600042c7de76f8047711201b",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj10/supervisor_job.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj9/rank0.log",
+    "bytes": 169923,
+    "sha256": "062f3c0c033a89c619ff6701edf34fe95071804250f9024cad3e3c70dc8c3f23",
+    "lossless_gzip": "多行通信spec1快筛与trace原始证据/roles/sj9/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj9/rank0.log.gz"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj9/result.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj9/role_config.json",
+    "bytes": 47888,
+    "sha256": "5c8e8def8d174743b111f2e99731ba3d8aabb9d04bd9a7fe14adb778ed774814",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj9/role_config.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj9/runtime_identity.json",
+    "bytes": 9329,
+    "sha256": "b905f3228627a58d30dd2908908f6124bbdab7cb8576aed0aeac334405a08404",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj9/runtime_identity.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj9/status.json",
+    "bytes": 272,
+    "sha256": "74d3c9e5992548a758041a0e74cc4de695dd714612c384fedfc407b812f38326",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj9/status.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "869bcd00ddfab68d6b6cd2e83ab6ca2b9fed07b7c00c9a3c8a9d579db933721a",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/roles/sj9/supervisor_job.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/finished.json",
+    "bytes": 120,
+    "sha256": "57d9b3e23572dce78c746d111074b4cc2593bcbc2f588ccaca2c683ceb582312",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/finished.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/job.json",
+    "bytes": 92,
+    "sha256": "de7ea9ad0c18d02d579aff59eeac4722c164c3e15fd3e2db091f27175676e686",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/job.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/manifest.json",
+    "bytes": 7394,
+    "sha256": "9f11993fb866f090cf43f71e1ca9a1d5be9e546ab0eba9802238f3db91089f09",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/manifest.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/off_after_sse.jsonl",
+    "bytes": 2497,
+    "sha256": "8ff7ec4e7e12ba232063612b94e44ee6d60e9723f201fc576ad1b05d573b4361",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/off_after_sse.jsonl"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/off_before_1_sse.jsonl",
+    "bytes": 2496,
+    "sha256": "69628e8d4be4230564b413cbb46b1fa3e23861ec38550b4fcfe587160dc5d62b",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/off_before_1_sse.jsonl"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/off_before_2_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "9b7199ddc4da594a5fbd45ef6e83657fad1908adf91d7436da37df551d7e19b3",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/off_before_2_sse.jsonl"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/profiled_sse.jsonl",
+    "bytes": 2491,
+    "sha256": "e98aed1759af6c5e05dcf8d134f97b4dd1852d43c1e6b15d7bea262d5d686b9e",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/profiled_sse.jsonl"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/request.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/requests.json",
+    "bytes": 1757,
+    "sha256": "242a95ade7fdc05def77b386c886584585ee80e952e8d0415c5a79864fb0b053",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/requests.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "2d22a24d0e3e6cf005df0f1bf20d9c2735499ac4e32444ca06a0b91545ffc54e",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/start_profile.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "594309f3efb2d785d582cfadb585410da82b150e13e8ee1925e3a0d05bed477c",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace/stop_profile.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace_analysis/all_rank_validation.json",
+    "bytes": 28103,
+    "sha256": "8b1f47388610b4b26316075885e1f592be29a0cecf1c5b9334964da9353f569d",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace_analysis/all_rank_validation.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace_analysis/resolved_symbols.json",
+    "bytes": 177039,
+    "sha256": "812955e553df57b9a181aaf8a9e66832a44510a1d07c40fe7502750adb523380",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据/trace_analysis/resolved_symbols.json"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace_analysis/sj10/rank0.native_stacks.jsonl",
+    "bytes": 54427264,
+    "sha256": "7c156772000320847d71903217f43289d75cfb846a06fccae15c5b371b0640f7",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace_analysis/sj10/rank0.pt.trace.json",
+    "bytes": 90023082,
+    "sha256": "0706012270d8371d6860dfb53a920c71ac661b9ba98add1016650c48356634f1",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace_analysis/sj9/rank0.native_stacks.jsonl",
+    "bytes": 18880300,
+    "sha256": "9621430819c1c22785a0cca3b258850057047027c612f896b0bdca83fe12f488",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据/trace_analysis/sj9/rank0.pt.trace.json",
+    "bytes": 20149772,
+    "sha256": "827c55721009a8a827c97f42f5097e49f5f4d0876571918033e77f97db522425",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据.tar.gz",
+    "bytes": 17778724,
+    "sha256": "b93aa6d28f1dd68e7ec04163616b0b602f9a0b9b53474cccd5d9d45a0fbb6a33",
+    "storage": "AI Book and NFS only"
+  },
+  {
+    "original": "多行通信spec1快筛与trace原始证据校验.json",
+    "bytes": 225,
+    "sha256": "25f8a1c722a86fb46096f01adea338439c2266a4f531e66ea76bed80da00c9de",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/多行通信spec1快筛与trace原始证据校验.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/checks_summary.json",
+    "bytes": 524,
+    "sha256": "1dcb4b6ea0c0570e9e02c65c49bb3ddafff211cbbbf7b91c47933a28a4e3352a",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/checks_summary.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/commands.json",
+    "bytes": 15587,
+    "sha256": "91329d95d65f0c82889836d42d0f80da8c2d32fd32ba021426a1ba732d8e2d74",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/commands.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/compile.log",
+    "bytes": 3510,
+    "sha256": "f60a871845b93ef2253f1630547a96dae56c71dbbd6655366be5a3847cbdb793",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/compile.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/compile.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/finished.json",
+    "bytes": 165,
+    "sha256": "d73a96ebb6774cce35fc9ed4b49bf66a8b8584e8c914e8db034a0134d1748c87",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/finished.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/finished.json",
+    "bytes": 178,
+    "sha256": "aafa5c3d2ba6b5d71b80501e147ad727dbebd1450a963c92b626f2ad24d791c7",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/finished.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/job.json",
+    "bytes": 91,
+    "sha256": "a2daf375fb372f26e6d4dca9cec4ba130d451003b03e753ca166a9c4bd970dea",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/job.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank0.log",
+    "bytes": 2209,
+    "sha256": "e20fda8ad798f439df879bc5cbbbe018a9787e61ba10124b3cd41652e68e10d5",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank0.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank1.log",
+    "bytes": 2209,
+    "sha256": "b35444862b6203c6ca44c9dddea2686a7393ef3fcaf12b1a70b4cd8b5956b808",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank1.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank1.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank2.log",
+    "bytes": 2209,
+    "sha256": "f472651f77d9407572f469e3a5427386618a5facd5c8632d51889999e1b1cf48",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank2.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank2.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank3.log",
+    "bytes": 2209,
+    "sha256": "7e960fe79db80117e0ad50c6e8b11e60c2ae05977b6a581f8d68a482322dc148",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank3.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank3.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank4.log",
+    "bytes": 2209,
+    "sha256": "f6eefefc33bb82ecf87c2b9e6d69b1a931c674b2c5288d44163127369f98d7be",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank4.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank4.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank5.log",
+    "bytes": 2209,
+    "sha256": "3bb34c25324cff32a086de1152c84462fe53d8317704de9e416ed6a9e4f6c0aa",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank5.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank5.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank6.log",
+    "bytes": 2209,
+    "sha256": "f5330d0a8dc89e6486e8ec49849e4b4b9b4b9377d1a247e79d236467c114d508",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank6.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank6.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/rank7.log",
+    "bytes": 2209,
+    "sha256": "56278519d273b3e9d7c9ce0793a66f69a35c5f6218d8fc65497be4ba7b1966bb",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/rank7.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/rank7.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/ranks.json",
+    "bytes": 578,
+    "sha256": "8ba763ccc3ce1875f7f9f1c10004d58566705106a9182ff076cdb2660a3cbe45",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/ranks.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank0.json",
+    "bytes": 19650,
+    "sha256": "fd1cbc58b82c46a8a060eb3c78a40809c3807ee373b44bca6c18bc0a0f5783d5",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank0.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank1.json",
+    "bytes": 19650,
+    "sha256": "478b14b06be1229d3939e608ce99c744ee58522814835e377af85aa4114fab84",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank1.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank2.json",
+    "bytes": 19650,
+    "sha256": "885929fab6dd026e1539ea93c3a6a8cd8ff84e2a0810d58316bb660e2a68a224",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank2.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank3.json",
+    "bytes": 19650,
+    "sha256": "436c2dfbf4f54650981ca69a4aea3111a25032a338960b2a356168751dba75aa",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank3.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank4.json",
+    "bytes": 19650,
+    "sha256": "179c6a347bdb7a137e40e3a3618e85fea3333b581e4b69a86c0a721680ccb030",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank4.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank5.json",
+    "bytes": 19650,
+    "sha256": "d7cf3702fdccf0216a8f00594c6b5014429b377bcbc51563955325730537b246",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank5.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank6.json",
+    "bytes": 19650,
+    "sha256": "fe1af332b6751358970aecd4c9c2091346cdaeb9e2b8ab449a281c1a5a8a8593",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank6.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/results/rank7.json",
+    "bytes": 19650,
+    "sha256": "9c85c6bb9c00405614e0c777ece8bbabe110bee94ff2a7efc10cdd9f2fbe9436",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/results/rank7.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/status.json",
+    "bytes": 244,
+    "sha256": "64d176d41cf7a209c29c2ffc5d390df8f0cda3dba9bd94039358e8bc1f542c54",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/status.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/worker.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks/worker.py",
+    "bytes": 2336,
+    "sha256": "f7215b21f89a873828fb76287eded765e814ea52d584cd3fef4d83d1b9bae2ea",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks/worker.py"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/finished.json",
+    "bytes": 178,
+    "sha256": "dfa0593b64dbf4dd847473fa42fa66d8669f334f43aed06692319a74f99094f9",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/finished.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/job.json",
+    "bytes": 92,
+    "sha256": "996e620b0ca69dca48b18ecf206ec4162a58db308d379e9463a18e6a85244245",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/job.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank0.log",
+    "bytes": 1081,
+    "sha256": "9ccc622a930ae30c4f407c0e6525545d7414de863cf9ec7168f90d2e0a5b9710",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank0.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank0.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank1.log",
+    "bytes": 1081,
+    "sha256": "98ec75518d0dccca42ef0da2fc11c7512a16ee6bd60630828ba6ae4b685b500f",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank1.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank1.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank2.log",
+    "bytes": 1081,
+    "sha256": "7f380e51100e25270fcbdfebc5643a1431882aa968ab4732c5048814ca2b8c03",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank2.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank2.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank3.log",
+    "bytes": 1081,
+    "sha256": "bde48ecb7d19570c025c4e0645dbf031d92f43b79e270199c03878e163e9e677",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank3.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank3.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank4.log",
+    "bytes": 1081,
+    "sha256": "73c2a1ab677304c7b4c35672ec613cae58ae7e3aa655a9bcb6118fa425a4b08c",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank4.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank4.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank5.log",
+    "bytes": 1081,
+    "sha256": "adfa435e75bbdbbc04a8248f428434250c25713714a4de5306a28341d79c44c7",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank5.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank5.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank6.log",
+    "bytes": 1081,
+    "sha256": "444305c67515e1ccd59238198aa751c3d0a1498ec7730cc401709d2964c44be2",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank6.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank6.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank7.log",
+    "bytes": 1081,
+    "sha256": "39eb545ff9b08683ecb2ff5d5cfbc5b1a875813354d6d06827ba24b2e38442d5",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/rank7.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/rank7.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/ranks.json",
+    "bytes": 586,
+    "sha256": "9a3f68bdb76bce0d7d691950c135f74e8473537631fca2897801b0e565d68da6",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/ranks.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank0.json",
+    "bytes": 4072,
+    "sha256": "a979cb51784954db1414a3585462e1486e07502599b7b8b4ba822b3a09a19813",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank0.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank1.json",
+    "bytes": 4072,
+    "sha256": "6fcf8e298ecc87e5279d664ce4c41e6f1e0402915ea8b228889b081318ee7fed",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank1.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank2.json",
+    "bytes": 4072,
+    "sha256": "dd772be903c4e0e6d54c209610bf9121f6fdad608e3d07211e151e7d5e41d762",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank2.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank3.json",
+    "bytes": 4072,
+    "sha256": "9992a669c7c17d7ce967f2e583aab385566409ac6cc5b756b3eb85e5ba39160e",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank3.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank4.json",
+    "bytes": 4072,
+    "sha256": "6fffb39f1022d6d3ef35bc335572674d87dd9416d78d3434563eab2136438488",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank4.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank5.json",
+    "bytes": 4072,
+    "sha256": "0abbe342bd407bd50d3f7f80184453fa0eda34bbb8ba41b12624b3088d694b7d",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank5.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank6.json",
+    "bytes": 4072,
+    "sha256": "0e4cb32172d8458f0291bcc52b4f7a0c71eb216b22ca6f9b5eddad886185a3d1",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank6.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank7.json",
+    "bytes": 4072,
+    "sha256": "618580fbd13adfb3857cda80cbad1bc877570a2533b95f06ae6e25e5ba9246bc",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/results/rank7.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/status.json",
+    "bytes": 252,
+    "sha256": "cba28a575b8afe02d14c512035f90caf64f8cd02fa8ce4c8bad9e92586608099",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/status.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/validate_verify_collective.py",
+    "bytes": 4600,
+    "sha256": "3626fc67076c647734e82cf302efed18b104a0fbc952b1aa8a1d705ef1676bee",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/validate_verify_collective.py"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/gpu_checks_q5/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/worker.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/gpu_checks_q5/worker.py",
+    "bytes": 2339,
+    "sha256": "5ae1307d0b955de3778a3f07b5d325e32a61029040242857b5c0529fc03a2f2e",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/gpu_checks_q5/worker.py"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/import.log",
+    "bytes": 72,
+    "sha256": "537ef6c247b640f9fddb1ddd4b7d1d32727085ee550863a56cef8c7cf90b588f",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/import.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/import.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/job.json",
+    "bytes": 91,
+    "sha256": "bbbc95236de19d0f22667b38d491c821c51329271f7082dc687b9d5c56c19b43",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/job.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/link.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/link.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/manifest.json",
+    "bytes": 299,
+    "sha256": "d7b25b745aa6a1d382e84202e9acc0b7cc18d587801aa40b48997a00ca53da6d",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/manifest.json"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/v41_verify_collective_test_module.cpp",
+    "bytes": 3230,
+    "sha256": "199a04cb2173e8fbab5b5167d2eeed21d2f63357ab8f539b5ecd0049ef7af478",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/v41_verify_collective_test_module.cpp"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/validate_verify_collective.py",
+    "bytes": 4611,
+    "sha256": "bd888809356b19c285a10f101d933180caef2ad0fb847ba4e6305660eed6a709",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/validate_verify_collective.py"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lossless_gzip": "真实八卡通信基本检查原始证据/worker.log.gz",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/worker.log.gz"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据/worker.py",
+    "bytes": 2402,
+    "sha256": "c2f08f951fc61387ad80d9ea565d84a006e8ff58a01907649c7a9c339d1664d1",
+    "git_path": "evidence/v41_match_sglang_1116/实验006/真实八卡通信基本检查原始证据/worker.py"
+  },
+  {
+    "original": "真实八卡通信基本检查原始证据.tar.gz",
+    "bytes": 18120,
+    "sha256": "7d88985df2da92e7672a91480d532d53f07ceea2e8c2762200aa67129e5fb623",
+    "storage": "AI Book and NFS only"
+  }
+]
