@@ -802,8 +802,8 @@ bool RoutedMoeImpl::try_load_quantized_experts(
       w13.copy_(transformed.first);
       s13.copy_(transformed.second);
     } else {
-      w13.copy_(torch::stack(packed_vec).to(w13.device()));
-      s13.copy_(torch::stack(scale_vec).to(s13.device()));
+      w13.copy_(torch::stack(packed_vec));
+      s13.copy_(torch::stack(scale_vec));
     }
     w13_loaded = true;
     w1_list.clear();
@@ -815,13 +815,8 @@ bool RoutedMoeImpl::try_load_quantized_experts(
   if (!w2_loaded && all_tensors_defined(w2_list) &&
       all_tensors_defined(s2_list)) {
     ensure_storage();
-    if (mega_moe_ || ep_mate_moe_) {
-      w2_storage.copy_(torch::stack(w2_list));
-      s2.copy_(torch::stack(s2_list));
-    } else {
-      w2_storage.copy_(torch::stack(w2_list).to(w2_storage.device()));
-      s2.copy_(torch::stack(s2_list).to(s2.device()));
-    }
+    w2_storage.copy_(torch::stack(w2_list));
+    s2.copy_(torch::stack(s2_list));
     w2_loaded = true;
     w2_list.clear();
     s2_list.clear();
@@ -1525,6 +1520,28 @@ void RoutedMoeImpl::load_experts(const StateDict& state_dict) {
     return;
   }
 
+  // A nonempty checkpoint shard may contain only other ranks' experts.
+  // Allocate dense storage only when a local weight actually arrives;
+  // otherwise an FP8 model can retain unused BF16 weights for every layer.
+  const auto has_local_weight = [&]() {
+    for (int64_t idx = 0; idx < num_experts_per_rank_; ++idx) {
+      const std::string prefix = std::to_string(start_expert_id_ + idx) + ".";
+      for (const char* name : {"gate_proj.weight",
+                               "up_proj.weight",
+                               "down_proj.weight",
+                               "w1.weight",
+                               "w3.weight",
+                               "w2.weight"}) {
+        if (state_dict.has(prefix + name)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  if (!has_local_weight()) {
+    return;
+  }
   ensure_dense_expert_storage();
   prefixes = {"gate_proj.", "up_proj."};
   weight::load_moe_fused_weight(state_dict,

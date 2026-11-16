@@ -17,25 +17,24 @@ NNODES="${GLM5_NNODES:-8}"
 EP_SIZE="${GLM5_EP_SIZE:-8}"
 CP_SIZE="${GLM5_CP_SIZE:-8}"
 MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
-MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-4096}"
+MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-32768}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
-ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
+ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-false}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-auto}"
-# The default is the validated GLM5 CP8+EP8 graph Prefill path. Set the
-# corresponding GLM5_* variables explicitly to run a single-rank baseline.
+# The default is the GLM5 CP8+EP8 eager Prefill path. Set the corresponding
+# GLM5_* variables explicitly to run a different parallel configuration.
 export XLLM_GLM5_MEGA_MOE="${XLLM_GLM5_MEGA_MOE:-0}"
 export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-1}"
 export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-1}"
-export XLLM_GLM5_PREFILL_EP_BACKEND="${XLLM_GLM5_PREFILL_EP_BACKEND:-mate}"
+export XLLM_GLM5_PREFILL_EP_BACKEND="${XLLM_GLM5_PREFILL_EP_BACKEND:-eager}"
 PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
 ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-true}"
-MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:-4096}"
+MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:-32768}"
 PREFILL_BATCH_WAIT_MS="${GLM5_PREFILL_BATCH_WAIT_MS:-0}"
-# Graph capture uses exact GLM5 token shapes for prefill and exact decode batch
-# shapes.  The executor enforces model-specific safety checks for unsupported
-# shapes; this limit only prevents unexpectedly large graph allocations.
+# This limit is retained for graph-enabled overrides. It does not affect the
+# default eager path.
 MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-4096}"
-ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-true}"
+ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-false}"
 ENABLE_DISAGG_PD="${GLM5_ENABLE_DISAGG_PD:-false}"
 INSTANCE_ROLE="${GLM5_INSTANCE_ROLE:-DEFAULT}"
 KV_CACHE_TRANSFER_MODE="${GLM5_KV_CACHE_TRANSFER_MODE:-PUSH}"
@@ -210,6 +209,17 @@ ensure_ops_cache
 mkdir -p "${LOG_DIR}"
 stop_service
 
+# Release all ranks if any worker fails during startup.
+cleanup_failed_start() {
+  local status=$?
+  if [[ "${status}" != "0" ]]; then
+    stop_service
+  fi
+}
+trap cleanup_failed_start EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 PROFILE_ARGS=()
 if [[ "${TORCH_PROFILE}" == "1" ]]; then
   mkdir -p "${PROFILE_DIR}"
@@ -288,9 +298,9 @@ for ((elapsed = 1; elapsed <= WAIT_TIMEOUT_SEC; ++elapsed)); do
     echo "Service ready after ${elapsed}s: http://${HOST}:${BASE_PORT}"
     exit 0
   fi
-  if grep -q -E "Check failed|SIGSEGV|SIGABRT" "${LOG_DIR}"/rank_*.log 2>/dev/null; then
+  if grep -q -E "Check failed|SIGSEGV|SIGABRT|out of memory|terminate called" "${LOG_DIR}"/rank_*.log 2>/dev/null; then
     echo "Error: worker crash detected during startup!" >&2
-    grep -n -C 5 -E "Check failed|SIGSEGV|SIGABRT" "${LOG_DIR}"/rank_*.log >&2 || true
+    grep -n -C 5 -E "Check failed|SIGSEGV|SIGABRT|out of memory|terminate called" "${LOG_DIR}"/rank_*.log >&2 || true
     exit 1
   fi
   sleep 1

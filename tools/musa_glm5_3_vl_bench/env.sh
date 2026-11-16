@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Settings for the GLM-5.3-Flash VL benchmark on MUSA (default: 2k input / 1 output).
+# Settings for the GLM-5.3-Flash VL benchmark on MUSA (default: 20k input / 1 output).
 # Override any setting by exporting GLM5_<NAME> or VL_<NAME> before running bench.sh.
 
 KIT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -15,7 +15,7 @@ MODEL_ID=${GLM5_MODEL_ID:-${VL_MODEL_ID:-glm-5.3-flash}}
 DATA_DIR=${GLM5_DATA_DIR:-${VL_DATA_DIR:-/workspace/xllm_vl_bench_ref}}
 WORK_DIR=${GLM5_WORK_DIR:-${VL_WORK_DIR:-/tmp/glm5_3_vl_bench}}
 
-ISL=${GLM5_ISL:-${VL_ISL:-2048}}
+ISL=${GLM5_ISL:-${VL_ISL:-20000}}
 SHARED=${GLM5_SHARED:-${VL_SHARED:-0}}
 OSL=${GLM5_OSL:-${VL_OSL:-1}}
 NUM_IMAGES=${GLM5_NUM_IMAGES:-${VL_NUM_IMAGES:-0}}

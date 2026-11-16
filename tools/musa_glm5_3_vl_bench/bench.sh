@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Benchmarks the running GLM-5.3-Flash VLM service for 2k input / 1 output.
+# Benchmarks the running GLM-5.3-Flash VLM service for 20k input / 1 output.
 # Extra arguments go to vl_bench.py (e.g. --requests 16 --out FILE).
 # Usage: bench.sh [CONCURRENCY] [vl_bench.py arguments...]
 # Images are disabled by default; use --num-images N to include them.
