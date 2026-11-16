@@ -80,6 +80,27 @@ class DeepseekV41TokenCache final {
     return torch::where(rows.lt(committed).unsqueeze(-1), values, 0);
   }
 
+  // Fixed capacity with a device-side visible length, for graph replay.
+  // Padding is zeroed before scoring, including NaNs in unallocated pages.
+  torch::Tensor gather_visible(const torch::Tensor& table,
+                               const torch::Tensor& visible,
+                               int64_t capacity) const {
+    check_table(table);
+    CHECK(visible.defined());
+    CHECK_EQ(visible.device(), cache_.device());
+    CHECK_EQ(visible.numel(), 1);
+    CHECK(visible.scalar_type() == torch::kInt32 ||
+          visible.scalar_type() == torch::kInt64);
+    CHECK_GE(capacity, 0);
+    CHECK_LE(capacity, table.size(1) * cache_.size(1));
+    torch::DeviceGuard guard(cache_.device());
+    const torch::Tensor rows =
+        torch::arange(capacity, table.options().dtype(torch::kInt64));
+    const torch::Tensor values = cache_.view({-1, cache_.size(2)})
+                                     .index_select(0, slots(rows, table, true));
+    return torch::where(rows.lt(visible.reshape({1})).unsqueeze(-1), values, 0);
+  }
+
  private:
   void check_table(const torch::Tensor& table) const {
     CHECK(table.defined());
@@ -111,14 +132,17 @@ class DeepseekV41TokenCache final {
 // Materialization stays lazy because REUSE does not consume indexer keys.
 class DeepseekV41TokenCacheReadView final {
  public:
-  DeepseekV41TokenCacheReadView(torch::Tensor cache,
-                                torch::Tensor table,
-                                int64_t committed,
-                                int64_t capacity)
+  DeepseekV41TokenCacheReadView(
+      torch::Tensor cache,
+      torch::Tensor table,
+      int64_t committed,
+      int64_t capacity,
+      std::optional<torch::Tensor> visible = std::nullopt)
       : cache_(std::move(cache)),
         table_(std::move(table)),
         committed_(committed),
-        capacity_(capacity) {
+        capacity_(capacity),
+        visible_(std::move(visible)) {
     CHECK_GE(committed_, 0);
     CHECK_GE(capacity_, committed_);
   }
@@ -127,8 +151,11 @@ class DeepseekV41TokenCacheReadView final {
     if (!values_.has_value()) {
       const DeepseekV41ProfileRange range(
           "V41/Attention/compressed_cache_materialize");
-      values_ =
-          DeepseekV41TokenCache(cache_).gather(table_, committed_, capacity_);
+      values_ = visible_.has_value()
+                    ? DeepseekV41TokenCache(cache_).gather_visible(
+                          table_, visible_.value(), capacity_)
+                    : DeepseekV41TokenCache(cache_).gather(
+                          table_, committed_, capacity_);
     }
     return *values_;
   }
@@ -138,6 +165,7 @@ class DeepseekV41TokenCacheReadView final {
   torch::Tensor table_;
   int64_t committed_;
   int64_t capacity_;
+  std::optional<torch::Tensor> visible_;
   std::optional<torch::Tensor> values_;
 };
 

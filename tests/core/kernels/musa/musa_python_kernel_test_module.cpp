@@ -50,6 +50,9 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
   module.def("v41_pair_pool",
              &xllm::kernel::musa::deepseek_v41_pair_pool,
              pybind11::call_guard<pybind11::gil_scoped_release>());
+  module.def("v41_pair_pool_decode",
+             &xllm::kernel::musa::deepseek_v41_pair_pool_decode,
+             pybind11::call_guard<pybind11::gil_scoped_release>());
   module.def("v41_indexer_score",
              &xllm::kernel::musa::deepseek_v41_indexer_score,
              pybind11::call_guard<pybind11::gil_scoped_release>());
@@ -439,6 +442,9 @@ PYBIND11_MODULE(musa_python_kernel_test_module, module) {
            pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("gather",
            &NativeTokenCache::gather,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("gather_visible",
+           &NativeTokenCache::gather_visible,
            pybind11::call_guard<pybind11::gil_scoped_release>());
   using NativeTokenReadView = xllm::layer::DeepseekV41TokenCacheReadView;
   pybind11::class_<NativeTokenReadView>(module, "NativeV41TokenCacheReadView")

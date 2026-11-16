@@ -1,0 +1,27 @@
+{
+  "source_commit": "9ce7f8498fd4275183587a81cba39c72d527025e",
+  "source_manifest": "/expt/builds/baseline_9ce7f849/source_manifest.json",
+  "build_job": {
+    "pid": 8828,
+    "start_ticks": "517622715",
+    "command": [
+      "bash",
+      "_build_cuda_graph_musa.sh"
+    ],
+    "cwd": "/workspace/xllm-mt-main",
+    "started_at": "2026-11-16T16:03:11.293990+08:00",
+    "env_overrides": {
+      "MAX_JOBS": "16",
+      "XLLM_BUILD_TESTING": "1",
+      "NINJA_TARGET": "xllm",
+      "MUSA_VISIBLE_DEVICES": "-1",
+      "MTHREADS_VISIBLE_DEVICES": "void"
+    }
+  },
+  "binary": "/expt/artifacts/baseline_9ce7f849/bin/xllm",
+  "binary_sha256": "4a29a4865f9b287b585ae56e7c2affd62a317eb6bb8aadc5e60d870af3921c09",
+  "bytes": 341277360,
+  "fresh_link": true,
+  "ninja_no_pending_work": true,
+  "verified_at": "2026-11-16T16:11:36.157839+08:00"
+}

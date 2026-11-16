@@ -1,0 +1,53 @@
+{
+  "baseline": {
+    "status": "BASELINE_SHORT_VALID_LONG_SMOKE_PREVIOUS_RUN",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 396.58814165741205,
+    "mean_TPOT_ms_per_token": 68.92345485003555,
+    "TPOT_sample_stdev_ms": 1.034290316753788,
+    "mean_E2E_s": 17.97206912841648,
+    "output_tokens_per_latency_sum_second": 14.244325356796365,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "4a29a4865f9b287b585ae56e7c2affd62a317eb6bb8aadc5e60d870af3921c09"
+  },
+  "static_off": {
+    "status": "STATIC_DECODE_SHORT_VALID_NO_LONG_REGRESSION_YET",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 393.30741949379444,
+    "mean_TPOT_ms_per_token": 71.49490485807844,
+    "TPOT_sample_stdev_ms": 1.2405250005973592,
+    "mean_E2E_s": 18.624508158303797,
+    "output_tokens_per_latency_sum_second": 13.745329424222222,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "34e600ce14f4d2d10ebb50baf6a793b8edd43d474961acbf7a7a4191a0b1b22a"
+  },
+  "static_on": {
+    "status": "FULL_DECODE_GRAPH_SHORT_VALID_NO_LONG_REGRESSION_YET",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 423.5600784420967,
+    "mean_TPOT_ms_per_token": 59.587164951451854,
+    "TPOT_sample_stdev_ms": 0.38446745714779007,
+    "mean_E2E_s": 15.61828714106232,
+    "output_tokens_per_latency_sum_second": 16.39104196816473,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "34e600ce14f4d2d10ebb50baf6a793b8edd43d474961acbf7a7a4191a0b1b22a"
+  },
+  "e2e_reduction_vs_baseline_pct": 13.09688923704664,
+  "output_increase_vs_baseline_pct": 15.070679429153211,
+  "e2e_reduction_vs_static_off_pct": 16.141210235939273
+}

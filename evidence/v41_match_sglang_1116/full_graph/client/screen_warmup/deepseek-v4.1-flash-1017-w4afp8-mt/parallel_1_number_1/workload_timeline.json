@@ -1,0 +1,11 @@
+{
+    "wall_start": 5179584.314483204,
+    "points": [
+        {
+            "t": 18.446964,
+            "cum_completion": 256,
+            "cum_new_prompt": 256,
+            "cum_cached_prompt": 0
+        }
+    ]
+}

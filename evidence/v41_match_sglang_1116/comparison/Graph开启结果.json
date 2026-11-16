@@ -1,0 +1,30 @@
+{
+  "status": "PHASE_CHAMPION_SHORT_VALID_LONG_SMOKE_AND_POST_LONG_BASIC_PASSED",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 423.5600784420967,
+  "mean_TPOT_ms_per_token": 59.587164951451854,
+  "TPOT_sample_stdev_ms": 0.38446745714779007,
+  "mean_E2E_s": 15.61828714106232,
+  "output_tokens_per_latency_sum_second": 16.39104196816473,
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "34e600ce14f4d2d10ebb50baf6a793b8edd43d474961acbf7a7a4191a0b1b22a",
+  "long_smoke": {
+    "latency_s": 23.05596232507378,
+    "first_content_s": 2.5565562210977077,
+    "usage": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 256,
+      "total_tokens": 2304,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "scope": "One bounded long-shape cache/Graph bucket smoke, not formal performance round"
+  },
+  "final_three_round_acceptance": false
+}

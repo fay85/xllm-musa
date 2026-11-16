@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/rotary_embedding_util.h"
 #include "core/layers/musa/deepseek_v41/batch_metadata.h"
+#include "core/layers/musa/deepseek_v41/decode_graph.h"
 #include "core/layers/musa/deepseek_v41/engram_embedding.h"
 #include "core/layers/musa/deepseek_v41/engram_hash.h"
 #include "core/layers/musa/deepseek_v41/request_metadata.h"
@@ -64,6 +65,17 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK_EQ(context.get_parallel_args().dp_size(), 1);
     CHECK(!ExecutionConfig::get_instance().enable_graph());
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+    full_decode_graph_ =
+        util::get_bool_env("XLLM_DSV41_FULL_DECODE_GRAPH", false);
+    static_decode_ = full_decode_graph_ ||
+                     util::get_bool_env("XLLM_DSV41_STATIC_DECODE", false);
+    if (static_decode_) {
+      CHECK(!native_dspark_) << "Initial full graph supports target q1 only";
+      CHECK(util::get_bool_env("XLLM_DSV41_DECODE_FUSED_SWA_READ", false));
+      CHECK(util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false));
+      CHECK(!util::get_bool_env("XLLM_DSV41_DECODE_FFN_TAIL_GRAPH", false));
+      CHECK(util::get_bool_env("XLLM_DSV41_MODEL_NONDEFAULT_STREAM", false));
+    }
     const int64_t speculative_tokens =
         SpeculativeConfig::get_instance().num_speculative_tokens();
     CHECK(speculative_tokens == 0 ||
@@ -208,6 +220,19 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         tp_group_,
         expert_reduction_group(),
         bounded_replay_);
+    if (static_decode_) {
+      std::vector<int64_t> ratios;
+      ratios.reserve(args_.n_layers());
+      for (int64_t layer = 0; layer < args_.n_layers(); ++layer) {
+        ratios.emplace_back(args_.compress_ratios()[layer]);
+      }
+      decode_graph_ =
+          std::make_unique<layer::DeepseekV41DecodeGraph>(std::move(ratios));
+      CHECK(args_.layers_to_capture().empty());
+      LOG(INFO) << "Native V4.1 fixed-capacity q1 Decode enabled, graph="
+                << full_decode_graph_
+                << ", capacities=512/4096; Prefill stays eager";
+    }
     if (!args_.layers_to_capture().empty()) {
       auxiliary_ = std::make_unique<AuxHiddenCapture>(
           args_, options_, /*max_tokens_per_batch=*/512);
@@ -407,6 +432,33 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                               context_lengths.value(),
                                               engram_rows,
                                               mask);
+    } else if (decode_graph_ && tokens.numel() == 1 && context_length <= 4096) {
+      layer::DeepseekV41DecodeInputs input{tokens,
+                                           positions,
+                                           caches,
+                                           swa_table,
+                                           ratio1_table,
+                                           ratio2_table,
+                                           context_length,
+                                           engram_rows,
+                                           mask};
+      hidden = decode_graph_->run(
+          input,
+          full_decode_graph_,
+          [this](const layer::DeepseekV41DecodeInputs& value,
+                 int64_t capacity) {
+            return model_->forward_with_capture(value.tokens,
+                                                value.positions,
+                                                value.caches,
+                                                value.swa_table,
+                                                value.ratio1_table,
+                                                value.ratio2_table,
+                                                value.context_length,
+                                                value.engram_rows,
+                                                value.engram_mask,
+                                                nullptr,
+                                                capacity);
+          });
     } else {
       hidden = model_->forward_with_capture(tokens,
                                             positions,
@@ -1107,6 +1159,11 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   std::unique_ptr<PendingVerification> pending_verification_;
   std::unique_ptr<AuxHiddenCapture> auxiliary_;
   std::unique_ptr<layer::DeepseekV41TextModel> model_;
+  bool static_decode_ = false;
+  bool full_decode_graph_ = false;
+  // Graphs retain weight/cache pointers; destroy before model and Engram
+  // assets.
+  std::unique_ptr<layer::DeepseekV41DecodeGraph> decode_graph_;
 };
 
 inline const bool kDeepseekV41NativeRegistered = []() {

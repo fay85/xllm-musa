@@ -1,0 +1,16 @@
+{
+  "status": "GRAPH_CONTROL_PLUS_SEPARATE_BOUNDARY_TIMING_COMPLETE",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 483.3680862560868,
+  "mean_TPOT_ms_per_token": 59.68461827685435,
+  "TPOT_sample_stdev_ms": 0.1669275881174374,
+  "mean_E2E_s": 15.702945746853947,
+  "output_tokens_per_latency_sum_second": 16.302673659258428,
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "f5d36ea5d7e8b78399a1d085bb47ad44cdefd3d1659d4091ed85c9cd8ffb3ed4"
+}

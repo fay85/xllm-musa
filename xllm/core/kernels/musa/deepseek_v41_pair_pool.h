@@ -21,4 +21,16 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool(
     int64_t start,
     int64_t block_size);
 
+// C1 decode with GPU position. The caller must select a graph whose
+// closes_pair matches position % 2 == 1; no device-to-host read occurs here.
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_decode(
+    const torch::Tensor& values,
+    const torch::Tensor& scores,
+    const torch::Tensor& table,
+    torch::Tensor& value_state,
+    torch::Tensor& score_state,
+    const torch::Tensor& position,
+    bool closes_pair,
+    int64_t block_size);
+
 }  // namespace xllm::kernel::musa

@@ -1,0 +1,16 @@
+{
+  "status": "STATIC_DECODE_SHORT_VALID_NO_LONG_REGRESSION_YET",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 393.30741949379444,
+  "mean_TPOT_ms_per_token": 71.49490485807844,
+  "TPOT_sample_stdev_ms": 1.2405250005973592,
+  "mean_E2E_s": 18.624508158303797,
+  "output_tokens_per_latency_sum_second": 13.745329424222222,
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "34e600ce14f4d2d10ebb50baf6a793b8edd43d474961acbf7a7a4191a0b1b22a"
+}

@@ -73,6 +73,12 @@ def main() -> None:
         help="Include actual correlated ATen entry backtraces as COUNT; "
         "the extra leaf is the real RecordFunction name, not a native PC symbol",
     )
+    parser.add_argument(
+        "--include-runtime",
+        action="store_true",
+        help="Show actual runtime/driver API intervals on a separate track; "
+        "GraphLaunch and stream waits are CPU spans, not graph GPU nodes",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
@@ -114,6 +120,9 @@ def main() -> None:
         and (
             row.get("cat") in ("cpu_op", "user_annotation")
             or "kernel" in row.get("cat", "").lower()
+            or (args.include_runtime and row.get("cat", "").endswith(
+                ("_runtime", "_driver")
+            ))
         )
     ]
     if selected_scope is not None:
@@ -143,7 +152,11 @@ def main() -> None:
         if not gpu:
             raise ValueError("No GPU kernel linked to the actual CPU semantic scope")
         selected = [
-            row for row in selected if row.get("cat") in ("cpu_op", "user_annotation")
+            row for row in selected
+            if row.get("cat") in ("cpu_op", "user_annotation")
+            or (args.include_runtime and row.get("cat", "").endswith(
+                ("_runtime", "_driver")
+            ))
         ]
         selected += gpu
     symbols = json.loads(args.resolved_symbols.read_text())
@@ -154,9 +167,16 @@ def main() -> None:
     defaults.trace_packet_defaults.stack_sample_defaults.source = (
         "xllm.native_cpp.RecordFunction_entry_backtrace.COUNT"
     )
-    track_ids: dict[tuple[int, int], int] = {}
+    def _track_key(row: dict) -> tuple[int, int, str]:
+        category = row.get("cat", "")
+        kind = "gpu" if "kernel" in category.lower() else (
+            "runtime" if category.endswith(("_runtime", "_driver")) else "cpu"
+        )
+        return row["pid"], row["tid"], kind
+
+    track_ids: dict[tuple[int, int, str], int] = {}
     for row in selected:
-        key = (row["pid"], row["tid"])
+        key = _track_key(row)
         if key in track_ids:
             continue
         track_ids[key] = len(track_ids) + 1
@@ -166,12 +186,15 @@ def main() -> None:
         prefix = (
             "GPU kernel stream "
             if "kernel" in row.get("cat", "").lower()
-            else "Native C++ / ATen thread "
+            else (
+                "CPU runtime / driver thread " if key[2] == "runtime"
+                else "Native C++ / ATen thread "
+            )
         )
         packet.track_descriptor.name = prefix + str(row["tid"])
     packets = []
     for row in selected:
-        uuid = track_ids[(row["pid"], row["tid"])]
+        uuid = track_ids[_track_key(row)]
         for stamp, kind in (
             (round(row["ts"] * 1000), 1),
             (round((row["ts"] + row["dur"]) * 1000), 2),
@@ -274,6 +297,7 @@ def main() -> None:
         "actual_intervals": len(selected),
         "native_entry_samples": count,
         "include_aten_entries": args.include_aten,
+        "include_runtime_intervals": args.include_runtime,
         "operation_leaf_provenance": (
             "Actual same-ID RecordFunction names, not invented native symbols"
             if args.include_aten

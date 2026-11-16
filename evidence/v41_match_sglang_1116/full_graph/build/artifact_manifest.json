@@ -1,0 +1,9 @@
+{
+  "source_base": "9ce7f8498fd4275183587a81cba39c72d527025e",
+  "source_delta_manifest": "/expt/builds/full_decode_graph_v1/source_manifest.json",
+  "binary": "/expt/artifacts/full_decode_graph_v1/bin/xllm",
+  "sha256": "34e600ce14f4d2d10ebb50baf6a793b8edd43d474961acbf7a7a4191a0b1b22a",
+  "bytes": 341315544,
+  "small_checks": "PASS_REAL_GRAPH_DYNAMIC_POSITION_AND_VISIBILITY",
+  "status": "COMPILED_SMALL_CHECKS_PASSED_FULL_MODEL_UNTESTED"
+}

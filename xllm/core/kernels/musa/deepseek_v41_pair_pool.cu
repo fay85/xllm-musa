@@ -32,9 +32,13 @@ __global__ void pair_pool_kernel(const float* values,
                                  c10::BFloat16* output,
                                  int64_t* positions,
                                  int64_t start,
+                                 const int64_t* dynamic_start,
                                  int64_t dimension,
                                  int64_t table_size,
                                  int64_t block_size) {
+  if (dynamic_start != nullptr) {
+    start = dynamic_start[0];
+  }
   const int64_t group = blockIdx.x;
   const int64_t position = (start / 2 + group) * 2;
   const int64_t first_row = position - start;
@@ -67,10 +71,14 @@ __global__ void park_pair_tail_kernel(const float* values,
                                       float* value_state,
                                       float* score_state,
                                       int64_t start,
+                                      const int64_t* dynamic_start,
                                       int64_t count,
                                       int64_t dimension,
                                       int64_t table_size,
                                       int64_t block_size) {
+  if (dynamic_start != nullptr) {
+    start = dynamic_start[0];
+  }
   const int64_t first = count > 32 ? count - 32 : 0;
   const int64_t row = first + blockIdx.x;
   const int64_t position = start + row;
@@ -84,16 +92,15 @@ __global__ void park_pair_tail_kernel(const float* values,
   }
 }
 
-}  // namespace
-
-std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool(
+std::tuple<torch::Tensor, torch::Tensor> pair_pool_impl(
     const torch::Tensor& values,
     const torch::Tensor& scores,
     const torch::Tensor& table,
     torch::Tensor& value_state,
     torch::Tensor& score_state,
     int64_t start,
-    int64_t block_size) {
+    int64_t block_size,
+    const torch::Tensor& dynamic_start) {
   CHECK(values.defined() && scores.defined() && table.defined());
   CHECK(values.device().type() == torch::kPrivateUse1);
   CHECK_EQ(values.scalar_type(), torch::kFloat32);
@@ -143,6 +150,7 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool(
         pooled.data_ptr<c10::BFloat16>(),
         positions.data_ptr<int64_t>(),
         start,
+        dynamic_start.defined() ? dynamic_start.data_ptr<int64_t>() : nullptr,
         values.size(1),
         pages.numel(),
         block_size);
@@ -160,6 +168,7 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool(
         value_state.data_ptr<float>(),
         score_state.data_ptr<float>(),
         start,
+        dynamic_start.defined() ? dynamic_start.data_ptr<int64_t>() : nullptr,
         count,
         values.size(1),
         pages.numel(),
@@ -167,6 +176,46 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool(
     check_musa_kernel_launch("V4.1 ratio-2 park tail");
   }
   return {pooled, positions};
+}
+
+}  // namespace
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool(
+    const torch::Tensor& values,
+    const torch::Tensor& scores,
+    const torch::Tensor& table,
+    torch::Tensor& value_state,
+    torch::Tensor& score_state,
+    int64_t start,
+    int64_t block_size) {
+  return pair_pool_impl(
+      values, scores, table, value_state, score_state, start, block_size, {});
+}
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_pair_pool_decode(
+    const torch::Tensor& values,
+    const torch::Tensor& scores,
+    const torch::Tensor& table,
+    torch::Tensor& value_state,
+    torch::Tensor& score_state,
+    const torch::Tensor& position,
+    bool closes_pair,
+    int64_t block_size) {
+  CHECK_EQ(values.size(0), 1);
+  CHECK(position.defined() && position.is_contiguous());
+  CHECK_EQ(position.device(), values.device());
+  CHECK_EQ(position.scalar_type(), torch::kInt64);
+  CHECK_EQ(position.numel(), 1);
+  // Only the parity is host metadata. The physical slot and output position
+  // come from a stable GPU input, updated before every graph replay.
+  return pair_pool_impl(values,
+                        scores,
+                        table,
+                        value_state,
+                        score_state,
+                        closes_pair ? 1 : 0,
+                        block_size,
+                        position);
 }
 
 }  // namespace xllm::kernel::musa

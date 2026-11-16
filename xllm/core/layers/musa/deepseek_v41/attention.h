@@ -77,6 +77,8 @@ struct DeepseekV41AttentionCache {
 // a new object for each forward, never retain candidate masks across requests.
 // Persistent caches are scheduler owned and are published as tensor handles.
 struct DeepseekV41AttentionRuntime {
+  // Nonzero only for fixed-capacity C1 decode. Real visibility is positions+1.
+  int64_t decode_capacity = 0;
   int64_t swa_replay_start = 0;
   int64_t source_layer = -1;
   int64_t ratio = 0;
@@ -276,6 +278,7 @@ class DeepseekV41Attention final {
                                 const torch::Tensor& qr) {
     if (config_.mode == DeepseekV41AttentionMode::FULL) {
       publish(hidden,
+              positions,
               rope_table,
               cache,
               swa_table,
@@ -289,15 +292,30 @@ class DeepseekV41Attention final {
     if (config_.mode != DeepseekV41AttentionMode::SWA) {
       CHECK_EQ(shared.source_layer, config_.source_layer);
       CHECK_EQ(shared.ratio, config_.ratio);
-      const int64_t committed = context_length / config_.ratio;
+      const bool static_decode = shared.decode_capacity > 0;
+      CHECK(!static_decode || hidden.size(0) == 1);
+      const int64_t committed =
+          (static_decode ? shared.decode_capacity : context_length) /
+          config_.ratio;
+      const std::optional<torch::Tensor> dynamic_visible =
+          static_decode ? std::make_optional(
+                              torch::floor_divide(positions + 1, config_.ratio))
+                        : std::nullopt;
       const bool reuse_read =
           config_.decode_cache_read_reuse && hidden.size(0) == 1;
+      CHECK(!static_decode || reuse_read);
       if (reuse_read) {
         if (!shared.key_read.has_value()) {
-          shared.key_read.emplace(
-              shared.key, shared.key_table, committed, committed);
-          shared.index_read.emplace(
-              shared.index, shared.index_table, committed, committed);
+          shared.key_read.emplace(shared.key,
+                                  shared.key_table,
+                                  committed,
+                                  committed,
+                                  dynamic_visible);
+          shared.index_read.emplace(shared.index,
+                                    shared.index_table,
+                                    committed,
+                                    committed,
+                                    dynamic_visible);
           shared.materialized_committed = committed;
         }
         CHECK_EQ(shared.materialized_committed, committed);
@@ -373,6 +391,7 @@ class DeepseekV41Attention final {
   }
 
   void publish(const torch::Tensor& hidden,
+               const torch::Tensor& positions,
                const torch::Tensor& rope_table,
                const DeepseekV41AttentionCache& cache,
                const torch::Tensor& swa_table,
@@ -391,7 +410,10 @@ class DeepseekV41Attention final {
                                      config_.epsilon,
                                      /*fused_pair_pool=*/true);
     auto [latent, starts] =
-        compressor.forward(hidden, start_position, swa_table);
+        shared.decode_capacity > 0
+            ? compressor.forward_decode(
+                  hidden, positions, start_position % 2 == 1, swa_table)
+            : compressor.forward(hidden, start_position, swa_table);
     const torch::Tensor index_values =
         indexer_->prepare_key(latent, starts, rope_table);
     DeepseekV41TokenCache(cache.index)

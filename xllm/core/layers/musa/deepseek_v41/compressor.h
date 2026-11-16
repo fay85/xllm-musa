@@ -82,6 +82,28 @@ class DeepseekV41Compressor final {
       const torch::Tensor& input,
       int64_t start_position,
       const torch::Tensor& swa_block_table) {
+    return forward_impl(input, start_position, swa_block_table, std::nullopt);
+  }
+
+  std::tuple<torch::Tensor, torch::Tensor> forward_decode(
+      const torch::Tensor& input,
+      const torch::Tensor& position,
+      bool closes_pair,
+      const torch::Tensor& swa_block_table) {
+    CHECK_EQ(input.size(0), 1);
+    CHECK(position.defined() && position.is_contiguous());
+    CHECK_EQ(position.device(), input.device());
+    CHECK_EQ(position.scalar_type(), torch::kInt64);
+    CHECK_EQ(position.numel(), 1);
+    return forward_impl(input, closes_pair ? 1 : 0, swa_block_table, position);
+  }
+
+ private:
+  std::tuple<torch::Tensor, torch::Tensor> forward_impl(
+      const torch::Tensor& input,
+      int64_t start_position,
+      const torch::Tensor& swa_block_table,
+      const std::optional<torch::Tensor>& decode_position) {
     const DeepseekV41ProfileRange range("V41/Attention/compressor");
     CHECK(input.defined() && swa_block_table.defined());
     CHECK_EQ(input.device(), kv_weight_.device());
@@ -103,13 +125,29 @@ class DeepseekV41Compressor final {
               torch::empty({0}, index_options)};
     }
     if (ratio_ == 1) {
-      return {norm(torch::linear(input, kv_weight_)),
-              torch::arange(input.size(0), index_options) + start_position};
+      return {
+          norm(torch::linear(input, kv_weight_)),
+          decode_position.has_value()
+              ? decode_position.value()
+              : torch::arange(input.size(0), index_options) + start_position};
     }
     const torch::Tensor values =
         torch::linear(input.to(torch::kFloat32), kv_weight_);
     const torch::Tensor scores =
         torch::linear(input.to(torch::kFloat32), gate_weight_.value());
+    if (decode_position.has_value()) {
+      CHECK(fused_pair_pool_);
+      auto [pooled, starts] =
+          kernel::musa::deepseek_v41_pair_pool_decode(values,
+                                                      scores,
+                                                      swa_block_table,
+                                                      kv_state_.value(),
+                                                      score_state_.value(),
+                                                      decode_position.value(),
+                                                      start_position == 1,
+                                                      swa_block_size_);
+      return {norm(pooled), starts};
+    }
     if (fused_pair_pool_) {
       auto [pooled, starts] =
           kernel::musa::deepseek_v41_pair_pool(values,
@@ -172,7 +210,6 @@ class DeepseekV41Compressor final {
     return {latent, starts};
   }
 
- private:
   void check_state(const torch::Tensor& state) const {
     CHECK(state.defined());
     CHECK_EQ(state.device(), kv_weight_.device());

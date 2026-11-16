@@ -130,7 +130,8 @@ class DeepseekV41TextModel final {
       int64_t context_length,
       const std::vector<std::optional<torch::Tensor>>& engram_rows,
       const std::optional<torch::Tensor>& engram_mask,
-      AuxHiddenCapture* auxiliary) {
+      AuxHiddenCapture* auxiliary,
+      int64_t decode_capacity = 0) {
     CHECK(input_ids.defined() && positions.defined());
     CHECK_EQ(input_ids.device(), embedding_.device());
     CHECK_EQ(positions.device(), embedding_.device());
@@ -153,6 +154,9 @@ class DeepseekV41TextModel final {
         {input_ids.size(0), 4}, hidden.options().dtype(torch::kFloat32));
     pre_mix.select(1, 0).fill_(1.0);
     DeepseekV41AttentionRuntime shared;
+    shared.decode_capacity = decode_capacity;
+    CHECK(decode_capacity == 0 ||
+          (input_ids.numel() == 1 && decode_capacity >= context_length));
     last_output_row_offset_ = 0;
     torch::Tensor active_ids = input_ids;
     torch::Tensor active_positions = positions;

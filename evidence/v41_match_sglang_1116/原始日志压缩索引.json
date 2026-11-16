@@ -1,0 +1,242 @@
+[
+  {
+    "original": "static_off/build/build.log",
+    "stored": "static_off/build/build.log.gz",
+    "bytes": 52668,
+    "sha256": "060aab7a992270473a0d2ded5a8c7af3a9accc65cfc8ce344c99098811fee7e2"
+  },
+  {
+    "original": "static_off/client/screen_warmup.log",
+    "stored": "static_off/client/screen_warmup.log.gz",
+    "bytes": 17755,
+    "sha256": "d9e4a5438f88d9d18151d61ad10dedaced5195e858388957307ade7c529370e5"
+  },
+  {
+    "original": "static_off/client/warmup.log",
+    "stored": "static_off/client/warmup.log.gz",
+    "bytes": 17716,
+    "sha256": "b8d71b33d3b2e5bf2f7122ee208b1a6056f01c884f6e536340d21a7716c28547"
+  },
+  {
+    "original": "static_off/client/screen.log",
+    "stored": "static_off/client/screen.log.gz",
+    "bytes": 18714,
+    "sha256": "ebc1add0d251b0e99d95ea9d696325003f3bd9bd01dd8563cc60dc23c50b76e9"
+  },
+  {
+    "original": "static_off/client/measured.log",
+    "stored": "static_off/client/measured.log.gz",
+    "bytes": 22039,
+    "sha256": "560dcf5c5791dfbbec1dde8b5b860ebcc81329f4a8e2c70ca828fdb8cac3d640"
+  },
+  {
+    "original": "static_off/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "static_off/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 11560,
+    "sha256": "cac12fd3753f38d603ff0988dc82d8978c52c562f41ee5f7ff460c91a737d696"
+  },
+  {
+    "original": "static_off/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "static_off/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9154,
+    "sha256": "7c322ad54c47571e0dbbcbc5c7f69fcdc5f916091b3a5d9539f59aa857568c5e"
+  },
+  {
+    "original": "static_off/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "static_off/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9186,
+    "sha256": "aef99c0390e2bcf941aa8df8101f054696500b5c3cb0225a2c7d13c015199883"
+  },
+  {
+    "original": "static_off/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "static_off/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9724,
+    "sha256": "a036104f2fa1cf94a4be82e0af09928f9e8825fab25ef5d521d46c969f6db3da"
+  },
+  {
+    "original": "baseline/build/build.log",
+    "stored": "baseline/build/build.log.gz",
+    "bytes": 1449976,
+    "sha256": "5cd0c5186418aabbaee90afc00780ceb946bfdb995b57db98740c2955f87e8ae"
+  },
+  {
+    "original": "baseline/client/warmup.log",
+    "stored": "baseline/client/warmup.log.gz",
+    "bytes": 17764,
+    "sha256": "ea27b455d463253715be68a89cb9ac174abedc4c09fd1ff4e0d809b17febef80"
+  },
+  {
+    "original": "baseline/client/measured.log",
+    "stored": "baseline/client/measured.log.gz",
+    "bytes": 22087,
+    "sha256": "aba38dff6cd282fc22ae0b34631e783cdf0b38d43ae82d72cdb4bfa31ae6bec4"
+  },
+  {
+    "original": "baseline/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "baseline/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 11600,
+    "sha256": "30dd8c617552dccf52fdb744f277eb2057f8cd73d553b30f7c45800bb1f608ea"
+  },
+  {
+    "original": "baseline/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "baseline/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9194,
+    "sha256": "5db79bc67b438882aa29156ec75c29d1656f56cc8a315bea5c09a5609fa24041"
+  },
+  {
+    "original": "full_graph/build/build.log",
+    "stored": "full_graph/build/build.log.gz",
+    "bytes": 52668,
+    "sha256": "060aab7a992270473a0d2ded5a8c7af3a9accc65cfc8ce344c99098811fee7e2"
+  },
+  {
+    "original": "full_graph/client/screen_warmup.log",
+    "stored": "full_graph/client/screen_warmup.log.gz",
+    "bytes": 17780,
+    "sha256": "c46e5356717e84ae80c15f5163fe1db139e9d2f1752f6a04a01519412ba3436e"
+  },
+  {
+    "original": "full_graph/client/warmup.log",
+    "stored": "full_graph/client/warmup.log.gz",
+    "bytes": 17739,
+    "sha256": "7ac7bf795d9cacb7d06c6e3d72b10f482349a47bf4028dc95e6354518df13cf1"
+  },
+  {
+    "original": "full_graph/client/screen.log",
+    "stored": "full_graph/client/screen.log.gz",
+    "bytes": 18740,
+    "sha256": "a92c9cf3bb3f17ff2c0beece03c05590ba835ec836b9e1c9ca19d904b29446ca"
+  },
+  {
+    "original": "full_graph/client/measured.log",
+    "stored": "full_graph/client/measured.log.gz",
+    "bytes": 22062,
+    "sha256": "00238d07bce13cbc9e6440aad0c595e93305cdc420a5d08f59da53fb9f0d03b3"
+  },
+  {
+    "original": "full_graph/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "full_graph/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 11579,
+    "sha256": "9f5387eec4af7f6e870fd0e1fe757bc6e90f50b109d8105ef0206d39bbca050f"
+  },
+  {
+    "original": "full_graph/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "full_graph/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9173,
+    "sha256": "93db3047a2e1319d88e2dbbc99c87aa8236a685bb5b10f6d5d48a9c813f08e5f"
+  },
+  {
+    "original": "full_graph/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "full_graph/client/screen_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9207,
+    "sha256": "9496dc1c1a4beb96266e351b308248a4c84af5a6c9d1f9eceaae51743c8fdaf4"
+  },
+  {
+    "original": "full_graph/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "full_graph/client/screen/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9746,
+    "sha256": "5406821154d3d3edea1fa26c1adc7aec3ce1a13e3ac6c4315ffd6a000e66adf8"
+  },
+  {
+    "original": "graph_timing/build/build.log",
+    "stored": "graph_timing/build/build.log.gz",
+    "bytes": 52668,
+    "sha256": "7efeef14399778d602246470ec8f29109fdcb11c2b93708fedfc1385912afc01"
+  },
+  {
+    "original": "graph_timing/client/warmup.log",
+    "stored": "graph_timing/client/warmup.log.gz",
+    "bytes": 17746,
+    "sha256": "d54053647ff9697b2c0827ff498dbb55d60096ef30df601100483afe1de0972d"
+  },
+  {
+    "original": "graph_timing/client/diagnostic.log",
+    "stored": "graph_timing/client/diagnostic.log.gz",
+    "bytes": 18772,
+    "sha256": "4b20f467faf99cb126f5b2aeefa5f85bdb8737712b949a71e4fe2c9c473a5b66"
+  },
+  {
+    "original": "graph_timing/client/measured.log",
+    "stored": "graph_timing/client/measured.log.gz",
+    "bytes": 22068,
+    "sha256": "fad4066f0a4a8deab3d9702312da12b837cb7117e2d97280b5126dd8dc9cdb24"
+  },
+  {
+    "original": "graph_timing/client/off_after.log",
+    "stored": "graph_timing/client/off_after.log.gz",
+    "bytes": 18766,
+    "sha256": "df91b4d8b53c4de9f512981db3daa60d25187faed5f48cb9d76225a2980f853d"
+  },
+  {
+    "original": "graph_timing/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "stored": "graph_timing/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "bytes": 167276,
+    "sha256": "1082021ea8d5d37c70fb04bb7bc3389070f5b2c5b332a90e2836c09da1507e70"
+  },
+  {
+    "original": "graph_timing/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "graph_timing/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 11584,
+    "sha256": "dcc652c4c9ab4aff1e2be1e62ad66d7f367c27d5784fc11d0670f11f683975b5"
+  },
+  {
+    "original": "graph_timing/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "stored": "graph_timing/client/measured/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "bytes": 4909,
+    "sha256": "fd2ab16173ff46657c1e7d94479758e05abeb1252a323e03f1a248019a0ca4c3"
+  },
+  {
+    "original": "graph_timing/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "stored": "graph_timing/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "bytes": 166935,
+    "sha256": "406ac2340367f8dd4630508bae9dc19c190daca45286034ca587d5986861d347"
+  },
+  {
+    "original": "graph_timing/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "graph_timing/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9773,
+    "sha256": "33db528759444bb67d2f46348f8c9ac51c5a5db12b0439f4e9a21d2e846c5319"
+  },
+  {
+    "original": "graph_timing/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "stored": "graph_timing/client/diagnostic/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "bytes": 4909,
+    "sha256": "06b77307f8fa2fe13b723611bddb57a96c8befe2e587271ba4914e885c59cf98"
+  },
+  {
+    "original": "graph_timing/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "stored": "graph_timing/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "bytes": 166791,
+    "sha256": "f40df8259f7f13a62738620abe9efbdd35e5895a787c0c0674fbd4ed9d8713b7"
+  },
+  {
+    "original": "graph_timing/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "graph_timing/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9179,
+    "sha256": "e61365587dc4be30e395065981b7dd0f97df3471a1e1a05ddf90b360326e0b40"
+  },
+  {
+    "original": "graph_timing/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "stored": "graph_timing/client/warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "bytes": 4909,
+    "sha256": "53aa6b1df5c0c98c341780f8274b54d7f5cbfb5ae59342eaaef672be41f69f4c"
+  },
+  {
+    "original": "graph_timing/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+    "stored": "graph_timing/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html.gz",
+    "bytes": 166934,
+    "sha256": "2eb1f40caf8d6517c0465e39e21578e0b589f91b85c84bb1e72e1abc7a8019a2"
+  },
+  {
+    "original": "graph_timing/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "stored": "graph_timing/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log.gz",
+    "bytes": 9768,
+    "sha256": "cfd51965f406da1257875d7dc2e593cbf878d08a8b8bb834ba181bb8e9066f65"
+  },
+  {
+    "original": "graph_timing/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "stored": "graph_timing/client/off_after/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt.gz",
+    "bytes": 4909,
+    "sha256": "33dd361faa1913bd306020d236d82dd23f011d8d07720063fc450ef6777c055e"
+  }
+]

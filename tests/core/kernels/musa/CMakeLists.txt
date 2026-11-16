@@ -11,6 +11,16 @@ target_include_directories(musa_python_kernel_test_module PRIVATE
   "${PROJECT_SOURCE_DIR}/xllm"
 )
 
+# Small production-kernel checks for graph-replayed position/cache inputs.
+pybind_extension(
+  NAME v41_decode_graph_inputs_test_module
+  SRCS v41_decode_graph_inputs_test_module.cpp
+  DEPS :cuda_kernels musa_python torch_python Python::Module torch glog::glog
+)
+target_include_directories(v41_decode_graph_inputs_test_module PRIVATE
+  "${PROJECT_SOURCE_DIR}/xllm"
+)
+
 # CPU tensors exercise ownership without running a MUSA kernel or model.
 cc_test(
   NAME musa_tvmffi_lifetime_test

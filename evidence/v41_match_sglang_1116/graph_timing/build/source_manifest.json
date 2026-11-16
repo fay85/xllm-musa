@@ -1,0 +1,19 @@
+{
+  "base_commit": "9ce7f8498fd4275183587a81cba39c72d527025e",
+  "changed_files": {
+    "tests/core/kernels/musa/CMakeLists.txt": "b1e7279fdea3d6d26d422f6359f0f5cf483670e800d67830aea54fa9593ac3eb",
+    "tests/core/kernels/musa/musa_python_kernel_test_module.cpp": "4fd1df8246e2794df7c982ac365736b6b506acdba31a4012e1449b7f4d410a7d",
+    "xllm/core/kernels/musa/deepseek_v41_pair_pool.cu": "cd94fd7754786ae834e279d2b89e7b4bdbcc8ab508b15b7034484a9464768117",
+    "xllm/core/kernels/musa/deepseek_v41_pair_pool.h": "ad387e0406411acb3433531e93cb54608d12aa4e681a4eaaf583419487da14e3",
+    "xllm/core/layers/musa/deepseek_v41/attention.h": "0efedc101377b1145ae8244f7778335bdfcd1cb6d1d39600d5d881d42201078e",
+    "xllm/core/layers/musa/deepseek_v41/compressor.h": "85cd2d7c9acb1d324940fcbdf62a97c4251ae9f04e61f037d41718fc8f29e173",
+    "xllm/core/layers/musa/deepseek_v41/light_timing.h": "62d755e85b8b072dbeb95d52a4857f307c515e435b2fe4fd95edb98cd15a48aa",
+    "xllm/core/layers/musa/deepseek_v41/text_model.h": "cfd1156e9d347435712a80cf791157673015423763cdddc6df8ed8b601be73fe",
+    "xllm/core/layers/musa/deepseek_v41/token_cache.h": "a9102c960181f7cb752fb8da46ce909c1fd9679ab91aa512b6e3bf6d2062be46",
+    "xllm/models/llm/musa/deepseek_v41_native.h": "8e7e4a1307fa380141331ea25092977826c8732c2121151cd71ae944f8888aba",
+    "tests/core/kernels/musa/v41_decode_graph_inputs_test_module.cpp": "da7698d601bcc1416f5e9adede8a84cdd8d07d17afa1af5aed86f483a81913dc",
+    "tools/musa_deepseek_v41/validate_decode_graph_inputs.py": "243e65abb965fe7074c3daa694b9f466e1e7e56d01dbee437daddabc7ff141ce",
+    "xllm/core/layers/musa/deepseek_v41/decode_graph.h": "835c21557242033e0a03da01afd021bc88cd386e37d0f5c896b11659fc31d480"
+  },
+  "status": "EXPERIMENTAL_NOT_VALIDATED"
+}

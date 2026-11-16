@@ -1,0 +1,16 @@
+{
+  "status": "BASELINE_SHORT_VALID_LONG_SMOKE_PREVIOUS_RUN",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 396.58814165741205,
+  "mean_TPOT_ms_per_token": 68.92345485003555,
+  "TPOT_sample_stdev_ms": 1.034290316753788,
+  "mean_E2E_s": 17.97206912841648,
+  "output_tokens_per_latency_sum_second": 14.244325356796365,
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "4a29a4865f9b287b585ae56e7c2affd62a317eb6bb8aadc5e60d870af3921c09"
+}

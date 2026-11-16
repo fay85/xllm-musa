@@ -40,14 +40,21 @@ class DeepseekV41LightTiming final {
     if (root_) {
       // Every thread owns its sampling and buffer; do not cross request steps.
       flush(s);  // query only: never synchronize the device to collect data.
-      s.selected = (s.steps++ % s.every == 0) && s.samples < s.limit &&
-                   s.pending.empty();
+      const bool armed =
+          s.arm_file.empty() || ::access(s.arm_file.c_str(), F_OK) == 0;
+      const bool selected_shape = !s.decode_only || tokens == 1;
+      s.selected = armed && selected_shape && (s.steps++ % s.every == 0) &&
+                   s.samples < s.limit && s.pending.empty();
       if (s.selected) {
         ++s.samples;
         s.rows.clear();
       }
     }
     if (!s.selected || name.substr(0, 4) != "V41/") {
+      return;
+    }
+    if (s.boundaries_only && !root_ && name != "V41/full_decode_graph_replay" &&
+        name != "V41/Engram/hash_lookup") {
       return;
     }
     active_ = true;
@@ -127,6 +134,12 @@ class DeepseekV41LightTiming final {
   }
   struct State {
     std::string path;
+    // Arm after all requested Graph buckets are captured. This avoids adding
+    // diagnostic event nodes to a graph intended for an uninstrumented run.
+    std::string arm_file;
+    bool decode_only = std::getenv("XLLM_V41_LIGHT_DECODE_ONLY") != nullptr;
+    bool boundaries_only =
+        std::getenv("XLLM_V41_LIGHT_BOUNDARIES_ONLY") != nullptr;
     uint64_t every = positive("XLLM_V41_LIGHT_EVERY", 32);
     uint64_t limit = positive("XLLM_V41_LIGHT_LIMIT", 16);
     uint64_t steps = 0, samples = 0, depth = 0;
@@ -136,6 +149,10 @@ class DeepseekV41LightTiming final {
   };
   static State make_state() {
     State s;
+    const char* arm_file = std::getenv("XLLM_V41_LIGHT_ARM_FILE");
+    if (arm_file != nullptr) {
+      s.arm_file = arm_file;
+    }
     const char* prefix = std::getenv("XLLM_V41_LIGHT_PREFIX");
     if (prefix && *prefix) {
       s.path = std::string(prefix) + "." + std::to_string(::getpid()) + "." +

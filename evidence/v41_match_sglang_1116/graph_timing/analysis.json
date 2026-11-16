@@ -1,0 +1,97 @@
+{
+  "status": "COMPLETE_ALL_RANK_EVENTS_VALID",
+  "files": [
+    {
+      "file": "decode.31872.140560513876464.jsonl",
+      "rows": 96,
+      "sha256": "a1f6ad734888b1f80013ce08819399733ccc52cc481b0fd2b1ff498bc1330cb5"
+    },
+    {
+      "file": "decode.31873.140441244639728.jsonl",
+      "rows": 96,
+      "sha256": "11fe4df5f0f850d2aa910b164dd7d0e726afd08a236e4e3f331e0d0f14db32e4"
+    },
+    {
+      "file": "decode.31874.140163212616176.jsonl",
+      "rows": 96,
+      "sha256": "e3c8901ced60a4dc758d7af9b2cb0067c8181828d6f42d38f1b6e30378e0a982"
+    },
+    {
+      "file": "decode.31875.140603253830128.jsonl",
+      "rows": 96,
+      "sha256": "82a60396ce75fdd80daa285d0171204429b0d23458fcd5ce9c590656dace330c"
+    },
+    {
+      "file": "decode.31876.140335254565360.jsonl",
+      "rows": 96,
+      "sha256": "d267eb547366f33e2272c1b8d19e24ae5a404cfafa059b0737592a826d40b8a9"
+    },
+    {
+      "file": "decode.31877.140579782513136.jsonl",
+      "rows": 96,
+      "sha256": "111ae206a7ef0324c60268d5987488014619f49834c3f61b61218110e1a02398"
+    },
+    {
+      "file": "decode.31878.140214232138224.jsonl",
+      "rows": 96,
+      "sha256": "dbb5667540c5b589e64fa55ae1ce864fac1abe730e0e1c180de460d6841703b9"
+    },
+    {
+      "file": "decode.31879.140421657244144.jsonl",
+      "rows": 96,
+      "sha256": "f3a3f2c90b83f91058235241d5646920227d1e4d678226fd1a0bf73190e94493"
+    }
+  ],
+  "stream_span_by_scope": {
+    "V41/Engram/hash_lookup": {
+      "samples": 256,
+      "mean_gpu_stream_ms": 2.417679375,
+      "median_gpu_stream_ms": 2.1587199999999998,
+      "mean_cpu_ms": 0.73201847265625
+    },
+    "V41/full_decode_graph_replay": {
+      "samples": 256,
+      "mean_gpu_stream_ms": 52.845606640625,
+      "median_gpu_stream_ms": 52.8999,
+      "mean_cpu_ms": 0.71877885546875
+    },
+    "V41/step": {
+      "samples": 256,
+      "mean_gpu_stream_ms": 56.241201171875,
+      "median_gpu_stream_ms": 56.2185,
+      "mean_cpu_ms": 56.4304448515625
+    }
+  },
+  "phases": {
+    "warmup": {
+      "requests": 1,
+      "tpot_ms": 70.0219574037428,
+      "mean_e2e_s": 18.412706344388425,
+      "output_tps": 13.903442286637032,
+      "success_and_counts_valid": true
+    },
+    "measured": {
+      "requests": 5,
+      "tpot_ms": 59.68461827685435,
+      "mean_e2e_s": 15.702945746853947,
+      "output_tps": 16.302673659258428,
+      "success_and_counts_valid": true
+    },
+    "diagnostic": {
+      "requests": 2,
+      "tpot_ms": 59.555165495212165,
+      "mean_e2e_s": 15.553939250297844,
+      "output_tps": 16.458853019828904,
+      "success_and_counts_valid": true
+    },
+    "off_after": {
+      "requests": 2,
+      "tpot_ms": 59.58933113690685,
+      "mean_e2e_s": 15.573102958034724,
+      "output_tps": 16.43859933950545,
+      "success_and_counts_valid": true
+    }
+  },
+  "limits": "Per-rank sample stream spans include stream dependencies, not exclusive kernel busy times; ranks are not summed. Diagnostic 2 requests and off_after2 do not establish a new performance champion.",
+  "at": "2026-11-16T17:29:49.344972+08:00"
+}
