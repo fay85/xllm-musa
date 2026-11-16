@@ -1,0 +1,180 @@
+{
+  "summary": {
+    "at": "2026-11-17T06:26:42.677533+08:00",
+    "all_pass": true,
+    "checks_per_rank": [
+      102,
+      102,
+      102,
+      102,
+      102,
+      102,
+      102,
+      102
+    ],
+    "max_relative_rms": 0.0005220766761340201,
+    "short_exits": {
+      "at": "2026-11-17T06:24:07.339304+08:00",
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "all_pass": true,
+      "normal_term_requested": false
+    },
+    "benchmark_exits": {
+      "at": "2026-11-17T06:26:07.960832+08:00",
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "all_pass": true,
+      "normal_term_requested": false
+    },
+    "microbench": [
+      {
+        "prefix": "layers.0.ffn",
+        "rows": 1,
+        "control": {
+          "max_rank_us_per_round": [
+            480.4728317260742,
+            481.59080505371094,
+            480.8127975463867
+          ],
+          "mean_max_rank_us": 480.9588114420573
+        },
+        "deepep": {
+          "max_rank_us_per_round": [
+            314.2959976196289,
+            313.26242446899414,
+            312.569580078125
+          ],
+          "mean_max_rank_us": 313.37600072224933
+        },
+        "scope": "routed experts only; control native MCCL (not cumulative-best custom AR); no end-to-end speedup claim"
+      },
+      {
+        "prefix": "layers.0.ffn",
+        "rows": 4,
+        "control": {
+          "max_rank_us_per_round": [
+            556.5488052368164,
+            557.3271942138672,
+            555.4027938842773
+          ],
+          "mean_max_rank_us": 556.4262644449869
+        },
+        "deepep": {
+          "max_rank_us_per_round": [
+            364.13402557373047,
+            366.43917083740234,
+            366.2432098388672
+          ],
+          "mean_max_rank_us": 365.60546875
+        },
+        "scope": "routed experts only; control native MCCL (not cumulative-best custom AR); no end-to-end speedup claim"
+      },
+      {
+        "prefix": "layers.0.ffn",
+        "rows": 6,
+        "control": {
+          "max_rank_us_per_round": [
+            596.5831756591797,
+            577.2852325439453,
+            577.8472137451172
+          ],
+          "mean_max_rank_us": 583.9052073160807
+        },
+        "deepep": {
+          "max_rank_us_per_round": [
+            379.0684127807617,
+            381.4132308959961,
+            377.9140090942383
+          ],
+          "mean_max_rank_us": 379.46521759033203
+        },
+        "scope": "routed experts only; control native MCCL (not cumulative-best custom AR); no end-to-end speedup claim"
+      },
+      {
+        "prefix": "mtp.0.ffn",
+        "rows": 1,
+        "control": {
+          "max_rank_us_per_round": [
+            465.97278594970703,
+            464.9919891357422,
+            467.79918670654297
+          ],
+          "mean_max_rank_us": 466.25465393066406
+        },
+        "deepep": {
+          "max_rank_us_per_round": [
+            308.9019966125488,
+            299.03480529785156,
+            296.88318252563477
+          ],
+          "mean_max_rank_us": 301.6066614786784
+        },
+        "scope": "routed experts only; control native MCCL (not cumulative-best custom AR); no end-to-end speedup claim"
+      },
+      {
+        "prefix": "mtp.0.ffn",
+        "rows": 4,
+        "control": {
+          "max_rank_us_per_round": [
+            531.9920349121094,
+            529.8307800292969,
+            530.5099868774414
+          ],
+          "mean_max_rank_us": 530.7776006062826
+        },
+        "deepep": {
+          "max_rank_us_per_round": [
+            354.32960510253906,
+            355.40279388427734,
+            354.24922943115234
+          ],
+          "mean_max_rank_us": 354.66054280598956
+        },
+        "scope": "routed experts only; control native MCCL (not cumulative-best custom AR); no end-to-end speedup claim"
+      },
+      {
+        "prefix": "mtp.0.ffn",
+        "rows": 6,
+        "control": {
+          "max_rank_us_per_round": [
+            551.3391876220703,
+            549.4688034057617,
+            549.8403930664062
+          ],
+          "mean_max_rank_us": 550.2161280314127
+        },
+        "deepep": {
+          "max_rank_us_per_round": [
+            365.3927993774414,
+            363.9699935913086,
+            377.0104217529297
+          ],
+          "mean_max_rank_us": 368.79107157389325
+        },
+        "scope": "routed experts only; control native MCCL (not cumulative-best custom AR); no end-to-end speedup claim"
+      }
+    ],
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+  },
+  "archive": "/expt/exports/e38_deepep_w4a8_raw_v1.tar.gz",
+  "files": 173,
+  "bytes": 64417,
+  "sha256": "023eb7e9718b9f4bd68741f6f392b24522b0a9de7f4a7da3125f4f2a23df8d14"
+}

@@ -17,8 +17,9 @@ namespace xllm::layer {
 
 // All projection work stays in the corrected delivery MATE S4FP8 kernel.
 // C++ owns dispatch/quantization/SwiGLU/combine and the EP-local weight slice.
-// This object returns FP32 LOCAL routed output; its owner performs one EP
-// all-reduce and adds the replicated shared expert exactly once afterwards.
+// forward() returns FP32 local routed output for the owner's EP reduction.
+// forward_dispatched() instead returns unweighted expert-major BF16 for
+// DeepEP combine; the owner must not apply a second routed EP all-reduce.
 class DeepseekV41W4A8Experts final {
  public:
   DeepseekV41W4A8Experts(torch::Tensor gate_up,
@@ -62,6 +63,37 @@ class DeepseekV41W4A8Experts final {
                                                  first_expert_,
                                                  gate_up_.size(0),
                                                  gate_up_input_scale_);
+    const torch::Tensor down =
+        project_dispatched(dispatched,
+                           input_scale,
+                           counts,
+                           valid_prefix_swiglu_ && input.size(0) <= 8);
+    return kernel::musa::deepseek_v41_w4a8_combine(down,
+                                                   ids.contiguous(),
+                                                   route_rows,
+                                                   route_weights.contiguous(),
+                                                   first_expert_);
+  }
+
+  // BF16 [local_experts, padded_capacity, hidden] from DeepEP dispatch.
+  // Returns unweighted expert-major output for DeepEP combine; there is no
+  // local re-routing, FP32 EP all-reduce, or shared-expert addition here.
+  torch::Tensor forward_dispatched(const torch::Tensor& input,
+                                   const torch::Tensor& counts) const {
+    const DeepseekV41ProfileRange range("V41/MoE/W4A8_deepep_experts");
+    CHECK_EQ(input.dim(), 3);
+    CHECK_EQ(input.size(0), gate_up_.size(0));
+    CHECK_EQ(input.size(2), gate_up_.size(2) * 2);
+    auto [quantized, scales] = kernel::musa::deepseek_v41_w4a8_quant_dispatched(
+        input, counts, gate_up_input_scale_);
+    return project_dispatched(quantized, scales, counts, valid_prefix_swiglu_);
+  }
+
+ private:
+  torch::Tensor project_dispatched(const torch::Tensor& dispatched,
+                                   const torch::Tensor& input_scale,
+                                   const torch::Tensor& counts,
+                                   bool valid_prefix) const {
     const torch::Tensor gate_up =
         kernel::musa::deepseek_v41_w4a8_masked_gemm(dispatched,
                                                     input_scale,
@@ -72,27 +104,16 @@ class DeepseekV41W4A8Experts final {
                                                     gate_up_input_scale_ > 0.0);
     auto [activation, activation_scale] =
         kernel::musa::deepseek_v41_w4a8_swiglu_quant(
-            gate_up,
-            counts,
-            limit_,
-            down_input_scale_,
-            valid_prefix_swiglu_ && input.size(0) <= 8);
-    const torch::Tensor down =
-        kernel::musa::deepseek_v41_w4a8_masked_gemm(activation,
-                                                    activation_scale,
-                                                    down_,
-                                                    down_scale_,
-                                                    counts,
-                                                    library_path_,
-                                                    down_input_scale_ > 0.0);
-    return kernel::musa::deepseek_v41_w4a8_combine(down,
-                                                   ids.contiguous(),
-                                                   route_rows,
-                                                   route_weights.contiguous(),
-                                                   first_expert_);
+            gate_up, counts, limit_, down_input_scale_, valid_prefix);
+    return kernel::musa::deepseek_v41_w4a8_masked_gemm(activation,
+                                                       activation_scale,
+                                                       down_,
+                                                       down_scale_,
+                                                       counts,
+                                                       library_path_,
+                                                       down_input_scale_ > 0.0);
   }
 
- private:
   torch::Tensor gate_up_;
   torch::Tensor gate_up_scale_;
   torch::Tensor down_;

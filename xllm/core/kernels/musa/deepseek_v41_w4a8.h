@@ -21,6 +21,15 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
                            int64_t local_experts,
                            double static_scale = 0.0);
 
+// Quantize the valid expert-major BF16 prefixes already dispatched by DeepEP.
+// Preserve expert/slot order and ignore uninitialized padding. No route weight
+// is applied here; DeepEP combine applies it once after the down projection.
+// Counts must come from the dispatcher and lie in [0, padded_capacity].
+std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_quant_dispatched(
+    const torch::Tensor& input,
+    const torch::Tensor& counts,
+    double static_scale = 0.0);
+
 std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
     const torch::Tensor& gate_up,
     const torch::Tensor& counts,
