@@ -64,6 +64,9 @@ KVCacheImpl::KVCacheImpl(const KVCacheShape& kv_cache_shape,
   // transfer's "block id == dim0 row" contract holds.
   const int64_t replicated_pages =
       std::max<int64_t>(kv_cache_shape.replicated_block_pages(), 1);
+  const torch::ScalarType kv_dtype = create_options.fp8_kv_cache()
+                                         ? create_options.fp8_kv_dtype()
+                                         : create_options.dtype();
   if (kv_cache_shape.has_key_cache_shape()) {
     create_host_tensor(
         build_host_group_tensor_shape(
@@ -72,7 +75,7 @@ KVCacheImpl::KVCacheImpl(const KVCacheShape& kv_cache_shape,
                                          replicated_pages),
             create_options.host_blocks_factor(),
             layer_count),
-        create_options.dtype(),
+        kv_dtype,
         &key_cache_,
         &key_cache_shape_);
   }
@@ -84,7 +87,7 @@ KVCacheImpl::KVCacheImpl(const KVCacheShape& kv_cache_shape,
                                          replicated_pages),
             create_options.host_blocks_factor(),
             layer_count),
-        create_options.dtype(),
+        kv_dtype,
         &value_cache_,
         &value_cache_shape_);
   }

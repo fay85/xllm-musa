@@ -602,10 +602,16 @@ Master::Master(const Options& options, EngineType type)
     const bool supports_host_offload =
         type == EngineType::LLM ||
         (type == EngineType::SSM && SpeculativeConfig::supports_host_kv_cache(
-                                        options_.speculative_algorithm()));
+                                        options_.speculative_algorithm())) ||
+        (options_.enable_disagg_pd() &&
+         (type == EngineType::VLM ||
+          (type == EngineType::VLMSSM &&
+           SpeculativeConfig::supports_host_kv_cache(
+               options_.speculative_algorithm()))));
     CHECK(supports_host_offload)
-        << "Basic host KV cache offload supports the LLM engine and "
-           "model-based speculative engines only.";
+        << "Basic host KV cache offload supports the LLM engine, "
+           "disaggregated VLM under LLMEngine, and model-based speculative "
+           "engines only.";
   }
   // Multi-process serving runs one worker per process. Select one runtime
   // logical device from the process-visible devices while keeping node_rank as
@@ -825,6 +831,7 @@ Master::Master(const Options& options, EngineType type)
         .max_tokens_for_graph_mode(options_.max_tokens_for_graph_mode())
         .max_tokens_per_chunk_for_prefill(
             options_.max_tokens_per_chunk_for_prefill());
+    apply_runtime_kv_cache_options(options_, eng_options);
 
     // VLMEngine has no KV transfer (get_cache_info/link_cluster unimplemented).
     // Disaggregated VLM serving runs VLM workers under LLMEngine, matching

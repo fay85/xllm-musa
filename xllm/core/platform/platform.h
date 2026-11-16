@@ -86,7 +86,7 @@ class Platform final {
   // Host KV offload requires a batch memcpy provider with stream
   // synchronization support.
   static constexpr bool supports_host_kv_offload() {
-    return is_npu() || is_mlu();
+    return is_npu() || is_mlu() || is_musa();
   }
 
   static constexpr bool supports_compact_host_kv_transfer() { return is_mlu(); }

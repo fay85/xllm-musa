@@ -57,6 +57,12 @@ ModelOutput Executor::forward(const torch::Tensor& tokens,
                               const torch::Tensor& positions,
                               std::vector<KVCache>& kv_caches,
                               const ModelInputParams& params) {
+#if defined(USE_MUSA)
+  if (params.parallel.layer_wise_load_synchronizer != nullptr) {
+    CHECK(params.synchronize_all_layers())
+        << "failed to wait for Host KV cache load before forward";
+  }
+#endif
   return impl_->run(tokens, positions, kv_caches, params);
 }
 

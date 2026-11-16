@@ -568,6 +568,9 @@ void HierarchyBlockManagerPool::collect_offload_pairs(Sequence* sequence) {
               << " hbm_blocks=" << hbm_blocks->size()
               << " host_blocks=" << host_blocks->size();
       if (!sequence->is_prefill_stage()) {
+        if (!options_.instance_is_decode()) {
+          continue;
+        }
         const size_t confirmed_tokens =
             sequence->last_confirmed_cached_tokens_num();
         const std::optional<size_t> checkpoint_row =
@@ -623,6 +626,13 @@ void HierarchyBlockManagerPool::collect_offload_pairs(Sequence* sequence) {
       if (host_cached_tokens >= hbm_cached_tokens || hbm_blocks->size() <= 1) {
         continue;
       }
+      // Only offload LINEAR states that HBM actually hashed and published at
+      // this exact checkpoint boundary; otherwise hbm_block has an unstamped
+      // hash and would pollute Host prefix cache with garbage keys.
+      if (hbm_state.num_cached_blocks(BlockType::LINEAR) * block_size !=
+          hbm_cached_tokens) {
+        continue;
+      }
 
       // Prefill keeps at most two LINEAR slots: blocks[0] is the completed
       // checkpoint being read by the current chunk, while back() is the live
@@ -631,6 +641,20 @@ void HierarchyBlockManagerPool::collect_offload_pairs(Sequence* sequence) {
 
       Block& hbm_block = (*hbm_blocks)[source_index];
       if (!hbm_block.is_valid()) {
+        continue;
+      }
+      const auto* hbm_composite =
+          static_cast<const CompositeBlockManager*>(block_managers_[dp_rank].get());
+      const auto hbm_linear_it =
+          hbm_composite->leaf_entries().find(BlockType::LINEAR);
+      if (hbm_linear_it != hbm_composite->leaf_entries().end() &&
+          hbm_block.id() >=
+              static_cast<int32_t>(
+                  hbm_linear_it->second.leaf->num_total_blocks())) {
+        VLOG(1) << "[HostCache][LinearOffloadSkip] seq=" << sequence->seq_id()
+                << " ckpt_block_id=" << hbm_block.id()
+                << " active_slots="
+                << hbm_linear_it->second.leaf->num_total_blocks();
         continue;
       }
       if (host_blocks->size() <= 1 || !host_blocks->front().is_valid()) {
@@ -815,6 +839,10 @@ bool HierarchyBlockManagerPool::allocate(Sequence* sequence,
     return false;
   }
 
+#if defined(USE_MUSA)
+  composite->publish_linear_checkpoint(sequence,
+                                       &swap_block_transfer_infos_[dp_rank]);
+#endif
   collect_load_block_transfer_infos(sequence);
   CHECK_GE(hbm_state.current_max_tokens_capacity(), restore_tokens);
   collect_offload_pairs(sequence);
@@ -891,6 +919,22 @@ void HierarchyBlockManagerPool::collect_load_block_transfer_infos(
   if (load_infos.size() != load_info_begin) {
     hbm_state.set_kv_cache_tokens_num(host_cached_tokens);
   }
+}
+
+size_t HierarchyBlockManagerPool::probe_prefix_hit_tokens(
+    Sequence* sequence,
+    int32_t dp_rank) const {
+  const size_t hbm_hits =
+      BlockManagerPool::probe_prefix_hit_tokens(sequence, dp_rank);
+  if (!options_.enable_prefix_cache() || sequence == nullptr ||
+      sequence->stage() == SequenceStage::DECODE || dp_rank < 0 ||
+      static_cast<size_t>(dp_rank) >= host_block_managers_.size() ||
+      host_block_managers_[dp_rank] == nullptr) {
+    return hbm_hits;
+  }
+  const size_t host_hits =
+      host_block_managers_[dp_rank]->probe_hit_tokens_for_sequence(sequence);
+  return std::max(hbm_hits, host_hits);
 }
 
 void HierarchyBlockManagerPool::allocate_shared(Sequence* sequence) {

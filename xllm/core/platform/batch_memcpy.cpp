@@ -21,6 +21,8 @@ limitations under the License.
 #include "platform/npu/npu_batch_memcpy.h"
 #elif defined(USE_MLU)
 #include "platform/mlu/mlu_batch_memcpy.h"
+#elif defined(USE_MUSA)
+#include "platform/musa/musa_batch_memcpy.h"
 #endif
 
 namespace xllm {
@@ -30,8 +32,10 @@ std::unique_ptr<BatchMemcpy> create_batch_memcpy(const Device& device) {
   auto memcpy = std::make_unique<npu::NPUBatchMemcpy>();
 #elif defined(USE_MLU)
   auto memcpy = std::make_unique<mlu::MLUBatchMemcpy>();
+#elif defined(USE_MUSA)
+  auto memcpy = std::make_unique<musa::MUSABatchMemcpy>();
 #endif
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
   memcpy->init(device.index());
   return memcpy;
 #else

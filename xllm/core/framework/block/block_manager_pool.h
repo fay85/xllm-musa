@@ -116,7 +116,7 @@ class BlockManagerPool : public KVCacheManager {
   void reset_swa_prefix_cache();
 
   void allocate_shared(Sequence* sequence) override;
-  size_t probe_prefix_hit_tokens(Sequence* sequence, int32_t dp_rank) const;
+  virtual size_t probe_prefix_hit_tokens(Sequence* sequence, int32_t dp_rank) const;
   void cache(Sequence* sequence) override;
   void cache(Sequence* sequence, size_t num_tokens) override;
 
@@ -155,12 +155,12 @@ class BlockManagerPool : public KVCacheManager {
   friend class BlockManagerPoolTestPeer;
 
   mutable std::atomic<size_t> dp_selection_cursor_{0};
-  std::vector<std::vector<BlockTransferInfo>> swap_block_transfer_infos_;
 
  protected:
   // the options for the block manager
   Options options_;
   std::vector<std::unique_ptr<BlockManager>> block_managers_;
+  std::vector<std::vector<BlockTransferInfo>> swap_block_transfer_infos_;
 };
 
 }  // namespace xllm

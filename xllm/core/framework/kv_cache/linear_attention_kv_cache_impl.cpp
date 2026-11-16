@@ -68,14 +68,19 @@ LinearAttentionKVCacheImpl::LinearAttentionKVCacheImpl(
   std::vector<int64_t> host_conv_shape = device_conv_shape;
   host_conv_shape[0] = host_slot_count;
 #if defined(USE_MUSA)
+  // MUSA conv_cache is channel-major [slots, conv_dim, conv_state_len].
+  // Keeping the full trailing conv_state_len preserves contiguous per-slot
+  // device/host buffers for single-descriptor DMA transfers on Prefill.
   constexpr int64_t kConvHistoryAxis = 2;
+  CHECK_GT(host_conv_shape.size(), kConvHistoryAxis);
+  CHECK_GT(host_conv_shape[kConvHistoryAxis], 0);
 #else
   constexpr int64_t kConvHistoryAxis = 1;
-#endif
   constexpr int64_t kCommittedConvRows = 3;
   CHECK_GT(host_conv_shape.size(), kConvHistoryAxis);
   CHECK_GE(host_conv_shape[kConvHistoryAxis], kCommittedConvRows);
   host_conv_shape[kConvHistoryAxis] = kCommittedConvRows;
+#endif
   host_conv_shape.insert(host_conv_shape.begin() + 1, layer_count);
   create_host_tensor(host_conv_shape,
                      create_options.dtype(),
@@ -129,12 +134,16 @@ BlockTypeTensorMap LinearAttentionKVCacheImpl::get_block_type_tensors(
     return tensor_map;
   }
 
-  constexpr int64_t kCommittedConvRows = 3;
 #if defined(USE_MUSA)
-  constexpr int64_t kConvHistoryAxis = 2;
+  // On MUSA conv_cache is [slots, conv_dim, conv_state_len]; narrowing the
+  // trailing axis when conv_state_len > 3 would produce a non-contiguous slice.
+  // Prefill always transfers from checkpoint_row == 0 as a contiguous block.
+  CHECK_EQ(checkpoint_row, 0u)
+      << "MUSA LINEAR host transfer only supports checkpoint_row == 0 "
+      << "(contiguous conv_cache); got checkpoint_row=" << checkpoint_row;
 #else
+  constexpr int64_t kCommittedConvRows = 3;
   constexpr int64_t kConvHistoryAxis = 1;
-#endif
   CHECK_GT(conv_it->second.dim(), kConvHistoryAxis);
   const int64_t conv_history_rows = conv_it->second.size(kConvHistoryAxis);
   CHECK_GE(conv_history_rows, kCommittedConvRows);
@@ -145,6 +154,7 @@ BlockTypeTensorMap LinearAttentionKVCacheImpl::get_block_type_tensors(
   conv_it->second = conv_it->second.narrow(kConvHistoryAxis,
                                            static_cast<int64_t>(checkpoint_row),
                                            kCommittedConvRows);
+#endif
 
   CHECK_GT(ssm_it->second.size(0), 0);
   CHECK_EQ(ssm_it->second.size(0) % conv_cache_.size(0), 0)

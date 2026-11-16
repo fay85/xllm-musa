@@ -19,11 +19,13 @@ limitations under the License.
 #include "platform/npu/npu_layer_synchronizer.h"
 #elif defined(USE_MLU)
 #include "platform/mlu/mlu_layer_synchronizer.h"
+#elif defined(USE_MUSA)
+#include "platform/musa/musa_layer_synchronizer.h"
 #endif
 
 namespace xllm {
 
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 
 #if defined(USE_NPU)
 class NPULayerSynchronizerAdapter final : public LayerSynchronizer {
@@ -78,14 +80,37 @@ class MLULayerSynchronizerAdapter final : public LayerSynchronizer {
  private:
   MLULayerSynchronizerImpl impl_;
 };
+#elif defined(USE_MUSA)
+class MUSALayerSynchronizerAdapter final : public LayerSynchronizer {
+ public:
+  explicit MUSALayerSynchronizerAdapter(int64_t num_layers)
+      : impl_(num_layers) {}
+
+  bool synchronize_layer(int64_t layer_index) override {
+    return impl_.wait_layer_on_current_stream(layer_index);
+  }
+
+  bool record_stream(int64_t layer_index, Stream* stream) override {
+    return impl_.record_stream(layer_index, stream);
+  }
+
+  void abort() override { impl_.abort(); }
+
+  uint32_t size() const override { return impl_.get_event_size(); }
+
+ private:
+  MUSALayerSynchronizerImpl impl_;
+};
 #endif
 
 std::shared_ptr<LayerSynchronizer> create_layer_synchronizer(
     int64_t num_layers) {
 #if defined(USE_NPU)
   return std::make_shared<NPULayerSynchronizerAdapter>(num_layers);
-#else
+#elif defined(USE_MLU)
   return std::make_shared<MLULayerSynchronizerAdapter>(num_layers);
+#else
+  return std::make_shared<MUSALayerSynchronizerAdapter>(num_layers);
 #endif
 }
 

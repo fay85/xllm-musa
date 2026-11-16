@@ -685,6 +685,8 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       .has_conv_cache_shape = kv_cache_shape.has_conv_cache_shape(),
       .has_ssm_cache_shape = kv_cache_shape.has_ssm_cache_shape(),
       .kv_cache_dtype = options_.kv_cache_dtype(),
+      .supports_unscaled_fp8_kv_offload =
+          Platform::is_musa() && options_.kv_cache_dtype() == "fp8_e4m3",
       .indexer_cache_dtype = kv_cache_config.indexer_cache_dtype(),
       .model_type = args_.model_type(),
       .is_npu_platform = Platform::is_npu(),

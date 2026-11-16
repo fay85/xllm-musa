@@ -93,7 +93,16 @@ bool HostKVTransfer::valid_request(const HostKVRequest& request,
               mapping.device_block_id < 0 ||
               mapping.device_block_id >=
                   layout_.device_block_count(mapping.group_id)) {
-            LOG(ERROR) << "Host KV request contains an unknown group or block.";
+            LOG(ERROR) << "Host KV request contains an unknown group or block: "
+                       << "group_id=" << mapping.group_id
+                       << ", group_found=" << (group != nullptr)
+                       << ", host_block_id=" << mapping.host_block_id
+                       << ", host_cap="
+                       << (group != nullptr ? layout_.host_block_count(mapping.group_id) : -1)
+                       << ", device_block_id=" << mapping.device_block_id
+                       << ", device_cap="
+                       << (group != nullptr ? layout_.device_block_count(mapping.group_id) : -1)
+                       << ", is_load=" << is_load;
             return false;
           }
 

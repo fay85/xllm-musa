@@ -34,6 +34,8 @@ limitations under the License.
 #include "util/utils.h"
 #if defined(USE_MLU)
 #include "platform/mlu/mlu_host_memory.h"
+#elif defined(USE_MUSA)
+#include "platform/musa/musa_host_memory.h"
 #endif
 #if defined(USE_NPU)
 #include "acl/acl_rt.h"
@@ -468,7 +470,7 @@ aclFormat get_npu_kv_cache_format(const std::string& model_type) {
 
 namespace {
 
-#if !defined(USE_MLU)
+#if !defined(USE_MLU) && !defined(USE_MUSA)
 void release_host_region(void*& base_ptr, size_t& total_bytes) {
   if (base_ptr == nullptr || total_bytes == 0) {
     base_ptr = nullptr;
@@ -497,6 +499,10 @@ HostPageAlignedRegion::HostPageAlignedRegion(size_t bytes) {
   mlu_region_ = std::make_unique<mlu::MLUHostMemoryRegion>(bytes);
   base_ptr = mlu_region_->data();
   total_bytes = mlu_region_->size();
+#elif defined(USE_MUSA)
+  musa_region_ = std::make_unique<musa::MUSAHostMemoryRegion>(bytes);
+  base_ptr = musa_region_->data();
+  total_bytes = musa_region_->size();
 #else
   const int64_t system_page_size = sysconf(_SC_PAGESIZE);
   CHECK_GT(system_page_size, 0) << "Failed to query system page size.";
@@ -545,6 +551,9 @@ HostPageAlignedRegion::HostPageAlignedRegion(
 #if defined(USE_MLU)
       ,
       mlu_region_(std::move(other.mlu_region_))
+#elif defined(USE_MUSA)
+      ,
+      musa_region_(std::move(other.musa_region_))
 #endif
 {
   other.base_ptr = nullptr;
@@ -556,10 +565,12 @@ HostPageAlignedRegion& HostPageAlignedRegion::operator=(
   if (this == &other) {
     return *this;
   }
-#if !defined(USE_MLU)
-  release_host_region(base_ptr, total_bytes);
-#else
+#if defined(USE_MLU)
   mlu_region_ = std::move(other.mlu_region_);
+#elif defined(USE_MUSA)
+  musa_region_ = std::move(other.musa_region_);
+#else
+  release_host_region(base_ptr, total_bytes);
 #endif
   base_ptr = other.base_ptr;
   total_bytes = other.total_bytes;
@@ -569,7 +580,7 @@ HostPageAlignedRegion& HostPageAlignedRegion::operator=(
 }
 
 HostPageAlignedRegion::~HostPageAlignedRegion() {
-#if !defined(USE_MLU)
+#if !defined(USE_MLU) && !defined(USE_MUSA)
   release_host_region(base_ptr, total_bytes);
 #endif
 }
@@ -680,8 +691,12 @@ std::optional<std::string> validate_host_cache_options(
   }
 
   // Quantized KV caches add scale tensors whose host offload and restore
-  // lifecycle is not supported consistently by the common path yet.
-  if (options.kv_cache_dtype != "auto") {
+  // lifecycle is not supported consistently by the common path yet. Unscaled
+  // MUSA fp8_e4m3 stores raw 8-bit K/V elements with no scale tensors.
+  const bool allowed_unscaled_fp8 =
+      options.supports_unscaled_fp8_kv_offload &&
+      options.kv_cache_dtype == "fp8_e4m3";
+  if (options.kv_cache_dtype != "auto" && !allowed_unscaled_fp8) {
     violations.emplace_back(
         "quantized KV cache scales are not transferred to host memory; set "
         "--kv_cache_dtype=auto");

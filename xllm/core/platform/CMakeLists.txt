@@ -28,7 +28,10 @@ cc_library(
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.h>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.h>
     $<$<BOOL:${USE_CUDA}>:cuda/cuda_utils.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_batch_memcpy.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_csrc_guards.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_host_memory.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_layer_synchronizer.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_utils.h>
     $<$<BOOL:${USE_CUDA}>:cuda_profiler.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:torch_profiler.h>
@@ -47,6 +50,9 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu/mlu_batch_memcpy.cpp>
     $<$<BOOL:${USE_MLU}>:mlu/mlu_host_memory.cpp>
     $<$<BOOL:${USE_MLU}>:mlu/mlu_layer_synchronizer.cpp>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_batch_memcpy.cpp>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_host_memory.cpp>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_layer_synchronizer.cpp>
     $<$<BOOL:${USE_CUDA}>:cuda_profiler.cpp>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:torch_profiler.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.cpp>

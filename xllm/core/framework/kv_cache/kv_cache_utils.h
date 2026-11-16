@@ -53,6 +53,10 @@ class KVCacheShape;
 namespace mlu {
 class MLUHostMemoryRegion;
 }
+#elif defined(USE_MUSA)
+namespace musa {
+class MUSAHostMemoryRegion;
+}
 #endif
 
 struct KVCacheCreateOptions {
@@ -154,6 +158,7 @@ struct HostCacheValidationOptions {
   bool has_conv_cache_shape = false;
   bool has_ssm_cache_shape = false;
   std::string kv_cache_dtype = "auto";
+  bool supports_unscaled_fp8_kv_offload = false;
   std::string indexer_cache_dtype = "auto";
   std::string model_type;
   // The worker's caches run on an NPU device and at least one registered role
@@ -189,6 +194,8 @@ struct HostPageAlignedRegion {
  private:
 #if defined(USE_MLU)
   std::unique_ptr<mlu::MLUHostMemoryRegion> mlu_region_;
+#elif defined(USE_MUSA)
+  std::unique_ptr<musa::MUSAHostMemoryRegion> musa_region_;
 #endif
 };
 

@@ -245,8 +245,13 @@ void PrefillFirstPolicy::schedule(
       last_deferred_chunk_req = chunk_top_ptr;
       consecutive_fast_passes = 0;
     }
-    if (rem_new > 0 && rem_new <= max_chunk && rem_chunk > max_chunk &&
-        rem_new < rem_chunk && consecutive_fast_passes < 2) {
+    const double chunk_wait_ms =
+        std::max(0.0, absl::ToDoubleMilliseconds(absl::Now() - state.chunk_queue.top()->created_time()));
+    const bool big_chunk_advantage =
+        rem_chunk > max_chunk || (rem_new <= 2048 && rem_new * 2 < rem_chunk);
+    if (rem_new > 0 && rem_new <= max_chunk && big_chunk_advantage &&
+        rem_new < rem_chunk && consecutive_fast_passes < 8 &&
+        chunk_wait_ms < 2500.0) {
       ++consecutive_fast_passes;
       fast_single_chunk_first = true;
       const size_t block_size =

@@ -41,6 +41,26 @@ struct CopyPlan {
   std::vector<torch::Tensor> dst_tensors;
 };
 
+struct RawRoleCopyDesc {
+  uint8_t* host_layer_base = nullptr;
+  int64_t host_block_stride_bytes = 0;
+  uint8_t* device_base = nullptr;
+  int64_t device_block_stride_bytes = 0;
+  size_t copy_bytes = 0;
+};
+
+struct RawLayerCopyDesc {
+  int64_t absolute_layer_id = 0;
+  BlockType block_type = BlockType::KV;
+  std::vector<RawRoleCopyDesc> roles;
+};
+
+struct RawCopyPlan {
+  std::vector<void*> src_addrs;
+  std::vector<void*> dst_addrs;
+  std::vector<size_t> byte_counts;
+};
+
 using CopyStreamQueue =
     moodycamel::BlockingConcurrentQueue<std::unique_ptr<Stream>>;
 
@@ -147,6 +167,7 @@ class BasicHostKVTransfer::Impl final {
       batch_memcpy_->init(device_.index());
     }
     CHECK(batch_memcpy_ != nullptr) << "Host KV batch memcpy is unavailable.";
+    init_raw_copy_descs();
     for (size_t index = 0; index < kCopyStreamCount; ++index) {
       streams_.enqueue(device_.get_stream_from_pool(kStreamTimeoutMs));
     }
@@ -169,15 +190,32 @@ class BasicHostKVTransfer::Impl final {
   bool load(const HostKVRequest& request, const HostKVLoadHandle& handle) {
     CopyStreamLease stream(&streams_);
     bool stream_has_work = false;
+    const bool raw_ok = can_use_raw_copy(request);
     for (size_t index = 0; index < ranges_.size(); ++index) {
-      CopyPlan plan = build_plan(
-          layout_, request.target_mappings, ranges_[index], /*is_load=*/true);
-      if (!plan.src_tensors.empty()) {
-        if (!batch_memcpy_->submit_h2d(
-                plan.src_tensors, plan.dst_tensors, stream.get())) {
-          return false;
+      if (raw_ok) {
+        RawCopyPlan plan = build_raw_plan(
+            request.target_mappings,
+            ranges_[index],
+            /*is_load=*/true,
+            /*linear_mode=*/index == 0 ? LinearFilter::ALL_LAYERS
+                                       : LinearFilter::SKIP);
+        if (!plan.byte_counts.empty()) {
+          if (!batch_memcpy_->submit_h2d_raw(
+                  plan.src_addrs, plan.dst_addrs, plan.byte_counts, stream.get())) {
+            return false;
+          }
+          stream_has_work = true;
         }
-        stream_has_work = true;
+      } else {
+        CopyPlan plan = build_plan(
+            layout_, request.target_mappings, ranges_[index], /*is_load=*/true);
+        if (!plan.src_tensors.empty()) {
+          if (!batch_memcpy_->submit_h2d(
+                  plan.src_tensors, plan.dst_tensors, stream.get())) {
+            return false;
+          }
+          stream_has_work = true;
+        }
       }
       if (!handle.synchronizer->record_stream(static_cast<int64_t>(index),
                                               stream.get())) {
@@ -187,18 +225,34 @@ class BasicHostKVTransfer::Impl final {
         return false;
       }
     }
-    for (const LayerRange& range : ranges_) {
-      CopyPlan plan =
-          build_plan(layout_, request.draft_mappings, range, /*is_load=*/true);
-      if (!plan.src_tensors.empty() &&
-          !batch_memcpy_->submit_h2d(
-              plan.src_tensors, plan.dst_tensors, stream.get())) {
-        if (stream_has_work) {
-          stream.drain_or_die("draft cache copy submission failed");
+    if (raw_ok && !request.draft_mappings.empty()) {
+      const LayerRange full_range{0, layout_.num_layers()};
+      RawCopyPlan plan = build_raw_plan(
+          request.draft_mappings, full_range, /*is_load=*/true, LinearFilter::RANGE);
+      if (!plan.byte_counts.empty()) {
+        if (!batch_memcpy_->submit_h2d_raw(
+                plan.src_addrs, plan.dst_addrs, plan.byte_counts, stream.get())) {
+          if (stream_has_work) {
+            stream.drain_or_die("draft cache copy submission failed");
+          }
+          return false;
         }
-        return false;
+        stream_has_work = true;
       }
-      stream_has_work = stream_has_work || !plan.src_tensors.empty();
+    } else {
+      for (const LayerRange& range : ranges_) {
+        CopyPlan plan =
+            build_plan(layout_, request.draft_mappings, range, /*is_load=*/true);
+        if (!plan.src_tensors.empty() &&
+            !batch_memcpy_->submit_h2d(
+                plan.src_tensors, plan.dst_tensors, stream.get())) {
+          if (stream_has_work) {
+            stream.drain_or_die("draft cache copy submission failed");
+          }
+          return false;
+        }
+        stream_has_work = stream_has_work || !plan.src_tensors.empty();
+      }
     }
     if (!request.draft_mappings.empty() &&
         !handle.synchronizer->record_stream(
@@ -214,6 +268,35 @@ class BasicHostKVTransfer::Impl final {
   bool offload(const HostKVRequest& request) {
     CopyStreamLease stream(&streams_);
     stream.get()->wait_stream(compute_stream_);
+    if (can_use_raw_copy(request)) {
+      const LayerRange full_range{0, layout_.num_layers()};
+      RawCopyPlan plan;
+      if (!request.target_mappings.empty()) {
+        RawCopyPlan target_plan = build_raw_plan(
+            request.target_mappings, full_range, /*is_load=*/false, LinearFilter::RANGE);
+        plan.src_addrs.insert(
+            plan.src_addrs.end(), target_plan.src_addrs.begin(), target_plan.src_addrs.end());
+        plan.dst_addrs.insert(
+            plan.dst_addrs.end(), target_plan.dst_addrs.begin(), target_plan.dst_addrs.end());
+        plan.byte_counts.insert(
+            plan.byte_counts.end(), target_plan.byte_counts.begin(), target_plan.byte_counts.end());
+      }
+      if (!request.draft_mappings.empty()) {
+        RawCopyPlan draft_plan = build_raw_plan(
+            request.draft_mappings, full_range, /*is_load=*/false, LinearFilter::RANGE);
+        plan.src_addrs.insert(
+            plan.src_addrs.end(), draft_plan.src_addrs.begin(), draft_plan.src_addrs.end());
+        plan.dst_addrs.insert(
+            plan.dst_addrs.end(), draft_plan.dst_addrs.begin(), draft_plan.dst_addrs.end());
+        plan.byte_counts.insert(
+            plan.byte_counts.end(), draft_plan.byte_counts.begin(), draft_plan.byte_counts.end());
+      }
+      if (plan.byte_counts.empty()) {
+        return true;
+      }
+      return batch_memcpy_->copy_d2h_raw(
+          plan.src_addrs, plan.dst_addrs, plan.byte_counts, stream.get());
+    }
     const auto offload_mappings =
         [this, &stream](const std::vector<HostKVMapping>& mappings) {
           for (const LayerRange& range : ranges_) {
@@ -245,7 +328,142 @@ class BasicHostKVTransfer::Impl final {
   }
 
  private:
+  enum class LinearFilter : int8_t { RANGE = 0, ALL_LAYERS = 1, SKIP = 2 };
+
+  void init_raw_copy_descs() {
+    if (batch_memcpy_ == nullptr || !batch_memcpy_->supports_raw_copy()) {
+      return;
+    }
+    for (const HostKVGroupLayout& group : layout_.groups()) {
+      std::vector<RawLayerCopyDesc> layer_descs;
+      layer_descs.reserve(group.layers.size());
+      for (const HostKVLayerLayout& layer : group.layers) {
+        const BlockTypeTensorMap device_tensors =
+            get_device_transfer_tensors(layer, /*checkpoint_row=*/0);
+        RawLayerCopyDesc layer_desc;
+        layer_desc.absolute_layer_id = layer.absolute_layer_id;
+        layer_desc.block_type = layer.block_type;
+        for (const auto& [role, device_tensor] : device_tensors) {
+          auto host_it = group.host_roles.find(role);
+          if (host_it == group.host_roles.end()) {
+            continue;
+          }
+          const torch::Tensor& host_tensor = host_it->second;
+          if (!device_tensor.defined() || !host_tensor.defined() ||
+              device_tensor.dim() < 2 || host_tensor.dim() < 3) {
+            return;
+          }
+          const torch::Tensor host_sample =
+              host_tensor[0][layer.group_layer_slot];
+          const torch::Tensor dev_sample = device_tensor[0];
+          if (!host_sample.is_contiguous() || !dev_sample.is_contiguous()) {
+            return;
+          }
+          const size_t bytes = static_cast<size_t>(dev_sample.nbytes());
+          if (static_cast<size_t>(host_sample.nbytes()) != bytes) {
+            return;
+          }
+          RawRoleCopyDesc role_desc;
+          role_desc.host_layer_base =
+              static_cast<uint8_t*>(host_tensor.data_ptr()) +
+              layer.group_layer_slot * host_tensor.stride(1) *
+                  host_tensor.element_size();
+          role_desc.host_block_stride_bytes =
+              host_tensor.stride(0) * host_tensor.element_size();
+          role_desc.device_base =
+              static_cast<uint8_t*>(device_tensor.data_ptr());
+          role_desc.device_block_stride_bytes =
+              device_tensor.stride(0) * device_tensor.element_size();
+          role_desc.copy_bytes = bytes;
+          layer_desc.roles.emplace_back(role_desc);
+        }
+        layer_descs.emplace_back(std::move(layer_desc));
+      }
+      raw_descs_by_group_.emplace(group.group_id, std::move(layer_descs));
+    }
+    use_raw_copy_ = !raw_descs_by_group_.empty();
+  }
+
+  bool can_use_raw_copy(const HostKVRequest& request) const {
+    if (!use_raw_copy_) {
+      return false;
+    }
+    for (const HostKVMapping& m : request.target_mappings) {
+      if (m.checkpoint_row != 0) return false;
+    }
+    for (const HostKVMapping& m : request.draft_mappings) {
+      if (m.checkpoint_row != 0) return false;
+    }
+    return true;
+  }
+
+  RawCopyPlan build_raw_plan(const std::vector<HostKVMapping>& mappings,
+                             const LayerRange& range,
+                             bool is_load,
+                             LinearFilter linear_mode) const {
+    RawCopyPlan plan;
+    if (mappings.empty()) {
+      return plan;
+    }
+    const size_t est =
+        mappings.size() * static_cast<size_t>(std::max<int64_t>(1, range.end - range.begin)) * 2;
+    plan.src_addrs.reserve(est);
+    plan.dst_addrs.reserve(est);
+    plan.byte_counts.reserve(est);
+
+    auto append_layer = [&](const HostKVMapping& mapping,
+                            const RawLayerCopyDesc& layer) {
+      for (const RawRoleCopyDesc& role : layer.roles) {
+        if (role.copy_bytes == 0) continue;
+        uint8_t* host_ptr =
+            role.host_layer_base +
+            mapping.host_block_id * role.host_block_stride_bytes;
+        uint8_t* dev_ptr =
+            role.device_base +
+            mapping.device_block_id * role.device_block_stride_bytes;
+        if (is_load) {
+          plan.src_addrs.emplace_back(host_ptr);
+          plan.dst_addrs.emplace_back(dev_ptr);
+        } else {
+          plan.src_addrs.emplace_back(dev_ptr);
+          plan.dst_addrs.emplace_back(host_ptr);
+        }
+        plan.byte_counts.emplace_back(role.copy_bytes);
+      }
+    };
+
+    if (linear_mode == LinearFilter::ALL_LAYERS) {
+      for (const HostKVMapping& mapping : mappings) {
+        auto it = raw_descs_by_group_.find(mapping.group_id);
+        if (it == raw_descs_by_group_.end()) continue;
+        for (const RawLayerCopyDesc& layer : it->second) {
+          if (layer.block_type != BlockType::LINEAR) break;
+          append_layer(mapping, layer);
+        }
+      }
+    }
+
+    for (const HostKVMapping& mapping : mappings) {
+      auto it = raw_descs_by_group_.find(mapping.group_id);
+      if (it == raw_descs_by_group_.end()) continue;
+      for (const RawLayerCopyDesc& layer : it->second) {
+        if (layer.block_type == BlockType::LINEAR &&
+            linear_mode != LinearFilter::RANGE) {
+          continue;
+        }
+        if (layer.absolute_layer_id < range.begin ||
+            layer.absolute_layer_id >= range.end) {
+          continue;
+        }
+        append_layer(mapping, layer);
+      }
+    }
+    return plan;
+  }
+
   const HostKVLayout& layout_;
+  bool use_raw_copy_ = false;
+  std::unordered_map<int32_t, std::vector<RawLayerCopyDesc>> raw_descs_by_group_;
   Device device_;
   const Stream& compute_stream_;
   uint32_t layers_per_event_ = 1;

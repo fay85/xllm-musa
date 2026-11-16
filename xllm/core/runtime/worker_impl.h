@@ -441,6 +441,10 @@ class WorkerImpl {
                          /*cpu_binding=*/false,
                          /*pool_name=*/"WorkerImpl.schedule"};
 
+  ThreadPool d2h_threadpool_{/*num_threads=*/1,
+                             /*cpu_binding=*/false,
+                             /*pool_name=*/"WorkerImpl.d2h"};
+
   // dtype of the model
   torch::ScalarType dtype_;
 

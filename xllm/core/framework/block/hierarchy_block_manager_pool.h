@@ -50,6 +50,8 @@ class HierarchyBlockManagerPool : public BlockManagerPool {
 
   bool allocate(Sequence* sequence, size_t num_tokens) override;
 
+  size_t probe_prefix_hit_tokens(Sequence* sequence,
+                                 int32_t dp_rank) const override;
   void allocate_shared(Sequence* sequence) override;
   bool needs_shared_reprobe(Sequence* sequence) const override {
     return should_probe_prefix_cache(sequence);

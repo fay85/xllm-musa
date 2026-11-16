@@ -47,6 +47,9 @@ PlatformStream get_stream_from_pool(const c10::Device& device) {
 #if defined(USE_MLU)
   return torch_mlu::getStreamFromPool(
       /*isHighPriority=*/false, device.index());
+#elif defined(USE_MUSA)
+  return c10::musa::getStreamFromPool(
+      /*isHighPriority=*/false, device.index());
 #else
   static_cast<void>(device);
   return get_stream_from_pool();

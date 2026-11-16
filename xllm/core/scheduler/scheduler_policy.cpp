@@ -490,7 +490,7 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       double seq_estimate_latency = 0;
       if (options_.enable_latency_aware_schedule()) {
         size_t kv_cache_tokens_num =
-            prefill_sequence->kv_state().kv_cache_tokens_num();
+            prefill_sequence->kv_cache_tokens_num();
         seq_estimate_latency = state.profile_manager->predict_step_time(
             num_tokens + kv_cache_tokens_num, kv_cache_tokens_num, false);
         if (budget.estimate_latency + allocated_estimate_latency +
@@ -599,15 +599,14 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
   // Chunked prefill: compute min(remaining, max_chunk, budget).
   const size_t max_tokens_per_chunk =
       options_.max_tokens_per_chunk_for_prefill();
-  size_t num_tokens = seq->num_tokens();
-  size_t assume_max = std::min(max_tokens_per_chunk, remaining_budget);
-  num_tokens = std::min(assume_max, num_tokens);
-
-  // CP-aware chunk alignment.
-  const size_t kv_cache_tokens_num = seq->kv_state().kv_cache_tokens_num();
+  const size_t kv_cache_tokens_num = seq->kv_cache_tokens_num();
   const size_t remaining_in_seq = seq->num_tokens() > kv_cache_tokens_num
                                       ? seq->num_tokens() - kv_cache_tokens_num
                                       : 0;
+  size_t assume_max = std::min(max_tokens_per_chunk, remaining_budget);
+  size_t num_tokens = std::min(assume_max, remaining_in_seq);
+
+  // CP-aware chunk alignment.
   const int32_t kv_split_for_align =
       ::xllm::ParallelConfig::get_instance().kv_split_size_effective();
   num_tokens = maybe_align_cp_chunk_tokens(num_tokens,
@@ -615,10 +614,12 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                            state.kv_cache_manager->block_size(),
                                            remaining_in_seq);
 
+  // Land on the deepest fine-grained checkpoint boundary (< num_tokens) so
+  // prompts in ranges like (32768, 34816) or 22k never overshoot their final
+  // reusable LINEAR checkpoint without splitting earlier chunks unnecessarily.
   if (has_linear_attention_layers(state.model_args) &&
       state.enable_prefix_cache &&
-      seq->num_tokens() > 3 * max_tokens_per_chunk &&
-      kv_cache_tokens_num >= 3 * max_tokens_per_chunk &&
+      seq->num_tokens() > max_tokens_per_chunk &&
       remaining_in_seq > 0) {
     const size_t block_size =
         static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
@@ -626,14 +627,11 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
         static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) * block_size;
     const size_t fine_stride =
         std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
-    const size_t next_fine_boundary =
-        ((kv_cache_tokens_num / fine_stride) + 1) * fine_stride;
-    // Only split at next_fine_boundary when at least one full fine_stride
-    // remains afterward; slicing a short unique tail into tiny memory-bound
-    // steps (or splitting at last_cp_boundary) re-reads all weights and KV
-    // without creating reusable prefix state.
-    if (next_fine_boundary + fine_stride <= seq->num_tokens()) {
-      num_tokens = std::min(num_tokens, next_fine_boundary - kv_cache_tokens_num);
+    const size_t target_ckpt =
+        ((seq->num_tokens() - 1) / fine_stride) * fine_stride;
+    if (kv_cache_tokens_num < target_ckpt &&
+        kv_cache_tokens_num + num_tokens > target_ckpt) {
+      num_tokens = target_ckpt - kv_cache_tokens_num;
     }
   }
 

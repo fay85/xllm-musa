@@ -402,6 +402,7 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
   device_.set_device();
   device_.init_device_context();
   threadpool_.schedule([this]() mutable { device_.set_device(); });
+  d2h_threadpool_.schedule([this]() mutable { device_.set_device(); });
   prepare_stream_ = device_.get_stream_from_pool();
   compute_stream_ = device_.current_stream();
   sampler_ = std::make_unique<Sampler>();
@@ -927,6 +928,12 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
   if (is_prefill && params.parallel.layer_wise_load_synchronizer != nullptr) {
     CHECK(params.synchronize_all_layers())
         << "failed to wait for Host cache load before LINEAR state restore";
+#if defined(USE_MUSA)
+    // On MUSA, synchronize_all_layers() installs GPU stream wait events on
+    // compute_stream_ (non-blocking on host). Clear the handle so Executor::forward()
+    // does not re-install duplicate wait_event calls.
+    params.parallel.layer_wise_load_synchronizer = nullptr;
+#endif
   }
 #if defined(USE_MUSA)
   const int64_t gdn_ckpt_slots =
@@ -2513,22 +2520,31 @@ uint32_t WorkerImpl::transfer_kv_blocks(
   if (hierarchy_kv_cache_transfer_ != nullptr) {
     if (!block_transfer_info.empty() &&
         block_transfer_info.front().transfer_type == TransferType::D2H2G) {
-      // Schedule-overlap can deliver the D2H RPC before the preceding forward
-      // task has enqueued its kernels. Queue D2H on the same single-threaded
-      // worker executor so it runs after that forward; the hierarchy transfer
-      // then makes its copy stream wait on compute_stream_. H2D must remain on
-      // the RPC thread because it is registered before the matching forward.
+      // Record a lightweight compute_stream_ event in FIFO order on threadpool_,
+      // then hand off the actual D2H copy + stream sync + Mooncake Put to
+      // d2h_threadpool_ so WorkerImpl.schedule never stalls GPU forward launch.
       auto result = std::make_shared<std::promise<uint32_t>>();
       std::future<uint32_t> future = result->get_future();
       threadpool_.schedule(
-          [this, batch_id, block_transfer_info, result]() mutable {
-            try {
-              result->set_value(
-                  hierarchy_kv_cache_transfer_->transfer_kv_blocks(
-                      batch_id, block_transfer_info));
-            } catch (...) {
-              result->set_exception(std::current_exception());
-            }
+          [this, batch_id, block_transfer_info = std::move(block_transfer_info), result]() mutable {
+            StreamEventPtr compute_done = compute_stream_->record_event();
+            d2h_threadpool_.schedule(
+                [this,
+                 batch_id,
+                 block_transfer_info = std::move(block_transfer_info),
+                 compute_done = std::move(compute_done),
+                 result]() mutable {
+                  try {
+                    if (compute_done != nullptr) {
+                      compute_done->synchronize();
+                    }
+                    result->set_value(
+                        hierarchy_kv_cache_transfer_->transfer_kv_blocks(
+                            batch_id, block_transfer_info));
+                  } catch (...) {
+                    result->set_exception(std::current_exception());
+                  }
+                });
           });
       return future.get();
     }

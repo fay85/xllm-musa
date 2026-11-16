@@ -23,6 +23,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
+#include "core/framework/config/scheduler_config.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/request/sequence.h"
 
@@ -45,6 +46,28 @@ BlockManager::Options make_linear_state_options(
   options.instance_is_decode(instance_is_decode);
   options.num_speculative_tokens(num_speculative_tokens);
   return options;
+}
+
+bool should_publish_linear_checkpoint(size_t cached_tokens,
+                                      size_t total_tokens,
+                                      size_t chunk_stride) {
+  if (cached_tokens == 0 || chunk_stride == 0 ||
+      cached_tokens % chunk_stride != 0) {
+    return false;
+  }
+  if (total_tokens == 0 || cached_tokens >= total_tokens) {
+    return true;
+  }
+  const int32_t configured_chunk =
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  const size_t major_stride = std::max<size_t>(
+      chunk_stride,
+      configured_chunk > 0 ? static_cast<size_t>(configured_chunk) : 8192);
+  const size_t fine_stride =
+      std::max<size_t>(chunk_stride, std::min<size_t>(major_stride, 2048));
+  const size_t target_ckpt =
+      ((total_tokens - 1) / fine_stride) * fine_stride;
+  return cached_tokens == target_ckpt || cached_tokens % major_stride == 0;
 }
 
 bool crosses_checkpoint(size_t begin, size_t end, size_t checkpoint_stride) {
@@ -311,16 +334,10 @@ void LinearStateBlockManager::cache_read_source(Sequence* seq,
   }
   const size_t chunk_stride = block_size();
   const size_t cached_tokens = seq->kv_cache_tokens_num();
-  if (cached_tokens % chunk_stride != 0) {
-    return;
-  }
   const size_t total_tokens = seq->num_tokens();
-  if (total_tokens > 0 && cached_tokens < total_tokens) {
-    const size_t next_8k = ((cached_tokens / 8192) + 1) * 8192;
-    if (next_8k < total_tokens ||
-        (cached_tokens >= 8192 && cached_tokens % 8192 != 0)) {
-      return;
-    }
+  if (!should_publish_linear_checkpoint(
+          cached_tokens, total_tokens, chunk_stride)) {
+    return;
   }
   const size_t checkpoint_index = cached_tokens / chunk_stride;
   if (checkpoint_index <= kv_state.num_cached_blocks(BlockType::LINEAR)) {
@@ -515,28 +532,21 @@ void LinearStateBlockManager::publish_linear_checkpoint(
       prefix_cache_ == nullptr || swap_transfers == nullptr) {
     return;
   }
-  const Slice<Block> blocks = kv_state.blocks(BlockType::LINEAR);
-  if (blocks.size() < 2) {
+  std::vector<Block>* blocks = kv_state.mutable_blocks(BlockType::LINEAR);
+  if (blocks == nullptr || blocks->size() < 2) {
     return;
   }
-  const Block& src_block = blocks[blocks.size() - 2];
+  Block& src_block = (*blocks)[blocks->size() - 2];
   if (!src_block.is_valid() ||
       src_block.id() >= static_cast<int32_t>(num_active_slots_)) {
     return;
   }
   const size_t chunk_stride = block_size();
   const size_t cached_tokens = seq->kv_cache_tokens_num();
-  if (cached_tokens == 0 || chunk_stride == 0 ||
-      cached_tokens % chunk_stride != 0) {
-    return;
-  }
   const size_t total_tokens = seq->num_tokens();
-  if (total_tokens > 0 && cached_tokens < total_tokens) {
-    const size_t next_8k = ((cached_tokens / 8192) + 1) * 8192;
-    if (next_8k < total_tokens ||
-        (cached_tokens >= 8192 && cached_tokens % 8192 != 0)) {
-      return;
-    }
+  if (!should_publish_linear_checkpoint(
+          cached_tokens, total_tokens, chunk_stride)) {
+    return;
   }
   const size_t checkpoint_index = cached_tokens / chunk_stride;
   if (checkpoint_index <= kv_state.num_cached_blocks(BlockType::LINEAR)) {
@@ -546,6 +556,7 @@ void LinearStateBlockManager::publish_linear_checkpoint(
   const Slice<XXH3Key> hashes = seq->linear_state_hashes();
   CHECK_GE(hashes.size(), checkpoint_index);
   const XXH3Key& hash_key = hashes[checkpoint_index - 1];
+  src_block.set_hash_value(hash_key.data);
   if (prefix_cache_->find(hash_key).is_valid()) {
     kv_state.set_num_cached_blocks(BlockType::LINEAR, checkpoint_index);
     return;

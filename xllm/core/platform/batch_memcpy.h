@@ -55,6 +55,29 @@ class BatchMemcpy {
   virtual bool copy_d2h(const std::vector<torch::Tensor>& src_tensors,
                         const std::vector<torch::Tensor>& dst_tensors,
                         Stream* stream) = 0;
+
+  virtual bool supports_raw_copy() const { return false; }
+
+  virtual bool submit_h2d_raw(const std::vector<void*>& /*src_addrs*/,
+                              const std::vector<void*>& /*dst_addrs*/,
+                              const std::vector<size_t>& /*byte_counts*/,
+                              Stream* /*stream*/) {
+    return false;
+  }
+
+  virtual bool submit_d2h_raw(const std::vector<void*>& /*src_addrs*/,
+                              const std::vector<void*>& /*dst_addrs*/,
+                              const std::vector<size_t>& /*byte_counts*/,
+                              Stream* /*stream*/) {
+    return false;
+  }
+
+  virtual bool copy_d2h_raw(const std::vector<void*>& /*src_addrs*/,
+                            const std::vector<void*>& /*dst_addrs*/,
+                            const std::vector<size_t>& /*byte_counts*/,
+                            Stream* /*stream*/) {
+    return false;
+  }
 };
 
 std::unique_ptr<BatchMemcpy> create_batch_memcpy(const Device& device);
