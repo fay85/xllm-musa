@@ -1,0 +1,24 @@
+{
+  "at": "2026-11-17T02:39:20.917357+08:00",
+  "pids": [
+    348,
+    349,
+    350,
+    351,
+    352,
+    353,
+    354,
+    355
+  ],
+  "exit_codes": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "stopping": true
+}

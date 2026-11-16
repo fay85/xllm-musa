@@ -1,0 +1,14 @@
+{
+  "original_ops": "/opt/mate027_cache/mp31/cached_ops_jd_k8d",
+  "ops_root": "/expt/artifacts/gate_bf16_fp32_mate_v1/ops",
+  "library": "/expt/artifacts/gate_bf16_fp32_mate_v1/ops/gemm_ops/gemm_ops.so",
+  "sha256": "e2654c9e73cc5f3e45a5c399061e57c128b33dc7f918d55bf8c6b7bfaeb02f56",
+  "bytes": 160040,
+  "source": "/expt/diagnostics/e31_gate_bf16_fp32_v1/mate_workspace/.cache/mate/0.2.6/mp31/cached_ops/gemm_ops/gemm_ops.so",
+  "other_uris": "symlinks to unchanged container runtime bundle",
+  "archive": {
+    "path": "/expt/exports/e31_gate_projection_reference_micro.tar.gz",
+    "bytes": 21911,
+    "sha256": "4903b18d4cda960531063f0ddcfc49ad980f311e62aa9806abaa48002696947f"
+  }
+}

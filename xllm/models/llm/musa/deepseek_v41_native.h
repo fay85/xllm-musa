@@ -1028,6 +1028,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         (args_.moe_layer_freq() > 1 && index % args_.moe_layer_freq() != 0);
     moe.shared_expert_tp_reduce = !moe.dense && shared_expert_tp_reduce_;
     moe.gate_cache_fp32_weight = !moe.dense && gate_cache_fp32_weight_;
+    moe.gate_bf16_fp32_projection =
+        !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_BF16_FP32", false);
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());
     moe.topk = args_.num_experts_per_tok();

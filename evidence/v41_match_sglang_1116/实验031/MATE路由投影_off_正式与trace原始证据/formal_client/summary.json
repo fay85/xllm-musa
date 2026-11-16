@@ -1,0 +1,16 @@
+{
+  "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 354.3911838904023,
+  "mean_TPOT_ms_per_token": 34.72638297460827,
+  "TPOT_sample_stdev_ms": 0.19640625651983037,
+  "mean_E2E_s": 9.209618842415512,
+  "output_tokens_per_latency_sum_second": 27.797024435036874,
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "f052e017d4f0d900fe143a2561d5b7975e76f26ad275b5b107c27a7be10980a8"
+}

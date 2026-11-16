@@ -1,0 +1,11 @@
+{
+  "explicit_flag_hits": [],
+  "loaded_bmm_libraries": [
+    {
+      "path": "/root/.cache/mate/0.2.6/mp31/cached_ops/gemm_ops/gemm_ops.so",
+      "bytes": 160024,
+      "sha256": "083cac35506c04daa026894edfedcc7707e68b9f32d2af99c32a28605b340e06"
+    }
+  ],
+  "note": "Loaded library alone does not prove this specific projection branch. Delivery guide enables the option; frozen source requires BF16 weight/input and V4 model flag."
+}

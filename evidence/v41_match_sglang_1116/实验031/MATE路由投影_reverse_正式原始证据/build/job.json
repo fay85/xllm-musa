@@ -1,0 +1,17 @@
+{
+  "pid": 49273,
+  "start_ticks": "521268408",
+  "command": [
+    "bash",
+    "_build_cuda_graph_musa.sh"
+  ],
+  "cwd": "/workspace/xllm-mt-main",
+  "started_at": "2026-11-17T02:10:48.226466+08:00",
+  "env_overrides": {
+    "MAX_JOBS": "16",
+    "XLLM_BUILD_TESTING": "1",
+    "NINJA_TARGET": "xllm",
+    "MUSA_VISIBLE_DEVICES": "-1",
+    "MTHREADS_VISIBLE_DEVICES": "void"
+  }
+}

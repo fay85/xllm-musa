@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 49273, \"start_ticks\": \"521268408\", \"root\": \"/expt/builds/gate_bf16_fp32_native_v1\", \"changed_files\": 76}\n",
+  "stderr": ""
+}

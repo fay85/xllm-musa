@@ -1,0 +1,345 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 1,
+      "magnitude": 0.0,
+      "alternate_stream": false,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "magnitude": 1e-05,
+      "alternate_stream": false,
+      "relative_rms": 1.2369971500447718e-06,
+      "max_abs": 4.3655745685100555e-11,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "magnitude": 1.0,
+      "alternate_stream": false,
+      "relative_rms": 1.2358259482425638e-06,
+      "max_abs": 4.5299530029296875e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "magnitude": 0.0,
+      "alternate_stream": false,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "magnitude": 1e-05,
+      "alternate_stream": false,
+      "relative_rms": 1.2554700106193195e-06,
+      "max_abs": 6.184563972055912e-11,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "magnitude": 1.0,
+      "alternate_stream": false,
+      "relative_rms": 1.3114091643728898e-06,
+      "max_abs": 5.245208740234375e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "magnitude": 0.0,
+      "alternate_stream": false,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "magnitude": 1e-05,
+      "alternate_stream": false,
+      "relative_rms": 1.2697250895143952e-06,
+      "max_abs": 5.4569682106375694e-11,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "magnitude": 1.0,
+      "alternate_stream": false,
+      "relative_rms": 1.3175239246265846e-06,
+      "max_abs": 7.62939453125e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "magnitude": 0.0,
+      "alternate_stream": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "magnitude": 1e-05,
+      "alternate_stream": true,
+      "relative_rms": 1.2697081501755747e-06,
+      "max_abs": 4.18367562815547e-11,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "magnitude": 1.0,
+      "alternate_stream": true,
+      "relative_rms": 1.3125935538482736e-06,
+      "max_abs": 4.76837158203125e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "magnitude": 0.0,
+      "alternate_stream": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "magnitude": 1e-05,
+      "alternate_stream": true,
+      "relative_rms": 1.2700479601335246e-06,
+      "max_abs": 5.093170329928398e-11,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "magnitude": 1.0,
+      "alternate_stream": true,
+      "relative_rms": 1.2915688785142265e-06,
+      "max_abs": 5.4836273193359375e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "magnitude": 0.0,
+      "alternate_stream": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "magnitude": 1e-05,
+      "alternate_stream": true,
+      "relative_rms": 1.2842380101574236e-06,
+      "max_abs": 5.4569682106375694e-11,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "magnitude": 1.0,
+      "alternate_stream": true,
+      "relative_rms": 1.277722958548111e-06,
+      "max_abs": 6.198883056640625e-06,
+      "top8_same": true
+    }
+  ],
+  "graphs": [
+    {
+      "rows": 1,
+      "update": 0,
+      "relative_rms": 1.3081880751997232e-06,
+      "max_abs": 4.291534423828125e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "update": 1,
+      "relative_rms": 1.253973891834903e-06,
+      "max_abs": 4.0531158447265625e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 1,
+      "update": 2,
+      "relative_rms": 1.352866775050643e-06,
+      "max_abs": 6.4373016357421875e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "update": 0,
+      "relative_rms": 1.2770346984325442e-06,
+      "max_abs": 5.245208740234375e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "update": 1,
+      "relative_rms": 1.2429478601916344e-06,
+      "max_abs": 5.7220458984375e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 4,
+      "update": 2,
+      "relative_rms": 1.2887869615951786e-06,
+      "max_abs": 5.9604644775390625e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "update": 0,
+      "relative_rms": 1.2663714414884453e-06,
+      "max_abs": 5.9604644775390625e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "update": 1,
+      "relative_rms": 1.2560074083012296e-06,
+      "max_abs": 5.9604644775390625e-06,
+      "top8_same": true
+    },
+    {
+      "rows": 6,
+      "update": 2,
+      "relative_rms": 1.2965385849383892e-06,
+      "max_abs": 6.198883056640625e-06,
+      "top8_same": true
+    }
+  ],
+  "timings": [
+    {
+      "rows": 1,
+      "label": "off",
+      "microseconds": [
+        41.03919982910156,
+        38.70954990386963,
+        38.79514932632446,
+        38.73260021209717,
+        38.58260154724121
+      ],
+      "median_us": 38.73260021209717,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 1,
+      "label": "on",
+      "microseconds": [
+        21.512451171875,
+        18.993250131607056,
+        19.001749753952026,
+        19.044800996780396,
+        19.107249975204468
+      ],
+      "median_us": 19.044800996780396,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 1,
+      "label": "reverse_off",
+      "microseconds": [
+        39.36355113983154,
+        40.69999694824219,
+        39.22149896621704,
+        39.25110101699829,
+        39.17645215988159
+      ],
+      "median_us": 39.25110101699829,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 4,
+      "label": "off",
+      "microseconds": [
+        74.05620098114014,
+        75.7121467590332,
+        73.54959964752197,
+        74.00609970092773,
+        73.86575222015381
+      ],
+      "median_us": 74.00609970092773,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 4,
+      "label": "on",
+      "microseconds": [
+        20.547950267791748,
+        18.99685025215149,
+        19.024900197982788,
+        19.126200675964355,
+        18.998650312423706
+      ],
+      "median_us": 19.024900197982788,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 4,
+      "label": "reverse_off",
+      "microseconds": [
+        73.65395069122314,
+        73.90914916992188,
+        73.35834980010986,
+        74.10820007324219,
+        74.18564796447754
+      ],
+      "median_us": 73.90914916992188,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 6,
+      "label": "off",
+      "microseconds": [
+        70.99479675292969,
+        70.94690322875977,
+        70.80080032348633,
+        70.55339813232422,
+        70.6198501586914
+      ],
+      "median_us": 70.80080032348633,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 6,
+      "label": "on",
+      "microseconds": [
+        20.911948680877686,
+        18.967000246047974,
+        18.934099674224854,
+        20.791749954223633,
+        20.456950664520264
+      ],
+      "median_us": 20.456950664520264,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    },
+    {
+      "rows": 6,
+      "label": "reverse_off",
+      "microseconds": [
+        70.6997013092041,
+        70.69835186004639,
+        70.53964614868164,
+        70.61774730682373,
+        70.71165084838867
+      ],
+      "median_us": 70.69835186004639,
+      "calls_per_graph": 40,
+      "replays_per_window": 20
+    }
+  ],
+  "mate_file": "/donor/mate/__init__.py",
+  "mate_version": "0.2.7",
+  "scope": "BF16 operands, FP32 output; standalone MATE projection, not native C++ integration or model performance"
+}

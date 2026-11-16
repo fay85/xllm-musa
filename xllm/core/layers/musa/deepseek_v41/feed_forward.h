@@ -22,6 +22,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::layer {
 
@@ -358,7 +359,8 @@ class DeepseekV41Gate final {
                   int64_t topk,
                   bool normalize,
                   double scale,
-                  bool cache_fp32_weight = false)
+                  bool cache_fp32_weight = false,
+                  bool use_bf16_fp32_projection = false)
       : weight_(std::move(weight)),
         bias_(std::move(bias)),
         vision_bias_(vision_bias.value_or(torch::Tensor{})),
@@ -380,6 +382,11 @@ class DeepseekV41Gate final {
     CHECK_LE(topk_, weight_.size(0));
     CHECK_LE(weight_.size(0), 1024);
     CHECK(std::isfinite(scale_));
+    if (use_bf16_fp32_projection && weight_.scalar_type() == torch::kBFloat16) {
+      // Retain the original BF16 operand before optional FP32 caching. Never
+      // round a genuinely FP32 checkpoint merely to select this backend.
+      weight_bf16_ = weight_;
+    }
     if (cache_fp32_weight) {
       torch::DeviceGuard guard(weight_.device());
       // The weight is immutable after model construction. Materialize exactly
@@ -413,14 +420,30 @@ class DeepseekV41Gate final {
       bias = torch::where(
           input_ids->reshape({-1, 1}).eq(image_token_id_), vision_bias_, bias_);
     }
-    const torch::Tensor logits =
-        torch::linear(input.to(torch::kFloat32), weight_.to(torch::kFloat32));
+    torch::Tensor logits;
+    if (weight_bf16_.defined() && input.scalar_type() == torch::kBFloat16 &&
+        input.size(0) <= 6) {
+      // Reuse the V4 MATE BF16-input / FP32-output projection. The guard
+      // orders eager pool-stream producers/consumers and preserves capture.
+      {
+        kernel::musa::TvmffiStreamGuard stream_guard(input.device());
+        logits = kernel::musa::deepseek_v4_gate_bf16_fp32(
+            input, weight_bf16_, /*output=*/std::nullopt);
+      }
+      CHECK(logits.defined())
+          << "Required V4.1 BF16->FP32 MATE Gate projection failed";
+      CHECK_EQ(logits.scalar_type(), torch::kFloat32);
+    } else {
+      logits =
+          torch::linear(input.to(torch::kFloat32), weight_.to(torch::kFloat32));
+    }
     return kernel::musa::deepseek_v41_gate_topk(
         logits.contiguous(), bias.contiguous(), topk_, normalize_, scale_);
   }
 
  private:
   torch::Tensor weight_;
+  torch::Tensor weight_bf16_;
   torch::Tensor bias_;
   torch::Tensor vision_bias_;
   int64_t image_token_id_;

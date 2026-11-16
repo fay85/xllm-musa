@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"sj9\": {\"result.json\": {\"exit_codes\": [0, 0, 0, 0, 0, 0, 0, 0], \"control_exit\": null, \"stopping\": true, \"automatic_kill\": false}, \"status.json\": {\"at\": \"2026-11-17T02:39:20.917357+08:00\", \"pids\": [348, 349, 350, 351, 352, 353, 354, 355], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": true}, \"supervisor_job.json\": {\"pid\": 347, \"start_ticks\": \"521408676\", \"at\": \"2026-11-17T02:34:10.885914+08:00\", \"host\": \"sj9\"}}, \"sj10\": {\"result.json\": {\"exit_codes\": [0, 0, 0, 0, 0, 0, 0, 0], \"control_exit\": 0, \"stopping\": true, \"automatic_kill\": false}, \"status.json\": {\"at\": \"2026-11-17T02:39:47.500477+08:00\", \"pids\": [2188, 2189, 2190, 2191, 2192, 2193, 2194, 2195], \"exit_codes\": [null, 0, 0, 0, 0, 0, 0, 0], \"stopping\": true}, \"supervisor_job.json\": {\"pid\": 1880, \"start_ticks\": \"521416761\", \"at\": \"2026-11-17T02:34:24.497847+08:00\", \"host\": \"sj10\"}, \"verified_live\": false}}\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p31_gate_bf16_fp32_off_v1_evidence.tar.gz\", \"bytes\": 6589007, \"sha256\": \"20e37d1d016ada35683d95b2915a96908390c6d9a489e6fced2e87b0f2f7fe6a\", \"at\": \"2026-11-17T02:26:12.768032+08:00\"}\n",
+  "stderr": "addr2line: DWARF error: invalid or unhandled FORM value: 0x23\n"
+}

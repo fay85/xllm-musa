@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"source_base\": \"9ce7f8498fd4275183587a81cba39c72d527025e\", \"source_delta_manifest\": \"/expt/builds/gate_bf16_fp32_native_v1/source_manifest.json\", \"binary\": \"/expt/artifacts/gate_bf16_fp32_native_v1/bin/xllm\", \"sha256\": \"f052e017d4f0d900fe143a2561d5b7975e76f26ad275b5b107c27a7be10980a8\", \"bytes\": 341545160, \"small_checks\": \"E31 MATE Python 18 numeric + 9 Graph; native production integration checks pending\", \"status\": \"COMPILED_NOT_YET_VALIDATED\"}\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "path": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/03_代码/xllm-musa/tools/musa_deepseek_v41/validate_gate_bf16_fp32.py",
+  "sha256": "c1158b73ac5ce5379737fbce3c49bbedd056f9f6677384c0f5a046e7b5830bc6",
+  "note": "Diagnostic Python source added after native model build; does not affect model ELF. Native module links compiled production library."
+}
