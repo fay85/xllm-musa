@@ -1,0 +1,93 @@
+{
+  "summary": {
+    "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 399.1328062489629,
+    "mean_TPOT_ms_per_token": 51.15158726187313,
+    "TPOT_sample_stdev_ms": 0.22790742849949486,
+    "mean_E2E_s": 13.442787558026613,
+    "output_tokens_per_latency_sum_second": 19.043669246051863,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "d4770abc334cc0aea75fc15806fcfbd1cb042a8f9f76fbbd1822bad23cce8d11"
+  },
+  "verify_scopes": [
+    {
+      "name": "V41/step/q=3/kv=259",
+      "duration_us": 3706596.023
+    },
+    {
+      "name": "V41/step/q=3/kv=260",
+      "duration_us": 132777.337
+    },
+    {
+      "name": "V41/step/q=3/kv=262",
+      "duration_us": 131151.637
+    },
+    {
+      "name": "V41/step/q=3/kv=264",
+      "duration_us": 129798.146
+    }
+  ],
+  "last_scope": "V41/step/q=3/kv=264",
+  "last_graph_events": {
+    "V41/full_decode_graph_replay": 1,
+    "musaGraphLaunch": 1
+  },
+  "last_aten_counts": {
+    "aten::empty": 333,
+    "aten::item": 597,
+    "aten::to": 270
+  },
+  "all_256_request_counters": [
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    },
+    {
+      "speculative_accepted_tokens": "130",
+      "speculative_proposed_tokens": "250",
+      "speculative_token_acceptance_rate": "0.5200"
+    }
+  ]
+}

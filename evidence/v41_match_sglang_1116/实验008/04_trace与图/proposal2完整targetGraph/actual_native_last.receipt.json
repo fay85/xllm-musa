@@ -1,0 +1,37 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "d2324a899c2b4e2dda82ce717682cf71622d9c088f369f10e4beadad00350f42",
+  "native_stacks_sha256": "878e4b55ecbaaf276cfce7ccc7988276314c75acebe6290214fb49b877a050c2",
+  "symbols_sha256": "1a9e4e858f3c457cf59d99e30cccb403416abdcd521665d1526013a4f85c1459",
+  "symbolization_binary_sha256": "d4770abc334cc0aea75fc15806fcfbd1cb042a8f9f76fbbd1822bad23cce8d11",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=3/kv=264",
+    "pid": 20346,
+    "tid": 22186,
+    "ts": 3971763730143.922,
+    "dur": 129798.146,
+    "args": {
+      "External id": 24406,
+      "Record function id": 25082,
+      "finished": true,
+      "Ev Idx": 24405
+    }
+  },
+  "step_selection": "outermost target forward; nested accepted-prefix replay retained",
+  "selected_scope": null,
+  "gpu_selection": "within full step window",
+  "actual_intervals": 5873,
+  "native_entry_samples": 4090,
+  "include_aten_entries": true,
+  "include_runtime_intervals": true,
+  "operation_leaf_provenance": "Actual same-ID RecordFunction names, not invented native symbols",
+  "output_sha256": "961bf7a05b2bce03d9033b32176b955f670427cf5436774053b0ae116dcaeee8",
+  "verification": {
+    "slices": 5873,
+    "native_entry_samples": 4090,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}
