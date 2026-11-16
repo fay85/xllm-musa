@@ -1,0 +1,119 @@
+[
+  {
+    "rows": 1,
+    "label": "off",
+    "microseconds_per_metadata": [
+      51.43111801147461,
+      51.40303039550781,
+      51.3225212097168,
+      51.331787109375,
+      51.12449645996094
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 1,
+    "label": "on",
+    "microseconds_per_metadata": [
+      12.341050148010254,
+      12.618839263916016,
+      12.54817008972168,
+      12.524260520935059,
+      12.589639663696289
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 1,
+    "label": "reverse_off",
+    "microseconds_per_metadata": [
+      50.886390686035156,
+      51.47322082519531,
+      51.68303680419922,
+      51.602149963378906,
+      51.58973693847656
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 4,
+    "label": "off",
+    "microseconds_per_metadata": [
+      51.21247863769531,
+      51.24953079223633,
+      51.18067932128906,
+      51.68142318725586,
+      51.22637176513672
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 4,
+    "label": "on",
+    "microseconds_per_metadata": [
+      14.399800300598145,
+      14.271750450134277,
+      14.65485954284668,
+      14.665260314941406,
+      13.377130508422852
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 4,
+    "label": "reverse_off",
+    "microseconds_per_metadata": [
+      51.40998840332031,
+      51.505950927734375,
+      51.55447769165039,
+      51.45751953125,
+      51.190731048583984
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 6,
+    "label": "off",
+    "microseconds_per_metadata": [
+      50.97727966308594,
+      51.42084884643555,
+      51.14339065551758,
+      51.145591735839844,
+      51.4708366394043
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 6,
+    "label": "on",
+    "microseconds_per_metadata": [
+      12.03518009185791,
+      12.084330558776855,
+      12.632559776306152,
+      12.349249839782715,
+      12.25409984588623
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  },
+  {
+    "rows": 6,
+    "label": "reverse_off",
+    "microseconds_per_metadata": [
+      50.739601135253906,
+      51.35824203491211,
+      50.738651275634766,
+      51.0175895690918,
+      51.14141845703125
+    ],
+    "graph_calls": 80,
+    "replays_per_window": 50
+  }
+]

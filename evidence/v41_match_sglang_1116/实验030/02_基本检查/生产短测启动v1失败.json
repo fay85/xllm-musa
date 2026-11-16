@@ -1,0 +1,5 @@
+{
+  "exit_status": 1,
+  "stdout": "",
+  "stderr": "Traceback (most recent call last):\n  File \"<stdin>\", line 7, in <module>\n  File \"/usr/lib/python3.10/shutil.py\", line 434, in copy2\n    copyfile(src, dst, follow_symlinks=follow_symlinks)\n  File \"/usr/lib/python3.10/shutil.py\", line 254, in copyfile\n    with open(src, 'rb') as fsrc:\nFileNotFoundError: [Errno 2] No such file or directory: '/workspace/xllm-mt-main/tools/musa_deepseek_v41/validate_hc_metadata_warp.py'\n"
+}

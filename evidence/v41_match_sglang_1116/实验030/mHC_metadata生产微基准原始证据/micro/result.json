@@ -1,0 +1,125 @@
+{
+  "status": "PASS",
+  "exact_checks": 342,
+  "graph_checks": 9,
+  "timings": [
+    {
+      "rows": 1,
+      "label": "off",
+      "microseconds_per_metadata": [
+        51.43645095825195,
+        51.40032958984375,
+        51.48027038574219,
+        51.94123077392578,
+        51.50603103637695
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 1,
+      "label": "on",
+      "microseconds_per_metadata": [
+        12.002470016479492,
+        12.544459342956543,
+        12.530489921569824,
+        12.503449440002441,
+        12.508849143981934
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 1,
+      "label": "reverse_off",
+      "microseconds_per_metadata": [
+        51.53742218017578,
+        51.45680236816406,
+        51.37132263183594,
+        51.432289123535156,
+        51.45711898803711
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 4,
+      "label": "off",
+      "microseconds_per_metadata": [
+        51.26139831542969,
+        51.4769401550293,
+        51.20493698120117,
+        51.368412017822266,
+        51.36391830444336
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 4,
+      "label": "on",
+      "microseconds_per_metadata": [
+        11.77022933959961,
+        12.161310195922852,
+        12.621749877929688,
+        12.604829788208008,
+        12.57411003112793
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 4,
+      "label": "reverse_off",
+      "microseconds_per_metadata": [
+        51.306549072265625,
+        51.28902816772461,
+        51.414119720458984,
+        51.35803985595703,
+        51.68854904174805
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 6,
+      "label": "off",
+      "microseconds_per_metadata": [
+        51.30624008178711,
+        51.62281799316406,
+        51.42740249633789,
+        51.16292190551758,
+        51.34151077270508
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 6,
+      "label": "on",
+      "microseconds_per_metadata": [
+        12.443510055541992,
+        12.157690048217773,
+        12.186779975891113,
+        12.461090087890625,
+        12.095860481262207
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    },
+    {
+      "rows": 6,
+      "label": "reverse_off",
+      "microseconds_per_metadata": [
+        51.31794738769531,
+        51.20541763305664,
+        51.36994934082031,
+        51.36882019042969,
+        51.44532012939453
+      ],
+      "graph_calls": 80,
+      "replays_per_window": 50
+    }
+  ],
+  "scope": "Production dispatcher metadata check; no full-model promotion"
+}

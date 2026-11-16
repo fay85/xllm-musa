@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"job.json\": {\"pid\": 32931, \"start_ticks\": \"521074339\", \"command\": [\"bash\", \"_build_cuda_graph_musa.sh\"], \"cwd\": \"/workspace/xllm-mt-main\", \"started_at\": \"2026-11-17T01:38:27.535522+08:00\", \"env_overrides\": {\"MAX_JOBS\": \"16\", \"XLLM_BUILD_TESTING\": \"1\", \"NINJA_TARGET\": \"xllm\", \"MUSA_VISIBLE_DEVICES\": \"-1\", \"MTHREADS_VISIBLE_DEVICES\": \"void\"}}, \"finished.json\": {\"exit_code\": 0, \"finished_at\": \"2026-11-17T01:39:33.277701+08:00\"}, \"tail\": \"[1/3] Building CUDA object xllm/core/kernels/musa/CMakeFiles/cuda_kernels.dir/deepseek_v4_dsa_cache_ops.cu.o\\n[2/3] Linking CXX static library xllm/core/kernels/musa/libcuda_kernels.a\\n[3/3] Linking CXX executable /workspace/xllm-mt-main/build/lib.linux-x86_64-cpython-310/xllm/xllm\"}\n",
+  "stderr": ""
+}

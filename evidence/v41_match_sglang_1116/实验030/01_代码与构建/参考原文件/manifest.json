@@ -1,0 +1,22 @@
+[
+  {
+    "archive": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/sglang团队的工作的复现和性能测速结果/00_参考证据/当前缓存镜像源码/sglang_image_cpu_source.tar.gz",
+    "path": "sglang/srt/hardware_backend/layers/deepseek_v4_musa/ops/mhc_ops.py",
+    "sha256": "9883b02cd5483e7729d26657a0a7bdbbfb1e6647f7e0b5dd15fed6338c127d50"
+  },
+  {
+    "archive": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/sglang团队的工作的复现和性能测速结果/00_参考证据/当前缓存镜像源码/sglang_image_cpu_source.tar.gz",
+    "path": "sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/mhc_sinkhorn.py",
+    "sha256": "3220aefde2a2372b5a97a384d3592227315253b1d644850ba183860a99fa073f"
+  },
+  {
+    "archive": "王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/sglang团队的工作的复现和性能测速结果/00_参考证据/当前缓存镜像源码/sglang_image_cpu_source.tar.gz",
+    "path": "sglang/srt/hardware_backend/layers/deepseek_v4_musa/ops/mhc_prenorm_ops.py",
+    "sha256": "afe9d8120ade916f2d6b0f9ba37973358e2a413a089db78ffcf86fe558f106bb"
+  },
+  {
+    "path": "王家明/参考实现/01_王家明_V4原生实现_f8dd0663/xllm-musa/xllm/core/kernels/musa/deepseek_v4_dsa_cache_ops.cu",
+    "commit": "f8dd0663279e9085365ade309d9823b7b438c4e6",
+    "sha256": "b23eacbde998121d1f622d748584e3866918c4a7831c3e00a530b6e1558ab6c5"
+  }
+]

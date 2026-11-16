@@ -30,6 +30,7 @@ limitations under the License.
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "core/util/env_var.h"
 #ifndef MUSART_INF_FP16
 #define MUSART_INF_FP16 __float2half_rn(INFINITY)
 #endif
@@ -2559,6 +2560,85 @@ __global__ void __launch_bounds__(kHcPost2DBlockSize, 1)
   }
 }
 
+// The 4x4 coefficients stay in registers. Warp shuffles preserve the old
+// row/column addition order without a CTA barrier at every normalization.
+__global__ void hc_metadata_warp_kernel(const float* mixes,
+                                        const float* scale,
+                                        const float* base,
+                                        float* pre,
+                                        float* post,
+                                        float* comb,
+                                        int64_t iterations,
+                                        float eps) {
+  const int32_t lane = threadIdx.x;
+  const int64_t token = blockIdx.x;
+  const float* input = mixes + token * 24;
+  float row[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  if (lane < 4) {
+    const float pre_value = input[lane] * scale[0] + base[lane];
+    const float post_value = input[4 + lane] * scale[1] + base[4 + lane];
+    pre[token * 4 + lane] = 1.0f / (1.0f + expf(-pre_value)) + eps;
+    post[token * 4 + lane] = 2.0f / (1.0f + expf(-post_value));
+    const int32_t offset = 8 + lane * 4;
+    float maximum = -INFINITY;
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      maximum =
+          fmaxf(maximum, input[offset + col] * scale[2] + base[offset + col]);
+    }
+    float sum = 0.0f;
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      row[col] =
+          expf(input[offset + col] * scale[2] + base[offset + col] - maximum);
+      sum += row[col];
+    }
+    const float reciprocal = 1.0f / sum;
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      row[col] = row[col] * reciprocal + eps;
+    }
+  }
+  // All 32 lanes execute each shuffle; only lanes 0..3 own matrix rows.
+  // Preserve the original row-0, row-1, row-2, row-3 addition order.
+#pragma unroll
+  for (int32_t col = 0; col < 4; ++col) {
+    float sum = 0.0f;
+#pragma unroll
+    for (int32_t source = 0; source < 4; ++source) {
+      sum += __shfl_sync(0xffffffffu, row[col], source, 32);
+    }
+    row[col] *= 1.0f / (sum + eps);
+  }
+  for (int64_t iteration = 1; iteration < iterations; ++iteration) {
+    float sum = 0.0f;
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      sum += row[col];
+    }
+    const float reciprocal = 1.0f / (sum + eps);
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      row[col] *= reciprocal;
+    }
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      float column_sum = 0.0f;
+#pragma unroll
+      for (int32_t source = 0; source < 4; ++source) {
+        column_sum += __shfl_sync(0xffffffffu, row[col], source, 32);
+      }
+      row[col] *= 1.0f / (column_sum + eps);
+    }
+  }
+  if (lane < 4) {
+#pragma unroll
+    for (int32_t col = 0; col < 4; ++col) {
+      comb[token * 16 + lane * 4 + col] = row[col];
+    }
+  }
+}
+
 __global__ void __launch_bounds__(kHcMetadataBlockSize, 1)
     dsv4_hc_pre_metadata_kernel(const float* __restrict__ mixes,
                                 const float* __restrict__ hc_scale,
@@ -4292,19 +4372,36 @@ deepseek_v4_hc_pre_metadata(const torch::Tensor& mixes,
   if (num_tokens == 0) {
     return std::make_tuple(pre, post, comb);
   }
-  dsv4_hc_pre_metadata_kernel<<<dim3(num_tokens),
-                                dim3(kHcMetadataBlockSize),
-                                0,
-                                current_dsv4_cache_stream()>>>(
-      mixes.data_ptr<float>(),
-      hc_scale.data_ptr<float>(),
-      hc_base.data_ptr<float>(),
-      pre.data_ptr<float>(),
-      post.data_ptr<float>(),
-      comb.data_ptr<float>(),
-      hc_mult,
-      sinkhorn_iters,
-      static_cast<float>(eps));
+  const bool warp_metadata =
+      util::get_bool_env("XLLM_DSV41_HC_METADATA_WARP", false);
+  if (warp_metadata && hc_mult == 4 && num_tokens <= 6) {
+    hc_metadata_warp_kernel<<<dim3(static_cast<uint32_t>(num_tokens)),
+                              dim3(32),
+                              0,
+                              current_dsv4_cache_stream()>>>(
+        mixes.data_ptr<float>(),
+        hc_scale.data_ptr<float>(),
+        hc_base.data_ptr<float>(),
+        pre.data_ptr<float>(),
+        post.data_ptr<float>(),
+        comb.data_ptr<float>(),
+        sinkhorn_iters,
+        static_cast<float>(eps));
+  } else {
+    dsv4_hc_pre_metadata_kernel<<<dim3(num_tokens),
+                                  dim3(kHcMetadataBlockSize),
+                                  0,
+                                  current_dsv4_cache_stream()>>>(
+        mixes.data_ptr<float>(),
+        hc_scale.data_ptr<float>(),
+        hc_base.data_ptr<float>(),
+        pre.data_ptr<float>(),
+        post.data_ptr<float>(),
+        comb.data_ptr<float>(),
+        hc_mult,
+        sinkhorn_iters,
+        static_cast<float>(eps));
+  }
   check_musa_kernel_launch("dsv4 kernel");
   return std::make_tuple(pre, post, comb);
 }

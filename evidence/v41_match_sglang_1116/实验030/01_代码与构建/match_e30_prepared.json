@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"prepared\": [\"p30_hc_metadata_off_v1\", \"p30_hc_metadata_on_v1\", \"p30_hc_metadata_off_reverse_v1\"], \"binary_sha256\": \"d14f0cad2ce25da08a8cf096bfc8d851601e29bc6cbcbef44ee6e52e53fdd1f6\"}\n",
+  "stderr": ""
+}

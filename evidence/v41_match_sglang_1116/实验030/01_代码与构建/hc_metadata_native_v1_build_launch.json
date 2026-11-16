@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 32931, \"start_ticks\": \"521074339\", \"root\": \"/expt/builds/hc_metadata_native_v1\", \"changed_files\": 75}\n",
+  "stderr": ""
+}
