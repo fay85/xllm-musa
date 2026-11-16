@@ -50,12 +50,17 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     w4a8_path_ = required_path("XLLM_DSV41_MATE_W4A8_SO", false);
     mhc_path_ = required_path("XLLM_DSV41_MATE_MHC_DIR", true);
     sparse_path_ = required_path("XLLM_DSV41_MATE_SPARSE_SO", false);
+    draft_custom_allreduce_ =
+        util::get_bool_env("XLLM_DSV41_DRAFT_CUSTOM_AR", false);
+    CHECK(!draft_custom_allreduce_ ||
+          util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true));
   }
 
   void load_model(std::unique_ptr<ModelLoader> loader) override {
     CHECK(loader != nullptr && !model_);
     torch::DeviceGuard guard(device());
     torch::NoGradGuard no_grad;
+    initialize_draft_collective_policy();
     DeepseekV41Checkpoint checkpoint(
         loader->get_state_dicts(),
         options_,
@@ -98,7 +103,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
         checkpoint.copy(head, torch::kBFloat16, /*shard_dim=*/0),
         rope,
         tp_group_,
-        ep_group_);
+        draft_expert_reduction_group());
     markov_embed_ =
         checkpoint.copy("mtp.2.markov_head.embed.weight", torch::kBFloat16);
     markov_head_ =
@@ -229,6 +234,44 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   }
 
  private:
+  ProcessGroup* draft_expert_reduction_group() const {
+    if (!draft_custom_allreduce_) {
+      return ep_group_;
+    }
+    // This adapter requires CP1/DP1, with TP8 and EP8 in custom mode.
+    // Both groups span the same eight ranks in the same order. The existing
+    // custom-reduce entry point belongs to tp_group; expert ownership still
+    // uses ep_group_, and the replicated shared expert joins after this sum.
+    CHECK_EQ(tp_size(), 8);
+    CHECK_EQ(ep_size(), tp_size());
+    CHECK_EQ(tp_group_->rank(), ep_group_->rank());
+    return tp_group_;
+  }
+
+  void initialize_draft_collective_policy() const {
+    const int32_t policy = static_cast<int32_t>(draft_custom_allreduce_);
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local =
+          torch::tensor({policy}, options_.dtype(torch::kInt32));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* policies = peers.data_ptr<int32_t>();
+      for (int64_t rank = 0; rank < tp_size(); ++rank) {
+        CHECK_EQ(policies[rank], policy)
+            << "Native DSpark draft collective policy differs across TP ranks";
+      }
+    }
+    if (draft_custom_allreduce_) {
+      CHECK_EQ(tp_size(), 8);
+      CHECK_EQ(ep_size(), tp_size());
+      CHECK_EQ(tp_group_->rank(), ep_group_->rank());
+    }
+    LOG(INFO) << "Native V4.1 draft TP/EP custom allreduce="
+              << draft_custom_allreduce_
+              << "; shared expert remains replicated";
+  }
+
   std::string required_path(const char* name, bool directory) const {
     const char* value = std::getenv(name);
     CHECK(value != nullptr);
@@ -281,8 +324,12 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     moe.scale = args_.routed_scaling_factor();
     moe.limit = args_.swiglu_limit();
     moe.image_token_id = args_.image_token_id();
-    // First draft integration retains replicated shared expert and normal
-    // TP/EP collectives at q>1; accepted target policies stay independent.
+    // Reuse the already checked 1..6-row BF16 attention / FP32 expert
+    // reductions. Keep the replicated shared expert outside the EP sum.
+    result.decode_tp_custom_allreduce = draft_custom_allreduce_;
+    result.verify_custom_allreduce = draft_custom_allreduce_;
+    moe.decode_ep_custom_allreduce = draft_custom_allreduce_;
+    moe.verify_custom_allreduce = draft_custom_allreduce_;
     return result;
   }
   layer::DeepseekV41DecoderWeights layer_weights(
@@ -403,6 +450,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   std::string w4a8_path_;
   std::string mhc_path_;
   std::string sparse_path_;
+  bool draft_custom_allreduce_ = false;
   torch::Tensor markov_embed_;
   torch::Tensor markov_head_;
   torch::Tensor confidence_weight_;

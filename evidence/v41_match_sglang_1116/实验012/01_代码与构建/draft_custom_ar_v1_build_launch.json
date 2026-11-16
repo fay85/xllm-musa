@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"worker\": 7789, \"start_ticks\": \"519106117\", \"root\": \"/expt/builds/draft_custom_ar_v1\", \"changed_files\": 36}\n",
+  "stderr": ""
+}

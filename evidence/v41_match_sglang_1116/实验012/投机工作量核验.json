@@ -1,0 +1,60 @@
+{
+  "records": [
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    },
+    {
+      "accepted": 142,
+      "proposed": 339,
+      "verify_rounds": 113,
+      "committed": 256
+    }
+  ],
+  "count": 9,
+  "identity": "accepted + proposed/3 + P first = 256"
+}

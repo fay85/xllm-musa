@@ -64,6 +64,10 @@ def main() -> None:
     parser.add_argument("--binary-sha256", required=True)
     parser.add_argument("--step", choices=("first", "last"), required=True)
     parser.add_argument(
+        "--step-prefix", default="V41/step/",
+        help="Actual semantic root prefix; use a DSpark layer for draft analysis",
+    )
+    parser.add_argument(
         "--scope", help="Optional actual CPU semantic scope within the chosen step"
     )
     parser.add_argument("--scope-index", type=int, default=0)
@@ -92,7 +96,7 @@ def main() -> None:
         for row in events
         if row.get("ph") == "X"
         and row.get("cat") in ("cpu_op", "user_annotation")
-        and row.get("name", "").startswith("V41/step/")
+        and row.get("name", "").startswith(args.step_prefix)
     ]
     # The replay-based speculative path calls target.forward recursively to
     # rebuild an accepted prefix. Select the outer request step, not its last
@@ -107,7 +111,7 @@ def main() -> None:
         outer_steps.append(row)
         boundaries[key] = end
     if not outer_steps:
-        raise ValueError("No outer target step in the trace")
+        raise ValueError(f"No outer semantic scope with prefix {args.step_prefix!r}")
     step = outer_steps[0 if args.step == "first" else -1]
     begin, end = step["ts"], step["ts"] + step["dur"]
     selected_scope = None
@@ -302,7 +306,8 @@ def main() -> None:
         "symbols_sha256": _sha(args.resolved_symbols),
         "symbolization_binary_sha256": args.binary_sha256,
         "selected_step": step,
-        "step_selection": "outermost target forward; nested accepted-prefix replay retained",
+        "step_selection": "outermost matching semantic scope; nested calls retained",
+        "step_prefix": args.step_prefix,
         "selected_scope": selected_scope,
         "gpu_selection": (
             "runtime correlation for scope"

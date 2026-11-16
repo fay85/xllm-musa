@@ -1,0 +1,15 @@
+{
+  "exit_codes": [
+    -6,
+    -6,
+    -6,
+    -6,
+    -6,
+    -6,
+    -6,
+    -6
+  ],
+  "control_exit": 0,
+  "stopping": true,
+  "automatic_kill": false
+}

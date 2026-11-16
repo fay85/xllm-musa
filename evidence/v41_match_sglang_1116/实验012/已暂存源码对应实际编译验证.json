@@ -1,0 +1,6 @@
+{
+  "file": "xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+  "staged_sha256": "21ee06ce169b23479b219dbbc3eb73fcf72bf6691260516ed72551cb08555050",
+  "matches_compiled_manifest": true,
+  "E13_unstaged_excluded": true
+}
