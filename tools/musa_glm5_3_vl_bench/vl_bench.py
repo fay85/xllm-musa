@@ -621,7 +621,7 @@ def main() -> None:
     parser.add_argument("--num-images", type=int, default=1, help="number of images per prompt (default: 1)")
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--requests", type=int, default=4, help="measured requests")
-    parser.add_argument("--warm", type=int, default=1, help="sequential warm-up requests, distinct prompts")
+    parser.add_argument("--warm", type=int, default=10, help="sequential warm-up requests, distinct prompts (default: 10)")
     parser.add_argument(
         "--warm-concurrency", type=int, default=1, help="warm-up requests in flight at once during --warm"
     )
