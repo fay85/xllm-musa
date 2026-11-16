@@ -1,0 +1,3 @@
+from pathlib import Path
+import json,subprocess,datetime
+r=Path('/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116');run=r/'runs/p39_static_activation_on_v1';g=subprocess.run(['timeout','20','mthreads-gmi'],text=True,capture_output=True,timeout=25);p=subprocess.run(['docker','top','xiaopang1117_v41_sg438_decode_sj10','-eo','pid,ppid,state,args'],text=True,capture_output=True);v={'at':datetime.datetime.now().astimezone().isoformat(),'gpu':g.stdout,'docker_top':p.stdout,'result':json.loads((run/'sj10/result.json').read_text())};(run/'sj10/cleanup_gpu_final.json').write_text(json.dumps(v,indent=2));print(json.dumps(v))

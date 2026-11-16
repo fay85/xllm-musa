@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"rdma_hints\": [{\"experts\": 384, \"capacity\": 16, \"num_rdma_bytes\": 254807552}, {\"experts\": 384, \"capacity\": 32, \"num_rdma_bytes\": 509611520}, {\"experts\": 128, \"capacity\": 16, \"num_rdma_bytes\": 84936192}, {\"experts\": 128, \"capacity\": 32, \"num_rdma_bytes\": 169870848}], \"cpu_storage_check\": {\"gate_logical_bytes\": 2949120, \"gate_storage_bytes\": 23592960, \"gate_aliases_original\": true, \"down_logical_bytes\": 2949120, \"down_storage_bytes\": 2949120, \"down_aliases_original\": false}, \"scope\": \"CPU only; no Buffer allocated, hints do not include all mtshmem metadata\"}\nCreatePlatform failed!\n\n/opt/venv/lib/python3.10/site-packages/torch_musa/core/device.py:134: UserWarning: MUSA initialization: MUSA driver initialization failed, you might not have a Mthreads GPU. (Triggered internally at /data/dixonqin/torch_musa/torch_musa/csrc/core/MUSAFunctions.cpp:93.)\n  return torch_musa._MUSAC._musa_getDeviceCount() > 0\nNo MUSA runtime is found, using MUSA_HOME='/usr/local/musa'\n\n",
+  "stderr": ""
+}

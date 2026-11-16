@@ -1,0 +1,277 @@
+{
+  "at": "2026-11-17T06:40:33.967244+08:00",
+  "scenarios": {
+    "current_tp8": {
+      "rank0": {
+        "rank": 0,
+        "groups_bytes": {
+          "layers_attention": 1908552960,
+          "layers_norm_hc_gate": 315523520,
+          "layers_shared": 2005401600,
+          "layers_routed_scale": 1061683200,
+          "layers_routed_weight": 33973862400,
+          "engram_sharded_table": 25344443520,
+          "engram_projection": 629309440,
+          "layers_index_compression": 155194368,
+          "mtp_attention": 143141472,
+          "mtp_norm_hc_gate": 15793800,
+          "mtp_shared": 150405120,
+          "mtp_routed_scale": 26542080,
+          "mtp_routed_weight": 849346560,
+          "target_embed_head": 330967040,
+          "draft_embed_head": 330956800,
+          "draft_other": 289700352
+        },
+        "groups_GiB": {
+          "layers_attention": 1.7774784564971924,
+          "layers_norm_hc_gate": 0.2938541769981384,
+          "layers_shared": 1.86767578125,
+          "layers_routed_scale": 0.98876953125,
+          "layers_routed_weight": 31.640625,
+          "engram_sharded_table": 23.60385239124298,
+          "engram_projection": 0.586090087890625,
+          "layers_index_compression": 0.14453601837158203,
+          "mtp_attention": 0.13331088423728943,
+          "mtp_norm_hc_gate": 0.014709122478961945,
+          "mtp_shared": 0.14007568359375,
+          "mtp_routed_scale": 0.02471923828125,
+          "mtp_routed_weight": 0.791015625,
+          "target_embed_head": 0.30823707580566406,
+          "draft_embed_head": 0.3082275390625,
+          "draft_other": 0.2698044776916504
+        },
+        "total_parameter_storage_bytes": 67530824232,
+        "total_parameter_storage_GiB": 62.892981089651585
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "engram_GiB": 23.60385239124298,
+          "parameter_storage_GiB": 62.892981089651585
+        },
+        {
+          "rank": 1,
+          "engram_GiB": 23.603915825486183,
+          "parameter_storage_GiB": 62.89304452389479
+        },
+        {
+          "rank": 2,
+          "engram_GiB": 23.60403138399124,
+          "parameter_storage_GiB": 62.893160082399845
+        },
+        {
+          "rank": 3,
+          "engram_GiB": 23.604110553860664,
+          "parameter_storage_GiB": 62.89323925226927
+        },
+        {
+          "rank": 4,
+          "engram_GiB": 23.60419464111328,
+          "parameter_storage_GiB": 62.893323339521885
+        },
+        {
+          "rank": 5,
+          "engram_GiB": 23.604272827506065,
+          "parameter_storage_GiB": 62.89340152591467
+        },
+        {
+          "rank": 6,
+          "engram_GiB": 23.60434117913246,
+          "parameter_storage_GiB": 62.893469877541065
+        },
+        {
+          "rank": 7,
+          "engram_GiB": 23.604413956403732,
+          "parameter_storage_GiB": 62.893542654812336
+        }
+      ],
+      "extra_GiB_vs_current": 0.0
+    },
+    "target_dp8_draft_tp8": {
+      "rank0": {
+        "rank": 0,
+        "groups_bytes": {
+          "layers_attention": 10129397760,
+          "layers_norm_hc_gate": 315523520,
+          "layers_shared": 2831155200,
+          "layers_routed_scale": 1061683200,
+          "layers_routed_weight": 33973862400,
+          "engram_sharded_table": 25344443520,
+          "engram_projection": 629309440,
+          "layers_index_compression": 155194368,
+          "mtp_attention": 143141472,
+          "mtp_norm_hc_gate": 15793800,
+          "mtp_shared": 150405120,
+          "mtp_routed_scale": 26542080,
+          "mtp_routed_weight": 849346560,
+          "target_embed_head": 330967040,
+          "draft_embed_head": 330956800,
+          "draft_other": 289700352
+        },
+        "groups_GiB": {
+          "layers_attention": 9.433736801147461,
+          "layers_norm_hc_gate": 0.2938541769981384,
+          "layers_shared": 2.63671875,
+          "layers_routed_scale": 0.98876953125,
+          "layers_routed_weight": 31.640625,
+          "engram_sharded_table": 23.60385239124298,
+          "engram_projection": 0.586090087890625,
+          "layers_index_compression": 0.14453601837158203,
+          "mtp_attention": 0.13331088423728943,
+          "mtp_norm_hc_gate": 0.014709122478961945,
+          "mtp_shared": 0.14007568359375,
+          "mtp_routed_scale": 0.02471923828125,
+          "mtp_routed_weight": 0.791015625,
+          "target_embed_head": 0.30823707580566406,
+          "draft_embed_head": 0.3082275390625,
+          "draft_other": 0.2698044776916504
+        },
+        "total_parameter_storage_bytes": 76577422632,
+        "total_parameter_storage_GiB": 71.31828240305185
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "engram_GiB": 23.60385239124298,
+          "parameter_storage_GiB": 71.31828240305185
+        },
+        {
+          "rank": 1,
+          "engram_GiB": 23.603915825486183,
+          "parameter_storage_GiB": 71.31834583729506
+        },
+        {
+          "rank": 2,
+          "engram_GiB": 23.60403138399124,
+          "parameter_storage_GiB": 71.31846139580011
+        },
+        {
+          "rank": 3,
+          "engram_GiB": 23.604110553860664,
+          "parameter_storage_GiB": 71.31854056566954
+        },
+        {
+          "rank": 4,
+          "engram_GiB": 23.60419464111328,
+          "parameter_storage_GiB": 71.31862465292215
+        },
+        {
+          "rank": 5,
+          "engram_GiB": 23.604272827506065,
+          "parameter_storage_GiB": 71.31870283931494
+        },
+        {
+          "rank": 6,
+          "engram_GiB": 23.60434117913246,
+          "parameter_storage_GiB": 71.31877119094133
+        },
+        {
+          "rank": 7,
+          "engram_GiB": 23.604413956403732,
+          "parameter_storage_GiB": 71.3188439682126
+        }
+      ],
+      "extra_GiB_vs_current": 8.425301313400269
+    },
+    "target_and_draft_dp8": {
+      "rank0": {
+        "rank": 0,
+        "groups_bytes": {
+          "layers_attention": 10129397760,
+          "layers_norm_hc_gate": 315523520,
+          "layers_shared": 2831155200,
+          "layers_routed_scale": 1061683200,
+          "layers_routed_weight": 33973862400,
+          "engram_sharded_table": 25344443520,
+          "engram_projection": 629309440,
+          "layers_index_compression": 155194368,
+          "mtp_attention": 759704832,
+          "mtp_norm_hc_gate": 15793800,
+          "mtp_shared": 212336640,
+          "mtp_routed_scale": 26542080,
+          "mtp_routed_weight": 849346560,
+          "target_embed_head": 330967040,
+          "draft_embed_head": 330956800,
+          "draft_other": 289700352
+        },
+        "groups_GiB": {
+          "layers_attention": 9.433736801147461,
+          "layers_norm_hc_gate": 0.2938541769981384,
+          "layers_shared": 2.63671875,
+          "layers_routed_scale": 0.98876953125,
+          "layers_routed_weight": 31.640625,
+          "engram_sharded_table": 23.60385239124298,
+          "engram_projection": 0.586090087890625,
+          "layers_index_compression": 0.14453601837158203,
+          "mtp_attention": 0.7075302600860596,
+          "mtp_norm_hc_gate": 0.014709122478961945,
+          "mtp_shared": 0.19775390625,
+          "mtp_routed_scale": 0.02471923828125,
+          "mtp_routed_weight": 0.791015625,
+          "target_embed_head": 0.30823707580566406,
+          "draft_embed_head": 0.3082275390625,
+          "draft_other": 0.2698044776916504
+        },
+        "total_parameter_storage_bytes": 77255917512,
+        "total_parameter_storage_GiB": 71.95018000155687
+      },
+      "ranks": [
+        {
+          "rank": 0,
+          "engram_GiB": 23.60385239124298,
+          "parameter_storage_GiB": 71.95018000155687
+        },
+        {
+          "rank": 1,
+          "engram_GiB": 23.603915825486183,
+          "parameter_storage_GiB": 71.95024343580008
+        },
+        {
+          "rank": 2,
+          "engram_GiB": 23.60403138399124,
+          "parameter_storage_GiB": 71.95035899430513
+        },
+        {
+          "rank": 3,
+          "engram_GiB": 23.604110553860664,
+          "parameter_storage_GiB": 71.95043816417456
+        },
+        {
+          "rank": 4,
+          "engram_GiB": 23.60419464111328,
+          "parameter_storage_GiB": 71.95052225142717
+        },
+        {
+          "rank": 5,
+          "engram_GiB": 23.604272827506065,
+          "parameter_storage_GiB": 71.95060043781996
+        },
+        {
+          "rank": 6,
+          "engram_GiB": 23.60434117913246,
+          "parameter_storage_GiB": 71.95066878944635
+        },
+        {
+          "rank": 7,
+          "engram_GiB": 23.604413956403732,
+          "parameter_storage_GiB": 71.95074156671762
+        }
+      ],
+      "extra_GiB_vs_current": 9.057198911905289
+    }
+  },
+  "not_included": [
+    "Rope and hash metadata",
+    "KV/draft/Engram recurrent state",
+    "allocator slack, library/workspace, custom AR",
+    "DeepEP LL RDMA/NVL buffers",
+    "Graph pools and capture/load transient peak"
+  ],
+  "warnings": [
+    "Parameter storage only, not allocation permission or full model fit proof",
+    "current shared gate/up narrow(dim0).contiguous retains whole original GPU storage; down dim1 makes copy",
+    "DP layout assumes complete local shared expert and same TP8 head/Engram partition; owner/idle routing not implemented",
+    "packed QKV/shared gate-up optional duplicate storage must be checked against effective environment"
+  ],
+  "scope": "CPU header-only analysis; no GPU allocation or model change"
+}
