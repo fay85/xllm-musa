@@ -212,6 +212,11 @@ class DeepseekV41Decoder final {
         attn_output, hidden, attn_pre, attn_post, attn_comb, input_ids);
   }
 
+  void forward_empty_experts(int64_t owner_rows,
+                             const torch::TensorOptions& options) {
+    moe_.forward_empty(owner_rows, options);
+  }
+
   void write_draft_context(const torch::Tensor& projected,
                            const torch::Tensor& positions,
                            const torch::Tensor& rope_table,

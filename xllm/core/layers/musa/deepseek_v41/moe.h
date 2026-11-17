@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <torch/torch.h>
 #include <torch/utils.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -22,6 +23,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/process_group.h"
+#include "core/layers/musa/deepseek_v41/deep_ep_ll_runtime.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 #include "core/layers/musa/deepseek_v41/w4a8_experts.h"
@@ -31,6 +33,7 @@ namespace xllm::layer {
 enum class DeepseekV41ExpertFormat : int8_t { ORIGINAL_FP4, W4AFP8_MT };
 
 struct DeepseekV41MoeConfig {
+  std::shared_ptr<DeepseekV41DeepEpLlRuntime> deep_ep_ll;
   DeepseekV41ExpertFormat expert_format = DeepseekV41ExpertFormat::ORIGINAL_FP4;
   bool dense = false;
   bool gate_cache_fp32_weight = false;
@@ -175,6 +178,28 @@ class DeepseekV41Moe final {
       return shared_.forward(input);
     }
     auto [route_weights, indices] = gate_->forward(input, input_ids);
+    if (config_.deep_ep_ll) {
+      CHECK(!config_.shared_expert_tp_reduce);
+      CHECK(w4a8_ != nullptr);
+      const int64_t capacity = config_.deep_ep_ll->capacity();
+      std::vector<torch::Tensor> chunks;
+      chunks.reserve((input.size(0) + capacity - 1) / capacity);
+      for (int64_t start = 0; start < input.size(0); start += capacity) {
+        const int64_t count = std::min(capacity, input.size(0) - start);
+        chunks.emplace_back(forward_dispatched(
+            input.narrow(0, start, count).contiguous(),
+            indices.narrow(0, start, count).contiguous(),
+            route_weights.narrow(0, start, count).contiguous()));
+      }
+      CHECK(!chunks.empty());
+      torch::Tensor output =
+          chunks.size() == 1 ? chunks.front() : torch::cat(chunks, 0);
+      // LL combine already applies routing weights and merges every expert.
+      // Add the full owner shared expert once, with no routed TP/EP sum.
+      return (output.to(torch::kFloat32) +
+              shared_.forward(input).to(torch::kFloat32))
+          .to(input.scalar_type());
+    }
     torch::Tensor routed;
     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
       routed = w4a8_->forward(input, indices, route_weights);
@@ -220,7 +245,32 @@ class DeepseekV41Moe final {
     return routed.to(input.scalar_type());
   }
 
+  void forward_empty(int64_t owner_rows, const torch::TensorOptions& options) {
+    CHECK(config_.deep_ep_ll != nullptr && w4a8_ != nullptr);
+    CHECK_GT(owner_rows, 0);
+    const torch::Tensor input =
+        torch::empty({0, weights_.gate.size(1)}, options);
+    const torch::Tensor ids =
+        torch::empty({0, config_.topk}, options.dtype(torch::kInt64));
+    const torch::Tensor weights =
+        torch::empty({0, config_.topk}, options.dtype(torch::kFloat32));
+    for (int64_t start = 0; start < owner_rows;
+         start += config_.deep_ep_ll->capacity()) {
+      forward_dispatched(input, ids, weights);
+    }
+  }
+
  private:
+  torch::Tensor forward_dispatched(const torch::Tensor& input,
+                                   const torch::Tensor& ids,
+                                   const torch::Tensor& weights) {
+    const DeepseekV41ProfileRange range("V41/MoE/DeepEP_LL");
+    auto& bridge = config_.deep_ep_ll->bridge();
+    auto [received, counts] = bridge.dispatch(input, ids);
+    return bridge.combine(
+        w4a8_->forward_dispatched(received, counts), ids, weights);
+  }
+
   torch::Tensor shared_weight(int64_t index) const {
     CHECK_EQ(weights_.shared.size(), 3);
     return weights_.shared[index];

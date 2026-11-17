@@ -1,0 +1,36 @@
+{
+  "all_match": true,
+  "production_files": [
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/decode_graph.h",
+      "sha256": "38f13f0bfbaa23a0852a511ac1a6998c79320dd51e74604baeb271a90a273380",
+      "matches_full_v2": true
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/decoder.h",
+      "sha256": "d4758301e0052374cbc7a5ea9cc2b78f0903ed9c787969f0be67445b47088c9d",
+      "matches_full_v2": true
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/moe.h",
+      "sha256": "d7d887552f4985e65e94bb8409b48e1a73b3f5ddc347b2cbd6d6b408c4cbca72",
+      "matches_full_v2": true
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/text_model.h",
+      "sha256": "d68618f35598a4f416746e053df40b0aec47047418669ccdae0477c7aed873ca",
+      "matches_full_v2": true
+    },
+    {
+      "file": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "sha256": "5c589c859a0b25826374a6c11ef2a215101f3171fe41c07bfba15882f28aa767",
+      "matches_full_v2": true
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/deep_ep_ll_runtime.h",
+      "sha256": "4c138b81d88825a20affac2e997cb1b5c3f04a3a4df3611cfb217876927926ec",
+      "matches_full_v2": true
+    }
+  ],
+  "test_change_note": "Standalone test later expanded cross-stream/barrierless; compiled and passed336checks independently; no production source changed since full_v2."
+}

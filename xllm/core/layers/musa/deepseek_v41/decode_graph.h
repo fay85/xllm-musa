@@ -52,8 +52,12 @@ class DeepseekV41DecodeGraph final {
   using Forward =
       std::function<torch::Tensor(const DeepseekV41DecodeInputs&, int64_t)>;
 
-  explicit DeepseekV41DecodeGraph(std::vector<int64_t> ratios)
-      : ratios_(std::move(ratios)) {}
+  explicit DeepseekV41DecodeGraph(
+      std::vector<int64_t> ratios,
+      std::function<void()> communication_capture_boundary = {})
+      : communication_capture_boundary_(
+            std::move(communication_capture_boundary)),
+        ratios_(std::move(ratios)) {}
 
   torch::Tensor run(const DeepseekV41DecodeInputs& input,
                     bool replay_graph,
@@ -264,6 +268,9 @@ class DeepseekV41DecodeGraph final {
       }
       auto checkpoint = snapshot(entry.input);
       capture_stream.synchronize();
+      if (communication_capture_boundary_) {
+        communication_capture_boundary_();
+      }
       if (!pool_.has_value()) {
         pool_ = at::musa::graph_pool_handle();
       }
@@ -273,6 +280,9 @@ class DeepseekV41DecodeGraph final {
       entry.output = forward(entry.input, capacity);
       entry.graph->capture_end();
       capture_stream.synchronize();
+      if (communication_capture_boundary_) {
+        communication_capture_boundary_();
+      }
       finalize_musa_custom_allreduce_graphs();
       checkpoint->restore();
       capture_stream.synchronize();
@@ -284,6 +294,7 @@ class DeepseekV41DecodeGraph final {
         << "; warmup/capture cache writes restored; Engram lookup/head outside";
   }
 
+  std::function<void()> communication_capture_boundary_;
   std::vector<int64_t> ratios_;
   std::optional<c10::musa::MempoolId_t> pool_;
   std::map<Key, std::unique_ptr<Entry>> entries_;

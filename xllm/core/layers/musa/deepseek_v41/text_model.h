@@ -43,13 +43,16 @@ class DeepseekV41TextModel final {
                        ProcessGroup* attention_group = nullptr,
                        ProcessGroup* expert_group = nullptr,
                        bool bounded_replay = false,
-                       bool replicated_attention = false)
+                       bool replicated_attention = false,
+                       bool owner_attention = false)
       : embedding_(std::move(embedding)),
         norm_(std::move(norm)),
         head_(std::move(head)),
         plain_rope_(std::move(plain_rope)),
         compressed_rope_(std::move(compressed_rope)),
         attention_group_(attention_group) {
+    owner_attention_ = owner_attention;
+    CHECK(!owner_attention_ || (replicated_attention && attention_group_));
     CHECK(!configs.empty());
     CHECK_EQ(configs.size(), weights.size());
     CHECK(embedding_.defined() && norm_.defined() && head_.defined());
@@ -146,6 +149,26 @@ class DeepseekV41TextModel final {
     CHECK_EQ(caches.size(), layers_.size());
     CHECK_EQ(engram_rows.size(), layers_.size());
     CHECK_GE(context_length, input_ids.size(0));
+    if (owner_attention_ && attention_group_->rank() != 0) {
+      // Participate in the shared embedding collective, then execute only the
+      // local experts for owner tokens. This is fixed-owner C1, not a DP
+      // scheduler: every rank receives the same request metadata.
+      torch::Tensor embedded =
+          torch::embedding(embedding_, input_ids.to(torch::kInt64));
+      parallel_state::gather(embedded, attention_group_, /*dim=*/-1);
+      int64_t rows = input_ids.numel();
+      last_output_row_offset_ = 0;
+      for (size_t index = 0; index < layers_.size(); ++index) {
+        if (bounded_replay_ &&
+            index == static_cast<size_t>(late_layer_start_) &&
+            input_ids.size(0) > replay_window_) {
+          last_output_row_offset_ = input_ids.size(0) - replay_window_;
+          rows = replay_window_;
+        }
+        layers_[index]->forward_empty_experts(rows, embedding_.options());
+      }
+      return torch::zeros({rows, norm_.numel()}, embedding_.options());
+    }
     torch::DeviceGuard guard(embedding_.device());
     torch::Tensor hidden =
         torch::embedding(embedding_, input_ids.to(torch::kInt64));
@@ -255,6 +278,7 @@ class DeepseekV41TextModel final {
     CHECK_EQ(input_ids.size(0), positions.size(0));
     CHECK_EQ(caches.size(), layers_.size());
     CHECK_EQ(engram_rows.size(), layers_.size());
+    CHECK(!owner_attention_) << "Owner DeepEP supports one request only";
     CHECK_EQ(context_lengths.size(), static_cast<size_t>(input_ids.size(0)));
     CHECK_GT(input_ids.size(0), 1);
     CHECK_LE(input_ids.size(0), 8);
@@ -350,6 +374,7 @@ class DeepseekV41TextModel final {
   torch::Tensor plain_rope_;
   torch::Tensor compressed_rope_;
   double norm_epsilon_;
+  bool owner_attention_ = false;
   bool bounded_replay_ = false;
   int64_t replay_window_ = 0;
   int64_t late_layer_start_ = 0;

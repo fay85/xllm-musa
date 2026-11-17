@@ -18,6 +18,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -67,6 +68,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK(!ExecutionConfig::get_instance().enable_graph());
     replicated_attention_ =
         util::get_bool_env("XLLM_DSV41_REPLICATED_ATTENTION", false);
+    owner_attention_ = util::get_bool_env("XLLM_DSV41_OWNER_DEEPEP_LL", false);
+    CHECK(!owner_attention_ || replicated_attention_);
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
     const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
     if (dense_prequant != nullptr) {
@@ -218,6 +221,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     initialize_gate_cache_policy();
     initialize_decode_batch_policy();
     initialize_bounded_replay_policy();
+    initialize_owner_deepep_policy();
     DeepseekV41Checkpoint checkpoint(
         loader->get_state_dicts(),
         options_,
@@ -268,15 +272,19 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         tp_group_,
         expert_reduction_group(),
         bounded_replay_,
-        replicated_attention_);
+        replicated_attention_,
+        owner_attention_);
     if (static_decode_) {
       std::vector<int64_t> ratios;
       ratios.reserve(args_.n_layers());
       for (int64_t layer = 0; layer < args_.n_layers(); ++layer) {
         ratios.emplace_back(args_.compress_ratios()[layer]);
       }
-      decode_graph_ =
-          std::make_unique<layer::DeepseekV41DecodeGraph>(std::move(ratios));
+      decode_graph_ = std::make_unique<layer::DeepseekV41DecodeGraph>(
+          std::move(ratios),
+          owner_attention_ ? std::function<void()>(
+                                 [this]() { deep_ep_ll_->reset_for_capture(); })
+                           : std::function<void()>{});
       CHECK(native_dspark_ || args_.layers_to_capture().empty());
       LOG(INFO) << "Native V4.1 fixed-capacity C1 Decode/verify enabled, graph="
                 << full_decode_graph_
@@ -524,6 +532,14 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     }
     ModelOutput output =
         auxiliary_ ? auxiliary_->finalize(hidden) : ModelOutput(hidden);
+    if (owner_attention_) {
+      // Target head and draft are still TP8. Only owner computed these values;
+      // broadcast once at the model boundary, never sum an LL-combined output.
+      tp_group_->broadcast(hidden, /*root_rank=*/0);
+      if (output.aux_hidden_states.defined()) {
+        tp_group_->broadcast(output.aux_hidden_states, /*root_rank=*/0);
+      }
+    }
     if (model_stream.has_value()) {
       model_stream->record_output(hidden);
       if (output.aux_hidden_states.defined()) {
@@ -828,6 +844,40 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     decode_ep_custom_allreduce_ = enabled;
   }
 
+  void initialize_owner_deepep_policy() {
+    if (tp_group_ != nullptr && tp_size() > 1) {
+      const torch::Tensor local =
+          torch::tensor({static_cast<int64_t>(owner_attention_)},
+                        options_.dtype(torch::kInt64));
+      const torch::Tensor peers =
+          tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
+      CHECK(peers.eq(static_cast<int64_t>(owner_attention_)).all().item<bool>())
+          << "Owner/empty-rank DeepEP policy must agree on every rank";
+    }
+    if (!owner_attention_) {
+      return;
+    }
+    CHECK_EQ(tp_size(), 8);
+    CHECK_EQ(ep_size(), 8);
+    CHECK(!shared_expert_tp_reduce_ && !batched_decode_);
+    CHECK(!dense_prequant_path_.empty());
+    CHECK(expert_format_ == layer::DeepseekV41ExpertFormat::W4AFP8_MT);
+    CHECK_EQ(args_.n_layers(), 40);
+    const char* endpoint = std::getenv("XLLM_DSV41_DEEPEP_INIT_METHOD");
+    CHECK(endpoint != nullptr && endpoint[0] != '\0');
+    deep_ep_ll_ = std::make_shared<layer::DeepseekV41DeepEpLlRuntime>(
+        tp_group_->rank(),
+        tp_size(),
+        device().index(),
+        /*capacity=*/16,
+        args_.hidden_size(),
+        args_.n_routed_experts(),
+        endpoint);
+    LOG(INFO)
+        << "V4.1 C1 owner=0 Attention/shared; empty ranks execute EP8 "
+           "experts via DeepEP LL; head/embedding/Engram/draft remain TP8";
+  }
+
   void initialize_shared_expert_tp_policy() {
     const bool enabled =
         util::get_bool_env("XLLM_DSV41_SHARED_EXPERT_TP", false);
@@ -1030,6 +1080,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     moe.expert_format = expert_format_;
     moe.w4a8_so_path = w4a8_path_;
     moe.dense_prequant_directory = dense_prequant_path_;
+    moe.deep_ep_ll = deep_ep_ll_;
     moe.w4a8_static_activation =
         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
     moe.w4a8_valid_prefix_swiglu =
@@ -1367,6 +1418,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   bool static_decode_ = false;
   bool full_decode_graph_ = false;
   bool replicated_attention_ = false;
+  bool owner_attention_ = false;
+  std::shared_ptr<layer::DeepseekV41DeepEpLlRuntime> deep_ep_ll_;
   // Graphs retain weight/cache pointers; destroy before model and Engram
   // assets.
   std::unique_ptr<layer::DeepseekV41DecodeGraph> decode_graph_;

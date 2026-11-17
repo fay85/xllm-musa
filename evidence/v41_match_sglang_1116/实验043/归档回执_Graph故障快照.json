@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-17T08:56:05.327057+08:00",
+  "archive": "/expt/exports/e43_graph_failure_snapshot_v1.tar.gz",
+  "files": 103,
+  "bytes": 875365,
+  "sha256": "7a7f2c7931566585b336f77565f6beb23645433c92101a2ae819a5111a817570",
+  "scope": "failure snapshot; outstanding SJ10 ranks not declared released"
+}

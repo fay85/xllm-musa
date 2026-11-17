@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T08:45:09.678254+08:00\", \"status\": \"SMOKE_REQUESTS_PASS_POSTPROCESSING_ERROR_RECONCILED\", \"accuracy_status\": \"仅通过基础功能检查，未完成模型精度验收\", \"raw_client_exit_code\": 1, \"error\": \"Postprocessing summary only assigned in formal phase, omitted from smoke. No request rerun. Original records retained.\", \"screen_requests\": 2, \"formal\": false, \"mean_TTFT_ms\": 343.0339628830552, \"mean_TPOT_ms\": 36.33115790126955, \"output_tps\": 26.645907207556323, \"mean_E2E_s\": 9.60747922770679, \"identity_correction\": {\"source_commit\": \"b71742324 plus E43 full_v2 source_manifest\", \"source_manifest\": \"/expt/builds/e43_native_full_v2/source_manifest.json\", \"binary_sha256\": \"8bfb199226c3712c56b8412ef42133638c3c9d1078ac0ee4a2b279a2899757a4\"}}\n",
+  "stderr": ""
+}
