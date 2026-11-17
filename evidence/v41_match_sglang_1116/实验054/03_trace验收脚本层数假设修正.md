@@ -1,0 +1,9 @@
+# E54 trace验收脚本的层数假设修正
+
+首次ON trace验收在第39行失败，原脚本把proposal=5误当成执行5个draft层，错误地预期每图15次RoPE调用。
+
+实际原始trace中，target每图3367个kernel、120次直接RoPE；draft每图232个kernel、9次直接RoPE。核对冻结生产源码deepseek_v41_dspark_native.h第99行，模型固定加载3个draft层；第194行的draft Graph一次执行整个proposal块。proposal从3变5改变矩阵的行数，不会把3个已训练draft层变成5层。因此9次=3层×每层3次RoPE，是正确的固定计数。target实际q=6也已通过独立核验，不能凭kernel个数相同声称proposal参数没有生效。
+
+修正的是CPU分析脚本的预期计数，模型、ELF、配置、性能和原trace未修改，也没有重跑模型来凑结果。首次断言失败回执保留为E54_ON_trace核验与归档.json；修正后重新分析同一批文件，另存v2回执。E55的draft Gate期望计数也改为固定3个，避免继承同一个误解。
+
+这次的经验：投机输出块宽度、模型draft层数、Graph内kernel调用数是三个不同概念；用源码结构和实际张量形状关联，不能直接把proposal数乘进算子调用数。

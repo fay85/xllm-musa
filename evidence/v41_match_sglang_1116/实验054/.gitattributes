@@ -1,0 +1,7 @@
+*.db binary
+*.png binary
+*.log -diff
+*.log -whitespace
+*.txt -whitespace
+*.py -whitespace
+给家明的commit说明.md -whitespace

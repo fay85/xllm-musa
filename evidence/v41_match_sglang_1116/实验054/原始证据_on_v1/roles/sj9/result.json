@@ -1,0 +1,15 @@
+{
+  "exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "control_exit": null,
+  "stopping": true,
+  "automatic_kill": false
+}

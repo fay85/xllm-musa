@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T17:20:16.841303+08:00\", \"host\": \"sj9\", \"gpu_hardware_free\": true, \"external_window_elapsed\": true, \"gpu_free\": true, \"gpu_rows\": [[\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"]], \"gpu_process_owners\": []}\n",
+  "stderr": ""
+}

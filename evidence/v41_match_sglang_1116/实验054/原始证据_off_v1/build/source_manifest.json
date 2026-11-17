@@ -1,0 +1,26 @@
+{
+  "xllm/core/kernels/musa/deepseek_v4_dsa_rope.cu": {
+    "before": "d84232a469a6dd71def689a459c0568a02cc82eb6f902d9d939b2b55c8b0af62",
+    "after": "76a0c4ad21c1d3a1447e4b6fc934e19aa95e73d0d570b79659727dc68fefe4e8"
+  },
+  "xllm/core/kernels/musa/deepseek_v4_dsa_rope.h": {
+    "before": "a50149b6db5304174b7ba8cc0090472169e240b4b4acce4e75de99832fb9d611",
+    "after": "f3855cbbd73fd2fac3db61fe261042608d80971ae7fb823c41a8a21e0265919c"
+  },
+  "xllm/core/layers/musa/deepseek_v41/attention_projection.h": {
+    "before": "8ddb0264d3b02cd36cc09b50c8e3c8c39cbcc0f846695a57006be6806c2ea156",
+    "after": "daffb30d068c175526c2a9e153f47e26a736f00897754aaa46c17465c8f47aca"
+  },
+  "xllm/core/layers/musa/deepseek_v41/attention.h": {
+    "before": "120d57060fe2296b18a5b2d3dd105eceb44873dd54a7c082c208454e915c8a08",
+    "after": "7b94608ad2e32ed22f8f1fae6f3d57691190e4c547871ed9e454d018f909d1ac"
+  },
+  "xllm/models/llm/musa/deepseek_v41_native.h": {
+    "before": "472739a66dbaac9af813cae095ff81369a9ffbb80eda8f35ca90605bc770e1ee",
+    "after": "3e2a8084b7b0eba80efffc2eb9774018bf071c23204fde618519aff526a3dcb5"
+  },
+  "xllm/models/llm/musa/deepseek_v41_dspark_native.h": {
+    "before": "7abd8b66d23b66779cbfbc00792ec3059ae0de473ffca2530eca7524398e99a1",
+    "after": "7f3145d300bf7f07cb2a25713191b251701d38e1e712b382b023a81e2c264c15"
+  }
+}
