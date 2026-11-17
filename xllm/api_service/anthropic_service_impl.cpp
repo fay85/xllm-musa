@@ -549,6 +549,20 @@ bool send_delta_to_client(
 
     // Handle finish reason
     if (seq_output.finish_reason.has_value()) {
+      const std::string pending_text =
+          api_service::take_pending_tool_parser_text(stream_parser.get(), index);
+      if (!pending_text.empty()) {
+        ContentBlockInfo content_block_info;
+        content_block_info.normal_text = pending_text;
+        if (!send_content_block_delta(call,
+                                      last_content_block_type,
+                                      "text",
+                                      "text_delta",
+                                      content_block_info,
+                                      content_block_index)) {
+          return false;
+        }
+      }
       // Check for unstreamed tool args before sending finish reason
       if (stream_parser && stream_parser->get_has_tool_call(index)) {
         auto send_func = [&](const std::string& arguments,

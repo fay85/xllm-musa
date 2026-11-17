@@ -609,5 +609,15 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
   return StreamingParseResult(std::move(normal_text), std::move(calls));
 }
 
+std::string Qwen3CoderDetector::finish_pending_text() {
+  if (is_inside_tool_call_ || buffer_.empty()) {
+    return "";
+  }
+  std::string pending = std::move(buffer_);
+  buffer_.clear();
+  parsed_pos_ = 0;
+  return pending;
+}
+
 }  // namespace function_call
 }  // namespace xllm

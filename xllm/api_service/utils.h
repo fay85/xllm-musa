@@ -63,6 +63,22 @@ inline bool get_enable_thinking_from_request(
                                    reasoning_parser_format);
 }
 
+inline std::string take_pending_tool_parser_text(
+    StreamOutputParser* stream_parser,
+    size_t index) {
+  if (stream_parser == nullptr) {
+    return "";
+  }
+  auto* parser = stream_parser->get_tool_call_parser(index);
+  if (parser == nullptr) {
+    return "";
+  }
+  auto* detector = parser->get_detector();
+  auto* qwen_detector =
+      dynamic_cast<function_call::Qwen3CoderDetector*>(detector);
+  return qwen_detector == nullptr ? "" : qwen_detector->finish_pending_text();
+}
+
 inline bool check_for_unstreamed_tool_args(
     std::shared_ptr<StreamOutputParser> stream_parser,
     size_t index,

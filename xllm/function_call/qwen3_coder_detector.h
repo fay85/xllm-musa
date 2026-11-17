@@ -41,6 +41,10 @@ class Qwen3CoderDetector : public BaseFormatDetector {
       const std::string& new_text,
       const std::vector<JsonTool>& tools) override;
 
+  // Release text retained only because it might begin a tool tag. Text already
+  // inside a confirmed tool call stays buffered for argument recovery.
+  std::string finish_pending_text();
+
  private:
   std::string tool_call_start_token_;
   std::string tool_call_end_token_;

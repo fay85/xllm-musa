@@ -303,6 +303,21 @@ bool send_delta_to_client_brpc(
 
     // Handle finish reason
     if (seq_output.finish_reason.has_value()) {
+      const std::string pending_text =
+          api_service::take_pending_tool_parser_text(stream_parser.get(), index);
+      if (!pending_text.empty()) {
+        response.Clear();
+        response.set_object("chat.completion.chunk");
+        response.set_id(request_id);
+        response.set_created(created_time);
+        response.set_model(model);
+        auto* pending_choice = response.add_choices();
+        pending_choice->set_index(index);
+        pending_choice->mutable_delta()->set_content(pending_text);
+        if (!call->write(response)) {
+          return false;
+        }
+      }
       // Check for unstreamed tool args before sending finish reason
       if (stream_parser && stream_parser->get_has_tool_call(index)) {
         auto send_func = [&](const std::string& arguments, int tool_index) {
