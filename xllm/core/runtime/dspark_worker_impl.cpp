@@ -31,6 +31,7 @@ limitations under the License.
 #include "framework/model_loader.h"
 #include "framework/parallel_state/process_group.h"
 #include "runtime/llm_worker_impl.h"
+#include "runtime/musa_spec_step_timing.h"
 #include "util/timer.h"
 
 namespace xllm {
@@ -105,6 +106,11 @@ bool DSparkWorkerImpl::can_prelaunch_draft_for_init(
 
 std::optional<ForwardOutput> DSparkWorkerImpl::step_decode(
     const ForwardInput& raw_input) {
+  MusaSpecStepTiming phase_timing(*compute_stream_,
+                                  options_.num_speculative_tokens(),
+                                  raw_input.input_params.meta.num_sequences,
+                                  raw_input.input_params.meta.is_graph_warmup,
+                                  raw_input.input_params.embedding.request_ids);
   ForwardInput input = raw_input;
   ForwardInput validate_input;
   std::vector<int64_t> pending_rows;
@@ -115,13 +121,19 @@ std::optional<ForwardOutput> DSparkWorkerImpl::step_decode(
   DraftBlock draft_block;
   if (!pending_rows.empty()) {
     draft_block = run_decode_draft_from_pending(input, pending_rows);
+    MusaSpecStepTiming::mark_active("draft_prelaunch_done");
     commit_pending_context();
+    MusaSpecStepTiming::mark_active("commit_pending_done");
     prepare_decode_input(input);
+    MusaSpecStepTiming::mark_active("prepare_decode_done");
     prepare_validate_inputs(input, validate_input);
   } else {
     commit_pending_context();
+    MusaSpecStepTiming::mark_active("commit_pending_done");
     prepare_decode_input(input);
+    MusaSpecStepTiming::mark_active("prepare_decode_done");
     draft_block = run_decode_draft(input, validate_input);
+    MusaSpecStepTiming::mark_active("draft_done");
   }
 
   const bool async_output =

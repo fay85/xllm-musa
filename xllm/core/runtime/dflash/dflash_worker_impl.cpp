@@ -55,6 +55,7 @@ limitations under the License.
 #include "core/util/env_var.h"
 #include "runtime/draft_model_config.h"
 #include "runtime/llm_worker_impl.h"
+#include "runtime/musa_spec_step_timing.h"
 #include "runtime/speculative_worker_utils.h"
 #include "util/json_reader.h"
 #include "util/model_config_utils.h"
@@ -1095,10 +1096,12 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
   }
   const bool prelaunch =
       !async_output && !did_prune && prepare_draft_prelaunch(input);
+  MusaSpecStepTiming::mark_active("target_inputs_ready");
   ForwardOutput target_output =
       speculative_worker::run_worker_no_sync(
           *impl_, validate_input, *prepare_stream_, *compute_stream_)
           .value();
+  MusaSpecStepTiming::mark_active("target_forward_head_done");
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
   if (has_json_states) {
@@ -1162,6 +1165,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
         max_val_tokens - 1,
         masks);
   }
+  MusaSpecStepTiming::mark_active("rejection_done");
   COUNTER_ADD(speculative_execution_latency_seconds_validation,
               timer.elapsed_seconds());
 
@@ -1179,6 +1183,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
       retained_draft->retained_device_tensors = draft_block.retained_tensors;
       target_output.retained_inputs.emplace_back(std::move(retained_draft));
     }
+    MusaSpecStepTiming::mark_active("async_finalize_done");
     return target_output;
   }
   if (prelaunch) {
@@ -1207,6 +1212,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
   // passes an empty per_seq_val_tokens and every row counts full width;
   // adaptive passes the per-seq widths so padded tail slots aren't counted
   // as rejections. Zero extra device sync — we're already on CPU.
+  MusaSpecStepTiming::mark_active("accepted_host_ready");
   record_validate_metrics(
       val_output, did_prune ? per_seq_val_tokens : std::vector<int32_t>{});
   if (prelaunch) {
@@ -1228,6 +1234,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
         std::make_move_iterator(failed_request_ids.begin()),
         std::make_move_iterator(failed_request_ids.end()));
   }
+  MusaSpecStepTiming::mark_active("context_cache_done");
   if (has_json_states) {
     check_json_accepted_tokens(
         input,

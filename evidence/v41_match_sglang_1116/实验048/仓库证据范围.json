@@ -1,0 +1,7 @@
+{
+  "files": 144,
+  "bytes": 9293346,
+  "full_archive": "/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/exports/p48_runtime_boundaries_v1_evidence.tar.gz",
+  "sha256": "de547b15a050fed4f6b9f1e3da3239324134eba11f724f42c20bf22626962b46",
+  "excluded": "large full traces, all-rank sidecars, ELF/weights"
+}

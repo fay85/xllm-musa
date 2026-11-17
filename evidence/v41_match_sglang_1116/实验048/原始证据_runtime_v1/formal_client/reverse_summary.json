@@ -1,0 +1,18 @@
+{
+  "status": "DIAGNOSTIC_CALIBRATION_PHASE",
+  "phase": "reverse",
+  "runtime_timing_enabled": false,
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "mean_TTFT_ms": 256.24385233968496,
+  "mean_TPOT_ms_per_token": 27.648371813051842,
+  "TPOT_sample_stdev_ms": 0.36334370348594736,
+  "mean_E2E_s": 7.306578664667905,
+  "output_tokens_per_latency_sum_second": 35.03691833743305,
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "profiler_on": false,
+  "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+}

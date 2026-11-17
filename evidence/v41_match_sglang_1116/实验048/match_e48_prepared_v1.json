@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"artifact\": \"/expt/artifacts/native_sg438_runtime_timing_v1/bin/xllm\", \"sha256\": \"0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1\", \"bytes\": 341777000, \"source_manifest\": \"/expt/builds/e48_native_timing_v1/source_manifest.json\", \"source_parent\": \"17d19adc1cac8f6b6ce64f3d4fba80a0503d04d0\", \"at\": \"2026-11-17T11:37:49.600407+08:00\"}\n",
+  "stderr": ""
+}

@@ -1,0 +1,7 @@
+*.pftrace binary
+*.db binary
+*.sqlite binary
+*.log -whitespace
+*.txt -whitespace
+# Preserve exact executed diagnostic scripts, including their terminal newlines.
+*.py -whitespace
