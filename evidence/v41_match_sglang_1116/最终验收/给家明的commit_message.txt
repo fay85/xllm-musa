@@ -1,0 +1,13 @@
+完成V4.1 xLLM追平SGLang验收：TPOT 20.49ms，输出46.14token/s
+
+家明，我基于共同仓库xiaopangV41FlashCppFromSglangtoXllm继续完成了这轮速度优化。仍用SJ9/SJ10双机各8卡、W4AFP8-mt1017、实际256输入/256输出、并发1。最终配置为P Attention TP8/路由EP8，D Attention与共享TP8/路由EP8，目标decoder和draft Graph、proposal3。
+
+我独立重启服务完成三轮，每轮1次暖机和5次正式请求。三轮TPOT分别20.419、20.579、20.459ms/token，输出46.100、45.788、46.537token/s；15条汇总TTFT 324.44ms、TPOT 20.486ms/token、输出46.140token/s，三轮均达到约定目标。同一实现的2048/256另做1暖5，TTFT 1887.82ms、TPOT 24.668ms/token、输出31.303token/s。
+
+我也在相邻时段重新跑了冻结SGLang B，1暖5为TTFT 948.76ms、TPOT 21.600ms/token、输出39.648token/s。这次xLLM的TPOT低5.16%，端到端输出高16.37%。B为GPU Engram短请求变体，D DP8 Attention/EP8、DSPARK5，与我方并行和投机参数不同；这属于本轮允许的方案优化，不泛化为所有负载的优势。
+
+最后补的短上下文Indexer按全可见条件直接构造合法索引，保留cache写入，超过预算走原路径；94项相关小检查和长请求通过。独立trace显示target图3367降到3286节点，score/select各8次降为0。draft Gate虽减少6个图节点，四组复测未稳定提速；关闭逐层日志也未提速，都没有放进最终配置。其余完整Graph、静态输入、有效行计算、窄投影、mHC/Gate/SWA/RoPE及通信优化继续沿用累计最优。
+
+每条请求都核对真实token数、成功和终态；测速与trace分开。SJ9/SJ10任何一台有外部编译都先等待，正式时间窗留审计。仅通过基础功能检查，未完成模型精度验收；本结果不等于60%SOL，理论口径和高并发/长上下文仍需后续推进。
+
+这次提交归档E55-E57的接受与否决依据、最终原始EvalScope数据库/日志、配置、图及报告。实际执行的源码为980d9da，ELF为7d2ffa0662fd…，新报告提交没有改动这份已验收计算路径。仓库证据在evidence/v41_match_sglang_1116/最终验收；完整大trace和ELF在/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116。只提交个人分支，不提MR。

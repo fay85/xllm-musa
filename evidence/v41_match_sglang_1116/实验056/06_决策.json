@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-17T20:40:53.746991+08:00",
+  "status": "ACCEPTED_STAGE_NOT_FINAL",
+  "selected_run": "p56_short_indexer_on_v1",
+  "source_commit": "980d9da1287ba99a12749d89b89c55e0d8ed233f",
+  "binary_sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+  "evidence_sha256": "3e06a7b23029fead0e01bbe3dda8084054cd09a1a198318806be2641dc205a0b",
+  "evidence": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_056/03_性能/逐请求与实际工作量核验_off_v1_on_v1_reverse_off_v1.json",
+  "same_content_and_speculative_work_all15": true,
+  "remaining": "E57 then closure review and three NEW final rounds plus2048/256 and same-window SG",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}

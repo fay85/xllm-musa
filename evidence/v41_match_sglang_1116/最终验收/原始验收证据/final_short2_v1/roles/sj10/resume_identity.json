@@ -1,0 +1,71 @@
+{
+  "at": "2026-11-17T21:03:55.552347+08:00",
+  "host": "sj10",
+  "run": "final_short2_v1",
+  "ranks": [
+    {
+      "rank": 0,
+      "pid": 51213,
+      "start_ticks": "528061328",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 1,
+      "pid": 51214,
+      "start_ticks": "528061328",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 2,
+      "pid": 51215,
+      "start_ticks": "528061329",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 3,
+      "pid": 51216,
+      "start_ticks": "528061329",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 4,
+      "pid": 51217,
+      "start_ticks": "528061329",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 5,
+      "pid": 51218,
+      "start_ticks": "528061329",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 6,
+      "pid": 51219,
+      "start_ticks": "528061329",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    },
+    {
+      "rank": 7,
+      "pid": 51220,
+      "start_ticks": "528061329",
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "namespace": "xiaopang1117-final-short2-v1"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "pid": 1382,
+  "start_ticks": "528168026",
+  "at": "2026-11-17T21:19:37.154940+08:00",
+  "client_host": "sj10",
+  "command": [
+    "python3",
+    "/expt/scripts/sglang_reference_final_client.py",
+    "--case",
+    "B",
+    "--router",
+    "http://10.121.32.7:28192",
+    "--decode",
+    "http://10.121.32.9:28588",
+    "--inputs",
+    "/work/artifacts/benchmark_inputs_v1/input256_output256.jsonl",
+    "--tokenizer",
+    "/work/artifacts/model_view_w4afp8_mt_1017",
+    "--evalscope",
+    "/work/artifacts/bench_venv_v2/bin/evalscope",
+    "--out",
+    "/expt/runs/sglang_B_recheck_v1/performance",
+    "--runtime-identity",
+    "/expt/scripts/sglang_reference_final_identity.json"
+  ]
+}

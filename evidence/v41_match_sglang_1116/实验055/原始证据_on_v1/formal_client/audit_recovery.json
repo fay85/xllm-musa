@@ -1,0 +1,23 @@
+{
+  "at": "2026-11-17T19:44:09.076846+08:00",
+  "mode": "POSTPROCESSING_ONLY_NO_HTTP_NO_GPU_NO_SIGNALS",
+  "original_client_exit_code": 1,
+  "validated_exit_code": 0,
+  "original_failure": "audit_first_failure",
+  "immutable_evidence_sha256": {
+    "formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db": "a9ef5243555bf64b0b028d9936d40ae9b5c0b28825217b657604822724b38aa7",
+    "formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db": "a6f462c2b590e7bc8ce813740cf8df96abcf46c70315132fe52be742a3b8f35c",
+    "basic_2_sse.jsonl": "64b7b5c8ab8cfd5d11c46c123835feaf03f971ba21148df2346e7db0fed0f12a",
+    "basic_1_sse.jsonl": "79ca631a6531db6176e269a536b004146fba040457a9bc443d25937dc6a38704",
+    "status.json": "9759ec50f8a6cf3026ebce933d335ae167f136cd133c85ee3f2dc65671a3d938",
+    "identity.json": "452fb637e73a0fc40bb5c8c03e3b8155254381ef2bbe17c5ec82874a1830bfcd",
+    "basic_gate.json": "b250686f71b84b5fcba959241799f6c565eca63a461afeac29b1978b37efb2c0"
+  },
+  "complete_original_window": {
+    "start": "2026-11-17T19:35:17.412846+08:00",
+    "end": "2026-11-17T19:35:50.511654+08:00"
+  },
+  "no_observed_compilation": true,
+  "client_source_sha256": "07f907a4ca222fa2bcdc018ed7bee067fec6f3983c113fb343afb32f2149917b",
+  "auditor_sha256": "524777d2fb1017845fbe8527bc8294db4606b3be68908b26cfd865f1bc24ee2e"
+}

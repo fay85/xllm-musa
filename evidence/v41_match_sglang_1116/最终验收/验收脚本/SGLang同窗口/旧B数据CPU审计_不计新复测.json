@@ -1,0 +1,65 @@
+{
+  "status": "FORMAL_B_ROWS_RECOMPUTED",
+  "metrics": {
+    "mean_TTFT_ms": 990.0414403527975,
+    "mean_TPOT_ms_per_token": 21.56808421380964,
+    "mean_E2E_seconds": 6.489902914874255,
+    "output_tokens_per_latency_sum_second": 39.445890540715446
+  },
+  "requests": {
+    "warmup": [
+      {
+        "id": "a7e3b699062a4eec82754c8f3f5dc35f",
+        "TTFT_ms": 8186.774900183082,
+        "TPOT_ms": 22.48582728572336,
+        "E2E_s": 13.920660858042538,
+        "SSE_packets": 108,
+        "content_sha256": "3e549370dff17847a4a2f50097c196d30fd20271837b098d93cb67ad18ad1214"
+      }
+    ],
+    "measured": [
+      {
+        "id": "cd294239170749e1a644770bec656b48",
+        "TTFT_ms": 1267.8110832348466,
+        "TPOT_ms": 21.63215422016733,
+        "E2E_s": 6.784010409377515,
+        "SSE_packets": 108,
+        "content_sha256": "3e549370dff17847a4a2f50097c196d30fd20271837b098d93cb67ad18ad1214"
+      },
+      {
+        "id": "f7e8c357cf2b4329acedf8ef0e8e714b",
+        "TTFT_ms": 895.602885633707,
+        "TPOT_ms": 21.805821205763255,
+        "E2E_s": 6.456087293103337,
+        "SSE_packets": 108,
+        "content_sha256": "3e549370dff17847a4a2f50097c196d30fd20271837b098d93cb67ad18ad1214"
+      },
+      {
+        "id": "f9f253e9949c4de9afbd0e8a315e0029",
+        "TTFT_ms": 939.3426598981023,
+        "TPOT_ms": 21.44263270584976,
+        "E2E_s": 6.407213999889791,
+        "SSE_packets": 108,
+        "content_sha256": "3e549370dff17847a4a2f50097c196d30fd20271837b098d93cb67ad18ad1214"
+      },
+      {
+        "id": "2393440990cd425c9b813a329132927f",
+        "TTFT_ms": 923.9515690132976,
+        "TPOT_ms": 21.460292075632832,
+        "E2E_s": 6.39632604829967,
+        "SSE_packets": 108,
+        "content_sha256": "3e549370dff17847a4a2f50097c196d30fd20271837b098d93cb67ad18ad1214"
+      },
+      {
+        "id": "b772781a97a0431c9d6ff9241cd78709",
+        "TTFT_ms": 923.4990039840341,
+        "TPOT_ms": 21.49952086163502,
+        "E2E_s": 6.4058768237009645,
+        "SSE_packets": 108,
+        "content_sha256": "3e549370dff17847a4a2f50097c196d30fd20271837b098d93cb67ad18ad1214"
+      }
+    ]
+  },
+  "token_accounting": "EvalScope server usage updates token counters independently of stored content chunks; input IDs also checked with server /v1/tokenize, each response ends with length. SSE count is not token count.",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"pid\": 81, \"start_ticks\": \"528153927\", \"at\": \"2026-11-17T21:17:16.155897+08:00\", \"script\": \"/data/nfs_shared/xiaopang/sglang_v41_reference_20261116/B_recheck_20261117/configs/B_decode.sh\", \"script_sha256\": \"18db4f491fe9eb1849578b13c07f09042d2b5c53da95a9a44bc6f7f34b67c7bd\"}\n\n\n",
+  "stderr": ""
+}

@@ -1,0 +1,214 @@
+{
+  "formal_window": {
+    "start": "2026-11-17T19:52:20.552512+08:00",
+    "end": "2026-11-17T19:52:53.818098+08:00"
+  },
+  "all_clear": true,
+  "hosts": {
+    "sj9": {
+      "clear": true,
+      "coverage": true,
+      "observations": [
+        {
+          "at": "2026-11-17T19:52:12.139142+08:00",
+          "hostname": "worker32007",
+          "loadavg": "6.99 6.62 10.41 1/12282 12187",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 1523.653564,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:22.295890+08:00",
+          "hostname": "worker32007",
+          "loadavg": "8.13 6.89 10.45 3/12282 23404",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 1533.810312,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:32.556211+08:00",
+          "hostname": "worker32007",
+          "loadavg": "7.77 6.86 10.41 1/12282 35229",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 1544.070633,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:42.714551+08:00",
+          "hostname": "worker32007",
+          "loadavg": "7.69 6.88 10.37 2/12285 58200",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 1554.228973,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:52.870057+08:00",
+          "hostname": "worker32007",
+          "loadavg": "8.07 7.00 10.38 2/12285 7157",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 1564.384479,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T19:53:03.026512+08:00",
+          "hostname": "worker32007",
+          "loadavg": "7.71 6.96 10.33 1/12284 26901",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 1574.540934,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        }
+      ]
+    },
+    "sj10": {
+      "clear": true,
+      "coverage": true,
+      "observations": [
+        {
+          "at": "2026-11-17T19:52:05.628060+08:00",
+          "hostname": "worker32009",
+          "loadavg": "19.93 15.75 17.77 18/15404 15125",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 4806.425712,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:15.851259+08:00",
+          "hostname": "worker32009",
+          "loadavg": "19.84 15.87 17.78 15/15434 28161",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 4816.648911,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:26.062168+08:00",
+          "hostname": "worker32009",
+          "loadavg": "19.36 15.90 17.78 24/15437 42593",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 4826.85982,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:36.279814+08:00",
+          "hostname": "worker32009",
+          "loadavg": "20.66 16.30 17.89 17/15435 58699",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 4837.077466,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:46.503423+08:00",
+          "hostname": "worker32009",
+          "loadavg": "21.33 16.59 17.96 28/15435 7216",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 4847.301075,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T19:52:56.711063+08:00",
+          "hostname": "worker32009",
+          "loadavg": "20.92 16.67 17.97 15/15315 17710",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 4857.508715,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        }
+      ]
+    }
+  },
+  "scope": "10-second sampled known compiler/build processes; not proof of zero background load"
+}

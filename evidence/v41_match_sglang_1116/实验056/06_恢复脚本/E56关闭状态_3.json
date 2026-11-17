@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T20:13:40.463594+08:00\", \"sj9\": {\"at\": \"2026-11-17T20:13:39.635611+08:00\", \"pids\": [16015, 16016, 16017, 16018, 16019, 16020, 16021, 16022], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}, \"sj10\": {\"at\": \"2026-11-17T20:13:39.667529+08:00\", \"pids\": [13901, 13902, 13903, 13904, 13905, 13906, 13907, 13908], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}, \"phases\": [{\"phase\": \"formal_warmup\", \"exit_code\": 0, \"started_at\": \"2026-11-17T20:12:26.259595+08:00\", \"finished_at\": \"2026-11-17T20:13:11.685797+08:00\"}], \"basic\": [{\"answer\": \"4.2\", \"passed\": true}, {\"answer\": \"56\", \"passed\": true}]}\n",
+  "stderr": ""
+}

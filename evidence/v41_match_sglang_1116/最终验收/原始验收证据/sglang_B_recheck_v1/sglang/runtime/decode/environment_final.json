@@ -1,0 +1,5 @@
+{
+  "exit": 0,
+  "stdout": "{\"python\": \"3.10.12 (main, Aug 31 2026, 10:18:17) [GCC 11.4.0]\", \"mate_path\": \"/opt/venv/lib/python3.10/site-packages/mate/__init__.py\", \"versions\": {\"torch\": \"2.9.0\", \"torch_musa\": \"2.9.0\", \"mate\": \"0.2.6\", \"mate-mubin\": \"0.2.6\", \"sglang-router\": \"0.2.4\", \"deep_ep\": \"1.1.0+9017268.musa438.ringreset1\"}, \"git\": \"7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6\", \"git_status\": \"\"}\n",
+  "stderr": ""
+}

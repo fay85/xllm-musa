@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T18:14:31.397605+08:00\", \"sj9\": {\"at\": \"2026-11-17T18:14:30.487325+08:00\", \"pids\": [58019, 58020, 58021, 58022, 58023, 58024, 58025, 58026], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}, \"sj10\": {\"at\": \"2026-11-17T18:14:31.047729+08:00\", \"pids\": [53055, 53056, 53057, 53058, 53059, 53060, 53061, 53062], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}}\n",
+  "stderr": ""
+}

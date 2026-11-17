@@ -1,0 +1,5 @@
+I20261117 19:30:54.380363 59666 validate_short_context_attention.py:175] Static native Attention graph verified: rows=4 parity=0
+I20261117 19:30:54.794836 59666 validate_short_context_attention.py:175] Static native Attention graph verified: rows=4 parity=1
+I20261117 19:30:55.212471 59666 validate_short_context_attention.py:175] Static native Attention graph verified: rows=6 parity=0
+I20261117 19:30:55.664563 59666 validate_short_context_attention.py:175] Static native Attention graph verified: rows=6 parity=1
+I20261117 19:30:55.666726 59666 validate_short_context_attention.py:181] Graph Attention replay scenarios passed: 16

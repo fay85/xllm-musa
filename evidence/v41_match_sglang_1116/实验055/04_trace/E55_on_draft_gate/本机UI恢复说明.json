@@ -1,0 +1,4 @@
+{
+  "reason": "Local static Perfetto HTTP server no longer listening; restarted localhost-only server, reused already converted trace; no remote model or raw trace changes",
+  "failed_empty_directory": "Perfetto图_首次未连接本机UI"
+}

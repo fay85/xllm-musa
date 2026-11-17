@@ -1,0 +1,19 @@
+{
+  "status": "PASS_BASIC_FUNCTION_AND_EXACT_TOKEN_PERFORMANCE",
+  "case": "B",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "formal_requests": 5,
+  "input_output": [
+    256,
+    256
+  ],
+  "mean_TTFT_ms": 948.7579518929124,
+  "mean_TPOT_ms_per_token": 21.600125238445457,
+  "mean_E2E_seconds": 6.456789887696504,
+  "output_tokens_per_latency_sum_second": 39.64818500410107,
+  "qps_per_latency_sum": 0.15487572267226982,
+  "official_wall_metrics_location": "/expt/runs/sglang_B_recheck_v1/performance/measured",
+  "timing_definition": "EvalScope row latency and first_chunk_latency; TPOT=(latency-first_chunk_latency)/(completion_tokens-1). Official tool wall metrics retained separately, client process wall includes startup.",
+  "profiler_on": false,
+  "finished_at": "2026-11-17T21:20:42.519691+08:00"
+}

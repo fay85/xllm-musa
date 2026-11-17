@@ -1,0 +1,104 @@
+{
+  "at": "2026-11-17T21:24:00.130054+08:00",
+  "container": "034c599262ae8136bc51533e86ec79a2bccb27ef843e7f18269c430002bf00f2",
+  "case": "B_recheck_20261117",
+  "processes": [
+    {
+      "pid": 7960,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146088",
+      "cmd": "python -u -m sglang.launch_server --model-path /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt --tokenizer-path /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt --served-model-name deepseek-v4.1-flash-1017-w4afp8-mt --trust-remote-code --device musa --language-model-only --tp-size 8 --ep-size 8 --dp-size 1 --attention-backend dsv4 --moe-runner-backend triton --disable-radix-cache --disable-shared-experts-fusion --mem-fraction-static 0.90 --chunked-prefill-size 256 --context-length 4096 --max-total-tokens 8192 --max-running-requests 8 --watchdog-timeout 600 --tokenizer-backend fastokens --cuda-graph-backend-decode full --cuda-graph-backend-prefill disabled --enable-decoder-swa-bounded-replay --speculative-algorithm DSPARK --speculative-dspark-block-size 5 --random-seed 42 --disable-attn-tp-gather --moe-a2a-backend deepep --deepep-mode normal --deepep-dispatcher-output-dtype bf16 --deepep-config {\"normal_dispatch\":{\"num_sms\":32,\"num_max_nvl_chunked_send_tokens\":26},\"normal_combine\":{\"num_sms\":32,\"num_max_nvl_chunked_send_tokens\":16}} --enable-prefill-cp --cp-strategy interleave --enable-cp-decode-attn-tp --attn-cp-size 8 --host 0.0.0.0 --port 28586 --disaggregation-mode prefill --disaggregation-transfer-backend mooncake --disaggregation-bootstrap-port 28998 --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_9 ",
+      "D_threads": []
+    },
+    {
+      "pid": 14304,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "/opt/venv/bin/python -c from multiprocessing.resource_tracker import main;main(22) ",
+      "D_threads": []
+    },
+    {
+      "pid": 14305,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP0_TP0_EP0                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14306,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP1_TP1_EP1                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14307,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP2_TP2_EP2                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14308,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP3_TP3_EP3                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14309,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP4_TP4_EP4                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14310,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP5_TP5_EP5                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14311,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP6_TP6_EP6                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14312,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::scheduler_ATTN_CP7_TP7_EP7                                                                                                     ",
+      "D_threads": []
+    },
+    {
+      "pid": 14313,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528146754",
+      "cmd": "sglang::detokenizer                                                                                                                    ",
+      "D_threads": []
+    },
+    {
+      "pid": 15691,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528161048",
+      "cmd": "sglang::router                                                                                                                                                                                                                                                                                           ",
+      "D_threads": []
+    }
+  ],
+  "reason": "Same-window frozen B formal performance finished; archive then normal TERM. No SIGKILL/reset/driver action in this script."
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T19:36:39.672273+08:00\", \"formal_client/finished.json\": \"{\\n  \\\"at\\\": \\\"2026-11-17T19:35:57.554393+08:00\\\",\\n  \\\"exit_code\\\": 1\\n}\", \"formal_client/error.txt\": \"AssertionError('Compilation interference or monitoring gap: do not promote this round')\", \"sj9\": {\"at\": \"2026-11-17T19:36:39.206552+08:00\", \"pids\": [64062, 64063, 64064, 64065, 64066, 64067, 64068, 64069], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}, \"sj10\": {\"at\": \"2026-11-17T19:36:39.011997+08:00\", \"pids\": [60587, 60588, 60589, 60590, 60591, 60592, 60593, 60594], \"exit_codes\": [null, null, null, null, null, null, null, null], \"stopping\": false}}\n",
+  "stderr": ""
+}

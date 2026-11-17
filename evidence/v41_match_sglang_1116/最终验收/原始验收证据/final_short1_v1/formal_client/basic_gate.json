@@ -1,0 +1,78 @@
+[
+  {
+    "question": "只回答计算结果：1.3＋2.9 等于多少？",
+    "expected": "4.2",
+    "answer": "4.2",
+    "passed": true,
+    "usage": {
+      "prompt_tokens": 19,
+      "completion_tokens": 4,
+      "total_tokens": 23,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "first_SSE_json_s": 6.92203065007925,
+    "first_content_s": 6.922058009542525,
+    "finish_reason": "stop",
+    "request": {
+      "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "messages": [
+        {
+          "role": "user",
+          "content": "只回答计算结果：1.3＋2.9 等于多少？"
+        }
+      ],
+      "temperature": 0,
+      "top_p": 1,
+      "reasoning_effort": "none",
+      "chat_template_kwargs": {
+        "thinking_mode": "chat"
+      },
+      "max_tokens": 64,
+      "ignore_eos": false,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    }
+  },
+  {
+    "question": "只回答计算结果：7×8 等于多少？",
+    "expected": "56",
+    "answer": "56",
+    "passed": true,
+    "usage": {
+      "prompt_tokens": 15,
+      "completion_tokens": 2,
+      "total_tokens": 17,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "first_SSE_json_s": 0.879085598513484,
+    "first_content_s": 0.8791139684617519,
+    "finish_reason": "stop",
+    "request": {
+      "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "messages": [
+        {
+          "role": "user",
+          "content": "只回答计算结果：7×8 等于多少？"
+        }
+      ],
+      "temperature": 0,
+      "top_p": 1,
+      "reasoning_effort": "none",
+      "chat_template_kwargs": {
+        "thinking_mode": "chat"
+      },
+      "max_tokens": 64,
+      "ignore_eos": false,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    }
+  }
+]

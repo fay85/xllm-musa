@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"published\": \"/expt/scripts/match_final_client_v1.py\", \"sha256\": \"070b1498286256db62f0e03cf2010926c0c79bf92204ec06000a0ea4679f19f8\", \"gpu_started\": false}\n",
+  "stderr": ""
+}

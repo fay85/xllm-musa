@@ -1,0 +1,66 @@
+[
+  {
+    "label": "off_before_1",
+    "E2E_s": 0.47742667328566313,
+    "first_json_s": 0.26989164762198925,
+    "first_content_s": 0.26996986009180546,
+    "content": "Keeping experiment records helps engineers because it turns",
+    "usage": {
+      "prompt_tokens": 256,
+      "completion_tokens": 8,
+      "total_tokens": 264,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length"
+  },
+  {
+    "label": "off_before_2",
+    "E2E_s": 0.45572887267917395,
+    "first_json_s": 0.254504612646997,
+    "first_content_s": 0.25458388589322567,
+    "content": "Keeping experiment records helps engineers because it turns",
+    "usage": {
+      "prompt_tokens": 256,
+      "completion_tokens": 8,
+      "total_tokens": 264,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length"
+  },
+  {
+    "label": "profiled",
+    "E2E_s": 15.071442387998104,
+    "first_json_s": 9.791493359021842,
+    "first_content_s": 9.791567916050553,
+    "content": "Keeping experiment records helps engineers because it turns",
+    "usage": {
+      "prompt_tokens": 256,
+      "completion_tokens": 8,
+      "total_tokens": 264,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length"
+  },
+  {
+    "label": "off_after",
+    "E2E_s": 0.6908506704494357,
+    "first_json_s": 0.4581144666299224,
+    "first_content_s": 0.45819646306335926,
+    "content": "Keeping experiment records helps engineers because it turns",
+    "usage": {
+      "prompt_tokens": 256,
+      "completion_tokens": 8,
+      "total_tokens": 264,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "length"
+  }
+]

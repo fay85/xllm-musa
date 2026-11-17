@@ -1,0 +1,54 @@
+{
+  "at": "2026-11-17T20:41:55.907081+08:00",
+  "expected_enabled": false,
+  "ranks": [
+    {
+      "rank": 0,
+      "pid": 32713,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 1,
+      "pid": 32714,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 2,
+      "pid": 32715,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 3,
+      "pid": 32716,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 4,
+      "pid": 32717,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 5,
+      "pid": 32718,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 6,
+      "pid": 32719,
+      "start_ticks": "527941001",
+      "progress_present": false
+    },
+    {
+      "rank": 7,
+      "pid": 32720,
+      "start_ticks": "527941001",
+      "progress_present": false
+    }
+  ]
+}

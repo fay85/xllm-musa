@@ -1,0 +1,15 @@
+{
+  "ph": "X",
+  "cat": "user_annotation",
+  "name": "V41/DSpark/full_draft_graph_replay",
+  "pid": 60587,
+  "tid": 62789,
+  "ts": 4058870896292.134,
+  "dur": 83.68,
+  "args": {
+    "External id": 4780,
+    "Record function id": 5456,
+    "finished": true,
+    "Ev Idx": 4779
+  }
+}

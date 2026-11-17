@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"exists\": true, \"client.py\": {\"exists\": true, \"sha256\": \"3ecdbd481fba40473c4438604db39ae6c7c3b746d312fd9072833aa519421a8d\"}, \"configs/B_prefill.sh\": {\"exists\": true, \"sha256\": \"a2794b1e8cab3e18f580cd3db71b6ebd97c372a2ade0b9484340cf6916fb5236\"}, \"configs/B_decode.sh\": {\"exists\": true, \"sha256\": \"18db4f491fe9eb1849578b13c07f09042d2b5c53da95a9a44bc6f7f34b67c7bd\"}, \"runtime_exists\": false}\n",
+  "stderr": ""
+}

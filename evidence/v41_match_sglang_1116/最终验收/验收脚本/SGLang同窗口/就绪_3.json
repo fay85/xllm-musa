@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:18:03.709214+08:00\", \"roles\": {\"prefill\": {\"ready\": false, \"error\": \"URLError(ConnectionRefusedError(111, 'Connection refused'))\"}, \"decode\": {\"ready\": false, \"error\": \"URLError(ConnectionRefusedError(111, 'Connection refused'))\"}}, \"ready\": false}\n",
+  "stderr": ""
+}

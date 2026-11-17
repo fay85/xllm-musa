@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"ready\": false, \"reason\": \"Role metadata publication/visibility pending; no client launched\"}\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/exports/final_short2_v1_evidence.tar.gz\", \"bytes\": 1446072, \"sha256\": \"545c5d1b931c8359a71a5e52ebfde9bb46dbdd7822247f79f64b5fb631f4a544\", \"at\": \"2026-11-17T21:06:59.399055+08:00\"}\n",
+  "stderr": ""
+}

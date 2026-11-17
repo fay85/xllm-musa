@@ -1,0 +1,40 @@
+{
+  "selection_cases": 30,
+  "attention": [
+    {
+      "name": "attention_r1_c1024",
+      "cases": 16,
+      "branch": "scored_normal",
+      "max_output_rms": 0.0,
+      "max_next_rms": 0.0,
+      "max_state_rms": 0.0
+    },
+    {
+      "name": "attention_r1_c512",
+      "cases": 16,
+      "branch": "all_visible",
+      "max_output_rms": 0.0,
+      "max_next_rms": 0.0,
+      "max_state_rms": 0.0
+    },
+    {
+      "name": "attention_r2_c1024",
+      "cases": 16,
+      "branch": "all_visible",
+      "max_output_rms": 0.0,
+      "max_next_rms": 0.0,
+      "max_state_rms": 0.0
+    },
+    {
+      "name": "attention_r2_c512",
+      "cases": 16,
+      "branch": "all_visible",
+      "max_output_rms": 0.0,
+      "max_next_rms": 0.0,
+      "max_state_rms": 0.0
+    }
+  ],
+  "module_sha256": "448969013910b1c023bab941849f80ad34a0f45d36c65f419e43770c563d91f1",
+  "accuracy_scope": "仅通过基础功能检查，未完成模型精度验收",
+  "performance_tested": false
+}

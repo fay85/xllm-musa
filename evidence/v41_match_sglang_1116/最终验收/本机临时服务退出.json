@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-17T21:33:42.819155+08:00",
+  "records": [
+    {
+      "pid": 346322,
+      "start_ticks": "1459191",
+      "command": "/usr/bin/python3 -m http.server 18766 --bind 127.0.0.1 --directory /tmp/xiaopang_perfetto_ui_PwMt8e ",
+      "action": "TERM own local Perfetto server"
+    }
+  ]
+}

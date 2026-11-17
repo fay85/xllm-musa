@@ -1,0 +1,7 @@
+# Draft实际范围视图
+
+已分别用原始V41/DSpark/full_draft_graph_replay的RecordFunction id=5456定位OFF和ON最后一次draft回放，通过真实runtime correlation关联异步GPU节点，而非把附近GPU活动剪进CPU区间。OFF转换242区间，ON236区间（其中各有3条原生entry）；两张真实时间线均已目视核对，可看到短CPU图提交和其后GPU实际回放。
+
+OFF图跨度约3.991ms，ON约3.435ms，但这是不同重型profiler采集且含MCCL等待，不可据此声称稳定节省0.556ms。正式ON第二轮未重现首次优势，因此图中减少节点的事实与“全局稳定收益未证明”的结论同时成立。
+
+图在E55_off_v1_actual_draft_scope/Perfetto图及E55_on_v1_actual_draft_scope/Perfetto图。

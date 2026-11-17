@@ -1,0 +1,85 @@
+menu
+CURRENT TRACE
+actual_native_last.pftrace (4 MB)
+line_style
+Timeline
+info
+Overview
+data_exploration
+Data Explorer
+database
+Query (SQL)
+speed
+Metrics
+file_download
+Download
+NEW TRACE
+folder_open
+Open trace file
+library_books
+Open multiple trace files
+fiber_smart_record
+Record new trace
+memory
+Memscope
+PREVIEW
+android
+Open Android example
+language
+Open Chrome example
+SETTINGS
+settings
+Settings
+emoji_flags
+Flags
+extension
+Plugins
+SUPPORT
+Documentation & Bugs
+CONVERT TRACE
+Convert to other formats
+WSM
+0
+SW
+OFF
+v59.1-79997ada9
+unfold_more
+unfold_less
+keep_off
+filter_alt
+workspacesDefault Workspace
+check1 trackarrow_drop_down
+expand_less
+Global Track Events
+check_box_outline_blank
+CPU runtime / driver thread 34927
+check_box_outline_blank
+GPU kernel stream 22
+check_box_outline_blank
+Native C++ / ATen thread 34927
+check_box_outline_blank
+expand_less
+Process 32713
+indeterminate_check_box
+Thread 34927 Callstacks
+check_box
+more_vert
+Current Selection
+vertical_align_top
+keyboard_arrow_down
+Area Selection
+Callstack Flamegraph
+Flamegraph
+Call Tree
+Functions
+Measure:
+Real native semantic + ATen entries (COUNT, not CPU time)expand_more
+Filters:
+add
+content_copy
+delete
+Top Down
+Bottom Up
+searchHighlight
+downloadExport
+syncTimeline Sync

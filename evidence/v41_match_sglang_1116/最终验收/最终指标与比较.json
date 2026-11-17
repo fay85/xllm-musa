@@ -1,0 +1,31 @@
+{
+  "xllm_three_rounds": {
+    "TTFT_ms": 324.4357345004876,
+    "TPOT_ms": 20.48600930355343,
+    "E2E_s": 5.548368106906612,
+    "output_tokens_s": 46.13969280108344
+  },
+  "sglang_same_window": {
+    "TTFT_ms": 948.7579518929124,
+    "TPOT_ms": 21.60012523844546,
+    "E2E_s": 6.456789887696504,
+    "output_tokens_s": 39.64818500410107
+  },
+  "xllm_long": {
+    "TTFT_ms": 1887.8186874091625,
+    "TPOT_ms": 24.66753926201194,
+    "E2E_s": 8.178041199222207,
+    "output_tokens_s": 31.303339487253687
+  },
+  "versus_frozen_historical_goal": {
+    "TPOT_reduction_percent": 5.025455245463927,
+    "output_increase_percent": 16.95739620046499,
+    "TTFT_reduction_percent": 67.2300377256992
+  },
+  "versus_same_window_sglang": {
+    "TPOT_reduction_percent": 5.157914237038986,
+    "output_increase_percent": 16.37277417947609,
+    "TTFT_reduction_percent": 65.80416176189192
+  },
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}

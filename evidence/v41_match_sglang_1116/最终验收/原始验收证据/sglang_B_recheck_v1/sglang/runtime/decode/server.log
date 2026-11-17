@@ -1,0 +1,1255 @@
+[11/17/26 21:17:20] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+/workspace/sglang/python/sglang/launch_server.py:71: UserWarning: 'python -m sglang.launch_server' is still supported, but 'sglang serve' is the recommended entrypoint.
+  Example: sglang serve --model-path <model> [options]
+  warnings.warn(
+[2026-11-17 21:17:21] /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:21 | warnings | 139665514267072 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+[2026-11-17 21:17:22] KV cache is forced as chunk cache for decode server
+2026-11-17 21:17:22 | pd_disaggregation_hook | 139665514267072 | WARNING : KV cache is forced as chunk cache for decode server
+[2026-11-17 21:17:22] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:22 | model_config | 139665514267072 | INFO : Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:22] Hybrid SWA model detected. architectures=['DeepseekV4ForCausalLM']
+2026-11-17 21:17:22 | model_override_base | 139665514267072 | INFO : Hybrid SWA model detected. architectures=['DeepseekV4ForCausalLM']
+[2026-11-17 21:17:22] Use dsv4 attention backend for DeepseekV4ForCausalLM, setting page_size to 256.
+2026-11-17 21:17:22 | deepseek_v4 | 139665514267072 | INFO : Use dsv4 attention backend for DeepseekV4ForCausalLM, setting page_size to 256.
+[2026-11-17 21:17:22] Setting KV cache dtype to fp8_e4m3 for DeepseekV4ForCausalLM.
+2026-11-17 21:17:22 | overrides | 139665514267072 | WARNING : Setting KV cache dtype to fp8_e4m3 for DeepseekV4ForCausalLM.
+[2026-11-17 21:17:22] DP attention is enabled. chunked prefill size is adjusted from 256 to 32.
+2026-11-17 21:17:22 | parallel_hook | 139665514267072 | WARNING : DP attention is enabled. chunked prefill size is adjusted from 256 to 32.
+[2026-11-17 21:17:22] DSpark draft weights are bundled in the target checkpoint; defaulting --speculative-draft-model-path to --model-path (/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt).
+2026-11-17 21:17:22 | speculative_hook | 139665514267072 | INFO : DSpark draft weights are bundled in the target checkpoint; defaulting --speculative-draft-model-path to --model-path (/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt).
+[2026-11-17 21:17:23] server_args={'model_path': '/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt', 'tokenizer_path': '/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt', 'tokenizer_mode': 'auto', 'tokenizer_backend': 'huggingface', 'tokenizer_worker_num': 1, 'detokenizer_worker_num': 1, 'skip_tokenizer_init': False, 'load_format': 'auto', 'model_loader_extra_config': '{}', 'trust_remote_code': True, 'context_length': 4096, 'is_embedding': False, 'enable_multimodal': None, 'revision': None, 'model_impl': 'auto', 'model_config_parser': 'auto', 'json_model_override_args': '{}', 'dtype': 'auto', 'quantization': None, 'quantization_param_path': None, 'kv_cache_dtype': 'fp8_e4m3', 'enable_fp32_lm_head': False, 'modelopt_quant': None, 'modelopt_checkpoint_restore_path': None, 'modelopt_checkpoint_save_path': None, 'modelopt_export_path': None, 'quantize_and_serve': False, 'rl_quant_profile': None, 'enable_tf32_matmul': False, 'mem_fraction_static': 0.93, 'max_running_requests': 8, 'max_queued_requests': None, 'max_total_tokens': 8192, 'chunked_prefill_size': 32, 'prefill_decode_interval': 0, 'enable_dynamic_chunking': False, 'max_prefill_tokens': 16384, 'prefill_max_requests': None, 'schedule_policy': 'fcfs', 'enable_priority_scheduling': False, 'disable_priority_preemption': False, 'default_priority_value': None, 'abort_on_priority_when_disabled': False, 'schedule_low_priority_values_first': False, 'priority_scheduling_preemption_threshold': 10, 'retraction_policy': 'length', 'schedule_conservativeness': 0.3, 'page_size': 256, 'c128_page_size': 16, 'swa_full_tokens_ratio': 0.8, '_swa_full_tokens_ratio_explicitly_set': False, 'swa_prefix_tails': None, 'disable_hybrid_swa_memory': False, 'radix_eviction_policy': 'lru', 'radix_eviction_policy_config': None, 'prefill_only_disable_kv_cache': False, 'disable_radix_cache': True, 'enable_page_major_kv_layout': False, 'enable_unified_memory': False, 'disable_chunked_prefix_cache': False, 'disable_overlap_schedule': True, 'num_continuous_decode_steps': 1, 'scheduler_recv_interval': 1, 'enable_mixed_chunk': False, 'nccl_port': None, 'dist_timeout': None, 'dist_init_addr': None, 'gated_launch_port': None, 'nnodes': 1, 'node_rank': 0, 'tp_size': 8, 'dcp_size': 1, 'pp_size': 1, 'pp_max_micro_batch_size': None, 'pp_async_batch_depth': 0, 'dp_size': 8, 'load_balance_method': 'round_robin', 'attn_cp_size': 1, 'moe_dp_size': 1, 'dwdp_size': 1, 'dcp_comm_backend': 'ag_rs', 'dcp_replicate_q_proj': None, 'enable_prefill_cp': False, 'cp_strategy': None, 'enable_dsa_cache_layer_split': False, 'enable_cp_decode_attn_tp': False, 'enable_dp_attention': True, 'enable_dp_attention_local_control_broadcast': False, 'enable_dp_lm_head': False, 'enable_tp_lm_head_all_to_all': True, 'enable_attn_tp_input_scattered': False, 'enable_shared_experts_attn_tp': False, 'enable_dense_mlp_attn_tp': False, 'enable_layernorm_sp': False, 'disable_attn_tp_gather': True, 'enable_p2p_check': False, 'device': 'musa', 'base_gpu_id': 0, 'gpu_id_step': 1, 'random_seed': 42, 'mlx_enable_sampling': False, 'watchdog_timeout': 1800.0, 'soft_watchdog_timeout': None, 'sleep_on_idle': False, 'use_ray': False, 'custom_sigquit_handler': None, 'numa_node': None, 'gc_threshold': None, 'host': '0.0.0.0', 'port': 28588, 'fastapi_root_path': '', 'smg_grpc_mode': False, 'grpc_mode': False, 'grpc_port': None, 'grpc_worker_threads': 4, 'sidecar': None, 'sidecar_args': None, 'skip_server_warmup': False, 'warmups': None, 'enable_http2': False, 'http2_max_concurrent_streams': 200, 'http2_initial_connection_window_size': 1048576, 'ssl_keyfile': None, 'ssl_certfile': None, 'ssl_ca_certs': None, 'ssl_keyfile_password': None, 'enable_ssl_refresh': False, 'api_key': None, 'admin_api_key': None, 'served_model_name': 'deepseek-v4.1-flash-1017-w4afp8-mt', 'weight_version': 'default', 'chat_template': None, 'hf_chat_template_name': None, 'completion_template': None, 'file_storage_path': 'sglang_storage', 'enable_cache_report': False, 'return_input_ids': False, 'return_output_ids': False, 'reasoning_parser': None, 'default_chat_template_kwargs': None, 'strip_thinking_cache': False, 'enable_strict_thinking': False, 'tool_call_parser': None, 'tool_server': None, 'sampling_defaults': 'model', 'asr_max_buffer_seconds': 60, 'asr_max_concurrent_sessions': 32, 'preferred_sampling_params': None, 'allow_auto_truncate': False, 'stream_interval': 1, 'batch_notify_size': 16, 'stream_response_default_include_usage': False, 'incremental_streaming_output': False, 'enable_streaming_session': False, 'enable_session_radix_cache': False, 'log_level': 'info', 'log_level_http': None, 'log_requests': False, 'log_requests_level': 2, 'log_requests_format': 'text', 'log_requests_target': None, 'uvicorn_access_log_exclude_prefixes': [], 'crash_dump_folder': None, 'show_time_cost': False, 'enable_metrics': False, 'smg_http_sidecar_port': None, 'enable_mfu_metrics': False, 'enable_metrics_for_all_schedulers': False, 'load_snapshot_publish_interval': 15, 'tokenizer_metrics_custom_labels_header': 'x-custom-labels', 'tokenizer_metrics_allowed_custom_labels': None, 'extra_metric_labels': None, 'bucket_time_to_first_token': None, 'bucket_inter_token_latency': None, 'bucket_e2e_request_latency': None, 'prompt_tokens_buckets': None, 'generation_tokens_buckets': None, 'gc_warning_threshold_secs': 0.0, 'decode_log_interval': 40, 'enable_request_time_stats_logging': False, 'kv_events_config': None, 'load_publish_endpoint': None, 'enable_forward_pass_metrics': False, 'forward_pass_metrics_worker_id': '', 'forward_pass_metrics_ipc_name': None, 'enable_trace': False, 'trace_modules': 'request', 'otlp_traces_endpoint': 'localhost:4317', 'export_metrics_to_file': False, 'export_metrics_to_file_dir': None, 'stat_loggers': None, 'constrained_json_whitespace_pattern': None, 'constrained_json_disable_any_whitespace': False, 'attention_backend': 'dsv4', 'decode_attention_backend': None, 'enable_lean_attention': None, 'prefill_attention_backend': None, 'sampling_backend': 'pytorch', 'grammar_backend': 'xgrammar', 'radix_cache_backend': None, 'mm_attention_backend': None, 'fp8_gemm_runner_backend': 'auto', 'fp4_gemm_runner_backend': 'auto', 'bf16_gemm_backend': 'auto', 'dsa_prefill_backend': None, 'dsv4_prefill_backend': 'auto', 'dsa_decode_backend': None, 'dsa_paged_mqa_logits_backend': 'auto', 'dsa_topk_backend': 'sgl-kernel', 'disable_flashinfer_autotune': False, 'flashinfer_autotune_skip_ops': None, 'mamba_backend': 'triton', 'cuda_graph_config': {'decode': {'backend': 'full', 'max_bs': 8, 'bs': [1, 2, 3, 4, 5, 6, 7, 8], 'tc_compiler': 'eager', 'full_prefill_max_req': None, 'full_prefill_prefix_chunk_tokens': None, 'max_seq_len': None}, 'prefill': {'backend': 'disabled', 'max_bs': 256, 'bs': [4, 8, 12, 16, 20, 24, 28, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256], 'tc_compiler': 'eager', 'full_prefill_max_req': None, 'full_prefill_prefix_chunk_tokens': None, 'max_seq_len': None}}, 'cuda_graph_backend_decode': 'full', 'cuda_graph_backend_prefill': 'disabled', 'cuda_graph_max_bs_decode': 8, 'cuda_graph_max_bs_prefill': None, 'cuda_graph_max_seq_len_prefill': None, 'cuda_graph_bs_decode': None, 'cuda_graph_bs_prefill': None, 'cuda_graph_tc_compiler': None, 'disable_prefill_cuda_graph': False, 'disable_decode_cuda_graph': False, 'disable_cuda_graph': False, 'disable_cuda_graph_padding': False, 'enable_profile_cuda_graph': False, 'enable_cudagraph_gc': False, 'debug_cuda_graph': False, 'enable_layerwise_nvtx_marker': False, 'enable_nccl_nvls': False, 'enable_symm_mem': False, 'triton_attention_reduce_in_fp32': False, 'triton_attention_num_kv_splits': 8, 'triton_attention_split_tile_size': None, 'flashinfer_mla_disable_ragged': False, 'enable_fused_qk_norm_rope': False, 'enable_precise_embedding_interpolation': False, 'enable_fused_moe_sum_all_reduce': False, 'enable_deepseek_v4_fp4_indexer': False, 'disable_custom_all_reduce': False, 'enable_mscclpp': False, 'enable_torch_symm_mem': False, 'enable_scattered_sconv': False, 'pre_warm_nccl': False, 'enable_quant_communications': False, 'enable_flashinfer_allreduce_fusion': False, 'enforce_disable_flashinfer_allreduce_fusion': False, 'flashinfer_allreduce_fusion_backend': None, 'enable_aiter_allreduce_fusion': False, 'enable_torch_compile': False, 'enable_torch_compile_debug_mode': False, 'torch_compile_max_bs': 32, 'speculative_algorithm': 'DSPARK', 'uno_lora_path': None, 'speculative_draft_model_path': '/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt', 'speculative_draft_model_revision': None, 'speculative_draft_load_format': None, 'speculative_num_steps': 1, 'speculative_eagle_topk': 1, 'speculative_num_draft_tokens': 6, 'speculative_dflash_block_size': None, 'speculative_dspark_block_size': 5, 'speculative_dspark_sps_table_path': None, 'speculative_dspark_confidence_sts_path': None, 'speculative_dspark_align_verify_tokens_to_graph_tier': False, 'speculative_accept_threshold_single': 1.0, 'speculative_accept_threshold_acc': 1.0, 'speculative_use_rejection_sampling': False, 'speculative_token_map': None, 'speculative_attention_mode': 'prefill', 'speculative_draft_attention_backend': None, 'speculative_dsa_topk_backend': 'sgl-kernel', 'speculative_draft_kv_cache_dtype': None, 'speculative_draft_window_size': None, 'speculative_moe_runner_backend': 'triton', 'speculative_moe_a2a_backend': None, 'speculative_draft_model_quantization': None, '_speculative_draft_quantization_explicitly_set': False, 'speculative_skip_dp_mlp_sync': False, 'enable_multi_layer_eagle': False, 'speculative_adaptive': False, 'speculative_adaptive_config': None, 'decoupled_spec_bind_endpoint': None, 'decoupled_spec_connect_endpoints': None, 'decoupled_spec_rank': None, 'decoupled_spec_role': 'null', 'spec_trace_dir': None, 'speculative_ngram_min_bfs_breadth': 1, 'speculative_ngram_max_bfs_breadth': 10, 'speculative_ngram_match_type': 'BFS', 'speculative_ngram_max_trie_depth': 18, 'speculative_ngram_capacity': 10000000, 'speculative_ngram_external_corpus_path': None, 'speculative_ngram_external_sam_budget': 0, 'speculative_ngram_external_corpus_max_tokens': 10000000, 'ep_size': 8, 'moe_a2a_backend': 'deepep', 'enable_w4a4_mxfp4_megamoe': False, 'deepep_v2_mode': 'direct', 'moe_runner_backend': 'triton', 'flashinfer_mxfp4_moe_precision': 'default', 'deepep_mode': 'low_latency', 'fuseep_mode': 2, 'deepep_dispatcher_output_dtype': 'bf16', 'ep_num_redundant_experts': 0, 'ep_dispatch_algorithm': None, 'init_expert_location': 'trivial', 'enable_eplb': False, 'eplb_algorithm': 'auto', 'eplb_rebalance_num_iterations': 1000, 'eplb_rebalance_layers_per_chunk': None, 'eplb_min_rebalancing_utilization_threshold': 1.0, 'expert_distribution_recorder_mode': None, 'expert_distribution_recorder_buffer_size': 1000, 'expert_balancedness_report_mode': 'off', 'deepep_config': '{"normal_dispatch":{"num_sms":60,"num_max_nvl_chunked_send_tokens":26},"normal_combine":{"num_sms":60,"num_max_nvl_chunked_send_tokens":16}}', 'moe_dense_tp_size': None, 'elastic_ep_backend': None, 'enable_elastic_expert_backup': False, 'mooncake_ib_device': None, 'enable_waterfill': False, 'ep_join_mode': None, 'ep_join_rank_offset': 0, 'elastic_ep_initial_size': None, 'max_ep_size': None, 'elastic_ep_scale_timeout': 600, 'elastic_ep_rejoin': False, 'disable_flashinfer_cutlass_moe_fp4_allgather': False, 'disable_shared_experts_fusion': True, 'enforce_shared_experts_fusion': False, 'max_mamba_cache_size': None, 'mamba_ssm_dtype': None, 'mamba_max_states_per_path': -1, 'enable_mamba_cache_stochastic_rounding': False, 'mamba_cache_philox_rounds': 0, 'mamba_full_memory_ratio': 0.9, 'mamba_radix_cache_strategy': 'auto', 'uses_mamba_radix_cache': False, 'mamba_track_interval': 256, 'enable_int8_mamba_checkpoint': False, 'int8_mamba_ckpt_size': None, 'linear_attn_backend': 'triton', 'linear_attn_decode_backend': None, 'linear_attn_prefill_backend': None, 'linear_attn_verify_backend': None, 'enable_linear_replayssm': False, 'linear_replayssm_cache_len': 16, 'enable_linear_replayssm_spec': False, 'enable_hierarchical_cache': False, 'hicache_host_memory_mode': 'cache', 'hicache_ratio': None, 'hicache_size': 0, 'hicache_write_policy': 'write_through', 'hicache_io_backend': 'kernel', 'hicache_mem_layout': 'page_first', 'hicache_storage_backend': None, 'hicache_storage_prefetch_policy': 'timeout', 'hicache_storage_backend_extra_config': None, 'hicache_storage_prefetch_retry_poll_interval': 0, 'hicache_storage_prefetch_retry_max_attempts': 4, 'enable_unified_cache_external_linker': False, 'unified_cache_external_linker_backend': 'mooncake', 'enable_hisparse': False, 'hisparse_config': None, 'enable_broadcast_mm_inputs_process': False, 'enable_prefix_mm_cache': False, 'mm_enable_dp_encoder': False, 'mm_process_config': {}, 'mm_processor_worker_num': 0, 'mm_io_worker_num': 0, 'allowed_media_domains': [], 'media_url_max_file_size_mb': 64, 'mm_preprocess_cache_size_mb': None, 'trust_mm_content_hashes': False, 'limit_mm_data_per_request': None, 'enable_mm_global_cache': False, 'image_processor_backend': 'auto', 'mm_global_cache_backend': 'mooncake', 'disable_fast_image_processor': False, 'mm_feature_transport': 'cpu', 'keep_mm_feature_on_device': False, 'enable_lora': None, 'enable_lora_overlap_loading': None, 'max_lora_rank': None, 'lora_target_modules': None, 'lora_paths': None, 'max_loaded_loras': None, 'max_loras_per_batch': 8, 'lora_eviction_policy': 'lru', 'lora_backend': 'csgmv', 'max_lora_chunk_size': 16, 'experts_shared_outer_loras': None, 'lora_use_virtual_experts': False, 'lora_strict_loading': False, 'lora_drain_wait_threshold': 0.0, 'enable_two_batch_overlap': False, 'enable_single_batch_overlap': False, 'tbo_token_distribution_threshold': 0.48, 'cpu_offload_gb': 0, 'offload_group_size': -1, 'offload_num_in_group': 1, 'offload_prefetch_step': 1, 'offload_mode': 'cpu', 'enable_lmcache': False, 'lmcache_config_file': None, 'enable_flexkv': False, 'flexkv_config_file': None, 'kt_weight_path': None, 'kt_method': 'AMXINT4', 'kt_cpuinfer': None, 'kt_threadpool_count': 2, 'kt_num_gpu_experts': None, 'kt_max_deferred_experts_per_token': None, 'dllm_algorithm': None, 'dllm_algorithm_config': None, 'dllm_fdfo': True, 'disaggregation_mode': 'decode', 'disaggregation_transfer_backend': 'mooncake', 'disaggregation_bootstrap_port': 28998, 'disaggregation_ib_device': 'mlx5_0,mlx5_1,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_11', 'disaggregation_decode_enable_radix_cache': False, 'disaggregation_decode_enable_offload_kvcache': False, 'disaggregation_decode_retraction_backup': None, 'num_reserved_decode_tokens': 512, 'disaggregation_decode_extra_slots': 2, 'disaggregation_decode_polling_interval': 1, 'optimistic_prefill_attempts': 0, 'encoder_only': False, 'language_only': False, 'language_model_only': True, 'encoder_transfer_backend': 'zmq_to_scheduler', 'encoder_urls': [], 'encoder_bootstrap_port': 8997, 'encoder_register_urls': [], 'enable_adaptive_dispatch_to_encoder': False, 'enable_pdmux': False, 'pdmux_config_path': None, 'sm_group_num': 8, 'startup_weight_load_mode': 'serial', 'custom_weight_loader': [], 'weight_loader_disable_mmap': False, 'weight_loader_prefetch_checkpoints': False, 'weight_loader_prefetch_num_threads': 4, 'weight_loader_drop_cache_after_load': False, 'remote_instance_weight_loader_seed_instance_ip': None, 'remote_instance_weight_loader_seed_instance_service_port': None, 'remote_instance_weight_loader_send_weights_group_ports': None, 'remote_instance_weight_loader_backend': 'nccl', 'remote_instance_weight_loader_start_seed_via_transfer_engine': False, 'engine_info_bootstrap_port': 6789, 'modelexpress_config': None, 'download_dir': None, 'model_checksum': None, 'delete_ckpt_after_loading': False, 'decrypted_config_file': None, 'decrypted_draft_config_file': None, 'checkpoint_engine_wait_weights_before_ready': False, 'enable_prefill_delayer': False, 'prefill_delayer_max_delay_passes': 30, 'prefill_delayer_token_usage_low_watermark': None, 'prefill_delayer_forward_passes_buckets': None, 'prefill_delayer_wait_seconds_buckets': None, 'prefill_delayer_queue_min_ratio': None, 'prefill_delayer_max_delay_ms': None, 'min_free_slots_delay': None, 'enable_deterministic_inference': False, 'rl_on_policy_target': None, 'kv_canary': 'none', 'kv_canary_real_data': 'none', 'kv_canary_sweep_interval': 0, 'enable_dynamic_batch_tokenizer': False, 'dynamic_batch_tokenizer_batch_size': 32, 'dynamic_batch_tokenizer_batch_timeout': 0.002, 'enable_tokenizer_batch_encode': False, 'disable_tokenizer_batch_decode': False, 'debug_tensor_dump_output_folder': None, 'debug_tensor_dump_layers': None, 'debug_tensor_dump_input_file': None, 'enable_memory_saver': False, 'enable_weights_cpu_backup': False, 'enable_draft_weights_cpu_backup': False, 'enable_custom_logit_processor': False, 'enable_return_hidden_states': False, 'return_hidden_states_mode': None, 'enable_return_routed_experts': False, 'enable_return_indexer_topk': False, 'enable_encoder_swa_bounded_replay': False, 'enable_decoder_swa_bounded_replay': False, 'sampling_mask_max_tokens': 4096, 'disable_outlines_disk_cache': False, 'enable_mis': False, 'weight_cache_mode': 'off', 'weight_cache_socket': None, 'weight_cache_timeout': 1800, 'forward_hooks': None, 'msprobe_dump_config': None, 'ple_offload_embedding': None, 'ple_offload_backend': 'pinned', 'ple_offload_dir': None, 'speculative_domino_candidate_pool_size': 2048, 'flashinfer_a2a_dispatch_type': None, 'dsv4_attn_backend': 'auto', '_radix_eviction_policy_explicitly_set': False, 'enable_response_store': False}
+[2026-11-17 21:17:23] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:24] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:25] No HuggingFace chat template found
+[2026-11-17 21:17:25] No chat template found, defaulting to 'string' content format
+[11/17/26 21:17:27] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:27] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+2026-11-17 21:17:28 | warnings | 139952255484352 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:28 | warnings | 139829094973888 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+[2026-11-17 21:17:30] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[11/17/26 21:17:33] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:34] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+2026-11-17 21:17:35 | warnings | 139799292367296 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140475542368704 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140088177422784 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140173570081216 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140278847898048 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140622571983296 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140712004870592 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:35 | warnings | 140111960691136 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 139799292367296 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:36 | hook_registry | 139799292367296 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:36 DP2 TP2 EP2] Process 828 gpu_id 2 is running on CPUs: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175]
+[2026-11-17 21:17:36 DP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140475542368704 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:36 | hook_registry | 140475542368704 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:36 DP5 TP5 EP5] Process 831 gpu_id 5 is running on CPUs: [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223]
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140088177422784 | INFO : Executed general plugin: smg-zmq
+[2026-11-17 21:17:36 DP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:36 | hook_registry | 140088177422784 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:36 DP3 TP3 EP3] Process 829 gpu_id 3 is running on CPUs: [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191]
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140173570081216 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:36 | hook_registry | 140173570081216 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:36 DP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:36 DP1 TP1 EP1] Process 827 gpu_id 1 is running on CPUs: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159]
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140278847898048 | INFO : Executed general plugin: smg-zmq
+[2026-11-17 21:17:36 DP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | hook_registry | 140278847898048 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140622571983296 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140712004870592 | INFO : Executed general plugin: smg-zmq
+[2026-11-17 21:17:36 DP7 TP7 EP7] Process 833 gpu_id 7 is running on CPUs: [112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255]
+2026-11-17 21:17:36 | hook_registry | 140622571983296 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+2026-11-17 21:17:36 | hook_registry | 140712004870592 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:36 DP6 TP6 EP6] Process 832 gpu_id 6 is running on CPUs: [96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238]
+[2026-11-17 21:17:36 DP0 TP0 EP0] Process 826 gpu_id 0 is running on CPUs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143]
+[2026-11-17 21:17:36 DP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:36 | __init__ | 140111960691136 | INFO : Executed general plugin: smg-zmq
+[2026-11-17 21:17:36 DP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:36 | hook_registry | 140111960691136 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:36 DP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:36 DP4 TP4 EP4] Process 830 gpu_id 4 is running on CPUs: [64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207]
+[2026-11-17 21:17:36 DP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP2 TP2 EP2] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP5 TP5 EP5] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP2 TP2 EP2] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:17:38 DP3 TP3 EP3] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP5 TP5 EP5] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:17:38 DP1 TP1 EP1] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP6 TP6 EP6] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP7 TP7 EP7] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:38.489912  1200 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:38.489946  1200 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:38.489974  1200 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:15134
+I1117 21:17:38.490025  1200 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:38.493716  1200 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:38.516223  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:38.517001  1200 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:38.540081  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:38.540853  1200 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:38.568133  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:38.568920  1200 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+[2026-11-17 21:17:38 DP4 TP4 EP4] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP0 TP0 EP0] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 DP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:38.596127  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:38.597044  1200 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:38.612238  1219 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:38.612277  1219 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:38.612311  1219 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:15390
+I1117 21:17:38.612371  1219 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:38.615893  1219 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:38.621490  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:38.622325  1200 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:38.639757  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:38.640481  1219 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:38.644032  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:38.644789  1200 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+[2026-11-17 21:17:38 DP3 TP3 EP3] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:38.650168  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:38.650882  1200 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:38.667779  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:38.668493  1219 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:38.676095  1200 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:38.676878  1200 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:38.676946  1200 rdma_transport.cpp:162] Auto-splitting buffer 0x7f2093fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+[2026-11-17 21:17:38 DP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:38.695763  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:38.696478  1219 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+[2026-11-17 21:17:38 DP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:38.723729  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:38.724480  1219 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+[2026-11-17 21:17:38 DP6 TP6 EP6] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:38.751735  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:38.752470  1219 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+[2026-11-17 21:17:38 DP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP1 TP1 EP1] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:38.779783  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:38.780539  1219 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+[2026-11-17 21:17:38 DP7 TP7 EP7] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:38.803790  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:38.804548  1219 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+[2026-11-17 21:17:38 DP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:38.827711  1219 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:38.828476  1219 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:38.828547  1219 rdma_transport.cpp:162] Auto-splitting buffer 0x7fbe0ffff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+[2026-11-17 21:17:38 DP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:38 DP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:38.898299  1275 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:38.898331  1275 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:38.898356  1275 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:15530
+I1117 21:17:38.898401  1275 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:38.902248  1275 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+[2026-11-17 21:17:38 DP4 TP4 EP4] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:38.929414  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:38.932408  1275 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+[2026-11-17 21:17:38 DP0 TP0 EP0] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:38.942730  1283 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:38.942768  1283 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:38.942795  1283 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:16532
+I1117 21:17:38.942834  1283 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:38.946491  1283 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:38.953228  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+[2026-11-17 21:17:38 DP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:38.954005  1283 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:38.960963  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:38.965777  1275 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:38.973050  1303 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:38.973088  1303 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:38.973116  1303 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:15872
+I1117 21:17:38.973158  1303 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:38.976701  1303 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+[2026-11-17 21:17:38 DP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:38.984642  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:38.985489  1283 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:38.992749  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:38.993896  1314 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:38.993932  1314 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:38.993968  1314 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:16924
+I1117 21:17:38.994016  1314 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:38.997519  1275 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I1117 21:17:38.997813  1314 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:39.000363  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:39.001201  1303 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:39.001748  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:39.002487  1275 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+I1117 21:17:39.006646  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:39.007339  1275 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:39.013295  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:39.014467  1283 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I1117 21:17:39.020124  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:39.020864  1314 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:39.024698  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:39.028118  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:39.028924  1303 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:39.029479  1283 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+I1117 21:17:39.031745  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:39.032397  1342 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:39.032435  1342 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:39.032465  1342 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:16944
+I1117 21:17:39.032500  1275 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I1117 21:17:39.032521  1342 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:39.033172  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:39.033572  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:39.033864  1303 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I1117 21:17:39.034245  1283 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:39.036021  1342 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:39.040627  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:39.041405  1342 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:39.043814  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:39.044939  1303 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+I1117 21:17:39.048070  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:39.048866  1314 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:39.059863  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:39.059877  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:39.060557  1283 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I1117 21:17:39.060613  1275 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:39.064394  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:39.064824  1275 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:39.065227  1342 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:39.065539  1275 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:39.065603  1275 rdma_transport.cpp:162] Auto-splitting buffer 0x7f63d7fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:39.072446  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:39.073326  1314 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I1117 21:17:39.076601  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:39.077540  1303 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:39.087725  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:39.087809  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:39.088425  1283 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:39.088564  1342 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I1117 21:17:39.093189  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:39.093992  1342 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:39.094223  1394 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:39.094262  1394 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 12001
+I1117 21:17:39.094292  1394 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:16612
+I1117 21:17:39.094341  1394 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:39.097882  1394 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:39.099736  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:39.100482  1314 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+I1117 21:17:39.103749  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_8/
+I1117 21:17:39.104754  1394 rdma_context.cpp:133] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I1117 21:17:39.104928  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:39.105676  1314 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:39.109683  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:39.110705  1303 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I1117 21:17:39.111493  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:39.112160  1314 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I1117 21:17:39.115696  1283 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:39.115850  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:39.116410  1283 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:39.116479  1283 rdma_transport.cpp:162] Auto-splitting buffer 0x7fe02bfff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:39.116650  1342 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:39.121066  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:39.121438  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:39.121824  1342 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I1117 21:17:39.126969  1314 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:39.132841  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:39.133018  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:39.133877  1394 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I1117 21:17:39.136181  1342 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:39.136193  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:39.136893  1303 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:39.148108  1303 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:39.148793  1314 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:39.155236  1303 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+I1117 21:17:39.155277  1314 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:39.155303  1303 rdma_transport.cpp:162] Auto-splitting buffer 0x7f77affff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+W1117 21:17:39.155349  1314 rdma_transport.cpp:162] Auto-splitting buffer 0x7ff527fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:39.156817  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:39.157837  1394 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I1117 21:17:39.163949  1342 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:39.164752  1342 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:39.164830  1342 rdma_transport.cpp:162] Auto-splitting buffer 0x7f903bfff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:39.181064  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:39.182077  1394 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+I1117 21:17:39.205139  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:39.206164  1394 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I1117 21:17:39.232988  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:39.234001  1394 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I1117 21:17:39.239797  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_7/
+I1117 21:17:39.240799  1394 rdma_context.cpp:133] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I1117 21:17:39.246181  1394 rdma_context.cpp:542] Find best gid index: 3 on mlx5_11/
+I1117 21:17:39.247145  1394 rdma_context.cpp:133] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+W1117 21:17:39.247216  1394 rdma_transport.cpp:162] Auto-splitting buffer 0x7f6957fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+[2026-11-17 21:17:39 DP2 TP2 EP2] Init torch distributed begin.
+[2026-11-17 21:17:39 DP5 TP5 EP5] Init torch distributed begin.
+[2026-11-17 21:17:39 DP6 TP6 EP6] Init torch distributed begin.
+[2026-11-17 21:17:39 DP3 TP3 EP3] Init torch distributed begin.
+[2026-11-17 21:17:39 DP7 TP7 EP7] Init torch distributed begin.
+[2026-11-17 21:17:39 DP4 TP4 EP4] Init torch distributed begin.
+[2026-11-17 21:17:39 DP1 TP1 EP1] Init torch distributed begin.
+[2026-11-17 21:17:39 DP0 TP0 EP0] Init torch distributed begin.
+[Gloo] Rank 0 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 1 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank [Gloo] Rank [Gloo] Rank 23[Gloo] Rank [Gloo] Rank 4 is connected to  is connected to [Gloo] Rank 57 is connected to 77 is connected to 6 is connected to 7 peer ranks.  peer ranks. 7 is connected to 7 peer ranks. Expected number of connected peer ranks is : Expected number of connected peer ranks is :  peer ranks. 7 peer ranks. Expected number of connected peer ranks is : 77Expected number of connected peer ranks is :  peer ranks. Expected number of connected peer ranks is : 7
+
+7Expected number of connected peer ranks is : 
+7
+
+7
+[Gloo] Rank 0 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 1 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank [Gloo] Rank 2 is connected to 37 is connected to  peer ranks. 7Expected number of connected peer ranks is :  peer ranks. 7Expected number of connected peer ranks is : 
+7
+[Gloo] Rank 4 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 6 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 5 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 7 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[2026-11-17 21:17:42 DP0 TP0 EP0] sglang is using nccl==2.11.4
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank [Gloo] Rank 0[Gloo] Rank 0 is connected to [Gloo] Rank [Gloo] Rank 0 is connected to 00[Gloo] Rank 0[Gloo] Rank  is connected to 00 peer ranks.  is connected to 0 is connected to 0 is connected to  peer ranks. Expected number of connected peer ranks is : 0 is connected to 0 peer ranks. 0Expected number of connected peer ranks is : 0 peer ranks. 0 peer ranks. Expected number of connected peer ranks is :  peer ranks. 0
+Expected number of connected peer ranks is :  peer ranks. Expected number of connected peer ranks is : 0Expected number of connected peer ranks is : 
+0Expected number of connected peer ranks is : 0
+0
+0
+
+
+[Gloo] Rank [Gloo] Rank 00 is connected to  is connected to 00 peer ranks.  peer ranks. Expected number of connected peer ranks is : Expected number of connected peer ranks is : 00
+
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank [Gloo] Rank 00 is connected to  is connected to [Gloo] Rank 000 peer ranks.  peer ranks.  is connected to Expected number of connected peer ranks is : Expected number of connected peer ranks is : [Gloo] Rank 000[Gloo] Rank 0 peer ranks. 
+
+0 is connected to Expected number of connected peer ranks is :  is connected to 000 peer ranks. 
+ peer ranks. Expected number of connected peer ranks is : Expected number of connected peer ranks is : 00
+
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0[Gloo] Rank  is connected to [Gloo] Rank 00[Gloo] Rank 0 is connected to  peer ranks. 0 is connected to [Gloo] Rank 0Expected number of connected peer ranks is :  is connected to 00 peer ranks. 00 peer ranks. [Gloo] Rank  is connected to Expected number of connected peer ranks is : 
+ peer ranks. Expected number of connected peer ranks is : [Gloo] Rank 000Expected number of connected peer ranks is : 00 is connected to  peer ranks. 
+0
+ is connected to 0Expected number of connected peer ranks is : 
+0 peer ranks. 0 peer ranks. Expected number of connected peer ranks is : 
+Expected number of connected peer ranks is : 00
+
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0[Gloo] Rank 
+0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank [Gloo] Rank 00 is connected to [Gloo] Rank  is connected to 000 peer ranks.  is connected to  peer ranks. Expected number of connected peer ranks is : 0Expected number of connected peer ranks is : 0 peer ranks. 0
+Expected number of connected peer ranks is : 
+0
+[Gloo] Rank [Gloo] Rank 00[Gloo] Rank  is connected to  is connected to 00[Gloo] Rank 0 is connected to  peer ranks. [Gloo] Rank 0 peer ranks. 0[Gloo] Rank Expected number of connected peer ranks is : 00 is connected to Expected number of connected peer ranks is :  peer ranks. 0[Gloo] Rank  is connected to  is connected to 00Expected number of connected peer ranks is : 
+[Gloo] Rank 000 peer ranks. 
+00 is connected to  peer ranks.  peer ranks. Expected number of connected peer ranks is : 
+ is connected to 0Expected number of connected peer ranks is : Expected number of connected peer ranks is : 00 peer ranks. 00
+ peer ranks. Expected number of connected peer ranks is : 
+
+Expected number of connected peer ranks is : 00
+
+[Gloo] Rank [Gloo] Rank 00 is connected to  is connected to 0[Gloo] Rank 0[Gloo] Rank  peer ranks. 0 peer ranks. 0Expected number of connected peer ranks is :  is connected to Expected number of connected peer ranks is :  is connected to 0000
+ peer ranks. 
+ peer ranks. [Gloo] Rank Expected number of connected peer ranks is : Expected number of connected peer ranks is : [Gloo] Rank [Gloo] Rank 00000 is connected to [Gloo] Rank 
+
+ is connected to  is connected to 0000 peer ranks.  is connected to  peer ranks.  peer ranks. Expected number of connected peer ranks is : 0Expected number of connected peer ranks is : Expected number of connected peer ranks is : 0 peer ranks. 00
+Expected number of connected peer ranks is : 
+
+0
+[2026-11-17 21:17:45 DP0 TP0 EP0] Init torch distributed ends. elapsed=5.99 s, mem usage=1.14 GB
+[2026-11-17 21:17:45 DP6 TP6 EP6] Init torch distributed ends. elapsed=6.13 s, mem usage=1.42 GB
+[2026-11-17 21:17:45 DP7 TP7 EP7] Init torch distributed ends. elapsed=6.08 s, mem usage=1.42 GB
+[2026-11-17 21:17:45 DP5 TP5 EP5] Init torch distributed ends. elapsed=6.28 s, mem usage=1.42 GB
+[2026-11-17 21:17:45 DP4 TP4 EP4] Init torch distributed ends. elapsed=6.04 s, mem usage=1.42 GB
+[2026-11-17 21:17:45 DP3 TP3 EP3] Init torch distributed ends. elapsed=6.10 s, mem usage=1.42 GB
+[2026-11-17 21:17:45 DP1 TP1 EP1] Init torch distributed ends. elapsed=5.99 s, mem usage=1.42 GB
+[2026-11-17 21:17:45 DP2 TP2 EP2] Init torch distributed ends. elapsed=6.31 s, mem usage=1.42 GB
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:46 DP5 TP5 EP5] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP4 TP4 EP4] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP7 TP7 EP7] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP6 TP6 EP6] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP3 TP3 EP3] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP1 TP1 EP1] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP0 TP0 EP0] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:46 DP2 TP2 EP2] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:48 DP5 TP5 EP5] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP5 TP5 EP5] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP6 TP6 EP6] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP6 TP6 EP6] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP3 TP3 EP3] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP3 TP3 EP3] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP2 TP2 EP2] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP2 TP2 EP2] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP7 TP7 EP7] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP7 TP7 EP7] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP4 TP4 EP4] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP4 TP4 EP4] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP0 TP0 EP0] Load weight begin. avail mem=77.65 GB
+[2026-11-17 21:17:48 DP0 TP0 EP0] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:48 DP0 TP0 EP0] Detected fp8 checkpoint.
+[2026-11-17 21:17:48 DP1 TP1 EP1] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:48 DP1 TP1 EP1] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:51 DP5 TP5 EP5] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:51 DP6 TP6 EP6] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:51 DP3 TP3 EP3] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:52 DP2 TP2 EP2] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:52 DP7 TP7 EP7] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:52 DP4 TP4 EP4] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:52 DP0 TP0 EP0] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:52 DP1 TP1 EP1] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+Multi-thread loading shards:   0% Completed | 0/91 [00:00<?, ?it/s]Multi-thread loading shards:   3% Completed | 3/91 [00:00<00:15,  5.70it/s]Multi-thread loading shards:   4% Completed | 4/91 [00:00<00:19,  4.40it/s]Multi-thread loading shards:   5% Completed | 5/91 [00:01<00:20,  4.19it/s]Multi-thread loading shards:   7% Completed | 6/91 [00:01<00:20,  4.09it/s]Multi-thread loading shards:   8% Completed | 7/91 [00:01<00:20,  4.01it/s]Multi-thread loading shards:   9% Completed | 8/91 [00:01<00:20,  3.96it/s]Multi-thread loading shards:  10% Completed | 9/91 [00:02<00:20,  3.92it/s]Multi-thread loading shards:  11% Completed | 10/91 [00:02<00:20,  3.88it/s]Multi-thread loading shards:  12% Completed | 11/91 [00:02<00:20,  3.83it/s]Multi-thread loading shards:  13% Completed | 12/91 [00:02<00:20,  3.84it/s]Multi-thread loading shards:  14% Completed | 13/91 [00:03<00:20,  3.80it/s]Multi-thread loading shards:  15% Completed | 14/91 [00:03<00:20,  3.74it/s]Multi-thread loading shards:  16% Completed | 15/91 [00:03<00:20,  3.73it/s]Multi-thread loading shards:  18% Completed | 16/91 [00:04<00:20,  3.70it/s]Multi-thread loading shards:  19% Completed | 17/91 [00:04<00:20,  3.67it/s]Multi-thread loading shards:  20% Completed | 18/91 [00:04<00:19,  3.67it/s]Multi-thread loading shards:  21% Completed | 19/91 [00:04<00:19,  3.67it/s]Multi-thread loading shards:  22% Completed | 20/91 [00:05<00:19,  3.64it/s]Multi-thread loading shards:  23% Completed | 21/91 [00:05<00:19,  3.63it/s]Multi-thread loading shards:  24% Completed | 22/91 [00:05<00:18,  3.67it/s]Multi-thread loading shards:  25% Completed | 23/91 [00:05<00:18,  3.58it/s]Multi-thread loading shards:  26% Completed | 24/91 [00:06<00:18,  3.60it/s]Multi-thread loading shards:  27% Completed | 25/91 [00:06<00:18,  3.62it/s]Multi-thread loading shards:  29% Completed | 26/91 [00:06<00:17,  3.66it/s]Multi-thread loading shards:  30% Completed | 27/91 [00:07<00:17,  3.61it/s]Multi-thread loading shards:  31% Completed | 28/91 [00:07<00:17,  3.69it/s]Multi-thread loading shards:  32% Completed | 29/91 [00:07<00:16,  3.69it/s]Multi-thread loading shards:  33% Completed | 30/91 [00:07<00:16,  3.69it/s]Multi-thread loading shards:  34% Completed | 31/91 [00:08<00:16,  3.66it/s]Multi-thread loading shards:  35% Completed | 32/91 [00:08<00:24,  2.41it/s]Multi-thread loading shards:  36% Completed | 33/91 [00:09<00:21,  2.72it/s]Multi-thread loading shards:  37% Completed | 34/91 [00:09<00:19,  2.98it/s]Multi-thread loading shards:  38% Completed | 35/91 [00:09<00:17,  3.17it/s]Multi-thread loading shards:  40% Completed | 36/91 [00:09<00:16,  3.35it/s]Multi-thread loading shards:  41% Completed | 37/91 [00:10<00:15,  3.47it/s]Multi-thread loading shards:  42% Completed | 38/91 [00:10<00:14,  3.59it/s]Multi-thread loading shards:  43% Completed | 39/91 [00:10<00:14,  3.58it/s]Multi-thread loading shards:  44% Completed | 40/91 [00:11<00:14,  3.56it/s]Multi-thread loading shards:  45% Completed | 41/91 [00:11<00:14,  3.50it/s]Multi-thread loading shards:  46% Completed | 42/91 [00:11<00:14,  3.45it/s]Multi-thread loading shards:  48% Completed | 44/91 [00:11<00:10,  4.46it/s]Multi-thread loading shards:  49% Completed | 45/91 [00:12<00:10,  4.41it/s]Multi-thread loading shards:  51% Completed | 46/91 [00:12<00:10,  4.42it/s]Multi-thread loading shards:  54% Completed | 49/91 [00:12<00:08,  5.10it/s]Multi-thread loading shards:  55% Completed | 50/91 [00:15<00:25,  1.59it/s]Multi-thread loading shards:  56% Completed | 51/91 [00:18<00:47,  1.19s/it]Multi-thread loading shards:  57% Completed | 52/91 [00:19<00:50,  1.28s/it]Multi-thread loading shards:  58% Completed | 53/91 [00:21<00:52,  1.37s/it]Multi-thread loading shards:  59% Completed | 54/91 [00:22<00:43,  1.17s/it]Multi-thread loading shards:  60% Completed | 55/91 [00:22<00:33,  1.09it/s]Multi-thread loading shards:  62% Completed | 56/91 [00:22<00:25,  1.40it/s]Multi-thread loading shards:  63% Completed | 57/91 [00:22<00:19,  1.78it/s]Multi-thread loading shards:  64% Completed | 58/91 [00:23<00:14,  2.22it/s]Multi-thread loading shards:  65% Completed | 59/91 [00:23<00:11,  2.70it/s]Multi-thread loading shards:  66% Completed | 60/91 [00:23<00:14,  2.21it/s]Multi-thread loading shards:  67% Completed | 61/91 [00:24<00:11,  2.71it/s]Multi-thread loading shards:  68% Completed | 62/91 [00:24<00:09,  3.05it/s]Multi-thread loading shards:  69% Completed | 63/91 [00:25<00:15,  1.76it/s]Multi-thread loading shards:  70% Completed | 64/91 [00:26<00:17,  1.57it/s]Multi-thread loading shards:  71% Completed | 65/91 [00:27<00:19,  1.31it/s]Multi-thread loading shards:  73% Completed | 66/91 [00:27<00:14,  1.69it/s]Multi-thread loading shards:  74% Completed | 67/91 [00:28<00:14,  1.64it/s]Multi-thread loading shards:  75% Completed | 68/91 [00:28<00:14,  1.62it/s]Multi-thread loading shards:  76% Completed | 69/91 [00:28<00:10,  2.03it/s]Multi-thread loading shards:  77% Completed | 70/91 [00:29<00:11,  1.90it/s]Multi-thread loading shards:  78% Completed | 71/91 [00:29<00:08,  2.29it/s]Multi-thread loading shards:  79% Completed | 72/91 [00:30<00:10,  1.76it/s]Multi-thread loading shards:  80% Completed | 73/91 [00:30<00:08,  2.17it/s]Multi-thread loading shards:  81% Completed | 74/91 [00:31<00:06,  2.58it/s]Multi-thread loading shards:  82% Completed | 75/91 [00:31<00:05,  3.01it/s]Multi-thread loading shards:  84% Completed | 76/91 [00:31<00:04,  3.38it/s]Multi-thread loading shards:  85% Completed | 77/91 [00:31<00:03,  3.67it/s]Multi-thread loading shards:  86% Completed | 78/91 [00:32<00:07,  1.85it/s]Multi-thread loading shards:  87% Completed | 79/91 [00:33<00:06,  1.77it/s]Multi-thread loading shards:  88% Completed | 80/91 [00:34<00:07,  1.48it/s]Multi-thread loading shards:  89% Completed | 81/91 [00:35<00:08,  1.22it/s][2026-11-17 21:18:28 DP2 TP2 EP2] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  90% Completed | 82/91 [00:36<00:06,  1.34it/s][2026-11-17 21:18:29 DP6 TP6 EP6] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  91% Completed | 83/91 [00:36<00:04,  1.72it/s]Multi-thread loading shards:  92% Completed | 84/91 [00:36<00:03,  2.08it/s][2026-11-17 21:18:29 DP3 TP3 EP3] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:29 DP5 TP5 EP5] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  93% Completed | 85/91 [00:37<00:02,  2.07it/s]Multi-thread loading shards:  95% Completed | 86/91 [00:37<00:02,  2.47it/s][2026-11-17 21:18:30 DP1 TP1 EP1] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  96% Completed | 87/91 [00:37<00:01,  2.76it/s]Multi-thread loading shards:  97% Completed | 88/91 [00:37<00:00,  3.11it/s]Multi-thread loading shards: 100% Completed | 91/91 [00:37<00:00,  2.40it/s]
+[2026-11-17 21:18:30 DP0 TP0 EP0] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:30 DP4 TP4 EP4] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:31 DP7 TP7 EP7] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:43 DP0 TP0 EP0] Skipped checkpoint tensors not wired yet: gate.bias_vl=43, vision=266
+[2026-11-17 21:18:43 DP0 TP0 EP0] Some weights are not initialized from checkpoints: {'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:43 DP0 TP0 EP0] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:43 DP0 TP0 EP0] Load weight end. elapsed=55.10 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.36 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:47 DP2 TP2 EP2] Some weights are not initialized from checkpoints: {'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:47 DP6 TP6 EP6] Some weights are not initialized from checkpoints: {'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:47 DP2 TP2 EP2] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:47 DP2 TP2 EP2] Load weight end. elapsed=59.75 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:47 DP6 TP6 EP6] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:47 DP6 TP6 EP6] Load weight end. elapsed=59.85 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:48 DP7 TP7 EP7] Some weights are not initialized from checkpoints: {'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:48 DP7 TP7 EP7] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:48 DP7 TP7 EP7] Load weight end. elapsed=60.42 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:48 DP1 TP1 EP1] Some weights are not initialized from checkpoints: {'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:48 DP5 TP5 EP5] Some weights are not initialized from checkpoints: {'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:48 DP3 TP3 EP3] Some weights are not initialized from checkpoints: {'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:48 DP1 TP1 EP1] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:48 DP1 TP1 EP1] Load weight end. elapsed=60.47 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:48 DP5 TP5 EP5] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:48 DP5 TP5 EP5] Load weight end. elapsed=60.78 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:48 DP3 TP3 EP3] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:48 DP3 TP3 EP3] Load weight end. elapsed=60.79 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:51 DP4 TP4 EP4] Some weights are not initialized from checkpoints: {'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:51 DP4 TP4 EP4] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:51 DP4 TP4 EP4] Load weight end. elapsed=63.08 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=10.48 GB, mem usage=67.29 GB.
+[2026-11-17 21:18:52 DP1 TP1 EP1] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP2 TP2 EP2] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP5 TP5 EP5] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP7 TP7 EP7] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP3 TP3 EP3] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP0 TP0 EP0] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP6 TP6 EP6] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:52 DP4 TP4 EP4] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:18:53 DP5 TP5 EP5] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP2 TP2 EP2] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP4 TP4 EP4] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP0 TP0 EP0] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP3 TP3 EP3] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP1 TP1 EP1] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP7 TP7 EP7] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP6 TP6 EP6] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:53 DP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP2 TP2 EP2] Init torch distributed begin.
+[2026-11-17 21:18:53 DP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP5 TP5 EP5] Init torch distributed begin.
+[2026-11-17 21:18:53 DP2 TP2 EP2] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP5 TP5 EP5] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP2 TP2 EP2] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP5 TP5 EP5] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP4 TP4 EP4] Init torch distributed begin.
+[2026-11-17 21:18:53 DP4 TP4 EP4] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP3 TP3 EP3] Init torch distributed begin.
+[2026-11-17 21:18:53 DP7 TP7 EP7] Init torch distributed begin.
+[2026-11-17 21:18:53 DP2 TP2 EP2] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:53 DP0 TP0 EP0] Init torch distributed begin.
+[2026-11-17 21:18:53 DP1 TP1 EP1] Init torch distributed begin.
+[2026-11-17 21:18:53 DP5 TP5 EP5] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP4 TP4 EP4] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP3 TP3 EP3] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP7 TP7 EP7] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP0 TP0 EP0] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP1 TP1 EP1] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP3 TP3 EP3] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP7 TP7 EP7] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP1 TP1 EP1] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP0 TP0 EP0] Load weight begin. avail mem=10.36 GB
+[2026-11-17 21:18:53 DP4 TP4 EP4] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP6 TP6 EP6] Init torch distributed begin.
+[2026-11-17 21:18:53 DP6 TP6 EP6] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:53 DP3 TP3 EP3] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP7 TP7 EP7] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP1 TP1 EP1] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP0 TP0 EP0] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:53 DP0 TP0 EP0] Detected fp8 checkpoint.
+[2026-11-17 21:18:53 DP6 TP6 EP6] Load weight begin. avail mem=10.48 GB
+[2026-11-17 21:18:53 DP6 TP6 EP6] Detected w4afp8 checkpoint. Please note that
+Multi-thread loading shards:   0% Completed | 0/91 [00:00<?, ?it/s]Multi-thread loading shards:   3% Completed | 3/91 [00:00<00:06, 12.78it/s]Multi-thread loading shards:   5% Completed | 5/91 [00:00<00:13,  6.56it/s]Multi-thread loading shards:   7% Completed | 6/91 [00:00<00:14,  5.80it/s]Multi-thread loading shards:   8% Completed | 7/91 [00:01<00:15,  5.32it/s]Multi-thread loading shards:   9% Completed | 8/91 [00:01<00:16,  4.99it/s]Multi-thread loading shards:  10% Completed | 9/91 [00:01<00:17,  4.78it/s]Multi-thread loading shards:  11% Completed | 10/91 [00:01<00:17,  4.63it/s]Multi-thread loading shards:  12% Completed | 11/91 [00:02<00:17,  4.53it/s]Multi-thread loading shards:  13% Completed | 12/91 [00:02<00:17,  4.45it/s]Multi-thread loading shards:  14% Completed | 13/91 [00:02<00:17,  4.38it/s]Multi-thread loading shards:  15% Completed | 14/91 [00:02<00:17,  4.34it/s]Multi-thread loading shards:  16% Completed | 15/91 [00:03<00:17,  4.29it/s]Multi-thread loading shards:  18% Completed | 16/91 [00:03<00:17,  4.26it/s]Multi-thread loading shards:  19% Completed | 17/91 [00:03<00:17,  4.23it/s]Multi-thread loading shards:  20% Completed | 18/91 [00:03<00:17,  4.21it/s]Multi-thread loading shards:  21% Completed | 19/91 [00:03<00:17,  4.19it/s]Multi-thread loading shards:  22% Completed | 20/91 [00:04<00:17,  4.17it/s]Multi-thread loading shards:  23% Completed | 21/91 [00:04<00:16,  4.15it/s]Multi-thread loading shards:  24% Completed | 22/91 [00:04<00:16,  4.14it/s]Multi-thread loading shards:  25% Completed | 23/91 [00:04<00:16,  4.12it/s]Multi-thread loading shards:  26% Completed | 24/91 [00:05<00:16,  4.13it/s]Multi-thread loading shards:  27% Completed | 25/91 [00:05<00:16,  4.12it/s]Multi-thread loading shards:  29% Completed | 26/91 [00:05<00:15,  4.13it/s]Multi-thread loading shards:  30% Completed | 27/91 [00:05<00:15,  4.12it/s]Multi-thread loading shards:  31% Completed | 28/91 [00:06<00:15,  4.06it/s]Multi-thread loading shards:  32% Completed | 29/91 [00:06<00:15,  4.06it/s]Multi-thread loading shards:  33% Completed | 30/91 [00:06<00:15,  4.05it/s]Multi-thread loading shards:  34% Completed | 31/91 [00:06<00:14,  4.05it/s]Multi-thread loading shards:  35% Completed | 32/91 [00:07<00:14,  4.07it/s]Multi-thread loading shards:  36% Completed | 33/91 [00:07<00:14,  4.08it/s]Multi-thread loading shards:  37% Completed | 34/91 [00:07<00:13,  4.09it/s]Multi-thread loading shards:  38% Completed | 35/91 [00:07<00:13,  4.09it/s]Multi-thread loading shards:  40% Completed | 36/91 [00:08<00:13,  4.10it/s]Multi-thread loading shards:  41% Completed | 37/91 [00:08<00:13,  4.10it/s]Multi-thread loading shards:  42% Completed | 38/91 [00:08<00:12,  4.10it/s]Multi-thread loading shards:  43% Completed | 39/91 [00:08<00:12,  4.11it/s]Multi-thread loading shards:  44% Completed | 40/91 [00:09<00:12,  4.09it/s]Multi-thread loading shards:  45% Completed | 41/91 [00:09<00:12,  4.07it/s]Multi-thread loading shards:  46% Completed | 42/91 [00:09<00:12,  4.06it/s]Multi-thread loading shards:  48% Completed | 44/91 [00:09<00:10,  4.69it/s]Multi-thread loading shards:  49% Completed | 45/91 [00:10<00:11,  4.12it/s]Multi-thread loading shards:  51% Completed | 46/91 [00:10<00:12,  3.58it/s]Multi-thread loading shards:  54% Completed | 49/91 [00:10<00:07,  5.52it/s]Multi-thread loading shards:  56% Completed | 51/91 [00:11<00:05,  7.01it/s]Multi-thread loading shards:  58% Completed | 53/91 [00:11<00:04,  8.65it/s]Multi-thread loading shards:  60% Completed | 55/91 [00:11<00:03,  9.50it/s]Multi-thread loading shards:  63% Completed | 57/91 [00:11<00:03,  9.91it/s]Multi-thread loading shards:  65% Completed | 59/91 [00:11<00:03, 10.36it/s]Multi-thread loading shards:  67% Completed | 61/91 [00:12<00:04,  6.47it/s]Multi-thread loading shards:  68% Completed | 62/91 [00:12<00:04,  6.89it/s]Multi-thread loading shards:  69% Completed | 63/91 [00:12<00:03,  7.34it/s]Multi-thread loading shards:  71% Completed | 65/91 [00:12<00:02,  8.83it/s]Multi-thread loading shards:  74% Completed | 67/91 [00:12<00:02, 10.38it/s]Multi-thread loading shards:  76% Completed | 69/91 [00:12<00:02, 10.74it/s]Multi-thread loading shards:  78% Completed | 71/91 [00:13<00:01, 11.82it/s]Multi-thread loading shards:  80% Completed | 73/91 [00:13<00:01, 11.11it/s]Multi-thread loading shards:  82% Completed | 75/91 [00:13<00:01, 10.77it/s]Multi-thread loading shards:  85% Completed | 77/91 [00:13<00:01, 11.61it/s]Multi-thread loading shards:  87% Completed | 79/91 [00:13<00:01, 11.24it/s]Multi-thread loading shards:  91% Completed | 83/91 [00:13<00:00, 16.53it/s]Multi-thread loading shards:  98% Completed | 89/91 [00:14<00:00, 20.60it/s][2026-11-17 21:19:07 DP2 TP2 EP2] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:07 DP2 TP2 EP2] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:07 DP2 TP2 EP2] Load weight end. elapsed=14.44 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:07 DP1 TP1 EP1] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:07 DP3 TP3 EP3] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:07 DP1 TP1 EP1] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:07 DP1 TP1 EP1] Load weight end. elapsed=14.60 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:07 DP3 TP3 EP3] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:07 DP3 TP3 EP3] Load weight end. elapsed=14.61 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+Multi-thread loading shards: 100% Completed | 91/91 [00:14<00:00,  6.26it/s]
+[2026-11-17 21:19:07 DP0 TP0 EP0] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:07 DP0 TP0 EP0] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:07 DP0 TP0 EP0] Load weight end. elapsed=14.74 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=8.89 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:08 DP7 TP7 EP7] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:08 DP7 TP7 EP7] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:08 DP7 TP7 EP7] Load weight end. elapsed=15.46 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:08 DP5 TP5 EP5] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:08 DP5 TP5 EP5] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:08 DP5 TP5 EP5] Load weight end. elapsed=15.52 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:08 DP6 TP6 EP6] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:08 DP6 TP6 EP6] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:08 DP6 TP6 EP6] Load weight end. elapsed=15.58 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:08 DP4 TP4 EP4] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:19:08 DP4 TP4 EP4] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:19:08 DP4 TP4 EP4] Load weight end. elapsed=15.71 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=9.01 GB, mem usage=1.47 GB.
+[2026-11-17 21:19:08 DP0 TP0 EP0] Initialized DSpark draft runner. attention_backend=dsv4, model=DeepseekV4ForCausalLMDSpark, gamma=5, verify_num_draft_tokens=6, query_token_num=5, sample_from_anchor=True, mask_token_id=128799, markov_head=DSparkV4MarkovHead
+[2026-11-17 21:19:09 DP7 TP7 EP7] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP5 TP5 EP5] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP3 TP3 EP3] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP1 TP1 EP1] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP6 TP6 EP6] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP4 TP4 EP4] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP2 TP2 EP2] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP0 TP0 EP0] MUSA DSPARK head topology: target_tp=8 draft_tp=1 draft_weight_bytes=1323827200
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSpark markov_w2 vocab gather: LocalVocabGather
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=1.75 GB, c128_state_fixed=0.00 GB, swa_fixed=0.05 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1092864
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 pool sizes: full=1092864, swa=2304, c4=273216, c128=8538, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 SWA sizing: mode=cap, swa_tokens=2304, request_cap+headroom=2304, prefix_tails=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 pool sizes: full=8192, swa=2304, c4=2048, c128=64, c4_state=288, c128_state=0
+[2026-11-17 21:19:09 DP0 TP0 EP0] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP7 TP7 EP7] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP6 TP6 EP6] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP5 TP5 EP5] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP4 TP4 EP4] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP3 TP3 EP3] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP2 TP2 EP2] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP1 TP1 EP1] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=288 c128_state_pool_size=1024
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP5 TP5 EP5] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP7 TP7 EP7] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP4 TP4 EP4] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP6 TP6 EP6] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP3 TP3 EP3] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP1 TP1 EP1] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP0 TP0 EP0] Memory pool end. avail mem=7.20 GB
+[2026-11-17 21:19:09 DP2 TP2 EP2] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP5 TP5 EP5] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP7 TP7 EP7] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP5 TP5 EP5] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP4 TP4 EP4] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP7 TP7 EP7] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP5 TP5 EP5] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP6 TP6 EP6] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP3 TP3 EP3] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP4 TP4 EP4] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP7 TP7 EP7] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP6 TP6 EP6] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP3 TP3 EP3] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP4 TP4 EP4] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP6 TP6 EP6] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP3 TP3 EP3] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP1 TP1 EP1] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP0 TP0 EP0] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP2 TP2 EP2] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=1 swa_size=2304 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:19:09 DP1 TP1 EP1] Memory pool end. avail mem=7.32 GB
+[2026-11-17 21:19:09 DP0 TP0 EP0] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP2 TP2 EP2] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:19:09 DP0 TP0 EP0] Memory pool end. avail mem=7.20 GB
+[2026-11-17 21:19:09 DP2 TP2 EP2] Memory pool end. avail mem=7.32 GB
+E001_NATIVE_LOADED 831 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+[2026-11-17 21:19:10 DP5 TP5 EP5] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP5 TP5 EP5] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP5 TP5 EP5] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP5 TP5 EP5] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP5 TP5 EP5] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+E001_NATIVE_LOADED 833 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+E001_NATIVE_LOADED 830 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+E001_NATIVE_LOADED 829 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+E001_NATIVE_LOADED 832 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+E001_NATIVE_LOADED 827 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+[2026-11-17 21:19:10 DP7 TP7 EP7] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP7 TP7 EP7] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP7 TP7 EP7] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP4 TP4 EP4] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP4 TP4 EP4] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP7 TP7 EP7] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP4 TP4 EP4] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP3 TP3 EP3] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP3 TP3 EP3] Overriding draft attention backend to dsv4.
+E001_NATIVE_LOADED 828 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+[2026-11-17 21:19:10 DP3 TP3 EP3] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP4 TP4 EP4] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP7 TP7 EP7] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+[2026-11-17 21:19:10 DP3 TP3 EP3] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+E001_NATIVE_LOADED 826 /workspace/sglang/python/sglang/srt/hardware_backend/layers/deepseek_v4_musa/kernels/indexer_decode_length/native_topk.mu
+[2026-11-17 21:19:10 DP4 TP4 EP4] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+[2026-11-17 21:19:10 DP3 TP3 EP3] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+[2026-11-17 21:19:10 DP6 TP6 EP6] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP6 TP6 EP6] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP6 TP6 EP6] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP6 TP6 EP6] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP6 TP6 EP6] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+[2026-11-17 21:19:10 DP1 TP1 EP1] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP1 TP1 EP1] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP1 TP1 EP1] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP1 TP1 EP1] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP2 TP2 EP2] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP2 TP2 EP2] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP2 TP2 EP2] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP1 TP1 EP1] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+[2026-11-17 21:19:10 DP2 TP2 EP2] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP0 TP0 EP0] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP0 TP0 EP0] Overriding draft attention backend to dsv4.
+[2026-11-17 21:19:10 DP0 TP0 EP0] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:19:10 DP2 TP2 EP2] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.31 GB
+[2026-11-17 21:19:10 DP0 TP0 EP0] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:10 DP0 TP0 EP0] Capture target verify CUDA graph begin. backend=full, num_tokens_per_req=6, bs=[1], avail mem=7.19 GB
+  0%|          | 0/1 [00:00<?, ?it/s]Capturing batches (bs=1 avail_mem=7.19 GB):   0%|          | 0/1 [00:00<?, ?it/s][2026-11-17 21:19:14 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP7 TP7 EP7] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP3 TP3 EP3] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP4 TP4 EP4] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP5 TP5 EP5] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP0 TP0 EP0] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP1 TP1 EP1] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP6 TP6 EP6] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:14 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=6 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:14 DP2 TP2 EP2] MUSA exact TP1 RoPE active: heads=64 inverse=False
+[2026-11-17 21:19:15 DP7 TP7 EP7] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP4 TP4 EP4] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP7 TP7 EP7] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP4 TP4 EP4] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP0 TP0 EP0] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP0 TP0 EP0] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP3 TP3 EP3] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP5 TP5 EP5] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP3 TP3 EP3] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP5 TP5 EP5] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP6 TP6 EP6] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP6 TP6 EP6] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP2 TP2 EP2] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP2 TP2 EP2] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP1 TP1 EP1] MUSA exact TP1 RoPE active: heads=64 inverse=True
+[2026-11-17 21:19:15 DP1 TP1 EP1] WO_A_NATIVE_BF16_AB m=6 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:15 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:15 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:15 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=6 weight=(4608, 5120) splits=4 prequant=True
+[2026-11-17 21:19:15 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=6 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:17 DP0 TP0 EP0] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP3 TP3 EP3] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP1 TP1 EP1] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP2 TP2 EP2] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP7 TP7 EP7] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP5 TP5 EP5] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP4 TP4 EP4] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP6 TP6 EP6] DeepEP buffer initialized: mode=low_latency, experts=384, ranks=8, nvl_bytes=0, rdma_bytes=254807552
+[2026-11-17 21:19:17 DP5 TP5 EP5] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[2026-11-17 21:19:17 DP7 TP7 EP7] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[2026-11-17 21:19:17 DP4 TP4 EP4] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[2026-11-17 21:19:17 DP3 TP3 EP3] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[2026-11-17 21:19:17 DP0 TP0 EP0] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[2026-11-17 21:19:17 DP1 TP1 EP1] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[2026-11-17 21:19:17 DP6 TP6 EP6] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[2026-11-17 21:19:17 DP2 TP2 EP2] MUSA W4A8 DeepEP LL masked preparation active: shape=(48, 128, 5120) static scales retained
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[MUSA W4A8] DeepEP LL reuses static activation scale buffers
+[MUSA W4A8] LL public MATE S4FP8 backend=mutlass, static per-token A scales
+[2026-11-17 21:19:17 DP5 TP5 EP5] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:17 DP7 TP7 EP7] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:17 DP4 TP4 EP4] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:18 DP3 TP3 EP3] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:18 DP0 TP0 EP0] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:18 DP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=25600,K=6144,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:18 DP1 TP1 EP1] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:18 DP6 TP6 EP6] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:18 DP2 TP2 EP2] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+Capturing batches (bs=1 avail_mem=7.19 GB): 100%|██████████| 1/1 [00:15<00:00, 15.64s/it]Capturing batches (bs=1 avail_mem=7.19 GB): 100%|██████████| 1/1 [00:15<00:00, 15.64s/it]
+[2026-11-17 21:19:26 DP0 TP0 EP0] Registering 1 cuda graph addresses
+[2026-11-17 21:19:26 DP7 TP7 EP7] Capture target verify CUDA graph end. elapsed=16.79 s, mem usage=2.77 GB, avail mem=4.55 GB.
+[2026-11-17 21:19:26 DP7 TP7 EP7] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP7 TP7 EP7] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.55 GB
+[2026-11-17 21:19:26 DP5 TP5 EP5] Capture target verify CUDA graph end. elapsed=16.85 s, mem usage=2.75 GB, avail mem=4.56 GB.
+[2026-11-17 21:19:26 DP2 TP2 EP2] Capture target verify CUDA graph end. elapsed=16.78 s, mem usage=2.81 GB, avail mem=4.50 GB.
+[2026-11-17 21:19:26 DP5 TP5 EP5] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP5 TP5 EP5] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.56 GB
+[2026-11-17 21:19:26 DP2 TP2 EP2] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP2 TP2 EP2] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.50 GB
+[2026-11-17 21:19:26 DP3 TP3 EP3] Capture target verify CUDA graph end. elapsed=16.79 s, mem usage=2.80 GB, avail mem=4.52 GB.
+[2026-11-17 21:19:26 DP3 TP3 EP3] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP3 TP3 EP3] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.52 GB
+[2026-11-17 21:19:26 DP0 TP0 EP0] Capture target verify CUDA graph end. elapsed=16.79 s, mem usage=2.86 GB, avail mem=4.33 GB.
+[2026-11-17 21:19:26 DP4 TP4 EP4] Capture target verify CUDA graph end. elapsed=16.80 s, mem usage=2.76 GB, avail mem=4.55 GB.
+[2026-11-17 21:19:26 DP0 TP0 EP0] DSpark draft proposal (greedy + sampling) folded into the draft cuda graph.
+[2026-11-17 21:19:26 DP1 TP1 EP1] Capture target verify CUDA graph end. elapsed=16.79 s, mem usage=2.83 GB, avail mem=4.49 GB.
+[2026-11-17 21:19:26 DP0 TP0 EP0] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP0 TP0 EP0] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.33 GB
+[2026-11-17 21:19:26 DP4 TP4 EP4] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP4 TP4 EP4] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.55 GB
+[2026-11-17 21:19:26 DP1 TP1 EP1] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:26 DP1 TP1 EP1] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.49 GB
+[2026-11-17 21:19:27 DP6 TP6 EP6] Capture target verify CUDA graph end. elapsed=16.84 s, mem usage=2.79 GB, avail mem=4.53 GB.
+[2026-11-17 21:19:27 DP6 TP6 EP6] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:19:27 DP6 TP6 EP6] Capture draft verify CUDA graph begin. backend=full, num_tokens_per_req=5, bs=[1], avail mem=4.53 GB
+  0%|          | 0/1 [00:00<?, ?it/s]Capturing batches (bs=1 avail_mem=4.33 GB):   0%|          | 0/1 [00:00<?, ?it/s][2026-11-17 21:19:27 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=5 weight=(512, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=5 weight=(1280, 5120) splits=16 prequant=False
+[2026-11-17 21:19:27 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=5 weight=(32768, 1280) splits=4 prequant=True
+[2026-11-17 21:19:27 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 8192) splits=4 prequant=True
+[2026-11-17 21:19:27 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=5 weight=(4608, 5120) splits=8 prequant=True
+[2026-11-17 21:19:27 DP6 TP6 EP6] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP6 TP6 EP6] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP0 TP0 EP0] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP3 TP3 EP3] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP2 TP2 EP2] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP1 TP1 EP1] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA TP1 FP8 projection active: rows=5 weight=(5120, 2304) splits=8 prequant=True
+[2026-11-17 21:19:27 DP5 TP5 EP5] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP7 TP7 EP7] MUSA DSPARK router uses two warps
+[2026-11-17 21:19:27 DP4 TP4 EP4] MUSA DSPARK router uses two warps
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+WARN: 
+WARN: Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+Cooperative launch not supported on at least one PE; GPU-side synchronize may cause hang
+
+
+[2026-11-17 21:19:27 DP5 TP5 EP5] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP6 TP6 EP6] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP0 TP0 EP0] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP7 TP7 EP7] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP4 TP4 EP4] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP2 TP2 EP2] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP3 TP3 EP3] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+[2026-11-17 21:19:27 DP1 TP1 EP1] DeepEP buffer initialized: mode=low_latency, experts=128, ranks=8, nvl_bytes=0, rdma_bytes=84936192
+Capturing batches (bs=1 avail_mem=4.33 GB): 100%|██████████| 1/1 [00:00<00:00,  2.20it/s]Capturing batches (bs=1 avail_mem=4.33 GB): 100%|██████████| 1/1 [00:00<00:00,  2.20it/s]
+[2026-11-17 21:19:27 DP0 TP0 EP0] Registering 0 cuda graph addresses
+[2026-11-17 21:19:28 DP7 TP7 EP7] Capture draft verify CUDA graph end. elapsed=1.22 s, mem usage=0.04 GB, avail mem=4.50 GB.
+[2026-11-17 21:19:28 DP5 TP5 EP5] Capture draft verify CUDA graph end. elapsed=1.22 s, mem usage=0.04 GB, avail mem=4.52 GB.
+[2026-11-17 21:19:28 DP7 TP7 EP7] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP5 TP5 EP5] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP4 TP4 EP4] Capture draft verify CUDA graph end. elapsed=1.21 s, mem usage=0.04 GB, avail mem=4.51 GB.
+[2026-11-17 21:19:28 DP2 TP2 EP2] Capture draft verify CUDA graph end. elapsed=1.22 s, mem usage=0.04 GB, avail mem=4.46 GB.
+[2026-11-17 21:19:28 DP2 TP2 EP2] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP4 TP4 EP4] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP6 TP6 EP6] Capture draft verify CUDA graph end. elapsed=1.17 s, mem usage=0.04 GB, avail mem=4.48 GB.
+[2026-11-17 21:19:28 DP3 TP3 EP3] Capture draft verify CUDA graph end. elapsed=1.22 s, mem usage=0.04 GB, avail mem=4.47 GB.
+[2026-11-17 21:19:28 DP0 TP0 EP0] Capture draft verify CUDA graph end. elapsed=1.22 s, mem usage=0.04 GB, avail mem=4.29 GB.
+[2026-11-17 21:19:28 DP6 TP6 EP6] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP0 TP0 EP0] max_total_num_tokens=8192, chunked_prefill_size=32, max_prefill_tokens=16384, max_running_requests=1, context_len=4096, available_gpu_mem=4.29 GB
+[2026-11-17 21:19:28 DP3 TP3 EP3] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP0 TP0 EP0] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28 DP1 TP1 EP1] Capture draft verify CUDA graph end. elapsed=1.22 s, mem usage=0.04 GB, avail mem=4.44 GB.
+[2026-11-17 21:19:28 DP1 TP1 EP1] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:19:28] Engine startup timings (s): load_weight=78.79, kv_cache_allocation=0.32, scheduler_e2e=112.22, cuda_graph={prefill=0.00, decode=0.00, target_verify=16.85, draft_prefill=0.00, draft_decode=1.22, draft_extend=0.00}, tokenizer_e2e=125.41
+[2026-11-17 21:19:28] INFO:     Started server process [81]
+[2026-11-17 21:19:28] INFO:     Waiting for application startup.
+[2026-11-17 21:19:28] INFO:     Application startup complete.
+[2026-11-17 21:19:28] INFO:     Uvicorn running on http://0.0.0.0:28588 (Press CTRL+C to quit)
+[2026-11-17 21:19:29] INFO:     127.0.0.1:58882 - "GET /model_info HTTP/1.1" 200 OK
+[2026-11-17 21:19:29] Start of pd disaggregation warmup ...
+[2026-11-17 21:19:29 DP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=5120,K=15360,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:29 DP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=1536,K=5120,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:29] INFO:     127.0.0.1:58944 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58894 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58896 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58884 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58900 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58922 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58930 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58906 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] Disaggregation warmup requests completed for all 8 DP ranks
+[2026-11-17 21:19:30] End of disaggregation warmup
+[2026-11-17 21:19:30] INFO:     127.0.0.1:58954 - "POST /freeze_gc HTTP/1.1" 200 OK
+[2026-11-17 21:19:30] The server is fired up and ready to roll!
+[2026-11-17 21:19:33] /workspace/sglang/python/sglang/srt/entrypoints/http_server.py:454: FastAPIDeprecationWarning: ORJSONResponse is deprecated, FastAPI now serializes data directly to JSON bytes via Pydantic when a return type or response model is set, which is faster and doesn't need a custom response class. Read more in the FastAPI docs: https://fastapi.tiangolo.com/advanced/custom-response/#orjson-or-response-model and https://fastapi.tiangolo.com/tutorial/response-model/
+  return await original_handler(ORJSONRequest(request.scope, request.receive))
+
+[2026-11-17 21:19:33] INFO:     10.121.32.7:34126 - "GET /v1/models HTTP/1.1" 200 OK
+[2026-11-17 21:19:37] DeepSeek-V4.1 does not support reasoning_effort='none'; using the default 'high' (low/high/xhigh/max, a float in [0, 0.99], or an integer budget in [1, 100] via chat_template_kwargs are accepted).
+[2026-11-17 21:19:37] INFO:     10.121.32.9:52282 - "POST /v1/tokenize HTTP/1.1" 200 OK
+[2026-11-17 21:19:37] INFO:     10.121.32.9:52298 - "POST /v1/tokenize HTTP/1.1" 200 OK
+[2026-11-17 21:19:37] INFO:     10.121.32.9:52304 - "POST /v1/tokenize HTTP/1.1" 200 OK
+[2026-11-17 21:19:37] INFO:     10.121.32.9:52316 - "POST /v1/tokenize HTTP/1.1" 200 OK
+[2026-11-17 21:19:37] INFO:     10.121.32.9:52320 - "POST /v1/tokenize HTTP/1.1" 200 OK
+[2026-11-17 21:19:37] INFO:     10.121.32.9:52322 - "POST /v1/tokenize HTTP/1.1" 200 OK
+[2026-11-17 21:19:38] INFO:     10.121.32.7:34136 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:19:38] INFO:     10.121.32.7:34138 - "PRI %2A HTTP/2.0" 404 Not Found
+[2026-11-17 21:19:38] WARNING:  Invalid HTTP request received.
+[2026-11-17 21:19:38] INFO:     10.121.32.7:34152 - "PRI %2A HTTP/2.0" 404 Not Found
+[2026-11-17 21:19:38] WARNING:  Invalid HTTP request received.
+[2026-11-17 21:19:38] INFO:     10.121.32.7:34158 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:19:38] INFO:     10.121.32.7:34158 - "GET /model_info HTTP/1.1" 200 OK
+[2026-11-17 21:19:39] DeepSeek-V4.1 does not support reasoning_effort='none'; using the default 'high' (low/high/xhigh/max, a float in [0, 0.99], or an integer budget in [1, 100] via chat_template_kwargs are accepted).
+[2026-11-17 21:19:40] INFO:     10.121.32.7:34136 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:19:41] INFO:     10.121.32.7:34136 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:19:41] INFO:     10.121.32.9:52336 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:19:52] INFO:     10.121.32.7:34136 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:19:54 DP2 TP2 EP2] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 512, swa token usage: 0.22, accept len: 2.05, accept rate: 0.21, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 3.17, #queue-req: 0
+[2026-11-17 21:19:56 DP2 TP2 EP2] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 256, swa token usage: 0.11, accept len: 1.77, accept rate: 0.15, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 34.14, #queue-req: 0
+[2026-11-17 21:19:59] INFO:     10.121.32.9:48470 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:20:03] INFO:     10.121.32.7:45640 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:05 DP3 TP3 EP3] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 512, swa token usage: 0.22, accept len: 2.05, accept rate: 0.21, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 2.19, #queue-req: 0
+[2026-11-17 21:20:07 DP3 TP3 EP3] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 256, swa token usage: 0.11, accept len: 1.77, accept rate: 0.15, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 34.29, #queue-req: 0
+[2026-11-17 21:20:10] INFO:     10.121.32.7:45646 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:12 DP4 TP4 EP4] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 512, swa token usage: 0.22, accept len: 1.93, accept rate: 0.18, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 1.76, #queue-req: 0
+[2026-11-17 21:20:14 DP4 TP4 EP4] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 256, swa token usage: 0.11, accept len: 1.82, accept rate: 0.17, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 34.43, #queue-req: 0
+[2026-11-17 21:20:16] INFO:     10.121.32.7:41508 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:18 DP5 TP5 EP5] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 512, swa token usage: 0.22, accept len: 2.12, accept rate: 0.23, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 1.68, #queue-req: 0
+[2026-11-17 21:20:20 DP5 TP5 EP5] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 256, swa token usage: 0.11, accept len: 1.77, accept rate: 0.15, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 34.23, #queue-req: 0
+[2026-11-17 21:20:23] INFO:     10.121.32.7:41508 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:25 DP6 TP6 EP6] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 512, swa token usage: 0.22, accept len: 2.08, accept rate: 0.21, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 1.46, #queue-req: 0
+[2026-11-17 21:20:27 DP6 TP6 EP6] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 256, swa token usage: 0.11, accept len: 1.77, accept rate: 0.15, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 34.21, #queue-req: 0
+[2026-11-17 21:20:29] INFO:     10.121.32.7:41508 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:31 DP7 TP7 EP7] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 512, swa token usage: 0.22, accept len: 2.15, accept rate: 0.23, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 1.36, #queue-req: 0
+[2026-11-17 21:20:33 DP7 TP7 EP7] Decode batch, #running-req: 1, #full token: 512, full token usage: 0.06, #swa token: 256, swa token usage: 0.11, accept len: 1.90, accept rate: 0.18, pre-allocated usage: 0.00, #prealloc-req: 0, #transfer-req: 0, #retracted-req: 0, musa graph: True, gen throughput (token/s): 36.40, #queue-req: 0
+[2026-11-17 21:20:36] INFO:     10.121.32.9:42742 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:20:38] INFO:     10.121.32.7:47256 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:21:38] INFO:     10.121.32.7:37836 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:21:56] INFO:     127.0.0.1:44600 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:21:56] SIGTERM received. signum=None frame=None. Draining requests and shutting down...
+[2026-11-17 21:21:59] Gracefully exiting... Remaining number of requests 0. Remaining requests remaining_rids=[].
+[2026-11-17 21:22:14] kill_process_tree called: parent_pid=81, include_parent=False, pid=81
+[2026-11-17 21:22:14] ERROR:    Traceback (most recent call last):
+  File "/opt/venv/lib/python3.10/site-packages/uvicorn/_compat.py", line 60, in asyncio_run
+    return loop.run_until_complete(main)
+  File "uvloop/loop.pyx", line 1509, in uvloop.loop.Loop.run_until_complete
+  File "uvloop/loop.pyx", line 1502, in uvloop.loop.Loop.run_until_complete
+  File "uvloop/loop.pyx", line 1371, in uvloop.loop.Loop.run_forever
+  File "uvloop/loop.pyx", line 551, in uvloop.loop.Loop._run
+  File "uvloop/loop.pyx", line 471, in uvloop.loop.Loop._on_idle
+  File "uvloop/cbhandles.pyx", line 86, in uvloop.loop.Handle._run
+  File "uvloop/cbhandles.pyx", line 66, in uvloop.loop.Handle._run
+  File "/workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py", line 3723, in print_exception_wrapper
+    await func()
+  File "/workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py", line 3275, in sigterm_watchdog
+    sys.exit(0)
+SystemExit: 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/venv/lib/python3.10/site-packages/starlette/routing.py", line 661, in lifespan
+    await receive()
+  File "/opt/venv/lib/python3.10/site-packages/fastapi/telemetry/_runtime.py", line 214, in wrapped_receive
+    message = await receive()
+  File "/opt/venv/lib/python3.10/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 159, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+[2026-11-17 21:22:14] kill_process_tree called: parent_pid=81, include_parent=False, pid=81

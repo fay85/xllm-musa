@@ -1,0 +1,53 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "f0cdbb5410e0d3388260bad1f79f61b29d5663a267604bbeaf63a6dcd0b094c1",
+  "native_stacks_sha256": "b68f48b5321cb79bf5baef1db39a0bc2f7ffc2bfa76bb26be38d30b9438dabbf",
+  "symbols_sha256": "518978aa5e65c95212bdd1806e49ea7b8940d4d5b112ef13d011ebcb179d0caf",
+  "symbolization_binary_sha256": "c8a4f4cf1819baad39f30b8ad9962de73bb69653b5a6bd71d75c2d600c7bef2d",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/DSpark/full_draft_graph_replay",
+    "pid": 53055,
+    "tid": 55258,
+    "ts": 4053806680654.61,
+    "dur": 93.182,
+    "args": {
+      "External id": 4780,
+      "Record function id": 5456,
+      "finished": true,
+      "Ev Idx": 4779
+    }
+  },
+  "step_selection": "actual RecordFunction ID; GPU kernels linked through runtime correlation",
+  "selected_record_id": 5456,
+  "step_prefix": "V41/step/",
+  "selected_scope": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/DSpark/full_draft_graph_replay",
+    "pid": 53055,
+    "tid": 55258,
+    "ts": 4053806680654.61,
+    "dur": 93.182,
+    "args": {
+      "External id": 4780,
+      "Record function id": 5456,
+      "finished": true,
+      "Ev Idx": 4779
+    }
+  },
+  "gpu_selection": "runtime correlation for scope",
+  "actual_intervals": 242,
+  "native_entry_samples": 3,
+  "include_aten_entries": true,
+  "include_runtime_intervals": true,
+  "operation_leaf_provenance": "Actual same-ID RecordFunction names, not invented native symbols",
+  "output_sha256": "41ae6bc82bde74adcef464b75db7fc6fd878d8b7e0fb96302b6fdff08a5a5285",
+  "verification": {
+    "slices": 242,
+    "native_entry_samples": 3,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

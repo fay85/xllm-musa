@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host\": \"sj9\", \"name\": \"xiaopang1116_v41_match_prefill_sj9\", \"archive_image\": \"sha256:090ed8d76746016ae58b597efd9e1888a4cb890009a5938639f26eb569952a46\", \"status\": \"ARCHIVED_AND_REMOVED_WITHOUT_FORCE\"}\n{\"host\": \"sj9\", \"name\": \"xiaopang1117_v41_sgbuild_sj9\", \"archive_image\": \"sha256:e3901e041fdc2ce01fee60d53f234e9c1cf99bde4651b7a9328391dd372c8d65\", \"status\": \"ARCHIVED_AND_REMOVED_WITHOUT_FORCE\"}\n{\"host\": \"sj9\", \"name\": \"xiaopang1116_sglang_prefill_sj9\", \"archive_image\": \"sha256:57b8f27f25970ba3c6e628272bf80eb60d66038ade5259978604281adb9a9c1e\", \"status\": \"ARCHIVED_AND_REMOVED_WITHOUT_FORCE\"}\n{\"host\": \"sj9\", \"removed\": 3, \"kept\": {\"name\": \"xiaopang1117_v41_sg438_prefill_sj9\", \"id\": \"52abeddab774ff06522e2ffe452b0714065c579f95137660f51f54ed3d9ec94a\", \"running\": false, \"image\": \"sha256:1612b9c34896d7efb631975bf49542693c4c6d129554c63f32a31b13edc37337\"}, \"gpu_free\": true}\n",
+  "stderr": ""
+}

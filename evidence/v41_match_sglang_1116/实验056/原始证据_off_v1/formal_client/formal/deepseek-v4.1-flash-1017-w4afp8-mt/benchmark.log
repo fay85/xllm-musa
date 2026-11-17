@@ -1,0 +1,254 @@
+2026-11-17 20:13:13 - evalscope - INFO: Starting benchmark with args: 
+2026-11-17 20:13:13 - evalscope - INFO: {
+    "model": "deepseek-v4.1-flash-1017-w4afp8-mt",
+    "model_id": "deepseek-v4.1-flash-1017-w4afp8-mt",
+    "attn_implementation": null,
+    "api": "openai",
+    "tokenizer_path": "/work/artifacts/model_view_w4afp8_mt_1017",
+    "port": 8877,
+    "url": "10.121.32.9:31180",
+    "headers": {},
+    "connect_timeout": 20,
+    "read_timeout": 1800,
+    "total_timeout": 3600,
+    "api_key": null,
+    "no_test_connection": true,
+    "scenario": null,
+    "number": 5,
+    "parallel": 1,
+    "rate": -1.0,
+    "warmup_num": 0.0,
+    "enable_pd_metrics": false,
+    "open_loop": false,
+    "sleep_interval": 5,
+    "duration": null,
+    "sla_auto_tune": false,
+    "sla_variable": "parallel",
+    "sla_params": null,
+    "sla_num_runs": 3,
+    "sla_upper_bound": 65536,
+    "sla_lower_bound": 1,
+    "sla_fixed_parallel": null,
+    "sla_number_multiplier": null,
+    "db_commit_interval": 1,
+    "queue_size_multiplier": 5,
+    "in_flight_task_multiplier": 2,
+    "num_workers": 1,
+    "log_every_n_query": 1,
+    "debug": false,
+    "enable_progress_tracker": false,
+    "visualizer": null,
+    "wandb_api_key": null,
+    "swanlab_api_key": null,
+    "swanlab_host": null,
+    "name": null,
+    "alias": null,
+    "outputs_dir": "/expt/runs/p56_short_indexer_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt",
+    "no_timestamp": true,
+    "max_prompt_length": 131072,
+    "min_prompt_length": 0,
+    "prefix_length": 0,
+    "prefix_count": 1,
+    "prompt": null,
+    "query_template": null,
+    "apply_chat_template": true,
+    "image_width": 224,
+    "image_height": 224,
+    "image_format": "RGB",
+    "image_num": 1,
+    "image_patch_size": 28,
+    "dataset": "line_by_line",
+    "dataset_path": "/work/artifacts/benchmark_inputs_v1/input256_output256.jsonl",
+    "data_source": null,
+    "dataset_offset": 0,
+    "dataset_args": null,
+    "frequency_penalty": null,
+    "repetition_penalty": null,
+    "logprobs": null,
+    "max_tokens": 2048,
+    "min_tokens": null,
+    "n_choices": null,
+    "seed": null,
+    "stop": null,
+    "stop_token_ids": null,
+    "stream": true,
+    "temperature": 0.0,
+    "top_p": null,
+    "top_k": null,
+    "extra_args": {},
+    "tokenize_prompt": false,
+    "multi_turn": false,
+    "min_turns": 1,
+    "max_turns": null,
+    "multi_turn_args": null
+}
+2026-11-17 20:13:13 - evalscope - INFO: uvloop event loop policy installed (asyncio.sleep precision improved)
+2026-11-17 20:13:15 - evalscope - INFO: Generating[requests]  80%| 4/5 [Elapsed: 00:00 < Remaining: 00:00, 3093.14it/s]
+2026-11-17 20:13:15 - evalscope - INFO: Save the data base to: /expt/runs/p56_short_indexer_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db
+2026-11-17 20:13:21 - evalscope - INFO: {
+  "Test Duration (s)": 5.8169,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 1,
+  "Success Requests": 1,
+  "Failed Requests": 0,
+  "Stream Requests": 1,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.1719,
+  "Avg Latency (s)": 5.8169,
+  "Avg Input Tokens": 256.0,
+  "Output Throughput (tok/s)": 44.0099,
+  "Total Throughput (tok/s)": 88.0198,
+  "Avg TTFT (ms)": 476.13,
+  "Avg TPOT (ms)": 20.94,
+  "Avg ITL (ms)": 50.38,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0,
+  "Avg Decoded Tok/Iter": 2.3832,
+  "Spec. Accept Rate": 0.5804
+}
+2026-11-17 20:13:27 - evalscope - INFO: {
+  "Test Duration (s)": 11.4262,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 2,
+  "Success Requests": 2,
+  "Failed Requests": 0,
+  "Stream Requests": 2,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.175,
+  "Avg Latency (s)": 5.7129,
+  "Avg Input Tokens": 256.0,
+  "Output Throughput (tok/s)": 44.8091,
+  "Total Throughput (tok/s)": 89.6182,
+  "Avg TTFT (ms)": 367.49,
+  "Avg TPOT (ms)": 20.96,
+  "Avg ITL (ms)": 50.43,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0,
+  "Avg Decoded Tok/Iter": 2.3832,
+  "Spec. Accept Rate": 0.5804
+}
+2026-11-17 20:13:32 - evalscope - INFO: {
+  "Test Duration (s)": 17.1972,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 3,
+  "Success Requests": 3,
+  "Failed Requests": 0,
+  "Stream Requests": 3,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.1744,
+  "Avg Latency (s)": 5.7322,
+  "Avg Input Tokens": 256.0,
+  "Output Throughput (tok/s)": 44.6585,
+  "Total Throughput (tok/s)": 89.3171,
+  "Avg TTFT (ms)": 399.21,
+  "Avg TPOT (ms)": 20.91,
+  "Avg ITL (ms)": 50.31,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0,
+  "Avg Decoded Tok/Iter": 2.3832,
+  "Spec. Accept Rate": 0.5804
+}
+2026-11-17 20:13:38 - evalscope - INFO: {
+  "Test Duration (s)": 22.774,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 4,
+  "Success Requests": 4,
+  "Failed Requests": 0,
+  "Stream Requests": 4,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.1756,
+  "Avg Latency (s)": 5.6933,
+  "Avg Input Tokens": 256.0,
+  "Output Throughput (tok/s)": 44.9635,
+  "Total Throughput (tok/s)": 89.927,
+  "Avg TTFT (ms)": 368.15,
+  "Avg TPOT (ms)": 20.88,
+  "Avg ITL (ms)": 50.23,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0,
+  "Avg Decoded Tok/Iter": 2.3832,
+  "Spec. Accept Rate": 0.5804
+}
+2026-11-17 20:13:44 - evalscope - INFO: {
+  "Test Duration (s)": 28.5259,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 5,
+  "Success Requests": 5,
+  "Failed Requests": 0,
+  "Stream Requests": 5,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.1753,
+  "Avg Latency (s)": 5.705,
+  "Avg Input Tokens": 256.0,
+  "Output Throughput (tok/s)": 44.8715,
+  "Total Throughput (tok/s)": 89.743,
+  "Avg TTFT (ms)": 382.83,
+  "Avg TPOT (ms)": 20.87,
+  "Avg ITL (ms)": 50.21,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0,
+  "Avg Decoded Tok/Iter": 2.3832,
+  "Spec. Accept Rate": 0.5804
+}
+2026-11-17 20:13:44 - evalscope - INFO: Processing[parallel_1_number_5] 100%| 5/5 [Elapsed: 00:28 < Remaining: 00:00,  5.70s/it]
+2026-11-17 20:13:44 - evalscope - INFO: 
+Benchmarking summary:
+┌────────────────────────────┬───────────┐
+│ Metric                     │     Value │
+├────────────────────────────┼───────────┤
+│ ── General ──              │           │
+│ Test Duration (s)          │     28.53 │
+│ Concurrency                │         1 │
+│ Request Rate (req/s)       │        -1 │
+│ Total / Success / Failed   │ 5 / 5 / 0 │
+│ Req Throughput (req/s)     │      0.18 │
+│ ── Latency ──              │           │
+│ Avg Latency (s)            │     5.705 │
+│ Avg TTFT (ms)              │    382.83 │
+│ Avg TPOT (ms)              │     20.87 │
+│ Avg ITL (ms)               │     50.21 │
+│ ── Tokens ──               │           │
+│ Avg Input Tokens           │       256 │
+│ Avg Output Tokens          │       256 │
+│ Output Throughput (tok/s)  │     44.87 │
+│ Total Throughput (tok/s)   │     89.74 │
+│ ── Multi-turn ──           │           │
+│ KV Cache Hit Rate (%)      │         0 │
+│ ── Speculative Decoding ── │           │
+│ Avg Decoded Tok/Iter       │      2.38 │
+│ Spec. Accept Rate          │        58 │
+└────────────────────────────┴───────────┘
+2026-11-17 20:13:44 - evalscope - INFO: 
+Percentile results:
+┌────────────────┬────────┬────────┬────────┬────────┬───────┬────────┬────────┬────────┬────────┬────────┬────────┐
+│ Metric         │    min │     1% │     5% │    10% │   25% │    50% │    75% │    90% │    95% │    99% │    max │
+├────────────────┼────────┼────────┼────────┼────────┼───────┼────────┼────────┼────────┼────────┼────────┼────────┤
+│ Latency (s)    │  5.577 │  5.577 │  5.577 │  5.577 │ 5.609 │  5.752 │  5.771 │  5.817 │  5.817 │  5.817 │  5.817 │
+│ TTFT (ms)      │ 258.85 │ 258.85 │ 258.85 │ 258.85 │   275 │ 441.56 │ 462.64 │ 476.13 │ 476.13 │ 476.13 │ 476.13 │
+│ ITL (ms)       │  47.46 │  47.83 │  48.32 │   48.5 │ 49.12 │  49.67 │  50.22 │  50.76 │  51.39 │  63.63 │ 100.09 │
+│ TPOT (ms)      │  20.79 │  20.79 │  20.79 │  20.79 │ 20.82 │  20.82 │  20.94 │  20.98 │  20.98 │  20.98 │  20.98 │
+│ Input tokens   │    256 │    256 │    256 │    256 │   256 │    256 │    256 │    256 │    256 │    256 │    256 │
+│ Output tokens  │    256 │    256 │    256 │    256 │   256 │    256 │    256 │    256 │    256 │    256 │    256 │
+│ Output (tok/s) │  44.01 │  44.01 │  44.01 │  44.01 │ 44.36 │  44.51 │  45.64 │  45.91 │  45.91 │  45.91 │  45.91 │
+│ Total (tok/s)  │  88.02 │  88.02 │  88.02 │  88.02 │ 88.72 │  89.02 │  91.28 │  91.81 │  91.81 │  91.81 │  91.81 │
+│ Decode (tok/s) │  47.66 │  47.66 │  47.66 │  47.66 │ 47.75 │  48.02 │  48.04 │   48.1 │   48.1 │   48.1 │   48.1 │
+└────────────────┴────────┴────────┴────────┴────────┴───────┴────────┴────────┴────────┴────────┴────────┴────────┘
+2026-11-17 20:13:44 - evalscope - INFO: 
+Workload throughput (5 samples):
+┌─────────────────────┬───────────┬────────────┬─────────────────────┐
+│ Metric (tok/s)      │   Overall │   Last 30s │   Steady (drop 20%) │
+├─────────────────────┼───────────┼────────────┼─────────────────────┤
+│ Total Prompt tok/s  │     44.87 │      44.87 │               45.09 │
+│ New Prompt tok/s    │     44.87 │      44.87 │               45.09 │
+│ Cached Prompt tok/s │         0 │          0 │                   0 │
+│ Completion tok/s    │     44.87 │      44.87 │               45.09 │
+└─────────────────────┴───────────┴────────────┴─────────────────────┘
+2026-11-17 20:13:44 - evalscope - INFO: Save the summary to: /expt/runs/p56_short_indexer_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5
+2026-11-17 20:13:44 - evalscope - INFO: Running[perf] 100%| 1/1 [Elapsed: 00:31 < Remaining: 00:00, 31.02s/it]
+2026-11-17 20:13:44 - evalscope - INFO: Performance summary saved to: /expt/runs/p56_short_indexer_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt
+2026-11-17 20:13:44 - evalscope - INFO: HTML report generated: /expt/runs/p56_short_indexer_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html

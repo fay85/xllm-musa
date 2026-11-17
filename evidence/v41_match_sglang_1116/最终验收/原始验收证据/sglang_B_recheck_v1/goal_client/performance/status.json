@@ -1,0 +1,142 @@
+[
+  {
+    "phase": "warmup",
+    "count": 1,
+    "command": [
+      "/work/artifacts/bench_venv_v2/bin/evalscope",
+      "perf",
+      "--api",
+      "openai",
+      "--model",
+      "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "--url",
+      "http://10.121.32.7:28192/v1/chat/completions",
+      "--dataset",
+      "line_by_line",
+      "--dataset-path",
+      "/work/artifacts/benchmark_inputs_v1/input256_output256.jsonl",
+      "--number",
+      "1",
+      "--parallel",
+      "1",
+      "--num-workers",
+      "1",
+      "--db-commit-interval",
+      "1",
+      "--log-every-n-query",
+      "1",
+      "--warmup-num",
+      "0",
+      "--tokenizer-path",
+      "/work/artifacts/model_view_w4afp8_mt_1017",
+      "--stream",
+      "--outputs-dir",
+      "/expt/runs/sglang_B_recheck_v1/performance/warmup",
+      "--no-timestamp",
+      "--no-test-connection",
+      "--connect-timeout",
+      "20",
+      "--read-timeout",
+      "1800",
+      "--total-timeout",
+      "3600"
+    ],
+    "started_at": "2026-11-17T21:19:41.827766+08:00",
+    "exit_code": 0,
+    "client_wall_seconds": 17.16373590193689,
+    "finished_at": "2026-11-17T21:19:58.991933+08:00",
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 11.155755306594074,
+        "first_chunk_latency": 5.632447713054717
+      }
+    ]
+  },
+  {
+    "phase": "measured",
+    "count": 5,
+    "command": [
+      "/work/artifacts/bench_venv_v2/bin/evalscope",
+      "perf",
+      "--api",
+      "openai",
+      "--model",
+      "deepseek-v4.1-flash-1017-w4afp8-mt",
+      "--url",
+      "http://10.121.32.7:28192/v1/chat/completions",
+      "--dataset",
+      "line_by_line",
+      "--dataset-path",
+      "/work/artifacts/benchmark_inputs_v1/input256_output256.jsonl",
+      "--number",
+      "5",
+      "--parallel",
+      "1",
+      "--num-workers",
+      "1",
+      "--db-commit-interval",
+      "1",
+      "--log-every-n-query",
+      "1",
+      "--warmup-num",
+      "0",
+      "--tokenizer-path",
+      "/work/artifacts/model_view_w4afp8_mt_1017",
+      "--stream",
+      "--outputs-dir",
+      "/expt/runs/sglang_B_recheck_v1/performance/measured",
+      "--no-timestamp",
+      "--no-test-connection",
+      "--connect-timeout",
+      "20",
+      "--read-timeout",
+      "1800",
+      "--total-timeout",
+      "3600"
+    ],
+    "started_at": "2026-11-17T21:19:59.029128+08:00",
+    "exit_code": 0,
+    "client_wall_seconds": 37.33787776436657,
+    "finished_at": "2026-11-17T21:20:36.367682+08:00",
+    "rows": [
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 6.495301345363259,
+        "first_chunk_latency": 0.9663356086239219
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 6.480487767606974,
+        "first_chunk_latency": 0.9068729626014829
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 6.506737804040313,
+        "first_chunk_latency": 1.049976535141468
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 6.377465727739036,
+        "first_chunk_latency": 0.8791641360148787
+      },
+      {
+        "success": 1,
+        "prompt_tokens": 256,
+        "completion_tokens": 256,
+        "latency": 6.423956793732941,
+        "first_chunk_latency": 0.9414405170828104
+      }
+    ]
+  }
+]

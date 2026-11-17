@@ -1,0 +1,121 @@
+{
+  "at": "2026-11-17T21:21:56.435965+08:00",
+  "container": "4230b093ad6e326f5c30486a1d855573441bed6501d7cf6c436f6f14b0d0b55c",
+  "case": "B_recheck_20261117",
+  "processes": [
+    {
+      "pid": 62800,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528153927",
+      "cmd": "python -m sglang.launch_server --model-path /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt --tokenizer-path /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt --served-model-name deepseek-v4.1-flash-1017-w4afp8-mt --trust-remote-code --device musa --language-model-only --tp-size 8 --ep-size 8 --dp-size 8 --enable-dp-attention --enable-tp-lm-head-all-to-all --attention-backend dsv4 --moe-runner-backend triton --disable-shared-experts-fusion --mem-fraction-static 0.93 --chunked-prefill-size 256 --context-length 4096 --max-total-tokens 8192 --max-running-requests 8 --watchdog-timeout 1800 --cuda-graph-backend-decode full --cuda-graph-backend-prefill disabled --cuda-graph-max-bs-decode 8 --disable-overlap-schedule --disable-radix-cache --speculative-algorithm DSPARK --speculative-dspark-block-size 5 --random-seed 42 --disable-attn-tp-gather --moe-a2a-backend deepep --deepep-mode low_latency --deepep-dispatcher-output-dtype bf16 --deepep-config {\"normal_dispatch\":{\"num_sms\":60,\"num_max_nvl_chunked_send_tokens\":26},\"normal_combine\":{\"num_sms\":60,\"num_max_nvl_chunked_send_tokens\":16}} --host 0.0.0.0 --port 28588 --disaggregation-mode decode --disaggregation-transfer-backend mooncake --disaggregation-bootstrap-port 28998 --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_11 ",
+      "D_threads": [],
+      "TERM_sent": true
+    },
+    {
+      "pid": 3838,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528154628",
+      "cmd": "/opt/venv/bin/python -c from multiprocessing.resource_tracker import main;main(22) ",
+      "D_threads": []
+    },
+    {
+      "pid": 3839,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528154628",
+      "cmd": "sglang::data_parallel_controller                                                                                                       ",
+      "D_threads": []
+    },
+    {
+      "pid": 3840,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528154628",
+      "cmd": "sglang::detokenizer                                                                                                                    ",
+      "D_threads": []
+    },
+    {
+      "pid": 16048,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155267",
+      "cmd": "sglang::scheduler_DP0_TP0_EP0                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16049,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155267",
+      "cmd": "sglang::scheduler_DP1_TP1_EP1                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16050,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155267",
+      "cmd": "sglang::scheduler_DP2_TP2_EP2                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16051,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155267",
+      "cmd": "sglang::scheduler_DP3_TP3_EP3                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16052,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155267",
+      "cmd": "sglang::scheduler_DP4_TP4_EP4                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16053,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155267",
+      "cmd": "sglang::scheduler_DP5_TP5_EP5                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16054,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155268",
+      "cmd": "sglang::scheduler_DP6_TP6_EP6                                                                                                          ",
+      "D_threads": []
+    },
+    {
+      "pid": 16055,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528155268",
+      "cmd": "sglang::scheduler_DP7_TP7_EP7                                                                                                          ",
+      "D_threads": []
+    }
+  ],
+  "reason": "Same-window frozen B formal performance finished; archive then normal TERM. No SIGKILL/reset/driver action in this script.",
+  "remaining_pids": [
+    62800,
+    3838,
+    3839,
+    3840,
+    16048,
+    16049,
+    16050,
+    16051,
+    16052,
+    16053,
+    16054,
+    16055
+  ],
+  "status": "WAITING_AFTER_NORMAL_TERM_NO_FORCE",
+  "gpu_after": "Tue Nov 17 21:22:11 2026\n---------------------------------------------------------------------\n    zjlab-gmi:2.3.3              Driver Version:3.3.8-server\n---------------------------------------------------------------------\nID   Name                 |PCIe                |%GPU  Mem             \n     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     \n                                               |      ECC Mode        \n+-------------------------------------------------------------------+\n0    X10000               |00000000:03:00.0    |32%   76934MiB(81920MiB)\n     Physical      P0     |16x(16x)            |34C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n1    X10000               |00000000:24:00.0    |31%   76777MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n2    X10000               |00000000:44:00.0    |31%   76760MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n3    X10000               |00000000:63:00.0    |29%   76744MiB(81920MiB)\n     Physical      P0     |16x(16x)            |36C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n4    X10000               |00000000:83:00.0    |33%   76712MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n5    X10000               |00000000:a3:00.0    |29%   76700MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n6    X10000               |00000000:c3:00.0    |30%   76734MiB(81920MiB)\n     Physical      P0     |16x(16x)            |35C   YES             \n                                               |      On-die, EDC     \n+-------------------------------------------------------------------+\n7    X10000               |00000000:e3:00.0    |27%   76716MiB(81920MiB)\n     Physical      P0     |16x(16x)            |34C   YES             \n                                               |      On-die, EDC     \n---------------------------------------------------------------------\n\n---------------------------------------------------------------------\nProcesses:\nID   PID           Process name                           GPU Memory\n                                                               Usage\n+-------------------------------------------------------------------+\n0    3839          sglang::data_parallel_controller            41MiB\n0    3840          sglang::detokenizer                         41MiB\n0    16048         sglang::scheduler_DP0_TP0_EP0            76460MiB\n0    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n0    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n0    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n0    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n0    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n0    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n0    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n0    62800         python                                      41MiB\n+-------------------------------------------------------------------+\n1    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n1    16049         sglang::scheduler_DP1_TP1_EP1            76426MiB\n1    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n1    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n1    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n1    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n1    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n1    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n+-------------------------------------------------------------------+\n2    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n2    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n2    16050         sglang::scheduler_DP2_TP2_EP2            76410MiB\n2    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n2    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n2    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n2    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n2    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n+-------------------------------------------------------------------+\n3    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n3    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n3    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n3    16051         sglang::scheduler_DP3_TP3_EP3            76394MiB\n3    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n3    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n3    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n3    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n+-------------------------------------------------------------------+\n4    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n4    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n4    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n4    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n4    16052         sglang::scheduler_DP4_TP4_EP4            76361MiB\n4    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n4    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n4    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n+-------------------------------------------------------------------+\n5    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n5    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n5    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n5    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n5    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n5    16053         sglang::scheduler_DP5_TP5_EP5            76350MiB\n5    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n5    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n+-------------------------------------------------------------------+\n6    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n6    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n6    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n6    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n6    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n6    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n6    16054         sglang::scheduler_DP6_TP6_EP6            76384MiB\n6    16055         sglang::scheduler_DP7_TP7_EP7               50MiB\n+-------------------------------------------------------------------+\n7    16048         sglang::scheduler_DP0_TP0_EP0               50MiB\n7    16049         sglang::scheduler_DP1_TP1_EP1               50MiB\n7    16050         sglang::scheduler_DP2_TP2_EP2               50MiB\n7    16051         sglang::scheduler_DP3_TP3_EP3               50MiB\n7    16052         sglang::scheduler_DP4_TP4_EP4               50MiB\n7    16053         sglang::scheduler_DP5_TP5_EP5               50MiB\n7    16054         sglang::scheduler_DP6_TP6_EP6               50MiB\n7    16055         sglang::scheduler_DP7_TP7_EP7            76366MiB\n---------------------------------------------------------------------\n"
+}

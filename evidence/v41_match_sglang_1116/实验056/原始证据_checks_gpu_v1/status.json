@@ -1,0 +1,1 @@
+[{"name": "selection", "exit_code": 0}, {"name": "attention_r1_c512", "exit_code": 0}, {"name": "attention_r1_c1024", "exit_code": 0}, {"name": "attention_r2_c512", "exit_code": 0}, {"name": "attention_r2_c1024", "exit_code": 0}]

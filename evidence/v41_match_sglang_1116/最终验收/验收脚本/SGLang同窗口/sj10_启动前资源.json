@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:16:34.284411+08:00\", \"host\": \"sj10\", \"gpu_hardware_free\": true, \"external_window_elapsed\": true, \"gpu_free\": true, \"gpu_rows\": [[\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"], [\"0\", \"0\"]], \"gpu_process_owners\": [], \"compilation_clear\": true, \"compilation_inventory\": {\"at\": \"2026-11-17T21:16:34.596510+08:00\", \"hostname\": \"worker32009\", \"loadavg\": \"15.42 18.62 17.89 21/9361 9974\", \"logical_cpus\": 255, \"compilation_clear\": true, \"build_processes\": [], \"scope\": \"Known compiler/build executable inventory; absence is not proof of zero background load.\"}}\n",
+  "stderr": ""
+}

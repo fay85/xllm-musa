@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:10:47.386618+08:00\", \"host\": \"sj10\", \"container\": \"xiaopang1117_v41_sg438_decode_sj10\", \"id\": \"7eefcf3aedcb80825833e6b47295689965905518e51823cab8bedecfad6374f3\", \"image_id\": \"sha256:1612b9c34896d7efb631975bf49542693c4c6d129554c63f32a31b13edc37337\", \"image_tag\": \"sha256:1612b9c34896d7efb631975bf49542693c4c6d129554c63f32a31b13edc37337\", \"python_package_metadata\": {\"python\": \"/opt/venv/bin/python3\", \"versions\": {\"torch\": \"2.9.0\", \"torch_musa\": \"2.9.0\", \"mate\": \"0.2.6\", \"mate-mubin\": \"0.2.6\", \"deep_ep\": \"1.1.0+9017268.musa438.ringreset1\", \"tvm-ffi\": null}}, \"scope\": \"Package metadata only; actual loaded C++ SO paths and hashes are recorded separately in each final role runtime_identity.\"}\n",
+  "stderr": ""
+}

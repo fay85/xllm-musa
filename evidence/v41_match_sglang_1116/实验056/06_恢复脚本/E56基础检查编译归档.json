@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/e56_checks_build_v1.tar.gz\", \"bytes\": 9317, \"sha256\": \"259c0598a7b68b620687fcecd2a26a854885e5673a5c04f00c2719b29ccf0e19\", \"at\": \"2026-11-17T18:31:04.687766+08:00\"}\n",
+  "stderr": ""
+}

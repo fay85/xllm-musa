@@ -1,0 +1,14 @@
+[
+  {
+    "at": "2026-11-17T21:19:37.503127+08:00",
+    "error": "ConnectionError(MaxRetryError('HTTPConnectionPool(host=\\'10.121.32.7\\', port=28192): Max retries exceeded with url: /v1/models (Caused by NewConnectionError(\"HTTPConnection(host=\\'10.121.32.7\\', port=28192): Failed to establish a new connection: [Errno 111] Connection refused\"))'))"
+  },
+  {
+    "at": "2026-11-17T21:19:38.505808+08:00",
+    "error": "ConnectionError(MaxRetryError('HTTPConnectionPool(host=\\'10.121.32.7\\', port=28192): Max retries exceeded with url: /v1/models (Caused by NewConnectionError(\"HTTPConnection(host=\\'10.121.32.7\\', port=28192): Failed to establish a new connection: [Errno 111] Connection refused\"))'))"
+  },
+  {
+    "at": "2026-11-17T21:19:39.509510+08:00",
+    "http_status": 200
+  }
+]

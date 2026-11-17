@@ -1,0 +1,166 @@
+{
+  "formal_window": {
+    "start": "2026-11-17T20:03:45.829761+08:00",
+    "end": "2026-11-17T20:04:19.823777+08:00"
+  },
+  "all_clear": false,
+  "hosts": {
+    "sj9": {
+      "clear": false,
+      "coverage": false,
+      "observations": [
+        {
+          "at": "2026-11-17T20:03:32.907848+08:00",
+          "hostname": "worker32007",
+          "loadavg": "2.98 5.33 7.77 1/12251 18665",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 2204.42227,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T20:03:43.069804+08:00",
+          "hostname": "worker32007",
+          "loadavg": "2.52 5.16 7.69 5/12246 34248",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 2214.584226,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T20:03:53.223895+08:00",
+          "hostname": "worker32007",
+          "loadavg": "2.69 5.10 7.64 3/12247 46865",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 2224.738317,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T20:04:03.479275+08:00",
+          "hostname": "worker32007",
+          "loadavg": "3.55 5.20 7.65 2/12247 2984",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 2234.993697,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        },
+        {
+          "at": "2026-11-17T20:04:13.634855+08:00",
+          "hostname": "worker32007",
+          "loadavg": "4.28 5.30 7.65 2/12246 16144",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 2245.149277,
+          "monitor_job": {
+            "pid": 10003,
+            "start_ticks": "526883930",
+            "at": "2026-11-17T17:46:43.439758+08:00",
+            "host": "sj9"
+          }
+        }
+      ]
+    },
+    "sj10": {
+      "clear": false,
+      "coverage": false,
+      "observations": [
+        {
+          "at": "2026-11-17T20:03:39.293625+08:00",
+          "hostname": "worker32009",
+          "loadavg": "15.68 15.33 16.49 11/15358 44788",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 5500.091277,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T20:03:49.490964+08:00",
+          "hostname": "worker32009",
+          "loadavg": "15.47 15.30 16.47 4/15353 64314",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 5510.288616,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T20:03:59.704223+08:00",
+          "hostname": "worker32009",
+          "loadavg": "16.39 15.49 16.52 17/15358 17691",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 5520.501875,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        },
+        {
+          "at": "2026-11-17T20:04:09.905107+08:00",
+          "hostname": "worker32009",
+          "loadavg": "19.05 16.11 16.70 19/15356 29192",
+          "logical_cpus": 255,
+          "compilation_clear": true,
+          "build_processes": [],
+          "scope": "Known compiler/build executable inventory; absence is not proof of zero background load.",
+          "continuous_clear_seconds": 5530.702759,
+          "monitor_job": {
+            "pid": 58125,
+            "start_ticks": "526890841",
+            "at": "2026-11-17T17:46:45.325597+08:00",
+            "host": "sj10"
+          }
+        }
+      ]
+    }
+  },
+  "scope": "10-second sampled known compiler/build processes; not proof of zero background load"
+}

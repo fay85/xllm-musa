@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T20:49:50.436631+08:00\", \"expected_enabled\": true, \"ranks\": [{\"rank\": 0, \"pid\": 39591, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 1, \"pid\": 39592, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 2, \"pid\": 39593, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 3, \"pid\": 39594, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 4, \"pid\": 39595, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 5, \"pid\": 39596, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 6, \"pid\": 39597, \"start_ticks\": \"527977113\", \"progress_present\": true}, {\"rank\": 7, \"pid\": 39598, \"start_ticks\": \"527977113\", \"progress_present\": true}]}\n",
+  "stderr": ""
+}

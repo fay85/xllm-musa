@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-17T20:54:41.097333+08:00",
+  "status": "NO_STABLE_GAIN_NOT_PROMOTED",
+  "keep": "p56_short_indexer_on_v1",
+  "evidence_sha256": "e7641cfd7edc0aa901bff9dad9e7e6f167445ec266f3c15abc56bd186f7ee7bc",
+  "baseline_reused": "E56 ON5formal, not additional requests",
+  "new_formal_requests": 10,
+  "no_gpu_semantic_change": true,
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}

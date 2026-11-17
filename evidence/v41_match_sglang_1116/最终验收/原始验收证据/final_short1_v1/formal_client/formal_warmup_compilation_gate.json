@@ -1,0 +1,56 @@
+[
+  {
+    "at": "2026-11-17T20:57:57.321669+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:57:55.693297+08:00', 'hostname': 'worker32007', 'loadavg': '9.93 7.30 6.07 1/13117 48058', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 30.481668, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:58:07.334818+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:05.853348+08:00', 'hostname': 'worker32007', 'loadavg': '8.48 7.08 6.01 1/13117 58902', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 40.641719, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:58:17.348394+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:16.114953+08:00', 'hostname': 'worker32007', 'loadavg': '7.42 6.89 5.97 6/13087 14923', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 50.903324, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:58:27.361689+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:26.372062+08:00', 'hostname': 'worker32007', 'loadavg': '6.28 6.66 5.90 11/13082 26775', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 61.160433, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:58:37.364890+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:36.634824+08:00', 'hostname': 'worker32007', 'loadavg': '5.77 6.54 5.87 2/13071 45294', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 71.423195, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:58:47.376436+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:46.893295+08:00', 'hostname': 'worker32007', 'loadavg': '4.89 6.33 5.81 1/12803 60073', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 81.681666, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:58:57.389882+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:57.161016+08:00', 'hostname': 'worker32007', 'loadavg': '4.13 6.12 5.74 1/12801 15291', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 91.949387, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:59:07.402997+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:58:57.161016+08:00', 'hostname': 'worker32007', 'loadavg': '4.13 6.12 5.74 1/12801 15291', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 91.949387, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:59:17.411829+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:59:07.421767+08:00', 'hostname': 'worker32007', 'loadavg': '3.58 5.93 5.69 1/12801 26071', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 102.210138, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:59:27.424818+08:00",
+    "clear": false,
+    "reason": "('sj9', {'at': '2026-11-17T20:59:17.682728+08:00', 'hostname': 'worker32007', 'loadavg': '4.06 5.95 5.70 2/12821 38743', 'logical_cpus': 255, 'compilation_clear': True, 'build_processes': [], 'scope': 'Known compiler/build executable inventory; absence is not proof of zero background load.', 'continuous_clear_seconds': 112.471099, 'monitor_job': {'pid': 10003, 'start_ticks': '526883930', 'at': '2026-11-17T17:46:43.439758+08:00', 'host': 'sj9'}})"
+  },
+  {
+    "at": "2026-11-17T20:59:37.435144+08:00",
+    "clear": true
+  }
+]

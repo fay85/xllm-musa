@@ -1,0 +1,1060 @@
+{
+  "at": "2026-11-17T20:59:27.895964+08:00",
+  "experiment": 57,
+  "included": [
+    {
+      "path": "归档回执_candidate.json",
+      "bytes": 217,
+      "sha256": "4aacd76f14beecab9f05a96d6d1582431a46931ca5d18a296201edf20d73e5d3"
+    },
+    {
+      "path": "00_结果与认知.md",
+      "bytes": 1890,
+      "sha256": "daad7dd51933e82a507d02638e452ac56d1562040e43f99a3008d6f7527d2ff3"
+    },
+    {
+      "path": "00_候选边界_尚未执行.md",
+      "bytes": 1232,
+      "sha256": "36921c08d6754538137381312c0943f50ea870ffcf0a88473427bfb735d80835"
+    },
+    {
+      "path": "归档回执_reverse.json",
+      "bytes": 223,
+      "sha256": "4a44a11224b01488471845c80e225dc7e82dae8cae4e19c465f0d636d39cd23a"
+    },
+    {
+      "path": "01_选定控制.json",
+      "bytes": 435,
+      "sha256": "cb55bfaadde39e716d761296127b8769081bf893daa7d13b0ee0fd7772c1166b"
+    },
+    {
+      "path": "06_决策.json",
+      "bytes": 424,
+      "sha256": "7d9cfb32d2a27ac79fb86b44bc8158ad036ee31ccdc92249ff7d54f2f9637819"
+    },
+    {
+      "path": "原始证据_candidate/experiment.json",
+      "bytes": 660,
+      "sha256": "7173b51da7bacf9cc4b4d68c91b40f241efddd0080a9846e1e05c10079cafb9f"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup_compilation_gate.json",
+      "bytes": 75,
+      "sha256": "3fabc44e85871c48ae9c85f5ec2a5bc0ce0e967957b8ad88dc7d31824a40c73b"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/identity.json",
+      "bytes": 286283,
+      "sha256": "4c247b44ff94dc316a38ca236caca4176730677f24adaff8e0ab1cf73622b2fa"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal.log",
+      "bytes": 22416,
+      "sha256": "7441964adf109858cec2bef834aca01a3e16a443528af1594be8aedc46d22dbc"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/summary.json",
+      "bytes": 547,
+      "sha256": "57169359bb01b55041ab06e2d4f787e667d6fd85c67bd7f6eae5107e4381eac1"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/finished.json",
+      "bytes": 64,
+      "sha256": "ba4f9cda1c3ad8151ca65b36eb7f2cb4be60f84b7aad2149d86cf6375fbad7bd"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/compilation_window.json",
+      "bytes": 7806,
+      "sha256": "7803e0beea788eaee8c42380b76551a8c19693ae3e96022b1a1e9842d323ba45"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_compilation_gate.json",
+      "bytes": 75,
+      "sha256": "e732cc234b2ed59b01a9c5a52fe238ab5397e49aa26db4925da55e1a50227556"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/status.json",
+      "bytes": 3596,
+      "sha256": "accbdef642ca18c26aa34aa45c013983725bd2b540e8937953e568a7e934537c"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup.log",
+      "bytes": 18363,
+      "sha256": "a8af7088f0bbdb7c9f037669a21623a2c729e477876b5b9fcbca43d3a70f58e2"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/basic_1_sse.jsonl",
+      "bytes": 1584,
+      "sha256": "60995fed09673901774992b387b5409de6ee40f9413e394845e9215f1b5a5652"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/active.json",
+      "bytes": 982,
+      "sha256": "63865d7e60319bf10078c42101b6d7d74b990321b172517ea5fdb7b938c5efbc"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/job.json",
+      "bytes": 137,
+      "sha256": "22b6063008177683193d941a5dd8308378549a6b54a523ac9521c80fd5348819"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/basic_2_sse.jsonl",
+      "bytes": 1304,
+      "sha256": "61f3823950c49ffed0173c57a6b03f07c15644ea89b2d0590e9779c7a81b74e9"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/basic_gate.json",
+      "bytes": 1871,
+      "sha256": "69b8e5dce2cce837815a681bab728380761725f2e5d13f644cc83ead4f219602"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/compilation_audit_attempts/attempt_003.json",
+      "bytes": 6584,
+      "sha256": "07f968b93e214b4e0accdc22de22b324be5817b33cc5bb86cdfec135918f2128"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/compilation_audit_attempts/attempt_002.json",
+      "bytes": 6584,
+      "sha256": "07f968b93e214b4e0accdc22de22b324be5817b33cc5bb86cdfec135918f2128"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/compilation_audit_attempts/attempt_001.json",
+      "bytes": 5972,
+      "sha256": "a9f96c66d1b8dda6eddde87abdd6f6539e65fc3dd7e4855609c54fcf5fdf6bb3"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/compilation_audit_attempts/attempt_004.json",
+      "bytes": 6584,
+      "sha256": "07f968b93e214b4e0accdc22de22b324be5817b33cc5bb86cdfec135918f2128"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/compilation_audit_attempts/attempt_005.json",
+      "bytes": 7806,
+      "sha256": "7803e0beea788eaee8c42380b76551a8c19693ae3e96022b1a1e9842d323ba45"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+      "bytes": 11984,
+      "sha256": "fbf6aeb65a60613849a9e6875da62139a4f189b576832f2e4c63f1df0bcc7175"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+      "bytes": 5155,
+      "sha256": "0e711cb23acce9d35b81bc2f68ad4063da5a9248046eca36c93421b948ea7913"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 664,
+      "sha256": "25c9dffcaa2bf6edee976e8e822fee0933fe024a92e727cabd6a31c07aef07e3"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+      "bytes": 192512,
+      "sha256": "c5636d1ab4eadbcb661dcf9f637cc50864927e14aaf1ada20e52bdb7c2920b0a"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 878,
+      "sha256": "6e1efe7d79209224ff3cf145b90a5887b47af542e7660340324d382e9166a84c"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2352,
+      "sha256": "5bd4e47693078ead1f38e6866e6fb8fbdd5bbc493b35b3516b166aec4bbd3c98"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3621,
+      "sha256": "331f06205c510279a9eb40e1b7d63ed79caf505dc2aeeee8d07f932abcec9884"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 834,
+      "sha256": "843df01f6008a393326eec59346640c80cacfabdd24c744f05b2819a91dba22a"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+      "bytes": 9536,
+      "sha256": "e0a95b7055de8d0815340cc7e6e96e9feb561ce0f72c7fb95fb7e9f1bfab132a"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+      "bytes": 5155,
+      "sha256": "743a9a2fb72c29cc6a0e52c866bf8051d508f0211800a95b7591c75517aee376"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 667,
+      "sha256": "dc62f94598d4020405bb7759412e3eeee81ff9b088a047a56059b0b981d5a7c5"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+      "bytes": 40960,
+      "sha256": "293963958ccec539df46adf6a5e91cdd2dd25b7bb624ef441d8e06c9c8a9fc20"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 872,
+      "sha256": "8b24adc0020ace44ecdc22f37d7b55eee5f6c47c76ce01a868b1c2eca1c82dc9"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2359,
+      "sha256": "f776974f189cef6c1b2f7837383929bb56faa82656cdabc38b0fa0d2eb7c75bd"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3611,
+      "sha256": "10c7c3449a42c7af0b3abd9f0f5043f34c7dab5b62d347d97b88318415bf8338"
+    },
+    {
+      "path": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "2d338e360d94f51ae75fcdc6d79d31faed7be6e4ba5d132c527e462b67dae859"
+    },
+    {
+      "path": "原始证据_candidate/trace/off_after_sse.jsonl",
+      "bytes": 2492,
+      "sha256": "9159ebebe73082acc2eacca5557af7acb3c73eb60e1d71865f99fc1f5ea91806"
+    },
+    {
+      "path": "原始证据_candidate/trace/manifest.json",
+      "bytes": 7370,
+      "sha256": "b24970928750876edd80363a46ca43d966deddf36a3c61c6bb7ec33ee4f27045"
+    },
+    {
+      "path": "原始证据_candidate/trace/requests.json",
+      "bytes": 1746,
+      "sha256": "624d5d466c07fc096530304306ba63be5315c1495dbeaac75068ab315c9d364c"
+    },
+    {
+      "path": "原始证据_candidate/trace/start_profile.json",
+      "bytes": 312,
+      "sha256": "ae16244388ad2ecd1fdc21e4f68cabff81b84d38b99b1580739b17891f837b52"
+    },
+    {
+      "path": "原始证据_candidate/trace/off_before_1_sse.jsonl",
+      "bytes": 2499,
+      "sha256": "d9acb89e102d1f612cc6ab14161d42e867d649728e038adf3933dd4eb5cb8b7b"
+    },
+    {
+      "path": "原始证据_candidate/trace/stop_profile.json",
+      "bytes": 311,
+      "sha256": "10ba0801bdd9d16f7ba6f14b7fd1b7d2e363f70bada0296f71d2266252c1c8c9"
+    },
+    {
+      "path": "原始证据_candidate/trace/finished.json",
+      "bytes": 120,
+      "sha256": "0d8c3a263b353305682dab353906f77b95a24c6376e8f9a3c976502833ac6191"
+    },
+    {
+      "path": "原始证据_candidate/trace/request.json",
+      "bytes": 980,
+      "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211"
+    },
+    {
+      "path": "原始证据_candidate/trace/profiled_sse.jsonl",
+      "bytes": 2491,
+      "sha256": "de4a927fcace816a67503660d8de2f41603398eb3d4045daae5735b3462394a3"
+    },
+    {
+      "path": "原始证据_candidate/trace/job.json",
+      "bytes": 92,
+      "sha256": "ad3da5e837e47685696fc52bb806d38d7a13fc23e7709b52907ea9724879c2b8"
+    },
+    {
+      "path": "原始证据_candidate/trace/off_before_2_sse.jsonl",
+      "bytes": 2497,
+      "sha256": "c4507097980ea288af1cd7cb91540c2f2866d0fe45f6ce1dfea04ddbb0968bae"
+    },
+    {
+      "path": "原始证据_candidate/build/source_manifest.json",
+      "bytes": 1337,
+      "sha256": "15f4c6d4dbf6d5b5081ffad4b57cf4c34309fdac8437c25ace91165e70d1bd3a"
+    },
+    {
+      "path": "原始证据_candidate/build/finished.json",
+      "bytes": 80,
+      "sha256": "dc2351758b97bd2eb4d8ebb8ce1c8bcd30b33b1f5590b60c98742e33a4a2b319"
+    },
+    {
+      "path": "原始证据_candidate/build/artifact.json",
+      "bytes": 363,
+      "sha256": "143b7ff43306ec79611675b4c3c2f07c79857ab2bef6643792ea72ade70cd3bd"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/supervisor_job.json",
+      "bytes": 109,
+      "sha256": "3e7b5539c7ce9c94fd02a6209b99814b8e76ab9df35ebe811112eeffbde10b15"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/role_config.json",
+      "bytes": 53604,
+      "sha256": "7b0b4269a960be2de9cc95c436bec30606e455f74537e378cb8dc1102766ad42"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/runtime_identity.json",
+      "bytes": 10527,
+      "sha256": "e6c8a6d7606f233789c30de3c85eaaa573473945bf7f3bc8657837b0135d8630"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/effective_progress_env.json",
+      "bytes": 1020,
+      "sha256": "8fc2cb6c6df40de7e4b9df5e78f15e6fc281aba2bdf3f205fe1f158603ec55c7"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/result.json",
+      "bytes": 151,
+      "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/status.json",
+      "bytes": 251,
+      "sha256": "65def9fe57577a2fac6c7d3d3623640d2e999fdc2f149e2a1b8792d48b8cc17c"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/rank0.log",
+      "bytes": 131007,
+      "sha256": "3bff91e58294fdd93d6e781eaa8a1b250a93dd0ed7c6561e427d7fe85fd54b03"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj9/resource_release.json",
+      "bytes": 4685,
+      "sha256": "9d2edef537458787989dfae719453405761ce9352194f5b9eaca87f59869495a"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/supervisor_job.json",
+      "bytes": 110,
+      "sha256": "418115797f7f8a403cab286f0e594bf04fa85cf67175a2f9f8172b5981e204ae"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/role_config.json",
+      "bytes": 57381,
+      "sha256": "97bbcaa37fb3e0197c14d93d541d5864d81937f2db55da3a0fd04f60545a1e92"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/runtime_identity.json",
+      "bytes": 10299,
+      "sha256": "0a7071fa2e2d3bbc6e1aed2b55c57a669d48efcf196fbe5a1db1f15373536f82"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/effective_progress_env.json",
+      "bytes": 1020,
+      "sha256": "71558d482ab99626135c53abc21a962284a54ae7baf89afdda6a3dc514bc964c"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/result.json",
+      "bytes": 148,
+      "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/status.json",
+      "bytes": 269,
+      "sha256": "1a8eff6d9b24181b654f00413f4178422d69fb674a0e184cc07db65083a8bff8"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/rank0.log",
+      "bytes": 131505,
+      "sha256": "4e0e680c27ec6b48e529a2a02a26bdf02da27eb15b63c57c91c2457a5aaf3f3e"
+    },
+    {
+      "path": "原始证据_candidate/roles/sj10/resource_release.json",
+      "bytes": 5518,
+      "sha256": "07633edcd1417348242ba38660ada9aea847d38bb5079feaa79c58d01608b31f"
+    },
+    {
+      "path": "原始证据_candidate/trace_analysis/all_rank_validation.json",
+      "bytes": 1607432,
+      "sha256": "13eff7c56902539e92e701febb18757cda2086d299ec061d559a95c074891954"
+    },
+    {
+      "path": "原始证据_candidate/trace_analysis/resolved_symbols.json",
+      "bytes": 168556,
+      "sha256": "a6435072a7a849e24f4aa306c82652de5a6cf9653d8f2d81afe1288ffa9ce7dc"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup_compilation_gate.json",
+      "bytes": 75,
+      "sha256": "86d192a5482c82e78ea5193abee24945bdcff897e03d852c19d78dc6363add66"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/identity.json",
+      "bytes": 286283,
+      "sha256": "4c247b44ff94dc316a38ca236caca4176730677f24adaff8e0ab1cf73622b2fa"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal.log",
+      "bytes": 22452,
+      "sha256": "29c1275e3a3ca0c1b54b484cd197e667b7c56c1e10500c73670706245c1f71b4"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/summary.json",
+      "bytes": 547,
+      "sha256": "4a9a4a06c18178f4fc8ebee4d4c6e391f4980ac883e1f224f9e3bf294ed500d9"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/finished.json",
+      "bytes": 64,
+      "sha256": "2877c2aad341ff0406215458adbe39468e2ad99ffc0c4ad55658d9919159d05d"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/compilation_window.json",
+      "bytes": 7200,
+      "sha256": "d3991365b551169050c8df1a948804ee3ea4b82e4c3cea21115e6e0e6547ef91"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_compilation_gate.json",
+      "bytes": 75,
+      "sha256": "351e059224f78e70537c62cf0729d84ce6b60da18bfb50328a0a83c260353b1c"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/status.json",
+      "bytes": 3608,
+      "sha256": "7ae67de73d524929e57b1d77d11e721816bae674bfcb4e2d45e6816c8cd208dc"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup.log",
+      "bytes": 18405,
+      "sha256": "d6407a1b61cbd44d1c7dc7bc0399e04e03c1fe42828328aed3fa63ac6e2f4812"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/basic_1_sse.jsonl",
+      "bytes": 1585,
+      "sha256": "35a8397dd84215f57b0b1eaaf2c251767dec1b3312f648d1831e815a7b6b7e5c"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/active.json",
+      "bytes": 989,
+      "sha256": "10ab3902de3b960c384079b8bf22ed4bdc845983fc6c1d1dac2e1337981c8b76"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/job.json",
+      "bytes": 144,
+      "sha256": "c9901d3ebddf022bafd6c4de653e4738100622185ca6ca9eed5d32f2de2c48f3"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/basic_2_sse.jsonl",
+      "bytes": 1303,
+      "sha256": "81dbd0f60d7c480934d3195d20e86ec657d51729a261bff39fea6c5140da1fca"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/basic_gate.json",
+      "bytes": 1870,
+      "sha256": "88ddc65ea8f5a9073b7e8538e99d79a0eaed8a01c826eba0212685e2dd1b91d2"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/compilation_audit_attempts/attempt_003.json",
+      "bytes": 6589,
+      "sha256": "9ad273834cb03e9aee6b4351cb6cf7fe239ec20d975334bcf3b1093686e3c7fb"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/compilation_audit_attempts/attempt_002.json",
+      "bytes": 6589,
+      "sha256": "9ad273834cb03e9aee6b4351cb6cf7fe239ec20d975334bcf3b1093686e3c7fb"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/compilation_audit_attempts/attempt_001.json",
+      "bytes": 5980,
+      "sha256": "3ab8867445d9235920a9538ed3c917210e261eae3525ef2c60382d372ad68290"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/compilation_audit_attempts/attempt_004.json",
+      "bytes": 7200,
+      "sha256": "d3991365b551169050c8df1a948804ee3ea4b82e4c3cea21115e6e0e6547ef91"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+      "bytes": 12013,
+      "sha256": "bdf946aa561cef6ff36a6f257d9c304e6aebd3b6617a69e518f888388ef3eeeb"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+      "bytes": 5155,
+      "sha256": "59662fbb59bd0ebdd4ee8beec897dd0aae845ebeaa65ac818382ec538929296d"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+      "bytes": 663,
+      "sha256": "4790de9e41b5a0ee200125ca94dbbd8ef613dafb954b681460bbc340e18df304"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+      "bytes": 192512,
+      "sha256": "dc57e9c81bba543737af700ff66345db89888c993cfd04a7a8d18a9d2b35ae06"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+      "bytes": 875,
+      "sha256": "d21359053416b497ea77ea27c606a2a085fe0e16eff819900b991f387a503de5"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+      "bytes": 2359,
+      "sha256": "86b91b1b4731801230c3cf33ffa54c9fa8f54d5734bd5975840692ae057cf424"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+      "bytes": 3620,
+      "sha256": "ac2dcbe7011ce664490b743f3db5de974ddae4d7620d2b6b43665c6a0fbf09d9"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+      "bytes": 832,
+      "sha256": "6cb76dfcd65840fd06c26ad4f6026daeb39bc640a1abc4094a74c5ce321bb43a"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+      "bytes": 9571,
+      "sha256": "186f272fb83137515436b7fc2e61fdcf6180df96f6dc587b2b21afb1d6243ed6"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+      "bytes": 5155,
+      "sha256": "eca3ddccf67084092c6a89cdaebe344451c3e139730e5d39682ea6060b41d7f4"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+      "bytes": 667,
+      "sha256": "31efd049ed8051baa24c89d571edd757257d6125cee6fb28e52cbb7cef1f1950"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+      "bytes": 40960,
+      "sha256": "10b12a3ecf5ec7d781b5ab3a91d46cd1b44efac55fb9fb8ef7d581f29ec1be8e"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+      "bytes": 830,
+      "sha256": "f8f32584db452444b69370bbdbfe83e684847d3f1c6a314ea4fc587ec7582780"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+      "bytes": 2366,
+      "sha256": "a85409166fdfe92036a49caa91982962f9570dbb08e9ed2b818347151d61c771"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+      "bytes": 3620,
+      "sha256": "b3c162d126f9db0115734636df702c627b50a81ef557907bdd35e2c5d813a2c2"
+    },
+    {
+      "path": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+      "bytes": 215,
+      "sha256": "9c292f9c003a409b658d4742c65920ee177f709293a920196ed1c6728e784851"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/supervisor_job.json",
+      "bytes": 109,
+      "sha256": "29d2a54a8b59eeb7695537381f23817f59d14af691f9bd67623dcca828fc0f6d"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/role_config.json",
+      "bytes": 54178,
+      "sha256": "2eb649b21e17f53bcd124825d913e693d9566b13e27d256cbc6d2a13f008b2c3"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/runtime_identity.json",
+      "bytes": 10527,
+      "sha256": "0d533727f32c51ccf100136b6c61ea35a2d3572563c2a901035836596a0c9d39"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/effective_progress_env.json",
+      "bytes": 1011,
+      "sha256": "d3113f6543b4823342f816e618aac0c1529e13d5d2a6fa1c23914129035ff223"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/result.json",
+      "bytes": 151,
+      "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/status.json",
+      "bytes": 266,
+      "sha256": "c8e460ffb3f078a2b296056b357a6d6653942bc700e91d77d4687708fdf43150"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/rank0.log",
+      "bytes": 164627,
+      "sha256": "a824d9643e5ff45693f015d59601628bb351608443765555778221a0d2712563"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj9/resource_release.json",
+      "bytes": 4685,
+      "sha256": "e568f08627940dc3245c06c54d07d9994b60c61c87842eba28a06d42f57d6d17"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/supervisor_job.json",
+      "bytes": 110,
+      "sha256": "474b9ea23c8185c76f304c7b2c624a830ea964b82c4638d894bb9c4f8734f72b"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/role_config.json",
+      "bytes": 58067,
+      "sha256": "6268acdb8c52ed7816252accd5ece291402da442ccf08a738c43620ddaa73ac7"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/runtime_identity.json",
+      "bytes": 10299,
+      "sha256": "752b650f37ceac26292fe1f5fd91040d84bba999fd93e1cd1c68935214265df6"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/effective_progress_env.json",
+      "bytes": 1011,
+      "sha256": "b95333b33e1d889b5e246586d18ca8b55af8a03267a78c9176e43dea6b49f4a4"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/result.json",
+      "bytes": 148,
+      "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/status.json",
+      "bytes": 272,
+      "sha256": "820d66fa3139c61dd464dd50bb71498289d52a04e2b0a3d0cf6f2991904c6ca7"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/rank0.log",
+      "bytes": 236091,
+      "sha256": "d368b7ebeb0e8cb0a262bb285f9d3620ec6930c5426f350d02011ba817d37902"
+    },
+    {
+      "path": "原始证据_reverse/roles/sj10/resource_release.json",
+      "bytes": 5518,
+      "sha256": "3e55409ca1dbbf3769a03400791e3d73a17e462b625a35b6ef99e0d4fdbbd0f2"
+    },
+    {
+      "path": "04_trace/目视核对与归因边界.md",
+      "bytes": 1019,
+      "sha256": "e06968a736fffd471309e9e0b4d3ec72d29fb7b6ccf3e61051b17cde67d047b9"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/actual_native_last.receipt.json",
+      "bytes": 1448,
+      "sha256": "a38a8cc390e36eab833bba1c2b64254f11fd284a9fc7676b9670d209e13dd973"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/Perfetto图/Perfetto页面文本.txt",
+      "bytes": 1242,
+      "sha256": "a057e009a5a2057d9ef2273750908f4f3f4471fd62b78055b27b9176c4d15729"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/Perfetto图/rendered.json",
+      "bytes": 1200,
+      "sha256": "5c12bbb06677c3fef851a2f6661316f265c40554501d6650da1dfe7298f5202a"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+      "bytes": 189569,
+      "sha256": "885e33f751895b23aaa7806075efdacc3b2158b41265662e887b42a9714274d9"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+      "bytes": 248054,
+      "sha256": "6b393ead1338892654d6e2b61421d6244f02347ffed01d57c119be5969ba848d"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/Perfetto图/真实CPU区间与GPU时间线.png",
+      "bytes": 105242,
+      "sha256": "e61728d186ef923bc4fbcba83a70adf729f441537dbe701af89f17a88da1d4c7"
+    },
+    {
+      "path": "04_trace/E57_progress_disabled/Perfetto图/Perfetto实际轨道.json",
+      "bytes": 574,
+      "sha256": "c9420338dd24b3150eb63eec5064fe53eef5a406632ef48ea2c99dcc8f863f0f"
+    },
+    {
+      "path": "03_性能/逐请求与实际工作量核验_baseline_candidate.json",
+      "bytes": 78127,
+      "sha256": "84e8838fbc1dc61fc713204929e04a3d3a9b930c12f615b6d75f84ec0a5c1fdf"
+    },
+    {
+      "path": "03_性能/逐请求与实际工作量核验_baseline_candidate_reverse.json",
+      "bytes": 85384,
+      "sha256": "e7641cfd7edc0aa901bff9dad9e7e6f167445ec266f3c15abc56bd186f7ee7bc"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_stop_sj9.py",
+      "bytes": 2100,
+      "sha256": "ccbee7c70bf2ea10301a2761043af605294087de2b052a6f57cd5f440aad7aa6"
+    },
+    {
+      "path": "06_恢复脚本/E57反向状态_2.json",
+      "bytes": 4734,
+      "sha256": "37da3dccefee3ca426394b9fec23843d4d6339c129e15a9c2b2d75b5cd20a9f3"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_release.py",
+      "bytes": 1154,
+      "sha256": "ec78c76361aae93617a5a5e73a9dc49d85122dc1bcdd7d6784482269bbec0c41"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_trace_archive.py",
+      "bytes": 9201,
+      "sha256": "1af196ebc47dcd5bd054cf45c3c9a9d0e3aacd3e72ae5f522d6dc8d456238f92"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志sj10资源释放.json",
+      "bytes": 185,
+      "sha256": "ac9049a6b7f715131ebaabae75dccb046752ea1c13b217764dbcee028f06f778"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_poll.py",
+      "bytes": 800,
+      "sha256": "cef54debb76b878835fc29ab2edb2dff3441a09500d730fbfd1c6bca66bb0b2d"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志trace启动.json",
+      "bytes": 105,
+      "sha256": "a614de160e8bfa0a674f5c2499944a3c03d41ac4a8a7d39bd5dcbbdef080ceac"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj10实际环境核验_v2.json",
+      "bytes": 872,
+      "sha256": "b3cd9982c26739adebe479138686ce4947f65ecd967f5d1a3615b91b85fe05a1"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_environment_sj9.py",
+      "bytes": 992,
+      "sha256": "0061c6d7f66ea69a9337d29d87013953e28c1f286f9383b99bc268e4d7304eb5"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj9启动前资源.json",
+      "bytes": 741,
+      "sha256": "130923c311cb29510092b57f13d4c480f358879789a42e38d5cb604beb8d2a11"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_download.py",
+      "bytes": 1021,
+      "sha256": "71235ffb77bf161775146d2165bd1d893aebd2c65da496126e9dddae9907b8d3"
+    },
+    {
+      "path": "06_恢复脚本/e57_archive_and_start_reverse.py",
+      "bytes": 2381,
+      "sha256": "ad824a91a44eea21ba7d0a1a5f475fdae8edd7d6b3779b34ae3697a6c271c873"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志状态_1.json",
+      "bytes": 528,
+      "sha256": "30998a7e0c23fb3e69d4c7c5958f7a30e9158a12b37c1d45f8d7f64aacd3bdc5"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志trace状态.json",
+      "bytes": 2038,
+      "sha256": "e0d986b3fad254cce0fef6a1cdbc5cd54ada331a00811dcd598538437218863e"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志P正常退出请求.json",
+      "bytes": 151,
+      "sha256": "7773d7c2666f03d6eb4fd4fd8de4a032ffa3817c5bdea100b74990302510f9f8"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_environment_sj10.py",
+      "bytes": 993,
+      "sha256": "1cdea73a5952c42c40936dd2feea14c440ccdd29e68b200bc88da432b1121057"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_poll.py",
+      "bytes": 1087,
+      "sha256": "2b22b238d36eda680ae71a150ecdded7426e7b0091ea6bf14542b80382c45234"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_stop_sj10.py",
+      "bytes": 2042,
+      "sha256": "ab8338f8dd0a15744a8e66574f0fca6c2743335ea737ba52806d8248597b2973"
+    },
+    {
+      "path": "06_恢复脚本/e57_publish_selection.py",
+      "bytes": 593,
+      "sha256": "296d55108cd5d6036d3b4b0d8fc58128252bca7f6d4c179b41362340135aa5f4"
+    },
+    {
+      "path": "06_恢复脚本/E57配置准备.json",
+      "bytes": 154,
+      "sha256": "7ed8dc20da01983e8df3816c90ba86af77894457703720909f07a676b2b006b6"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_stop_sj10.py",
+      "bytes": 2101,
+      "sha256": "84909e8d9a22ebaaf23cd1535a3cc3b5b708b4e3b550884c1dbb5b833373e35b"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj10资源释放.json",
+      "bytes": 185,
+      "sha256": "882fe9521806491a1a87b33e3e912652b7428e8c370743a6b4afa9ceef2c9fd9"
+    },
+    {
+      "path": "06_恢复脚本/E57反向客户端启动_v2.json",
+      "bytes": 151,
+      "sha256": "ab30f01d33f89a7adf0069112883f28c2fb41031f5cc470bc55cab2efaf6db7b"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj10启动前资源.json",
+      "bytes": 746,
+      "sha256": "adf78a0f2f41f0185dbb58e39fcfaeb7da1d8de03bbd24ec888351203fc54724"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_environment_sj9.py",
+      "bytes": 873,
+      "sha256": "8ca622900c8b3c779e356bfdc251dcc82f992fef56a49963c0ee7f37e52a6723"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_wait_exit.py",
+      "bytes": 539,
+      "sha256": "1541011c384933632dcde9321079f037c752fd14c2252f7a804d8e7f12bc9830"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_stop_sj9.py",
+      "bytes": 2041,
+      "sha256": "60be6964923d92893871a9b8fafd26fcab08781dcf1464b19a6e7ddb32a917b1"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_close.py",
+      "bytes": 2023,
+      "sha256": "084474d2a6b530f16fb23ddf7db31c3c272e696e2cee5fda37c55f818838cb13"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志D正常退出请求.json",
+      "bytes": 152,
+      "sha256": "d64a840d7cedcb9169934ae9862df0f7be97a78e34a59104812b8a4d9d982d69"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_read_bootstrap.py",
+      "bytes": 394,
+      "sha256": "924bb707c66a5ee10b9dc6b83ac60cc3b9ad26ed97e30f63a7448daea94b5861"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_start_role.py",
+      "bytes": 4031,
+      "sha256": "bdfcbfdb4a65549531b2d328c34b6edd9cd0e336a7e9f2c95cd9fafc4cb08a19"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志P启动.json",
+      "bytes": 174,
+      "sha256": "248ee256f8551d15f3318f046d71214efce46c9e0a61c8a1af3af13b21915ea6"
+    },
+    {
+      "path": "06_恢复脚本/E57反向状态_1.json",
+      "bytes": 3739,
+      "sha256": "096ea69083e43a09903c2ec8ed5f085f41c30478d73e5795f62b7236c9a5b89c"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_wait_exit.py",
+      "bytes": 532,
+      "sha256": "c21140985ce69ba1cb0a4b0ce6e4896d1bdf43bcda4cc10e296f418855db1993"
+    },
+    {
+      "path": "06_恢复脚本/E57反向归档.json",
+      "bytes": 284,
+      "sha256": "6e3f529a681433205f169a4b4e0bcb20e0fa4eaf14760288539bce4665f52259"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_release.py",
+      "bytes": 1147,
+      "sha256": "60e478524e31862dcfb5ee94f35af42f9df42db7fbe64f29b05017a53ed8534a"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志退出结果.json",
+      "bytes": 374,
+      "sha256": "ab2a79d33c4caf955a81e3b08711e2b9a1f0ea6d1e3c2263b627578b89a07677"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj9启动.json",
+      "bytes": 174,
+      "sha256": "f8e136c1ba99bafb5e1d893b6f367be54ee133a7ae7152a9fb95c8b692c1e1c0"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志状态_2.json",
+      "bytes": 622,
+      "sha256": "137dba1edbb7c8a1b90fffb401f524ecacbcdad0e10ae1f5af858264b55175b6"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志状态_4.json",
+      "bytes": 1849,
+      "sha256": "9c855fe9cb1cc232e024ace8f4cf944c454ada3f1f648762fd55b703c853423b"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj9实际环境核验_v2.json",
+      "bytes": 872,
+      "sha256": "391e4ac4f59539e158754714917490ab16198909c0fc61b35e67f4736c847ce7"
+    },
+    {
+      "path": "06_恢复脚本/E57控制选择发布.json",
+      "bytes": 501,
+      "sha256": "8f5bb8ed051ec962232960fb6302766ec6eeabbb6ec234d5f85d7f7dbb8be780"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_download.py",
+      "bytes": 1016,
+      "sha256": "4d188b647310a377b7b7107386650c06820f374f80cdb133048652d46e2b46b2"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_start_client.py",
+      "bytes": 1246,
+      "sha256": "e63000b9ee20cd8cb0342a4ab3f0658579be5f6469aad58b255223e3e89cfadf"
+    },
+    {
+      "path": "06_恢复脚本/e57_analyze_local.py",
+      "bytes": 10027,
+      "sha256": "24ced91a3b58c26dd49bc9ee8d9e2781d697866a740c039a0072c11edcee98c9"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_environment_sj10.py",
+      "bytes": 874,
+      "sha256": "1ade95ac44f71e5b501b5d9f2253e597252969381a91e50d0cebf591e3ceba8b"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志sj10实际环境核验.json",
+      "bytes": 881,
+      "sha256": "669e37ebd4b8faa14d7c779a96476f2cd467e441d4870106256db8b3932f2e8f"
+    },
+    {
+      "path": "06_恢复脚本/E57反向最终状态.json",
+      "bytes": 5561,
+      "sha256": "fc5cc30f4f359e4dc1d37ca84aab14e6e34773b29ece79fd3ffb259dea546769"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志D启动.json",
+      "bytes": 175,
+      "sha256": "02c070b1f7b9cb5656b1b62fb018dd3aecf09991f9d9c51af8553fe69c236e34"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志客户端启动.json",
+      "bytes": 151,
+      "sha256": "6bf053a177827a2e9f208844e732e0a4866273c94aa45a0ec034b4a811c5b792"
+    },
+    {
+      "path": "06_恢复脚本/E57反向退出结果.json",
+      "bytes": 374,
+      "sha256": "35cf4dcc181d4e9b3bf337fa72cc748a7f24f6139da46173fff17b12f8b1d86b"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志sj9资源释放.json",
+      "bytes": 184,
+      "sha256": "2acb67cb20474ddc76adde5fee1af4fc4938b42c5be8500d6118dc96276041cc"
+    },
+    {
+      "path": "06_恢复脚本/e57_prepare.py",
+      "bytes": 1880,
+      "sha256": "c2c7bc6cb5671eb9d69a9c44cf6a1aff79b4ed768af5fbf787d1790f8cccf537"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj9正常退出请求.json",
+      "bytes": 151,
+      "sha256": "7773d7c2666f03d6eb4fd4fd8de4a032ffa3817c5bdea100b74990302510f9f8"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_archive.py",
+      "bytes": 1108,
+      "sha256": "254ef283af6f454fac81632e6a447cf1f21f678c4d057adf6f332d7f4bc0408b"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_start_role.py",
+      "bytes": 4024,
+      "sha256": "d84442213f44200471cdef0e53fd8abdb944894d9a01eb58b91e3caed4073431"
+    },
+    {
+      "path": "06_恢复脚本/e57_candidate_trace_start.py",
+      "bytes": 4780,
+      "sha256": "1908124a7507df36d4ce9fcc244d9a306eee95fc5cf65f063abbbac94c110549"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj10启动.json",
+      "bytes": 175,
+      "sha256": "51163416aa35220927a4f8999a5a8ebb95ec623736b411595fef49063f5a07a8"
+    },
+    {
+      "path": "06_恢复脚本/e57_reverse_start_client.py",
+      "bytes": 1416,
+      "sha256": "a155564a5d1e663f8d87d76d0c6715c08800259384a1ee47456d3450cc5d4245"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志状态_3.json",
+      "bytes": 795,
+      "sha256": "43314626115adf9fa5a1c1e3f62da1a752b6df5eb25977f99cb62bd81a39a086"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj10正常退出请求.json",
+      "bytes": 152,
+      "sha256": "d64a840d7cedcb9169934ae9862df0f7be97a78e34a59104812b8a4d9d982d69"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj9资源释放.json",
+      "bytes": 184,
+      "sha256": "d5e392f9266a0343debbda30bf8ebd39501a54118c32e982ab4a646b61536dd6"
+    },
+    {
+      "path": "06_恢复脚本/E57反向客户端启动.json",
+      "bytes": 584,
+      "sha256": "f8d5c3c452e2e325894ab1def946141294348c8900016957b313cc185307ceac"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志sj9实际环境核验.json",
+      "bytes": 881,
+      "sha256": "34969507632cf31ac30f79cb6bbb49943bc69876597bf155be69dd38490b6708"
+    },
+    {
+      "path": "06_恢复脚本/e57_render.py",
+      "bytes": 1291,
+      "sha256": "b8448aec757eeff0e16a120ec819e4dc0242c4b3d349d4ceda9ff179c9edb570"
+    },
+    {
+      "path": "06_恢复脚本/E57反向sj9实际环境核验.json",
+      "bytes": 524,
+      "sha256": "7a4a68b61f3e389256c7875c9b78457bd77b04f772afd83cdd10e70a0098274b"
+    },
+    {
+      "path": "06_恢复脚本/E57关闭日志归档.json",
+      "bytes": 341,
+      "sha256": "27b3109629804553534652db9a7cd4322767f8e29ff93511b1fa0bd85662e7e8"
+    }
+  ],
+  "omitted_large_or_generated": [
+    {
+      "relative": "原始证据_reverse.tar.gz",
+      "bytes": 165408
+    },
+    {
+      "relative": "原始证据_candidate.tar.gz",
+      "bytes": 5475132
+    },
+    {
+      "relative": "原始证据_candidate/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+      "bytes": 167262
+    },
+    {
+      "relative": "原始证据_candidate/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+      "bytes": 166778
+    },
+    {
+      "relative": "原始证据_candidate/trace_analysis/sj9/rank0.pt.trace.json",
+      "bytes": 21136972
+    },
+    {
+      "relative": "原始证据_candidate/trace_analysis/sj9/rank0.native_stacks.jsonl",
+      "bytes": 19631175
+    },
+    {
+      "relative": "原始证据_candidate/trace_analysis/sj10/rank0.pt.trace.json",
+      "bytes": 14807517
+    },
+    {
+      "relative": "原始证据_candidate/trace_analysis/sj10/rank0.native_stacks.jsonl",
+      "bytes": 7422857
+    },
+    {
+      "relative": "原始证据_reverse/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+      "bytes": 167253
+    },
+    {
+      "relative": "原始证据_reverse/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/perf_report.html",
+      "bytes": 166798
+    },
+    {
+      "relative": "04_trace/E57_progress_disabled/actual_native_last.pftrace",
+      "bytes": 3882747
+    }
+  ],
+  "local_complete_root": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_057",
+  "nfs_root": "/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116",
+  "scope": "Original formal DB/logs and configuration included. Large traces/binaries/archives remain original NFS and local evidence; see trace manifests."
+}

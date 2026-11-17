@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p55_draft_gate_reverse_off_v1_evidence.tar.gz\", \"bytes\": 166071, \"sha256\": \"bdeb75bf0449aa1fbf80fa60395b6a26d1bb9398f1840ca825454ac08d157a6c\", \"at\": \"2026-11-17T19:56:04.830295+08:00\"}\n",
+  "stderr": ""
+}

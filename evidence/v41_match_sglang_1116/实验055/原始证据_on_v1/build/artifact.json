@@ -1,0 +1,8 @@
+{
+  "artifact": "/expt/artifacts/native_sg438_draft_gate_v1/bin/xllm",
+  "sha256": "c8a4f4cf1819baad39f30b8ad9962de73bb69653b5a6bd71d75c2d600c7bef2d",
+  "bytes": 341814896,
+  "source_manifest": "/expt/builds/e55_native_draft_gate_v1/source_manifest.json",
+  "source_parent": "980d9da1287ba99a12749d89b89c55e0d8ed233f",
+  "at": "2026-11-17T16:25:05.234740+08:00"
+}

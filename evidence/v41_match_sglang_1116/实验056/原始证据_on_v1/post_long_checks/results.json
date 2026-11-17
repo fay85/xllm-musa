@@ -1,0 +1,44 @@
+[
+  {
+    "name": "arithmetic1",
+    "content": "4.2",
+    "usage": {
+      "prompt_tokens": 19,
+      "completion_tokens": 4,
+      "total_tokens": 23,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "passed": true,
+    "elapsed_s": 0.2762617003172636
+  },
+  {
+    "name": "arithmetic2",
+    "content": "56",
+    "usage": {
+      "prompt_tokens": 15,
+      "completion_tokens": 2,
+      "total_tokens": 17,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "passed": true,
+    "elapsed_s": 0.2285617170855403
+  },
+  {
+    "name": "short_bucket_return",
+    "content": "Keeping experiment records helps engineers because it turns",
+    "usage": {
+      "prompt_tokens": 256,
+      "completion_tokens": 8,
+      "total_tokens": 264,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "passed": true,
+    "elapsed_s": 0.4619732378050685
+  }
+]

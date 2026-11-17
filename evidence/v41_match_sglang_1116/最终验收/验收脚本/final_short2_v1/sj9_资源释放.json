@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:06:56.789657+08:00\", \"host\": \"sj9\", \"own_resources_released\": true, \"gpu_free\": true}\n",
+  "stderr": ""
+}

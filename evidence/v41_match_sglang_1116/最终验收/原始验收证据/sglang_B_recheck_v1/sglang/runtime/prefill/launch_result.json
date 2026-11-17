@@ -1,0 +1,5 @@
+{
+  "exit": 0,
+  "stdout": "{\"pid\": 77, \"start_ticks\": \"528146088\", \"at\": \"2026-11-17T21:17:05.003430+08:00\", \"script\": \"/data/nfs_shared/xiaopang/sglang_v41_reference_20261116/B_recheck_20261117/configs/B_prefill.sh\", \"script_sha256\": \"a2794b1e8cab3e18f580cd3db71b6ebd97c372a2ade0b9484340cf6916fb5236\"}\n",
+  "stderr": ""
+}

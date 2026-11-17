@@ -1,0 +1,287 @@
+{
+  "host": "sj9",
+  "at": "2026-11-17T20:17:50.800635+08:00",
+  "ranks": [
+    {
+      "rank": 0,
+      "pid": 16015,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 1,
+      "pid": 16016,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 2,
+      "pid": 16017,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 3,
+      "pid": 16018,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 4,
+      "pid": 16019,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 5,
+      "pid": 16020,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 6,
+      "pid": 16021,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    },
+    {
+      "rank": 7,
+      "pid": 16022,
+      "exe": "/expt/artifacts/native_sg438_rope_table_v1/bin/xllm",
+      "sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+      "start_ticks": "527745507",
+      "cgroup": "0::/\n"
+    }
+  ],
+  "runtime_libraries": [
+    {
+      "path": "/expt/artifacts/native_sg438_control_v1/lib/mate/libdeepseek_v41_mhc_m32.so",
+      "bytes": 102768,
+      "sha256": "6021f3ba272d6d7bd7d05edcc67de4ca3ed9295f3e04cadf408aff7d9c6c9c4c"
+    },
+    {
+      "path": "/expt/artifacts/native_sg438_control_v1/lib/mate/libdeepseek_v41_mhc_m64.so",
+      "bytes": 106888,
+      "sha256": "0a4d87d6384593cde04318af78a243d745ff65d3f284b71997692989120d7735"
+    },
+    {
+      "path": "/expt/artifacts/native_sg438_control_v1/lib/mate/libdeepseek_v41_w4a8_group128.so",
+      "bytes": 139856,
+      "sha256": "545342cacf0a54f5af9afc45068aaf1ecf0dab3e5a835f70af77b9de9aceae28"
+    },
+    {
+      "path": "/expt/artifacts/native_sg438_control_v1/lib/profiling/libxllm_native_cpp_stack.so",
+      "bytes": 43576,
+      "sha256": "057ac18bee163e37d5b6d9bd42714a441a74eaa6d016ddbcd5f10d0b95c0c589"
+    },
+    {
+      "path": "/expt/artifacts/native_sg438_control_v1/lib/runtime/libmusa_backend_init.so",
+      "bytes": 162712,
+      "sha256": "5a1d6db0c1f7f78cb96f8afcdd20d13712fe0006e2f90561dfc918ae58e2d9aa"
+    },
+    {
+      "path": "/expt/artifacts/native_sg438_control_v1/lib/sparse/libdeepseek_v41_sparse_h8_bf16.so",
+      "bytes": 77664,
+      "sha256": "212fbdd160e6cf63aa6ec1c229074e34793f1453f53fa88e1a9f86a4c52286fe"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libmusa_stub.so",
+      "bytes": 39248,
+      "sha256": "631fa023f89e852e7054f8551d65a65010072594e751a1ae73625ca21493d7a0"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libmusart_stub.so",
+      "bytes": 30936,
+      "sha256": "5cf885ae150049103119c66f3186a1bfcb71887a27f36d2b82ffded263aaae41"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libtvm_compiler.so",
+      "bytes": 72686064,
+      "sha256": "09e9c5cae372cc2a2c09162aef193b9bb6be942f3f3a9707ddf4cf5c7d9c4510"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libtvm_runtime.so",
+      "bytes": 4620176,
+      "sha256": "08cd2d3a103ee0a46fd353296219a4fee859ab7e3f6da4828eebf007fcca5089"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch/lib/libc10.so",
+      "bytes": 1401568,
+      "sha256": "ec186ea8ef46ac727e9f1d959697205f04a671901ede853500c88d56c66042a0"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch/lib/libshm.so",
+      "bytes": 40704,
+      "sha256": "a9154552923c61d5e29882bf9316fecf5ccc7450af52657591ff56dd2856bd38"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch/lib/libtorch.so",
+      "bytes": 14984,
+      "sha256": "b933ab9a915939a9a2b9d055c8c836ac9c0821857a88d566a1dc9ba6bc85ca80"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so",
+      "bytes": 320950832,
+      "sha256": "55ea977eb1b5c6b26ab563b28d0edf0e541f1adaef5e929a2af23e40926fb95b"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_python.so",
+      "bytes": 30641008,
+      "sha256": "87f22cd3b416e52e6cc5785ce541037b9675bef9d385aa5e9479891d3d18fc21"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch_musa/lib/lib_ext_musa_kernels.so",
+      "bytes": 3873648,
+      "sha256": "690f07b2e408f65a1d454a210f3c945e7e58d2334c2c79f6e9b1924e21975b8d"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_kernels.so",
+      "bytes": 889918256,
+      "sha256": "f6bb09265a79082afca9e9ac997876ed2ce9475107e692b9d4c3e721a279592b"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2",
+      "bytes": 15598184,
+      "sha256": "e71047cc0479943635c1c5a1271686787a8afe593ccaa5aa5b2a10b2de6e6761"
+    },
+    {
+      "path": "/opt/venv/lib/python3.10/site-packages/tvm_ffi/lib/libtvm_ffi.so",
+      "bytes": 1819088,
+      "sha256": "4419d50f9ac326505029038a796fc4f6cd98903919bc14c264be5088910c604f"
+    },
+    {
+      "path": "/usr/lib/libmtml.so",
+      "bytes": 5579406,
+      "sha256": "c7f8f6e3c051141602d7bac975d3bfb50e44e2459b5927b0508d32b178f7d4cc"
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libmusa.so.4.3.8",
+      "bytes": 11817488,
+      "sha256": "8eee0afc04c5d07a905e16fb986be3336eff2bb99c98b005498abfaaf7ba31bb"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libarcher.so",
+      "bytes": 51336,
+      "sha256": "7de253804ae5fd86774edc6a76a5bce256043dabc23c209fecbad15731439a1b"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmccl.so.2.11.4",
+      "bytes": 119949952,
+      "sha256": "9b1b23d66f6ea966105d89b63b8c467be95f600d87117fc224f4e9fc70f8d5a6"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmtfft-device-0.so",
+      "bytes": 363055936,
+      "sha256": "d1c6bf6b4a10526ed5623c6aa952ac9d3d79cd3627667227d9b5931546d37976"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmtfft-device-1.so",
+      "bytes": 359914328,
+      "sha256": "86fdb670d2859874f92e2c88d54ce33696b258d47575e4cba076c61444123f02"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmtfft-device-2.so",
+      "bytes": 359902040,
+      "sha256": "2343ce09d334e1c8a11eddaf66be07186892b5b07937d2fe18df671e83be6174"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmtfft-device-3.so",
+      "bytes": 301730672,
+      "sha256": "793316a945935d6a5cb4470b0d3270b0fa6aef48f88c1a1b4ec89a69447c049c"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmublas.so.1.10.8",
+      "bytes": 417632768,
+      "sha256": "ae71bb77728f681d520dc4dd7fac67d26f22fa9b159ef736b10281d938c4320c"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmublasLt.so.1.10.8",
+      "bytes": 7238840,
+      "sha256": "dfc2d46fc3fa2cc14e527badf5d24c08c5a52bb8754d3fdb50205ba0851b7d19"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn.so.3.1.8.0",
+      "bytes": 604560,
+      "sha256": "cbfe53db0723835e70a66886886ecce4d8d70af10d14c20a7a0e7b83ad2a9d47"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_base.so",
+      "bytes": 185288,
+      "sha256": "0f065d3c099d1efa5755fef56846a26d2bf40da1530cccf7e7dca4048e653f77"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_ops.so",
+      "bytes": 438967432,
+      "sha256": "77ef17efa6aa7bd0e3d5dc3864a6337499fe297146dc43837482393fff15de43"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_tensor.so",
+      "bytes": 276023400,
+      "sha256": "bb7c69e5c15663da7f18792fe85e36781cba14d9282d60dde7a2580c2c851a55"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_tensor_binary.so",
+      "bytes": 516304064,
+      "sha256": "e24f5fe54dbdf71dcb4262af7eb3fb8ecadef85030138435b4137e8cbb618c17"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_tensor_reduce.so",
+      "bytes": 1078533480,
+      "sha256": "a7b161a29228f508bc3a8d9d57ba2ced7e739cb2efc3e75d18e44786ada60430"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_tensor_unary.so",
+      "bytes": 310201400,
+      "sha256": "04fe9e6818854df9f3fdfaa8dcb89d515ce9d339aea1fe1a7df474b1e6776d8a"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmudnn_xmma.so",
+      "bytes": 1531298752,
+      "sha256": "0c978ecd664e7d62f1c646fb3c05e91681b9afee20940dbfa7d5d1b21a5b8504"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmufft.so.1.10.8",
+      "bytes": 510472,
+      "sha256": "743408159f2fad01689e7d9a3cab70d0be076606aced0ba608058cdff631c970"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmupti.so.1.0.8",
+      "bytes": 615752,
+      "sha256": "25998a4ef7f9f815eb36459504cef569f03f48c4850d7129106403694c0eda36"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmusart.so.4.3.8",
+      "bytes": 866832,
+      "sha256": "fd884e47c503d0347ad0467f263e9e1b254cc56f840e1f85f78ca82511c57c32"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmusolver.so.1.4.8",
+      "bytes": 688713176,
+      "sha256": "ac74ca2c92ab8d447ed17550a03f87bbbff261f50d046f341e507f7b8ac2e163"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libmusparse.so.1.5.8",
+      "bytes": 234955776,
+      "sha256": "e8bf1ee0b4af32733f24b4c30072cc4b4a6b2eaf4730a7d2b40f34d2fdff0203"
+    },
+    {
+      "path": "/usr/local/musa-4.3.8/lib/libomp.so",
+      "bytes": 1081840,
+      "sha256": "bca60773d2d4d4a7305b9b985ae498716b61056e0dc2e576bffd6934c6ccb800"
+    }
+  ]
+}

@@ -1,0 +1,1110 @@
+[11/17/26 21:17:08] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+/workspace/sglang/python/sglang/launch_server.py:71: UserWarning: 'python -m sglang.launch_server' is still supported, but 'sglang serve' is the recommended entrypoint.
+  Example: sglang serve --model-path <model> [options]
+  warnings.warn(
+[2026-11-17 21:17:10] /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:10 | warnings | 140143259149440 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+[2026-11-17 21:17:10] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+2026-11-17 21:17:10 | model_config | 140143259149440 | INFO : Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:10] Hybrid SWA model detected. architectures=['DeepseekV4ForCausalLM']
+2026-11-17 21:17:10 | model_override_base | 140143259149440 | INFO : Hybrid SWA model detected. architectures=['DeepseekV4ForCausalLM']
+[2026-11-17 21:17:10] Use dsv4 attention backend for DeepseekV4ForCausalLM, setting page_size to 256.
+2026-11-17 21:17:10 | deepseek_v4 | 140143259149440 | INFO : Use dsv4 attention backend for DeepseekV4ForCausalLM, setting page_size to 256.
+[2026-11-17 21:17:10] Setting KV cache dtype to fp8_e4m3 for DeepseekV4ForCausalLM.
+2026-11-17 21:17:10 | overrides | 140143259149440 | WARNING : Setting KV cache dtype to fp8_e4m3 for DeepseekV4ForCausalLM.
+[2026-11-17 21:17:10] Resolved DeepSeekV4 CP topology: cp_size=8, attention_tp_size=1, ep_size=8, dp_size=1, tp_size=8.
+2026-11-17 21:17:10 | deepseek_v4_hook | 140143259149440 | WARNING : Resolved DeepSeekV4 CP topology: cp_size=8, attention_tp_size=1, ep_size=8, dp_size=1, tp_size=8.
+[2026-11-17 21:17:10] Enable Context Parallel for DeepSeekV4, dp_size=1, moe_dense_tp_size=1, attn_cp_size=8, ep_size=8, tp_size=8
+2026-11-17 21:17:10 | deepseek_v4_hook | 140143259149440 | WARNING : Enable Context Parallel for DeepSeekV4, dp_size=1, moe_dense_tp_size=1, attn_cp_size=8, ep_size=8, tp_size=8
+[2026-11-17 21:17:10] DP attention is enabled. chunked prefill size is adjusted from 256 to 256.
+2026-11-17 21:17:10 | parallel_hook | 140143259149440 | WARNING : DP attention is enabled. chunked prefill size is adjusted from 256 to 256.
+[2026-11-17 21:17:10] DeepEP prefill-only keeps the native decode graph enabled
+2026-11-17 21:17:10 | moe_hook | 140143259149440 | INFO : DeepEP prefill-only keeps the native decode graph enabled
+[2026-11-17 21:17:10] DSpark draft weights are bundled in the target checkpoint; defaulting --speculative-draft-model-path to --model-path (/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt).
+2026-11-17 21:17:10 | speculative_hook | 140143259149440 | INFO : DSpark draft weights are bundled in the target checkpoint; defaulting --speculative-draft-model-path to --model-path (/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt).
+[2026-11-17 21:17:11] server_args={'model_path': '/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt', 'tokenizer_path': '/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt', 'tokenizer_mode': 'auto', 'tokenizer_backend': 'fastokens', 'tokenizer_worker_num': 1, 'detokenizer_worker_num': 1, 'skip_tokenizer_init': False, 'load_format': 'auto', 'model_loader_extra_config': '{}', 'trust_remote_code': True, 'context_length': 4096, 'is_embedding': False, 'enable_multimodal': None, 'revision': None, 'model_impl': 'auto', 'model_config_parser': 'auto', 'json_model_override_args': '{}', 'dtype': 'auto', 'quantization': None, 'quantization_param_path': None, 'kv_cache_dtype': 'fp8_e4m3', 'enable_fp32_lm_head': False, 'modelopt_quant': None, 'modelopt_checkpoint_restore_path': None, 'modelopt_checkpoint_save_path': None, 'modelopt_export_path': None, 'quantize_and_serve': False, 'rl_quant_profile': None, 'enable_tf32_matmul': False, 'mem_fraction_static': 0.9, 'max_running_requests': 8, 'max_queued_requests': None, 'max_total_tokens': 8192, 'chunked_prefill_size': 256, 'prefill_decode_interval': 0, 'enable_dynamic_chunking': False, 'max_prefill_tokens': 16384, 'prefill_max_requests': None, 'schedule_policy': 'fcfs', 'enable_priority_scheduling': False, 'disable_priority_preemption': False, 'default_priority_value': None, 'abort_on_priority_when_disabled': False, 'schedule_low_priority_values_first': False, 'priority_scheduling_preemption_threshold': 10, 'retraction_policy': 'length', 'schedule_conservativeness': 0.3, 'page_size': 256, 'c128_page_size': 16, 'swa_full_tokens_ratio': 0.8, '_swa_full_tokens_ratio_explicitly_set': False, 'swa_prefix_tails': None, 'disable_hybrid_swa_memory': False, 'radix_eviction_policy': 'lru', 'radix_eviction_policy_config': None, 'prefill_only_disable_kv_cache': False, 'disable_radix_cache': True, 'enable_page_major_kv_layout': False, 'enable_unified_memory': False, 'disable_chunked_prefix_cache': False, 'disable_overlap_schedule': False, 'num_continuous_decode_steps': 1, 'scheduler_recv_interval': 1, 'enable_mixed_chunk': False, 'nccl_port': None, 'dist_timeout': None, 'dist_init_addr': None, 'gated_launch_port': None, 'nnodes': 1, 'node_rank': 0, 'tp_size': 8, 'dcp_size': 1, 'pp_size': 1, 'pp_max_micro_batch_size': None, 'pp_async_batch_depth': 0, 'dp_size': 1, 'load_balance_method': 'follow_bootstrap_room', 'attn_cp_size': 8, 'moe_dp_size': 1, 'dwdp_size': 1, 'dcp_comm_backend': 'ag_rs', 'dcp_replicate_q_proj': None, 'enable_prefill_cp': True, 'cp_strategy': 'interleave', 'enable_dsa_cache_layer_split': False, 'enable_cp_decode_attn_tp': True, 'enable_dp_attention': True, 'enable_dp_attention_local_control_broadcast': False, 'enable_dp_lm_head': False, 'enable_tp_lm_head_all_to_all': False, 'enable_attn_tp_input_scattered': False, 'enable_shared_experts_attn_tp': False, 'enable_dense_mlp_attn_tp': False, 'enable_layernorm_sp': False, 'disable_attn_tp_gather': True, 'enable_p2p_check': False, 'device': 'musa', 'base_gpu_id': 0, 'gpu_id_step': 1, 'random_seed': 42, 'mlx_enable_sampling': False, 'watchdog_timeout': 600.0, 'soft_watchdog_timeout': None, 'sleep_on_idle': False, 'use_ray': False, 'custom_sigquit_handler': None, 'numa_node': None, 'gc_threshold': None, 'host': '0.0.0.0', 'port': 28586, 'fastapi_root_path': '', 'smg_grpc_mode': False, 'grpc_mode': False, 'grpc_port': None, 'grpc_worker_threads': 4, 'sidecar': None, 'sidecar_args': None, 'skip_server_warmup': False, 'warmups': None, 'enable_http2': False, 'http2_max_concurrent_streams': 200, 'http2_initial_connection_window_size': 1048576, 'ssl_keyfile': None, 'ssl_certfile': None, 'ssl_ca_certs': None, 'ssl_keyfile_password': None, 'enable_ssl_refresh': False, 'api_key': None, 'admin_api_key': None, 'served_model_name': 'deepseek-v4.1-flash-1017-w4afp8-mt', 'weight_version': 'default', 'chat_template': None, 'hf_chat_template_name': None, 'completion_template': None, 'file_storage_path': 'sglang_storage', 'enable_cache_report': False, 'return_input_ids': False, 'return_output_ids': False, 'reasoning_parser': None, 'default_chat_template_kwargs': None, 'strip_thinking_cache': False, 'enable_strict_thinking': False, 'tool_call_parser': None, 'tool_server': None, 'sampling_defaults': 'model', 'asr_max_buffer_seconds': 60, 'asr_max_concurrent_sessions': 32, 'preferred_sampling_params': None, 'allow_auto_truncate': False, 'stream_interval': 1, 'batch_notify_size': 16, 'stream_response_default_include_usage': False, 'incremental_streaming_output': False, 'enable_streaming_session': False, 'enable_session_radix_cache': False, 'log_level': 'info', 'log_level_http': None, 'log_requests': False, 'log_requests_level': 2, 'log_requests_format': 'text', 'log_requests_target': None, 'uvicorn_access_log_exclude_prefixes': [], 'crash_dump_folder': None, 'show_time_cost': False, 'enable_metrics': False, 'smg_http_sidecar_port': None, 'enable_mfu_metrics': False, 'enable_metrics_for_all_schedulers': False, 'load_snapshot_publish_interval': 15, 'tokenizer_metrics_custom_labels_header': 'x-custom-labels', 'tokenizer_metrics_allowed_custom_labels': None, 'extra_metric_labels': None, 'bucket_time_to_first_token': None, 'bucket_inter_token_latency': None, 'bucket_e2e_request_latency': None, 'prompt_tokens_buckets': None, 'generation_tokens_buckets': None, 'gc_warning_threshold_secs': 0.0, 'decode_log_interval': 40, 'enable_request_time_stats_logging': False, 'kv_events_config': None, 'load_publish_endpoint': None, 'enable_forward_pass_metrics': False, 'forward_pass_metrics_worker_id': '', 'forward_pass_metrics_ipc_name': None, 'enable_trace': False, 'trace_modules': 'request', 'otlp_traces_endpoint': 'localhost:4317', 'export_metrics_to_file': False, 'export_metrics_to_file_dir': None, 'stat_loggers': None, 'constrained_json_whitespace_pattern': None, 'constrained_json_disable_any_whitespace': False, 'attention_backend': 'dsv4', 'decode_attention_backend': None, 'enable_lean_attention': None, 'prefill_attention_backend': None, 'sampling_backend': 'pytorch', 'grammar_backend': 'xgrammar', 'radix_cache_backend': None, 'mm_attention_backend': None, 'fp8_gemm_runner_backend': 'auto', 'fp4_gemm_runner_backend': 'auto', 'bf16_gemm_backend': 'auto', 'dsa_prefill_backend': None, 'dsv4_prefill_backend': 'auto', 'dsa_decode_backend': None, 'dsa_paged_mqa_logits_backend': 'auto', 'dsa_topk_backend': 'sgl-kernel', 'disable_flashinfer_autotune': False, 'flashinfer_autotune_skip_ops': None, 'mamba_backend': 'triton', 'cuda_graph_config': {'decode': {'backend': 'full', 'max_bs': 512, 'bs': [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 40, 44, 48, 52, 56, 60, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'tc_compiler': 'eager', 'full_prefill_max_req': None, 'full_prefill_prefix_chunk_tokens': None, 'max_seq_len': None}, 'prefill': {'backend': 'disabled', 'max_bs': 256, 'bs': [4, 8, 12, 16, 20, 24, 28, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256], 'tc_compiler': 'eager', 'full_prefill_max_req': None, 'full_prefill_prefix_chunk_tokens': None, 'max_seq_len': None}}, 'cuda_graph_backend_decode': 'full', 'cuda_graph_backend_prefill': 'disabled', 'cuda_graph_max_bs_decode': None, 'cuda_graph_max_bs_prefill': None, 'cuda_graph_max_seq_len_prefill': None, 'cuda_graph_bs_decode': None, 'cuda_graph_bs_prefill': None, 'cuda_graph_tc_compiler': None, 'disable_prefill_cuda_graph': False, 'disable_decode_cuda_graph': False, 'disable_cuda_graph': False, 'disable_cuda_graph_padding': False, 'enable_profile_cuda_graph': False, 'enable_cudagraph_gc': False, 'debug_cuda_graph': False, 'enable_layerwise_nvtx_marker': False, 'enable_nccl_nvls': False, 'enable_symm_mem': False, 'triton_attention_reduce_in_fp32': False, 'triton_attention_num_kv_splits': 8, 'triton_attention_split_tile_size': None, 'flashinfer_mla_disable_ragged': False, 'enable_fused_qk_norm_rope': False, 'enable_precise_embedding_interpolation': False, 'enable_fused_moe_sum_all_reduce': False, 'enable_deepseek_v4_fp4_indexer': False, 'disable_custom_all_reduce': False, 'enable_mscclpp': False, 'enable_torch_symm_mem': False, 'enable_scattered_sconv': False, 'pre_warm_nccl': False, 'enable_quant_communications': False, 'enable_flashinfer_allreduce_fusion': False, 'enforce_disable_flashinfer_allreduce_fusion': False, 'flashinfer_allreduce_fusion_backend': None, 'enable_aiter_allreduce_fusion': False, 'enable_torch_compile': False, 'enable_torch_compile_debug_mode': False, 'torch_compile_max_bs': 32, 'speculative_algorithm': 'DSPARK', 'uno_lora_path': None, 'speculative_draft_model_path': '/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt', 'speculative_draft_model_revision': None, 'speculative_draft_load_format': None, 'speculative_num_steps': 1, 'speculative_eagle_topk': 1, 'speculative_num_draft_tokens': 6, 'speculative_dflash_block_size': None, 'speculative_dspark_block_size': 5, 'speculative_dspark_sps_table_path': None, 'speculative_dspark_confidence_sts_path': None, 'speculative_dspark_align_verify_tokens_to_graph_tier': False, 'speculative_accept_threshold_single': 1.0, 'speculative_accept_threshold_acc': 1.0, 'speculative_use_rejection_sampling': False, 'speculative_token_map': None, 'speculative_attention_mode': 'prefill', 'speculative_draft_attention_backend': None, 'speculative_dsa_topk_backend': 'sgl-kernel', 'speculative_draft_kv_cache_dtype': None, 'speculative_draft_window_size': None, 'speculative_moe_runner_backend': 'triton', 'speculative_moe_a2a_backend': None, 'speculative_draft_model_quantization': None, '_speculative_draft_quantization_explicitly_set': False, 'speculative_skip_dp_mlp_sync': False, 'enable_multi_layer_eagle': False, 'speculative_adaptive': False, 'speculative_adaptive_config': None, 'decoupled_spec_bind_endpoint': None, 'decoupled_spec_connect_endpoints': None, 'decoupled_spec_rank': None, 'decoupled_spec_role': 'null', 'spec_trace_dir': None, 'speculative_ngram_min_bfs_breadth': 1, 'speculative_ngram_max_bfs_breadth': 10, 'speculative_ngram_match_type': 'BFS', 'speculative_ngram_max_trie_depth': 18, 'speculative_ngram_capacity': 10000000, 'speculative_ngram_external_corpus_path': None, 'speculative_ngram_external_sam_budget': 0, 'speculative_ngram_external_corpus_max_tokens': 10000000, 'ep_size': 8, 'moe_a2a_backend': 'deepep', 'enable_w4a4_mxfp4_megamoe': False, 'deepep_v2_mode': 'direct', 'moe_runner_backend': 'triton', 'flashinfer_mxfp4_moe_precision': 'default', 'deepep_mode': 'normal', 'fuseep_mode': 2, 'deepep_dispatcher_output_dtype': 'bf16', 'ep_num_redundant_experts': 0, 'ep_dispatch_algorithm': None, 'init_expert_location': 'trivial', 'enable_eplb': False, 'eplb_algorithm': 'auto', 'eplb_rebalance_num_iterations': 1000, 'eplb_rebalance_layers_per_chunk': None, 'eplb_min_rebalancing_utilization_threshold': 1.0, 'expert_distribution_recorder_mode': None, 'expert_distribution_recorder_buffer_size': 1000, 'expert_balancedness_report_mode': 'off', 'deepep_config': '{"normal_dispatch":{"num_sms":32,"num_max_nvl_chunked_send_tokens":26},"normal_combine":{"num_sms":32,"num_max_nvl_chunked_send_tokens":16}}', 'moe_dense_tp_size': 1, 'elastic_ep_backend': None, 'enable_elastic_expert_backup': False, 'mooncake_ib_device': None, 'enable_waterfill': False, 'ep_join_mode': None, 'ep_join_rank_offset': 0, 'elastic_ep_initial_size': None, 'max_ep_size': None, 'elastic_ep_scale_timeout': 600, 'elastic_ep_rejoin': False, 'disable_flashinfer_cutlass_moe_fp4_allgather': False, 'disable_shared_experts_fusion': True, 'enforce_shared_experts_fusion': False, 'max_mamba_cache_size': None, 'mamba_ssm_dtype': None, 'mamba_max_states_per_path': -1, 'enable_mamba_cache_stochastic_rounding': False, 'mamba_cache_philox_rounds': 0, 'mamba_full_memory_ratio': 0.9, 'mamba_radix_cache_strategy': 'auto', 'uses_mamba_radix_cache': False, 'mamba_track_interval': 256, 'enable_int8_mamba_checkpoint': False, 'int8_mamba_ckpt_size': None, 'linear_attn_backend': 'triton', 'linear_attn_decode_backend': None, 'linear_attn_prefill_backend': None, 'linear_attn_verify_backend': None, 'enable_linear_replayssm': False, 'linear_replayssm_cache_len': 16, 'enable_linear_replayssm_spec': False, 'enable_hierarchical_cache': False, 'hicache_host_memory_mode': 'cache', 'hicache_ratio': 2.0, 'hicache_size': 0, 'hicache_write_policy': 'write_through', 'hicache_io_backend': 'kernel', 'hicache_mem_layout': 'page_first', 'hicache_storage_backend': None, 'hicache_storage_prefetch_policy': 'timeout', 'hicache_storage_backend_extra_config': None, 'hicache_storage_prefetch_retry_poll_interval': 0, 'hicache_storage_prefetch_retry_max_attempts': 4, 'enable_unified_cache_external_linker': False, 'unified_cache_external_linker_backend': 'mooncake', 'enable_hisparse': False, 'hisparse_config': None, 'enable_broadcast_mm_inputs_process': False, 'enable_prefix_mm_cache': False, 'mm_enable_dp_encoder': False, 'mm_process_config': {}, 'mm_processor_worker_num': 0, 'mm_io_worker_num': 0, 'allowed_media_domains': [], 'media_url_max_file_size_mb': 64, 'mm_preprocess_cache_size_mb': None, 'trust_mm_content_hashes': False, 'limit_mm_data_per_request': None, 'enable_mm_global_cache': False, 'image_processor_backend': 'auto', 'mm_global_cache_backend': 'mooncake', 'disable_fast_image_processor': False, 'mm_feature_transport': 'cpu', 'keep_mm_feature_on_device': False, 'enable_lora': None, 'enable_lora_overlap_loading': None, 'max_lora_rank': None, 'lora_target_modules': None, 'lora_paths': None, 'max_loaded_loras': None, 'max_loras_per_batch': 8, 'lora_eviction_policy': 'lru', 'lora_backend': 'csgmv', 'max_lora_chunk_size': 16, 'experts_shared_outer_loras': None, 'lora_use_virtual_experts': False, 'lora_strict_loading': False, 'lora_drain_wait_threshold': 0.0, 'enable_two_batch_overlap': False, 'enable_single_batch_overlap': False, 'tbo_token_distribution_threshold': 0.48, 'cpu_offload_gb': 0, 'offload_group_size': -1, 'offload_num_in_group': 1, 'offload_prefetch_step': 1, 'offload_mode': 'cpu', 'enable_lmcache': False, 'lmcache_config_file': None, 'enable_flexkv': False, 'flexkv_config_file': None, 'kt_weight_path': None, 'kt_method': 'AMXINT4', 'kt_cpuinfer': None, 'kt_threadpool_count': 2, 'kt_num_gpu_experts': None, 'kt_max_deferred_experts_per_token': None, 'dllm_algorithm': None, 'dllm_algorithm_config': None, 'dllm_fdfo': True, 'disaggregation_mode': 'prefill', 'disaggregation_transfer_backend': 'mooncake', 'disaggregation_bootstrap_port': 28998, 'disaggregation_ib_device': 'mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_9', 'disaggregation_decode_enable_radix_cache': False, 'disaggregation_decode_enable_offload_kvcache': False, 'disaggregation_decode_retraction_backup': None, 'num_reserved_decode_tokens': 512, 'disaggregation_decode_extra_slots': None, 'disaggregation_decode_polling_interval': 1, 'optimistic_prefill_attempts': 0, 'encoder_only': False, 'language_only': False, 'language_model_only': True, 'encoder_transfer_backend': 'zmq_to_scheduler', 'encoder_urls': [], 'encoder_bootstrap_port': 8997, 'encoder_register_urls': [], 'enable_adaptive_dispatch_to_encoder': False, 'enable_pdmux': False, 'pdmux_config_path': None, 'sm_group_num': 8, 'startup_weight_load_mode': 'serial', 'custom_weight_loader': [], 'weight_loader_disable_mmap': False, 'weight_loader_prefetch_checkpoints': False, 'weight_loader_prefetch_num_threads': 4, 'weight_loader_drop_cache_after_load': False, 'remote_instance_weight_loader_seed_instance_ip': None, 'remote_instance_weight_loader_seed_instance_service_port': None, 'remote_instance_weight_loader_send_weights_group_ports': None, 'remote_instance_weight_loader_backend': 'nccl', 'remote_instance_weight_loader_start_seed_via_transfer_engine': False, 'engine_info_bootstrap_port': 6789, 'modelexpress_config': None, 'download_dir': None, 'model_checksum': None, 'delete_ckpt_after_loading': False, 'decrypted_config_file': None, 'decrypted_draft_config_file': None, 'checkpoint_engine_wait_weights_before_ready': False, 'enable_prefill_delayer': False, 'prefill_delayer_max_delay_passes': 30, 'prefill_delayer_token_usage_low_watermark': None, 'prefill_delayer_forward_passes_buckets': None, 'prefill_delayer_wait_seconds_buckets': None, 'prefill_delayer_queue_min_ratio': None, 'prefill_delayer_max_delay_ms': None, 'min_free_slots_delay': None, 'enable_deterministic_inference': False, 'rl_on_policy_target': None, 'kv_canary': 'none', 'kv_canary_real_data': 'none', 'kv_canary_sweep_interval': 0, 'enable_dynamic_batch_tokenizer': False, 'dynamic_batch_tokenizer_batch_size': 32, 'dynamic_batch_tokenizer_batch_timeout': 0.002, 'enable_tokenizer_batch_encode': False, 'disable_tokenizer_batch_decode': False, 'debug_tensor_dump_output_folder': None, 'debug_tensor_dump_layers': None, 'debug_tensor_dump_input_file': None, 'enable_memory_saver': False, 'enable_weights_cpu_backup': False, 'enable_draft_weights_cpu_backup': False, 'enable_custom_logit_processor': False, 'enable_return_hidden_states': False, 'return_hidden_states_mode': None, 'enable_return_routed_experts': False, 'enable_return_indexer_topk': False, 'enable_encoder_swa_bounded_replay': False, 'enable_decoder_swa_bounded_replay': True, 'sampling_mask_max_tokens': 4096, 'disable_outlines_disk_cache': False, 'enable_mis': False, 'weight_cache_mode': 'off', 'weight_cache_socket': None, 'weight_cache_timeout': 1800, 'forward_hooks': None, 'msprobe_dump_config': None, 'ple_offload_embedding': None, 'ple_offload_backend': 'pinned', 'ple_offload_dir': None, 'speculative_domino_candidate_pool_size': 2048, 'flashinfer_a2a_dispatch_type': None, 'dsv4_attn_backend': 'auto', '_radix_eviction_policy_explicitly_set': False, 'enable_response_store': False}
+[2026-11-17 21:17:11] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[2026-11-17 21:17:11] fastokens backend enabled - transformers patched successfully
+[2026-11-17 21:17:13] CommonKVBootstrapServer started successfully on 0.0.0.0:28998
+[2026-11-17 21:17:13] No HuggingFace chat template found
+[2026-11-17 21:17:13] No chat template found, defaulting to 'string' content format
+[11/17/26 21:17:15] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+[11/17/26 21:17:16] WARNING  tag.strict is not set, and the  _scm_workdir.py:102
+                             future default changes this                        
+                             repository's version:                              
+                               now (tag.strict = false):                        
+                             20260925.dev155+g7c97bb0e6                         
+                             (from tag                                          
+                             'dsv41-milestone-baseline-repla                    
+                             y-20260924')                                       
+                               future default (tag.strict =                     
+                             true): no matching tag, falling                    
+                             back to the fallback version                       
+                             Set tag.strict explicitly in                       
+                             the [tool.setuptools_scm] table                    
+                             of your pyproject.toml.                            
+2026-11-17 21:17:17 | warnings | 140699450561664 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:17 | warnings | 139955897853056 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:17 | warnings | 140250015552640 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:17 | warnings | 139706246132864 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:17 | warnings | 140442160882816 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:17 | warnings | 139775815005312 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+[2026-11-17 21:17:17] fastokens backend enabled - transformers patched successfully
+2026-11-17 21:17:17 | warnings | 140425480156288 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:18 | warnings | 140238323463296 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:18 | warnings | 140583152944256 | WARNING : /workspace/sglang/python/sglang/srt/layers/quantization/awq/awq.py:53: UserWarning: Only CUDA, HIP and XPU support AWQ currently.
+  warnings.warn(f"Only CUDA, HIP and XPU support AWQ currently.")
+
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 140699450561664 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | hook_registry | 140699450561664 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:18 ATTN_CP1 TP1 EP1] Process 721 gpu_id 1 is running on CPUs: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159]
+[2026-11-17 21:17:18 ATTN_CP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:18 ATTN_CP1 TP1 EP1] fastokens backend enabled - transformers patched successfully
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 140250015552640 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | hook_registry | 140250015552640 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 139706246132864 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 140442160882816 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+[2026-11-17 21:17:18 ATTN_CP2 TP2 EP2] Process 722 gpu_id 2 is running on CPUs: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175]
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 139775815005312 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | hook_registry | 139706246132864 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+2026-11-17 21:17:18 | hook_registry | 140442160882816 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+2026-11-17 21:17:18 | hook_registry | 139775815005312 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:18 ATTN_CP4 TP4 EP4] Process 724 gpu_id 4 is running on CPUs: [64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207]
+[2026-11-17 21:17:18 ATTN_CP5 TP5 EP5] Process 725 gpu_id 5 is running on CPUs: [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223]
+[2026-11-17 21:17:18 ATTN_CP7 TP7 EP7] Process 727 gpu_id 7 is running on CPUs: [112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255]
+[2026-11-17 21:17:18 ATTN_CP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:18 ATTN_CP2 TP2 EP2] fastokens backend enabled - transformers patched successfully
+[2026-11-17 21:17:18 ATTN_CP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:18 ATTN_CP4 TP4 EP4] fastokens backend enabled - transformers patched successfully
+[2026-11-17 21:17:18 ATTN_CP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:18 ATTN_CP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:18 ATTN_CP5 TP5 EP5] fastokens backend enabled - transformers patched successfully
+[2026-11-17 21:17:18 ATTN_CP7 TP7 EP7] fastokens backend enabled - transformers patched successfully
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 140425480156288 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | hook_registry | 140425480156288 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:18 ATTN_CP0 TP0 EP0] Process 720 gpu_id 0 is running on CPUs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143]
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:18 | __init__ | 140238323463296 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:18 | hook_registry | 140238323463296 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:19 ATTN_CP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:19 ATTN_CP0 TP0 EP0] fastokens backend enabled - transformers patched successfully
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO : Available plugins for group sglang.srt.plugins:
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO :   - smg-servicer -> smg_grpc_servicer.sglang.plugin:register
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO :   - smg-zmq -> smg_grpc_servicer.sglang.zmq_plugin:register
+[2026-11-17 21:17:19 ATTN_CP6 TP6 EP6] Process 726 gpu_id 6 is running on CPUs: [96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238]
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO : Loaded plugin smg-servicer from group sglang.srt.plugins
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO : Loaded plugin smg-zmq from group sglang.srt.plugins
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO : Executed general plugin: smg-servicer
+2026-11-17 21:17:19 | __init__ | 140583152944256 | INFO : Executed general plugin: smg-zmq
+2026-11-17 21:17:19 | hook_registry | 140583152944256 | INFO : Applied 1 hook(s) to sglang.srt.server_args.ServerArgs.add_cli_args (from: plugin=smg-servicer, dist=smg-grpc-servicer)
+[2026-11-17 21:17:19 ATTN_CP3 TP3 EP3] Process 723 gpu_id 3 is running on CPUs: [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191]
+[2026-11-17 21:17:19 ATTN_CP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:19 ATTN_CP6 TP6 EP6] fastokens backend enabled - transformers patched successfully
+[2026-11-17 21:17:19 ATTN_CP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:19 ATTN_CP3 TP3 EP3] fastokens backend enabled - transformers patched successfully
+[2026-11-17 21:17:20 ATTN_CP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP1 TP1 EP1] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:17:20 ATTN_CP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP5 TP5 EP5] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:17:20 ATTN_CP4 TP4 EP4] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:17:20 ATTN_CP7 TP7 EP7] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:20.387302  1129 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:20.387343  1129 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:20.387382  1129 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:16681
+I1117 21:17:20.387429  1129 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:20.391010  1129 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+[2026-11-17 21:17:20 ATTN_CP2 TP2 EP2] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:20.416177  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:20.417014  1129 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+[2026-11-17 21:17:20 ATTN_CP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.440152  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:20.441004  1129 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+[2026-11-17 21:17:20 ATTN_CP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.468256  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:20.469066  1129 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:20.492218  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:20.493047  1129 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:20.516256  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:20.517096  1129 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:20.544358  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:20.545181  1129 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:20.568212  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:20.568985  1129 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:20.572058  1162 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:20.572099  1162 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:20.572137  1162 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15971
+I1117 21:17:20.572204  1162 transfer_engine.cpp:185] Auto-discovering topology...
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:20.572292  1167 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:20.572326  1167 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:20.572364  1167 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15910
+I1117 21:17:20.572413  1167 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:20.577982  1162 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:20.578058  1167 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:20.579960  1177 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:20.580008  1177 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:20.580039  1177 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15520
+I1117 21:17:20.580109  1177 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:20.583814  1177 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:20.588043  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:20.588778  1177 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I1117 21:17:20.596215  1129 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:20.597014  1129 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+W1117 21:17:20.597091  1129 rdma_transport.cpp:162] Auto-splitting buffer 0x7ff23bfff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:20.604117  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:20.604164  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:20.604907  1162 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I1117 21:17:20.604972  1167 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I1117 21:17:20.615932  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:20.616631  1177 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:20.627712  1205 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:20.627761  1205 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:20.627799  1205 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:16682
+I1117 21:17:20.627848  1205 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:20.631386  1205 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+[2026-11-17 21:17:20 ATTN_CP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.631994  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:20.632055  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:20.632725  1162 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I1117 21:17:20.632802  1167 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I1117 21:17:20.635490  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:20.636214  1205 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I1117 21:17:20.637182  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:20.637300  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:20.637842  1162 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:20.637969  1167 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:20.643772  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:20.644450  1177 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:20.663789  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:20.663990  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:20.664055  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:20.664561  1205 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I1117 21:17:20.664700  1162 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:20.664775  1167 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:20.669994  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:20.670060  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:20.670632  1167 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:20.670778  1162 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:20.671808  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:20.672497  1177 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:20.676424  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:20.677075  1177 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+[2026-11-17 21:17:20 ATTN_CP0 TP0 EP0] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:20.681007  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:20.681668  1177 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:20.691715  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:20.692451  1205 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:20.695886  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:20.695951  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:20.696390  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:20.696632  1167 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:20.696678  1162 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:20.697100  1205 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:20.701020  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:20.701139  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:20.701699  1205 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:20.701799  1162 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I1117 21:17:20.706615  1162 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:20.707270  1162 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+W1117 21:17:20.707337  1162 rdma_transport.cpp:162] Auto-splitting buffer 0x7f0af7fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:20.707736  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:20.708474  1177 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I1117 21:17:20.723878  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:20.724555  1167 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+[2026-11-17 21:17:20 ATTN_CP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.727733  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:20.728497  1205 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:20.735842  1177 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:20.736574  1177 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:20.736589  1281 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:20.736613  1281 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+W1117 21:17:20.736644  1177 rdma_transport.cpp:162] Auto-splitting buffer 0x7f1b27fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:20.736646  1281 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15900
+I1117 21:17:20.736701  1281 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:20.740338  1281 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:20.747855  1167 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:20.748557  1167 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+W1117 21:17:20.748627  1167 rdma_transport.cpp:162] Auto-splitting buffer 0x7fb653fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:20.755792  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:20.756561  1205 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+[2026-11-17 21:17:20 ATTN_CP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.767980  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:20.768766  1281 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+[2026-11-17 21:17:20 ATTN_CP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.783794  1205 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:20.784556  1205 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+W1117 21:17:20.784631  1205 rdma_transport.cpp:162] Auto-splitting buffer 0x7f8997fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:20.795888  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:20.796607  1281 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+[2026-11-17 21:17:20 ATTN_CP3 TP3 EP3] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:17:20 ATTN_CP6 TP6 EP6] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+I1117 21:17:20.823887  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:20.824635  1281 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:20.851840  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:20.852564  1281 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+[2026-11-17 21:17:20 ATTN_CP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:17:20 ATTN_CP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+I1117 21:17:20.976964  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:20.978190  1281 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:21.004956  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:21.005890  1281 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:21.011626  1323 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:21.011670  1323 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:21.011710  1323 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15555
+I1117 21:17:21.011759  1323 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:21.015468  1323 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1117 21:17:21.021020  1331 transfer_engine.cpp:486] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I1117 21:17:21.021056  1331 transfer_engine.cpp:91] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 12001
+I1117 21:17:21.021091  1331 transfer_engine.cpp:146] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15597
+I1117 21:17:21.021135  1331 transfer_engine.cpp:185] Auto-discovering topology...
+I1117 21:17:21.022466  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:21.023880  1323 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I1117 21:17:21.024698  1331 transfer_engine.cpp:200] Topology discovery complete. Found 8 HCAs.
+I1117 21:17:21.030614  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:21.031971  1323 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I1117 21:17:21.032796  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:21.033775  1281 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I1117 21:17:21.039004  1281 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:21.039904  1281 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+W1117 21:17:21.039978  1281 rdma_transport.cpp:162] Auto-splitting buffer 0x7fb267fff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:21.048341  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_6/
+I1117 21:17:21.049182  1331 rdma_context.cpp:133] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I1117 21:17:21.057938  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:21.059365  1323 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:21.076331  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_0/
+I1117 21:17:21.077193  1331 rdma_context.cpp:133] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I1117 21:17:21.086007  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:21.087534  1323 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:21.100363  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_1/
+I1117 21:17:21.101227  1331 rdma_context.cpp:133] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I1117 21:17:21.118029  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:21.119390  1323 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:21.124271  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_2/
+I1117 21:17:21.125108  1331 rdma_context.cpp:133] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I1117 21:17:21.148406  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_3/
+I1117 21:17:21.149237  1331 rdma_context.cpp:133] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I1117 21:17:21.149863  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:21.151600  1323 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:21.173328  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_4/
+I1117 21:17:21.174162  1331 rdma_context.cpp:133] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I1117 21:17:21.178217  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:21.179546  1323 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I1117 21:17:21.197050  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_5/
+I1117 21:17:21.198017  1331 rdma_context.cpp:133] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I1117 21:17:21.206115  1323 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:21.207548  1323 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+[2026-11-17 21:17:21 ATTN_CP1 TP1 EP1] Init torch distributed begin.
+W1117 21:17:21.207625  1323 rdma_transport.cpp:162] Auto-splitting buffer 0x7fd72ffff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+I1117 21:17:21.220772  1331 rdma_context.cpp:542] Find best gid index: 3 on mlx5_9/
+I1117 21:17:21.221555  1331 rdma_context.cpp:133] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+W1117 21:17:21.221623  1331 rdma_transport.cpp:162] Auto-splitting buffer 0x7f86dffff010 (2147483648 bytes) into 2 MR chunks of at most 1073741824 bytes (Mooncake#2017)
+[2026-11-17 21:17:21 ATTN_CP2 TP2 EP2] Init torch distributed begin.
+[2026-11-17 21:17:21 ATTN_CP4 TP4 EP4] Init torch distributed begin.
+[2026-11-17 21:17:21 ATTN_CP5 TP5 EP5] Init torch distributed begin.
+[2026-11-17 21:17:21 ATTN_CP7 TP7 EP7] Init torch distributed begin.
+[2026-11-17 21:17:21 ATTN_CP0 TP0 EP0] Init torch distributed begin.
+[2026-11-17 21:17:21 ATTN_CP3 TP3 EP3] Init torch distributed begin.
+[2026-11-17 21:17:21 ATTN_CP6 TP6 EP6] Init torch distributed begin.
+[Gloo] Rank 0 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 3 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 2 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 1 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 4 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 5 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 7 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 6 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 0 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 4 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 2 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 1 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 3 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 6 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 5 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 7 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[2026-11-17 21:17:23 ATTN_CP0 TP0 EP0] sglang is using nccl==2.11.4
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[2026-11-17 21:17:28 ATTN_CP0 TP0 EP0] Init torch distributed ends. elapsed=6.67 s, mem usage=1.14 GB
+[2026-11-17 21:17:28 ATTN_CP7 TP7 EP7] Init torch distributed ends. elapsed=6.79 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP5 TP5 EP5] Init torch distributed ends. elapsed=6.79 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP4 TP4 EP4] Init torch distributed ends. elapsed=6.82 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP3 TP3 EP3] Init torch distributed ends. elapsed=6.56 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP6 TP6 EP6] Init torch distributed ends. elapsed=6.55 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP2 TP2 EP2] Init torch distributed ends. elapsed=6.83 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP1 TP1 EP1] Init torch distributed ends. elapsed=6.98 s, mem usage=1.42 GB
+[2026-11-17 21:17:28 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.bailing_moe_linear: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.bailing_moe_nextn: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.bailing_moe_v3: No module named 'vllm'
+[2026-11-17 21:17:28 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.falcon_mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:28 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP7 TP7 EP7] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP5 TP5 EP5] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP4 TP4 EP4] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP0 TP0 EP0] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP3 TP3 EP3] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.inkling: No module named 'cutlass'
+[2026-11-17 21:17:29 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.mamba: cannot import name 'causal_conv1d_fn' from 'sglang.srt.layers.attention.mamba.mamba' (/workspace/sglang/python/sglang/srt/layers/attention/mamba/mamba.py)
+[2026-11-17 21:17:29 ATTN_CP6 TP6 EP6] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP1 TP1 EP1] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:29 ATTN_CP2 TP2 EP2] Ignore import error when loading sglang.srt.models.muse_glimmer: No module named 'transformers.vision_utils'
+[2026-11-17 21:17:31 ATTN_CP5 TP5 EP5] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP5 TP5 EP5] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP4 TP4 EP4] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP4 TP4 EP4] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP7 TP7 EP7] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP7 TP7 EP7] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP3 TP3 EP3] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP3 TP3 EP3] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP6 TP6 EP6] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP0 TP0 EP0] Load weight begin. avail mem=77.69 GB
+[2026-11-17 21:17:31 ATTN_CP6 TP6 EP6] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP0 TP0 EP0] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP0 TP0 EP0] Detected fp8 checkpoint.
+[2026-11-17 21:17:31 ATTN_CP1 TP1 EP1] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP1 TP1 EP1] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:31 ATTN_CP2 TP2 EP2] Load weight begin. avail mem=77.77 GB
+[2026-11-17 21:17:31 ATTN_CP2 TP2 EP2] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:17:37 ATTN_CP5 TP5 EP5] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:37 ATTN_CP7 TP7 EP7] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:37 ATTN_CP4 TP4 EP4] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:37 ATTN_CP3 TP3 EP3] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:37 ATTN_CP0 TP0 EP0] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:37 ATTN_CP6 TP6 EP6] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 ATTN_CP1 TP1 EP1] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[2026-11-17 21:17:38 ATTN_CP2 TP2 EP2] Tokenizer for /data/nfs_shared/models/DeepSeek-V4.1-Flash-1017-W4AFP8-mt is still TokenizersBackend after retries with --trust-remote-code. Model-specific tokenizer attributes may be missing.
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+Multi-thread loading shards:   0% Completed | 0/91 [00:00<?, ?it/s]Multi-thread loading shards:   3% Completed | 3/91 [00:00<00:15,  5.56it/s]Multi-thread loading shards:   4% Completed | 4/91 [00:00<00:19,  4.48it/s]Multi-thread loading shards:   5% Completed | 5/91 [00:01<00:20,  4.20it/s]Multi-thread loading shards:   7% Completed | 6/91 [00:01<00:26,  3.17it/s]Multi-thread loading shards:   8% Completed | 7/91 [00:01<00:25,  3.29it/s]Multi-thread loading shards:   9% Completed | 8/91 [00:02<00:24,  3.34it/s]Multi-thread loading shards:  10% Completed | 9/91 [00:02<00:23,  3.50it/s]Multi-thread loading shards:  11% Completed | 10/91 [00:02<00:22,  3.57it/s]Multi-thread loading shards:  12% Completed | 11/91 [00:02<00:22,  3.60it/s]Multi-thread loading shards:  13% Completed | 12/91 [00:03<00:21,  3.68it/s]Multi-thread loading shards:  14% Completed | 13/91 [00:03<00:21,  3.69it/s]Multi-thread loading shards:  15% Completed | 14/91 [00:03<00:20,  3.67it/s]Multi-thread loading shards:  16% Completed | 15/91 [00:04<00:20,  3.67it/s]Multi-thread loading shards:  18% Completed | 16/91 [00:04<00:20,  3.64it/s]Multi-thread loading shards:  19% Completed | 17/91 [00:04<00:20,  3.63it/s]Multi-thread loading shards:  20% Completed | 18/91 [00:04<00:20,  3.61it/s]Multi-thread loading shards:  21% Completed | 19/91 [00:05<00:19,  3.61it/s]Multi-thread loading shards:  22% Completed | 20/91 [00:05<00:19,  3.59it/s]Multi-thread loading shards:  23% Completed | 21/91 [00:05<00:18,  3.69it/s]Multi-thread loading shards:  24% Completed | 22/91 [00:05<00:19,  3.59it/s]Multi-thread loading shards:  25% Completed | 23/91 [00:06<00:18,  3.63it/s]Multi-thread loading shards:  26% Completed | 24/91 [00:06<00:18,  3.66it/s]Multi-thread loading shards:  27% Completed | 25/91 [00:06<00:18,  3.65it/s]Multi-thread loading shards:  29% Completed | 26/91 [00:07<00:18,  3.58it/s]Multi-thread loading shards:  30% Completed | 27/91 [00:07<00:17,  3.58it/s]Multi-thread loading shards:  31% Completed | 28/91 [00:07<00:17,  3.64it/s]Multi-thread loading shards:  32% Completed | 29/91 [00:07<00:16,  3.65it/s]Multi-thread loading shards:  33% Completed | 30/91 [00:08<00:16,  3.64it/s]Multi-thread loading shards:  34% Completed | 31/91 [00:08<00:16,  3.60it/s]Multi-thread loading shards:  35% Completed | 32/91 [00:08<00:16,  3.67it/s]Multi-thread loading shards:  36% Completed | 33/91 [00:09<00:15,  3.63it/s]Multi-thread loading shards:  37% Completed | 34/91 [00:09<00:15,  3.60it/s]Multi-thread loading shards:  38% Completed | 35/91 [00:09<00:15,  3.58it/s]Multi-thread loading shards:  40% Completed | 36/91 [00:09<00:14,  3.69it/s]Multi-thread loading shards:  41% Completed | 37/91 [00:10<00:14,  3.65it/s]Multi-thread loading shards:  42% Completed | 38/91 [00:10<00:14,  3.62it/s]Multi-thread loading shards:  43% Completed | 39/91 [00:10<00:14,  3.57it/s]Multi-thread loading shards:  44% Completed | 40/91 [00:10<00:14,  3.54it/s]Multi-thread loading shards:  45% Completed | 41/91 [00:11<00:14,  3.56it/s]Multi-thread loading shards:  46% Completed | 42/91 [00:11<00:13,  3.52it/s]Multi-thread loading shards:  48% Completed | 44/91 [00:11<00:10,  4.44it/s]Multi-thread loading shards:  49% Completed | 45/91 [00:12<00:10,  4.33it/s]Multi-thread loading shards:  51% Completed | 46/91 [00:12<00:10,  4.26it/s]Multi-thread loading shards:  54% Completed | 49/91 [00:12<00:09,  4.61it/s]Multi-thread loading shards:  55% Completed | 50/91 [00:16<00:37,  1.10it/s]Multi-thread loading shards:  56% Completed | 51/91 [00:17<00:40,  1.01s/it]Multi-thread loading shards:  57% Completed | 52/91 [00:20<00:50,  1.29s/it]Multi-thread loading shards:  58% Completed | 53/91 [00:21<00:51,  1.36s/it]Multi-thread loading shards:  59% Completed | 54/91 [00:23<00:57,  1.55s/it]Multi-thread loading shards:  60% Completed | 55/91 [00:23<00:42,  1.17s/it]Multi-thread loading shards:  62% Completed | 56/91 [00:24<00:31,  1.10it/s]Multi-thread loading shards:  63% Completed | 57/91 [00:24<00:23,  1.43it/s]Multi-thread loading shards:  64% Completed | 58/91 [00:24<00:18,  1.79it/s]Multi-thread loading shards:  65% Completed | 59/91 [00:25<00:18,  1.72it/s]Multi-thread loading shards:  66% Completed | 60/91 [00:25<00:14,  2.17it/s]Multi-thread loading shards:  67% Completed | 61/91 [00:25<00:11,  2.68it/s]Multi-thread loading shards:  68% Completed | 62/91 [00:25<00:09,  3.15it/s]Multi-thread loading shards:  69% Completed | 63/91 [00:26<00:10,  2.67it/s]Multi-thread loading shards:  70% Completed | 64/91 [00:26<00:10,  2.65it/s]Multi-thread loading shards:  71% Completed | 65/91 [00:27<00:13,  1.98it/s]Multi-thread loading shards:  73% Completed | 66/91 [00:27<00:11,  2.20it/s]Multi-thread loading shards:  74% Completed | 67/91 [00:28<00:15,  1.58it/s]Multi-thread loading shards:  75% Completed | 68/91 [00:29<00:11,  1.94it/s]Multi-thread loading shards:  76% Completed | 69/91 [00:29<00:11,  1.85it/s]Multi-thread loading shards:  77% Completed | 70/91 [00:29<00:09,  2.27it/s]Multi-thread loading shards:  78% Completed | 71/91 [00:30<00:11,  1.76it/s]Multi-thread loading shards:  79% Completed | 72/91 [00:31<00:12,  1.48it/s]Multi-thread loading shards:  80% Completed | 73/91 [00:31<00:09,  1.87it/s]Multi-thread loading shards:  81% Completed | 74/91 [00:32<00:07,  2.29it/s]Multi-thread loading shards:  82% Completed | 75/91 [00:32<00:05,  2.70it/s]Multi-thread loading shards:  84% Completed | 76/91 [00:32<00:04,  3.10it/s]Multi-thread loading shards:  85% Completed | 77/91 [00:32<00:04,  3.25it/s]Multi-thread loading shards:  86% Completed | 78/91 [00:33<00:03,  3.62it/s]Multi-thread loading shards:  87% Completed | 79/91 [00:33<00:03,  3.94it/s]Multi-thread loading shards:  88% Completed | 80/91 [00:33<00:03,  3.55it/s]Multi-thread loading shards:  89% Completed | 81/91 [00:35<00:09,  1.08it/s][2026-11-17 21:18:15 ATTN_CP4 TP4 EP4] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:15 ATTN_CP6 TP6 EP6] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:16 ATTN_CP2 TP2 EP2] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:16 ATTN_CP5 TP5 EP5] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  90% Completed | 82/91 [00:37<00:09,  1.04s/it]Multi-thread loading shards:  91% Completed | 83/91 [00:37<00:06,  1.27it/s]Multi-thread loading shards:  92% Completed | 84/91 [00:37<00:04,  1.62it/s][2026-11-17 21:18:16 ATTN_CP1 TP1 EP1] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  93% Completed | 85/91 [00:37<00:03,  1.97it/s][2026-11-17 21:18:17 ATTN_CP3 TP3 EP3] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:17 ATTN_CP7 TP7 EP7] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  95% Completed | 86/91 [00:38<00:02,  2.40it/s]Multi-thread loading shards:  96% Completed | 87/91 [00:38<00:01,  2.61it/s]Multi-thread loading shards:  97% Completed | 88/91 [00:38<00:01,  2.96it/s]Multi-thread loading shards: 100% Completed | 91/91 [00:38<00:00,  2.35it/s]
+[2026-11-17 21:18:17 ATTN_CP0 TP0 EP0] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:32 ATTN_CP0 TP0 EP0] Skipped checkpoint tensors not wired yet: gate.bias_vl=43, vision=266
+[2026-11-17 21:18:32 ATTN_CP0 TP0 EP0] Some weights are not initialized from checkpoints: {'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:32 ATTN_CP0 TP0 EP0] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:32 ATTN_CP0 TP0 EP0] Load weight end. elapsed=60.95 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.65 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:33 ATTN_CP4 TP4 EP4] Some weights are not initialized from checkpoints: {'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:33 ATTN_CP4 TP4 EP4] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:33 ATTN_CP4 TP4 EP4] Load weight end. elapsed=62.59 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:33 ATTN_CP6 TP6 EP6] Some weights are not initialized from checkpoints: {'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:34 ATTN_CP6 TP6 EP6] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:34 ATTN_CP6 TP6 EP6] Load weight end. elapsed=62.72 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:34 ATTN_CP5 TP5 EP5] Some weights are not initialized from checkpoints: {'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:34 ATTN_CP5 TP5 EP5] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:34 ATTN_CP5 TP5 EP5] Load weight end. elapsed=63.68 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:35 ATTN_CP1 TP1 EP1] Some weights are not initialized from checkpoints: {'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:35 ATTN_CP1 TP1 EP1] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:35 ATTN_CP1 TP1 EP1] Load weight end. elapsed=64.26 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:36 ATTN_CP2 TP2 EP2] Some weights are not initialized from checkpoints: {'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:36 ATTN_CP2 TP2 EP2] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:36 ATTN_CP2 TP2 EP2] Load weight end. elapsed=64.92 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:36 ATTN_CP7 TP7 EP7] Some weights are not initialized from checkpoints: {'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:37 ATTN_CP7 TP7 EP7] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:37 ATTN_CP7 TP7 EP7] Load weight end. elapsed=65.98 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:38 ATTN_CP3 TP3 EP3] Some weights are not initialized from checkpoints: {'model.layers.6.mlp.gate.e_score_correction_bias_vl', 'model.layers.16.mlp.gate.e_score_correction_bias_vl', 'model.layers.13.mlp.gate.e_score_correction_bias_vl', 'model.layers.27.mlp.gate.e_score_correction_bias_vl', 'model.layers.20.mlp.gate.e_score_correction_bias_vl', 'model.layers.30.mlp.gate.e_score_correction_bias_vl', 'model.layers.33.mlp.gate.e_score_correction_bias_vl', 'model.layers.19.mlp.gate.e_score_correction_bias_vl', 'model.layers.4.mlp.gate.e_score_correction_bias_vl', 'model.layers.39.mlp.gate.e_score_correction_bias_vl', 'model.layers.32.mlp.gate.e_score_correction_bias_vl', 'model.layers.31.mlp.gate.e_score_correction_bias_vl', 'model.layers.22.mlp.gate.e_score_correction_bias_vl', 'model.layers.25.mlp.gate.e_score_correction_bias_vl', 'model.layers.15.mlp.gate.e_score_correction_bias_vl', 'model.layers.34.mlp.gate.e_score_correction_bias_vl', 'model.layers.0.mlp.gate.e_score_correction_bias_vl', 'model.layers.36.mlp.gate.e_score_correction_bias_vl', 'model.layers.9.mlp.gate.e_score_correction_bias_vl', 'model.layers.8.mlp.gate.e_score_correction_bias_vl', 'model.layers.7.mlp.gate.e_score_correction_bias_vl', 'model.layers.3.mlp.gate.e_score_correction_bias_vl', 'model.layers.18.mlp.gate.e_score_correction_bias_vl', 'model.layers.17.mlp.gate.e_score_correction_bias_vl', 'model.layers.5.mlp.gate.e_score_correction_bias_vl', 'model.layers.29.mlp.gate.e_score_correction_bias_vl', 'model.layers.21.mlp.gate.e_score_correction_bias_vl', 'model.layers.11.mlp.gate.e_score_correction_bias_vl', 'model.layers.38.mlp.gate.e_score_correction_bias_vl', 'model.layers.35.mlp.gate.e_score_correction_bias_vl', 'model.layers.23.mlp.gate.e_score_correction_bias_vl', 'model.layers.2.mlp.gate.e_score_correction_bias_vl', 'model.layers.37.mlp.gate.e_score_correction_bias_vl', 'model.layers.10.mlp.gate.e_score_correction_bias_vl', 'model.layers.1.mlp.gate.e_score_correction_bias_vl', 'model.layers.12.mlp.gate.e_score_correction_bias_vl', 'model.layers.28.mlp.gate.e_score_correction_bias_vl', 'model.layers.14.mlp.gate.e_score_correction_bias_vl', 'model.layers.26.mlp.gate.e_score_correction_bias_vl', 'model.layers.24.mlp.gate.e_score_correction_bias_vl'}
+[2026-11-17 21:18:38 ATTN_CP3 TP3 EP3] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:38 ATTN_CP3 TP3 EP3] Load weight end. elapsed=67.25 s, type=DeepseekV4ForCausalLM, quant=w4afp8, fmt=e4m3, avail mem=11.74 GB, mem usage=66.03 GB.
+[2026-11-17 21:18:40 ATTN_CP7 TP7 EP7] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP4 TP4 EP4] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP5 TP5 EP5] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP3 TP3 EP3] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP1 TP1 EP1] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP2 TP2 EP2] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP6 TP6 EP6] Draft checkpoint bundles a DSpark head; loading draft arch DeepseekV4ForCausalLMDSpark.
+[2026-11-17 21:18:40 ATTN_CP4 TP4 EP4] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP7 TP7 EP7] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP7 TP7 EP7] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP4 TP4 EP4] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP7 TP7 EP7] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP4 TP4 EP4] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP1 TP1 EP1] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP7 TP7 EP7] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP5 TP5 EP5] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP4 TP4 EP4] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP3 TP3 EP3] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP7 TP7 EP7] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP6 TP6 EP6] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP5 TP5 EP5] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP1 TP1 EP1] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP4 TP4 EP4] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP5 TP5 EP5] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP1 TP1 EP1] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP3 TP3 EP3] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP5 TP5 EP5] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP1 TP1 EP1] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP6 TP6 EP6] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP3 TP3 EP3] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP5 TP5 EP5] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP3 TP3 EP3] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP1 TP1 EP1] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP6 TP6 EP6] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Load weight begin. avail mem=11.65 GB
+[2026-11-17 21:18:40 ATTN_CP6 TP6 EP6] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP3 TP3 EP3] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP0 TP0 EP0] Detected fp8 checkpoint.
+[2026-11-17 21:18:40 ATTN_CP2 TP2 EP2] Auto-detected DSV4 routed-expert layout: is_fp4_experts=True
+[2026-11-17 21:18:40 ATTN_CP6 TP6 EP6] Detected w4afp8 checkpoint. Please note that
+[2026-11-17 21:18:40 ATTN_CP2 TP2 EP2] Init torch distributed begin.
+[2026-11-17 21:18:40 ATTN_CP2 TP2 EP2] Init torch distributed ends. elapsed=0.00 s, mem usage=0.00 GB
+[2026-11-17 21:18:40 ATTN_CP2 TP2 EP2] Load weight begin. avail mem=11.74 GB
+[2026-11-17 21:18:40 ATTN_CP2 TP2 EP2] Detected w4afp8 checkpoint. Please note that
+Multi-thread loading shards:   0% Completed | 0/91 [00:00<?, ?it/s]Multi-thread loading shards:   3% Completed | 3/91 [00:00<00:06, 13.19it/s]Multi-thread loading shards:   5% Completed | 5/91 [00:00<00:13,  6.30it/s]Multi-thread loading shards:   7% Completed | 6/91 [00:00<00:14,  5.70it/s]Multi-thread loading shards:   8% Completed | 7/91 [00:01<00:16,  5.10it/s]Multi-thread loading shards:   9% Completed | 8/91 [00:01<00:17,  4.69it/s]Multi-thread loading shards:  10% Completed | 9/91 [00:01<00:18,  4.42it/s]Multi-thread loading shards:  11% Completed | 10/91 [00:01<00:19,  4.25it/s]Multi-thread loading shards:  12% Completed | 11/91 [00:02<00:19,  4.15it/s]Multi-thread loading shards:  13% Completed | 12/91 [00:02<00:19,  4.08it/s]Multi-thread loading shards:  14% Completed | 13/91 [00:02<00:19,  4.02it/s]Multi-thread loading shards:  15% Completed | 14/91 [00:02<00:19,  3.98it/s]Multi-thread loading shards:  16% Completed | 15/91 [00:03<00:19,  3.95it/s]Multi-thread loading shards:  18% Completed | 16/91 [00:03<00:19,  3.93it/s]Multi-thread loading shards:  19% Completed | 17/91 [00:03<00:18,  3.91it/s]Multi-thread loading shards:  20% Completed | 18/91 [00:04<00:18,  3.90it/s]Multi-thread loading shards:  21% Completed | 19/91 [00:04<00:18,  3.88it/s]Multi-thread loading shards:  22% Completed | 20/91 [00:04<00:18,  3.87it/s]Multi-thread loading shards:  23% Completed | 21/91 [00:04<00:18,  3.86it/s]Multi-thread loading shards:  24% Completed | 22/91 [00:05<00:17,  3.86it/s]Multi-thread loading shards:  25% Completed | 23/91 [00:05<00:17,  3.86it/s]Multi-thread loading shards:  26% Completed | 24/91 [00:05<00:17,  3.86it/s]Multi-thread loading shards:  27% Completed | 25/91 [00:05<00:17,  3.86it/s]Multi-thread loading shards:  29% Completed | 26/91 [00:06<00:16,  3.85it/s]Multi-thread loading shards:  30% Completed | 27/91 [00:06<00:16,  3.85it/s]Multi-thread loading shards:  31% Completed | 28/91 [00:06<00:16,  3.86it/s]Multi-thread loading shards:  32% Completed | 29/91 [00:06<00:16,  3.85it/s]Multi-thread loading shards:  33% Completed | 30/91 [00:07<00:15,  3.85it/s]Multi-thread loading shards:  34% Completed | 31/91 [00:07<00:15,  3.85it/s]Multi-thread loading shards:  35% Completed | 32/91 [00:07<00:15,  3.86it/s]Multi-thread loading shards:  36% Completed | 33/91 [00:07<00:15,  3.86it/s]Multi-thread loading shards:  37% Completed | 34/91 [00:08<00:14,  3.86it/s]Multi-thread loading shards:  38% Completed | 35/91 [00:08<00:14,  3.85it/s]Multi-thread loading shards:  40% Completed | 36/91 [00:08<00:14,  3.84it/s]Multi-thread loading shards:  41% Completed | 37/91 [00:08<00:14,  3.84it/s]Multi-thread loading shards:  42% Completed | 38/91 [00:09<00:13,  3.85it/s]Multi-thread loading shards:  43% Completed | 39/91 [00:09<00:13,  3.85it/s]Multi-thread loading shards:  44% Completed | 40/91 [00:09<00:13,  3.83it/s]Multi-thread loading shards:  45% Completed | 41/91 [00:10<00:13,  3.81it/s]Multi-thread loading shards:  46% Completed | 42/91 [00:10<00:12,  3.81it/s]Multi-thread loading shards:  48% Completed | 44/91 [00:10<00:10,  4.42it/s]Multi-thread loading shards:  49% Completed | 45/91 [00:10<00:11,  3.97it/s]Multi-thread loading shards:  51% Completed | 46/91 [00:11<00:12,  3.47it/s]Multi-thread loading shards:  54% Completed | 49/91 [00:11<00:09,  4.21it/s]Multi-thread loading shards:  56% Completed | 51/91 [00:12<00:07,  5.49it/s]Multi-thread loading shards:  58% Completed | 53/91 [00:12<00:05,  7.07it/s]Multi-thread loading shards:  60% Completed | 55/91 [00:12<00:04,  8.23it/s]Multi-thread loading shards:  63% Completed | 57/91 [00:12<00:03,  9.02it/s]Multi-thread loading shards:  65% Completed | 59/91 [00:12<00:03, 10.10it/s]Multi-thread loading shards:  67% Completed | 61/91 [00:12<00:02, 11.10it/s]Multi-thread loading shards:  69% Completed | 63/91 [00:12<00:02, 11.37it/s]Multi-thread loading shards:  71% Completed | 65/91 [00:13<00:02, 11.00it/s]Multi-thread loading shards:  74% Completed | 67/91 [00:13<00:02, 11.69it/s]Multi-thread loading shards:  76% Completed | 69/91 [00:13<00:01, 11.92it/s]Multi-thread loading shards:  78% Completed | 71/91 [00:13<00:01, 12.21it/s]Multi-thread loading shards:  80% Completed | 73/91 [00:13<00:01, 12.29it/s]Multi-thread loading shards:  82% Completed | 75/91 [00:13<00:01, 13.22it/s]Multi-thread loading shards:  85% Completed | 77/91 [00:14<00:01, 12.20it/s]Multi-thread loading shards:  87% Completed | 79/91 [00:14<00:00, 12.67it/s]Multi-thread loading shards:  91% Completed | 83/91 [00:14<00:00, 18.31it/s][2026-11-17 21:18:54 ATTN_CP5 TP5 EP5] Finished streaming dequant fp8 wo_a
+Multi-thread loading shards:  98% Completed | 89/91 [00:14<00:00, 22.01it/s][2026-11-17 21:18:54 ATTN_CP5 TP5 EP5] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:54 ATTN_CP5 TP5 EP5] Load weight end. elapsed=14.73 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+Multi-thread loading shards: 100% Completed | 91/91 [00:14<00:00,  6.10it/s]
+[2026-11-17 21:18:55 ATTN_CP0 TP0 EP0] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP0 TP0 EP0] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP0 TP0 EP0] Load weight end. elapsed=15.11 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.25 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP7 TP7 EP7] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP7 TP7 EP7] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP7 TP7 EP7] Load weight end. elapsed=15.18 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP4 TP4 EP4] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP4 TP4 EP4] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP4 TP4 EP4] Load weight end. elapsed=15.28 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP6 TP6 EP6] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP6 TP6 EP6] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP6 TP6 EP6] Load weight end. elapsed=15.44 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP3 TP3 EP3] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP3 TP3 EP3] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP3 TP3 EP3] Load weight end. elapsed=15.55 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP2 TP2 EP2] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP2 TP2 EP2] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP2 TP2 EP2] Load weight end. elapsed=15.63 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP1 TP1 EP1] Finished streaming dequant fp8 wo_a
+[2026-11-17 21:18:55 ATTN_CP1 TP1 EP1] Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0.
+[2026-11-17 21:18:55 ATTN_CP1 TP1 EP1] Load weight end. elapsed=15.71 s, type=DeepseekV4ForCausalLMDSpark, quant=w4afp8, fmt=e4m3, avail mem=10.33 GB, mem usage=1.41 GB.
+[2026-11-17 21:18:55 ATTN_CP0 TP0 EP0] Initialized DSpark draft runner. attention_backend=dsv4, model=DeepseekV4ForCausalLMDSpark, gamma=5, verify_num_draft_tokens=6, query_token_num=5, sample_from_anchor=True, mask_token_id=128799, markov_head=DSparkV4MarkovHead
+[2026-11-17 21:18:55 ATTN_CP0 TP0 EP0] DSpark markov_w2 vocab gather: NcclVocabGather
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 memory calculation: unified=False, unified_fp8=False, bytes_per_full_token=1670.75, available_bytes=2.46 GB, c128_state_fixed=0.00 GB, swa_fixed=0.23 GB, swa_ring_fixed=0.00 GB, c4_state_fixed=0.00 GB, full_token=1435392
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 pool sizes: full=1435392, swa=10240, c4=358848, c128=11214, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 SWA sizing: mode=cap, swa_tokens=10240, request_cap+headroom=10240, prefix_tails=0
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 pool sizes: full=8192, swa=10240, c4=2048, c128=64, c4_state=1280, c128_state=0
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=2048 c4_logical_size=2048 c128_size=64 c4_state_pool_size=1280 c128_state_pool_size=2304
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 SWA storage: worker=target, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Memory pool end. avail mem=9.99 GB
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Memory pool end. avail mem=10.07 GB
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Memory pool end. avail mem=9.97 GB
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Initialize DeepSeekV4TokenToKVPool with max_num_reqs=8 swa_size=10240 c4_size=0 c4_logical_size=0 c128_size=0 c4_state_pool_size=0 c128_state_pool_size=0
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] DSV4 SWA storage: worker=draft, storage=paged, paged_allocator=True
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Memory pool end. avail mem=10.05 GB
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP5 TP5 EP5] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP4 TP4 EP4] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP7 TP7 EP7] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP1 TP1 EP1] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP3 TP3 EP3] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] max_total_num_tokens=8192, chunked_prefill_size=256, max_prefill_tokens=16384, max_running_requests=8, context_len=4096, available_gpu_mem=9.96 GB
+[2026-11-17 21:18:56 ATTN_CP0 TP0 EP0] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP6 TP6 EP6] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Overriding draft attention backend to dsv4.
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Using DeepseekV4AttnBackend for dsv4 attention backend (CUDA).
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-17 21:18:56 ATTN_CP2 TP2 EP2] Tree cache initialized: source=default impl=SWAChunkCache hybrid_swa=True hybrid_ssm=False hicache_attached=False streaming_wrapped=False
+[2026-11-17 21:18:57] Engine startup timings (s): load_weight=82.80, kv_cache_allocation=0.40, scheduler_e2e=98.80, cuda_graph={prefill=0.00, decode=0.00, target_verify=0.00, draft_prefill=0.00, draft_decode=0.00, draft_extend=0.00}, tokenizer_e2e=105.67
+[2026-11-17 21:18:57] INFO:     Started server process [77]
+[2026-11-17 21:18:57] INFO:     Waiting for application startup.
+[2026-11-17 21:18:57] INFO:     Application startup complete.
+[2026-11-17 21:18:57] INFO:     Uvicorn running on http://0.0.0.0:28586 (Press CTRL+C to quit)
+[2026-11-17 21:18:58] INFO:     127.0.0.1:36442 - "GET /model_info HTTP/1.1" 200 OK
+[2026-11-17 21:18:58] Start of pd disaggregation warmup ...
+[2026-11-17 21:19:03 ATTN_CP0 TP0 EP0] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=0.
+[2026-11-17 21:19:03 ATTN_CP4 TP4 EP4] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=4.
+[2026-11-17 21:19:03 ATTN_CP7 TP7 EP7] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=7.
+[2026-11-17 21:19:03 ATTN_CP2 TP2 EP2] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=2.
+[2026-11-17 21:19:03 ATTN_CP5 TP5 EP5] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=5.
+[2026-11-17 21:19:03 ATTN_CP1 TP1 EP1] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=1.
+[2026-11-17 21:19:03 ATTN_CP6 TP6 EP6] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=6.
+[2026-11-17 21:19:03 ATTN_CP3 TP3 EP3] Enable CP decode attention TP: cp_size=8, attn_prefill_tp_size=1, decode_tp_size=8, decode_tp_rank=3.
+[2026-11-17 21:19:03 ATTN_CP0 TP0 EP0] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:03 ATTN_CP4 TP4 EP4] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:03 ATTN_CP7 TP7 EP7] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:03 ATTN_CP5 TP5 EP5] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:04 ATTN_CP1 TP1 EP1] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:04 ATTN_CP6 TP6 EP6] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[2026-11-17 21:19:04 ATTN_CP3 TP3 EP3] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[2026-11-17 21:19:04 ATTN_CP2 TP2 EP2] WO_A_NATIVE_BF16_AB m=4 EXPLICIT_GEMV_DISABLED
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[fastokens] patch_transformers: successfully patched transformers v5.8.1
+[2026-11-17 21:19:05 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=4608,K=5120,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:05 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=5120,K=2304,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:05 ATTN_CP0 TP0 EP0] Use DeepEP Config: {'normal_dispatch': {'num_sms': 32, 'num_max_nvl_chunked_send_tokens': 26}, 'normal_combine': {'num_sms': 32, 'num_max_nvl_chunked_send_tokens': 16}}
+[2026-11-17 21:19:05 ATTN_CP7 TP7 EP7] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP6 TP6 EP6] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP1 TP1 EP1] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP3 TP3 EP3] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP2 TP2 EP2] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP4 TP4 EP4] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP5 TP5 EP5] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:05 ATTN_CP0 TP0 EP0] DeepEP buffer initialized: mode=normal, experts=384, ranks=8, nvl_bytes=402917888, rdma_bytes=0
+[2026-11-17 21:19:06 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=25600,K=6144,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:08 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_MISS cumulative_len=4 max_context=4363
+[2026-11-17 21:19:09 ATTN_CP3 TP3 EP3] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:09 ATTN_CP1 TP1 EP1] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP7 TP7 EP7] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP6 TP6 EP6] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP4 TP4 EP4] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP5 TP5 EP5] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP0 TP0 EP0] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP2 TP2 EP2] MUSA W4A8 masked GEMM header=/workspace/sglang/python/sglang/jit_kernel/musa_w4a8/include/mate/gemm/deep_gemm/mp31_masked_moe_gemm_mixed_dtype.hpp sha256=5da18101e64257b7 library=/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so
+[2026-11-17 21:19:10 ATTN_CP7 TP7 EP7] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP3 TP3 EP3] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP5 TP5 EP5] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP4 TP4 EP4] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP2 TP2 EP2] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP1 TP1 EP1] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP0 TP0 EP0] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP6 TP6 EP6] multimem all-gather disabled (module 'torch.distributed._symmetric_memory' has no attribute 'set_signal_pad_size')
+[2026-11-17 21:19:10 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=5120,K=15360,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:10 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=1536,K=5120,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:10 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 4, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.28
+[2026-11-17 21:19:10] INFO:     127.0.0.1:36450 - "POST /generate HTTP/1.1" 200 OK
+[2026-11-17 21:19:10] Disaggregation warmup requests completed for all 1 DP ranks
+[2026-11-17 21:19:10] End of disaggregation warmup
+[2026-11-17 21:19:10] INFO:     127.0.0.1:35590 - "POST /freeze_gc HTTP/1.1" 200 OK
+[2026-11-17 21:19:10] The server is fired up and ready to roll!
+[2026-11-17 21:19:11] /workspace/sglang/python/sglang/srt/entrypoints/http_server.py:454: FastAPIDeprecationWarning: ORJSONResponse is deprecated, FastAPI now serializes data directly to JSON bytes via Pydantic when a return type or response model is set, which is faster and doesn't need a custom response class. Read more in the FastAPI docs: https://fastapi.tiangolo.com/advanced/custom-response/#orjson-or-response-model and https://fastapi.tiangolo.com/tutorial/response-model/
+  return await original_handler(ORJSONRequest(request.scope, request.receive))
+
+[2026-11-17 21:19:11] INFO:     10.121.32.7:43886 - "GET /v1/models HTTP/1.1" 200 OK
+[2026-11-17 21:19:33] INFO:     10.121.32.7:38412 - "GET /v1/models HTTP/1.1" 200 OK
+[2026-11-17 21:19:38] INFO:     10.121.32.7:38428 - "PRI %2A HTTP/2.0" 404 Not Found
+[2026-11-17 21:19:38] WARNING:  Invalid HTTP request received.
+[2026-11-17 21:19:38] INFO:     10.121.32.7:38422 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:19:38] INFO:     10.121.32.7:38436 - "PRI %2A HTTP/2.0" 404 Not Found
+[2026-11-17 21:19:38] WARNING:  Invalid HTTP request received.
+[2026-11-17 21:19:38] INFO:     10.121.32.7:38446 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:19:38] INFO:     10.121.32.7:38446 - "GET /model_info HTTP/1.1" 200 OK
+[2026-11-17 21:19:39] DeepSeek-V4.1 does not support reasoning_effort='none'; using the default 'high' (low/high/xhigh/max, a float in [0, 0.99], or an integer budget in [1, 100] via chat_template_kwargs are accepted).
+[2026-11-17 21:19:39 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=32768,K=1280,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:39 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=5120,K=8192,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:40 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_MISS cumulative_len=19 max_context=4363
+[2026-11-17 21:19:40 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 19, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 0.64
+[2026-11-17 21:19:40] INFO:     10.121.32.7:38422 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:19:41 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_MISS cumulative_len=15 max_context=4363
+[2026-11-17 21:19:41 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.36
+[2026-11-17 21:19:41 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 15, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 13.35
+[2026-11-17 21:19:41] INFO:     10.121.32.7:38422 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:19:46 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=1792,K=5120,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:47 ATTN_CP0 TP0 EP0] Using configuration from /workspace/sglang/python/sglang/kernels/ops/quantization/configs/N=4096,K=1280,device_name=MTT_S5000,dtype=fp8_w8a8,block_shape=[32, 32].json for W8A8 Block FP8 kernel.
+[2026-11-17 21:19:47 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_LOOKUP cumulative_len=256 width=256 rows=16
+[2026-11-17 21:19:51 ATTN_CP0 TP0 EP0] Registering 0 cuda graph addresses
+[2026-11-17 21:19:52 ATTN_CP7 TP7 EP7] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP3 TP3 EP3] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP5 TP5 EP5] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP4 TP4 EP4] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP1 TP1 EP1] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP0 TP0 EP0] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP6 TP6 EP6] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP2 TP2 EP2] MUSA_TAIL_SINGLE_GRAPH_CAPTURE start=21 end=39 width=256 rows=16 graphs=1
+[2026-11-17 21:19:52 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.36
+[2026-11-17 21:19:52 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.36
+[2026-11-17 21:19:52 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.35
+[2026-11-17 21:19:52 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.35
+[2026-11-17 21:19:52 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.35
+[2026-11-17 21:19:52 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.36
+[2026-11-17 21:19:52 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.35
+[2026-11-17 21:19:52 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 24.35
+[2026-11-17 21:19:52] INFO:     10.121.32.7:38422 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:03 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_LOOKUP cumulative_len=256 width=256 rows=16
+[2026-11-17 21:20:03 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 21.95
+[2026-11-17 21:20:03] INFO:     10.121.32.7:43506 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:10 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_LOOKUP cumulative_len=256 width=256 rows=16
+[2026-11-17 21:20:10 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.11
+[2026-11-17 21:20:10] INFO:     10.121.32.7:43508 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:16 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_LOOKUP cumulative_len=256 width=256 rows=16
+[2026-11-17 21:20:16 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 38.56
+[2026-11-17 21:20:16] INFO:     10.121.32.7:56788 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:23 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_LOOKUP cumulative_len=256 width=256 rows=16
+[2026-11-17 21:20:23 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 40.40
+[2026-11-17 21:20:23] INFO:     10.121.32.7:37116 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:29 ATTN_CP0 TP0 EP0] MUSA_TAIL_GRAPH_LOOKUP cumulative_len=256 width=256 rows=16
+[2026-11-17 21:20:29 ATTN_CP7 TP7 EP7] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP4 TP4 EP4] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP5 TP5 EP5] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP6 TP6 EP6] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP3 TP3 EP3] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP0 TP0 EP0] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP2 TP2 EP2] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29 ATTN_CP1 TP1 EP1] Prefill batch, #new-seq: 1, #new-token: 256, #cached-token: 0, full token usage: 0.03, swa token usage: 0.03, #running-req: 0, #queue-req: 0, #pending-token: 0, #bootstrap-req: 0, #inflight-req: 1, #optimistic-req: 0, musa graph: False, input throughput (token/s): 39.79
+[2026-11-17 21:20:29] INFO:     10.121.32.7:37122 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-11-17 21:20:38] INFO:     10.121.32.7:41096 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:21:38] INFO:     10.121.32.7:38398 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:22:38] INFO:     10.121.32.7:49430 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:23:38] INFO:     10.121.32.7:53890 - "GET /health HTTP/1.1" 200 OK
+[2026-11-17 21:23:59] INFO:     127.0.0.1:44992 - "GET /server_info HTTP/1.1" 200 OK
+[2026-11-17 21:24:00] SIGTERM received. signum=None frame=None. Draining requests and shutting down...
+[2026-11-17 21:24:03] Gracefully exiting... Remaining number of requests 0. Remaining requests remaining_rids=[].
+[2026-11-17 21:24:18] kill_process_tree called: parent_pid=77, include_parent=False, pid=77
+[2026-11-17 21:24:18] ERROR:    Traceback (most recent call last):
+  File "/opt/venv/lib/python3.10/site-packages/uvicorn/_compat.py", line 60, in asyncio_run
+    return loop.run_until_complete(main)
+  File "uvloop/loop.pyx", line 1509, in uvloop.loop.Loop.run_until_complete
+  File "uvloop/loop.pyx", line 1502, in uvloop.loop.Loop.run_until_complete
+  File "uvloop/loop.pyx", line 1371, in uvloop.loop.Loop.run_forever
+  File "uvloop/loop.pyx", line 551, in uvloop.loop.Loop._run
+  File "uvloop/loop.pyx", line 471, in uvloop.loop.Loop._on_idle
+  File "uvloop/cbhandles.pyx", line 86, in uvloop.loop.Handle._run
+  File "uvloop/cbhandles.pyx", line 66, in uvloop.loop.Handle._run
+  File "/workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py", line 3723, in print_exception_wrapper
+    await func()
+  File "/workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py", line 3275, in sigterm_watchdog
+    sys.exit(0)
+SystemExit: 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/venv/lib/python3.10/site-packages/starlette/routing.py", line 661, in lifespan
+    await receive()
+  File "/opt/venv/lib/python3.10/site-packages/fastapi/telemetry/_runtime.py", line 214, in wrapped_receive
+    message = await receive()
+  File "/opt/venv/lib/python3.10/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 159, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+[2026-11-17 21:24:18] kill_process_tree called: parent_pid=77, include_parent=False, pid=77

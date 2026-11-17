@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-17T17:49:15.442025+08:00",
+  "selection": {
+    "decision_complete": true,
+    "run": "p54_rope_proposal_off_v1",
+    "at": "2026-11-17T17:49:05.477321+08:00",
+    "reason": "Retain E52 proposal3 champion; proposal5 did not improve measured results.",
+    "caveat": "E54 lacks continuous compiler observations. Provisional rejection, not final acceptance; new comparisons use monitored quiet windows."
+  },
+  "enabled": true
+}

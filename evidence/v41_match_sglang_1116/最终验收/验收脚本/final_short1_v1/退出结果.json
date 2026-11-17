@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:01:33.963546+08:00\", \"both_finished\": true, \"sj9\": {\"exit_codes\": [0, 0, 0, 0, 0, 0, 0, 0], \"control_exit\": null, \"stopping\": true, \"automatic_kill\": false}, \"sj10\": {\"exit_codes\": [0, 0, 0, 0, 0, 0, 0, 0], \"control_exit\": 0, \"stopping\": true, \"automatic_kill\": false}}\n",
+  "stderr": ""
+}

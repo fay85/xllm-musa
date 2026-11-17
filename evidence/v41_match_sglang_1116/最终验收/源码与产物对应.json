@@ -1,0 +1,42 @@
+{
+  "at": "2026-11-17T20:56:22.931693+08:00",
+  "compiled_source_commit": "980d9da1287ba99a12749d89b89c55e0d8ed233f",
+  "compiled_parent": "d19631240a283e17295a5823f19e79f8dec6c991",
+  "report_head_before_final_commit": "da2058cb42c954ea6d6d262432f1e358f24805ce",
+  "compiled_delta_matches": [
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v4_dsa_rope.cu",
+      "sha256": "76a0c4ad21c1d3a1447e4b6fc934e19aa95e73d0d570b79659727dc68fefe4e8",
+      "matches_compiled_delta": true
+    },
+    {
+      "file": "xllm/core/kernels/musa/deepseek_v4_dsa_rope.h",
+      "sha256": "f3855cbbd73fd2fac3db61fe261042608d80971ae7fb823c41a8a21e0265919c",
+      "matches_compiled_delta": true
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+      "sha256": "daffb30d068c175526c2a9e153f47e26a736f00897754aaa46c17465c8f47aca",
+      "matches_compiled_delta": true
+    },
+    {
+      "file": "xllm/core/layers/musa/deepseek_v41/attention.h",
+      "sha256": "7b94608ad2e32ed22f8f1fae6f3d57691190e4c547871ed9e454d018f909d1ac",
+      "matches_compiled_delta": true
+    },
+    {
+      "file": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "sha256": "3e2a8084b7b0eba80efffc2eb9774018bf071c23204fde618519aff526a3dcb5",
+      "matches_compiled_delta": true
+    },
+    {
+      "file": "xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+      "sha256": "7f3145d300bf7f07cb2a25713191b251701d38e1e712b382b023a81e2c264c15",
+      "matches_compiled_delta": true
+    }
+  ],
+  "code_build_tools_diff_from_source_commit": [],
+  "binary_sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+  "binary_bytes": 341814896,
+  "final_runtime_library_checks": "Will be separately checked from actual live-process maps before each round exits"
+}

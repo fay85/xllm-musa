@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"prepared\": true, \"selected_control\": \"p56_short_indexer_on_v1\", \"no_gpu_started\": true}\n",
+  "stderr": ""
+}

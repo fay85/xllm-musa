@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T19:30:16.376010+08:00\", \"worker.log\": \"\", \"child.json\": \"{\\\"pid\\\": 59265, \\\"start_ticks\\\": \\\"527510927\\\", \\\"exe\\\": \\\"/usr/bin/python3.10\\\", \\\"command\\\": [\\\"python3\\\", \\\"/expt/builds/e56_short_context_module_v1/src/validate_short_context_selection.py\\\", \\\"--output\\\", \\\"/expt/diagnostics/e56_short_context_gpu_v1/selection.json\\\", \\\"--indexer-dir\\\", \\\"/expt/artifacts/native_sg438_control_v1/lib/indexer\\\"]}\", \"selection.log\": \"\"}\n",
+  "stderr": ""
+}

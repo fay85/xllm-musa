@@ -1,0 +1,1 @@
+已目视核对实际Perfetto时间线：原生V41 q4/kv265 scope、GPU stream22及MUSA runtime存在；OFF仍有8次indexer_score和8次indexer_radix_select（各D rank一致，见trace_analysis原始分类）。该图受profiler扰动，不从图宽推算正式TPOT。ON尚未出结果，不预写消除评分/排序或收益。

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p55_draft_gate_on_v1_evidence.tar.gz\", \"bytes\": 5570621, \"sha256\": \"a376bcf918505680b4a7ab971bd5a283a53625d9cb34691c51abd9f0f021791a\", \"at\": \"2026-11-17T19:48:16.091760+08:00\"}\n",
+  "stderr": "addr2line: DWARF error: invalid or unhandled FORM value: 0x23\n"
+}

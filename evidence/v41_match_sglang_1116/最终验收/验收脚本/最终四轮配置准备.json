@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"prepared\": [\"final_short1_v1\", \"final_short2_v1\", \"final_short3_v1\", \"final_long_v1\"], \"gpu_started\": false}\n",
+  "stderr": ""
+}

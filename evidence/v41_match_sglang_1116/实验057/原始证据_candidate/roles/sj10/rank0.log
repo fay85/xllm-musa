@@ -1,0 +1,729 @@
+[xllm_musa_backend_init] registered PrivateUse1 backend name musa
+[xllm_musa_backend_init] registered TorchMUSA hooks
+[xllm_musa_backend_init] installed CUDA-to-MUSA dispatch bridge
+I20261117 20:41:48.009487 32713 xllm.cpp:719] Registered torch_musa PrivateUse1 backend name=musa and hooks
+I20261117 20:41:48.009611 32713 verbose_trace_logger.cpp:68] Verbose trace logging is disabled.
+I20261117 20:41:48.009922 32713 xllm.cpp:590] set worker role to local worker
+I20261117 20:41:48.011341 32713 config_utils.cpp:207] Dumped startup config to /expt/runs/p57_progress_disabled_v1/sj10/resolved_rank0.json
+I20261117 20:41:48.048871 32713 master.cpp:532] 
+I20261117 20:41:48.048885 32713 master.cpp:533]       █     █     █▄   ▄█
+I20261117 20:41:48.048888 32713 master.cpp:542] ▀█▄ ▀ █     █     █ ▀▄▀ █  version 0.11.0
+I20261117 20:41:48.048890 32713 master.cpp:543]   █▶  █     █     █     █  model   /work/artifacts/model_view_w4afp8_mt_1017
+I20261117 20:41:48.048893 32713 master.cpp:545] ▄█▀ ▄ █▄▄▄▄ █▄▄▄▄ █     █  backend llm
+I20261117 20:41:48.048895 32713 master.cpp:547] 
+I20261117 20:41:48.048897 32713 master.cpp:720] Master init options: Options: [model_path: /work/artifacts/model_view_w4afp8_mt_1017, model_id: deepseek-v4.1-flash-1017-w4afp8-mt, draft_model_path: /work/artifacts/model_view_w4afp8_mt_1017, backend: llm, model_impl: native, limit_image_per_prompt: 8, block_size: 128, max_cache_size: 1073741824, max_memory_utilization: 0.95, enable_prefix_cache: 0, max_encoder_cache_size: 0, max_processor_cache_items: 256, max_linear_state_cache_slots: 0, max_tokens_per_batch: 256, max_seqs_per_batch: 1, max_tokens_per_chunk_for_prefill: 256, num_speculative_tokens: 3, speculative_algorithm: DSpark, draft_sampling_mode: greedy, speculative_suffix_cache_max_depth: 64, speculative_suffix_max_spec_factor: 1, speculative_suffix_max_spec_offset: 0, speculative_suffix_min_token_prob: 0.1, speculative_suffix_max_cached_requests: -1, speculative_suffix_use_tree_spec: 0, enable_mtp_draft_body_tp1: 0, enable_adaptive_speculative_decode: 0, adaptive_speculative_min_gain: 0, num_request_handling_threads: 4, enable_eplb: 0, redundant_experts_num: 1, eplb_update_interval: 1000, eplb_min_peak_load_improvement: 0.05, communication_backend: mccl, rank_tablefile: , expert_parallel_degree: 0, task_type: generate, enable_mla: 0, npu_kernel_backend: AUTO, enable_chunked_prefill: 1, enable_flashcomm1: 0, flashcomm1_min_prefill_tokens: 8192, enable_mmrs_fusion: 0, mmrs_comm_mode: aiv, dp_size: 1, cp_size: 1, ep_size: 8, tp_size: 1, sp_size: 1, cfg_size: 1, vae_size: 1, text_encoder_tp_size: 1, instance_name: 10.121.32.9:32000, master_node_addr: 10.121.32.9:32100, instance_role: DECODE, transfer_listen_port: 32300, nnodes: 8, node_rank: 0, enable_schedule_overlap: 0, enable_disagg_pd: 1, enable_pd_ooc: 0, enable_offline_inference: 0, enable_sleep_mode: 0, disable_log_stats: 0, kv_cache_dtype: auto, kv_cache_transfer_mode: PULL, etcd_addr: 10.121.32.9:31179, etcd_namespace: xiaopang1117-p57_progress_disabled_v1, enable_service_routing: 1, tool_call_parser: , reasoning_parser: , priority_strategy: fcfs, enable_online_preempt_offline: 1, host_blocks_factor: 0, enable_kvcache_store: 0, prefetch_timeout: 120000, prefetch_batch_size: 2, prefetch_valid_blocks_per_batch: 1, layers_wise_copy_batchs: 4, store_protocol: tcp, store_rdma_devices: , store_master_server_address: , store_metadata_server: , store_local_hostname: , enable_multi_stream_parallel: 0, enable_profile_step_time: 0, enable_profile_token_budget: 0, enable_latency_aware_schedule: 0, profile_max_prompt_length: 2048, enable_profile_kv_blocks: 1, disable_ttft_profiling: 0, enable_forward_interruption: 0, enable_graph: 0, enable_graph_mode_decode_no_padding: 1, enable_prefill_piecewise_graph: 0, max_tokens_for_graph_mode: 2048, max_global_ttft_ms: 2147483647, max_global_tpot_ms: 2147483647, max_requests_per_batch: 1, spawn_worker_path: , enable_shm: 0, input_shm_size: 1024, output_shm_size: 128, is_local: 1, beam_width: 1, rec_worker_max_concurrency: 1, master_status: WAKEUP, server_idx: 0]
+I20261117 20:41:48.048941 32713 master.cpp:725] Resolved CP config: cp_size=1, world_size=8, dp_size=1, ep_size=8, cp_sharding_stage=disabled, instance_role=DECODE
+I20261117 20:41:48.048947 32713 master.cpp:803] Creating engine with devices: musa:0
+I20261117 20:41:48.048957 32713 master.cpp:900] Using draft devices: musa:0
+I20261117 20:41:48.048975 32713 dist_manager.cpp:203] Multi-node serving world_size = 8, each_node_ranks = 1, current node rank = 0, nnodes = 8, dp_size = 1, cp_size = 1, ep_size = 8, tp_size = 8
+I20261117 20:41:48.049098 32713 xllm_server_registry.cpp:22] Register server CollectiveServer0.
+I20261117 20:41:48.049376 32743 worker_server.cpp:109] Create worker server with device: 0
+I20261117 20:41:48.049486 32743 threadpool.cpp:33] ThreadPool created, thread count 5, pool name WorkerService.copy, cpu_binding false.
+W20261117 20:41:48.052366 32713 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261117 20:41:48.053550 32713 server.cpp:1200] Server[xllm::CollectiveService] is serving on port=32100.
+I20261117 20:41:48.053574 32713 server.cpp:1203] Check out http://worker32009:32100 in web browser.
+I20261117 20:41:48.053669 32713 xllm_server.cpp:302] CollectiveServer0 server started on address 10.121.32.9:32100, idle_timeout_sec: -1, num_threads: 8
+I20261117 20:41:48.404881 32743 threadpool.cpp:33] ThreadPool created, thread count 4, pool name WorkerService.request, cpu_binding false.
+I20261117 20:41:48.405411 32743 xllm_server_registry.cpp:22] Register server DistributeWorkerServer0.
+W20261117 20:41:48.405905 32743 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261117 20:41:48.406454 32743 server.cpp:1200] Server[xllm::WorkerService] is serving on port=36075.
+I20261117 20:41:48.406461 32743 server.cpp:1203] Check out http://worker32009:36075 in web browser.
+I20261117 20:41:48.406466 32743 xllm_server.cpp:302] DistributeWorker server started on address 10.121.32.9:36075, idle_timeout_sec: -1, num_threads: 8
+I20261117 20:41:48.406471 32743 worker_server.cpp:159] Worker 0: server address: 10.121.32.9:36075
+I20261117 20:41:48.406848 32743 worker_server.cpp:537] Worker#0 connect to 10.121.32.9:32100 success.
+I20261117 20:41:49.053947 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:49.054252 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+E20261117 20:41:49.055209 32713 comm_channel.cpp:105] Hello request failed: [E2001][10.121.32.9:36075]Server is not initialized
+I20261117 20:41:50.412806 32743 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group world_group, rank=0, world_size=8, algorithm=2, max_bytes=8388608
+E20261117 20:41:52.055918 32713 comm_channel.cpp:105] Hello request failed: [E2001][10.121.32.9:36075]Server is not initialized
+I20261117 20:41:54.312655 32743 musa_native_collectives.h:76] Native synchronous MCCL initialized for world_group, local rank 0/8
+I20261117 20:41:54.675877 32743 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=0, world_size=8, enabled=1, max_bytes=8388608
+I20261117 20:41:54.691720 32743 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=0, world_size=8, algorithm=1, max_bytes=8388608
+E20261117 20:41:55.056578 32713 comm_channel.cpp:105] Hello request failed: [E2001][10.121.32.9:36075]Server is not initialized
+I20261117 20:41:55.591332 32743 musa_native_collectives.h:76] Native synchronous MCCL initialized for tp_group, local rank 0/8
+W20261117 20:41:55.593119 32743 musa_custom_all_reduce.cpp:259] Custom all-reduce disabled for moe_tp_group: unsupported world size 1
+I20261117 20:41:56.532280 32743 musa_native_collectives.h:76] Native synchronous MCCL initialized for moe_ep_group, local rank 0/8
+I20261117 20:41:56.532330 32743 worker_server.cpp:209] Worker CP config: cp_size=1, cp_group_size=8, cp_sharding_stage=disabled, instance_role=DECODE
+I20261117 20:41:56.532344 32743 threadpool.cpp:33] ThreadPool created, thread count 1, pool name Worker.async, cpu_binding false.
+I20261117 20:41:56.532562 32743 worker.cpp:55] Speculative decode is enabled, algorithm: DSpark
+I20261117 20:41:56.532582 32743 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 20:41:56.532733 32743 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 20:41:56.532871 32743 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 20:41:56.532907 34935 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:0
+I20261117 20:41:56.533066 34938 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:0
+I20261117 20:41:56.547640 34935 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 20:41:56.554713 34938 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 20:41:58.057132 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:36075, global_rank_: 0
+I20261117 20:41:58.057284 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.057485 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.058665 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:44111, global_rank_: 1
+I20261117 20:41:58.058691 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.058820 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.059825 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:46575, global_rank_: 2
+I20261117 20:41:58.059852 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.059965 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.061057 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:41771, global_rank_: 3
+I20261117 20:41:58.061075 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.061203 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.062136 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:32775, global_rank_: 4
+I20261117 20:41:58.062163 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.062278 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.063341 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:40431, global_rank_: 5
+I20261117 20:41:58.063360 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.063477 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.064543 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:41625, global_rank_: 6
+I20261117 20:41:58.064559 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 20:41:58.064682 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 20:41:58.065662 32713 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.9:35249, global_rank_: 7
+I20261117 20:41:58.065762 32713 dist_manager.cpp:338] Started cluster health check thread
+I20261117 20:41:58.065845 32713 threadpool.cpp:33] ThreadPool created, thread count 8, pool name LLMEngine.link, cpu_binding false.
+I20261117 20:41:58.948596 32713 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261117 20:41:58.950161 32713 threadpool.cpp:33] ThreadPool created, thread count 8, pool name LLMEngine.link, cpu_binding false.
+I20261117 20:41:58.951560 32713 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261117 20:41:58.953998 32713 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 20:41:58.956636 32713 llm_engine.cpp:260] Initializing model from: /work/artifacts/model_view_w4afp8_mt_1017
+I20261117 20:41:58.956671 32713 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261117 20:41:59.293457 32713 llm_engine.cpp:327] Block info, block_size: 128, n_local_kv_heads: 1, head_dim: 512, n_layers: 40, dtype: BFloat16, kv_cache_dtype: auto
+I20261117 20:41:59.673655 32713 llm_engine.cpp:367] Initializing model with ModelArgs: [model_type: deepseek_v41, encoder_embedding_mode: 0, embedding_mode: 0, dtype: bfloat16, hidden_size: 5120, hidden_act: silu, intermediate_size: 2304, moe_intermediate_size: 2304, n_routed_experts: 384, n_activated_experts: 6, num_experts_per_tok: 6, n_layers: 40, n_encoder_layers: 0, head_dim: 512, decoder_head_dim: 0, n_heads: 64, decoder_n_heads: 0, n_kv_heads: 1, decoder_n_kv_heads: -1, vocab_size: 129280, rms_norm_eps: 1e-20, layer_norm_eps: 0, rotary_dim: 0, rope_theta: 10000, rope_scaling_rope_type: yarn, rope_scaling_factor: 16, rope_scaling_low_freq_factor: 0, rope_scaling_high_freq_factor: 0, rope_scaling_original_max_position_embeddings: 65536, rope_scaling_mrope_section: [], max_position_embeddings: 1048576, use_absolute_position_embedding: 0, bos_token_id: 0, eos_token_id: 1, pad_token_id: 2, attn_scalar: 0, no_bias: 0, qkv_bias: 0, stop_token_ids: [1, ], vision_start_token_id: 0, vision_end_token_id: 0, vision_token_id: 0, image_token_id: 129264, video_token_id: 0, vision_custom_adapter: , vision_max_slice_nums: 0, mm_dropout: 0, mm_hidden_act: , mm_hidden_size: 1024, mm_image_size: 0, mm_intermediate_size: 2816, mm_num_channels: 3, mm_initializer_range: 0, mm_layer_norm_eps: 0, mm_num_attention_heads: 16, mm_num_beam_groups: 0, mm_num_beams: 0, mm_num_hidden_layers: 32, mm_num_return_sequences: 0, mm_output_attentions: 0, mm_output_hidden_states: 0, mm_output_scores: 0, mm_patch_size: 14, mm_projection_dim: 5120, mm_spatial_merge_size: 0, mm_spatial_patch_size: 0, mm_downsample_ratio: 3, mm_rope_theta: 10000, mm_remove_invalid_values: 0, mm_repetition_penalty: 0, mm_return_dict: 0, mm_return_dict_in_generate: 0, mm_temperature: 0, mm_tie_encoder_decoder: 0, mm_tie_word_embeddings: 0, mm_top_k: 0, mm_top_p: 0, mm_torchscript: 0, mm_use_bfloat16: 0, mm_head_dim: 64, mm_vocab_size: 0, mm_window_size: 0, mm_fullatt_block_indexes: [], mm_deepstack_visual_indexes: [], mm_tokens_per_second: 0, mm_temporal_patch_size: 0, mm_projector_type: , mm_projector_hidden_act: , mm_projector_n_layers: 0, mm_vision_feature_layer: 0, mm_vision_feature_select_strategy: , mm_image_do_center_crop: 0, mm_image_crop_height_size: 336, mm_image_crop_width_size: 336, mm_image_do_resize: 0, mm_image_resize_shortest_edge: 336, mm_image_resample: 0, mm_image_do_rescale: 0, mm_video_do_rescale: 0, mm_image_rescale_factor: 0, mm_image_do_normalize: 0, mm_image_normalize_mean: [], mm_image_normalize_std: [], mm_image_shortest_edge: 0, mm_image_longest_edge: 0, mm_image_min_pixels: 295936, mm_image_max_pixels: 0, mm_image_patch_size: 14, mm_image_temporal_patch_size: 0, mm_image_merge_size: 0, mm_image_min_tokens: 0, mm_image_max_tokens: 1024, mm_image_token_index: 0, mm_video_normalize_mean: [], mm_video_normalize_std: [], mm_video_shortest_edge: 0, mm_video_longest_edge: 0, mm_video_patch_size: 0, mm_video_temporal_patch_size: 0, mm_video_merge_size: 0, mm_video_min_tokens: 0, mm_video_max_tokens: 0, mm_video_max_pixels: 0, mm_pad_token_id: 0, tie_word_embeddings: 0, use_sliding_window: 0, sliding_window: -1, max_window_layers: 0, query_num: 0, num_speculative_tokens: 0, in_channels: -1, out_channels: -1, down_block_types: [], up_block_types: [], block_out_channels: [], layers_per_block: 1, latent_channels: -1, norm_num_groups: -1, sample_size: -1, scale_factor: 0, shift_factor: 0, mid_block_add_attention: 1, force_upcast: 1, use_quant_conv: 0, use_post_quant_conv: 0, joint_attention_dim: 0, pooled_projection_dim: 0, guidance_embeds: 1, axes_dims_rope: [], num_single_layers: 0, d_model: 0, num_layers: 0, d_kv: 0, d_ff: 0, act_fn: , is_gated_act: 1, relative_attention_num_buckets: 0, relative_attention_max_distance: 0, num_train_timesteps: 0, shift: 0, use_dynamic_shifting: 0, base_shift: 0, max_shift: 0, base_image_seq_len: 0, max_image_seq_len: 0]
+I20261117 20:41:59.673763 32713 llm_engine.cpp:368] Initializing model with quant args: QuantArgs: [quant_method: w4afp8, quantize_type: , bits: 0, moe_weight_bits: 8, only_expert_per_group: 0, group_size: 0, desc_act: 0, is_sym: 0, activation_dynamic: 1, preserve_smooth: 0, compressed_groups: 0, fmt: e4m3, ignored_modules: 0, quant_version: , quant_desc_count: 0]
+I20261117 20:41:59.673766 32713 llm_engine.cpp:369] Initializing model with tokenizer args: TokenizerArgs: [tokenizer_type: fast, add_bos_token: 0, add_eos_token: 0, bos_token: <｜begin▁of▁sentence｜>, eos_token: <｜end▁of▁sentence｜>, pad_token: <｜end▁of▁sentence｜>, tokenizer_class: PreTrainedTokenizerFast, pattern: ]
+I20261117 20:41:59.673770 32713 llm_engine.cpp:370] Initializing model with random seed: 1105
+I20261117 20:41:59.675325 34927 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 20:41:59.678686 34927 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261117 20:42:00.489795 34927 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:0
+I20261117 20:42:00.495836 34927 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 20:42:00.667122 34927 worker_impl.cpp:2396] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261117 20:42:00.669920 35488 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 20:42:00.669871 35371 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 20:42:00.669888 35398 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 20:42:00.669891 35409 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 20:42:00.669898 35417 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 20:42:00.669901 35443 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 20:42:00.669904 35452 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 20:42:00.669884 35388 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 20:42:00.669909 35460 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 20:42:00.669914 35468 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 20:42:00.669865 35378 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 20:42:00.669924 35516 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 20:42:00.669900 35433 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 20:42:00.669925 35497 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 20:42:00.669926 35477 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 20:42:00.669930 35524 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 20:42:00.669868 35355 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 20:42:00.669939 35532 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 20:42:00.669948 35541 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 20:42:00.669950 35507 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 20:42:00.669965 35586 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 20:42:00.669862 35344 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 20:42:00.669862 35363 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 20:42:00.669971 35553 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 20:42:00.669974 35589 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 20:42:00.669890 35425 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 20:42:00.669976 35592 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 20:42:00.669978 35566 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 20:42:00.669979 35561 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 20:42:00.670010 35577 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 20:42:00.670037 35571 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 20:42:00.670048 35582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 20:42:00.671813 35488 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 20:42:00.672384 35371 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 20:42:00.672434 35586 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 20:42:00.672456 35398 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 20:42:00.672717 35344 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 20:42:00.672827 35566 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 20:42:00.673020 35452 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 20:42:00.673084 35577 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 20:42:00.673381 35582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 20:42:00.673409 35443 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 20:42:00.673446 35417 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 20:42:00.673482 35409 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 20:42:00.673491 35388 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 20:42:00.673653 35468 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 20:42:00.673768 35516 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 20:42:00.673806 35433 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 20:42:00.673918 35524 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 20:42:00.673943 35460 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 20:42:00.673942 35532 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 20:42:00.674041 35378 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 20:42:00.674109 35507 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 20:42:00.674170 35497 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 20:42:00.674206 35363 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 20:42:00.674242 35477 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 20:42:00.674244 35553 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 20:42:00.674275 35541 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 20:42:00.674279 35425 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 20:42:00.674281 35592 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 20:42:00.674299 35561 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 20:42:00.674405 35355 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 20:42:00.674682 35589 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 20:42:00.674695 35571 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 20:42:00.675168 35468 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 20:42:00.675173 35371 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 20:42:00.675209 35344 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 20:42:00.675216 35398 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 20:42:00.675213 35388 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 20:42:00.675211 35409 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 20:42:00.675211 35452 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 20:42:00.675215 35443 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 20:42:00.675215 35417 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 20:42:00.675410 35433 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 20:42:00.675597 35460 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 20:42:00.675606 35378 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 20:42:00.675607 35363 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 20:42:00.675617 35477 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 20:42:00.675822 35425 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 20:42:00.675873 35355 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 20:42:00.719666 35516 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 20:42:00.722597 35488 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 20:42:00.722885 35532 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 20:42:00.723742 35507 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 20:42:00.724448 35571 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 20:42:00.724635 35553 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 20:42:00.724915 35541 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 20:42:00.724953 35566 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 20:42:00.725096 35561 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 20:42:00.725800 35524 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 20:42:00.725991 35497 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 20:42:04.731809 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 0
+I20261117 20:42:07.756209 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 1
+I20261117 20:42:09.403627 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 2
+I20261117 20:42:11.022805 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 3
+I20261117 20:42:12.615873 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 4
+I20261117 20:42:14.159017 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 5
+I20261117 20:42:15.724957 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 6
+I20261117 20:42:17.262848 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 7
+I20261117 20:42:18.796345 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 8
+I20261117 20:42:20.245000 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 9
+I20261117 20:42:21.713402 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 10
+I20261117 20:42:23.199944 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 11
+I20261117 20:42:24.667275 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 12
+I20261117 20:42:26.195443 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 13
+I20261117 20:42:29.005050 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 14
+I20261117 20:42:30.528991 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 15
+I20261117 20:42:32.013022 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 16
+I20261117 20:42:33.481961 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 17
+I20261117 20:42:34.945921 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 18
+I20261117 20:42:36.419097 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 19
+I20261117 20:42:37.908608 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 20
+I20261117 20:42:39.351346 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 21
+I20261117 20:42:40.849736 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 22
+I20261117 20:42:42.303150 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 23
+I20261117 20:42:43.764806 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 24
+I20261117 20:42:45.252758 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 25
+I20261117 20:42:46.696349 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 26
+I20261117 20:42:48.135696 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 27
+I20261117 20:42:49.616631 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 28
+I20261117 20:42:51.060047 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 29
+I20261117 20:42:52.535059 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 30
+I20261117 20:42:53.961787 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 31
+I20261117 20:42:55.451617 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 32
+I20261117 20:42:56.901239 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 33
+I20261117 20:42:58.413762 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 34
+I20261117 20:42:59.849761 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 35
+I20261117 20:43:01.372426 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 36
+I20261117 20:43:02.853071 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 37
+I20261117 20:43:04.309018 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 38
+I20261117 20:43:05.770479 34927 deepseek_v41_native.h:282] Native V4.1 loaded decoder layer 39
+I20261117 20:43:06.656761 34927 deepseek_v41_native.h:1012] Native V4.1 full-world EP reduction shares TP communicator
+I20261117 20:43:06.657878 34927 deepseek_v41_native.h:322] Native V4.1 fixed-capacity C1 Decode/verify enabled, graph=1, rows=1..6, capacities=512/4096; Prefill stays eager
+I20261117 20:43:06.658257 34927 deepseek_v41_native.h:330] Native V4.1 weights ready, expert_format=w4afp8_mt, layers=40, tp=8, ep=8, engram_layers=2
+I20261117 20:43:07.584450 32750 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:07.772110 32751 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:08.179025 32755 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:08.722632 32751 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:09.140260 32755 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:09.248484 34927 worker_impl.cpp:2413] Weight loading completed, restored ATen threads=1
+I20261117 20:43:09.248867 32751 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:09.327685 32750 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:09.704459 32755 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:09.708655 32713 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 20:43:09.711334 32713 llm_engine.cpp:260] Initializing model from: /work/artifacts/model_view_w4afp8_mt_1017
+I20261117 20:43:09.711349 32713 llm_engine.cpp:327] Block info, block_size: 128, n_local_kv_heads: 1, head_dim: 512, n_layers: 3, dtype: BFloat16, kv_cache_dtype: auto
+I20261117 20:43:09.711351 32713 llm_engine.cpp:367] Initializing model with ModelArgs: [model_type: deepseek_v4_dspark, encoder_embedding_mode: 0, embedding_mode: 0, dtype: bfloat16, hidden_size: 5120, hidden_act: silu, intermediate_size: 2304, moe_intermediate_size: 2304, n_routed_experts: 384, n_activated_experts: 6, num_experts_per_tok: 6, n_layers: 3, n_encoder_layers: 0, head_dim: 512, decoder_head_dim: 0, n_heads: 64, decoder_n_heads: 0, n_kv_heads: 1, decoder_n_kv_heads: -1, vocab_size: 129280, rms_norm_eps: 1e-20, layer_norm_eps: 0, rotary_dim: 0, rope_theta: 10000, rope_scaling_rope_type: yarn, rope_scaling_factor: 16, rope_scaling_low_freq_factor: 0, rope_scaling_high_freq_factor: 0, rope_scaling_original_max_position_embeddings: 65536, rope_scaling_mrope_section: [], max_position_embeddings: 1048576, use_absolute_position_embedding: 0, bos_token_id: 0, eos_token_id: 1, pad_token_id: 2, attn_scalar: 0, no_bias: 0, qkv_bias: 0, stop_token_ids: [1, ], vision_start_token_id: 0, vision_end_token_id: 0, vision_token_id: 0, image_token_id: 129264, video_token_id: 0, vision_custom_adapter: , vision_max_slice_nums: 0, mm_dropout: 0, mm_hidden_act: , mm_hidden_size: 1024, mm_image_size: 0, mm_intermediate_size: 2816, mm_num_channels: 3, mm_initializer_range: 0, mm_layer_norm_eps: 0, mm_num_attention_heads: 16, mm_num_beam_groups: 0, mm_num_beams: 0, mm_num_hidden_layers: 32, mm_num_return_sequences: 0, mm_output_attentions: 0, mm_output_hidden_states: 0, mm_output_scores: 0, mm_patch_size: 14, mm_projection_dim: 5120, mm_spatial_merge_size: 0, mm_spatial_patch_size: 0, mm_downsample_ratio: 3, mm_rope_theta: 10000, mm_remove_invalid_values: 0, mm_repetition_penalty: 0, mm_return_dict: 0, mm_return_dict_in_generate: 0, mm_temperature: 0, mm_tie_encoder_decoder: 0, mm_tie_word_embeddings: 0, mm_top_k: 0, mm_top_p: 0, mm_torchscript: 0, mm_use_bfloat16: 0, mm_head_dim: 64, mm_vocab_size: 0, mm_window_size: 0, mm_fullatt_block_indexes: [], mm_deepstack_visual_indexes: [], mm_tokens_per_second: 0, mm_temporal_patch_size: 0, mm_projector_type: , mm_projector_hidden_act: , mm_projector_n_layers: 0, mm_vision_feature_layer: 0, mm_vision_feature_select_strategy: , mm_image_do_center_crop: 0, mm_image_crop_height_size: 336, mm_image_crop_width_size: 336, mm_image_do_resize: 0, mm_image_resize_shortest_edge: 336, mm_image_resample: 0, mm_image_do_rescale: 0, mm_video_do_rescale: 0, mm_image_rescale_factor: 0, mm_image_do_normalize: 0, mm_image_normalize_mean: [], mm_image_normalize_std: [], mm_image_shortest_edge: 0, mm_image_longest_edge: 0, mm_image_min_pixels: 295936, mm_image_max_pixels: 0, mm_image_patch_size: 14, mm_image_temporal_patch_size: 0, mm_image_merge_size: 0, mm_image_min_tokens: 0, mm_image_max_tokens: 1024, mm_image_token_index: 0, mm_video_normalize_mean: [], mm_video_normalize_std: [], mm_video_shortest_edge: 0, mm_video_longest_edge: 0, mm_video_patch_size: 0, mm_video_temporal_patch_size: 0, mm_video_merge_size: 0, mm_video_min_tokens: 0, mm_video_max_tokens: 0, mm_video_max_pixels: 0, mm_pad_token_id: 0, tie_word_embeddings: 0, use_sliding_window: 0, sliding_window: -1, max_window_layers: 0, query_num: 0, num_speculative_tokens: 0, in_channels: -1, out_channels: -1, down_block_types: [], up_block_types: [], block_out_channels: [], layers_per_block: 1, latent_channels: -1, norm_num_groups: -1, sample_size: -1, scale_factor: 0, shift_factor: 0, mid_block_add_attention: 1, force_upcast: 1, use_quant_conv: 0, use_post_quant_conv: 0, joint_attention_dim: 0, pooled_projection_dim: 0, guidance_embeds: 1, axes_dims_rope: [], num_single_layers: 0, d_model: 0, num_layers: 0, d_kv: 0, d_ff: 0, act_fn: , is_gated_act: 1, relative_attention_num_buckets: 0, relative_attention_max_distance: 0, num_train_timesteps: 0, shift: 0, use_dynamic_shifting: 0, base_shift: 0, max_shift: 0, base_image_seq_len: 0, max_image_seq_len: 0]
+I20261117 20:43:09.711385 32713 llm_engine.cpp:368] Initializing model with quant args: QuantArgs: [quant_method: w4afp8, quantize_type: , bits: 0, moe_weight_bits: 8, only_expert_per_group: 0, group_size: 0, desc_act: 0, is_sym: 0, activation_dynamic: 1, preserve_smooth: 0, compressed_groups: 0, fmt: e4m3, ignored_modules: 0, quant_version: , quant_desc_count: 0]
+I20261117 20:43:09.711388 32713 llm_engine.cpp:369] Initializing model with tokenizer args: TokenizerArgs: [tokenizer_type: sentencepiece, add_bos_token: 0, add_eos_token: 0, bos_token: , eos_token: , pad_token: , tokenizer_class: , pattern: ]
+I20261117 20:43:09.711391 32713 llm_engine.cpp:370] Initializing model with random seed: 1105
+I20261117 20:43:09.713091 34927 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 20:43:09.716169 34927 draft_model_config.cpp:356] Overriding draft model_type from deepseek_v41 to deepseek_v41_dspark for block-diffusion speculative decoding
+W20261117 20:43:09.716325 34927 draft_model_config.cpp:82] --num_speculative_tokens=3 overrides DSpark checkpoint dspark_block_size=5.
+I20261117 20:43:09.716331 34927 draft_model_config.cpp:131] DSpark draft compress_ratios=[0,0,0] over 3 draft layers (python_v41=1, from checkpoint tail)
+I20261117 20:43:09.717530 34927 worker_impl.cpp:2396] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261117 20:43:09.718603 34927 deepseek_v41_dspark_native.h:324] Native V4.1 draft TP/EP custom allreduce=1, static_inputs=1, full_draft_graph=1; shared expert remains replicated
+I20261117 20:43:09.718667 35646 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 20:43:09.718683 35674 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 20:43:09.718679 35683 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 20:43:09.718688 35691 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 20:43:09.718688 35714 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 20:43:09.718685 35707 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 20:43:09.718667 35661 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 20:43:09.718693 35722 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 20:43:09.718650 35640 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 20:43:09.718657 35651 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 20:43:09.718654 35656 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 20:43:09.718698 35730 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 20:43:09.718712 35762 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 20:43:09.718714 35738 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 20:43:09.718719 35754 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 20:43:09.718645 35639 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 20:43:09.718719 35770 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 20:43:09.718719 35778 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 20:43:09.718727 35794 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 20:43:09.718708 35746 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 20:43:09.718730 35809 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 20:43:09.718724 35786 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 20:43:09.718740 35802 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 20:43:09.718741 35825 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 20:43:09.718743 35841 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 20:43:09.718674 35668 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 20:43:09.718735 35817 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 20:43:09.718750 35833 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 20:43:09.718679 35700 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 20:43:09.718753 35856 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 20:43:09.718755 35863 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 20:43:09.718779 35848 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 20:43:09.719888 35668 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 20:43:09.720130 35640 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 20:43:09.720604 35700 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 20:43:09.720613 35674 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 20:43:09.720628 35691 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 20:43:09.720659 35651 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 20:43:09.720685 35833 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 20:43:09.720641 35656 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 20:43:09.720831 35661 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 20:43:09.720909 35646 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 20:43:09.720937 35746 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 20:43:09.721025 35863 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 20:43:09.721036 35848 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 20:43:09.721027 35661 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 20:43:09.721107 35809 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 20:43:09.721125 35646 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 20:43:09.721205 35700 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 20:43:09.721233 35668 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 20:43:09.721241 35762 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 20:43:09.721336 35738 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 20:43:09.721400 35674 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 20:43:09.721419 35707 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 20:43:09.721472 35714 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 20:43:09.721501 35770 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 20:43:09.721537 35825 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 20:43:09.721652 35841 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 20:43:09.721662 35639 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 20:43:09.721721 35778 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 20:43:09.721984 35786 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 20:43:09.722244 35691 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 20:43:09.722265 35640 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 20:43:09.722311 35754 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 20:43:09.722337 35722 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 20:43:09.722453 35802 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 20:43:09.722512 35722 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 20:43:09.722530 35651 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 20:43:09.722597 35817 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 20:43:09.722610 35683 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 20:43:09.722712 35730 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 20:43:09.722766 35656 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 20:43:09.722781 35794 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 20:43:09.722805 35730 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 20:43:09.722887 35683 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 20:43:09.723461 35738 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 20:43:09.723634 35856 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 20:43:09.723980 35707 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 20:43:09.724165 35714 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 20:43:09.724448 35639 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 20:43:09.734225 35794 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 20:43:09.734617 35746 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 20:43:09.735018 35778 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 20:43:09.735869 35770 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 20:43:09.736519 35802 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 20:43:09.740151 35786 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 20:43:09.740326 35754 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 20:43:09.740476 35817 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 20:43:09.741326 35762 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 20:43:09.741952 35825 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 20:43:09.745824 35809 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 20:43:17.962867 34927 deepseek_v41_dspark_native.h:151] Native V4.1 DSpark checkpoint loaded:3 pure-SWA stages, experts=128, topk=3, tp=8, ep=8
+I20261117 20:43:17.962910 34927 deepseek_v41_dspark_native.h:155] Native V4.1 DSpark Markov BF16 GEMM, FP32 logits=0
+I20261117 20:43:18.081966 32755 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.107409 32751 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.141350 32750 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.161671 34927 worker_impl.cpp:2413] Weight loading completed, restored ATen threads=1
+I20261117 20:43:18.161756 34927 dflash_worker_impl.cpp:467] Configured DeepSeek-V4 DSpark draft block size: 3
+I20261117 20:43:18.161759 34927 dflash_worker_impl.cpp:469] Configured DeepSeek-V4 DSpark SAS mode: native explicit indices
+I20261117 20:43:18.162017 34927 dspark_worker_impl.cpp:77] DSpark async output enabled=0
+I20261117 20:43:18.162021 34927 dspark_worker_impl.cpp:78] DSpark device-only decode inputs supported=0, draft prelaunch enabled=0
+I20261117 20:43:18.162909 34927 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 20:43:18.165243 36113 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 20:43:18.165194 36094 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 20:43:18.165199 36096 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 20:43:18.165180 36088 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 20:43:18.165201 36095 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 20:43:18.165205 36099 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 20:43:18.165206 36098 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 20:43:18.165184 36090 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 20:43:18.165210 36100 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 20:43:18.165194 36097 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 20:43:18.165211 36103 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 20:43:18.165184 36089 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 20:43:18.165218 36106 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 20:43:18.165218 36102 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 20:43:18.165222 36108 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 20:43:18.165225 36104 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 20:43:18.165213 36101 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 20:43:18.165185 36093 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 20:43:18.165230 36111 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 20:43:18.165222 36105 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 20:43:18.165234 36110 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 20:43:18.165186 36091 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 20:43:18.165236 36109 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 20:43:18.165236 36112 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 20:43:18.165230 36107 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 20:43:18.165248 36115 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 20:43:18.165247 36114 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 20:43:18.165190 36092 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 20:43:18.165249 36119 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 20:43:18.165251 36118 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 20:43:18.165251 36116 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 20:43:18.165251 36117 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 20:43:18.166277 36095 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 20:43:18.166301 36113 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 20:43:18.166308 36096 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 20:43:18.166350 36094 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 20:43:18.166373 36102 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 20:43:18.166381 36095 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 20:43:18.166394 36099 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 20:43:18.166429 36096 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 20:43:18.166440 36102 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 20:43:18.166553 36094 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 20:43:18.166568 36089 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 20:43:18.166605 36099 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 20:43:18.166687 36107 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 20:43:18.166767 36115 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 20:43:18.166797 36093 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 20:43:18.166906 36093 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 20:43:18.166918 36091 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 20:43:18.166970 36088 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 20:43:18.166996 36106 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 20:43:18.167006 36091 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 20:43:18.167043 36110 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 20:43:18.167090 36088 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 20:43:18.167106 36114 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 20:43:18.167183 36105 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 20:43:18.167191 36098 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 20:43:18.167253 36098 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 20:43:18.167335 36104 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 20:43:18.167423 36090 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 20:43:18.167428 36097 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 20:43:18.167430 36103 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 20:43:18.167455 36100 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 20:43:18.167510 36103 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 20:43:18.167522 36090 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 20:43:18.167536 36097 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 20:43:18.167586 36100 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 20:43:18.167622 36111 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 20:43:18.167634 36112 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 20:43:18.167680 36116 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 20:43:18.167713 36089 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 20:43:18.167749 36108 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 20:43:18.167775 36109 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 20:43:18.167774 36119 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 20:43:18.167798 36101 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 20:43:18.167877 36118 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 20:43:18.167887 36117 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 20:43:18.167918 36101 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 20:43:18.168265 36092 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 20:43:18.168368 36092 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 20:43:18.172346 36113 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 20:43:18.173055 36106 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 20:43:18.173228 36105 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 20:43:18.173331 36104 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 20:43:18.173418 36114 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 20:43:18.173502 32755 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.173565 36109 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 20:43:18.173895 36110 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 20:43:18.174047 36112 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 20:43:18.174115 36111 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 20:43:18.174336 36108 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 20:43:18.175238 36107 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 20:43:18.202829 32751 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.234138 32750 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.256280 32755 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.273396 32751 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 20:43:18.278728 34927 kv_cache_estimation.cpp:757] speculative kv cache capacity adjusted from 10.84 GB to 10.83 GB, target_constant_bytes=33816576, draft_constant_bytes=2654208, target_common_unit_bytes=819200, draft_common_unit_bytes=0, common_blocks_per_unit=2, token_unit_count=14158
+I20261117 20:43:18.279237 32713 llm_engine.cpp:550] worker #0: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279273 32713 llm_engine.cpp:550] worker #1: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279278 32713 llm_engine.cpp:550] worker #2: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279284 32713 llm_engine.cpp:550] worker #3: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279287 32713 llm_engine.cpp:550] worker #4: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279291 32713 llm_engine.cpp:550] worker #5: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279295 32713 llm_engine.cpp:550] worker #6: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279299 32713 llm_engine.cpp:550] worker #7: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279397 34927 kv_cache_estimation.cpp:757] speculative kv cache capacity adjusted from 10.84 GB to 10.83 GB, target_constant_bytes=33816576, draft_constant_bytes=2654208, target_common_unit_bytes=819200, draft_common_unit_bytes=0, common_blocks_per_unit=2, token_unit_count=14159
+I20261117 20:43:18.279590 32713 llm_engine.cpp:550] worker #0: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279597 32713 llm_engine.cpp:550] worker #1: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279601 32713 llm_engine.cpp:550] worker #2: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279605 32713 llm_engine.cpp:550] worker #3: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279609 32713 llm_engine.cpp:550] worker #4: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279613 32713 llm_engine.cpp:550] worker #5: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279625 32713 llm_engine.cpp:550] worker #6: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279629 32713 llm_engine.cpp:550] worker #7: available memory: 10.83 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.95, max_cache_size: 1.00 GB
+I20261117 20:43:18.279637 32713 llm_engine.cpp:632] kv cache capacity: 1.00 GB, blocks: 1024, slot_size: 2048, index_slot_size: 256, indexer_layers: 0, scale_slot_size: 0, linear_slot_size: 0, linear_blocks: 0, state_slots: 0, gdn_state_bytes: 0.00 B, kpool_state_bytes: 0.00 B, max_linear_state_cache_slots: 0, reserved_state_bytes: 0.00 B, n_layers: 40, kv_cache_dtype: auto
+I20261117 20:43:18.279656 32713 kv_cache_shape.cpp:304] Initializing DSV4.1 kv cache with shape: [swa_count=6, c2_count=1269, c1_count=2538]
+I20261117 20:43:18.279951 34927 threadpool.cpp:33] ThreadPool created, thread count 2, pool name KVCacheTransfer.async, cpu_binding false.
+I20261117 20:43:18.281118 34927 transfer_engine_impl.cpp:976] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I20261117 20:43:18.281133 34927 transfer_engine_impl.cpp:115] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.9 port: 32300
+I20261117 20:43:18.281158 34927 transfer_engine_impl.cpp:182] Transfer Engine RPC using P2P handshake, listening on 10.121.32.9:32407
+I20261117 20:43:18.281275 34927 transfer_engine_impl.cpp:263] Auto-discovering topology...
+I20261117 20:43:18.281277 34927 topology.cpp:168] IB device whitelist: mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5
+I20261117 20:43:18.312260 34927 topology.cpp:127] Device mlx5_0 port 1 is available
+I20261117 20:43:18.319068 34927 topology.cpp:127] Device mlx5_1 port 1 is available
+I20261117 20:43:18.347751 34927 topology.cpp:127] Device mlx5_4 port 1 is available
+I20261117 20:43:18.352624 34927 topology.cpp:127] Device mlx5_5 port 1 is available
+I20261117 20:43:18.357347 34927 topology.cpp:127] Device mlx5_6 port 1 is available
+I20261117 20:43:18.361970 34927 topology.cpp:127] Device mlx5_7 port 1 is available
+I20261117 20:43:18.367367 34927 topology.cpp:127] Device mlx5_8 port 1 is available
+I20261117 20:43:18.368849 34927 topology.cpp:218] Skipping device: mlx5_9
+I20261117 20:43:18.368854 34927 topology.cpp:218] Skipping device: mlx5_10
+I20261117 20:43:18.372709 34927 topology.cpp:127] Device mlx5_11 port 1 is available
+I20261117 20:43:18.373868 34927 topology.cpp:218] Skipping device: mlx5_bond_0
+I20261117 20:43:18.375402 34927 transfer_engine_impl.cpp:278] Topology discovery complete. Found 8 HCAs.
+I20261117 20:43:18.375423 34927 rdma_transport.cpp:76] [RDMA] Relaxed ordering disabled via MC_IB_PCI_RELAXED_ORDERING=0. Falling back to strict ordering.
+I20261117 20:43:18.375437 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.380157 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_8/ (network state: with network device)
+I20261117 20:43:18.381191 34927 rdma_context.cpp:288] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:09
+I20261117 20:43:18.381206 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.408339 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_0/ (network state: with network device)
+I20261117 20:43:18.409338 34927 rdma_context.cpp:288] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:09
+I20261117 20:43:18.409353 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.414745 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_1/ (network state: with network device)
+I20261117 20:43:18.417690 34927 rdma_context.cpp:288] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:09
+I20261117 20:43:18.417708 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.422904 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_4/ (network state: with network device)
+I20261117 20:43:18.423691 34927 rdma_context.cpp:288] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:09
+I20261117 20:43:18.423702 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.452203 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_5/ (network state: with network device)
+I20261117 20:43:18.452998 34927 rdma_context.cpp:288] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:09
+I20261117 20:43:18.453011 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.457791 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_6/ (network state: with network device)
+I20261117 20:43:18.458729 34927 rdma_context.cpp:288] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:09
+I20261117 20:43:18.458745 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.463881 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_7/ (network state: with network device)
+I20261117 20:43:18.464962 34927 rdma_context.cpp:288] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:09
+I20261117 20:43:18.464979 34927 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 20:43:18.493430 34927 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_11/ (network state: with network device)
+I20261117 20:43:18.494278 34927 rdma_context.cpp:288] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:09
+I20261117 20:43:18.494439 34927 transfer_engine_impl.cpp:393] installTransport, type=rdma
+I20261117 20:43:18.494445 34927 mooncake_transfer_engine.cpp:197] [Mooncake][PDTransferEngine] transfer engine init success, handshake_endpoint=10.121.32.9:32300
+I20261117 20:43:18.523197 34927 server.cpp:1200] Server[xllm::MooncakeTransferEngineService] is serving on port=32300.
+I20261117 20:43:18.523221 34927 server.cpp:1203] Check out http://worker32009:32300 in web browser.
+I20261117 20:43:18.523231 34927 mooncake_transfer_engine.cpp:217] [Mooncake][PDTransferEngine] ready, handshake_endpoint=10.121.32.9:32300, data_endpoint=10.121.32.9:32407
+I20261117 20:43:18.530630 34927 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+I20261117 20:43:18.530652 34927 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[6, 128, 1, 512]
+I20261117 20:43:18.530656 34927 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: key_cache=[2538, 128, 1, 512], index_cache=[2538, 128, 1, 128], indexer_cache_scale=undefined, swa_cache=[6, 128, 1, 512]
+I20261117 20:43:18.530659 34927 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_2 shapes: key_cache=[1269, 128, 1, 512], index_cache=[1269, 128, 1, 128], indexer_cache_scale=undefined, swa_cache=[6, 128, 1, 512], compress_kv_state=[6, 32, 512], compress_score_state=[6, 32, 512]
+I20261117 20:43:18.635051 34927 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=54
+I20261117 20:43:18.635072 34927 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=40, buffers=54
+I20261117 20:43:18.635557 34927 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,0]
+I20261117 20:43:18.635564 34927 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[6, 128, 1, 512]
+I20261117 20:43:18.641206 34927 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=57
+I20261117 20:43:18.641217 34927 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=3, buffers=3
+I20261117 20:43:18.722733 32713 llm_engine.cpp:875] KV token capacity: N/A (grouped cache)
+I20261117 20:43:18.722782 32713 llm_engine.cpp:632] kv cache capacity: 1.00 GB, blocks: 1024, slot_size: 2048, index_slot_size: 256, indexer_layers: 0, scale_slot_size: 0, linear_slot_size: 0, linear_blocks: 0, state_slots: 0, gdn_state_bytes: 0.00 B, kpool_state_bytes: 0.00 B, max_linear_state_cache_slots: 0, reserved_state_bytes: 0.00 B, n_layers: 3, kv_cache_dtype: auto
+I20261117 20:43:18.722820 32713 kv_cache_shape.cpp:309] Initializing DSV4 kv cache with shape: [swa_count=6, c4_count=0, c128_count=0]
+I20261117 20:43:18.729907 32713 xservice_client.cpp:924] Successfully connected to xservice: 10.121.32.9:31183
+I20261117 20:43:18.730098 32713 xservice_client.cpp:924] Successfully connected to xservice: 10.121.32.9:31181
+I20261117 20:43:18.732172 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name AsyncResponseProcessor.response, cpu_binding false.
+I20261117 20:43:19.103176 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name AsyncResponseProcessor.rpc, cpu_binding false.
+I20261117 20:43:19.103484 32713 threadpool.cpp:33] ThreadPool created, thread count 16, pool name AsyncResponseProcessor.generate_output, cpu_binding false.
+I20261117 20:43:19.484360 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name DisaggPDScheduler.prefill, cpu_binding false.
+I20261117 20:43:19.484637 32713 threadpool.cpp:33] ThreadPool created, thread count 1, pool name DisaggPDScheduler.reservation_release, cpu_binding false.
+E20261117 20:43:19.484913 32713 xllm_server_registry.cpp:55] Server DisaggPDServer0 doesn't exist.
+I20261117 20:43:19.485023 38409 xllm_server_registry.cpp:22] Register server DisaggPDServer0.
+W20261117 20:43:19.486435 38409 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 256, new concurrency: 8
+I20261117 20:43:19.486992 38409 server.cpp:1200] Server[xllm::DisaggPDService] is serving on port=32200.
+I20261117 20:43:19.486999 38409 server.cpp:1203] Check out http://worker32009:32200 in web browser.
+I20261117 20:43:19.487011 38409 xllm_server.cpp:302] Disagg PD server started on address 10.121.32.9:32200, idle_timeout_sec: -1, num_threads: 8
+I20261117 20:43:19.584995 32713 disagg_pd_scheduler.cpp:361] Instance info: instance name = 10.121.32.9:32000, instance rpc_address = 10.121.32.9:32200, instance type = DECODE
+I20261117 20:43:19.585310 34419 mooncake_kv_cache_transfer.cpp:299] get_cache_info success, cluster_id=657658629452758572, addr=10.121.32.9:32407
+I20261117 20:43:19.588169 32713 disagg_pd_scheduler.cpp:380] Instance declares kv_split_size = 1, cp_index_write_mode = 1 (replicated), dp_size = 1
+I20261117 20:43:19.589187 32713 xservice_client.cpp:407] Attached Native Provider Descriptor, engine=10.121.32.9:32000, model=deepseek-v4.1-flash-1017-w4afp8-mt, connector=pull
+I20261117 20:43:19.591053 32713 xservice_client.cpp:436] Success register instance to etcd.
+I20261117 20:43:19.591082 32713 chat_template.cpp:47] Using native C++ chat template for model_type: deepseek_v41
+I20261117 20:43:19.939978 32713 threadpool.cpp:33] ThreadPool created, thread count 4, pool name LLMMaster.request, cpu_binding false.
+W20261117 20:43:20.312049 32713 api_service.cpp:134] HTTP authentication is disabled because api_key is empty. Restrict access at the deployment boundary or set api_key.
+I20261117 20:43:20.312187 32713 xllm_server_registry.cpp:22] Register server HttpServer.
+I20261117 20:43:20.312203 32713 xllm_server.cpp:89] Use API route mode: master_node
+W20261117 20:43:20.313918 32713 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 256, new concurrency: 8
+I20261117 20:43:20.314085 32713 server.cpp:1200] Server[xllm::APIService] is serving on port=32000.
+I20261117 20:43:20.314090 32713 server.cpp:1203] Check out http://worker32009:32000 in web browser.
+I20261117 20:43:20.314095 32713 xllm_server.cpp:163] Brpc Server started on port 32000, idle_timeout_s: -1, num_threads: 8
+I20261117 20:43:20.314106 32713 xllm_server.cpp:176]      Started server process [32713]
+I20261117 20:43:20.314109 32713 xllm_server.cpp:177]      Waiting for application startup.
+I20261117 20:43:20.314111 32713 xllm_server.cpp:178]      Application startup complete.
+I20261117 20:43:26.262795 37300 disagg_pd_scheduler.cpp:1898] Successfully linked instance, instance_name: 10.121.32.7:22000, prefill_kv_split_size: 1
+I20261117 20:43:26.262861 37300 disagg_pd_service_impl.cpp:688] ensure_link ready prefill=10.121.32.7:22000 decode=10.121.32.9:32000 link_generation=1
+I20261117 20:43:36.360927 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=57, packed_regions=57, bind_ms=0.042631, move_ms=22.9907, success=true
+I20261117 20:43:36.361276 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008141, move_ms=3e-05, success=true
+I20261117 20:43:36.361512 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004326, move_ms=4e-05, success=true
+I20261117 20:43:36.361884 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.006359, move_ms=3e-05, success=true
+I20261117 20:43:36.362121 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004456, move_ms=3e-05, success=true
+I20261117 20:43:36.362255 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004336, move_ms=4e-05, success=true
+I20261117 20:43:36.362396 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004747, move_ms=4e-05, success=true
+I20261117 20:43:36.362547 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005447, move_ms=4e-05, success=true
+W20261117 20:43:36.365548 38415 batch.cpp:424] dp_balance_shuffle_seqs is not implemented for current device
+I20261117 20:43:40.281100 34927 musa_custom_all_reduce.cpp:548] [MUSA_TP_REDUCE] backend=custom, group=tp_group, rank=0, world_size=8, dtype=BFloat16, shape=[3, 5120], bytes=30720, out_of_place=true
+I20261117 20:43:40.281133 34927 decoder.h:353] Native V4.1 decode Attention TP backend=custom, group_size=8, bytes=30720
+I20261117 20:43:40.934010 34927 moe.h:235] Native V4.1 decode routed EP backend=custom, group_size=8, bytes=61440
+I20261117 20:43:41.201112 34927 musa_custom_all_reduce.cpp:677] Registered 6 custom-allreduce graph buffers for group tp_group, generation=0
+I20261117 20:43:41.203202 34927 draft_graph.h:128] Native V4.1 read-only draft Graph captured, rows=3; context writes and vocabulary/Markov heads outside
+I20261117 20:43:41.209455 34927 deepseek_v41_native.h:391] Native V4.1 model forward on a valid nondefault stream, with explicit input/output fences and output storage registration
+I20261117 20:43:41.211119 34927 deepseek_v41_native.h:804] Native DSpark target checkpoint bytes=201232; selective_commit=1; rejected writes restored, accepted prefix retained
+I20261117 20:43:48.845163 34927 musa_custom_all_reduce.cpp:677] Registered 80 custom-allreduce graph buffers for group tp_group, generation=1
+I20261117 20:43:48.847227 34927 decode_graph.h:296] Native V4.1 full decoder Graph captured; capacity=512, rows=4, parity=1; warmup/capture cache writes restored; Engram lookup/head outside
+I20261117 20:43:48.896224 38384 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-7ZGJRQfd2FiRMsH8dVWV6r, x-request-id: 01a1e988-a8c4-7eed-bf9b-9b3c14d60cba, outcome: success, status_code: 0
+I20261117 20:43:48.896301 38384 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-7ZGJRQfd2FiRMsH8dVWV6r, x-request-id: 01a1e988-a8c4-7eed-bf9b-9b3c14d60cba, sequence: 0, finish_reason: stop, prompt_tokens: 19, generated_tokens: 4, queue_to_batch: 6293.5ms, ttft: 6263.0ms, total_latency: 18824.4ms, avg tpot: 4187.1ms, generation speed: 0.3 tokens/s, max_tokens: 64, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 3, speculative_proposed_tokens: 3, speculative_token_acceptance_rate: 1.0000
+I20261117 20:43:49.793642 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=57, packed_regions=57, bind_ms=0.086453, move_ms=1.2349, success=true
+I20261117 20:43:49.794062 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.016193, move_ms=4e-05, success=true
+I20261117 20:43:49.794343 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007631, move_ms=4e-05, success=true
+I20261117 20:43:49.794605 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007711, move_ms=3e-05, success=true
+I20261117 20:43:49.794826 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008573, move_ms=2e-05, success=true
+I20261117 20:43:49.795017 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008232, move_ms=3e-05, success=true
+I20261117 20:43:49.795233 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.009073, move_ms=3e-05, success=true
+I20261117 20:43:49.795405 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.006709, move_ms=3e-05, success=true
+I20261117 20:43:49.849757 38385 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-tuxN9Q52fBpFFj7QzcSSwR, x-request-id: 01a1e988-f324-70c9-8737-7170f4933d36, outcome: success, status_code: 0
+I20261117 20:43:49.849815 38385 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-tuxN9Q52fBpFFj7QzcSSwR, x-request-id: 01a1e988-f324-70c9-8737-7170f4933d36, sequence: 0, finish_reason: stop, prompt_tokens: 15, generated_tokens: 2, queue_to_batch: 883.4ms, ttft: 877.0ms, total_latency: 936.5ms, avg tpot: 59.5ms, generation speed: 33.6 tokens/s, max_tokens: 64, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 1, speculative_proposed_tokens: 3, speculative_token_acceptance_rate: 0.3333
+I20261117 20:43:54.698098 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.045374, move_ms=0.648495, success=true
+I20261117 20:43:54.698570 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007921, move_ms=4e-05, success=true
+I20261117 20:43:54.698859 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004417, move_ms=4e-05, success=true
+I20261117 20:43:54.699043 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004767, move_ms=3e-05, success=true
+I20261117 20:43:54.699265 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004226, move_ms=3e-05, success=true
+I20261117 20:43:54.699419 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005819, move_ms=4e-05, success=true
+I20261117 20:43:54.699581 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004076, move_ms=3e-05, success=true
+I20261117 20:43:54.699678 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003855, move_ms=3e-05, success=true
+I20261117 20:43:55.362736 34927 musa_custom_all_reduce.cpp:677] Registered 6 custom-allreduce graph buffers for group tp_group, generation=2
+I20261117 20:43:55.364622 34927 draft_graph.h:128] Native V4.1 read-only draft Graph captured, rows=3; context writes and vocabulary/Markov heads outside
+I20261117 20:44:00.766238 34927 musa_custom_all_reduce.cpp:677] Registered 80 custom-allreduce graph buffers for group tp_group, generation=3
+I20261117 20:44:00.769364 34927 decode_graph.h:296] Native V4.1 full decoder Graph captured; capacity=512, rows=4, parity=0; warmup/capture cache writes restored; Engram lookup/head outside
+I20261117 20:44:05.833812 34927 musa_custom_all_reduce.cpp:677] Registered 80 custom-allreduce graph buffers for group tp_group, generation=4
+I20261117 20:44:05.836062 34927 decode_graph.h:296] Native V4.1 full decoder Graph captured; capacity=512, rows=4, parity=1; warmup/capture cache writes restored; Engram lookup/head outside
+I20261117 20:44:09.223554 34927 musa_custom_all_reduce.cpp:677] Registered 6 custom-allreduce graph buffers for group tp_group, generation=5
+I20261117 20:44:09.225250 34927 draft_graph.h:128] Native V4.1 read-only draft Graph captured, rows=3; context writes and vocabulary/Markov heads outside
+I20261117 20:44:14.544212 34927 musa_custom_all_reduce.cpp:677] Registered 80 custom-allreduce graph buffers for group tp_group, generation=6
+I20261117 20:44:14.547022 34927 decode_graph.h:296] Native V4.1 full decoder Graph captured; capacity=512, rows=4, parity=1; warmup/capture cache writes restored; Engram lookup/head outside
+I20261117 20:44:20.442389 34927 musa_custom_all_reduce.cpp:677] Registered 80 custom-allreduce graph buffers for group tp_group, generation=7
+I20261117 20:44:20.444839 34927 decode_graph.h:296] Native V4.1 full decoder Graph captured; capacity=512, rows=4, parity=0; warmup/capture cache writes restored; Engram lookup/head outside
+I20261117 20:44:22.711275 38386 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-73AzV6Z73hRqZpEyX8moN5, x-request-id: 01a1e989-08c2-7a4f-a21f-1dd0b255544d, outcome: success, status_code: 0
+I20261117 20:44:22.711345 38386 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-73AzV6Z73hRqZpEyX8moN5, x-request-id: 01a1e989-08c2-7a4f-a21f-1dd0b255544d, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 252.4ms, ttft: 246.0ms, total_latency: 28262.8ms, avg tpot: 109.9ms, generation speed: 9.1 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 148, speculative_proposed_tokens: 321, speculative_token_acceptance_rate: 0.4611
+I20261117 20:44:28.077708 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.122595, move_ms=1.17963, success=true
+I20261117 20:44:28.078130 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.0142, move_ms=3e-05, success=true
+I20261117 20:44:28.078377 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.016394, move_ms=5e-05, success=true
+I20261117 20:44:28.078573 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008522, move_ms=4e-05, success=true
+I20261117 20:44:28.078739 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.018927, move_ms=3e-05, success=true
+I20261117 20:44:28.078898 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.013339, move_ms=4e-05, success=true
+I20261117 20:44:28.079177 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.01393, move_ms=3e-05, success=true
+I20261117 20:44:28.079324 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007, move_ms=3e-05, success=true
+I20261117 20:44:33.339874 38387 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-ySvqgkjMGW7Fyhs3rZYj4q, x-request-id: 01a1e989-8a6c-76e7-b4cb-a764502b7682, outcome: success, status_code: 0
+I20261117 20:44:33.339926 38387 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-ySvqgkjMGW7Fyhs3rZYj4q, x-request-id: 01a1e989-8a6c-76e7-b4cb-a764502b7682, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 251.6ms, ttft: 245.0ms, total_latency: 5511.0ms, avg tpot: 20.7ms, generation speed: 48.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 148, speculative_proposed_tokens: 321, speculative_token_acceptance_rate: 0.4611
+I20261117 20:44:33.807219 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.056541, move_ms=0.695322, success=true
+I20261117 20:44:33.807533 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008533, move_ms=3e-05, success=true
+I20261117 20:44:33.807888 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004977, move_ms=5e-05, success=true
+I20261117 20:44:33.808101 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004005, move_ms=3e-05, success=true
+I20261117 20:44:33.808385 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005168, move_ms=3e-05, success=true
+I20261117 20:44:33.808538 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004196, move_ms=3e-05, success=true
+I20261117 20:44:33.808686 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004747, move_ms=3e-05, success=true
+I20261117 20:44:33.808869 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003555, move_ms=3e-05, success=true
+I20261117 20:44:39.073321 38384 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-JCAooyMn5RvQnaoUKX6Yy8, x-request-id: 01a1e989-a0bf-7478-8b8d-4897b49054fd, outcome: success, status_code: 0
+I20261117 20:44:39.073411 38384 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-JCAooyMn5RvQnaoUKX6Yy8, x-request-id: 01a1e989-a0bf-7478-8b8d-4897b49054fd, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 261.9ms, ttft: 257.0ms, total_latency: 5525.2ms, avg tpot: 20.7ms, generation speed: 48.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 148, speculative_proposed_tokens: 321, speculative_token_acceptance_rate: 0.4611
+I20261117 20:44:39.387442 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.077951, move_ms=1.17519, success=true
+I20261117 20:44:39.387898 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.01394, move_ms=4e-05, success=true
+I20261117 20:44:39.388208 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007952, move_ms=5e-05, success=true
+I20261117 20:44:39.388379 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00689, move_ms=3e-05, success=true
+I20261117 20:44:39.388538 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008212, move_ms=3e-05, success=true
+I20261117 20:44:39.388684 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00732, move_ms=2e-05, success=true
+I20261117 20:44:39.388865 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007761, move_ms=3e-05, success=true
+I20261117 20:44:39.389066 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004917, move_ms=2e-05, success=true
+I20261117 20:44:44.677040 38385 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-FX4fd8KhSeUkGjqKGHrymn, x-request-id: 01a1e989-b725-7d77-91f9-9ee3297d4288, outcome: success, status_code: 0
+I20261117 20:44:44.677119 38385 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-FX4fd8KhSeUkGjqKGHrymn, x-request-id: 01a1e989-b725-7d77-91f9-9ee3297d4288, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 300.1ms, ttft: 295.0ms, total_latency: 5587.2ms, avg tpot: 20.8ms, generation speed: 48.4 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 148, speculative_proposed_tokens: 321, speculative_token_acceptance_rate: 0.4611
+I20261117 20:44:44.964745 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.074336, move_ms=1.19683, success=true
+I20261117 20:44:44.965116 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.014771, move_ms=3e-05, success=true
+I20261117 20:44:44.965379 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007881, move_ms=5e-05, success=true
+I20261117 20:44:44.965616 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007651, move_ms=3e-05, success=true
+I20261117 20:44:44.965837 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008803, move_ms=3e-05, success=true
+I20261117 20:44:44.966023 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007891, move_ms=2e-05, success=true
+I20261117 20:44:44.966195 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007241, move_ms=4e-05, success=true
+I20261117 20:44:44.966312 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005107, move_ms=2e-05, success=true
+I20261117 20:44:50.257880 38386 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-uy78aSRRuqZkcoUKPzjTnp, x-request-id: 01a1e989-cd09-773f-85be-16b65ecefbda, outcome: success, status_code: 0
+I20261117 20:44:50.257946 38386 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-uy78aSRRuqZkcoUKPzjTnp, x-request-id: 01a1e989-cd09-773f-85be-16b65ecefbda, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 272.7ms, ttft: 268.0ms, total_latency: 5564.2ms, avg tpot: 20.8ms, generation speed: 48.3 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 148, speculative_proposed_tokens: 321, speculative_token_acceptance_rate: 0.4611
+I20261117 20:44:50.534093 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.071982, move_ms=1.23001, success=true
+I20261117 20:44:50.534430 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.012698, move_ms=3.1e-05, success=true
+I20261117 20:44:50.534789 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008552, move_ms=5e-05, success=true
+I20261117 20:44:50.534972 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00677, move_ms=3e-05, success=true
+I20261117 20:44:50.535152 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007661, move_ms=3e-05, success=true
+I20261117 20:44:50.535312 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008291, move_ms=3.1e-05, success=true
+I20261117 20:44:50.535454 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00736, move_ms=3e-05, success=true
+I20261117 20:44:50.535609 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004706, move_ms=3e-05, success=true
+I20261117 20:44:55.811791 38387 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-54czSy69YsRiAkSsdG8EHa, x-request-id: 01a1e989-e2d5-7fbd-80eb-5d5dec92c963, outcome: success, status_code: 0
+I20261117 20:44:55.811866 38387 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-54czSy69YsRiAkSsdG8EHa, x-request-id: 01a1e989-e2d5-7fbd-80eb-5d5dec92c963, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 262.4ms, ttft: 257.0ms, total_latency: 5537.4ms, avg tpot: 20.7ms, generation speed: 48.5 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 148, speculative_proposed_tokens: 321, speculative_token_acceptance_rate: 0.4611
+I20261117 20:45:54.579875 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.094645, move_ms=1.22521, success=true
+I20261117 20:45:54.580261 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.015171, move_ms=4.1e-05, success=true
+I20261117 20:45:54.580582 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008192, move_ms=6e-05, success=true
+I20261117 20:45:54.580818 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00718, move_ms=3e-05, success=true
+I20261117 20:45:54.580986 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.008502, move_ms=2e-05, success=true
+I20261117 20:45:54.581193 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00723, move_ms=3e-05, success=true
+I20261117 20:45:54.581321 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00727, move_ms=3e-05, success=true
+I20261117 20:45:54.581452 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005398, move_ms=3e-05, success=true
+I20261117 20:45:54.783842 38384 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-qGiZFY4MFYd4vKBZJGR7dv, x-request-id: 01a1e98a-dd05-7a11-8ce7-2a0a1f2a9383, outcome: success, status_code: 0
+I20261117 20:45:54.783900 38384 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-qGiZFY4MFYd4vKBZJGR7dv, x-request-id: 01a1e98a-dd05-7a11-8ce7-2a0a1f2a9383, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 8, queue_to_batch: 259.7ms, ttft: 254.0ms, total_latency: 461.4ms, avg tpot: 29.6ms, generation speed: 38.6 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 3, speculative_proposed_tokens: 12, speculative_token_acceptance_rate: 0.2500
+I20261117 20:45:55.042615 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.044714, move_ms=1.22386, success=true
+I20261117 20:45:55.043063 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.009013, move_ms=3e-05, success=true
+I20261117 20:45:55.043360 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005348, move_ms=5e-05, success=true
+I20261117 20:45:55.043588 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004457, move_ms=3e-05, success=true
+I20261117 20:45:55.043778 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005207, move_ms=3e-05, success=true
+I20261117 20:45:55.043917 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004006, move_ms=3e-05, success=true
+I20261117 20:45:55.044109 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005407, move_ms=0.000121, success=true
+I20261117 20:45:55.044263 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003606, move_ms=0.00019, success=true
+I20261117 20:45:55.240334 38385 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-XX86SXg4Rzp4Xsh8b8umuD, x-request-id: 01a1e98a-dee3-7520-8f37-da5acf87b900, outcome: success, status_code: 0
+I20261117 20:45:55.240396 38385 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-XX86SXg4Rzp4Xsh8b8umuD, x-request-id: 01a1e98a-dee3-7520-8f37-da5acf87b900, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 8, queue_to_batch: 255.5ms, ttft: 250.0ms, total_latency: 450.8ms, avg tpot: 28.7ms, generation speed: 39.8 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 3, speculative_proposed_tokens: 12, speculative_token_acceptance_rate: 0.2500
+I20261117 20:45:55.244983 37218 api_service.cpp:1659] Starting profiler.
+I20261117 20:45:55.245030 37218 llm_engine.cpp:1754] Starting profiler on 8 worker(s).
+I20261117 20:45:55.245114 34423 worker_impl.cpp:1957] Starting profiling with backend: torch
+ERROR: External init callback must run in same thread as registerClient (-335546816 != -1433970112)
+I20261117 20:45:56.000644 34927 torch_profiler.cpp:149] Refreshed 8 native MUSA graphs for profiler kernel visibility
+I20261117 20:45:56.000674 34927 torch_profiler.cpp:154] Torch profiler started (in-process Kineto). The trace will be written on /stop_profile; no external profiler is required.
+I20261117 20:45:56.009783 37218 api_service.cpp:1665] Profiler started.
+I20261117 20:46:05.835255 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.066625, move_ms=1.21686, success=true
+I20261117 20:46:05.835690 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.023343, move_ms=3e-05, success=true
+I20261117 20:46:05.836059 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007351, move_ms=3e-05, success=true
+I20261117 20:46:05.836268 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007661, move_ms=2e-05, success=true
+I20261117 20:46:05.836480 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007331, move_ms=2e-05, success=true
+I20261117 20:46:05.836618 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.007521, move_ms=3e-05, success=true
+I20261117 20:46:05.836778 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.00746, move_ms=4e-05, success=true
+I20261117 20:46:05.836928 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.005377, move_ms=3e-05, success=true
+I20261117 20:46:11.082103 38386 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-2zWRQ6VkgY5ZqwpH3dYqXo, x-request-id: 01a1e98a-e3ad-7e6b-a566-d49c25d9e20c, outcome: success, status_code: 0
+I20261117 20:46:11.082185 38386 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-2zWRQ6VkgY5ZqwpH3dYqXo, x-request-id: 01a1e98a-e3ad-7e6b-a566-d49c25d9e20c, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 8, queue_to_batch: 9821.5ms, ttft: 9786.0ms, total_latency: 15065.9ms, avg tpot: 754.3ms, generation speed: 1.5 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 3, speculative_proposed_tokens: 12, speculative_token_acceptance_rate: 0.2500
+I20261117 20:46:11.086386 37087 api_service.cpp:1695] Stopping profiler.
+I20261117 20:46:11.086426 37087 llm_engine.cpp:1778] Stopping profiler on 8 worker(s).
+I20261117 20:46:11.086527 34425 worker_impl.cpp:2005] Stopping profiling with backend: torch
+I20261117 20:46:11.611764 34927 torch_profiler.cpp:201] Restored 8 native MUSA graph execs after profiling
+I20261117 20:46:11.611800 34927 torch_profiler.cpp:206] Torch profiler stopped. Trace written to: /expt/profiling/p57_progress_disabled_v1/sj10/xllm_rank0_32713_1794919571086.pt.trace.json
+I20261117 20:46:11.621616 37087 api_service.cpp:1701] Profiler stopped.
+I20261117 20:46:12.083540 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892700, remote=10.121.32.7:15741, mapping_groups=3, layers=43, regions=59, packed_regions=59, bind_ms=0.050222, move_ms=0.349389, success=true
+I20261117 20:46:12.083856 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892701, remote=10.121.32.7:15193, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.009153, move_ms=4e-05, success=true
+I20261117 20:46:12.084259 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892702, remote=10.121.32.7:16791, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003965, move_ms=4e-05, success=true
+I20261117 20:46:12.084517 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892703, remote=10.121.32.7:15803, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004477, move_ms=2e-05, success=true
+I20261117 20:46:12.084764 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892704, remote=10.121.32.7:15928, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003675, move_ms=3e-05, success=true
+I20261117 20:46:12.084954 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892705, remote=10.121.32.7:15762, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.004115, move_ms=2e-05, success=true
+I20261117 20:46:12.085175 36160 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892706, remote=10.121.32.7:15076, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003686, move_ms=2e-05, success=true
+I20261117 20:46:12.085312 36167 mooncake_kv_cache_transfer.cpp:797] [Mooncake][PDTransfer] direction=pull, cluster_id=513543441376892707, remote=10.121.32.7:15777, mapping_groups=3, layers=43, regions=0, packed_regions=0, bind_ms=0.003315, move_ms=3e-05, success=true
+I20261117 20:46:12.313477 38387 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-12481178814234374860-DK75dX2P5i2ubo8qz6eazT, x-request-id: 01a1e98b-20a9-7ff3-8292-041d0300ce41, outcome: success, status_code: 0
+I20261117 20:46:12.313540 38387 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-DK75dX2P5i2ubo8qz6eazT, x-request-id: 01a1e98b-20a9-7ff3-8292-041d0300ce41, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 8, queue_to_batch: 253.1ms, ttft: 248.0ms, total_latency: 480.1ms, avg tpot: 33.2ms, generation speed: 34.5 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 3, speculative_proposed_tokens: 12, speculative_token_acceptance_rate: 0.2500
+I20261117 20:47:17.463675 32713 xllm_server.cpp:183]      Shutting down
+I20261117 20:47:17.463730 32713 xllm_server.cpp:184]      Waiting for application shutdown.
+I20261117 20:47:17.463735 32713 server.cpp:1260] Server[xllm::APIService] is going to quit
+I20261117 20:47:17.463944 32713 xllm_server.cpp:188]      Application shutdown complete.
+I20261117 20:47:17.463948 32713 xllm_server.cpp:189]      Finished server process [32713]
+I20261117 20:47:17.464087 32713 llm_master.cpp:151] LLMMaster stopping...
+I20261117 20:47:17.858816 32713 server.cpp:1260] Server[xllm::DisaggPDService] is going to quit
+I20261117 20:47:17.859448 32713 xllm_server_registry.cpp:38] Unregister server DisaggPDServer0.
+I20261117 20:47:19.314909 32713 server.cpp:1260] Server[xllm::CollectiveService] is going to quit
+I20261117 20:47:19.315111 32713 xllm_server_registry.cpp:38] Unregister server CollectiveServer0.
+I20261117 20:47:19.315596 32713 server.cpp:1260] Server[xllm::WorkerService] is going to quit
+I20261117 20:47:19.315769 32713 xllm_server_registry.cpp:38] Unregister server DistributeWorkerServer0.

@@ -1,0 +1,16 @@
+{
+  "selection": {
+    "at": "2026-11-17T20:54:41.097333+08:00",
+    "decision_complete": true,
+    "closure_review_complete": true,
+    "run": "p56_short_indexer_on_v1",
+    "source_commit": "980d9da1287ba99a12749d89b89c55e0d8ed233f",
+    "binary_sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f",
+    "closure_document_sha256": "f4412d239c64a5e874bbbabf05232a3e99e5bb9ba6afaa0a1a3226c4644da4f4",
+    "reason": "E56 accepted; E57 no stable gain; current high-priority candidate review complete, not a physical-limit claim",
+    "accuracy_status": "\u4ec5\u901a\u8fc7\u57fa\u7840\u529f\u80fd\u68c0\u67e5\uff0c\u672a\u5b8c\u6210\u6a21\u578b\u7cbe\u5ea6\u9a8c\u6536"
+  },
+  "length": 2048,
+  "formal_requests": 5,
+  "warmup": 1
+}

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host\": \"sj10\", \"name\": \"xiaopang1116_v41_match_decode_sj10\", \"archive_image\": \"sha256:252b800e3b6701e1833c13f8044280baff8ca8a345e83ffac5bf783aed7dbb3b\", \"status\": \"ARCHIVED_AND_REMOVED_WITHOUT_FORCE\"}\n{\"host\": \"sj10\", \"name\": \"xiaopang1116_sglang_decode_sj10\", \"archive_image\": \"sha256:5f7ac6d54ca0d7afdba205b3c12c52a295a16a70891dea3b6f842371df727809\", \"status\": \"ARCHIVED_AND_REMOVED_WITHOUT_FORCE\"}\n{\"host\": \"sj10\", \"removed\": 2, \"kept\": {\"name\": \"xiaopang1117_v41_sg438_decode_sj10\", \"id\": \"7eefcf3aedcb80825833e6b47295689965905518e51823cab8bedecfad6374f3\", \"running\": false, \"image\": \"sha256:1612b9c34896d7efb631975bf49542693c4c6d129554c63f32a31b13edc37337\"}, \"gpu_free\": true}\n",
+  "stderr": ""
+}

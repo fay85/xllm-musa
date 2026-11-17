@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:30:48.520788+08:00\", \"host\": \"sj9\", \"pid\": 10003, \"expected_start_ticks\": \"526883930\", \"command\": \"python3 /data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/00_control/compilation_monitor.py \", \"exe\": \"/usr/bin/python3.10\", \"exe_sha256\": \"b94e9b56bc1f96b18d36a0f1d14308575bb7b5960eda94ae0520f0376e95d12d\", \"normal_TERM_sent\": true, \"still_live\": false}\n",
+  "stderr": ""
+}

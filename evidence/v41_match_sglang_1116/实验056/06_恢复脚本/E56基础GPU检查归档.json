@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/e56_checks_gpu_v1.tar.gz\", \"bytes\": 5159, \"sha256\": \"5a4be9e4a55c084e3fa846c2026d086e7a6ae2c5ddc64853cf877c586206ad2b\", \"at\": \"2026-11-17T19:32:18.517508+08:00\"}\n",
+  "stderr": ""
+}

@@ -1,0 +1,17 @@
+{
+  "at": "2026-11-17T21:25:17.616604+08:00",
+  "host": "sj9",
+  "container": "034c599262ae8136bc51533e86ec79a2bccb27ef843e7f18269c430002bf00f2",
+  "records": [
+    {
+      "pid": 15691,
+      "exe": "/usr/bin/python3.10",
+      "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+      "start_ticks": "528161048",
+      "cmd": "sglang::router                                                                                                                                                                                                                                                                                           ",
+      "D_threads": [],
+      "current_D_threads": []
+    }
+  ],
+  "scope": "Completed own SG benchmark; normal TERM remaining child processes once."
+}

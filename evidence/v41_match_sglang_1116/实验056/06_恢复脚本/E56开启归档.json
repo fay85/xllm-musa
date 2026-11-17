@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p56_short_indexer_on_v1_evidence.tar.gz\", \"bytes\": 5512967, \"sha256\": \"dc37def140b8c7cbc81a7e0826fd77a237f901d9c6de5e00f7bd5e0073cc40fa\", \"at\": \"2026-11-17T20:35:03.781050+08:00\"}\n",
+  "stderr": "addr2line: DWARF error: invalid or unhandled FORM value: 0x23\n"
+}

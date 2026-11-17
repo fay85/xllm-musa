@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"client_published\": \"/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/scripts/sglang_reference_final_client.py\", \"gpu_started\": false}\n",
+  "stderr": ""
+}

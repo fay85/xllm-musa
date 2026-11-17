@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"host\": \"sj10\", \"own_resources_released\": true, \"container_stopped\": \"xiaopang1116_sglang_decode_sj10\", \"gpu_free\": true}\n",
+  "stderr": ""
+}

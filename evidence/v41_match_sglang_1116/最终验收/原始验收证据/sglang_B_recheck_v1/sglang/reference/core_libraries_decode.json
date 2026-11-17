@@ -1,0 +1,67 @@
+[
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libmusa_stub.so",
+    "bytes": 39248,
+    "sha256": "631fa023f89e852e7054f8551d65a65010072594e751a1ae73625ca21493d7a0"
+  },
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libmusart_stub.so",
+    "bytes": 30936,
+    "sha256": "5cf885ae150049103119c66f3186a1bfcb71887a27f36d2b82ffded263aaae41"
+  },
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_kernels.so",
+    "bytes": 889918256,
+    "sha256": "f6bb09265a79082afca9e9ac997876ed2ce9475107e692b9d4c3e721a279592b"
+  },
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2",
+    "bytes": 15598184,
+    "sha256": "e71047cc0479943635c1c5a1271686787a8afe593ccaa5aa5b2a10b2de6e6761"
+  },
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/tvm_ffi/core.cpython-310-x86_64-linux-gnu.so",
+    "bytes": 931792,
+    "sha256": "4fde7ddcb76c2aa0f8f74e42c176f519740e95bbaf62d42335146918b8ffc8be"
+  },
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/tvm_ffi/lib/libtvm_ffi.so",
+    "bytes": 1819088,
+    "sha256": "4419d50f9ac326505029038a796fc4f6cd98903919bc14c264be5088910c604f"
+  },
+  {
+    "path": "/opt/venv/lib/python3.10/site-packages/tvm_ffi/lib/libtvm_ffi_testing.so",
+    "bytes": 1619888,
+    "sha256": "9d1b658866f4102b15c526b947d1c8547ece07b3d4c8cf5eedce88160fb2ecfe"
+  },
+  {
+    "path": "/root/.cache/mate/0.2.6/mp31/cached_ops/gemm_ops/gemm_ops.so",
+    "bytes": 160024,
+    "sha256": "083cac35506c04daa026894edfedcc7707e68b9f32d2af99c32a28605b340e06"
+  },
+  {
+    "path": "/root/.cache/mate/0.2.6/mp31/cached_ops/mla_ops/mla_ops.so",
+    "bytes": 1507384,
+    "sha256": "abe216150cd85ad7377a89b69981007942e9fe60af250f2196146673dc54b7de"
+  },
+  {
+    "path": "/root/.cache/mate/0.2.6/mp31/cached_ops/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7/mp31_masked_moe_gemm_mixed_dtype_bf16_32x256x256_s3_Apertoken_sglang_5da18101e64257b7.so",
+    "bytes": 147856,
+    "sha256": "552ca5a9b422af105fa86c97fc7fd3aeeaa8727a6374dd0497ceb2649ae57f9c"
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libmusa.so.4.3.8",
+    "bytes": 11817488,
+    "sha256": "8eee0afc04c5d07a905e16fb986be3336eff2bb99c98b005498abfaaf7ba31bb"
+  },
+  {
+    "path": "/usr/local/musa-4.3.8/lib/libmccl.so.2.11.4",
+    "bytes": 119949952,
+    "sha256": "9b1b23d66f6ea966105d89b63b8c467be95f600d87117fc224f4e9fc70f8d5a6"
+  },
+  {
+    "path": "/usr/local/musa-4.3.8/lib/libmusart.so.4.3.8",
+    "bytes": 866832,
+    "sha256": "fd884e47c503d0347ad0467f263e9e1b254cc56f840e1f85f78ca82511c57c32"
+  }
+]

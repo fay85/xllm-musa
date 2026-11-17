@@ -1,0 +1,6 @@
+from pathlib import Path
+import json
+v=json.loads('{"decision_complete": true, "run": "p56_short_indexer_on_v1", "source_commit": "980d9da1287ba99a12749d89b89c55e0d8ed233f", "binary_sha256": "7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f", "control_reused_from": "E56 ON original5formal, not new final requests", "decision_evidence_sha256": "3e06a7b23029fead0e01bbe3dda8084054cd09a1a198318806be2641dc205a0b", "at": "2026-11-17T20:40:53.746991+08:00"}')
+p=Path("/expt/00_control/e57_selected_baseline.json")
+with p.open("x") as f:json.dump(v,f,indent=2)
+print(json.dumps(v))

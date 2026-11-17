@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"published\": \"/data/nfs_shared/xiaopang/sglang_v41_reference_20261116/B_recheck_20261117\", \"files\": 7, \"gpu_started\": false}\n",
+  "stderr": ""
+}

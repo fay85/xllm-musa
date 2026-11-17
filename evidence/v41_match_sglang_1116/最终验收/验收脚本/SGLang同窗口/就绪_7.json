@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T21:19:33.480670+08:00\", \"roles\": {\"prefill\": {\"ready\": true, \"status\": 200, \"body\": {\"object\": \"list\", \"data\": [{\"id\": \"deepseek-v4.1-flash-1017-w4afp8-mt\", \"object\": \"model\", \"created\": 1794921573, \"owned_by\": \"sglang\", \"root\": \"deepseek-v4.1-flash-1017-w4afp8-mt\", \"parent\": null, \"max_model_len\": 4096}]}}, \"decode\": {\"ready\": true, \"status\": 200, \"body\": {\"object\": \"list\", \"data\": [{\"id\": \"deepseek-v4.1-flash-1017-w4afp8-mt\", \"object\": \"model\", \"created\": 1794921573, \"owned_by\": \"sglang\", \"root\": \"deepseek-v4.1-flash-1017-w4afp8-mt\", \"parent\": null, \"max_model_len\": 4096}]}}}, \"ready\": true}\n",
+  "stderr": ""
+}
