@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/framework/model/model_output.h"
 #include "core/framework/model_context.h"
 #include "core/kernels/musa/mhc_ops.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/rms_norm.h"
@@ -225,6 +226,13 @@ class Glm5NextModelImpl final
                        return embed_tokens_(tokens);
                      })());
     hidden_states = kernel::musa::mhc_expand(hidden_states, hc_mult_);
+
+    // Keep all decoder layers, including the pending mHC post consumed by the
+    // next layer, on one concrete compute stream.  Creating this guard inside
+    // every layer would return to the default stream at each boundary and
+    // enqueue a redundant pair of event handoffs.
+    kernel::musa::TvmffiComputeStreamGuard compute_stream_guard(
+        hidden_states.device());
     std::optional<torch::Tensor> residual;
     std::optional<layer::PendingMHC> pending_mhc;
     std::optional<kernel::musa::Glm5NextIndexerSelection> shared_selection;

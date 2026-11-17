@@ -275,14 +275,21 @@ void ProcessGroup::reduce_scatter(const torch::Tensor& input,
   CHECK(pg_ != nullptr) << "Process group is not initialized.";
   // make sure input is contiguous
   CHECK(input.is_contiguous()) << "input is not contiguous.";
-  std::vector<torch::Tensor> input_tensors = {input};
-  std::vector<torch::Tensor> output_tensors = {output};
-
   c10d::ReduceScatterOptions opts;
   // we use reduce operation SUM for reduce_scatter for default.
   opts.reduceOp = c10d::ReduceOp::SUM;
+#if defined(USE_MUSA)
+  // This is the single-tensor form used by GLM5 KDA.  MCCL dispatches it via
+  // collective(), while reduce_scatter_tensor_coalesced() takes the generic
+  // coalesced path even when it contains only one tensor.
+  torch::Tensor input_buf = input;
+  pg_->_reduce_scatter_base(output, input_buf, opts)->wait();
+#else
+  std::vector<torch::Tensor> input_tensors = {input};
+  std::vector<torch::Tensor> output_tensors = {output};
   pg_->reduce_scatter_tensor_coalesced(output_tensors, input_tensors, opts)
       ->wait();
+#endif
 }
 
 void ProcessGroup::broadcast(torch::Tensor& input, int32_t root_rank) {
