@@ -1,0 +1,30 @@
+[
+  {
+    "name": "Global Track Events",
+    "uri": null
+  },
+  {
+    "name": "CPU runtime / driver thread 47804",
+    "uri": "/track_event_2"
+  },
+  {
+    "name": "GPU kernel stream 22",
+    "uri": "/track_event_3"
+  },
+  {
+    "name": "Native C++ / ATen thread 47804",
+    "uri": "/track_event_1"
+  },
+  {
+    "name": "Process 45607",
+    "uri": "/process_1"
+  },
+  {
+    "name": "Thread 47804",
+    "uri": "/thread_2"
+  },
+  {
+    "name": "Thread 47804 Callstacks",
+    "uri": "/process_1/thread_2_stack_samples_xllm.native_cpp.RecordFunction_entry_backtrace.COUNT"
+  }
+]

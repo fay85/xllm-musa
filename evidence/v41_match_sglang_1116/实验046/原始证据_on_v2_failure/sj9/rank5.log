@@ -1,0 +1,506 @@
+[xllm_musa_backend_init] registered PrivateUse1 backend name musa
+[xllm_musa_backend_init] registered TorchMUSA hooks
+[xllm_musa_backend_init] installed CUDA-to-MUSA dispatch bridge
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261117 10:40:18.118744 60357 config.cpp:751] Invalid port range [42450, 42459], falling back to default [15000, 17000]
+I20261117 10:40:18.125182 60357 xllm.cpp:719] Registered torch_musa PrivateUse1 backend name=musa and hooks
+I20261117 10:40:18.125268 60357 verbose_trace_logger.cpp:68] Verbose trace logging is disabled.
+I20261117 10:40:18.125617 60357 xllm.cpp:590] set worker role to local worker
+I20261117 10:40:18.173888 60357 master.cpp:720] Master init options: Options: [model_path: /work/artifacts/model_view_w4afp8_mt_1017, model_id: deepseek-v4.1-flash-1017-w4afp8-mt, draft_model_path: /work/artifacts/model_view_w4afp8_mt_1017, backend: llm, model_impl: native, limit_image_per_prompt: 8, block_size: 128, max_cache_size: 1073741824, max_memory_utilization: 0.9, enable_prefix_cache: 0, max_encoder_cache_size: 0, max_processor_cache_items: 256, max_linear_state_cache_slots: 0, max_tokens_per_batch: 256, max_seqs_per_batch: 1, max_tokens_per_chunk_for_prefill: 256, num_speculative_tokens: 3, speculative_algorithm: DSpark, draft_sampling_mode: greedy, speculative_suffix_cache_max_depth: 64, speculative_suffix_max_spec_factor: 1, speculative_suffix_max_spec_offset: 0, speculative_suffix_min_token_prob: 0.1, speculative_suffix_max_cached_requests: -1, speculative_suffix_use_tree_spec: 0, enable_mtp_draft_body_tp1: 0, enable_adaptive_speculative_decode: 0, adaptive_speculative_min_gain: 0, num_request_handling_threads: 4, enable_eplb: 0, redundant_experts_num: 1, eplb_update_interval: 1000, eplb_min_peak_load_improvement: 0.05, communication_backend: mccl, rank_tablefile: , expert_parallel_degree: 0, task_type: generate, enable_mla: 0, npu_kernel_backend: AUTO, enable_chunked_prefill: 1, enable_flashcomm1: 0, flashcomm1_min_prefill_tokens: 8192, enable_mmrs_fusion: 0, mmrs_comm_mode: aiv, dp_size: 1, cp_size: 1, ep_size: 8, tp_size: 1, sp_size: 1, cfg_size: 1, vae_size: 1, text_encoder_tp_size: 1, instance_name: 10.121.32.7:22005, master_node_addr: 10.121.32.7:22100, instance_role: PREFILL, transfer_listen_port: 22305, nnodes: 8, node_rank: 5, enable_schedule_overlap: 0, enable_disagg_pd: 1, enable_pd_ooc: 0, enable_offline_inference: 0, enable_sleep_mode: 0, disable_log_stats: 0, kv_cache_dtype: auto, kv_cache_transfer_mode: PULL, etcd_addr: 10.121.32.9:31179, etcd_namespace: xiaopang1117-p46_mhc_dot_on_v2, enable_service_routing: 1, tool_call_parser: , reasoning_parser: , priority_strategy: fcfs, enable_online_preempt_offline: 1, host_blocks_factor: 0, enable_kvcache_store: 0, prefetch_timeout: 120000, prefetch_batch_size: 2, prefetch_valid_blocks_per_batch: 1, layers_wise_copy_batchs: 4, store_protocol: tcp, store_rdma_devices: , store_master_server_address: , store_metadata_server: , store_local_hostname: , enable_multi_stream_parallel: 0, enable_profile_step_time: 0, enable_profile_token_budget: 0, enable_latency_aware_schedule: 0, profile_max_prompt_length: 2048, enable_profile_kv_blocks: 1, disable_ttft_profiling: 0, enable_forward_interruption: 0, enable_graph: 0, enable_graph_mode_decode_no_padding: 1, enable_prefill_piecewise_graph: 0, max_tokens_for_graph_mode: 2048, max_global_ttft_ms: 2147483647, max_global_tpot_ms: 2147483647, max_requests_per_batch: 1, spawn_worker_path: , enable_shm: 0, input_shm_size: 1024, output_shm_size: 128, is_local: 1, beam_width: 1, rec_worker_max_concurrency: 1, master_status: WAKEUP, server_idx: 0]
+I20261117 10:40:18.173952 60357 master.cpp:725] Resolved CP config: cp_size=1, world_size=8, dp_size=1, ep_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261117 10:40:18.173956 60357 master.cpp:803] Creating engine with devices: musa:5
+W20261117 10:40:18.173980 60357 master.cpp:812] Force to disable schedule overlap for prefill instance in disagg pd mode.
+I20261117 10:40:18.173983 60357 master.cpp:900] Using draft devices: musa:5
+I20261117 10:40:18.174018 60357 dist_manager.cpp:203] Multi-node serving world_size = 8, each_node_ranks = 1, current node rank = 5, nnodes = 8, dp_size = 1, cp_size = 1, ep_size = 8, tp_size = 8
+I20261117 10:40:18.408594 60409 worker_server.cpp:109] Create worker server with device: 5
+I20261117 10:40:18.408670 60409 threadpool.cpp:33] ThreadPool created, thread count 5, pool name WorkerService.copy, cpu_binding false.
+I20261117 10:40:18.554484 60409 threadpool.cpp:33] ThreadPool created, thread count 4, pool name WorkerService.request, cpu_binding false.
+I20261117 10:40:18.554983 60409 xllm_server_registry.cpp:22] Register server DistributeWorkerServer5.
+W20261117 10:40:18.558677 60409 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261117 10:40:18.559872 60409 server.cpp:1200] Server[xllm::WorkerService] is serving on port=34055.
+I20261117 10:40:18.559887 60409 server.cpp:1203] Check out http://worker32007:34055 in web browser.
+I20261117 10:40:18.560022 60409 xllm_server.cpp:302] DistributeWorker server started on address 10.121.32.7:34055, idle_timeout_sec: -1, num_threads: 8
+I20261117 10:40:18.560029 60409 worker_server.cpp:159] Worker 5: server address: 10.121.32.7:34055
+I20261117 10:40:18.560997 60409 worker_server.cpp:537] Worker#5 connect to 10.121.32.7:22100 success.
+I20261117 10:40:20.472390 60409 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group world_group, rank=5, world_size=8, algorithm=2, max_bytes=8388608
+I20261117 10:40:21.219601 60409 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=5, world_size=8, enabled=0, max_bytes=8388608
+I20261117 10:40:21.233134 60409 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=5, world_size=8, algorithm=1, max_bytes=8388608
+W20261117 10:40:21.234952 60409 musa_custom_all_reduce.cpp:259] Custom all-reduce disabled for moe_tp_group: unsupported world size 1
+I20261117 10:40:21.808892 60409 worker_server.cpp:209] Worker CP config: cp_size=1, cp_group_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261117 10:40:21.808929 60409 threadpool.cpp:33] ThreadPool created, thread count 1, pool name Worker.async, cpu_binding false.
+I20261117 10:40:21.809127 60409 worker.cpp:55] Speculative decode is enabled, algorithm: DSpark
+I20261117 10:40:21.809170 60409 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 10:40:21.809353 60409 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 10:40:21.809556 60409 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 10:40:21.809679 62461 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:5
+I20261117 10:40:21.809849 62462 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:5
+I20261117 10:40:21.816999 62462 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 10:40:21.821928 62461 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 10:40:21.876821 60357 threadpool.cpp:33] ThreadPool created, thread count 0, pool name LLMEngine.link, cpu_binding false.
+I20261117 10:40:21.876885 60357 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261117 10:40:21.878320 60357 threadpool.cpp:33] ThreadPool created, thread count 0, pool name LLMEngine.link, cpu_binding false.
+I20261117 10:40:21.878328 60357 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261117 10:40:26.723037 62460 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 10:40:26.726161 62460 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261117 10:40:27.568518 62460 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:5
+I20261117 10:40:27.575472 62460 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 10:40:27.806711 62460 worker_impl.cpp:2396] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261117 10:40:28.695843 62828 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 10:40:28.695931 63044 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 10:40:28.695852 62873 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 10:40:28.695855 62888 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 10:40:28.695858 62865 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 10:40:28.695856 62858 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 10:40:28.695866 62911 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 10:40:28.695868 62926 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 10:40:28.695869 62903 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 10:40:28.695878 62918 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 10:40:28.695884 62933 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 10:40:28.695890 62973 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 10:40:28.695866 62895 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 10:40:28.695843 62881 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 10:40:28.695895 62965 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 10:40:28.695896 62941 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 10:40:28.695904 63005 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 10:40:28.695905 62996 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 10:40:28.695885 62950 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 10:40:28.695909 62982 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 10:40:28.695910 62989 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 10:40:28.695911 63020 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 10:40:28.695915 63012 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 10:40:28.695917 63028 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 10:40:28.695899 62958 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 10:40:28.695933 63036 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 10:40:28.695936 63052 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 10:40:28.695852 62844 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 10:40:28.695844 62851 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 10:40:28.695941 63066 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 10:40:28.695844 62837 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 10:40:28.695948 63059 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 10:40:28.697319 62828 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 10:40:28.697691 62873 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 10:40:28.697690 63005 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 10:40:28.697836 63044 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 10:40:28.698195 62982 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 10:40:28.698369 63052 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 10:40:28.698771 62851 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 10:40:28.698778 62888 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 10:40:28.698818 62858 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 10:40:28.698839 63059 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 10:40:28.698899 62911 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 10:40:28.698987 62844 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 10:40:28.698990 62918 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 10:40:28.699014 62865 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 10:40:28.699028 62903 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 10:40:28.699083 62926 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 10:40:28.699369 62837 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 10:40:28.699389 62973 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 10:40:28.699394 62895 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 10:40:28.699420 62881 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 10:40:28.699494 62933 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 10:40:28.699533 62965 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 10:40:28.699566 62996 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 10:40:28.699728 62941 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 10:40:28.699730 62950 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 10:40:28.699738 62989 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 10:40:28.699771 63012 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 10:40:28.699771 63020 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 10:40:28.699851 62958 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 10:40:28.699863 63028 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 10:40:28.700692 63036 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 10:40:28.700701 62828 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 10:40:28.700695 63066 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 10:40:28.700770 62873 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 10:40:28.706121 63005 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 10:40:28.749526 62933 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 10:40:28.749548 62941 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 10:40:28.749553 62903 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 10:40:28.749778 62918 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 10:40:28.749786 62888 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 10:40:28.749799 62858 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 10:40:28.749786 62837 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 10:40:28.749817 62851 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 10:40:28.749799 62844 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 10:40:28.749801 62881 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 10:40:28.749797 62911 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 10:40:28.749807 62926 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 10:40:28.749790 62895 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 10:40:28.749807 62865 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 10:40:28.807230 63020 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 10:40:28.807418 63028 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 10:40:28.807967 62996 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 10:40:28.808185 62958 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 10:40:28.808295 62989 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 10:40:28.808595 62973 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 10:40:28.808615 62982 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 10:40:28.808998 63012 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 10:40:28.809023 62950 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 10:40:28.809033 62965 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 10:40:32.715373 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 0
+I20261117 10:40:36.055105 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 1
+I20261117 10:40:37.858839 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 2
+I20261117 10:40:39.574172 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 3
+I20261117 10:40:41.293712 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 4
+I20261117 10:40:42.977520 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 5
+I20261117 10:40:44.617558 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 6
+I20261117 10:40:46.258585 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 7
+I20261117 10:40:47.920148 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 8
+I20261117 10:40:49.566427 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 9
+I20261117 10:40:51.205677 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 10
+I20261117 10:40:52.826941 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 11
+I20261117 10:40:54.459400 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 12
+I20261117 10:40:56.088008 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 13
+I20261117 10:40:59.227507 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 14
+I20261117 10:41:00.878069 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 15
+I20261117 10:41:02.505887 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 16
+I20261117 10:41:04.127961 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 17
+I20261117 10:41:05.771440 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 18
+I20261117 10:41:07.347244 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 19
+I20261117 10:41:08.919243 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 20
+I20261117 10:41:10.497634 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 21
+I20261117 10:41:12.101747 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 22
+I20261117 10:41:13.769556 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 23
+I20261117 10:41:15.349498 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 24
+I20261117 10:41:16.906100 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 25
+I20261117 10:41:18.488811 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 26
+I20261117 10:41:20.068565 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 27
+I20261117 10:41:21.680927 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 28
+I20261117 10:41:23.243274 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 29
+I20261117 10:41:24.807605 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 30
+I20261117 10:41:26.368472 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 31
+I20261117 10:41:27.947240 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 32
+I20261117 10:41:29.504276 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 33
+I20261117 10:41:31.059356 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 34
+I20261117 10:41:32.613834 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 35
+I20261117 10:41:34.114014 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 36
+I20261117 10:41:35.627638 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 37
+I20261117 10:41:37.137455 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 38
+I20261117 10:41:38.626343 62460 deepseek_v41_native.h:263] Native V4.1 loaded decoder layer 39
+I20261117 10:41:39.631625 62460 deepseek_v41_native.h:990] Native V4.1 full-world EP reduction shares TP communicator
+I20261117 10:41:39.632966 62460 deepseek_v41_native.h:310] Native V4.1 weights ready, expert_format=w4afp8_mt, layers=40, tp=8, ep=8, engram_layers=2
+I20261117 10:41:42.090699 62460 worker_impl.cpp:2413] Weight loading completed, restored ATen threads=1
+I20261117 10:41:42.849426 62460 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 10:41:42.852478 62460 draft_model_config.cpp:356] Overriding draft model_type from deepseek_v41 to deepseek_v41_dspark for block-diffusion speculative decoding
+W20261117 10:41:42.852638 62460 draft_model_config.cpp:82] --num_speculative_tokens=3 overrides DSpark checkpoint dspark_block_size=5.
+I20261117 10:41:42.852643 62460 draft_model_config.cpp:131] DSpark draft compress_ratios=[0,0,0] over 3 draft layers (python_v41=1, from checkpoint tail)
+I20261117 10:41:42.853291 62460 worker_impl.cpp:2396] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261117 10:41:42.854728 62460 deepseek_v41_dspark_native.h:314] Native V4.1 draft TP/EP custom allreduce=0, static_inputs=0, full_draft_graph=0; shared expert remains replicated
+I20261117 10:41:42.854755 63170 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 10:41:42.854823 63264 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 10:41:42.854796 63171 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 10:41:42.854770 63181 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 10:41:42.854815 63273 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 10:41:42.854794 63209 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 10:41:42.854815 63281 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 10:41:42.854806 63249 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 10:41:42.854771 63173 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 10:41:42.854815 63289 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 10:41:42.854765 63176 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 10:41:42.854779 63186 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 10:41:42.854826 63306 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 10:41:42.854777 63190 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 10:41:42.854838 63298 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 10:41:42.854843 63322 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 10:41:42.854781 63203 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 10:41:42.854851 63330 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 10:41:42.854837 63314 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 10:41:42.854853 63338 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 10:41:42.854853 63362 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 10:41:42.854861 63354 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 10:41:42.854849 63347 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 10:41:42.854861 63371 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 10:41:42.854789 63218 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 10:41:42.854764 63172 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 10:41:42.854866 63379 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 10:41:42.854795 63241 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 10:41:42.854786 63197 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 10:41:42.854797 63226 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 10:41:42.854799 63234 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 10:41:42.855552 63171 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 10:41:42.854809 63256 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 10:41:42.856127 63330 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 10:41:42.856158 63218 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 10:41:42.856158 63354 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 10:41:42.856549 63172 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 10:41:42.856626 63289 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 10:41:42.856647 63226 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 10:41:42.856665 63234 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 10:41:42.856698 63273 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 10:41:42.856753 63256 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 10:41:42.856772 63171 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 10:41:42.856853 63281 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 10:41:42.856901 63322 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 10:41:42.856910 63209 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 10:41:42.856963 63209 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 10:41:42.857146 63203 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 10:41:42.857249 63181 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 10:41:42.857260 63362 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 10:41:42.857415 63306 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 10:41:42.857443 63170 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 10:41:42.857442 63176 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 10:41:42.857498 63241 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 10:41:42.857502 63371 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 10:41:42.857649 63190 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 10:41:42.857722 63347 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 10:41:42.857849 63298 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 10:41:42.858026 63249 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 10:41:42.858174 63338 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 10:41:42.858174 63314 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 10:41:42.858237 63218 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 10:41:42.858307 63173 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 10:41:42.858450 63172 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 10:41:42.858485 63173 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 10:41:42.858507 63197 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 10:41:42.858613 63197 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 10:41:42.858629 63226 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 10:41:42.858911 63234 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 10:41:42.859478 63186 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 10:41:42.859529 63379 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 10:41:42.859611 63186 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 10:41:42.859750 63203 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 10:41:42.859961 63264 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 10:41:42.860069 63181 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 10:41:42.860368 63170 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 10:41:42.860526 63176 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 10:41:42.860704 63241 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 10:41:42.861020 63190 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 10:41:42.861269 63249 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 10:41:42.868779 63330 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 10:41:42.871498 63322 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 10:41:42.872195 63273 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 10:41:42.874090 63306 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 10:41:42.875850 63314 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 10:41:42.875902 63281 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 10:41:42.876088 63256 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 10:41:42.876679 63298 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 10:41:42.878552 63289 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 10:41:42.879632 63338 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 10:41:42.881560 63264 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 10:41:51.135989 62460 deepseek_v41_dspark_native.h:143] Native V4.1 DSpark checkpoint loaded:3 pure-SWA stages, experts=128, topk=3, tp=8, ep=8
+I20261117 10:41:51.136051 62460 deepseek_v41_dspark_native.h:147] Native V4.1 DSpark Markov BF16 GEMM, FP32 logits=0
+I20261117 10:41:51.365234 62460 worker_impl.cpp:2413] Weight loading completed, restored ATen threads=1
+I20261117 10:41:51.365350 62460 dflash_worker_impl.cpp:466] Configured DeepSeek-V4 DSpark draft block size: 3
+I20261117 10:41:51.365355 62460 dflash_worker_impl.cpp:468] Configured DeepSeek-V4 DSpark SAS mode: native explicit indices
+I20261117 10:41:51.365671 62460 dspark_worker_impl.cpp:76] DSpark async output enabled=0
+I20261117 10:41:51.365675 62460 dspark_worker_impl.cpp:77] DSpark device-only decode inputs supported=0, draft prelaunch enabled=0
+I20261117 10:41:51.366698 62460 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 10:41:51.369459 63557 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 10:41:51.369495 63568 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 10:41:51.369537 63580 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 10:41:51.369475 63558 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 10:41:51.369477 63562 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 10:41:51.369483 63565 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 10:41:51.369483 63563 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 10:41:51.369490 63567 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 10:41:51.369479 63564 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 10:41:51.369489 63566 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 10:41:51.369467 63555 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 10:41:51.369495 63570 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 10:41:51.369496 63569 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 10:41:51.369462 63559 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 10:41:51.369500 63572 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 10:41:51.369721 63554 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 10:41:51.369508 63573 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 10:41:51.369517 63578 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 10:41:51.369516 63574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 10:41:51.369520 63576 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 10:41:51.369524 63575 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 10:41:51.369526 63577 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 10:41:51.369527 63581 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 10:41:51.369529 63579 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 10:41:51.369531 63582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 10:41:51.369505 63571 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 10:41:51.369539 63583 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 10:41:51.369472 63561 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 10:41:51.369541 63585 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 10:41:51.369544 63584 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 10:41:51.369472 63556 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 10:41:51.369469 63560 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 10:41:51.370457 63568 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 10:41:51.370527 63568 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 10:41:51.370581 63580 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 10:41:51.370603 63567 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 10:41:51.370638 63558 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 10:41:51.370694 63564 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 10:41:51.370697 63572 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 10:41:51.370714 63574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 10:41:51.370757 63567 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 10:41:51.370779 63555 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 10:41:51.370788 63578 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 10:41:51.370812 63558 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 10:41:51.370873 63564 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 10:41:51.370913 63579 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 10:41:51.370916 63577 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 10:41:51.370930 63581 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 10:41:51.370939 63582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 10:41:51.370963 63583 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 10:41:51.371002 63584 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 10:41:51.371011 63561 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 10:41:51.371075 63576 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 10:41:51.371215 63561 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 10:41:51.371429 63562 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 10:41:51.371546 63562 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 10:41:51.371592 63563 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 10:41:51.371706 63571 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 10:41:51.371743 63563 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 10:41:51.371799 63557 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 10:41:51.371811 63559 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 10:41:51.371840 63554 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 10:41:51.371909 63557 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 10:41:51.371948 63554 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 10:41:51.371961 63559 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 10:41:51.372376 63569 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 10:41:51.372462 63569 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 10:41:51.372571 63556 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 10:41:51.372586 63555 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 10:41:51.372692 63556 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 10:41:51.372959 63570 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 10:41:51.372960 63573 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 10:41:51.372994 63585 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 10:41:51.373025 63566 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 10:41:51.373196 63566 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 10:41:51.373318 63560 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 10:41:51.373464 63560 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 10:41:51.373593 63575 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 10:41:51.375468 63565 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 10:41:51.375641 63565 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 10:41:51.376760 63574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 10:41:51.377525 63578 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 10:41:51.378711 63579 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 10:41:51.379205 63576 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 10:41:51.379333 63571 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 10:41:51.379752 63580 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 10:41:51.380798 63572 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 10:41:51.381534 63577 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 10:41:51.382099 63575 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 10:41:51.382956 63570 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 10:41:51.383095 63573 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 10:41:51.548146 62460 kv_cache_estimation.cpp:757] speculative kv cache capacity adjusted from 11.56 GB to 11.56 GB, target_constant_bytes=33816576, draft_constant_bytes=2654208, target_common_unit_bytes=819200, draft_common_unit_bytes=0, common_blocks_per_unit=2, token_unit_count=15107
+I20261117 10:41:51.548661 62460 kv_cache_estimation.cpp:757] speculative kv cache capacity adjusted from 11.56 GB to 11.56 GB, target_constant_bytes=33816576, draft_constant_bytes=2654208, target_common_unit_bytes=819200, draft_common_unit_bytes=0, common_blocks_per_unit=2, token_unit_count=15107
+I20261117 10:41:51.549309 62460 threadpool.cpp:33] ThreadPool created, thread count 2, pool name KVCacheTransfer.async, cpu_binding false.
+I20261117 10:41:51.550203 62460 transfer_engine_impl.cpp:976] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I20261117 10:41:51.550220 62460 transfer_engine_impl.cpp:115] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 22305
+I20261117 10:41:51.550246 62460 transfer_engine_impl.cpp:182] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:16743
+I20261117 10:41:51.550350 62460 transfer_engine_impl.cpp:263] Auto-discovering topology...
+I20261117 10:41:51.550355 62460 topology.cpp:168] IB device whitelist: mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3
+I20261117 10:41:51.574023 62460 topology.cpp:127] Device mlx5_0 port 1 is available
+I20261117 10:41:51.579646 62460 topology.cpp:127] Device mlx5_1 port 1 is available
+I20261117 10:41:51.580516 62460 topology.cpp:218] Skipping device: mlx5_bond_0
+I20261117 10:41:51.585059 62460 topology.cpp:127] Device mlx5_2 port 1 is available
+I20261117 10:41:51.590580 62460 topology.cpp:127] Device mlx5_3 port 1 is available
+I20261117 10:41:51.596077 62460 topology.cpp:127] Device mlx5_4 port 1 is available
+I20261117 10:41:51.601559 62460 topology.cpp:127] Device mlx5_5 port 1 is available
+I20261117 10:41:51.607198 62460 topology.cpp:127] Device mlx5_6 port 1 is available
+I20261117 10:41:51.608110 62460 topology.cpp:218] Skipping device: mlx5_7
+I20261117 10:41:51.608115 62460 topology.cpp:218] Skipping device: mlx5_8
+I20261117 10:41:51.612598 62460 topology.cpp:127] Device mlx5_9 port 1 is available
+I20261117 10:41:51.616289 62460 transfer_engine_impl.cpp:278] Topology discovery complete. Found 8 HCAs.
+I20261117 10:41:51.616330 62460 rdma_transport.cpp:76] [RDMA] Relaxed ordering disabled via MC_IB_PCI_RELAXED_ORDERING=0. Falling back to strict ordering.
+I20261117 10:41:51.616345 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.620944 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_6/ (network state: with network device)
+I20261117 10:41:51.622249 62460 rdma_context.cpp:288] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I20261117 10:41:51.622303 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.627756 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_0/ (network state: with network device)
+I20261117 10:41:51.628966 62460 rdma_context.cpp:288] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I20261117 10:41:51.628978 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.633445 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_1/ (network state: with network device)
+I20261117 10:41:51.634526 62460 rdma_context.cpp:288] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I20261117 10:41:51.634536 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.638927 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_2/ (network state: with network device)
+I20261117 10:41:51.640017 62460 rdma_context.cpp:288] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I20261117 10:41:51.640030 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.668287 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_3/ (network state: with network device)
+I20261117 10:41:51.669510 62460 rdma_context.cpp:288] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I20261117 10:41:51.669526 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.675235 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_4/ (network state: with network device)
+I20261117 10:41:51.676362 62460 rdma_context.cpp:288] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I20261117 10:41:51.676375 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.682066 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_5/ (network state: with network device)
+I20261117 10:41:51.683162 62460 rdma_context.cpp:288] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I20261117 10:41:51.683175 62460 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 10:41:51.712409 62460 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_9/ (network state: with network device)
+I20261117 10:41:51.713330 62460 rdma_context.cpp:288] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+I20261117 10:41:51.713459 62460 transfer_engine_impl.cpp:393] installTransport, type=rdma
+I20261117 10:41:51.713464 62460 mooncake_transfer_engine.cpp:197] [Mooncake][PDTransferEngine] transfer engine init success, handshake_endpoint=10.121.32.7:22305
+I20261117 10:41:51.741225 62460 server.cpp:1200] Server[xllm::MooncakeTransferEngineService] is serving on port=22305.
+I20261117 10:41:51.741246 62460 server.cpp:1203] Check out http://worker32007:22305 in web browser.
+I20261117 10:41:51.741255 62460 mooncake_transfer_engine.cpp:217] [Mooncake][PDTransferEngine] ready, handshake_endpoint=10.121.32.7:22305, data_endpoint=10.121.32.7:16743
+I20261117 10:41:51.747084 62460 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+I20261117 10:41:51.747102 62460 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[6, 128, 1, 512]
+I20261117 10:41:51.747104 62460 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: key_cache=[2538, 128, 1, 512], index_cache=[2538, 128, 1, 128], indexer_cache_scale=undefined, swa_cache=[6, 128, 1, 512]
+I20261117 10:41:51.747107 62460 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_2 shapes: key_cache=[1269, 128, 1, 512], index_cache=[1269, 128, 1, 128], indexer_cache_scale=undefined, swa_cache=[6, 128, 1, 512], compress_kv_state=[6, 32, 512], compress_score_state=[6, 32, 512]
+I20261117 10:41:51.853945 62460 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=54
+I20261117 10:41:51.853971 62460 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=40, buffers=54
+I20261117 10:41:51.854604 62460 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,0]
+I20261117 10:41:51.854612 62460 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[6, 128, 1, 512]
+I20261117 10:41:51.860250 62460 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=57
+I20261117 10:41:51.860262 62460 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=3, buffers=3
+[W1117 10:41:52.710676391 TCPStore.cpp:125] [c10d] recvValue failed on SocketImpl(fd=23, addr=worker32007.cluster.local:50016, remote=worker32007.cluster.local:22101): Connection reset by peer
+Exception raised from recvBytes at /data/dixonqin/torch_compile/pytorch/torch/csrc/distributed/c10d/Utils.hpp:694 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x9c (0x7f12a802115c in /opt/venv/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x62ea002 (0x7f12b731b002 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x62eb3ec (0x7f12b731c3ec in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x62ebf31 (0x7f12b731cf31 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x2c9 (0x7f12b7317b29 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupMCCL::heartbeatMonitor() + 0x382 (0x7f12bf63e702 in /opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2)
+frame #6: <unknown function> + 0xdc253 (0x7f1271fed253 in /usr/lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x94a83 (0x7f1271d5ca83 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #8: clone + 0x44 (0x7f1271deda94 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
+[W1117 10:41:52.712954047 ProcessGroupMCCL.cpp:1278] [PG ID 0 PG GUID world_group Rank 5] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Connection reset by peer
+[W1117 10:41:53.713133720 TCPStore.cpp:106] [c10d] sendBytes failed on SocketImpl(fd=23, addr=worker32007.cluster.local:50016, remote=worker32007.cluster.local:22101): Broken pipe
+Exception raised from sendBytes at /data/dixonqin/torch_compile/pytorch/torch/csrc/distributed/c10d/Utils.hpp:668 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x9c (0x7f12a802115c in /opt/venv/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x62ea002 (0x7f12b731b002 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x62ea44b (0x7f12b731b44b in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x62ec3e5 (0x7f12b731d3e5 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x2b8 (0x7f12b7317b18 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupMCCL::heartbeatMonitor() + 0x382 (0x7f12bf63e702 in /opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2)
+frame #6: <unknown function> + 0xdc253 (0x7f1271fed253 in /usr/lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x94a83 (0x7f1271d5ca83 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #8: clone + 0x44 (0x7f1271deda94 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
+[W1117 10:41:53.715306407 ProcessGroupMCCL.cpp:1278] [PG ID 0 PG GUID world_group Rank 5] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Broken pipe
+[W1117 10:41:54.715413325 TCPStore.cpp:106] [c10d] sendBytes failed on SocketImpl(fd=23, addr=worker32007.cluster.local:50016, remote=worker32007.cluster.local:22101): Broken pipe
+Exception raised from sendBytes at /data/dixonqin/torch_compile/pytorch/torch/csrc/distributed/c10d/Utils.hpp:668 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x9c (0x7f12a802115c in /opt/venv/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x62ea002 (0x7f12b731b002 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x62ea44b (0x7f12b731b44b in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x62ec3e5 (0x7f12b731d3e5 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x2b8 (0x7f12b7317b18 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupMCCL::heartbeatMonitor() + 0x382 (0x7f12bf63e702 in /opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2)
+frame #6: <unknown function> + 0xdc253 (0x7f1271fed253 in /usr/lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x94a83 (0x7f1271d5ca83 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #8: clone + 0x44 (0x7f1271deda94 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
+[W1117 10:41:54.717555989 ProcessGroupMCCL.cpp:1278] [PG ID 0 PG GUID world_group Rank 5] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Broken pipe
+[W1117 10:41:55.717723044 TCPStore.cpp:106] [c10d] sendBytes failed on SocketImpl(fd=23, addr=worker32007.cluster.local:50016, remote=worker32007.cluster.local:22101): Broken pipe
+Exception raised from sendBytes at /data/dixonqin/torch_compile/pytorch/torch/csrc/distributed/c10d/Utils.hpp:668 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x9c (0x7f12a802115c in /opt/venv/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x62ea002 (0x7f12b731b002 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x62ea44b (0x7f12b731b44b in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x62ec3e5 (0x7f12b731d3e5 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x2b8 (0x7f12b7317b18 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupMCCL::heartbeatMonitor() + 0x382 (0x7f12bf63e702 in /opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2)
+frame #6: <unknown function> + 0xdc253 (0x7f1271fed253 in /usr/lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x94a83 (0x7f1271d5ca83 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #8: clone + 0x44 (0x7f1271deda94 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
+[W1117 10:41:55.720020259 ProcessGroupMCCL.cpp:1278] [PG ID 0 PG GUID world_group Rank 5] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Broken pipe
+[W1117 10:41:56.720148277 TCPStore.cpp:106] [c10d] sendBytes failed on SocketImpl(fd=23, addr=worker32007.cluster.local:50016, remote=worker32007.cluster.local:22101): Broken pipe
+Exception raised from sendBytes at /data/dixonqin/torch_compile/pytorch/torch/csrc/distributed/c10d/Utils.hpp:668 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x9c (0x7f12a802115c in /opt/venv/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x62ea002 (0x7f12b731b002 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x62ea44b (0x7f12b731b44b in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x62ec3e5 (0x7f12b731d3e5 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x2b8 (0x7f12b7317b18 in /opt/venv/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupMCCL::heartbeatMonitor() + 0x382 (0x7f12bf63e702 in /opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so.2)
+frame #6: <unknown function> + 0xdc253 (0x7f1271fed253 in /usr/lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x94a83 (0x7f1271d5ca83 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #8: clone + 0x44 (0x7f1271deda94 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
+[W1117 10:41:56.722238467 ProcessGroupMCCL.cpp:1278] [PG ID 0 PG GUID world_group Rank 5] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Broken pipe
+I20261117 10:41:56.881253 60357 llm_master.cpp:151] LLMMaster stopping...
+E20261117 10:41:56.882278 60357 xllm_server_registry.cpp:55] Server CollectiveServer0 doesn't exist.
+I20261117 10:41:56.882292 60357 server.cpp:1260] Server[xllm::WorkerService] is going to quit
+I20261117 10:41:56.882406 60357 xllm_server_registry.cpp:38] Unregister server DistributeWorkerServer5.

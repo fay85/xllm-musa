@@ -1,0 +1,6 @@
+# Preserve original tool logs and binary traces byte-for-byte.
+*.pftrace binary
+*.db binary
+*.sqlite binary
+*.log -whitespace
+*.txt -whitespace

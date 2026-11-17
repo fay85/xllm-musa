@@ -38,7 +38,8 @@ class DeepseekV41HyperConnection final {
                              double norm_eps,
                              double eps,
                              std::string mate_prenorm_directory = {},
-                             bool decode_fused_prenorm_reduce = false)
+                             bool decode_fused_prenorm_reduce = false,
+                             std::string dot_sinkhorn_directory = {})
       : fn_(std::move(fn)),
         scale_(std::move(scale)),
         base_(std::move(base)),
@@ -46,7 +47,8 @@ class DeepseekV41HyperConnection final {
         norm_eps_(norm_eps),
         eps_(eps),
         mate_prenorm_directory_(std::move(mate_prenorm_directory)),
-        decode_fused_prenorm_reduce_(decode_fused_prenorm_reduce) {
+        decode_fused_prenorm_reduce_(decode_fused_prenorm_reduce),
+        dot_sinkhorn_directory_(std::move(dot_sinkhorn_directory)) {
     CHECK(fn_.defined() && scale_.defined() && base_.defined());
     CHECK(fn_.device().type() == torch::kPrivateUse1);
     CHECK_EQ(fn_.scalar_type(), torch::kFloat32);
@@ -68,6 +70,13 @@ class DeepseekV41HyperConnection final {
     CHECK_LE(iterations_, 1000);
     CHECK(std::isfinite(norm_eps_) && norm_eps_ > 0.0);
     CHECK(std::isfinite(eps_) && eps_ > 0.0 && eps_ < 1.0);
+    if (!dot_sinkhorn_directory_.empty()) {
+      CHECK_EQ(fn_.size(1), 20480);
+      CHECK_EQ(iterations_, 20);
+      // ModelArgs and the device constants use FP32 epsilon values.
+      CHECK_EQ(static_cast<float>(norm_eps_), 1e-20f);
+      CHECK_EQ(static_cast<float>(eps_), 1e-6f);
+    }
   }
 
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -83,6 +92,18 @@ class DeepseekV41HyperConnection final {
     CHECK_EQ(carried_pre.size(1), 4);
     torch::DeviceGuard guard(residual.device());
     const torch::Tensor packed = residual.contiguous();
+    if (!dot_sinkhorn_directory_.empty() && packed.size(0) >= 1 &&
+        packed.size(0) <= 8) {
+      const DeepseekV41ProfileRange dot_range("V41/mHC/dot_sinkhorn");
+      auto [mixes, next_pre, post, comb] =
+          kernel::musa::deepseek_v41_mhc_dot_sinkhorn(
+              packed.flatten(1), fn_, scale_, base_, dot_sinkhorn_directory_);
+      // V4.1 collapses with the PREVIOUS sublayer's pre, even though the
+      // fused SG operator also produces this sublayer's next_pre.
+      torch::Tensor input = kernel::musa::deepseek_v4_hc_pre_combine(
+          packed, carried_pre.contiguous());
+      return {input, next_pre, post, comb};
+    }
     torch::Tensor mixes;
     if (!mate_prenorm_directory_.empty()) {
       // The operator is validated for multiple rows, but keep that policy
@@ -171,6 +192,7 @@ class DeepseekV41HyperConnection final {
   double eps_;
   std::string mate_prenorm_directory_;
   bool decode_fused_prenorm_reduce_ = false;
+  std::string dot_sinkhorn_directory_;
 };
 
 }  // namespace xllm::layer

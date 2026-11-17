@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/expt/scripts/match_e46_formal_client.py", line 73, in <module>
+    if __name__=='__main__':main()
+  File "/expt/scripts/match_e46_formal_client.py", line 31, in main
+    if state.exists() and any(x is not None for x in json.loads(state.read_text()).get('exit_codes',[])):raise RuntimeError('Rank exited during readiness: '+host)
+RuntimeError: Rank exited during readiness: sj10

@@ -44,6 +44,7 @@ struct DeepseekV41DecoderConfig {
   int64_t sinkhorn_iterations = 20;
   double hc_epsilon = 1e-6;
   std::string mhc_prenorm_directory;
+  std::string mhc_dot_sinkhorn_directory;
   bool decode_tp_custom_allreduce = false;
   bool verify_custom_allreduce = false;
   bool decode_mhc_fused_reduce = false;
@@ -82,7 +83,8 @@ class DeepseekV41Decoder final {
                       config_.attention.epsilon,
                       config_.hc_epsilon,
                       config_.mhc_prenorm_directory,
-                      config_.decode_mhc_fused_reduce),
+                      config_.decode_mhc_fused_reduce,
+                      config_.mhc_dot_sinkhorn_directory),
         ffn_hc_(weights_.hyper_connection[3],
                 weights_.hyper_connection[4],
                 weights_.hyper_connection[5],
@@ -90,7 +92,8 @@ class DeepseekV41Decoder final {
                 config_.attention.epsilon,
                 config_.hc_epsilon,
                 config_.mhc_prenorm_directory,
-                config_.decode_mhc_fused_reduce),
+                config_.decode_mhc_fused_reduce,
+                config_.mhc_dot_sinkhorn_directory),
         attention_group_(attention_group) {
     check_norm(weights_.input_norm);
     check_norm(weights_.post_attention_norm);

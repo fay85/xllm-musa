@@ -1,0 +1,41 @@
+{
+  "sj9": {
+    "result": {
+      "exit_codes": [
+        -6,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "control_exit": null,
+      "stopping": true,
+      "automatic_kill": false
+    },
+    "gpu_free_at": "2026-11-17T10:44:55.045645+08:00"
+  },
+  "sj10": {
+    "result": {
+      "exit_codes": [
+        -6,
+        -6,
+        -6,
+        -6,
+        -6,
+        -6,
+        -6,
+        -6
+      ],
+      "control_exit": 0,
+      "stopping": true,
+      "automatic_kill": false
+    },
+    "gpu_free_at": "2026-11-17T10:44:55.129289+08:00"
+  },
+  "status": "FAILED_STARTUP_NO_PERFORMANCE_DATA",
+  "reason": "candidate RMS epsilon used 1e-6 but actual text config specifies 1e-20; HC epsilon remains 1e-6; re-export and repeat checks with actual config",
+  "artifact_sha256": "3b0b5de7fb6d8544b4235ff27b77fec7c23ca0a16ea2b0d6698aaded84edd343"
+}

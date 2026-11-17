@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T10:26:09.294572+08:00\", \"job.json\": {\"pid\": 31830, \"start_ticks\": \"524242639\", \"at\": \"2026-11-17T10:25:23.276735+08:00\"}, \"child.json\": {\"pid\": 31831, \"start_ticks\": \"524242641\", \"command\": [\"python3\", \"/expt/scripts/validate_mhc_dot_dispatch.py\", \"--fixture\", \"/work/correctness/fixtures/w4afp8_mt_layer0_mhc.safetensors\", \"--mate-directory\", \"/expt/artifacts/native_sg438_control_v1/lib/mate\", \"--candidate-directory\", \"/expt/builds/e46_sg_mhc_dot_aot_v2\", \"--output\", \"/expt/diagnostics/e46_native_mhc_dispatch_v1/result.json\"]}, \"finished.json\": {\"exit_code\": 0, \"at\": \"2026-11-17T10:25:38.427411+08:00\"}, \"worker.log\": \"\", \"test.log\": \"I20261117 10:25:36.790700 31831 validate_mhc_dot_dispatch.py:72] Passed 30 native layer dispatch/Graph cases\\n\", \"results\": {\"status\": \"PASS_NATIVE_MODEL_LAYER_DISPATCH\", \"checks\": 30, \"last_check\": {\"part\": \"ffn\", \"rows\": 8, \"trial\": 2, \"route\": \"dot160\", \"all_outputs_exact\": true}}, \"job.json_live\": false, \"child.json_live\": false}\n",
+  "stderr": ""
+}

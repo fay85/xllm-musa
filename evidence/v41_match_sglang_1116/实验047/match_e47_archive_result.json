@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/e47_combine_norm_native_checks_v1.tar.gz\", \"sha256\": \"125541209e698c7d8a19fa698375d1ff8996f52bb47f292b0871c5a7a001eb3c\", \"bytes\": 28240, \"at\": \"2026-11-17T11:20:55.984327+08:00\"}\n",
+  "stderr": ""
+}

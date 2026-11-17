@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.cpp\": \"8bf94ec8cf93879553e1129801797d926901cbec86a7be3161ea6bc32f2b8787\", \"xllm/core/kernels/musa/deepseek_v41_mhc_prenorm.h\": \"446a21eb82766adb98e655f7c74590390adb8f40fb43c8973fc5bef2365f2e8c\", \"tests/core/kernels/musa/v41_mhc_dot_test_module.cpp\": \"1f819ae11936f6fc1358d27530e23004580e4b9c48558b0c13985c7dd6660e37\"}\n",
+  "stderr": ""
+}

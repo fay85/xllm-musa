@@ -7,8 +7,18 @@ SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
 #include <string>
+#include <tuple>
 
 namespace xllm::kernel::musa {
+
+// Frozen SGLang dot160 projection and fused RMS/Sinkhorn, M=1..8.
+// Returns mixes, next_pre, post, comb; it does not collapse carried_pre.
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v41_mhc_dot_sinkhorn(const torch::Tensor& residual_flat,
+                              const torch::Tensor& fn,
+                              const torch::Tensor& scale,
+                              const torch::Tensor& base,
+                              const std::string& directory);
 
 // MATE TF32 prenorm projection plus row square-sum. Only normalized mix
 // coefficients are returned: V4.1's carried/shifted pre-mix stays in the

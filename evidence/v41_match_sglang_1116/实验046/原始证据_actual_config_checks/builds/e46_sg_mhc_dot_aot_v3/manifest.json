@@ -1,0 +1,41 @@
+{
+  "status": "CPU_EXPORTED_REQUIRES_GPU_NUMERIC_AND_GRAPH_CHECKS",
+  "target": {
+    "kind": "musa",
+    "arch": 31
+  },
+  "sg_commit": "7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6",
+  "source_sha256": {
+    "mhc_dot.py": "732cbbc2aa9bb6429d205d6a30ed54a2ebefaaa180e6b64345c4e2ddd68e2ff7",
+    "mhc_stats_projection.py": "8c7eef615fcc301addd81ddd148992498fc0bbc21af879ab7ce5b4f99725258f"
+  },
+  "model_config_sha256": "8072a73cadd4df137cb83777de9ba5ece3062912fb8b299a04a28533e0df7f9c",
+  "dot_library_sha256": "19426a3df6e5bff3bf08109dea605e8bbb5e71859ab9ca1705f82000cfffe4e0",
+  "input_contract": "FP32[M,20480] and FP32[24,20480], M1..8; carried_pre is separate",
+  "reduce_constants": {
+    "NUM_SLICES": 160,
+    "NUM_N_BLOCKS": 1,
+    "SQ_STRIDE": 1,
+    "EPS": 1e-20,
+    "HC_EPS": 1e-06,
+    "SINKHORN_ITERS": 20,
+    "VECTORIZE_SLICES": true,
+    "CONTIGUOUS_ROW": true
+  },
+  "kernels": {
+    "reduce": {
+      "file": "reduce.mubin",
+      "sha256": "42b1d8319c12bd004930fe33f3912176b35cf01d9fe2e6553b5fba71a07a79e3",
+      "bytes": 18728,
+      "symbol": "_mhc_mix_stats_sinkhorn_reduce_kernel",
+      "threads": 32,
+      "shared": 128,
+      "num_ctas": 1,
+      "cluster_dims": [
+        1,
+        1,
+        1
+      ]
+    }
+  }
+}

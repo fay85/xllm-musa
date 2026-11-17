@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/expt/scripts/match_e46_formal_client.py", line 73, in <module>
+    if __name__=='__main__':main()
+  File "/expt/scripts/match_e46_formal_client.py", line 30, in main
+    if done.exists():raise RuntimeError('Role terminal during readiness: '+host)
+RuntimeError: Role terminal during readiness: sj10

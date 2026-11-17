@@ -1,0 +1,47 @@
+{
+  "archive": "/expt/exports/p46_mhc_dot_off_v1_startup_failure.tar.gz",
+  "bytes": 58444,
+  "sha256": "aac5eedf75d1199f20bdc5a9fd567fce4ea3fff65d371ffc16e1a3047ccecce8",
+  "at": "2026-11-17T10:30:51.643132+08:00",
+  "failure": {
+    "sj9": {
+      "result": {
+        "exit_codes": [
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6
+        ],
+        "control_exit": null,
+        "stopping": true,
+        "automatic_kill": false
+      },
+      "gpu_free_at": "2026-11-17T10:30:18.162532+08:00"
+    },
+    "sj10": {
+      "result": {
+        "exit_codes": [
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6,
+          -6
+        ],
+        "control_exit": 0,
+        "stopping": true,
+        "automatic_kill": false
+      },
+      "gpu_free_at": "2026-11-17T10:30:18.758593+08:00"
+    },
+    "status": "FAILED_STARTUP_NO_PERFORMANCE_DATA",
+    "reason": "new optional MHC directory used required-env getter; fixed to optional.value_or empty in full_v2",
+    "artifact_sha256": "64f62cb2a9530de4f19fc1dd5a334b2ad0cc7d89333c79e6865d2d5a55e89df4"
+  }
+}

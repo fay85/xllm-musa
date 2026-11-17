@@ -1,0 +1,53 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def kernel(x_handle: T.handle, weight_handle: T.handle, projection_handle: T.handle, sqrsum_handle: T.handle):
+    num_tokens = T.int32()
+    x = T.match_buffer(x_handle, (num_tokens, 20480), strides=(20480, 1))
+    weight = T.match_buffer(weight_handle, (24, 20480), strides=(20480, 1))
+    projection = T.match_buffer(projection_handle, (num_tokens, 160, 32), strides=(5120, 32, 1))
+    sqrsum = T.match_buffer(sqrsum_handle, (num_tokens, 160), strides=(160, 1))
+    # with T.sblock("root"):
+    for bx in T.thread_binding(160, thread="blockIdx.x"):
+        for tx in T.thread_binding(128, thread="threadIdx.x"):
+            for ty in T.thread_binding(1, thread="threadIdx.y"):
+                for tz in T.thread_binding(1, thread="threadIdx.z"):
+                    with T.sblock("tilelang_root"):
+                        T.reads()
+                        T.writes()
+                        x_raw_shared = T.sblock_alloc_buffer((16, 32), scope="shared.dyn")
+                        x_shared = T.sblock_alloc_buffer((16, 32), "custom[tfloat32]", scope="shared.dyn")
+                        w_shared = T.sblock_alloc_buffer((64, 32), "custom[tfloat32]", scope="shared.dyn")
+                        acc = T.sblock_alloc_buffer((16, 64), scope="local.fragment")
+                        sq_part = T.sblock_alloc_buffer((16, 4), scope="local.fragment")
+                        sq = T.sblock_alloc_buffer((16,), scope="local.fragment")
+                        T.fill(T.region(acc[0, 0], 2, 16, 64), 0)
+                        T.fill(T.region(sq_part[0, 0], 2, 16, 4), 0)
+                        k_base: T.int32 = bx * 128
+                        for kt in T.serial(4, annotations={"num_stages": 2}):
+                            for row in T.parallel(16):
+                                for k in T.parallel(32):
+                                    col: T.int32 = k_base + kt * 32 + k
+                                    x_value: T.float32 = T.if_then_else(row < num_tokens, x[row, col], T.float32(0.0))
+                                    x_raw_shared[row, k] = x_value
+                                    x_shared[row, k] = T.Cast("custom[tfloat32]", x_value)
+                            for j in T.parallel(64):
+                                for k in T.parallel(32):
+                                    col: T.int32 = k_base + kt * 32 + k
+                                    w_value: T.float32 = T.if_then_else(j < 24, weight[j, col], T.float32(0.0))
+                                    w_shared[j, k] = T.Cast("custom[tfloat32]", w_value)
+                            for i in T.parallel(16):
+                                for j in T.parallel(4):
+                                    for q in range(8):
+                                        value: T.float32 = x_raw_shared[i, q * 4 + j]
+                                        if i < num_tokens:
+                                            sq_part[i, j] = sq_part[i, j] + value * value
+                            T.gemm(T.region(x_shared[0, 0], 1, 16, 32), T.region(w_shared[0, 0], 1, 64, 32), T.region(acc[0, 0], 3, 16, 64), T.bool(False), T.bool(True), 16, 64, 32, 1, T.bool(False), 32, 32, 0, 0, 1, 0, 0, 0, 0)
+                        T.reduce(T.region(sq_part[0, 0], 1, 16, 4), T.region(sq[0], 2, 16), "sum", 1, T.bool(True))
+                        for i in T.parallel(16):
+                            for j in T.parallel(32):
+                                if i < num_tokens:
+                                    projection[i, bx, j] = T.if_then_else(j < 24, acc[i, j], T.float32(0.0))
+                        for i in T.parallel(16):
+                            if i < num_tokens:
+                                sqrsum[i, bx] = sq[i]

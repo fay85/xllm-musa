@@ -1,0 +1,1 @@
+{"pid": 58052, "start_ticks": "524542073", "command": ["python3", "/expt/scripts/validate_mhc_combine_norm_v1.py", "--fixture", "/expt/inputs/e47_layer0_norm.safetensors", "--candidate-directory", "/expt/builds/e47_combine_norm_aot_v1", "--output", "/expt/diagnostics/e47_native_combine_norm_gpu_v1/result.json"]}

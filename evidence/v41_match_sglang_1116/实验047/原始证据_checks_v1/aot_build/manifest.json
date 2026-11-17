@@ -1,0 +1,33 @@
+{
+  "status": "CPU_EXPORTED_REQUIRES_GPU_CHECKS",
+  "target": {
+    "kind": "musa",
+    "arch": 31
+  },
+  "source_commit": "7c97bb0e6d8b0f8fd41cd797a77b54f7162c79f6",
+  "source_sha256": "f92a8f921834aa78132af259f568e0d914e8a7c4da15e232e23e6dcbf42d748c",
+  "model_config_sha256": "8072a73cadd4df137cb83777de9ba5ece3062912fb8b299a04a28533e0df7f9c",
+  "constants": {
+    "SX": 20480,
+    "SP": 4,
+    "EPS": 1e-20,
+    "PARTS": 8
+  },
+  "contract": "BF16[M,4,5120], FP32[M,4] carried pre, BF16[5120] weight; M1..8; graph grid Mx8; intermediate combine rounded to BF16",
+  "kernels": {
+    "combine_norm": {
+      "file": "combine_norm.mubin",
+      "sha256": "eb194f6d622ecd27db21f958dea0130c863b6da2fb4bf29dc56823847bbe5549",
+      "bytes": 27408,
+      "symbol": "_mhc_combine_norm_kernel",
+      "threads": 128,
+      "shared": 512,
+      "num_ctas": 1,
+      "cluster_dims": [
+        1,
+        1,
+        1
+      ]
+    }
+  }
+}

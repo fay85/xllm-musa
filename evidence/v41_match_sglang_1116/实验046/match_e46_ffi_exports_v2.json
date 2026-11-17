@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"kernel\": {\"lookup_error\": \"Module has no function 'kernel'\"}, \"main\": {\"found\": true}}\nCreatePlatform failed!\n",
+  "stderr": "/opt/venv/lib/python3.10/site-packages/torch_musa/core/device.py:134: UserWarning: MUSA initialization: MUSA driver initialization failed, you might not have a Mthreads GPU. (Triggered internally at /data/dixonqin/torch_musa/torch_musa/csrc/core/MUSAFunctions.cpp:93.)\n  return torch_musa._MUSAC._musa_getDeviceCount() > 0\nNo MUSA runtime is found, using MUSA_HOME='/usr/local/musa'\n"
+}

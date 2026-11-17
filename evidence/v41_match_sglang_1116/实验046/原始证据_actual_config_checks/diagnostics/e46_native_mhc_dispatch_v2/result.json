@@ -1,0 +1,215 @@
+{
+  "status": "PASS_NATIVE_MODEL_LAYER_DISPATCH",
+  "checks": [
+    {
+      "part": "attn",
+      "rows": 4,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 4,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 4,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "trial": 0,
+      "route": "original_mate",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "trial": 1,
+      "route": "original_mate",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 9,
+      "trial": 2,
+      "route": "original_mate",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 1,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 1,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 1,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 6,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 8,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 8,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "attn",
+      "rows": 8,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 4,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "trial": 0,
+      "route": "original_mate",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "trial": 1,
+      "route": "original_mate",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 9,
+      "trial": 2,
+      "route": "original_mate",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 1,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 1,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 1,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 6,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 8,
+      "trial": 0,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 8,
+      "trial": 1,
+      "route": "dot160",
+      "all_outputs_exact": true
+    },
+    {
+      "part": "ffn",
+      "rows": 8,
+      "trial": 2,
+      "route": "dot160",
+      "all_outputs_exact": true
+    }
+  ]
+}

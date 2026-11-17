@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"directory\": \"/expt/builds/e46_sg_mhc_dot_aot_v2\", \"dot_sha256\": \"19426a3df6e5bff3bf08109dea605e8bbb5e71859ab9ca1705f82000cfffe4e0\", \"reduce_sha256\": \"d574fc04c8bb9712f30dfb0ed278bd008a5f3ec1d68e088228c19cb1607326f1\"}\n",
+  "stderr": ""
+}

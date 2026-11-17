@@ -18,8 +18,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -192,6 +194,25 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         CHECK(std::filesystem::is_regular_file(
             std::filesystem::path(mhc_path_) / filename));
       }
+    }
+    mhc_dot_sinkhorn_path_ =
+        util::get_optional_string_env("XLLM_DSV41_MHC_DOT_SINKHORN_DIR")
+            .value_or("");
+    if (!mhc_dot_sinkhorn_path_.empty()) {
+      for (const char* filename :
+           {"libsg_mhc_dot160.so", "reduce.mubin", "manifest.json"}) {
+        CHECK(std::filesystem::is_regular_file(
+            std::filesystem::path(mhc_dot_sinkhorn_path_) / filename));
+      }
+      std::ifstream manifest_file(mhc_dot_sinkhorn_path_ + "/manifest.json");
+      CHECK(manifest_file.good());
+      const auto manifest = nlohmann::json::parse(manifest_file);
+      const auto& constants = manifest.at("reduce_constants");
+      CHECK_EQ(constants.at("EPS").get<float>(), args_.rms_norm_eps());
+      CHECK_EQ(constants.at("HC_EPS").get<float>(), args_.hc_eps());
+      CHECK_EQ(constants.at("SINKHORN_ITERS").get<int64_t>(),
+               args_.hc_sinkhorn_iters());
+      CHECK_EQ(constants.at("NUM_SLICES").get<int64_t>(), 160);
     }
     const char* expert_format = std::getenv("XLLM_DSV41_EXPERT_FORMAT");
     const std::string_view format =
@@ -1075,6 +1096,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     config.hc_epsilon = args_.hc_eps();
     config.mhc_prenorm_directory = mhc_path_;
+    config.mhc_dot_sinkhorn_directory = mhc_dot_sinkhorn_path_;
     config.decode_mhc_fused_reduce =
         util::get_bool_env("XLLM_DSV41_DECODE_MHC_FUSED_REDUCE", false);
     config.decode_ffn_tail_graph = decode_ffn_tail_graph_;
@@ -1408,6 +1430,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   std::string w4a8_path_;
   std::string dense_prequant_path_;
   std::string mhc_path_;
+  std::string mhc_dot_sinkhorn_path_;
   std::string sparse_path_;
   std::string indexer_aot_path_;
   std::string engram_aot_path_;

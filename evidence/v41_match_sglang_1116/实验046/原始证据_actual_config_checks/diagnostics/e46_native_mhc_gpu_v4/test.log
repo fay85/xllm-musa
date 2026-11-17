@@ -1,0 +1,11 @@
+/opt/venv/lib/python3.10/site-packages/torch/__init__.py:1617: UserWarning: Please use the new API settings to control TF32 behavior, such as torch.backends.cudnn.conv.fp32_precision = 'tf32' or torch.backends.cuda.matmul.fp32_precision = 'ieee'. Old settings, e.g, torch.backends.cuda.matmul.allow_tf32 = True, torch.backends.cudnn.allow_tf32 = True, allowTF32CuDNN() and allowTF32CuBLAS() will be deprecated after Pytorch 2.9. Please see https://pytorch.org/docs/main/notes/cuda.html#tensorfloat-32-tf32-on-ampere-and-later-devices (Triggered internally at /data/dixonqin/torch_compile/pytorch/aten/src/ATen/Context.cpp:80.)
+  _C._set_float32_matmul_precision(precision)
+I20261117 10:50:57.136349 44875 validate_mhc_dot_v3.py:167] attn M=1 control 50.406 -> dot160 38.424 -> control 50.788 us
+I20261117 10:50:58.839513 44875 validate_mhc_dot_v3.py:167] attn M=4 control 47.107 -> dot160 38.976 -> control 46.967 us
+I20261117 10:51:00.547576 44875 validate_mhc_dot_v3.py:167] attn M=6 control 50.231 -> dot160 39.876 -> control 50.601 us
+I20261117 10:51:02.309798 44875 validate_mhc_dot_v3.py:167] attn M=8 control 84.048 -> dot160 38.243 -> control 84.258 us
+I20261117 10:51:03.568552 44875 validate_mhc_dot_v3.py:167] ffn M=1 control 51.159 -> dot160 39.154 -> control 51.156 us
+I20261117 10:51:05.286961 44875 validate_mhc_dot_v3.py:167] ffn M=4 control 47.431 -> dot160 39.272 -> control 47.593 us
+I20261117 10:51:07.074599 44875 validate_mhc_dot_v3.py:167] ffn M=6 control 49.770 -> dot160 38.044 -> control 49.926 us
+I20261117 10:51:08.879496 44875 validate_mhc_dot_v3.py:167] ffn M=8 control 83.915 -> dot160 39.711 -> control 83.934 us
+I20261117 10:51:08.897757 44875 validate_mhc_dot_v3.py:171] Passed 80 numerical and 24 changed-input Graph cases

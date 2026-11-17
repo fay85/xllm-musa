@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"artifact\": \"/expt/artifacts/native_sg438_mhc_dot_v1/bin/xllm\", \"sha256\": \"64f62cb2a9530de4f19fc1dd5a334b2ad0cc7d89333c79e6865d2d5a55e89df4\", \"bytes\": 341750728, \"source_manifest\": \"/expt/builds/e46_native_full_v1/source_manifest.json\", \"source_parent\": \"fdbb896aee75cea8e398a474130812ce36c8c9df\", \"at\": \"2026-11-17T10:27:48.376139+08:00\"}\n",
+  "stderr": ""
+}

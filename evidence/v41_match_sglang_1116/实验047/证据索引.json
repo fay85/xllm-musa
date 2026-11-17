@@ -1,0 +1,131 @@
+{
+  "copied": [
+    {
+      "path": "match_e47_fixture_result.json",
+      "bytes": 576,
+      "sha256": "6061f8d48a33306db96592d615041f1ce72633f983681564b58b6f0028cd7aad"
+    },
+    {
+      "path": "match_e47_gpu_status1.json",
+      "bytes": 5981,
+      "sha256": "89984ffc9b29e9901e32eeb1f6b67885306f4b785815b7b746340d354e869ea0"
+    },
+    {
+      "path": "00_来源与待验假设.md",
+      "bytes": 1512,
+      "sha256": "c6c6b3832c9199fef56b47c0ca8113fec4796513f7c86ce7a84523182f013bc4"
+    },
+    {
+      "path": "01_局部检查结果与不接入模型的决定.md",
+      "bytes": 2923,
+      "sha256": "bd0d108fd50868b9a4adc63b2aca660e0d37f27dddd92352578da393b244054f"
+    },
+    {
+      "path": "match_e47_resource_release.json",
+      "bytes": 161,
+      "sha256": "b23acfbfe0e7c8a596aadcfcd3f744265b18101cbe90b860d1c30559abf3291b"
+    },
+    {
+      "path": "match_e47_native_build_started_v1.json",
+      "bytes": 151,
+      "sha256": "1b237032898110866fb1b73c50627bf22141cdecfa1f3269832b2600bdc9dd9d"
+    },
+    {
+      "path": "归档回执_checks_v1.json",
+      "bytes": 216,
+      "sha256": "b65945d1699549e64198171c01b4b2740cf493a0a2c52fa78dddfb3d8d00d653"
+    },
+    {
+      "path": "match_e47_gpu_started_v1.json",
+      "bytes": 151,
+      "sha256": "d7dbbdf182bd52becd9c79ef20eec4443aa132f026a5c1aaf2d16601582ab0af"
+    },
+    {
+      "path": "match_e47_export_result.json",
+      "bytes": 2464,
+      "sha256": "08ab0b8fa844076dbb63762a39f12134c14330b90752c35682bef75a1faa5a4f"
+    },
+    {
+      "path": "match_e47_archive_result.json",
+      "bytes": 276,
+      "sha256": "4913482621e17126bb94a2dc158ec1bdb01134ed4f9b24389fb11cd94566554c"
+    },
+    {
+      "path": "原始证据_checks_v1/aot_build/manifest.json",
+      "bytes": 929,
+      "sha256": "90652d02359f35bff589e574c0f60510439bd19db12114fe5956e5fd7654e934"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/test.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/finished.json",
+      "bytes": 58,
+      "sha256": "500282ad142d64d4bfd580d343b89257e110f845b3076865e860e227cb5fbd09"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/result.json",
+      "bytes": 31280,
+      "sha256": "d9e29d186040f35c7b4abf44f321ec8d58dd9727688fb7d8517230de64651ec5"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/child.json",
+      "bytes": 313,
+      "sha256": "dae4164db557d02a87f5dd6b24a212f7b87400f9da97626b888f902d743e201b"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/job.json",
+      "bytes": 84,
+      "sha256": "15cf392b415e0b1f43b561c29191c4bc2b484a4c8032bab7706fac1fc8f3bcba"
+    },
+    {
+      "path": "原始证据_checks_v1/checks/resource_release.json",
+      "bytes": 3428,
+      "sha256": "2c5fb9ec98f603c2f4c2a2f1b7ad786132cf8e59a917659befaeb21b21c17755"
+    },
+    {
+      "path": "原始证据_checks_v1/native_build/source_manifest.json",
+      "bytes": 179,
+      "sha256": "65712b77eed360027514662447933c543c425ab51f98eb6a79e1bec7b75a8288"
+    },
+    {
+      "path": "原始证据_checks_v1/native_build/1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "原始证据_checks_v1/native_build/import.log",
+      "bytes": 418,
+      "sha256": "a6100e6e3b88cb6078be385989db5f5fb64490e1df3e4a2adbf859d28df857fe"
+    },
+    {
+      "path": "原始证据_checks_v1/native_build/0.log",
+      "bytes": 3174,
+      "sha256": "2d55b46363d4b0ab763bcf3fc3dca0abb2eaf9bc23cfd5115b529bf5b6f5f360"
+    },
+    {
+      "path": "原始证据_checks_v1/native_build/finished.json",
+      "bytes": 165,
+      "sha256": "242d50f96052f66efea3606f36f4788d3984a3773a8bb31b6766d93927850f8b"
+    },
+    {
+      "path": "原始证据_checks_v1/native_build/commands.json",
+      "bytes": 14863,
+      "sha256": "0586accfbd6d869b3a954ad966dda2b2f9b7ac8e1c14c55ae697981a7943967a"
+    },
+    {
+      "path": "原始证据_checks_v1/fixture/e47_layer0_norm.json",
+      "bytes": 585,
+      "sha256": "5d08a11952a1a60c3fdb00c9b4aa3078097f4ca04d0a253c19ba0d261680d127"
+    }
+  ],
+  "full_raw_nfs": "/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116",
+  "scope": "full traces/binaries/weights retained in NFS; local tar SHA receipts identify complete archives"
+}
