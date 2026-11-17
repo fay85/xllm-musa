@@ -270,9 +270,26 @@ void SchedulerPolicy::drain_request_queue(
     if (queued->sequences()[0]->kv_state().kv_cache_tokens_num() == 0) {
       // New request goes to waiting queue (back = FIFO from MPMC).
       state.prefill_queue.push(queued, /*if_back=*/true);
+    } else if (batch_mode_.enable_chunked_prefill &&
+               queued->sequences()[0]->is_chunked_prefill_stage()) {
+      // Partial prefill continuation. Keep it on the chunk tail so a newer
+      // full prompt cannot be requeued ahead of it.
+      if (batch_mode_.priority_strategy == "fcfs") {
+        state.chunk_queue.push(queued, /*if_back=*/true);
+      } else {
+        state.chunk_queue.push(queued);
+      }
+    } else if (batch_mode_.priority_strategy == "fcfs") {
+      // PD decode handoff already has KV. Continuing runners are requeued at
+      // the front of decode_queue. Putting this admission into
+      // running_requests splices it into that front group, so it takes the
+      // next free slot ahead of requests that already started and are waiting.
+      // Under a full max_seqs batch those waiters never run again. Park the
+      // new admission at the tail and let schedule_decode_from_queue admit it
+      // after the current runners.
+      state.decode_queue.push(queued, /*if_back=*/true);
     } else {
-      // Request from prefill instance in disagg PD mode -- already has KV.
-      state.running_requests.emplace_back(queued);
+      state.decode_queue.push(queued);
     }
   }
 }
