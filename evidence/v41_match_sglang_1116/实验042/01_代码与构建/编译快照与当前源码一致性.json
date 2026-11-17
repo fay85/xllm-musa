@@ -1,0 +1,38 @@
+[
+  {
+    "path": "xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp",
+    "matches": true
+  },
+  {
+    "path": "xllm/core/kernels/musa/deepseek_v41_dense_block32.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/core/layers/musa/deepseek_v41/attention.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/core/layers/musa/deepseek_v41/feed_forward.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/core/layers/musa/deepseek_v41/moe.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/models/llm/musa/deepseek_v41_checkpoint.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+    "matches": true
+  },
+  {
+    "path": "xllm/models/llm/musa/deepseek_v41_native.h",
+    "matches": true
+  }
+]

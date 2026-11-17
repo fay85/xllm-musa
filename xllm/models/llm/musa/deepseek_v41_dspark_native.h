@@ -7,6 +7,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -50,6 +51,16 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     CHECK(options_.device().type() == torch::kPrivateUse1);
     CHECK_EQ(options_.dtype().toScalarType(), torch::kBFloat16);
     w4a8_path_ = required_path("XLLM_DSV41_MATE_W4A8_SO", false);
+    const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
+    if (dense_prequant != nullptr) {
+      dense_prequant_path_ = dense_prequant;
+      CHECK(!dense_prequant_path_.empty());
+      CHECK(std::filesystem::is_regular_file(
+          std::filesystem::path(dense_prequant_path_) / "export_summary.json"));
+      LOG(INFO) << "Native V4.1 preserves FP8 dense weights/scales; AOT="
+                << dense_prequant_path_;
+    }
+
     mhc_path_ = required_path("XLLM_DSV41_MATE_MHC_DIR", true);
     sparse_path_ = required_path("XLLM_DSV41_MATE_SPARSE_SO", false);
     draft_custom_allreduce_ =
@@ -343,6 +354,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     attention.window = args_.window_size();
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -.5);
+    attention.dense_prequant_directory = dense_prequant_path_;
     attention.sparse_library_path = sparse_path_;
     result.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     result.hc_epsilon = args_.hc_eps();
@@ -350,6 +362,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     auto& moe = result.moe;
     moe.expert_format = layer::DeepseekV41ExpertFormat::W4AFP8_MT;
     moe.w4a8_so_path = w4a8_path_;
+    moe.dense_prequant_directory = dense_prequant_path_;
     moe.w4a8_static_activation =
         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
     moe.w4a8_valid_prefix_swiglu =
@@ -378,14 +391,27 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     const std::string attention = prefix + "attn.";
     layer::DeepseekV41DecoderWeights weights;
     auto& attn = weights.attention;
+    if (!dense_prequant_path_.empty()) {
+      attn.projection_fp8_scales.resize(7);
+    }
+    const auto projection = [&](const std::string& name,
+                                size_t index,
+                                std::optional<int64_t> dim = std::nullopt) {
+      if (dense_prequant_path_.empty()) {
+        return checkpoint.dense(name, dim);
+      }
+      auto [weight, scale] = checkpoint.dense_fp8(name, dim);
+      attn.projection_fp8_scales[index] = std::move(scale);
+      return weight;
+    };
     attn.projection = {
-        checkpoint.dense(attention + "wq_a"),
+        projection(attention + "wq_a", 0),
         checkpoint.copy(attention + "q_norm.weight", torch::kBFloat16),
-        checkpoint.dense(attention + "wq_b", /*shard_dim=*/0),
-        checkpoint.dense(attention + "wkv"),
+        projection(attention + "wq_b", 2, /*shard_dim=*/0),
+        projection(attention + "wkv", 3),
         checkpoint.copy(attention + "kv_norm.weight", torch::kBFloat16),
         checkpoint.dense(attention + "wo_a", /*shard_dim=*/0),
-        checkpoint.dense(attention + "wo_b", /*shard_dim=*/1)};
+        projection(attention + "wo_b", 6, /*shard_dim=*/1)};
     const std::string sink_name = checkpoint.has(attention + "attn_sink")
                                       ? attention + "attn_sink"
                                       : attention + "attn_sink.weight";
@@ -430,10 +456,26 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     const std::string ffn = prefix + "ffn.";
     const std::string shared = config.moe.dense ? ffn : ffn + "shared_experts.";
     auto& moe = weights.moe;
-    moe.shared = {checkpoint.dense(shared + "w1"),
-                  checkpoint.dense(shared + "w3"),
-                  checkpoint.dense(shared + "w2")};
-    if (config.moe.shared_expert_tp_reduce) {
+    if (dense_prequant_path_.empty()) {
+      moe.shared = {checkpoint.dense(shared + "w1"),
+                    checkpoint.dense(shared + "w3"),
+                    checkpoint.dense(shared + "w2")};
+    } else {
+      moe.shared.reserve(3);
+      moe.shared_fp8_scales.reserve(3);
+      const std::array<const char*, 3> names = {"w1", "w3", "w2"};
+      for (size_t projection = 0; projection < names.size(); ++projection) {
+        const std::optional<int64_t> dim =
+            config.moe.shared_expert_tp_reduce
+                ? std::optional<int64_t>{projection == 2 ? 1 : 0}
+                : std::nullopt;
+        auto [weight, scale] =
+            checkpoint.dense_fp8(shared + names[projection], dim);
+        moe.shared.emplace_back(std::move(weight));
+        moe.shared_fp8_scales.emplace_back(std::move(scale));
+      }
+    }
+    if (config.moe.shared_expert_tp_reduce && dense_prequant_path_.empty()) {
       const int64_t intermediate = moe.shared[0].size(0);
       CHECK_EQ(intermediate % tp_size(), 0);
       const int64_t local_intermediate = intermediate / tp_size();
@@ -498,6 +540,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   ProcessGroup* tp_group_;
   ProcessGroup* ep_group_;
   std::string w4a8_path_;
+  std::string dense_prequant_path_;
   std::string mhc_path_;
   std::string sparse_path_;
   bool draft_custom_allreduce_ = false;

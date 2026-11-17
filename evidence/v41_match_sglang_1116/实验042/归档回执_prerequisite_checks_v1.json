@@ -1,0 +1,22 @@
+{
+  "archive": "/expt/exports/e42_prerequisite_checks_v1.tar.gz",
+  "bytes": 199232,
+  "sha256": "25d5dc20b53cc9264b77c45d347773b5a8475ddffdf380a0671258790dcb9085",
+  "checks": {
+    "all_pass": true,
+    "first_job_exit": 1,
+    "harness_error": "Missing legacy NativeV41SharedMlp binding; first 198 projection and44 graph completed; only remaining shared checks rerun with original BF16 projections and matching float32 SwiGLU reference.",
+    "cpu_unique_projection_configs": 22,
+    "projection": 198,
+    "projection_max_rms": 0.0002531064674258232,
+    "projection_graph": 44,
+    "projection_graph_max_rms": 0.00039241378544829786,
+    "shared": 24,
+    "shared_max_rms": 0.0026495622005313635,
+    "shared_graph": 12,
+    "shared_graph_max_rms": 0.0011355136521160603,
+    "module_sha256": "76d1c539fc30055bd3ae34d51d6ed516ac34dec151b2a950fd68239b85d30570",
+    "at": "2026-11-17T07:45:34.857881+08:00",
+    "scope": "Local operator/loader/graph checks only, no full model acceptance"
+  }
+}

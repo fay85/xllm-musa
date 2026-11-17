@@ -15,6 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -27,23 +28,42 @@ namespace xllm::layer {
 
 // Native V4.1 query/SWA-KV preparation and grouped output projection. The
 // decoder/backend owns cache writes, compressor/indexer, and TP all-reduce.
-// QDQ retains original FP8 block32 semantics while GEMMs remain BF16.
+// Default QDQ/BF16 and explicit original-FP8 projections share cache semantics.
 class DeepseekV41AttentionProjection final {
  public:
   // Weights: wq_a, q_norm, wq_b, wkv, kv_norm, grouped_wo_a, wo_b.
-  DeepseekV41AttentionProjection(std::vector<torch::Tensor> weights,
-                                 int64_t heads,
-                                 int64_t groups,
-                                 int64_t output_rank,
-                                 double epsilon,
-                                 bool original_fp8_activation,
-                                 bool decode_packed_qkv = false,
-                                 bool verify_skinny_projection = false)
-      : weights_(check_weights(std::move(weights))),
-        q_a_(weights_[0], original_fp8_activation),
-        q_b_(weights_[2], original_fp8_activation),
-        kv_(weights_[3], original_fp8_activation, verify_skinny_projection),
-        o_b_(weights_[6], original_fp8_activation),
+  DeepseekV41AttentionProjection(
+      std::vector<torch::Tensor> weights,
+      int64_t heads,
+      int64_t groups,
+      int64_t output_rank,
+      double epsilon,
+      bool original_fp8_activation,
+      bool decode_packed_qkv = false,
+      bool verify_skinny_projection = false,
+      const std::vector<torch::Tensor>& fp8_scales = {},
+      const std::string& prequant_directory = {})
+      : weights_(check_weights(std::move(weights), fp8_scales)),
+        q_a_(weights_[0],
+             original_fp8_activation,
+             false,
+             projection_scale(fp8_scales, 0),
+             prequant_directory),
+        q_b_(weights_[2],
+             original_fp8_activation,
+             false,
+             projection_scale(fp8_scales, 2),
+             prequant_directory),
+        kv_(weights_[3],
+            original_fp8_activation,
+            verify_skinny_projection,
+            projection_scale(fp8_scales, 3),
+            prequant_directory),
+        o_b_(weights_[6],
+             original_fp8_activation,
+             false,
+             projection_scale(fp8_scales, 6),
+             prequant_directory),
         heads_(heads),
         groups_(groups),
         output_rank_(output_rank),
@@ -72,6 +92,8 @@ class DeepseekV41AttentionProjection final {
     CHECK_EQ(weights_[6].sizes(),
              torch::IntArrayRef({weights_[0].size(1), groups_ * output_rank_}));
     CHECK(!original_fp8_activation_ || head_dim_ % 32 == 0);
+    CHECK(fp8_scales.empty() || !decode_packed_qkv)
+        << "FP8 projection candidate uses separate Q-A and KV allocations";
     if (decode_packed_qkv) {
       packed_qkv_ = std::make_unique<DeepseekV41Dense>(
           torch::cat({weights_[0], weights_[3]}, 0).contiguous(),
@@ -149,18 +171,31 @@ class DeepseekV41AttentionProjection final {
 
  private:
   static std::vector<torch::Tensor> check_weights(
-      std::vector<torch::Tensor> weights) {
+      std::vector<torch::Tensor> weights,
+      const std::vector<torch::Tensor>& fp8_scales) {
     CHECK_EQ(weights.size(), 7);
+    CHECK(fp8_scales.empty() || fp8_scales.size() == 7);
     CHECK(weights[0].defined());
     CHECK(weights[0].device().type() == torch::kPrivateUse1);
-    for (const torch::Tensor& weight : weights) {
+    for (size_t index = 0; index < weights.size(); ++index) {
+      const torch::Tensor& weight = weights[index];
       CHECK(weight.defined());
       CHECK_EQ(weight.device(), weights[0].device());
-      CHECK_EQ(weight.scalar_type(), torch::kBFloat16);
+      const bool fp8 = !fp8_scales.empty() &&
+                       (index == 0 || index == 2 || index == 3 || index == 6);
+      CHECK_EQ(weight.scalar_type(),
+               fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16);
+      CHECK(fp8_scales.empty() || fp8_scales[index].defined() == fp8);
       CHECK(weight.is_contiguous());
       CHECK_GT(weight.numel(), 0);
     }
     return weights;
+  }
+
+  static torch::Tensor projection_scale(
+      const std::vector<torch::Tensor>& scales,
+      size_t index) {
+    return scales.empty() ? torch::Tensor{} : scales[index];
   }
 
   void check_hidden(const torch::Tensor& hidden) const {

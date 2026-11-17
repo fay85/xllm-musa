@@ -51,12 +51,14 @@ struct DeepseekV41MoeConfig {
   double limit = 10.0;
   std::string bmm_so_path;
   std::string w4a8_so_path;
+  std::string dense_prequant_directory;
   int64_t max_partial_bytes = 512 * 1024 * 1024;
 };
 
 struct DeepseekV41MoeWeights {
   // Shared/dense w1,w3,w2. Routed packed matrices and scales same ordering.
   std::vector<torch::Tensor> shared;
+  std::vector<torch::Tensor> shared_fp8_scales;
   std::array<torch::Tensor, 3> expert;
   std::array<torch::Tensor, 3> scale;
   std::array<double, 2> expert_input_scale = {0.0, 0.0};
@@ -83,7 +85,9 @@ class DeepseekV41Moe final {
                 config_.limit,
                 config_.original_fp8_activation,
                 config_.decode_packed_shared_gate_up,
-                config_.verify_skinny_projection),
+                config_.verify_skinny_projection,
+                weights_.shared_fp8_scales,
+                config_.dense_prequant_directory),
         ep_group_(ep_group) {
     if (config_.dense) {
       return;

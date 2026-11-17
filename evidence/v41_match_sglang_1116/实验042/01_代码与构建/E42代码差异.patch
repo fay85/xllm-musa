@@ -1,0 +1,766 @@
+diff --git a/tests/core/kernels/musa/v41_prequant_projection_test_module.cpp b/tests/core/kernels/musa/v41_prequant_projection_test_module.cpp
+index 607a4807..039c6286 100644
+--- a/tests/core/kernels/musa/v41_prequant_projection_test_module.cpp
++++ b/tests/core/kernels/musa/v41_prequant_projection_test_module.cpp
+@@ -4,9 +4,48 @@ SPDX-License-Identifier: Apache-2.0
+ #include <torch/extension.h>
+ 
+ #include "core/kernels/musa/deepseek_v41_dense_block32.h"
++#include "core/layers/musa/deepseek_v41/feed_forward.h"
++#include "models/llm/musa/deepseek_v41_checkpoint.h"
+ 
+ PYBIND11_MODULE(v41_prequant_projection_test_module, module) {
+   module.def("forward",
+              &xllm::kernel::musa::deepseek_v41_dense_prequant_block32,
+              pybind11::call_guard<pybind11::gil_scoped_release>());
++  module.def("prepare_fp8",
++             &xllm::DeepseekV41Checkpoint::prepare_dense_fp8,
++             pybind11::call_guard<pybind11::gil_scoped_release>());
++  module.def(
++      "dense_forward",
++      [](const torch::Tensor& input,
++         const torch::Tensor& weight,
++         const torch::Tensor& scale,
++         const std::string& directory) {
++        xllm::layer::DeepseekV41Dense dense(weight,
++                                            /*original_fp8_activation=*/true,
++                                            /*verify_skinny_projection=*/false,
++                                            scale,
++                                            directory);
++        return dense.forward(input);
++      },
++      pybind11::call_guard<pybind11::gil_scoped_release>());
++  module.def(
++      "shared_forward",
++      [](const torch::Tensor& input,
++         const std::vector<torch::Tensor>& weights,
++         const std::vector<torch::Tensor>& scales,
++         const std::string& directory) {
++        CHECK_EQ(weights.size(), 3);
++        xllm::layer::DeepseekV41SharedMlp shared(
++            weights[0],
++            weights[1],
++            weights[2],
++            /*limit=*/10.0,
++            /*original_fp8_activation=*/true,
++            /*decode_packed_gate_up=*/false,
++            /*verify_skinny_projection=*/false,
++            scales,
++            directory);
++        return shared.forward(input);
++      },
++      pybind11::call_guard<pybind11::gil_scoped_release>());
+ }
+diff --git a/tools/musa_deepseek_v41/build_dense_prequant_aot.py b/tools/musa_deepseek_v41/build_dense_prequant_aot.py
+index 7a8fedae..c7e3987b 100644
+--- a/tools/musa_deepseek_v41/build_dense_prequant_aot.py
++++ b/tools/musa_deepseek_v41/build_dense_prequant_aot.py
+@@ -90,7 +90,7 @@ def prequantized_block32_gemm(
+ def _build(output: Path, shape: list[int]) -> dict[str, Any]:
+     rows, columns, hidden, splits = shape
+     if not (
+-        1 <= rows <= 8
++        1 <= rows <= 32
+         and columns > 0
+         and columns % 32 == 0
+         and hidden > 0
+diff --git a/xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp b/xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp
+index 1df45c7b..ff26eabb 100644
+--- a/xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp
++++ b/xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp
+@@ -99,7 +99,7 @@ torch::Tensor deepseek_v41_dense_prequant_block32(
+         weight_scale.is_contiguous());
+   CHECK_EQ(input.size(1), weight.size(1));
+   CHECK_GT(input.size(0), 0);
+-  CHECK_LE(input.size(0), 8);
++  CHECK_LE(input.size(0), 32);
+   CHECK_GT(weight.size(0), 0);
+   CHECK_GT(weight.size(1), 0);
+   CHECK_GT(splits, 0);
+diff --git a/xllm/core/kernels/musa/deepseek_v41_dense_block32.h b/xllm/core/kernels/musa/deepseek_v41_dense_block32.h
+index f39ad947..53c17887 100644
+--- a/xllm/core/kernels/musa/deepseek_v41_dense_block32.h
++++ b/xllm/core/kernels/musa/deepseek_v41_dense_block32.h
+@@ -18,7 +18,7 @@ torch::Tensor deepseek_v41_dense_block32(const torch::Tensor& input,
+                                          const std::string& directory);
+ 
+ // Separate quantization avoids redoing activation quantization in every N tile.
+-// Directory contains shape-specific AOT exports; only rows 1..8 are supported.
++// Directory contains shape-specific AOT exports; only rows 1..32 are supported.
+ torch::Tensor deepseek_v41_dense_prequant_block32(
+     const torch::Tensor& input,
+     const torch::Tensor& weight,
+diff --git a/xllm/core/layers/musa/deepseek_v41/attention.h b/xllm/core/layers/musa/deepseek_v41/attention.h
+index 3c6ffdc0..f961b38c 100644
+--- a/xllm/core/layers/musa/deepseek_v41/attention.h
++++ b/xllm/core/layers/musa/deepseek_v41/attention.h
+@@ -57,10 +57,12 @@ struct DeepseekV41AttentionConfig {
+   bool verify_skinny_projection = false;
+   std::string sparse_library_path;
+   std::string indexer_score_directory;
++  std::string dense_prequant_directory;
+ };
+ 
+ struct DeepseekV41AttentionWeights {
+   std::vector<torch::Tensor> projection;
++  std::vector<torch::Tensor> projection_fp8_scales;
+   torch::Tensor sink;
+   torch::Tensor compressor_kv;
+   torch::Tensor compressor_norm;
+@@ -115,7 +117,9 @@ class DeepseekV41Attention final {
+                     config_.epsilon,
+                     config_.original_fp8_activation,
+                     config_.decode_packed_qkv,
+-                    config_.verify_skinny_projection) {
++                    config_.verify_skinny_projection,
++                    weights_.projection_fp8_scales,
++                    config_.dense_prequant_directory) {
+     CHECK_GE(config_.layer, 0);
+     CHECK_GT(config_.window, 0);
+     CHECK(weights_.sink.defined());
+diff --git a/xllm/core/layers/musa/deepseek_v41/attention_projection.h b/xllm/core/layers/musa/deepseek_v41/attention_projection.h
+index ed7a81f2..78b20cc5 100644
+--- a/xllm/core/layers/musa/deepseek_v41/attention_projection.h
++++ b/xllm/core/layers/musa/deepseek_v41/attention_projection.h
+@@ -15,6 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ #include <cmath>
+ #include <cstdint>
+ #include <memory>
++#include <string>
+ #include <tuple>
+ #include <utility>
+ #include <vector>
+@@ -27,23 +28,42 @@ namespace xllm::layer {
+ 
+ // Native V4.1 query/SWA-KV preparation and grouped output projection. The
+ // decoder/backend owns cache writes, compressor/indexer, and TP all-reduce.
+-// QDQ retains original FP8 block32 semantics while GEMMs remain BF16.
++// Default QDQ/BF16 and explicit original-FP8 projections share cache semantics.
+ class DeepseekV41AttentionProjection final {
+  public:
+   // Weights: wq_a, q_norm, wq_b, wkv, kv_norm, grouped_wo_a, wo_b.
+-  DeepseekV41AttentionProjection(std::vector<torch::Tensor> weights,
+-                                 int64_t heads,
+-                                 int64_t groups,
+-                                 int64_t output_rank,
+-                                 double epsilon,
+-                                 bool original_fp8_activation,
+-                                 bool decode_packed_qkv = false,
+-                                 bool verify_skinny_projection = false)
+-      : weights_(check_weights(std::move(weights))),
+-        q_a_(weights_[0], original_fp8_activation),
+-        q_b_(weights_[2], original_fp8_activation),
+-        kv_(weights_[3], original_fp8_activation, verify_skinny_projection),
+-        o_b_(weights_[6], original_fp8_activation),
++  DeepseekV41AttentionProjection(
++      std::vector<torch::Tensor> weights,
++      int64_t heads,
++      int64_t groups,
++      int64_t output_rank,
++      double epsilon,
++      bool original_fp8_activation,
++      bool decode_packed_qkv = false,
++      bool verify_skinny_projection = false,
++      const std::vector<torch::Tensor>& fp8_scales = {},
++      const std::string& prequant_directory = {})
++      : weights_(check_weights(std::move(weights), fp8_scales)),
++        q_a_(weights_[0],
++             original_fp8_activation,
++             false,
++             projection_scale(fp8_scales, 0),
++             prequant_directory),
++        q_b_(weights_[2],
++             original_fp8_activation,
++             false,
++             projection_scale(fp8_scales, 2),
++             prequant_directory),
++        kv_(weights_[3],
++            original_fp8_activation,
++            verify_skinny_projection,
++            projection_scale(fp8_scales, 3),
++            prequant_directory),
++        o_b_(weights_[6],
++             original_fp8_activation,
++             false,
++             projection_scale(fp8_scales, 6),
++             prequant_directory),
+         heads_(heads),
+         groups_(groups),
+         output_rank_(output_rank),
+@@ -72,6 +92,8 @@ class DeepseekV41AttentionProjection final {
+     CHECK_EQ(weights_[6].sizes(),
+              torch::IntArrayRef({weights_[0].size(1), groups_ * output_rank_}));
+     CHECK(!original_fp8_activation_ || head_dim_ % 32 == 0);
++    CHECK(fp8_scales.empty() || !decode_packed_qkv)
++        << "FP8 projection candidate uses separate Q-A and KV allocations";
+     if (decode_packed_qkv) {
+       packed_qkv_ = std::make_unique<DeepseekV41Dense>(
+           torch::cat({weights_[0], weights_[3]}, 0).contiguous(),
+@@ -149,20 +171,33 @@ class DeepseekV41AttentionProjection final {
+ 
+  private:
+   static std::vector<torch::Tensor> check_weights(
+-      std::vector<torch::Tensor> weights) {
++      std::vector<torch::Tensor> weights,
++      const std::vector<torch::Tensor>& fp8_scales) {
+     CHECK_EQ(weights.size(), 7);
++    CHECK(fp8_scales.empty() || fp8_scales.size() == 7);
+     CHECK(weights[0].defined());
+     CHECK(weights[0].device().type() == torch::kPrivateUse1);
+-    for (const torch::Tensor& weight : weights) {
++    for (size_t index = 0; index < weights.size(); ++index) {
++      const torch::Tensor& weight = weights[index];
+       CHECK(weight.defined());
+       CHECK_EQ(weight.device(), weights[0].device());
+-      CHECK_EQ(weight.scalar_type(), torch::kBFloat16);
++      const bool fp8 = !fp8_scales.empty() &&
++                       (index == 0 || index == 2 || index == 3 || index == 6);
++      CHECK_EQ(weight.scalar_type(),
++               fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16);
++      CHECK(fp8_scales.empty() || fp8_scales[index].defined() == fp8);
+       CHECK(weight.is_contiguous());
+       CHECK_GT(weight.numel(), 0);
+     }
+     return weights;
+   }
+ 
++  static torch::Tensor projection_scale(
++      const std::vector<torch::Tensor>& scales,
++      size_t index) {
++    return scales.empty() ? torch::Tensor{} : scales[index];
++  }
++
+   void check_hidden(const torch::Tensor& hidden) const {
+     CHECK(hidden.defined());
+     CHECK_EQ(hidden.device(), weights_[0].device());
+diff --git a/xllm/core/layers/musa/deepseek_v41/feed_forward.h b/xllm/core/layers/musa/deepseek_v41/feed_forward.h
+index 97c88da4..b02a9d28 100644
+--- a/xllm/core/layers/musa/deepseek_v41/feed_forward.h
++++ b/xllm/core/layers/musa/deepseek_v41/feed_forward.h
+@@ -12,37 +12,60 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ #include <torch/torch.h>
+ #include <torch/utils.h>
+ 
++#include <algorithm>
+ #include <array>
+ #include <cmath>
+ #include <cstdint>
++#include <memory>
+ #include <optional>
+ #include <string>
+ #include <tuple>
+ #include <utility>
++#include <vector>
+ 
++#include "core/kernels/musa/deepseek_v41_dense_block32.h"
+ #include "core/kernels/musa/musa_dsv4_ops_api.h"
+ #include "core/kernels/musa/musa_ops_api.h"
+ #include "core/kernels/musa/musa_tvmffi_stream.h"
+ 
+ namespace xllm::layer {
+ 
+-// Native dense projection retaining original FP8 input QDQ. The exact
+-// dequantized BF16 weight is a carrier; this does not claim an FP8 GEMM.
++// Native dense projection: the default uses an exact BF16 weight carrier and
++// activation QDQ. Explicit FP8 weights/scales select offline-compiled kernels.
+ class DeepseekV41Dense final {
+  public:
+   DeepseekV41Dense(torch::Tensor weight,
+                    bool original_fp8_activation,
+-                   bool verify_skinny_projection = false)
++                   bool verify_skinny_projection = false,
++                   torch::Tensor fp8_scale = {},
++                   std::string prequant_directory = {})
+       : weight_(std::move(weight)),
+         original_fp8_activation_(original_fp8_activation),
+-        verify_skinny_projection_(verify_skinny_projection) {
++        verify_skinny_projection_(verify_skinny_projection),
++        fp8_scale_(std::move(fp8_scale)),
++        prequant_directory_(std::move(prequant_directory)) {
+     CHECK(weight_.defined());
+     CHECK(weight_.device().type() == torch::kPrivateUse1);
+-    CHECK_EQ(weight_.scalar_type(), torch::kBFloat16);
++    CHECK_EQ(weight_.scalar_type(),
++             fp8_scale_.defined() ? torch::kFloat8_e4m3fn : torch::kBFloat16);
+     CHECK_EQ(weight_.dim(), 2);
+     CHECK_GT(weight_.size(0), 0);
+     CHECK_GT(weight_.size(1), 0);
+     CHECK(!original_fp8_activation_ || weight_.size(1) % 32 == 0);
++    if (fp8_scale_.defined()) {
++      CHECK(original_fp8_activation_);
++      CHECK(!prequant_directory_.empty());
++      CHECK(weight_.is_contiguous() && fp8_scale_.is_contiguous());
++      CHECK_EQ(fp8_scale_.device(), weight_.device());
++      CHECK_EQ(fp8_scale_.scalar_type(), torch::kFloat32);
++      CHECK_EQ(
++          fp8_scale_.sizes(),
++          torch::IntArrayRef({weight_.size(0) / 32, weight_.size(1) / 32}));
++      CHECK_EQ(weight_.size(0) % 32, 0);
++      CHECK_EQ(weight_.size(1) % 32, 0);
++    } else {
++      CHECK(prequant_directory_.empty());
++    }
+   }
+ 
+   torch::Tensor forward(const torch::Tensor& input) const {
+@@ -52,6 +75,9 @@ class DeepseekV41Dense final {
+     CHECK_GE(input.dim(), 2);
+     CHECK_EQ(input.size(-1), weight_.size(1));
+     torch::DeviceGuard guard(input.device());
++    if (fp8_scale_.defined()) {
++      return fp8_forward(input);
++    }
+     torch::Tensor value = input;
+     if (original_fp8_activation_) {
+       value =
+@@ -73,13 +99,52 @@ class DeepseekV41Dense final {
+   }
+ 
+  private:
++  torch::Tensor fp8_forward(const torch::Tensor& input) const {
++    const int64_t columns = weight_.size(0);
++    const int64_t hidden = weight_.size(1);
++    std::vector<int64_t> shape = input.sizes().vec();
++    shape.back() = columns;
++    if (input.numel() == 0) {
++      return torch::empty(shape, input.options());
++    }
++    int64_t splits = columns == 1280 || columns == 512 ? 16 : 8;
++    if (hidden == 1280 || hidden == 8192 || hidden == 1024) {
++      splits = 4;
++    }
++    while (hidden % (32 * splits) != 0) {
++      splits /= 2;
++    }
++    const torch::Tensor flat = input.reshape({-1, hidden}).contiguous();
++    const int64_t rows = flat.size(0);
++    // Small decode/verify runs one graph-compatible projection. Larger D-side
++    // CED replay is explicitly tiled; it never retains a BF16 weight replica.
++    if (rows <= 32) {
++      return kernel::musa::deepseek_v41_dense_prequant_block32(
++                 flat, weight_, fp8_scale_, splits, prequant_directory_)
++          .reshape(shape);
++    }
++    std::vector<torch::Tensor> output;
++    output.reserve((rows + 31) / 32);
++    for (int64_t start = 0; start < rows; start += 32) {
++      output.emplace_back(kernel::musa::deepseek_v41_dense_prequant_block32(
++          flat.narrow(0, start, std::min<int64_t>(32, rows - start)),
++          weight_,
++          fp8_scale_,
++          splits,
++          prequant_directory_));
++    }
++    return torch::cat(output, 0).reshape(shape);
++  }
++
+   torch::Tensor weight_;
+   bool original_fp8_activation_;
+   bool verify_skinny_projection_;
++  torch::Tensor fp8_scale_;
++  std::string prequant_directory_;
+ };
+ 
+-// BF16 shared/dense expert, with the same gate/up/down GEMMs and activation
+-// kernel as the Python fused path. Decoder loading retains Tensor ownership.
++// Shared/dense expert with BF16 or explicit FP8 projections. Both paths use
++// the same SwiGLU semantics; decoder loading retains tensor ownership.
+ class DeepseekV41SharedMlp final {
+  public:
+   DeepseekV41SharedMlp(torch::Tensor gate,
+@@ -88,7 +153,9 @@ class DeepseekV41SharedMlp final {
+                        double limit,
+                        bool original_fp8_activation = false,
+                        bool decode_packed_gate_up = false,
+-                       bool verify_skinny_projection = false)
++                       bool verify_skinny_projection = false,
++                       const std::vector<torch::Tensor>& fp8_scales = {},
++                       const std::string& prequant_directory = {})
+       : gate_(std::move(gate)),
+         up_(std::move(up)),
+         down_(std::move(down)),
+@@ -97,9 +164,11 @@ class DeepseekV41SharedMlp final {
+         verify_skinny_projection_(verify_skinny_projection) {
+     CHECK(gate_.defined() && up_.defined() && down_.defined());
+     CHECK(gate_.device().type() == torch::kPrivateUse1);
+-    CHECK_EQ(gate_.scalar_type(), torch::kBFloat16);
+-    CHECK_EQ(up_.scalar_type(), torch::kBFloat16);
+-    CHECK_EQ(down_.scalar_type(), torch::kBFloat16);
++    const torch::ScalarType dtype =
++        fp8_scales.empty() ? torch::kBFloat16 : torch::kFloat8_e4m3fn;
++    CHECK_EQ(gate_.scalar_type(), dtype);
++    CHECK_EQ(up_.scalar_type(), dtype);
++    CHECK_EQ(down_.scalar_type(), dtype);
+     CHECK_EQ(gate_.device(), up_.device());
+     CHECK_EQ(gate_.device(), down_.device());
+     CHECK_EQ(gate_.dim(), 2);
+@@ -112,6 +181,28 @@ class DeepseekV41SharedMlp final {
+     CHECK(!original_fp8_activation_ ||
+           (gate_.size(0) % 32 == 0 && gate_.size(1) % 32 == 0));
+     CHECK(std::isfinite(limit_) && limit_ > 0.0 && limit_ < 1000000.0);
++    if (!fp8_scales.empty()) {
++      CHECK_EQ(fp8_scales.size(), 3);
++      CHECK(!decode_packed_gate_up)
++          << "FP8 shared candidate keeps separate gate/up projections";
++      fp8_gate_ = std::make_unique<DeepseekV41Dense>(gate_,
++                                                     original_fp8_activation_,
++                                                     false,
++                                                     fp8_scales[0],
++                                                     prequant_directory);
++      fp8_up_ = std::make_unique<DeepseekV41Dense>(up_,
++                                                   original_fp8_activation_,
++                                                   false,
++                                                   fp8_scales[1],
++                                                   prequant_directory);
++      fp8_down_ = std::make_unique<DeepseekV41Dense>(down_,
++                                                     original_fp8_activation_,
++                                                     false,
++                                                     fp8_scales[2],
++                                                     prequant_directory);
++    } else {
++      CHECK(prequant_directory.empty());
++    }
+     if (decode_packed_gate_up) {
+       packed_gate_up_ = torch::cat({gate_, up_}, 0).contiguous();
+     }
+@@ -127,6 +218,14 @@ class DeepseekV41SharedMlp final {
+     if (input.size(0) == 0) {
+       return torch::empty_like(input);
+     }
++    if (fp8_gate_ != nullptr) {
++      const torch::Tensor packed =
++          torch::cat({fp8_gate_->forward(input), fp8_up_->forward(input)}, -1);
++      const torch::Tensor activation =
++          torch::empty({input.size(0), gate_.size(0)}, input.options());
++      kernel::musa::deepseek_v4_shared_swiglu(packed, limit_, activation);
++      return fp8_down_->forward(activation);
++    }
+     const torch::Tensor value = quantize(input);
+     torch::Tensor packed;
+     if (packed_gate_up_.defined() && input.size(0) == 1) {
+@@ -156,6 +255,9 @@ class DeepseekV41SharedMlp final {
+   torch::Tensor up_;
+   torch::Tensor packed_gate_up_;
+   torch::Tensor down_;
++  std::unique_ptr<DeepseekV41Dense> fp8_gate_;
++  std::unique_ptr<DeepseekV41Dense> fp8_up_;
++  std::unique_ptr<DeepseekV41Dense> fp8_down_;
+   double limit_;
+   bool original_fp8_activation_;
+   bool verify_skinny_projection_;
+diff --git a/xllm/core/layers/musa/deepseek_v41/moe.h b/xllm/core/layers/musa/deepseek_v41/moe.h
+index 17ecde78..6ae694ba 100644
+--- a/xllm/core/layers/musa/deepseek_v41/moe.h
++++ b/xllm/core/layers/musa/deepseek_v41/moe.h
+@@ -51,12 +51,14 @@ struct DeepseekV41MoeConfig {
+   double limit = 10.0;
+   std::string bmm_so_path;
+   std::string w4a8_so_path;
++  std::string dense_prequant_directory;
+   int64_t max_partial_bytes = 512 * 1024 * 1024;
+ };
+ 
+ struct DeepseekV41MoeWeights {
+   // Shared/dense w1,w3,w2. Routed packed matrices and scales same ordering.
+   std::vector<torch::Tensor> shared;
++  std::vector<torch::Tensor> shared_fp8_scales;
+   std::array<torch::Tensor, 3> expert;
+   std::array<torch::Tensor, 3> scale;
+   std::array<double, 2> expert_input_scale = {0.0, 0.0};
+@@ -83,7 +85,9 @@ class DeepseekV41Moe final {
+                 config_.limit,
+                 config_.original_fp8_activation,
+                 config_.decode_packed_shared_gate_up,
+-                config_.verify_skinny_projection),
++                config_.verify_skinny_projection,
++                weights_.shared_fp8_scales,
++                config_.dense_prequant_directory),
+         ep_group_(ep_group) {
+     if (config_.dense) {
+       return;
+diff --git a/xllm/models/llm/musa/deepseek_v41_checkpoint.h b/xllm/models/llm/musa/deepseek_v41_checkpoint.h
+index 0f7533fc..f8c77665 100644
+--- a/xllm/models/llm/musa/deepseek_v41_checkpoint.h
++++ b/xllm/models/llm/musa/deepseek_v41_checkpoint.h
+@@ -82,6 +82,57 @@ class DeepseekV41Checkpoint final {
+     return shard(decoded, shard_dim).to(options_).contiguous();
+   }
+ 
++  // Preserve the checkpoint FP8 representation. Slice weights and block scales
++  // together on the CPU, before any device allocation or dequantization.
++  std::pair<torch::Tensor, torch::Tensor> dense_fp8(
++      const std::string& prefix,
++      std::optional<int64_t> shard_dim = std::nullopt) const {
++    auto [weight, scale] = prepare_dense_fp8(tensor(prefix + ".weight"),
++                                             tensor(prefix + ".scale"),
++                                             tp_rank_,
++                                             tp_size_,
++                                             shard_dim);
++    return {weight.to(options_.dtype(torch::kFloat8_e4m3fn)).contiguous(),
++            scale.to(options_.dtype(torch::kFloat32)).contiguous()};
++  }
++
++  static std::pair<torch::Tensor, torch::Tensor> prepare_dense_fp8(
++      torch::Tensor weight,
++      torch::Tensor scale,
++      int64_t rank,
++      int64_t size,
++      std::optional<int64_t> shard_dim) {
++    CHECK(weight.device().is_cpu() && scale.device().is_cpu());
++    CHECK_EQ(weight.dim(), 2);
++    CHECK_EQ(scale.dim(), 2);
++    CHECK(weight.scalar_type() == torch::kUInt8 ||
++          weight.scalar_type() == torch::kFloat8_e4m3fn);
++    CHECK_EQ(scale.element_size(), 1);
++    CHECK_EQ(weight.size(0) % 32, 0);
++    CHECK_EQ(weight.size(1) % 32, 0);
++    CHECK_EQ(scale.size(0), weight.size(0) / 32);
++    CHECK_EQ(scale.size(1), weight.size(1) / 32);
++    CHECK_GT(size, 0);
++    CHECK_GE(rank, 0);
++    CHECK_LT(rank, size);
++    if (shard_dim.has_value()) {
++      const int64_t dim = shard_dim.value();
++      CHECK(dim == 0 || dim == 1);
++      CHECK_EQ(weight.size(dim) % size, 0);
++      const int64_t width = weight.size(dim) / size;
++      CHECK_EQ(width % 32, 0) << "FP8 TP slice must preserve block boundaries";
++      weight = weight.narrow(dim, rank * width, width);
++      scale = scale.narrow(dim, rank * width / 32, width / 32);
++    }
++    const torch::Tensor bytes =
++        scale.contiguous().view(torch::kUInt8).to(torch::kInt32);
++    CHECK(!bytes.eq(255).any().item<bool>()) << "UE8M0 scale 255 is NaN";
++    const torch::Tensor bits = torch::where(
++        bytes.eq(0), 0x00400000, torch::bitwise_left_shift(bytes, 23));
++    return {weight.contiguous().view(torch::kFloat8_e4m3fn),
++            bits.contiguous().view(torch::kFloat32)};
++  }
++
+   std::pair<torch::Tensor, torch::Tensor> experts(const std::string& prefix,
+                                                   const std::string& projection,
+                                                   int64_t first,
+diff --git a/xllm/models/llm/musa/deepseek_v41_dspark_native.h b/xllm/models/llm/musa/deepseek_v41_dspark_native.h
+index 5736c51f..d982a70c 100644
+--- a/xllm/models/llm/musa/deepseek_v41_dspark_native.h
++++ b/xllm/models/llm/musa/deepseek_v41_dspark_native.h
+@@ -7,6 +7,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
+ #include <glog/logging.h>
+ #include <torch/torch.h>
+ 
++#include <array>
+ #include <cmath>
+ #include <cstdint>
+ #include <cstdlib>
+@@ -50,6 +51,16 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+     CHECK(options_.device().type() == torch::kPrivateUse1);
+     CHECK_EQ(options_.dtype().toScalarType(), torch::kBFloat16);
+     w4a8_path_ = required_path("XLLM_DSV41_MATE_W4A8_SO", false);
++    const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
++    if (dense_prequant != nullptr) {
++      dense_prequant_path_ = dense_prequant;
++      CHECK(!dense_prequant_path_.empty());
++      CHECK(std::filesystem::is_regular_file(
++          std::filesystem::path(dense_prequant_path_) / "export_summary.json"));
++      LOG(INFO) << "Native V4.1 preserves FP8 dense weights/scales; AOT="
++                << dense_prequant_path_;
++    }
++
+     mhc_path_ = required_path("XLLM_DSV41_MATE_MHC_DIR", true);
+     sparse_path_ = required_path("XLLM_DSV41_MATE_SPARSE_SO", false);
+     draft_custom_allreduce_ =
+@@ -343,6 +354,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+     attention.window = args_.window_size();
+     attention.epsilon = args_.rms_norm_eps();
+     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -.5);
++    attention.dense_prequant_directory = dense_prequant_path_;
+     attention.sparse_library_path = sparse_path_;
+     result.sinkhorn_iterations = args_.hc_sinkhorn_iters();
+     result.hc_epsilon = args_.hc_eps();
+@@ -350,6 +362,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+     auto& moe = result.moe;
+     moe.expert_format = layer::DeepseekV41ExpertFormat::W4AFP8_MT;
+     moe.w4a8_so_path = w4a8_path_;
++    moe.dense_prequant_directory = dense_prequant_path_;
+     moe.w4a8_static_activation =
+         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
+     moe.w4a8_valid_prefix_swiglu =
+@@ -378,14 +391,27 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+     const std::string attention = prefix + "attn.";
+     layer::DeepseekV41DecoderWeights weights;
+     auto& attn = weights.attention;
++    if (!dense_prequant_path_.empty()) {
++      attn.projection_fp8_scales.resize(7);
++    }
++    const auto projection = [&](const std::string& name,
++                                size_t index,
++                                std::optional<int64_t> dim = std::nullopt) {
++      if (dense_prequant_path_.empty()) {
++        return checkpoint.dense(name, dim);
++      }
++      auto [weight, scale] = checkpoint.dense_fp8(name, dim);
++      attn.projection_fp8_scales[index] = std::move(scale);
++      return weight;
++    };
+     attn.projection = {
+-        checkpoint.dense(attention + "wq_a"),
++        projection(attention + "wq_a", 0),
+         checkpoint.copy(attention + "q_norm.weight", torch::kBFloat16),
+-        checkpoint.dense(attention + "wq_b", /*shard_dim=*/0),
+-        checkpoint.dense(attention + "wkv"),
++        projection(attention + "wq_b", 2, /*shard_dim=*/0),
++        projection(attention + "wkv", 3),
+         checkpoint.copy(attention + "kv_norm.weight", torch::kBFloat16),
+         checkpoint.dense(attention + "wo_a", /*shard_dim=*/0),
+-        checkpoint.dense(attention + "wo_b", /*shard_dim=*/1)};
++        projection(attention + "wo_b", 6, /*shard_dim=*/1)};
+     const std::string sink_name = checkpoint.has(attention + "attn_sink")
+                                       ? attention + "attn_sink"
+                                       : attention + "attn_sink.weight";
+@@ -430,10 +456,26 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+     const std::string ffn = prefix + "ffn.";
+     const std::string shared = config.moe.dense ? ffn : ffn + "shared_experts.";
+     auto& moe = weights.moe;
+-    moe.shared = {checkpoint.dense(shared + "w1"),
+-                  checkpoint.dense(shared + "w3"),
+-                  checkpoint.dense(shared + "w2")};
+-    if (config.moe.shared_expert_tp_reduce) {
++    if (dense_prequant_path_.empty()) {
++      moe.shared = {checkpoint.dense(shared + "w1"),
++                    checkpoint.dense(shared + "w3"),
++                    checkpoint.dense(shared + "w2")};
++    } else {
++      moe.shared.reserve(3);
++      moe.shared_fp8_scales.reserve(3);
++      const std::array<const char*, 3> names = {"w1", "w3", "w2"};
++      for (size_t projection = 0; projection < names.size(); ++projection) {
++        const std::optional<int64_t> dim =
++            config.moe.shared_expert_tp_reduce
++                ? std::optional<int64_t>{projection == 2 ? 1 : 0}
++                : std::nullopt;
++        auto [weight, scale] =
++            checkpoint.dense_fp8(shared + names[projection], dim);
++        moe.shared.emplace_back(std::move(weight));
++        moe.shared_fp8_scales.emplace_back(std::move(scale));
++      }
++    }
++    if (config.moe.shared_expert_tp_reduce && dense_prequant_path_.empty()) {
+       const int64_t intermediate = moe.shared[0].size(0);
+       CHECK_EQ(intermediate % tp_size(), 0);
+       const int64_t local_intermediate = intermediate / tp_size();
+@@ -498,6 +540,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+   ProcessGroup* tp_group_;
+   ProcessGroup* ep_group_;
+   std::string w4a8_path_;
++  std::string dense_prequant_path_;
+   std::string mhc_path_;
+   std::string sparse_path_;
+   bool draft_custom_allreduce_ = false;
+diff --git a/xllm/models/llm/musa/deepseek_v41_native.h b/xllm/models/llm/musa/deepseek_v41_native.h
+index 8d38a809..eec15eaf 100644
+--- a/xllm/models/llm/musa/deepseek_v41_native.h
++++ b/xllm/models/llm/musa/deepseek_v41_native.h
+@@ -68,6 +68,16 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+     replicated_attention_ =
+         util::get_bool_env("XLLM_DSV41_REPLICATED_ATTENTION", false);
+     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
++    const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
++    if (dense_prequant != nullptr) {
++      dense_prequant_path_ = dense_prequant;
++      CHECK(!dense_prequant_path_.empty());
++      CHECK(std::filesystem::is_regular_file(
++          std::filesystem::path(dense_prequant_path_) / "export_summary.json"));
++      LOG(INFO) << "Native V4.1 preserves FP8 dense weights/scales; AOT="
++                << dense_prequant_path_;
++    }
++
+     selective_spec_commit_ =
+         util::get_bool_env("XLLM_DSV41_SPEC_SELECTIVE_COMMIT", false);
+     CHECK(!selective_spec_commit_ || native_dspark_);
+@@ -986,6 +996,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+     attention.candidate_block_size = args_.candidate_block_size();
+     attention.epsilon = args_.rms_norm_eps();
+     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
++    attention.dense_prequant_directory = dense_prequant_path_;
+     attention.verify_skinny_projection =
+         util::get_bool_env("XLLM_DSV41_VERIFY_SKINNY_PROJECTION", false);
+     attention.decode_packed_qkv =
+@@ -1018,6 +1029,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+     moe.verify_custom_allreduce = verify_custom_allreduce_;
+     moe.expert_format = expert_format_;
+     moe.w4a8_so_path = w4a8_path_;
++    moe.dense_prequant_directory = dense_prequant_path_;
+     moe.w4a8_static_activation =
+         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
+     moe.w4a8_valid_prefix_swiglu =
+@@ -1055,14 +1067,27 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+         replicated_attention_ ? std::nullopt : std::optional<int64_t>{0};
+     const std::optional<int64_t> output_shard =
+         replicated_attention_ ? std::nullopt : std::optional<int64_t>{1};
++    if (!dense_prequant_path_.empty()) {
++      attn.projection_fp8_scales.resize(7);
++    }
++    const auto projection = [&](const std::string& name,
++                                size_t index,
++                                std::optional<int64_t> dim = std::nullopt) {
++      if (dense_prequant_path_.empty()) {
++        return checkpoint.dense(name, dim);
++      }
++      auto [weight, scale] = checkpoint.dense_fp8(name, dim);
++      attn.projection_fp8_scales[index] = std::move(scale);
++      return weight;
++    };
+     attn.projection = {
+-        checkpoint.dense(attention + "wq_a"),
++        projection(attention + "wq_a", 0),
+         checkpoint.copy(attention + "q_norm.weight", torch::kBFloat16),
+-        checkpoint.dense(attention + "wq_b", head_shard),
+-        checkpoint.dense(attention + "wkv"),
++        projection(attention + "wq_b", 2, head_shard),
++        projection(attention + "wkv", 3),
+         checkpoint.copy(attention + "kv_norm.weight", torch::kBFloat16),
+         checkpoint.dense(attention + "wo_a", head_shard),
+-        checkpoint.dense(attention + "wo_b", output_shard)};
++        projection(attention + "wo_b", 6, output_shard)};
+     const std::string sink_name = checkpoint.has(attention + "attn_sink")
+                                       ? attention + "attn_sink"
+                                       : attention + "attn_sink.weight";
+@@ -1107,10 +1132,26 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+     const std::string ffn = prefix + "ffn.";
+     const std::string shared = config.moe.dense ? ffn : ffn + "shared_experts.";
+     auto& moe = weights.moe;
+-    moe.shared = {checkpoint.dense(shared + "w1"),
+-                  checkpoint.dense(shared + "w3"),
+-                  checkpoint.dense(shared + "w2")};
+-    if (config.moe.shared_expert_tp_reduce) {
++    if (dense_prequant_path_.empty()) {
++      moe.shared = {checkpoint.dense(shared + "w1"),
++                    checkpoint.dense(shared + "w3"),
++                    checkpoint.dense(shared + "w2")};
++    } else {
++      moe.shared.reserve(3);
++      moe.shared_fp8_scales.reserve(3);
++      const std::array<const char*, 3> names = {"w1", "w3", "w2"};
++      for (size_t projection = 0; projection < names.size(); ++projection) {
++        const std::optional<int64_t> dim =
++            config.moe.shared_expert_tp_reduce
++                ? std::optional<int64_t>{projection == 2 ? 1 : 0}
++                : std::nullopt;
++        auto [weight, scale] =
++            checkpoint.dense_fp8(shared + names[projection], dim);
++        moe.shared.emplace_back(std::move(weight));
++        moe.shared_fp8_scales.emplace_back(std::move(scale));
++      }
++    }
++    if (config.moe.shared_expert_tp_reduce && dense_prequant_path_.empty()) {
+       const int64_t intermediate = moe.shared[0].size(0);
+       CHECK_EQ(intermediate % tp_size(), 0);
+       const int64_t local_intermediate = intermediate / tp_size();
+@@ -1301,6 +1342,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+   bool batched_decode_ = false;
+   std::string bmm_path_;
+   std::string w4a8_path_;
++  std::string dense_prequant_path_;
+   std::string mhc_path_;
+   std::string sparse_path_;
+   std::string indexer_aot_path_;

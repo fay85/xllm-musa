@@ -12,37 +12,60 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <torch/torch.h>
 #include <torch/utils.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
+#include "core/kernels/musa/deepseek_v41_dense_block32.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::layer {
 
-// Native dense projection retaining original FP8 input QDQ. The exact
-// dequantized BF16 weight is a carrier; this does not claim an FP8 GEMM.
+// Native dense projection: the default uses an exact BF16 weight carrier and
+// activation QDQ. Explicit FP8 weights/scales select offline-compiled kernels.
 class DeepseekV41Dense final {
  public:
   DeepseekV41Dense(torch::Tensor weight,
                    bool original_fp8_activation,
-                   bool verify_skinny_projection = false)
+                   bool verify_skinny_projection = false,
+                   torch::Tensor fp8_scale = {},
+                   std::string prequant_directory = {})
       : weight_(std::move(weight)),
         original_fp8_activation_(original_fp8_activation),
-        verify_skinny_projection_(verify_skinny_projection) {
+        verify_skinny_projection_(verify_skinny_projection),
+        fp8_scale_(std::move(fp8_scale)),
+        prequant_directory_(std::move(prequant_directory)) {
     CHECK(weight_.defined());
     CHECK(weight_.device().type() == torch::kPrivateUse1);
-    CHECK_EQ(weight_.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(weight_.scalar_type(),
+             fp8_scale_.defined() ? torch::kFloat8_e4m3fn : torch::kBFloat16);
     CHECK_EQ(weight_.dim(), 2);
     CHECK_GT(weight_.size(0), 0);
     CHECK_GT(weight_.size(1), 0);
     CHECK(!original_fp8_activation_ || weight_.size(1) % 32 == 0);
+    if (fp8_scale_.defined()) {
+      CHECK(original_fp8_activation_);
+      CHECK(!prequant_directory_.empty());
+      CHECK(weight_.is_contiguous() && fp8_scale_.is_contiguous());
+      CHECK_EQ(fp8_scale_.device(), weight_.device());
+      CHECK_EQ(fp8_scale_.scalar_type(), torch::kFloat32);
+      CHECK_EQ(
+          fp8_scale_.sizes(),
+          torch::IntArrayRef({weight_.size(0) / 32, weight_.size(1) / 32}));
+      CHECK_EQ(weight_.size(0) % 32, 0);
+      CHECK_EQ(weight_.size(1) % 32, 0);
+    } else {
+      CHECK(prequant_directory_.empty());
+    }
   }
 
   torch::Tensor forward(const torch::Tensor& input) const {
@@ -52,6 +75,9 @@ class DeepseekV41Dense final {
     CHECK_GE(input.dim(), 2);
     CHECK_EQ(input.size(-1), weight_.size(1));
     torch::DeviceGuard guard(input.device());
+    if (fp8_scale_.defined()) {
+      return fp8_forward(input);
+    }
     torch::Tensor value = input;
     if (original_fp8_activation_) {
       value =
@@ -73,13 +99,52 @@ class DeepseekV41Dense final {
   }
 
  private:
+  torch::Tensor fp8_forward(const torch::Tensor& input) const {
+    const int64_t columns = weight_.size(0);
+    const int64_t hidden = weight_.size(1);
+    std::vector<int64_t> shape = input.sizes().vec();
+    shape.back() = columns;
+    if (input.numel() == 0) {
+      return torch::empty(shape, input.options());
+    }
+    int64_t splits = columns == 1280 || columns == 512 ? 16 : 8;
+    if (hidden == 1280 || hidden == 8192 || hidden == 1024) {
+      splits = 4;
+    }
+    while (hidden % (32 * splits) != 0) {
+      splits /= 2;
+    }
+    const torch::Tensor flat = input.reshape({-1, hidden}).contiguous();
+    const int64_t rows = flat.size(0);
+    // Small decode/verify runs one graph-compatible projection. Larger D-side
+    // CED replay is explicitly tiled; it never retains a BF16 weight replica.
+    if (rows <= 32) {
+      return kernel::musa::deepseek_v41_dense_prequant_block32(
+                 flat, weight_, fp8_scale_, splits, prequant_directory_)
+          .reshape(shape);
+    }
+    std::vector<torch::Tensor> output;
+    output.reserve((rows + 31) / 32);
+    for (int64_t start = 0; start < rows; start += 32) {
+      output.emplace_back(kernel::musa::deepseek_v41_dense_prequant_block32(
+          flat.narrow(0, start, std::min<int64_t>(32, rows - start)),
+          weight_,
+          fp8_scale_,
+          splits,
+          prequant_directory_));
+    }
+    return torch::cat(output, 0).reshape(shape);
+  }
+
   torch::Tensor weight_;
   bool original_fp8_activation_;
   bool verify_skinny_projection_;
+  torch::Tensor fp8_scale_;
+  std::string prequant_directory_;
 };
 
-// BF16 shared/dense expert, with the same gate/up/down GEMMs and activation
-// kernel as the Python fused path. Decoder loading retains Tensor ownership.
+// Shared/dense expert with BF16 or explicit FP8 projections. Both paths use
+// the same SwiGLU semantics; decoder loading retains tensor ownership.
 class DeepseekV41SharedMlp final {
  public:
   DeepseekV41SharedMlp(torch::Tensor gate,
@@ -88,7 +153,9 @@ class DeepseekV41SharedMlp final {
                        double limit,
                        bool original_fp8_activation = false,
                        bool decode_packed_gate_up = false,
-                       bool verify_skinny_projection = false)
+                       bool verify_skinny_projection = false,
+                       const std::vector<torch::Tensor>& fp8_scales = {},
+                       const std::string& prequant_directory = {})
       : gate_(std::move(gate)),
         up_(std::move(up)),
         down_(std::move(down)),
@@ -97,9 +164,11 @@ class DeepseekV41SharedMlp final {
         verify_skinny_projection_(verify_skinny_projection) {
     CHECK(gate_.defined() && up_.defined() && down_.defined());
     CHECK(gate_.device().type() == torch::kPrivateUse1);
-    CHECK_EQ(gate_.scalar_type(), torch::kBFloat16);
-    CHECK_EQ(up_.scalar_type(), torch::kBFloat16);
-    CHECK_EQ(down_.scalar_type(), torch::kBFloat16);
+    const torch::ScalarType dtype =
+        fp8_scales.empty() ? torch::kBFloat16 : torch::kFloat8_e4m3fn;
+    CHECK_EQ(gate_.scalar_type(), dtype);
+    CHECK_EQ(up_.scalar_type(), dtype);
+    CHECK_EQ(down_.scalar_type(), dtype);
     CHECK_EQ(gate_.device(), up_.device());
     CHECK_EQ(gate_.device(), down_.device());
     CHECK_EQ(gate_.dim(), 2);
@@ -112,6 +181,28 @@ class DeepseekV41SharedMlp final {
     CHECK(!original_fp8_activation_ ||
           (gate_.size(0) % 32 == 0 && gate_.size(1) % 32 == 0));
     CHECK(std::isfinite(limit_) && limit_ > 0.0 && limit_ < 1000000.0);
+    if (!fp8_scales.empty()) {
+      CHECK_EQ(fp8_scales.size(), 3);
+      CHECK(!decode_packed_gate_up)
+          << "FP8 shared candidate keeps separate gate/up projections";
+      fp8_gate_ = std::make_unique<DeepseekV41Dense>(gate_,
+                                                     original_fp8_activation_,
+                                                     false,
+                                                     fp8_scales[0],
+                                                     prequant_directory);
+      fp8_up_ = std::make_unique<DeepseekV41Dense>(up_,
+                                                   original_fp8_activation_,
+                                                   false,
+                                                   fp8_scales[1],
+                                                   prequant_directory);
+      fp8_down_ = std::make_unique<DeepseekV41Dense>(down_,
+                                                     original_fp8_activation_,
+                                                     false,
+                                                     fp8_scales[2],
+                                                     prequant_directory);
+    } else {
+      CHECK(prequant_directory.empty());
+    }
     if (decode_packed_gate_up) {
       packed_gate_up_ = torch::cat({gate_, up_}, 0).contiguous();
     }
@@ -126,6 +217,14 @@ class DeepseekV41SharedMlp final {
     torch::DeviceGuard guard(input.device());
     if (input.size(0) == 0) {
       return torch::empty_like(input);
+    }
+    if (fp8_gate_ != nullptr) {
+      const torch::Tensor packed =
+          torch::cat({fp8_gate_->forward(input), fp8_up_->forward(input)}, -1);
+      const torch::Tensor activation =
+          torch::empty({input.size(0), gate_.size(0)}, input.options());
+      kernel::musa::deepseek_v4_shared_swiglu(packed, limit_, activation);
+      return fp8_down_->forward(activation);
     }
     const torch::Tensor value = quantize(input);
     torch::Tensor packed;
@@ -156,6 +255,9 @@ class DeepseekV41SharedMlp final {
   torch::Tensor up_;
   torch::Tensor packed_gate_up_;
   torch::Tensor down_;
+  std::unique_ptr<DeepseekV41Dense> fp8_gate_;
+  std::unique_ptr<DeepseekV41Dense> fp8_up_;
+  std::unique_ptr<DeepseekV41Dense> fp8_down_;
   double limit_;
   bool original_fp8_activation_;
   bool verify_skinny_projection_;

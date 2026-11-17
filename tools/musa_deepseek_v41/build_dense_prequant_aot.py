@@ -90,7 +90,7 @@ def prequantized_block32_gemm(
 def _build(output: Path, shape: list[int]) -> dict[str, Any]:
     rows, columns, hidden, splits = shape
     if not (
-        1 <= rows <= 8
+        1 <= rows <= 32
         and columns > 0
         and columns % 32 == 0
         and hidden > 0

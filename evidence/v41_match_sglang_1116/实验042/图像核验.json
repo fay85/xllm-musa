@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-17T08:09:46.321989+08:00",
+  "off_and_on": true,
+  "actual_timeline_and_count_profile_viewed": true,
+  "native_entries_each": 634,
+  "target_graph_nodes": {
+    "off": 4047,
+    "on": 4367
+  },
+  "note": "Actual Perfetto views; COUNT is not CPU sampled duration"
+}

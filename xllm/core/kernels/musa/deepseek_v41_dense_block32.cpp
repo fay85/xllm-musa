@@ -99,7 +99,7 @@ torch::Tensor deepseek_v41_dense_prequant_block32(
         weight_scale.is_contiguous());
   CHECK_EQ(input.size(1), weight.size(1));
   CHECK_GT(input.size(0), 0);
-  CHECK_LE(input.size(0), 8);
+  CHECK_LE(input.size(0), 32);
   CHECK_GT(weight.size(0), 0);
   CHECK_GT(weight.size(1), 0);
   CHECK_GT(splits, 0);

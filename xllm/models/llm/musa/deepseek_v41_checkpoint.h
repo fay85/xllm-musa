@@ -82,6 +82,57 @@ class DeepseekV41Checkpoint final {
     return shard(decoded, shard_dim).to(options_).contiguous();
   }
 
+  // Preserve the checkpoint FP8 representation. Slice weights and block scales
+  // together on the CPU, before any device allocation or dequantization.
+  std::pair<torch::Tensor, torch::Tensor> dense_fp8(
+      const std::string& prefix,
+      std::optional<int64_t> shard_dim = std::nullopt) const {
+    auto [weight, scale] = prepare_dense_fp8(tensor(prefix + ".weight"),
+                                             tensor(prefix + ".scale"),
+                                             tp_rank_,
+                                             tp_size_,
+                                             shard_dim);
+    return {weight.to(options_.dtype(torch::kFloat8_e4m3fn)).contiguous(),
+            scale.to(options_.dtype(torch::kFloat32)).contiguous()};
+  }
+
+  static std::pair<torch::Tensor, torch::Tensor> prepare_dense_fp8(
+      torch::Tensor weight,
+      torch::Tensor scale,
+      int64_t rank,
+      int64_t size,
+      std::optional<int64_t> shard_dim) {
+    CHECK(weight.device().is_cpu() && scale.device().is_cpu());
+    CHECK_EQ(weight.dim(), 2);
+    CHECK_EQ(scale.dim(), 2);
+    CHECK(weight.scalar_type() == torch::kUInt8 ||
+          weight.scalar_type() == torch::kFloat8_e4m3fn);
+    CHECK_EQ(scale.element_size(), 1);
+    CHECK_EQ(weight.size(0) % 32, 0);
+    CHECK_EQ(weight.size(1) % 32, 0);
+    CHECK_EQ(scale.size(0), weight.size(0) / 32);
+    CHECK_EQ(scale.size(1), weight.size(1) / 32);
+    CHECK_GT(size, 0);
+    CHECK_GE(rank, 0);
+    CHECK_LT(rank, size);
+    if (shard_dim.has_value()) {
+      const int64_t dim = shard_dim.value();
+      CHECK(dim == 0 || dim == 1);
+      CHECK_EQ(weight.size(dim) % size, 0);
+      const int64_t width = weight.size(dim) / size;
+      CHECK_EQ(width % 32, 0) << "FP8 TP slice must preserve block boundaries";
+      weight = weight.narrow(dim, rank * width, width);
+      scale = scale.narrow(dim, rank * width / 32, width / 32);
+    }
+    const torch::Tensor bytes =
+        scale.contiguous().view(torch::kUInt8).to(torch::kInt32);
+    CHECK(!bytes.eq(255).any().item<bool>()) << "UE8M0 scale 255 is NaN";
+    const torch::Tensor bits = torch::where(
+        bytes.eq(0), 0x00400000, torch::bitwise_left_shift(bytes, 23));
+    return {weight.contiguous().view(torch::kFloat8_e4m3fn),
+            bits.contiguous().view(torch::kFloat32)};
+  }
+
   std::pair<torch::Tensor, torch::Tensor> experts(const std::string& prefix,
                                                   const std::string& projection,
                                                   int64_t first,

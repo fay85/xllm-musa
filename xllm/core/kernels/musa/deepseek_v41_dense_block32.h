@@ -18,7 +18,7 @@ torch::Tensor deepseek_v41_dense_block32(const torch::Tensor& input,
                                          const std::string& directory);
 
 // Separate quantization avoids redoing activation quantization in every N tile.
-// Directory contains shape-specific AOT exports; only rows 1..8 are supported.
+// Directory contains shape-specific AOT exports; only rows 1..32 are supported.
 torch::Tensor deepseek_v41_dense_prequant_block32(
     const torch::Tensor& input,
     const torch::Tensor& weight,

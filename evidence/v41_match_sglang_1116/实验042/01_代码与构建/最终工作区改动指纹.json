@@ -1,0 +1,49 @@
+{
+  "parent_commit": "b34f1e6d2786198fdc507883238b4f3c0fe09f48",
+  "files": [
+    {
+      "path": "tests/core/kernels/musa/v41_prequant_projection_test_module.cpp",
+      "sha256": "f4a78c741859467ac3f2e05c1b6b6afa3d82f58a16c99b84103da8b9f5b90724"
+    },
+    {
+      "path": "tools/musa_deepseek_v41/build_dense_prequant_aot.py",
+      "sha256": "5e685a4aaf139b425b588f092a4855e5586be2725e6357dc3d275f7e5bccd7fc"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_dense_block32.cpp",
+      "sha256": "f94771276bc9fddbfbca84e0d5a6c922a9a594a11df7bac0b0cffa69513e9cb0"
+    },
+    {
+      "path": "xllm/core/kernels/musa/deepseek_v41_dense_block32.h",
+      "sha256": "c3d4feab513864718b24cfc9002bf798986aaa329ba0b46be1422db1c1b18c94"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention.h",
+      "sha256": "120d57060fe2296b18a5b2d3dd105eceb44873dd54a7c082c208454e915c8a08"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+      "sha256": "8ddb0264d3b02cd36cc09b50c8e3c8c39cbcc0f846695a57006be6806c2ea156"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/feed_forward.h",
+      "sha256": "e61c91f54d91f315827251305b65f50cab5402388291f2ce27168d0e4a939046"
+    },
+    {
+      "path": "xllm/core/layers/musa/deepseek_v41/moe.h",
+      "sha256": "2525626244d1db32a58cc56837fa801f6cb4fc63af448c62fbdd3a6e4b6a4679"
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_checkpoint.h",
+      "sha256": "02bc80d0ca2bf2f18fd7f7157087c1657f1c87b8f94ec07c5f12599d7dcd7c2b"
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+      "sha256": "b0a8c1641cf7f61a16044fa4b973bd27cf8dbefd942b0a72ddc8b0379de421bd"
+    },
+    {
+      "path": "xllm/models/llm/musa/deepseek_v41_native.h",
+      "sha256": "d0d3f142322f7cce5415775977ced249500e3eb5008bd82bb1e7a5be99913834"
+    }
+  ]
+}

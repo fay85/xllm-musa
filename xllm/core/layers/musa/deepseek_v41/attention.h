@@ -57,10 +57,12 @@ struct DeepseekV41AttentionConfig {
   bool verify_skinny_projection = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
+  std::string dense_prequant_directory;
 };
 
 struct DeepseekV41AttentionWeights {
   std::vector<torch::Tensor> projection;
+  std::vector<torch::Tensor> projection_fp8_scales;
   torch::Tensor sink;
   torch::Tensor compressor_kv;
   torch::Tensor compressor_norm;
@@ -115,7 +117,9 @@ class DeepseekV41Attention final {
                     config_.epsilon,
                     config_.original_fp8_activation,
                     config_.decode_packed_qkv,
-                    config_.verify_skinny_projection) {
+                    config_.verify_skinny_projection,
+                    weights_.projection_fp8_scales,
+                    config_.dense_prequant_directory) {
     CHECK_GE(config_.layer, 0);
     CHECK_GT(config_.window, 0);
     CHECK(weights_.sink.defined());

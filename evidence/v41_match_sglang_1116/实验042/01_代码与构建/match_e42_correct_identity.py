@@ -1,0 +1,5 @@
+from pathlib import Path
+import json,datetime
+r=Path('/expt');p=r/'scripts/match_e42_formal_client.py';s=p.read_text();old=s;s=s.replace('0130ef9a E37 native SG environment control; E42 FP8 projection OFF/ON treatment identified in role configs','b34f1e6d parent + E42 source_manifest; same new ELF OFF/ON').replace('/expt/builds/native_sg438_control/e37_native_mccl/source_manifest.json','/expt/builds/e42_native_full_v1/source_manifest.json');assert s!=old;(r/'builds/e42_native_full_v1/formal_client_original.py').write_text(old);p.write_text(s)
+v={'at':datetime.datetime.now().astimezone().isoformat(),'scope':'Metadata correction only; retain original OFF client identity. No request or measurement changed.','source_commit':'b34f1e6d2786198fdc507883238b4f3c0fe09f48 + E42 source_manifest','candidate_delta_manifest':'/expt/builds/e42_native_full_v1/source_manifest.json','binary_sha256':'7389984e8a774025f574b79cc2a50b00fd50df09eb91773636c7bcb5fa50934d'}
+(r/'runs/p42_fp8dense_off_v1/identity_correction.json').write_text(json.dumps(v,indent=2));print(json.dumps(v))
