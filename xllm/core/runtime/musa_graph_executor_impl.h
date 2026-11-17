@@ -179,6 +179,14 @@ class MusaGraphPersistentParam final {
     }
     return persistent_linear_state_indices_;
   }
+  torch::Tensor persistent_linear_state_read_indices(
+      uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_linear_state_read_indices_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_linear_state_read_indices_;
+  }
   torch::Tensor persistent_num_accepted_tokens(
       uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
@@ -282,6 +290,7 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_embedding_;
   torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
+  torch::Tensor persistent_linear_state_read_indices_;
   torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
