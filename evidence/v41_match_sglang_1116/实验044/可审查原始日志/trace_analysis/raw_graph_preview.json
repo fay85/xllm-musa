@@ -1,0 +1,166 @@
+[
+  {
+    "rank": 0,
+    "graphs": 5,
+    "last_nodes": 4362,
+    "by_count": [
+      [
+        "void musa::dnn::unary::kernel_unary<__mt_bfloat16, musa::dnn::unary::CastOp, float, float, __mt_bfloat16, 128>(float*, __mt_bfloat16 const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+        286
+      ],
+      [
+        "quantize_block32_once",
+        280
+      ],
+      [
+        "prequantized_block32_gemm",
+        280
+      ],
+      [
+        "dense_block32_reduce",
+        280
+      ],
+      [
+        "void musa::dnn::(anonymous namespace)::CopyGeneralOutContiguousKernel<4, int, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long)",
+        240
+      ],
+      [
+        "void xllm::kernel::musa::(anonymous namespace)::rmsnorm_vec8_kernel<__mt_bfloat16, false, true>(__mt_bfloat16 const*, __mt_bfloat16 const*, __mt_bfloat16*, int, int, int, long, long, long, float, float)",
+        169
+      ],
+      [
+        "void musa::dnn::reduce_abc::ReduceABCKernel<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, (musa::dnn::ReduceMode)1, 32, 4, musa::dnn::FastDivmodU32>(float*, float*, float*, float const*, long, long, long, musa::dnn::ReduceOp<float, float, float, musa::dnn::ReduceType<float, (musa::dnn::ReduceImplType)0>, (musa::dnn::ReduceMode)1>, musa::dnn::FastDivmodU32)",
+        160
+      ],
+      [
+        "void musa::dnn::unary::kernel_unary<float, musa::dnn::unary::CastOp, float, __mt_bfloat16, float, 128>(__mt_bfloat16*, float const*, unsigned long, float, float, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+        160
+      ],
+      [
+        "void at::native::(anonymous namespace)::IndexSelectVectorKernel<float, long, true, 128>(float*, long*, float*, long, long, long, long, unsigned int)",
+        120
+      ],
+      [
+        "void xllm::kernel::musa::(anonymous namespace)::deepseek_v4_partial_rope_kernel<float>(float const*, float const*, float const*, float*, long, long, long, long, long, long, bool)",
+        120
+      ],
+      [
+        "void musa::dnn::unary::kernel_unary<int, musa::dnn::unary::CastOp, int, long, int, 128>(long*, int const*, unsigned long, int, int, void const*, void const*, musa::dnn::ParamType, musa::dnn::ParamType, float, float, float)",
+        97
+      ],
+      [
+        "xllm::kernel::musa::(anonymous namespace)::block32_qdq_kernel(c10::BFloat16 const*, c10::BFloat16*, float*, long)",
+        90
+      ]
+    ],
+    "by_profile_sum_us": [
+      [
+        "prequantized_block32_gemm",
+        7657.011999999993
+      ],
+      [
+        "void mutlass::device_kernel<mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false> >(mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false>::Params)",
+        4394.807999999999
+      ],
+      [
+        "void deep_ep::internode_ll::combine<5120, 16, 3, true>(void*, void*, int*, void*, void const*, long const*, float const*, int const*, long const*, int*, int, int, int, int, int, int, int, int, int, int, bool)",
+        2790.6489999999994
+      ],
+      [
+        "void musa::dnn::(anonymous namespace)::batch_gemm_small_m_nt_tt_kernel<float, (musa::dnn::GemmTransposeType)2, 512, 4, 32, 64, 512, 4, false>(float*, float const*, float const*, float const*, float const*, float*, unsigned int*, int, int, int, int, int, int, int, int, long, long, long, long, float, float, float, int, int, musa::dnn::FastDivmodU32)",
+        2717.7659999999996
+      ],
+      [
+        "musa_asm_bf16bf16bf16bf16ssgemm_nt_tce_128_32x128B128_epilogue_stage3",
+        2232.0430000000006
+      ],
+      [
+        "xllm::kernel::musa::(anonymous namespace)::swa_verify_read_kernel(c10::BFloat16 const*, c10::BFloat16 const*, long const*, long const*, c10::BFloat16 const*, long const*, c10::BFloat16*, long*, long*, long, long, long, long, long, long, long, long)",
+        1731.9639999999997
+      ],
+      [
+        "dense_block32_reduce",
+        1642.6070000000004
+      ],
+      [
+        "void mutlass::device_kernel<mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u> >(mate::deep_gemm::Mp31Tf32HcPrenormGemm<mutlass::bfloat16_t, float, float, mute::tuple<long, long>, mute::tuple<long, long>, mute::tuple<long, long, long>, mute::tuple<long, long>, mute::tuple<mute::C<32>, mute::C<32>, mute::C<32> >, 3u, 2u>::Params)",
+        1499.042
+      ],
+      [
+        "void xllm::kernel::musa::(anonymous namespace)::v41_gate_block_kernel<512>(float const*, float const*, float*, long*, int, int, bool, bool, float)",
+        1376.9619999999998
+      ],
+      [
+        "dsa_prefill_kernel",
+        1373.3239999999998
+      ],
+      [
+        "void musa::dnn::(anonymous namespace)::CopyGeneralOutContiguousKernel<4, int, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, int>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, long, long, long, long, long)",
+        1369.2050000000006
+      ],
+      [
+        "void deep_ep::internode_ll::dispatch<false, false, 5120, 3, 16, true>(void*, void*, int*, long*, int*, int*, void*, int*, void*, void const*, long const*, int*, int*, int*, int, int, int, int, int, int, int, int, int, bool)",
+        1316.203
+      ]
+    ],
+    "ll_nodes": 201
+  },
+  {
+    "rank": 1,
+    "graphs": 5,
+    "last_nodes": 241,
+    "by_count": [
+      [
+        "void mutlass::device_kernel<mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false> >(mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false>::Params)",
+        80
+      ],
+      [
+        "void deep_ep::internode_ll::dispatch<false, false, 5120, 3, 16, true>(void*, void*, int*, long*, int*, int*, void*, int*, void*, void const*, long const*, int*, int*, int*, int, int, int, int, int, int, int, int, int, bool)",
+        40
+      ],
+      [
+        "xllm::kernel::musa::(anonymous namespace)::quant_dispatched_kernel(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float)",
+        40
+      ],
+      [
+        "void xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel<true>(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float, float)",
+        40
+      ],
+      [
+        "void deep_ep::internode_ll::combine<5120, 16, 3, true>(void*, void*, int*, void*, void const*, long const*, float const*, int const*, long const*, int*, int, int, int, int, int, int, int, int, int, int, bool)",
+        40
+      ],
+      [
+        "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)",
+        1
+      ]
+    ],
+    "by_profile_sum_us": [
+      [
+        "void deep_ep::internode_ll::dispatch<false, false, 5120, 3, 16, true>(void*, void*, int*, long*, int*, int*, void*, int*, void*, void const*, long const*, int*, int*, int*, int, int, int, int, int, int, int, int, int, bool)",
+        47910.95199999999
+      ],
+      [
+        "void mutlass::device_kernel<mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false> >(mate::gemm::masked_moe_gemm_mixed_dtype::Mp31MixedDtypeMaskedMoeGEMMS4FP8<mutlass::float_e4m3_t, mutlass::integer_subbyte<4, true>, float, mutlass::bfloat16_t, mutlass::bfloat16_t, mute::tuple<mute::C<32>, mute::C<256>, mute::C<256> >, 3u, -1, false>::Params)",
+        3852.4999999999986
+      ],
+      [
+        "void deep_ep::internode_ll::combine<5120, 16, 3, true>(void*, void*, int*, void*, void const*, long const*, float const*, int const*, long const*, int*, int, int, int, int, int, int, int, int, int, int, bool)",
+        3610.5370000000003
+      ],
+      [
+        "void xllm::kernel::musa::(anonymous namespace)::swiglu_quant_kernel<true>(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float, float)",
+        257.601
+      ],
+      [
+        "xllm::kernel::musa::(anonymous namespace)::quant_dispatched_kernel(c10::BFloat16 const*, int const*, c10::Float8_e4m3fn*, float*, int, int, float)",
+        216.12000000000006
+      ],
+      [
+        "void musa::dnn::(anonymous namespace)::KernelFill<__mt_bfloat16, false, false, false, (musa::dnn::(anonymous namespace)::BroadcastMode)0, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, 128>(void*, musa::dnn::DeviceTensor<unsigned int, musa::dnn::FastDivmodU32>, __mt_bfloat16, long)",
+        4.72
+      ]
+    ],
+    "ll_nodes": 120
+  }
+]

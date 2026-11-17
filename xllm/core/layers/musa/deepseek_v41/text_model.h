@@ -124,6 +124,17 @@ class DeepseekV41TextModel final {
                                 nullptr);
   }
 
+  // Keep TP embedding communication outside an owner/DeepEP decoder graph.
+  // The caller supplies the gathered tensor as a stable graph input; no
+  // embedding weights are replicated and every TP rank still participates.
+  torch::Tensor prepare_embeddings(const torch::Tensor& input_ids) const {
+    torch::DeviceGuard guard(embedding_.device());
+    CHECK_EQ(input_ids.device(), embedding_.device());
+    torch::Tensor hidden =
+        torch::embedding(embedding_, input_ids.to(torch::kInt64));
+    return parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
+  }
+
   torch::Tensor forward_with_capture(
       const torch::Tensor& input_ids,
       const torch::Tensor& positions,
@@ -135,7 +146,8 @@ class DeepseekV41TextModel final {
       const std::vector<std::optional<torch::Tensor>>& engram_rows,
       const std::optional<torch::Tensor>& engram_mask,
       AuxHiddenCapture* auxiliary,
-      int64_t decode_capacity = 0) {
+      int64_t decode_capacity = 0,
+      const std::optional<torch::Tensor>& prepared_embedding = std::nullopt) {
     CHECK(input_ids.defined() && positions.defined());
     CHECK_EQ(input_ids.device(), embedding_.device());
     CHECK_EQ(positions.device(), embedding_.device());
@@ -149,13 +161,21 @@ class DeepseekV41TextModel final {
     CHECK_EQ(caches.size(), layers_.size());
     CHECK_EQ(engram_rows.size(), layers_.size());
     CHECK_GE(context_length, input_ids.size(0));
+    if (prepared_embedding.has_value()) {
+      CHECK(owner_attention_);
+      CHECK_EQ(prepared_embedding->device(), embedding_.device());
+      CHECK_EQ(prepared_embedding->scalar_type(), embedding_.scalar_type());
+      CHECK_EQ(prepared_embedding->dim(), 2);
+      CHECK_EQ(prepared_embedding->size(0), input_ids.numel());
+      CHECK_EQ(prepared_embedding->size(1), norm_.numel());
+    }
     if (owner_attention_ && attention_group_->rank() != 0) {
       // Participate in the shared embedding collective, then execute only the
       // local experts for owner tokens. This is fixed-owner C1, not a DP
       // scheduler: every rank receives the same request metadata.
-      torch::Tensor embedded =
-          torch::embedding(embedding_, input_ids.to(torch::kInt64));
-      parallel_state::gather(embedded, attention_group_, /*dim=*/-1);
+      if (!prepared_embedding.has_value()) {
+        prepare_embeddings(input_ids);
+      }
       int64_t rows = input_ids.numel();
       last_output_row_offset_ = 0;
       for (size_t index = 0; index < layers_.size(); ++index) {
@@ -170,9 +190,9 @@ class DeepseekV41TextModel final {
       return torch::zeros({rows, norm_.numel()}, embedding_.options());
     }
     torch::DeviceGuard guard(embedding_.device());
-    torch::Tensor hidden =
-        torch::embedding(embedding_, input_ids.to(torch::kInt64));
-    hidden = parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
+    torch::Tensor hidden = prepared_embedding.has_value()
+                               ? prepared_embedding.value()
+                               : prepare_embeddings(input_ids);
     hidden = hidden.unsqueeze(1).expand({-1, 4, -1}).contiguous();
     torch::Tensor pre_mix = torch::zeros(
         {input_ids.size(0), 4}, hidden.options().dtype(torch::kFloat32));

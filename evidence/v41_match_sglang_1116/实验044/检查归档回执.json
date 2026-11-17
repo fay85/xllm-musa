@@ -1,0 +1,134 @@
+{
+  "at": "2026-11-17T09:34:01.234799+08:00",
+  "archive": "/expt/exports/e44_checks_and_build_v1.tar.gz",
+  "bytes": 125029,
+  "sha256": "d48b854071f308059b68a117099b896a58613a4e03b2c345b26256299dc25491",
+  "checks": [
+    {
+      "path": "/expt/diagnostics/e44_real_chain_layer1_v1",
+      "result": {
+        "at": "2026-11-17T09:14:05.690824+08:00",
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "all_pass": true,
+        "normal_term_requested": false
+      }
+    },
+    {
+      "path": "/expt/diagnostics/e44_real_chain_layer40_v1",
+      "result": {
+        "at": "2026-11-17T09:19:22.268637+08:00",
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "all_pass": true,
+        "normal_term_requested": false
+      }
+    },
+    {
+      "path": "/expt/diagnostics/e44_mixed_mccl_layer1_v1",
+      "result": {
+        "at": "2026-11-17T09:24:48.095665+08:00",
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "all_pass": true,
+        "normal_term_requested": false
+      }
+    },
+    {
+      "path": "/expt/diagnostics/e44_mixed_mccl_layer40_v1",
+      "result": {
+        "at": "2026-11-17T09:26:51.262360+08:00",
+        "exit_codes": [
+          -15,
+          -15,
+          -15,
+          -15,
+          -15,
+          -15,
+          -15,
+          -15
+        ],
+        "all_pass": false,
+        "normal_term_requested": true
+      }
+    },
+    {
+      "path": "/expt/diagnostics/e44_mixed_mccl_layer40_reverse_v1",
+      "result": {
+        "at": "2026-11-17T09:30:26.586284+08:00",
+        "exit_codes": [
+          -15,
+          -15,
+          -15,
+          -15,
+          -15,
+          -15,
+          -15,
+          -15
+        ],
+        "all_pass": false,
+        "normal_term_requested": true
+      }
+    },
+    {
+      "path": "/expt/diagnostics/e44_gather_outside_layer40_v1",
+      "result": {
+        "at": "2026-11-17T09:28:23.084173+08:00",
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "all_pass": true,
+        "normal_term_requested": false
+      }
+    },
+    {
+      "path": "/expt/diagnostics/e44_gather_outside_layer40_v2",
+      "result": {
+        "at": "2026-11-17T09:31:42.814713+08:00",
+        "exit_codes": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "all_pass": true,
+        "normal_term_requested": false
+      }
+    }
+  ]
+}

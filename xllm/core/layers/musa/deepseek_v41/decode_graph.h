@@ -42,6 +42,7 @@ struct DeepseekV41DecodeInputs {
   int64_t context_length = 0;
   std::vector<std::optional<torch::Tensor>> engram_rows;
   std::optional<torch::Tensor> engram_mask;
+  std::optional<torch::Tensor> prepared_embedding;
 };
 
 // C1 target decoder only. Engram hashing/lookup and the vocabulary head stay
@@ -147,6 +148,10 @@ class DeepseekV41DecodeGraph final {
     if (input.engram_mask.has_value()) {
       buffers.engram_mask = torch::empty_like(input.engram_mask.value());
     }
+    if (input.prepared_embedding.has_value()) {
+      buffers.prepared_embedding =
+          torch::empty_like(input.prepared_embedding.value());
+    }
     return buffers;
   }
 
@@ -211,6 +216,7 @@ class DeepseekV41DecodeGraph final {
       copy_optional(target.engram_rows[index], source.engram_rows[index]);
     }
     copy_optional(target.engram_mask, source.engram_mask);
+    copy_optional(target.prepared_embedding, source.prepared_embedding);
   }
 
   std::unique_ptr<DeepseekV41StateCheckpoint> snapshot(

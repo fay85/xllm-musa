@@ -69,6 +69,9 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     replicated_attention_ =
         util::get_bool_env("XLLM_DSV41_REPLICATED_ATTENTION", false);
     owner_attention_ = util::get_bool_env("XLLM_DSV41_OWNER_DEEPEP_LL", false);
+    owner_gather_outside_graph_ =
+        util::get_bool_env("XLLM_DSV41_OWNER_GATHER_OUTSIDE_GRAPH", false);
+    CHECK(!owner_gather_outside_graph_ || owner_attention_);
     CHECK(!owner_attention_ || replicated_attention_);
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
     const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
@@ -477,6 +480,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                 .flatten(1);
       }
     }
+    std::optional<torch::Tensor> prepared_embedding;
+    if (owner_gather_outside_graph_) {
+      prepared_embedding = model_->prepare_embeddings(tokens);
+    }
     torch::Tensor hidden;
     if (batched) {
       CHECK(!auxiliary_) << "DSpark capture currently requires one request";
@@ -500,7 +507,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                            ratio2_table,
                                            context_length,
                                            engram_rows,
-                                           mask};
+                                           mask,
+                                           prepared_embedding};
       hidden = decode_graph_->run(
           input,
           full_decode_graph_,
@@ -516,7 +524,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                                 value.engram_rows,
                                                 value.engram_mask,
                                                 auxiliary_.get(),
-                                                capacity);
+                                                capacity,
+                                                value.prepared_embedding);
           });
     } else {
       hidden = model_->forward_with_capture(tokens,
@@ -528,7 +537,9 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                             context_length,
                                             engram_rows,
                                             mask,
-                                            auxiliary_.get());
+                                            auxiliary_.get(),
+                                            /*decode_capacity=*/0,
+                                            prepared_embedding);
     }
     ModelOutput output =
         auxiliary_ ? auxiliary_->finalize(hidden) : ModelOutput(hidden);
@@ -845,13 +856,15 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   }
 
   void initialize_owner_deepep_policy() {
+    const int64_t policy =
+        static_cast<int64_t>(owner_attention_) |
+        (static_cast<int64_t>(owner_gather_outside_graph_) << 1);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
-          torch::tensor({static_cast<int64_t>(owner_attention_)},
-                        options_.dtype(torch::kInt64));
+          torch::tensor({policy}, options_.dtype(torch::kInt64));
       const torch::Tensor peers =
           tp_group_->allgather_base_sync(local).to(torch::kCPU).contiguous();
-      CHECK(peers.eq(static_cast<int64_t>(owner_attention_)).all().item<bool>())
+      CHECK(peers.eq(policy).all().item<bool>())
           << "Owner/empty-rank DeepEP policy must agree on every rank";
     }
     if (!owner_attention_) {
@@ -1419,6 +1432,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   bool full_decode_graph_ = false;
   bool replicated_attention_ = false;
   bool owner_attention_ = false;
+  bool owner_gather_outside_graph_ = false;
   std::shared_ptr<layer::DeepseekV41DeepEpLlRuntime> deep_ep_ll_;
   // Graphs retain weight/cache pointers; destroy before model and Engram
   // assets.
