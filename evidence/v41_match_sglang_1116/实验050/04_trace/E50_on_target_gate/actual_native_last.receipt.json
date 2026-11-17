@@ -1,0 +1,39 @@
+{
+  "status": "CONVERTED_AND_VERIFIED",
+  "trace_sha256": "3b4286c8d9624f37944fe94485d357bd2c0efa297662a7dba7804c320d45ec4d",
+  "native_stacks_sha256": "bbf0967ef7ffcf4b86a01a1cf84c91c3bf0a534bdc242004bf6002930ab520aa",
+  "symbols_sha256": "fab3da0e0935ad09bcaa8e75e09ec3534444d6e11efbd97cff52a203aad632a8",
+  "symbolization_binary_sha256": "1b82cf0ded826db867a67ecf4429ad96368936149597a9cc07c431465506ae8a",
+  "selected_step": {
+    "ph": "X",
+    "cat": "user_annotation",
+    "name": "V41/step/q=4/kv=266",
+    "pid": 25107,
+    "tid": 27311,
+    "ts": 4033924560224.657,
+    "dur": 64053.066,
+    "args": {
+      "External id": 7261,
+      "Record function id": 8102,
+      "finished": true,
+      "Ev Idx": 7260
+    }
+  },
+  "step_selection": "outermost matching semantic scope; nested calls retained",
+  "selected_record_id": null,
+  "step_prefix": "V41/step/",
+  "selected_scope": null,
+  "gpu_selection": "within full step window",
+  "actual_intervals": 4909,
+  "native_entry_samples": 634,
+  "include_aten_entries": true,
+  "include_runtime_intervals": true,
+  "operation_leaf_provenance": "Actual same-ID RecordFunction names, not invented native symbols",
+  "output_sha256": "3df6204550dbd86dc327908a49cff73a46267cc0b7b8aafc41dae6ca424fffc3",
+  "verification": {
+    "slices": 4909,
+    "native_entry_samples": 634,
+    "errors": 0
+  },
+  "scope": "Actual CPU/GPU intervals plus real native semantic entry COUNT; not CPU-time sampling"
+}

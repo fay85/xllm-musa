@@ -1,0 +1,27 @@
+from pathlib import Path
+import base64,json,hashlib,datetime
+r=Path('/expt/builds/e50_native_gate_gemv_v3');r.mkdir(exist_ok=False);(r/'src').mkdir()
+p=r/'src/v41_gate_gemv_test_module.cpp';p.write_bytes(base64.b64decode('LyogQ29weXJpZ2h0IDIwMjYgVGhlIHhMTE0gQXV0aG9ycy4gQWxsIFJpZ2h0cyBSZXNlcnZlZC4KU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IEFwYWNoZS0yLjAKPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09Ki8KI2luY2x1ZGUgPHRvcmNoL2V4dGVuc2lvbi5oPgoKI2luY2x1ZGUgPGNzdGRpbnQ+CiNpbmNsdWRlIDxtZW1vcnk+CiNpbmNsdWRlIDxvcHRpb25hbD4KCiNpbmNsdWRlICJjb3JlL2tlcm5lbHMvbXVzYS9tdXNhX2RzdjRfb3BzX2FwaS5oIgojaW5jbHVkZSAiY29yZS9rZXJuZWxzL211c2EvbXVzYV9vcHNfYXBpLmgiCiNpbmNsdWRlICJjb3JlL2xheWVycy9tdXNhL2RlZXBzZWVrX3Y0MS9mZWVkX2ZvcndhcmQuaCIKCm5hbWVzcGFjZSB7CnRvcmNoOjpUZW5zb3IgZ2F0ZV9nZW12KGNvbnN0IHRvcmNoOjpUZW5zb3IgJmlucHV0LAogICAgICAgICAgICAgICAgICAgICAgICBjb25zdCB0b3JjaDo6VGVuc29yICZ3ZWlnaHQpIHsKICByZXR1cm4geGxsbTo6a2VybmVsOjptdXNhOjpkZWVwc2Vla192NF9nYXRlX2dlbXYoaW5wdXQsIHdlaWdodCwKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgLypvdXRwdXQ9Ki9zdGQ6Om51bGxvcHQpOwp9Cgp0b3JjaDo6VGVuc29yIGdhdGVfcmVmZXJlbmNlKGNvbnN0IHRvcmNoOjpUZW5zb3IgJmlucHV0LAogICAgICAgICAgICAgICAgICAgICAgICAgICAgIGNvbnN0IHRvcmNoOjpUZW5zb3IgJmZwMzJfd2VpZ2h0KSB7CiAgcmV0dXJuIHRvcmNoOjpsaW5lYXIoaW5wdXQudG8odG9yY2g6OmtGbG9hdDMyKSwgZnAzMl93ZWlnaHQpOwp9Cn0gLy8gbmFtZXNwYWNlCgpQWUJJTkQxMV9NT0RVTEUodjQxX2dhdGVfZ2Vtdl90ZXN0X21vZHVsZSwgbW9kdWxlKSB7CiAgbW9kdWxlLmRlZigiZ2VtdiIsICZnYXRlX2dlbXYpOwogIG1vZHVsZS5kZWYoInJlZmVyZW5jZSIsICZnYXRlX3JlZmVyZW5jZSk7CiAgbW9kdWxlLmRlZigicm91dGluZyIsICZ4bGxtOjprZXJuZWw6Om11c2E6OmRlZXBzZWVrX3Y0MV9nYXRlX3RvcGspOwogIHVzaW5nIEdhdGUgPSB4bGxtOjpsYXllcjo6RGVlcHNlZWtWNDFHYXRlOwogIHB5YmluZDExOjpjbGFzc188R2F0ZSwgc3RkOjpzaGFyZWRfcHRyPEdhdGU+Pihtb2R1bGUsICJHYXRlIikKICAgICAgLmRlZihweWJpbmQxMTo6aW5pdChbXSh0b3JjaDo6VGVuc29yIHdlaWdodCwgdG9yY2g6OlRlbnNvciBiaWFzLAogICAgICAgICAgICAgICAgICAgICAgICAgICAgIGludDY0X3QgdG9waywgYm9vbCBub3JtYWxpemUsIGRvdWJsZSBzY2FsZSwKICAgICAgICAgICAgICAgICAgICAgICAgICAgICBib29sIHVzZV9zaW10LCBib29sIGNhY2hlX2ZwMzIpIHsKICAgICAgICByZXR1cm4gc3RkOjptYWtlX3NoYXJlZDxHYXRlPigKICAgICAgICAgICAgc3RkOjptb3ZlKHdlaWdodCksIHN0ZDo6bW92ZShiaWFzKSwKICAgICAgICAgICAgLyp2aXNpb25fYmlhcz0qL3N0ZDo6bnVsbG9wdCwKICAgICAgICAgICAgLyppbWFnZV90b2tlbl9pZD0qLzEyOTI2NCwgdG9waywgbm9ybWFsaXplLCBzY2FsZSwgY2FjaGVfZnAzMiwKICAgICAgICAgICAgLyp1c2VfYmYxNl9mcDMyX3Byb2plY3Rpb249Ki9mYWxzZSwgdXNlX3NpbXQpOwogICAgICB9KSkKICAgICAgLmRlZigiZm9yd2FyZCIsIFtdKGNvbnN0IEdhdGUgJmdhdGUsIGNvbnN0IHRvcmNoOjpUZW5zb3IgJmlucHV0KSB7CiAgICAgICAgcmV0dXJuIGdhdGUuZm9yd2FyZChpbnB1dCwgLyppbnB1dF9pZHM9Ki9zdGQ6Om51bGxvcHQpOwogICAgICB9KTsKfQo='))
+(r/'source_manifest.json').write_text(json.dumps({'source_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'at':datetime.datetime.now().astimezone().isoformat(),'scope':'isolate existing V4 SIMT GEMV; no model change'},indent=2))
+from pathlib import Path
+import json,os,subprocess,datetime
+r=Path('/expt/builds/e50_native_gate_gemv_v3');assert (r/'source_manifest.json').exists() and not (r/'job.json').exists();old=Path('/expt/builds/e40_prequant_native_v1');template=json.loads((old/'commands.json').read_text())[0];commands=[]
+for i,name in enumerate(['v41_gate_gemv_test_module.cpp']):
+ cmd=[x.replace(str(old),str(r)) for x in template];cmd[cmd.index('-o')+1]=str(r/f'{i}.o');cmd[cmd.index('-c')+1]=str(r/'src'/name);commands.append(cmd)
+link=json.loads(Path('/expt/builds/hc_metadata_production_checks_v1/commands.json').read_text())[1];link=[x for x in link if not x.endswith('/test_module.o')];link[link.index('-o')+1]=str(r/'v41_gate_gemv_test_module.so');link[4:4]=[str(r/'0.o')];commands.append(link);(r/'commands.json').write_text(json.dumps(commands,indent=2))
+worker='''from pathlib import Path
+import json,os,subprocess,datetime,hashlib
+r=Path('/expt/builds/e50_native_gate_gemv_v3');rc=1
+try:
+ for i,cmd in enumerate(json.loads((r/'commands.json').read_text())):
+  with (r/f'{i}.log').open('xb') as f:
+   p=subprocess.Popen(cmd,cwd='/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310',stdout=f,stderr=subprocess.STDOUT);(r/'child.json').write_text(json.dumps({'pid':p.pid,'start_ticks':Path('/proc',str(p.pid),'stat').read_text().split()[21]}));code=p.wait()
+  assert code==0,(i,code)
+ p=subprocess.run(['python3','-c','import torch,torch_musa; import v41_gate_gemv_test_module; print("IMPORT_PASS")'],env=dict(os.environ,PYTHONPATH=str(r)),capture_output=True,text=True);(r/'import.log').write_text(p.stdout+p.stderr);assert p.returncode==0;rc=0
+finally:
+ val={'exit_code':rc,'at':datetime.datetime.now().astimezone().isoformat()};p=r/'v41_gate_gemv_test_module.so'
+ if p.exists():val.update(bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+ (r/'finished.json').write_text(json.dumps(val,indent=2))
+''';(r/'worker.py').write_text(worker);py='/opt/venv/lib/python3.10/site-packages';env=dict(os.environ,LD_PRELOAD='',LD_LIBRARY_PATH=py+'/torch_musa/lib:'+py+'/torch/lib:'+py+'/tvm_ffi/lib:/usr/local/musa/lib',MUSAMAPPING_PATH='/usr/local/musa/tools/musamapping',MUSA_VISIBLE_DEVICES='-1',OMP_NUM_THREADS='2')
+with (r/'worker.log').open('xb') as f:p=subprocess.Popen(['python3',str(r/'worker.py')],env=env,stdout=f,stderr=subprocess.STDOUT,start_new_session=True)
+v={'pid':p.pid,'start_ticks':Path('/proc',str(p.pid),'stat').read_text().split()[21],'at':datetime.datetime.now().astimezone().isoformat()};(r/'job.json').write_text(json.dumps(v));print(json.dumps(v))

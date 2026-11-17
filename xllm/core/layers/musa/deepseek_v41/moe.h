@@ -38,6 +38,7 @@ struct DeepseekV41MoeConfig {
   bool dense = false;
   bool gate_cache_fp32_weight = false;
   bool gate_bf16_fp32_projection = false;
+  bool gate_simt_projection = false;
   bool original_fp8_activation = true;
   bool decode_ep_custom_allreduce = false;
   bool verify_custom_allreduce = false;
@@ -122,16 +123,16 @@ class DeepseekV41Moe final {
       CHECK_EQ(weights_.expert[index].size(0), count);
       CHECK_EQ(weights_.scale[index].size(0), count);
     }
-    gate_ =
-        std::make_unique<DeepseekV41Gate>(weights_.gate,
-                                          weights_.bias,
-                                          weights_.vision_bias,
-                                          config_.image_token_id,
-                                          config_.topk,
-                                          config_.normalize,
-                                          config_.scale,
-                                          config_.gate_cache_fp32_weight,
-                                          config_.gate_bf16_fp32_projection);
+    gate_ = std::make_unique<DeepseekV41Gate>(weights_.gate,
+                                              weights_.bias,
+                                              weights_.vision_bias,
+                                              config_.image_token_id,
+                                              config_.topk,
+                                              config_.normalize,
+                                              config_.scale,
+                                              config_.gate_cache_fp32_weight,
+                                              config_.gate_bf16_fp32_projection,
+                                              config_.gate_simt_projection);
     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
       w4a8_ = std::make_unique<DeepseekV41W4A8Experts>(
           weights_.expert[0],

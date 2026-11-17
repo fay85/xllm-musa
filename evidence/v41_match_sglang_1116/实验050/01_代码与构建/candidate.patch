@@ -1,0 +1,110 @@
+diff --git a/xllm/core/layers/musa/deepseek_v41/feed_forward.h b/xllm/core/layers/musa/deepseek_v41/feed_forward.h
+index b02a9d28..2ed7d3bb 100644
+--- a/xllm/core/layers/musa/deepseek_v41/feed_forward.h
++++ b/xllm/core/layers/musa/deepseek_v41/feed_forward.h
+@@ -462,14 +462,16 @@ class DeepseekV41Gate final {
+                   bool normalize,
+                   double scale,
+                   bool cache_fp32_weight = false,
+-                  bool use_bf16_fp32_projection = false)
++                  bool use_bf16_fp32_projection = false,
++                  bool use_simt_projection = false)
+       : weight_(std::move(weight)),
+         bias_(std::move(bias)),
+         vision_bias_(vision_bias.value_or(torch::Tensor{})),
+         image_token_id_(image_token_id),
+         topk_(topk),
+         normalize_(normalize),
+-        scale_(scale) {
++        scale_(scale),
++        use_simt_projection_(use_simt_projection) {
+     CHECK(weight_.defined() && bias_.defined());
+     CHECK(weight_.device().type() == torch::kPrivateUse1);
+     CHECK(weight_.scalar_type() == torch::kBFloat16 ||
+@@ -484,7 +486,10 @@ class DeepseekV41Gate final {
+     CHECK_LE(topk_, weight_.size(0));
+     CHECK_LE(weight_.size(0), 1024);
+     CHECK(std::isfinite(scale_));
+-    if (use_bf16_fp32_projection && weight_.scalar_type() == torch::kBFloat16) {
++    CHECK(!(use_bf16_fp32_projection && use_simt_projection_))
++        << "Select at most one optional V4.1 Gate projection backend";
++    if ((use_bf16_fp32_projection || use_simt_projection_) &&
++        weight_.scalar_type() == torch::kBFloat16) {
+       // Retain the original BF16 operand before optional FP32 caching. Never
+       // round a genuinely FP32 checkpoint merely to select this backend.
+       weight_bf16_ = weight_;
+@@ -523,8 +528,13 @@ class DeepseekV41Gate final {
+           input_ids->reshape({-1, 1}).eq(image_token_id_), vision_bias_, bias_);
+     }
+     torch::Tensor logits;
+-    if (weight_bf16_.defined() && input.scalar_type() == torch::kBFloat16 &&
+-        input.size(0) <= 6) {
++    if (use_simt_projection_ && weight_bf16_.defined() && input.size(0) <= 6) {
++      // The existing V4 SIMT kernel keeps checkpoint BF16 weights and FP32
++      // accumulation/output. It uses the current stream, including capture.
++      logits = kernel::musa::deepseek_v4_gate_gemv(
++          input, weight_bf16_, /*output=*/std::nullopt);
++    } else if (!use_simt_projection_ && weight_bf16_.defined() &&
++               input.scalar_type() == torch::kBFloat16 && input.size(0) <= 6) {
+       // Reuse the V4 MATE BF16-input / FP32-output projection. The guard
+       // orders eager pool-stream producers/consumers and preserves capture.
+       {
+@@ -552,5 +562,6 @@ class DeepseekV41Gate final {
+   int64_t topk_;
+   bool normalize_;
+   double scale_;
++  bool use_simt_projection_;
+ };
+ }  // namespace xllm::layer
+diff --git a/xllm/core/layers/musa/deepseek_v41/moe.h b/xllm/core/layers/musa/deepseek_v41/moe.h
+index 14724c22..b22a12c0 100644
+--- a/xllm/core/layers/musa/deepseek_v41/moe.h
++++ b/xllm/core/layers/musa/deepseek_v41/moe.h
+@@ -38,6 +38,7 @@ struct DeepseekV41MoeConfig {
+   bool dense = false;
+   bool gate_cache_fp32_weight = false;
+   bool gate_bf16_fp32_projection = false;
++  bool gate_simt_projection = false;
+   bool original_fp8_activation = true;
+   bool decode_ep_custom_allreduce = false;
+   bool verify_custom_allreduce = false;
+@@ -122,16 +123,16 @@ class DeepseekV41Moe final {
+       CHECK_EQ(weights_.expert[index].size(0), count);
+       CHECK_EQ(weights_.scale[index].size(0), count);
+     }
+-    gate_ =
+-        std::make_unique<DeepseekV41Gate>(weights_.gate,
+-                                          weights_.bias,
+-                                          weights_.vision_bias,
+-                                          config_.image_token_id,
+-                                          config_.topk,
+-                                          config_.normalize,
+-                                          config_.scale,
+-                                          config_.gate_cache_fp32_weight,
+-                                          config_.gate_bf16_fp32_projection);
++    gate_ = std::make_unique<DeepseekV41Gate>(weights_.gate,
++                                              weights_.bias,
++                                              weights_.vision_bias,
++                                              config_.image_token_id,
++                                              config_.topk,
++                                              config_.normalize,
++                                              config_.scale,
++                                              config_.gate_cache_fp32_weight,
++                                              config_.gate_bf16_fp32_projection,
++                                              config_.gate_simt_projection);
+     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
+       w4a8_ = std::make_unique<DeepseekV41W4A8Experts>(
+           weights_.expert[0],
+diff --git a/xllm/models/llm/musa/deepseek_v41_native.h b/xllm/models/llm/musa/deepseek_v41_native.h
+index aaa6919b..c7058775 100644
+--- a/xllm/models/llm/musa/deepseek_v41_native.h
++++ b/xllm/models/llm/musa/deepseek_v41_native.h
+@@ -1130,6 +1130,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+     moe.gate_cache_fp32_weight = !moe.dense && gate_cache_fp32_weight_;
+     moe.gate_bf16_fp32_projection =
+         !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_BF16_FP32", false);
++    moe.gate_simt_projection =
++        !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_SIMT", false);
+     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
+                        (args_.n_routed_experts() / ep_size());
+     moe.topk = args_.num_experts_per_tok();

@@ -1,0 +1,2719 @@
+{
+  "status": "PASS_NATIVE_GATE_GEMV_AND_GRAPH",
+  "checks": [
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 1.4210854715202004e-14,
+      "relative_rms": 1.2926940697583948e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 1.4210854715202004e-14,
+      "relative_rms": 1.3484175460370417e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 1.430511474609375e-06,
+      "relative_rms": 1.3764181776469868e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 1.430511474609375e-06,
+      "relative_rms": 1.3639839142783493e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 1.52587890625e-05,
+      "relative_rms": 1.1844856016944527e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 1.1444091796875e-05,
+      "relative_rms": 1.4740741182925272e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 2.1316282072803006e-14,
+      "relative_rms": 1.4529801124774112e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 2.842170943040401e-14,
+      "relative_rms": 1.656854954606484e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 2.384185791015625e-06,
+      "relative_rms": 1.5635619543741575e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 2.86102294921875e-06,
+      "relative_rms": 1.4839106130740422e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 1.9073486328125e-05,
+      "relative_rms": 1.4688522310643842e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 3.0517578125e-05,
+      "relative_rms": 1.48286878945962e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 2.1316282072803006e-14,
+      "relative_rms": 1.5212959759503262e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 2.842170943040401e-14,
+      "relative_rms": 1.575182214383938e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 2.86102294921875e-06,
+      "relative_rms": 1.548735286270668e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 1.9073486328125e-06,
+      "relative_rms": 1.5906168111394862e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 1.621246337890625e-05,
+      "relative_rms": 1.5685127329550549e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 2.288818359375e-05,
+      "relative_rms": 1.5287462041112276e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 3.552713678800501e-14,
+      "relative_rms": 1.5453995718345284e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 1.7763568394002505e-14,
+      "relative_rms": 1.5884585578555526e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 1.9073486328125e-06,
+      "relative_rms": 1.5583195845969057e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 2.86102294921875e-06,
+      "relative_rms": 1.5965763128319498e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 1.9073486328125e-05,
+      "relative_rms": 1.5489831796965534e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 2.47955322265625e-05,
+      "relative_rms": 1.5437599050573224e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 3.375077994860476e-14,
+      "relative_rms": 2.902722686568937e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 2.842170943040401e-14,
+      "relative_rms": 2.1966063019517736e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 2.86102294921875e-06,
+      "relative_rms": 2.6690807951990556e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 3.0994415283203125e-06,
+      "relative_rms": 2.541608957774675e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 2.6702880859375e-05,
+      "relative_rms": 2.566358797505957e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 2.384185791015625e-05,
+      "relative_rms": 2.3874807894395454e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 4.263256414560601e-14,
+      "relative_rms": 3.5944921916560143e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 4.263256414560601e-14,
+      "relative_rms": 3.7290111232958726e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 4.5299530029296875e-06,
+      "relative_rms": 3.3698699178322097e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 3.933906555175781e-06,
+      "relative_rms": 3.391047242702108e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 4.00543212890625e-05,
+      "relative_rms": 3.4669214833341504e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 4.9591064453125e-05,
+      "relative_rms": 3.6539803605246337e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 5.684341886080802e-14,
+      "relative_rms": 3.515583086622024e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 4.440892098500626e-14,
+      "relative_rms": 3.2696780655614246e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 4.172325134277344e-06,
+      "relative_rms": 3.287379604961524e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 4.291534423828125e-06,
+      "relative_rms": 3.567017550532611e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 4.9591064453125e-05,
+      "relative_rms": 3.678099819216732e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 5.53131103515625e-05,
+      "relative_rms": 3.5053246362776814e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 5.417888360170764e-14,
+      "relative_rms": 3.3268698476491846e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 4.973799150320701e-14,
+      "relative_rms": 3.319748156925764e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 5.7220458984375e-06,
+      "relative_rms": 3.591890345296964e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 3.814697265625e-06,
+      "relative_rms": 3.391612498559928e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 7.05718994140625e-05,
+      "relative_rms": 3.6650241261431914e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 5.340576171875e-05,
+      "relative_rms": 3.3647925075100174e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 3.552713678800501e-14,
+      "relative_rms": 1.5729853656664087e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 2.842170943040401e-14,
+      "relative_rms": 1.0553477830061056e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 2.86102294921875e-06,
+      "relative_rms": 1.2352220337802827e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 2.86102294921875e-06,
+      "relative_rms": 1.425418748243428e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 3.0517578125e-05,
+      "relative_rms": 1.2877739430829836e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 3.0517578125e-05,
+      "relative_rms": 1.2806052861107083e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 3.552713678800501e-14,
+      "relative_rms": 1.62737172237153e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 4.263256414560601e-14,
+      "relative_rms": 1.677063450765029e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 4.0531158447265625e-06,
+      "relative_rms": 1.4407549041645519e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 3.814697265625e-06,
+      "relative_rms": 1.6673277546800047e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 6.103515625e-05,
+      "relative_rms": 1.568738131393284e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 5.7220458984375e-05,
+      "relative_rms": 1.4911125226012324e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 4.973799150320701e-14,
+      "relative_rms": 1.636759560867602e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 5.684341886080802e-14,
+      "relative_rms": 1.5342891024929665e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 4.76837158203125e-06,
+      "relative_rms": 1.4125685022215026e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 3.814697265625e-06,
+      "relative_rms": 1.6925803658147424e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 4.00543212890625e-05,
+      "relative_rms": 1.6418856744371226e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 4.38690185546875e-05,
+      "relative_rms": 1.6325690875418636e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 4.263256414560601e-14,
+      "relative_rms": 1.6470386559137133e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 5.684341886080802e-14,
+      "relative_rms": 1.5065452169755287e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 4.76837158203125e-06,
+      "relative_rms": 1.6983290404202978e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 5.7220458984375e-06,
+      "relative_rms": 1.6150885110480483e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 6.103515625e-05,
+      "relative_rms": 1.5096478011329632e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 4.57763671875e-05,
+      "relative_rms": 1.5589998888431984e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 0,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 5.684341886080802e-14,
+      "relative_rms": 2.2538672304120268e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 5.684341886080802e-14,
+      "relative_rms": 2.7224093978228795e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 5.7220458984375e-06,
+      "relative_rms": 2.466917125611473e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 5.7220458984375e-06,
+      "relative_rms": 2.995944353193287e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 6.67572021484375e-05,
+      "relative_rms": 3.0344194656674994e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 4.57763671875e-05,
+      "relative_rms": 3.021172081556215e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 7.815970093361102e-14,
+      "relative_rms": 3.5753682572771934e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 8.526512829121202e-14,
+      "relative_rms": 3.244307293373364e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 9.5367431640625e-06,
+      "relative_rms": 3.5839983523798123e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 9.5367431640625e-06,
+      "relative_rms": 3.6877985909454816e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 9.1552734375e-05,
+      "relative_rms": 3.2290432933437864e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 9.918212890625e-05,
+      "relative_rms": 2.932643496144921e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 8.526512829121202e-14,
+      "relative_rms": 3.312838563192579e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 8.704148513061227e-14,
+      "relative_rms": 3.5441141606709926e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 8.58306884765625e-06,
+      "relative_rms": 3.6638165932524663e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 9.655952453613281e-06,
+      "relative_rms": 3.529389728255436e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 9.72747802734375e-05,
+      "relative_rms": 3.4240013766240366e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 9.918212890625e-05,
+      "relative_rms": 3.9564277568995113e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": false,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 0.0,
+      "nondefault": true,
+      "max_abs": 0.0,
+      "relative_rms": 0.0,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": false,
+      "max_abs": 1.1368683772161603e-13,
+      "relative_rms": 3.485562008826428e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1e-08,
+      "nondefault": true,
+      "max_abs": 9.237055564881302e-14,
+      "relative_rms": 3.3045261136795063e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": false,
+      "max_abs": 9.298324584960938e-06,
+      "relative_rms": 3.502477723713464e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 1.0,
+      "nondefault": true,
+      "max_abs": 1.2636184692382812e-05,
+      "relative_rms": 3.4385657426235307e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": false,
+      "max_abs": 0.00011444091796875,
+      "relative_rms": 3.274521089345738e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "magnitude": 10.0,
+      "nondefault": true,
+      "max_abs": 0.00012969970703125,
+      "relative_rms": 3.540086147742523e-07,
+      "route_ids_equal": true,
+      "input_unchanged": true
+    }
+  ],
+  "graphs": [
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "target",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 1,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 3,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 4,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.bfloat16",
+      "rows": 6,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 1,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 3,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 4,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "part": "draft",
+      "dtype": "torch.float32",
+      "rows": 6,
+      "trial": 2,
+      "exact": true
+    }
+  ],
+  "timings": [
+    {
+      "part": "target",
+      "rows": 1,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          33.52799945407443,
+          33.26488865746392,
+          33.33911101023356,
+          33.388000064425995,
+          33.47600036197238
+        ],
+        "median_us": 33.388000064425995,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          14.755554993947348,
+          14.823110898335775,
+          14.575111865997314,
+          14.523555172814262,
+          14.684889051649305
+        ],
+        "median_us": 14.684889051649305,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          33.27111138237847,
+          33.038666513231064,
+          32.95422395070394,
+          33.14755492740207,
+          33.123556772867836
+        ],
+        "median_us": 33.123556772867836,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 1,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          64.84844419691298,
+          64.98933368259006,
+          64.90933630201552,
+          64.97333314683702,
+          64.88889058430989
+        ],
+        "median_us": 64.90933630201552,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          44.60977448357476,
+          44.62400012546115,
+          44.75555419921875,
+          44.60932943556044,
+          44.57599851820204
+        ],
+        "median_us": 44.60977448357476,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          64.78844218783908,
+          64.33644824557834,
+          64.60266643100314,
+          64.27688598632812,
+          64.76622157626682
+        ],
+        "median_us": 64.60266643100314,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 3,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          63.6448860168457,
+          63.67200215657552,
+          63.85199758741591,
+          63.93867068820529,
+          63.51911226908366
+        ],
+        "median_us": 63.67200215657552,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          29.989335272047256,
+          29.74310980902778,
+          29.964889420403374,
+          29.600000381469727,
+          28.66044309404161
+        ],
+        "median_us": 29.74310980902778,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          63.598224851820206,
+          63.586224450005425,
+          63.54177792867025,
+          61.096440421210396,
+          60.93022028605143
+        ],
+        "median_us": 63.54177792867025,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 3,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          96.60711288452148,
+          96.59332699245877,
+          96.42133712768555,
+          97.10089365641277,
+          96.34088940090604
+        ],
+        "median_us": 96.59332699245877,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          60.62000062730577,
+          60.629330741034615,
+          59.305779139200844,
+          57.37066798739963,
+          57.3079956902398
+        ],
+        "median_us": 59.305779139200844,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          96.032894982232,
+          95.56534025404189,
+          95.60889138115778,
+          95.58400048149957,
+          95.7831170823839
+        ],
+        "median_us": 95.60889138115778,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 4,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          64.5253340403239,
+          64.77155685424805,
+          63.12577989366319,
+          62.19689051310221,
+          62.115112940470375
+        ],
+        "median_us": 63.12577989366319,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          36.38311227162679,
+          36.6537782880995,
+          36.699109607272675,
+          36.88444296518961,
+          35.808889071146645
+        ],
+        "median_us": 36.6537782880995,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          64.80711301167806,
+          65.23777643839519,
+          63.3586671617296,
+          62.28088802761502,
+          62.17599974738227
+        ],
+        "median_us": 63.3586671617296,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 4,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          97.07244237263997,
+          96.82977464463976,
+          96.76222271389432,
+          103.82444593641493,
+          97.25377824571397
+        ],
+        "median_us": 97.07244237263997,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          67.61422157287598,
+          65.48710929022894,
+          64.45199648539226,
+          64.31066195170085,
+          64.14266692267523
+        ],
+        "median_us": 64.45199648539226,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          96.25245200263129,
+          96.56399620903863,
+          97.10133870442708,
+          96.25111685858832,
+          97.14444478352864
+        ],
+        "median_us": 96.56399620903863,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 6,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          63.73600429958768,
+          63.58977953592936,
+          62.85200119018555,
+          61.4191108279758,
+          60.61378055148654
+        ],
+        "median_us": 62.85200119018555,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          45.39466434054904,
+          45.67866855197482,
+          44.711997773912216,
+          44.35422155592177,
+          43.27288998497857
+        ],
+        "median_us": 44.711997773912216,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          63.91777462429471,
+          62.906222873263886,
+          60.694217681884766,
+          60.497331619262695,
+          60.44266488817003
+        ],
+        "median_us": 60.694217681884766,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "target",
+      "rows": 6,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          95.2008883158366,
+          93.6937861972385,
+          91.08977847629123,
+          90.6502193874783,
+          90.68489074707031
+        ],
+        "median_us": 91.08977847629123,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          76.23022397359212,
+          74.33733410305447,
+          72.74711396959093,
+          71.83422512478299,
+          71.93244298299153
+        ],
+        "median_us": 72.74711396959093,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          95.19999821980794,
+          92.19644334581163,
+          94.55644819471571,
+          95.15110651652019,
+          95.12355592515733
+        ],
+        "median_us": 95.12355592515733,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 1,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          28.203553623623318,
+          28.212001588609482,
+          28.618666860792374,
+          28.31466727786594,
+          28.024888038635254
+        ],
+        "median_us": 28.212001588609482,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          13.683554861280653,
+          13.692443900638157,
+          13.732443915473091,
+          13.54044410917494,
+          13.780000474717882
+        ],
+        "median_us": 13.692443900638157,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          28.208888901604546,
+          28.22444438934326,
+          28.320887353685166,
+          28.122666147020126,
+          27.961333592732746
+        ],
+        "median_us": 28.208888901604546,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 1,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          45.004002253214516,
+          45.478667153252495,
+          45.18977801005045,
+          45.52799860636393,
+          44.83689202202691
+        ],
+        "median_us": 45.18977801005045,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          29.810221989949543,
+          29.73911232418484,
+          29.451110627916123,
+          29.807557000054253,
+          29.89777723948161
+        ],
+        "median_us": 29.807557000054253,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          45.155556996663414,
+          46.091556549072266,
+          45.03777821858724,
+          45.5168883005778,
+          45.56844499376085
+        ],
+        "median_us": 45.5168883005778,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 3,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          55.26577631632487,
+          55.24889098273383,
+          55.02844386630588,
+          55.06666501363119,
+          55.34844398498535
+        ],
+        "median_us": 55.24889098273383,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          15.33199946085612,
+          14.98711109161377,
+          15.122222900390625,
+          15.138667159610325,
+          15.056444538964165
+        ],
+        "median_us": 15.122222900390625,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          55.25155597262912,
+          55.254220962524414,
+          55.09155591328939,
+          55.25511105855306,
+          55.09777598910861
+        ],
+        "median_us": 55.25155597262912,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 3,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          70.94222174750433,
+          70.9462218814426,
+          70.9519969092475,
+          70.94533178541396,
+          70.96889283921983
+        ],
+        "median_us": 70.9462218814426,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          30.051999621921116,
+          30.015110969543457,
+          29.75955539279514,
+          29.547998640272354,
+          29.791111416286892
+        ],
+        "median_us": 29.791111416286892,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          70.96889283921983,
+          70.92400126987033,
+          70.9404468536377,
+          70.75866593254938,
+          70.94577683342828
+        ],
+        "median_us": 70.9404468536377,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 4,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          55.5964469909668,
+          55.558670891655815,
+          53.03689108954536,
+          52.815559175279404,
+          52.661334143744575
+        ],
+        "median_us": 53.03689108954536,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          21.347110801272922,
+          21.384889549679226,
+          21.161777443355984,
+          21.198222372266983,
+          21.481777562035454
+        ],
+        "median_us": 21.347110801272922,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          55.58577643500434,
+          55.9084415435791,
+          52.85688506232368,
+          52.773332595825195,
+          52.84799999660916
+        ],
+        "median_us": 52.85688506232368,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 4,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          76.78355640835233,
+          76.48355695936415,
+          76.88666449652777,
+          77.19555430942111,
+          76.59244537353516
+        ],
+        "median_us": 76.78355640835233,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          37.73688740200467,
+          37.76400089263916,
+          37.53422101338705,
+          37.40222189161513,
+          35.998222563001846
+        ],
+        "median_us": 37.53422101338705,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          72.65155050489638,
+          71.92222277323405,
+          72.04311158921983,
+          72.82488611009386,
+          72.07333246866862
+        ],
+        "median_us": 72.07333246866862,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 6,
+      "include_route": false,
+      "control": {
+        "us_per_call": [
+          55.835109286838104,
+          56.170664893256294,
+          56.17600017123752,
+          55.970663494533966,
+          56.02266523573134
+        ],
+        "median_us": 56.02266523573134,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          22.508443726433647,
+          22.600444157918293,
+          22.498223516676163,
+          22.530666987101238,
+          22.21377690633138
+        ],
+        "median_us": 22.508443726433647,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          56.17200003729926,
+          56.2013308207194,
+          56.424003177218964,
+          56.41911294725206,
+          56.039110819498696
+        ],
+        "median_us": 56.2013308207194,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "part": "draft",
+      "rows": 6,
+      "include_route": true,
+      "control": {
+        "us_per_call": [
+          72.11910883585612,
+          72.13999960157606,
+          72.32355541653104,
+          72.1586651272244,
+          72.30889002482097
+        ],
+        "median_us": 72.1586651272244,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          38.42844433254666,
+          38.4373320473565,
+          38.23111057281494,
+          38.320443365308975,
+          36.97911103566488
+        ],
+        "median_us": 38.320443365308975,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          72.13644451565213,
+          72.97511100769043,
+          72.1377796596951,
+          72.24577797783746,
+          74.26133155822754
+        ],
+        "median_us": 72.24577797783746,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    }
+  ],
+  "route_differences": [],
+  "module": "/expt/builds/e50_native_gate_gemv_v2/v41_gate_gemv_test_module.so",
+  "module_sha256": "face97caf02f25aaa95c916ee45c1adad7493178cb30f3ce9577964c7c5ecc2c",
+  "fixture_sha256": "11ef3c869974f06d469bdf347612910a4faf6820f5c84247ca84eb46381d60ba",
+  "scope": "Real BF16 gate weights, generated inputs, FP32 output; operator only",
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}

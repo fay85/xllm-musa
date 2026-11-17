@@ -1,0 +1,14 @@
+{
+  "xllm/core/layers/musa/deepseek_v41/feed_forward.h": {
+    "before": "e61c91f54d91f315827251305b65f50cab5402388291f2ce27168d0e4a939046",
+    "after": "f99de87bf4eb04548122ed48ab31ecb64be0ecccf962914839a1c6cf631e06b0"
+  },
+  "xllm/core/layers/musa/deepseek_v41/moe.h": {
+    "before": "d7d887552f4985e65e94bb8409b48e1a73b3f5ddc347b2cbd6d6b408c4cbca72",
+    "after": "00a18c31df4bc78f354a5563a66e83d394dbe117ba3dbbc55543cb31b08cd056"
+  },
+  "xllm/models/llm/musa/deepseek_v41_native.h": {
+    "before": "124dc31610af827d6f88d502f4ef071c33ca3d05ceb37cbb26d435f9399fd2c7",
+    "after": "0b768d9090800c3029387c742643e3650d2aff120603ee7f125b239ed24761d8"
+  }
+}

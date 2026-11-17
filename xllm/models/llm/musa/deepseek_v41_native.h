@@ -1130,6 +1130,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     moe.gate_cache_fp32_weight = !moe.dense && gate_cache_fp32_weight_;
     moe.gate_bf16_fp32_projection =
         !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_BF16_FP32", false);
+    moe.gate_simt_projection =
+        !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_SIMT", false);
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());
     moe.topk = args_.num_experts_per_tok();

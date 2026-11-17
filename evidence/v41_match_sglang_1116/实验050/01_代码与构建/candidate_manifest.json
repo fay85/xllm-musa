@@ -1,0 +1,8 @@
+{
+  "source_parent": "6d60070b07aa8d3448d5123a153b587a6dae5bba",
+  "files": {
+    "xllm/core/layers/musa/deepseek_v41/feed_forward.h": "f99de87bf4eb04548122ed48ab31ecb64be0ecccf962914839a1c6cf631e06b0",
+    "xllm/core/layers/musa/deepseek_v41/moe.h": "00a18c31df4bc78f354a5563a66e83d394dbe117ba3dbbc55543cb31b08cd056",
+    "xllm/models/llm/musa/deepseek_v41_native.h": "0b768d9090800c3029387c742643e3650d2aff120603ee7f125b239ed24761d8"
+  }
+}

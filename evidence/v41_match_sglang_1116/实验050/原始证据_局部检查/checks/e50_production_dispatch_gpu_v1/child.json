@@ -1,0 +1,1 @@
+{"pid": 18241, "start_ticks": "525011013", "command": ["python3", "/expt/scripts/validate_v41_gate_simt_dispatch_v1.py", "--fixture", "/expt/inputs/e50_real_gate_weights.safetensors", "--output", "/expt/diagnostics/e50_production_dispatch_gpu_v1/result.json"]}

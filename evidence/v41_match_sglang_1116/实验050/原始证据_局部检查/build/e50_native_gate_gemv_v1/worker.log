@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/expt/builds/e50_native_gate_gemv_v1/worker.py", line 8, in <module>
+    assert code==0,(i,code)
+AssertionError: (0, 1)

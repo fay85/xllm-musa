@@ -1,0 +1,1 @@
+{"pid": 18011, "start_ticks": "524966732", "command": ["python3", "/expt/scripts/validate_v41_gate_gemv_v1.py", "--fixture", "/expt/inputs/e50_real_gate_weights.safetensors", "--output", "/expt/diagnostics/e50_native_gate_gemv_gpu_v1/result.json"]}

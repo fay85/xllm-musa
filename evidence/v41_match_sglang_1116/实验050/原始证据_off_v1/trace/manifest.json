@@ -1,0 +1,194 @@
+[
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank6_35661_1794890386332.pt.trace.json",
+    "bytes": 21232883,
+    "sha256": "2f84cd6e72ccbb407253579dce16a09785c036bd071b8cce950b4f90a405ae69"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank0_35655_1794890386332.pt.trace.json",
+    "bytes": 21238046,
+    "sha256": "df6e5b165ab87790cb994ba4db2b47e63ea6c9b4a6ca62c2575c61e99aa4aa97"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank7_35662_1794890386332.pt.trace.json",
+    "bytes": 21232801,
+    "sha256": "648fd31a0e6faaa739ee8ea06bd7efd771282b009f604127df8674a2110407e3"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank4_35659_1794890386333.pt.trace.json",
+    "bytes": 21234422,
+    "sha256": "f20028ae8466e587d295495fb5f6c3aa45c0fa7bcefb498dc446a35cc72f016f"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank5_35660_1794890386332.pt.trace.json",
+    "bytes": 21233010,
+    "sha256": "45267e7f96a7482da49e79d37678b48479247eff217774301736177b083e9a4e"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank2_35657_1794890386332.pt.trace.json",
+    "bytes": 21231084,
+    "sha256": "805fca5d6e9a7ffc1fc8934599e69420716faad2d1cb818433f4f5ae4eaf7e40"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank3_35658_1794890386332.pt.trace.json",
+    "bytes": 21230721,
+    "sha256": "d677dbe2f9f66f03757738794d49c2cafe5f3d3d28994b956b39a9f4ef4b6de5"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/xllm_rank1_35656_1794890386333.pt.trace.json",
+    "bytes": 21232153,
+    "sha256": "5ac9d97a1c6f5fef51e8b583b83b095b45b61c6edd71b3dfa9ec6ae279634cf5"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35659.jsonl",
+    "bytes": 19048571,
+    "sha256": "4e5e031af6f4a1db77c7c4a02e9ff424b843344299e63e63d62c19a6eea732cf"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35660.jsonl",
+    "bytes": 19048571,
+    "sha256": "7f026b6b640ff2a85d3edac49d196864eace7d82545f7193e02f3f302f741ea3"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35657.jsonl",
+    "bytes": 19048571,
+    "sha256": "74f90766149f29ebc65d8f9c96cc931712ac832e86df0e8681c6f4574cf57a94"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35662.jsonl",
+    "bytes": 19048571,
+    "sha256": "3948d6eab14ce152023c2b2a8c7b6de6a5ca957fa4ff433606bd5d506df542be"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35655.jsonl",
+    "bytes": 19594244,
+    "sha256": "e67aea9ad32e1c8b069fd4b7442390870e2fb2e02b11f89600d7e9a49bb0ffe8"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35658.jsonl",
+    "bytes": 19048571,
+    "sha256": "d34c61988ed4e06c8f854bb4e6478fba2eeaddba4a6cb88598dc8175f928aae7"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35656.jsonl",
+    "bytes": 19048571,
+    "sha256": "49c10e1698708dfa2f32a822b8906dec760d903e878cb592f6f8a93f73079bb2"
+  },
+  {
+    "host": "sj9",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj9/native_cpp_stacks_35661.jsonl",
+    "bytes": 19048571,
+    "sha256": "8d02297fae0736832dbbc0e55a66259158c157582ef577ed1b6ba3c412d6a5cc"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank3_18755_1794890392012.pt.trace.json",
+    "bytes": 17733032,
+    "sha256": "8ba147fcc66f97bd5871ae57e278f51ef177c510a2258bfea7f76f2f0ee4c92d"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank4_18756_1794890392012.pt.trace.json",
+    "bytes": 17733595,
+    "sha256": "9aa34f50c2549d6b1b4352d2a3c5ebaaea7ec548a7a764eebba968336dc43564"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank2_18754_1794890392012.pt.trace.json",
+    "bytes": 17732891,
+    "sha256": "459fadb0b6a6c7621bcf9c3aa8e02ef5e9537999ae1e5c02e72ab12dc946b554"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank6_18758_1794890392012.pt.trace.json",
+    "bytes": 17732911,
+    "sha256": "d83a0771413702bc4d4efe0d3f37a86a791b259d5fb52ac245dca4d35b7d0b30"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank7_18759_1794890392012.pt.trace.json",
+    "bytes": 17732436,
+    "sha256": "0aeb30206db512795771c25ddd912e8e2d0ec68c0d657a6a0ae03f135fbcf18a"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank1_18753_1794890392012.pt.trace.json",
+    "bytes": 17733615,
+    "sha256": "d515e824a3987e5627068f8b9d2bb3ff88575d0bf9507a10af6076e3b542bc0c"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank0_18752_1794890392012.pt.trace.json",
+    "bytes": 17735136,
+    "sha256": "0d669fc253d6a373e4d3ff6ce22da61428e0620a08576258e9d998596b7317e1"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/xllm_rank5_18757_1794890392012.pt.trace.json",
+    "bytes": 17733618,
+    "sha256": "a07d21180d0a8966256bd04d6f70939e6f37e5047ca052a66213c70a837b69da"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18754.jsonl",
+    "bytes": 7571629,
+    "sha256": "618e84bfcf444caa17b6f5b9183e14d66e10a458a1f34fc6d59a8006f030322f"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18758.jsonl",
+    "bytes": 7571629,
+    "sha256": "78787a753ccde83082c99d90c4c8ca2b33cb01e7464600d91fcaa0c3b033b5ac"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18753.jsonl",
+    "bytes": 7571629,
+    "sha256": "f97251d5407612dca0fd66e87db974bdf7497d83e63fec6baf1bd6ca52d62c8a"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18757.jsonl",
+    "bytes": 7571629,
+    "sha256": "e7d3495f3718c7a4cc34961fc54e79e00b2499be613a96ddf70d4a75e82d2b93"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18756.jsonl",
+    "bytes": 7571629,
+    "sha256": "2f541359ee9be7b07cbcfabbf32b963a745b8126ad496823e45349c6cbaf49a9"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18752.jsonl",
+    "bytes": 7965850,
+    "sha256": "1444b6ebefe83309874787ea868c02596fa54bcee350c0bad017f39ed9331bbf"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18759.jsonl",
+    "bytes": 7571629,
+    "sha256": "9cc05af2117b1b1ccfc2ef09f1ec192523c0ff18f127ee7f18fbc14ea4f881da"
+  },
+  {
+    "host": "sj10",
+    "path": "/expt/profiling/p50_gate_simt_off_v1/sj10/native_cpp_stacks_18755.jsonl",
+    "bytes": 7571629,
+    "sha256": "47ac27f547f650d7760b11e4b22ccfa63310785f27fbf45e810c49acf56c897a"
+  }
+]

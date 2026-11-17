@@ -1,0 +1,9 @@
+# Preserve exact generated reports and executed scripts as evidence.
+*.db binary
+*.sqlite binary
+*.pftrace binary
+*.log -whitespace
+*.txt -whitespace
+*.html -whitespace
+*.svg -whitespace
+*.py -whitespace

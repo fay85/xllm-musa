@@ -1,0 +1,100 @@
+{
+  "nfs_root": "/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116",
+  "raw_trace_manifests": [
+    "原始证据_off_v1/trace/manifest.json",
+    "原始证据_on_v1/trace/manifest.json"
+  ],
+  "excluded": [
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_off_v1.tar.gz",
+      "relative": "原始证据_off_v1.tar.gz",
+      "bytes": 5761027,
+      "sha256": "8ec52fb4c6a112dc6bca52ff7d621c4b13a95f6843e8fa6761275fdf4d612019"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_局部检查.tar.gz",
+      "relative": "原始证据_局部检查.tar.gz",
+      "bytes": 31320,
+      "sha256": "b515c7d4f1134687e235c981012677f8fe7b523883eb89e52e631458bec1bd2c"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_confirm_on_v1.tar.gz",
+      "relative": "原始证据_confirm_on_v1.tar.gz",
+      "bytes": 165878,
+      "sha256": "79f7d891b4d7c46d5ccfc36d5c02fba0052798b31510c12bb88ba2c8095a86b5"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_reverse_off_v1.tar.gz",
+      "relative": "原始证据_reverse_off_v1.tar.gz",
+      "bytes": 166389,
+      "sha256": "612f66b761507d32c4a634d8e505d68c60b207b3efa5cdfe3a2eaf91d412b582"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_on_v1.tar.gz",
+      "relative": "原始证据_on_v1.tar.gz",
+      "bytes": 6119757,
+      "sha256": "571d0c82707146f35ea5ab1261756127ab71f68313e7b254bee16c9f02e40913"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_off_v1/trace_analysis/sj9/rank0.pt.trace.json",
+      "relative": "原始证据_off_v1/trace_analysis/sj9/rank0.pt.trace.json",
+      "bytes": 21238046,
+      "sha256": "df6e5b165ab87790cb994ba4db2b47e63ea6c9b4a6ca62c2575c61e99aa4aa97"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_off_v1/trace_analysis/sj9/rank0.native_stacks.jsonl",
+      "relative": "原始证据_off_v1/trace_analysis/sj9/rank0.native_stacks.jsonl",
+      "bytes": 19594244,
+      "sha256": "e67aea9ad32e1c8b069fd4b7442390870e2fb2e02b11f89600d7e9a49bb0ffe8"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_off_v1/trace_analysis/sj10/rank0.pt.trace.json",
+      "relative": "原始证据_off_v1/trace_analysis/sj10/rank0.pt.trace.json",
+      "bytes": 17735136,
+      "sha256": "0d669fc253d6a373e4d3ff6ce22da61428e0620a08576258e9d998596b7317e1"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_off_v1/trace_analysis/sj10/rank0.native_stacks.jsonl",
+      "relative": "原始证据_off_v1/trace_analysis/sj10/rank0.native_stacks.jsonl",
+      "bytes": 7965850,
+      "sha256": "1444b6ebefe83309874787ea868c02596fa54bcee350c0bad017f39ed9331bbf"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_on_v1/trace_analysis/sj9/rank0.pt.trace.json",
+      "relative": "原始证据_on_v1/trace_analysis/sj9/rank0.pt.trace.json",
+      "bytes": 21147392,
+      "sha256": "02d77fed56cacc85d5837f4aee7117858c60dcd393a6d011fcea21f51a3e718b"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_on_v1/trace_analysis/sj9/rank0.native_stacks.jsonl",
+      "relative": "原始证据_on_v1/trace_analysis/sj9/rank0.native_stacks.jsonl",
+      "bytes": 19594244,
+      "sha256": "17785ca885b3e92b226b948c21a8f8bc97100f39df6d2bb0cc0055bfc1432568"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_on_v1/trace_analysis/sj10/rank0.pt.trace.json",
+      "relative": "原始证据_on_v1/trace_analysis/sj10/rank0.pt.trace.json",
+      "bytes": 21453071,
+      "sha256": "3b4286c8d9624f37944fe94485d357bd2c0efa297662a7dba7804c320d45ec4d"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/原始证据_on_v1/trace_analysis/sj10/rank0.native_stacks.jsonl",
+      "relative": "原始证据_on_v1/trace_analysis/sj10/rank0.native_stacks.jsonl",
+      "bytes": 8242853,
+      "sha256": "bbf0967ef7ffcf4b86a01a1cf84c91c3bf0a534bdc242004bf6002930ab520aa"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/04_trace/E50_on_target_gate/actual_native_last.pftrace",
+      "relative": "04_trace/E50_on_target_gate/actual_native_last.pftrace",
+      "bytes": 4248393,
+      "sha256": "3df6204550dbd86dc327908a49cff73a46267cc0b7b8aafc41dae6ca424fffc3"
+    },
+    {
+      "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261111后续推进Cpp吧/以sglang_mt工作为母本去做/20261116后续如何正确推进并知道边界大概在哪里/追平sglang甚至超越它/02_实验记录/实验_050/04_trace/E50_off_target_gate/actual_native_last.pftrace",
+      "relative": "04_trace/E50_off_target_gate/actual_native_last.pftrace",
+      "bytes": 4302113,
+      "sha256": "a888c173273a0a34fc8ccd8b91003623ebd8771e192fd81232427d223328f47d"
+    }
+  ],
+  "copied_files": 367
+}

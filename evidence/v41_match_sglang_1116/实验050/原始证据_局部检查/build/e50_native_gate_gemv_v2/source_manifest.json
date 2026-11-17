@@ -1,0 +1,5 @@
+{
+  "source_sha256": "9d59794a1989d60158a63828591fabdd24afb6c02c7cf90b11a3385ba2ebdc2a",
+  "at": "2026-11-17T12:24:05.025123+08:00",
+  "scope": "isolate existing V4 SIMT GEMV; no model change"
+}

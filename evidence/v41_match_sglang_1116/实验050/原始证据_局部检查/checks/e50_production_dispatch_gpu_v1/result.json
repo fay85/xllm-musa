@@ -1,0 +1,1058 @@
+{
+  "status": "PASS_PRODUCTION_GATE_DISPATCH_AND_GRAPH",
+  "checks": [
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": true,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.bfloat16",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": false,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 0,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 1,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 4,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 6,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 7,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.bfloat16",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "weight_dtype": "torch.float32",
+      "input_dtype": "torch.float32",
+      "cache_fp32": true,
+      "rows": 16,
+      "candidate_eligible": false,
+      "route_ids_equal": true
+    }
+  ],
+  "graphs": [
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 1,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 1,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 1,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 4,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 4,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 4,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 7,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 7,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 7,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 1,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 1,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 1,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 4,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 4,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 4,
+      "trial": 2,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 7,
+      "trial": 0,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 7,
+      "trial": 1,
+      "exact": true
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 7,
+      "trial": 2,
+      "exact": true
+    }
+  ],
+  "timings": [
+    {
+      "prefix": "layers.0.ffn.gate",
+      "rows": 4,
+      "control": {
+        "us_per_call": [
+          96.88889185587566,
+          96.81510925292969,
+          97.10889392428928,
+          97.08400302463107,
+          98.63644705878363
+        ],
+        "median_us": 97.08400302463107,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          67.15999709235297,
+          66.92799992031522,
+          64.14488686455621,
+          63.47466574774848,
+          63.4035587310791
+        ],
+        "median_us": 64.14488686455621,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          96.19110955132379,
+          96.79110844930013,
+          97.14888466729059,
+          96.1893293592665,
+          96.27288182576497
+        ],
+        "median_us": 96.27288182576497,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    },
+    {
+      "prefix": "mtp.0.ffn.gate",
+      "rows": 4,
+      "control": {
+        "us_per_call": [
+          72.1328894297282,
+          71.55199580722385,
+          71.62799835205078,
+          71.63911395602756,
+          71.53867085774739
+        ],
+        "median_us": 71.62799835205078,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "candidate": {
+        "us_per_call": [
+          36.982666121588814,
+          36.968443128797745,
+          37.10177739461263,
+          36.795997619628906,
+          35.13688776228163
+        ],
+        "median_us": 36.968443128797745,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      },
+      "control_reverse": {
+        "us_per_call": [
+          71.82577451070149,
+          71.51466475592719,
+          71.61599795023601,
+          71.65510919358995,
+          71.67867024739583
+        ],
+        "median_us": 71.65510919358995,
+        "scope": "30 calls per graph x 3 replays, 5 samples; not E2E"
+      }
+    }
+  ],
+  "module": "/expt/builds/e50_native_gate_gemv_v3/v41_gate_gemv_test_module.so",
+  "module_sha256": "d0b3660af04284b4e5e6c38e11183290ce5ffb2073ef8b52149c3f642ae0a889",
+  "scope": "Production DeepseekV41Gate class, not a model accuracy test"
+}
