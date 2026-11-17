@@ -1,0 +1,3258 @@
+{
+  "5487742": [
+    "xllm::Executor::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "5568706": [
+    "xllm::BaseExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "5599618": [
+    "xllm::VlmExecutorImpl::run(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "5601375": [
+    "at::Tensor::operator[](long) const",
+    "??:?"
+  ],
+  "5747574": [
+    "torch::zeros(c10::ArrayRef<long>, c10::TensorOptions)",
+    "??:?"
+  ],
+  "5748192": [
+    "torch::full(c10::ArrayRef<long>, c10::Scalar const&, c10::TensorOptions)",
+    "??:?"
+  ],
+  "5752308": [
+    "at::Tensor::slice(long, std::optional<long>, std::optional<long>, long) const",
+    "??:?"
+  ],
+  "5753204": [
+    "at::Tensor::to(c10::TensorOptions, bool, bool, std::optional<c10::MemoryFormat>) const",
+    "??:?"
+  ],
+  "5757679": [
+    "torch::empty(c10::ArrayRef<long>, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "5768219": [
+    "at::zeros(c10::ArrayRef<long>, c10::TensorOptions)",
+    "??:?"
+  ],
+  "5770745": [
+    "at::full(c10::ArrayRef<long>, c10::Scalar const&, c10::TensorOptions)",
+    "??:?"
+  ],
+  "5773464": [
+    "torch::detail::TensorDataContainer::convert_to_tensor(c10::TensorOptions) const",
+    "??:?"
+  ],
+  "5774859": [
+    "at::empty(c10::ArrayRef<long>, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "5775935": [
+    "torch::detail::TensorDataContainer::TensorDataContainer(c10::ArrayRef<int>)",
+    "??:?"
+  ],
+  "5776703": [
+    "torch::detail::TensorDataContainer::TensorDataContainer(c10::ArrayRef<long>)",
+    "??:?"
+  ],
+  "5836926": [
+    "at::Tensor::narrow(long, long, long) const",
+    "??:?"
+  ],
+  "5841452": [
+    "torch::arange(c10::Scalar const&, c10::TensorOptions)",
+    "??:?"
+  ],
+  "6054213": [
+    "torch::empty_like(at::Tensor const&, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "6054744": [
+    "at::empty_like(at::Tensor const&, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "6150977": [
+    "xllm::Worker::step_async(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "6191616": [
+    "xllm::WorkerImpl::prepare_work_before_execute(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "6191923": [
+    "xllm::WorkerImpl::prepare_work_before_execute_on_stream(xllm::ForwardInput const&, xllm::ForwardInput&, xllm::Stream&, bool, bool, bool)",
+    "??:?"
+  ],
+  "6192608": [
+    "xllm::WorkerImpl::prepare_work_before_execute_on_stream(xllm::ForwardInput const&, xllm::ForwardInput&, xllm::Stream&, bool, bool, bool)::$_10::operator()() const",
+    "worker_impl.cpp:?"
+  ],
+  "6204404": [
+    "xllm::WorkerImpl::step_async(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "6226490": [
+    "void folly::detail::function::FunctionTraits<void ()>::callBig<xllm::WorkerImpl::step_async(xllm::ForwardInput const&)::$_3>(folly::detail::function::Data&)",
+    "worker_impl.cpp:?"
+  ],
+  "6302165": [
+    "torch::zeros_like(at::Tensor const&, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "6302584": [
+    "at::zeros_like(at::Tensor const&, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "6302791": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6302876": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6303043": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6303288": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6303415": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6303678": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6303732": [
+    "xllm::ForwardInput::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "6306640": [
+    "xllm::ForwardInput::to_contiguous_input_buffer(c10::Device const&, xllm::ForwardInput&) const",
+    "??:?"
+  ],
+  "6308207": [
+    "xllm::ModelInputParams::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6308255": [
+    "xllm::ModelInputParams::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6310766": [
+    "xllm::ModelInputParams::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6350138": [
+    "xllm::AttentionInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6351235": [
+    "xllm::ModelEmbeddingInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6351428": [
+    "xllm::ModelEmbeddingInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6351898": [
+    "xllm::ModelEmbeddingInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6380345": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6380392": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6380656": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6381017": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6381196": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6381375": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6381912": [
+    "xllm::AttentionDeviceInput::to(c10::Device const&) const",
+    "??:?"
+  ],
+  "6393802": [
+    "xllm::AttentionInput::rebuild_device_buffer(c10::Device const&, std::vector<xllm::AttentionInput::PackedIntInput, std::allocator<xllm::AttentionInput::PackedIntInput> > const&, xllm::AttentionInput::BufferReusePolicy)",
+    "??:?"
+  ],
+  "6394258": [
+    "xllm::AttentionInput::rebuild_device_buffer(c10::Device const&, std::vector<xllm::AttentionInput::PackedIntInput, std::allocator<xllm::AttentionInput::PackedIntInput> > const&, xllm::AttentionInput::BufferReusePolicy)",
+    "??:?"
+  ],
+  "6394283": [
+    "xllm::AttentionInput::rebuild_device_buffer(c10::Device const&, std::vector<xllm::AttentionInput::PackedIntInput, std::allocator<xllm::AttentionInput::PackedIntInput> > const&, xllm::AttentionInput::BufferReusePolicy)",
+    "??:?"
+  ],
+  "6394301": [
+    "xllm::AttentionInput::rebuild_device_buffer(c10::Device const&, std::vector<xllm::AttentionInput::PackedIntInput, std::allocator<xllm::AttentionInput::PackedIntInput> > const&, xllm::AttentionInput::BufferReusePolicy)",
+    "??:?"
+  ],
+  "6398491": [
+    "xllm::AttentionInput::ensure_attention_buffer_capacity(unsigned long, c10::Device const&)",
+    "??:?"
+  ],
+  "6398683": [
+    "xllm::AttentionInput::ensure_attention_buffer_capacity(unsigned long, c10::Device const&)",
+    "??:?"
+  ],
+  "6472815": [
+    "xllm::LLMWorkerImpl::execute_no_sync_on_stream(xllm::ForwardInput const&, xllm::Stream&)",
+    "??:?"
+  ],
+  "6472952": [
+    "xllm::LLMWorkerImpl::execute_no_sync_on_stream(xllm::ForwardInput const&, xllm::Stream&, bool)",
+    "??:?"
+  ],
+  "6473469": [
+    "xllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)",
+    "??:?"
+  ],
+  "6475938": [
+    "xllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)",
+    "??:?"
+  ],
+  "6476998": [
+    "xllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)",
+    "??:?"
+  ],
+  "6479728": [
+    "xllm::LLMWorkerImpl::step_internal(xllm::ForwardInput const&, xllm::LLMWorkerImpl::ForwardSyncPolicy, bool)",
+    "??:?"
+  ],
+  "6816236": [
+    "xllm::forward_output_to_proto(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > > const&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> > const&, at::Tensor const&, long, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, xllm::proto::ForwardOutput*, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > > const&)",
+    "??:?"
+  ],
+  "6816702": [
+    "xllm::forward_output_to_proto(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > > const&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> > const&, at::Tensor const&, long, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, xllm::proto::ForwardOutput*, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > > const&)",
+    "??:?"
+  ],
+  "6817601": [
+    "xllm::forward_output_to_proto(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > > const&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> > const&, at::Tensor const&, long, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, xllm::proto::ForwardOutput*, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > > const&)",
+    "??:?"
+  ],
+  "6818145": [
+    "xllm::forward_output_to_proto(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > > const&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> > const&, at::Tensor const&, long, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, xllm::proto::ForwardOutput*, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > > const&)",
+    "??:?"
+  ],
+  "6829496": [
+    "xllm::build_token(long, at::Tensor, at::Tensor, at::Tensor, at::Tensor)",
+    "??:?"
+  ],
+  "6829504": [
+    "xllm::build_token(long, at::Tensor, at::Tensor, at::Tensor, at::Tensor)",
+    "??:?"
+  ],
+  "6879989": [
+    "xllm::DraftModelSpecWorkerImpl::force_greedy_draft_sampling(xllm::SamplingParameters&)",
+    "??:?"
+  ],
+  "6890651": [
+    "xllm::(anonymous namespace)::calculate_contiguous_speculative_token_stats(at::Tensor const&, std::vector<int, std::allocator<int> > const&, int)",
+    "speculative_worker_impl.cpp:?"
+  ],
+  "6891929": [
+    "xllm::calculate_block_speculative_token_stats(at::Tensor const&, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "6894076": [
+    "xllm::SpeculativeWorkerImpl::step(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "6894084": [
+    "xllm::SpeculativeWorkerImpl::step(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "6896453": [
+    "xllm::SpeculativeWorkerImpl::update_sampling_params(xllm::SamplingParameters&, int, int, bool)",
+    "??:?"
+  ],
+  "6898740": [
+    "xllm::SpeculativeWorkerImpl::update_sampling_params(xllm::SamplingParameters&, int, int, bool)",
+    "??:?"
+  ],
+  "6901547": [
+    "xllm::SpeculativeWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "6901875": [
+    "xllm::SpeculativeWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "6903708": [
+    "xllm::SpeculativeWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "6904983": [
+    "xllm::SpeculativeWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "6905040": [
+    "xllm::SpeculativeWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "6911243": [
+    "at::Tensor::repeat_interleave(long, std::optional<long>, std::optional<long>) const",
+    "??:?"
+  ],
+  "6915015": [
+    "xllm::speculative_worker::run_worker_no_sync(xllm::WorkerImpl&, xllm::ForwardInput const&, xllm::Stream&, xllm::Stream&, xllm::ForwardInput*, xllm::speculative_worker::WorkerStreamOptions)",
+    "??:?"
+  ],
+  "6915064": [
+    "xllm::speculative_worker::run_worker_no_sync(xllm::WorkerImpl&, xllm::ForwardInput const&, xllm::Stream&, xllm::Stream&, xllm::ForwardInput*, xllm::speculative_worker::WorkerStreamOptions)",
+    "??:?"
+  ],
+  "7101407": [
+    "torch::full_like(at::Tensor const&, c10::Scalar const&, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "7124220": [
+    "at::full_like(at::Tensor const&, c10::Scalar const&, c10::TensorOptions, std::optional<c10::MemoryFormat>)",
+    "??:?"
+  ],
+  "7197029": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7198442": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7198483": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7198804": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7199170": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7199429": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7199451": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7199689": [
+    "xllm::DFlashWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7201554": [
+    "xllm::(anonymous namespace)::cpu_int_vec_to_device(std::vector<int, std::allocator<int> > const&, xllm::Device const&)",
+    "dflash_worker_impl.cpp:?"
+  ],
+  "7201613": [
+    "xllm::(anonymous namespace)::cpu_int_vec_to_device(std::vector<int, std::allocator<int> > const&, xllm::Device const&)",
+    "dflash_worker_impl.cpp:?"
+  ],
+  "7202138": [
+    "xllm::DFlashWorkerImpl::write_context_kv[abi:cxx11](xllm::ForwardInput const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "7203580": [
+    "xllm::DFlashWorkerImpl::prepare_decode_input(xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7204021": [
+    "xllm::DFlashWorkerImpl::prepare_decode_input(xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7204066": [
+    "xllm::DFlashWorkerImpl::prepare_decode_input(xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7204666": [
+    "xllm::DFlashWorkerImpl::prepare_decode_input(xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7207043": [
+    "xllm::DFlashWorkerImpl::run_validate(xllm::ForwardInput const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7207261": [
+    "xllm::DFlashWorkerImpl::run_validate(xllm::ForwardInput const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7208826": [
+    "xllm::DFlashWorkerImpl::run_validate(xllm::ForwardInput const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7210908": [
+    "xllm::DFlashWorkerImpl::run_validate(xllm::ForwardInput const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7211670": [
+    "xllm::DFlashWorkerImpl::run_validate(xllm::ForwardInput const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7211793": [
+    "xllm::DFlashWorkerImpl::run_validate(xllm::ForwardInput const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7217231": [
+    "xllm::DFlashWorkerImpl::update_decode_step_input(xllm::ForwardInput&, std::vector<xllm::EmbeddingCache::DecodeState, std::allocator<xllm::EmbeddingCache::DecodeState> > const&) const",
+    "??:?"
+  ],
+  "7217430": [
+    "xllm::DFlashWorkerImpl::update_decode_step_input(xllm::ForwardInput&, std::vector<xllm::EmbeddingCache::DecodeState, std::allocator<xllm::EmbeddingCache::DecodeState> > const&) const",
+    "??:?"
+  ],
+  "7221315": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7223506": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7224380": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7224423": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7224488": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7224794": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7225028": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7225176": [
+    "xllm::DFlashWorkerImpl::prepare_query_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7226535": [
+    "xllm::DFlashWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7227153": [
+    "xllm::DFlashWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7227250": [
+    "xllm::DFlashWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7228460": [
+    "xllm::DFlashWorkerImpl::prepare_validate_inputs(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7229753": [
+    "xllm::DFlashWorkerImpl::fill_validate_input_from_draft_outputs(xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, xllm::Stream&, int)",
+    "??:?"
+  ],
+  "7230108": [
+    "xllm::DFlashWorkerImpl::fill_validate_input_from_draft_outputs(xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, xllm::Stream&, int)",
+    "??:?"
+  ],
+  "7230830": [
+    "xllm::DFlashWorkerImpl::fill_validate_input_from_draft_outputs(xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, xllm::Stream&, int)",
+    "??:?"
+  ],
+  "7231179": [
+    "xllm::DFlashWorkerImpl::fill_validate_input_from_draft_outputs(xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, xllm::Stream&, int)",
+    "??:?"
+  ],
+  "7231197": [
+    "xllm::DFlashWorkerImpl::fill_validate_input_from_draft_outputs(xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardInput&, xllm::Stream&, int)",
+    "??:?"
+  ],
+  "7243673": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7243780": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DFlashWorkerImpl::DraftBlock const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7244603": [
+    "xllm::DFlashWorkerImpl::record_validate_metrics(xllm::SampleOutput&, std::vector<int, std::allocator<int> > const&) const",
+    "??:?"
+  ],
+  "7245384": [
+    "xllm::DFlashWorkerImpl::record_validate_metrics(xllm::SampleOutput&, std::vector<int, std::allocator<int> > const&) const",
+    "??:?"
+  ],
+  "7248429": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7249778": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7249809": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7249986": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7250410": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7250432": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7250460": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7250481": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7250565": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7250635": [
+    "xllm::DFlashWorkerImpl::write_target_context_to_cache[abi:cxx11](xllm::ForwardInput const&, xllm::SampleOutput const&)",
+    "??:?"
+  ],
+  "7256476": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DraftProposal const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7257023": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DraftProposal const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7257077": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DraftProposal const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7259308": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DraftProposal const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7259404": [
+    "xllm::DFlashWorkerImpl::validate(xllm::SamplingParameters const&, xllm::DraftProposal const&, xllm::ForwardOutput const&, int, std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "7260832": [
+    "xllm::(anonymous namespace)::repeat_sampling_tensor(at::Tensor&, int)",
+    "dflash_worker_impl.cpp:?"
+  ],
+  "7269823": [
+    "xllm::DraftProposal::slice_speculative(long, long) const::{lambda(at::Tensor const&)#1}::operator()(at::Tensor const&) const",
+    "??:?"
+  ],
+  "7333230": [
+    "xllm::DSparkWorkerImpl::step_decode(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7333274": [
+    "xllm::DSparkWorkerImpl::step_decode(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7333372": [
+    "xllm::DSparkWorkerImpl::step_decode(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7345317": [
+    "xllm::DSparkWorkerImpl::run_decode_draft(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7345367": [
+    "xllm::DSparkWorkerImpl::run_decode_draft(xllm::ForwardInput const&, xllm::ForwardInput&)",
+    "??:?"
+  ],
+  "7345965": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7346057": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7346090": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7346670": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7347388": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7347422": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7347538": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7348320": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7348343": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7348379": [
+    "xllm::DSparkWorkerImpl::execute_draft_query(xllm::ForwardInput const&, xllm::ForwardInput, bool, xllm::ForwardInput*)",
+    "??:?"
+  ],
+  "7359274": [
+    "xllm::DSparkWorkerImpl::step_prefill(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "7361309": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7361528": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7361860": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7362225": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7362505": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7362628": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7362829": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7364930": [
+    "xllm::DSparkWorkerImpl::sample_block(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::SamplingParameters const&) const",
+    "??:?"
+  ],
+  "7390571": [
+    "xllm::detail::unpack_from_input_host_buffer(xllm::ForwardInput const&, c10::Device const&, c10::ScalarType, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7390877": [
+    "xllm::detail::unpack_from_input_host_buffer(xllm::ForwardInput const&, c10::Device const&, c10::ScalarType, xllm::ForwardInput&, bool)",
+    "??:?"
+  ],
+  "7393311": [
+    "xllm::(anonymous namespace)::deserialize_forward_input_payload(char const*&, unsigned long, xllm::ForwardInput&, c10::Device const&, xllm::Stream*, bool, bool)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7393339": [
+    "xllm::(anonymous namespace)::deserialize_forward_input_payload(char const*&, unsigned long, xllm::ForwardInput&, c10::Device const&, xllm::Stream*, bool, bool)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7395507": [
+    "xllm::(anonymous namespace)::deserialize_forward_input_payload(char const*&, unsigned long, xllm::ForwardInput&, c10::Device const&, xllm::Stream*, bool, bool)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7403687": [
+    "xllm::(anonymous namespace)::deserialize_forward_input_payload(char const*&, unsigned long, xllm::ForwardInput&, c10::Device const&, xllm::Stream*, bool, bool)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7404316": [
+    "xllm::(anonymous namespace)::deserialize_forward_input_payload(char const*&, unsigned long, xllm::ForwardInput&, c10::Device const&, xllm::Stream*, bool, bool)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7413168": [
+    "xllm::forward_input_to_packed_proto(xllm::ForwardInput const&, xllm::proto::PackedForwardInput*)",
+    "??:?"
+  ],
+  "7413847": [
+    "xllm::(anonymous namespace)::serialize_forward_input(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputLayoutHeader const&, char*&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7414229": [
+    "xllm::packed_proto_to_forward_input(xllm::proto::PackedForwardInput const&, xllm::ForwardInput&, c10::Device const&, xllm::Stream*)",
+    "??:?"
+  ],
+  "7439329": [
+    "xllm::(anonymous namespace)::read_tensor_and_host(xllm::(anonymous namespace)::ReadContext&, at::Tensor&, at::Tensor&, xllm::Stream*)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7440316": [
+    "void xllm::(anonymous namespace)::read_tensor_and_vector<int>(xllm::(anonymous namespace)::ReadContext&, at::Tensor&, std::vector<int, std::allocator<int> >&, xllm::Stream*)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7447178": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7447191": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7447894": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7449836": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7450459": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7450667": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7450683": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7453723": [
+    "xllm::(anonymous namespace)::serialize_forward_input_sections(xllm::ForwardInput const&, xllm::(anonymous namespace)::RawInputSerializeContext&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7457129": [
+    "xllm::(anonymous namespace)::write_tensor(xllm::(anonymous namespace)::RawInputSerializeContext&, at::Tensor const&)",
+    "forward_shared_memory_manager.cpp:?"
+  ],
+  "7813728": [
+    "std::thread::_State_impl<std::thread::_Invoker<std::tuple<xllm::LLMMaster::run()::$_7> > >::_M_run()",
+    "llm_master.cpp:?"
+  ],
+  "7919038": [
+    "xllm::ThreadPool::internal_loop(unsigned long, std::shared_ptr<folly::Function<void ()> >, std::shared_ptr<xllm::BlockingCounter>, int)",
+    "??:?"
+  ],
+  "7929424": [
+    "std::thread::_State_impl<std::thread::_Invoker<std::tuple<xllm::ThreadPool::ThreadPool(unsigned long, folly::Function<void ()>, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::$_1> > >::_M_run()",
+    "threadpool.cpp:?"
+  ],
+  "7964223": [
+    "xllm::util::proto_to_torch(xllm::proto::Tensor const&)",
+    "??:?"
+  ],
+  "7969069": [
+    "xllm::util::torch_to_proto(at::Tensor const&, xllm::proto::Tensor*)",
+    "??:?"
+  ],
+  "7972340": [
+    "bool xllm::util::(anonymous namespace)::set_data_to_contents<float>(xllm::proto::TensorContents*, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "utils.cpp:?"
+  ],
+  "8868594": [
+    "bthread::TaskGroup::task_runner(long)",
+    "??:?"
+  ],
+  "9096961": [
+    "brpc::InputMessenger::OnNewMessages(brpc::Socket*)",
+    "??:?"
+  ],
+  "9131858": [
+    "brpc::policy::ProcessRpcRequest(brpc::InputMessageBase*)",
+    "??:?"
+  ],
+  "9849603": [
+    "brpc::Socket::ProcessEvent(void*)",
+    "??:?"
+  ],
+  "10377073": [
+    "finish",
+    "context.cpp:?"
+  ],
+  "13281056": [
+    "xllm::Sequence::update_embeddings(at::Tensor const&)",
+    "??:?"
+  ],
+  "13281319": [
+    "xllm::Sequence::update_mtp_bootstrap_embedding(at::Tensor const&)",
+    "??:?"
+  ],
+  "13281334": [
+    "xllm::Sequence::update_mtp_bootstrap_embedding(at::Tensor const&)",
+    "??:?"
+  ],
+  "13510907": [
+    "xllm::LLMEngine::step(std::vector<xllm::Batch, std::allocator<xllm::Batch> >&)",
+    "??:?"
+  ],
+  "13513197": [
+    "xllm::LLMEngine::step(std::vector<xllm::Batch, std::allocator<xllm::Batch> >&)",
+    "??:?"
+  ],
+  "13515279": [
+    "xllm::LLMEngine::prepare_inputs(std::vector<xllm::Batch, std::allocator<xllm::Batch> >&)",
+    "??:?"
+  ],
+  "13677825": [
+    "xllm::SpeculativeEngineBase<xllm::LLMEngine>::step(std::vector<xllm::Batch, std::allocator<xllm::Batch> >&)",
+    "??:?"
+  ],
+  "13853059": [
+    "xllm::WorkerService::step(xllm::ForwardInput&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > >&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, at::Tensor&, long&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > >&)",
+    "??:?"
+  ],
+  "13853878": [
+    "xllm::WorkerService::step(xllm::ForwardInput&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > >&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, at::Tensor&, long&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > >&)",
+    "??:?"
+  ],
+  "13857190": [
+    "xllm::WorkerService::step(xllm::ForwardInput&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > >&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, at::Tensor&, long&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > >&)::$_27::operator()() const",
+    "worker_service.cpp:?"
+  ],
+  "13862021": [
+    "xllm::WorkerService::step(xllm::ForwardInput&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<std::vector<at::Tensor, std::allocator<at::Tensor> >, std::allocator<std::vector<at::Tensor, std::allocator<at::Tensor> > > >&, std::vector<xllm::SpeculativeTokenStats, std::allocator<xllm::SpeculativeTokenStats> >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<at::Tensor, std::allocator<at::Tensor> >&, at::Tensor&, long&, at::Tensor&, at::Tensor&, at::Tensor&, std::vector<xllm::JsonObjectOutputError, std::allocator<xllm::JsonObjectOutputError> >&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > >, std::allocator<std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::variant<at::Tensor, std::vector<at::Tensor, std::allocator<at::Tensor> > > > > > > >&)::$_27::operator()() const",
+    "worker_service.cpp:?"
+  ],
+  "13877778": [
+    "void folly::detail::function::FunctionTraits<void ()>::callSmall<xllm::WorkerService::ExecuteModel(google::protobuf::RpcController*, xllm::proto::ForwardInput const*, xllm::proto::ForwardOutput*, google::protobuf::Closure*)::$_21>(folly::detail::function::Data&)",
+    "worker_service.cpp:?"
+  ],
+  "13878167": [
+    "void folly::detail::function::FunctionTraits<void ()>::callSmall<xllm::WorkerService::ExecuteModel(google::protobuf::RpcController*, xllm::proto::ForwardInput const*, xllm::proto::ForwardOutput*, google::protobuf::Closure*)::$_21>(folly::detail::function::Data&)",
+    "worker_service.cpp:?"
+  ],
+  "13878291": [
+    "void folly::detail::function::FunctionTraits<void ()>::callSmall<xllm::WorkerService::ExecuteModel(google::protobuf::RpcController*, xllm::proto::ForwardInput const*, xllm::proto::ForwardOutput*, google::protobuf::Closure*)::$_21>(folly::detail::function::Data&)",
+    "worker_service.cpp:?"
+  ],
+  "13920683": [
+    "xllm::CommChannel::execute_model_with_brpc(xllm::ForwardInput const&, folly::Promise<std::optional<xllm::RawForwardOutput> >&)",
+    "??:?"
+  ],
+  "13971894": [
+    "xllm::ContinuousScheduler::step(absl::lts_20230802::Duration const&)",
+    "??:?"
+  ],
+  "14221513": [
+    "xllm::DisaggPDScheduler::step(absl::lts_20230802::Duration const&)",
+    "??:?"
+  ],
+  "14257696": [
+    "xllm::DisaggPDScheduler::decode_recv_first_generation(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, long, bool, float, double, double, std::vector<long, std::allocator<long> >, std::vector<float, std::allocator<float> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::vector<unsigned long, std::allocator<unsigned long> >, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >, std::vector<xllm::KVTransferMapping, std::allocator<xllm::KVTransferMapping> >, int, int, at::Tensor, int, xllm::proto::RequestPhaseTiming const*, int)",
+    "??:?"
+  ],
+  "14269094": [
+    "void folly::detail::function::FunctionTraits<void ()>::callSmall<xllm::DisaggPDScheduler::prefill_send_first_generation()::$_2>(folly::detail::function::Data&)",
+    "disagg_pd_scheduler.cpp:?"
+  ],
+  "14269165": [
+    "void folly::detail::function::FunctionTraits<void ()>::callSmall<xllm::DisaggPDScheduler::prefill_send_first_generation()::$_2>(folly::detail::function::Data&)",
+    "disagg_pd_scheduler.cpp:?"
+  ],
+  "14705071": [
+    "xllm::AuxHiddenCapture::capture_layer(int, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "14705138": [
+    "xllm::AuxHiddenCapture::capture_layer(int, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "14705287": [
+    "xllm::AuxHiddenCapture::capture_layer(int, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "14705527": [
+    "xllm::AuxHiddenCapture::capture_layer(int, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "14710798": [
+    "xllm::AuxHiddenCapture::finalize(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "14821872": [
+    "torch::nn::functional::linear(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "14821886": [
+    "torch::nn::functional::linear(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15020326": [
+    "xllm::DeepseekV41NativeDraftCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15020380": [
+    "xllm::DeepseekV41NativeDraftCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15020478": [
+    "xllm::DeepseekV41NativeDraftCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15022822": [
+    "xllm::DeepseekV41NativeDraftCausalLM::logits(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15022840": [
+    "xllm::DeepseekV41NativeDraftCausalLM::logits(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15023044": [
+    "xllm::DeepseekV41NativeDraftCausalLM::logits(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15034660": [
+    "xllm::DeepseekV41NativeDraftCausalLM::write_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15034702": [
+    "xllm::DeepseekV41NativeDraftCausalLM::write_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15035477": [
+    "xllm::DeepseekV41NativeDraftCausalLM::dspark_markov_bias(at::Tensor const&)",
+    "??:?"
+  ],
+  "15048275": [
+    "xllm::layer::DeepseekV41DraftGraph::run(at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, at::Tensor const&, long, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DraftInputs const&)> const&)",
+    "??:?"
+  ],
+  "15048290": [
+    "xllm::layer::DeepseekV41DraftGraph::run(at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, at::Tensor const&, long, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DraftInputs const&)> const&)",
+    "??:?"
+  ],
+  "15048305": [
+    "xllm::layer::DeepseekV41DraftGraph::run(at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, at::Tensor const&, long, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DraftInputs const&)> const&)",
+    "??:?"
+  ],
+  "15048340": [
+    "xllm::layer::DeepseekV41DraftGraph::run(at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, at::Tensor const&, long, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DraftInputs const&)> const&)",
+    "??:?"
+  ],
+  "15048499": [
+    "xllm::layer::DeepseekV41DraftGraph::run(at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, at::Tensor const&, long, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DraftInputs const&)> const&)",
+    "??:?"
+  ],
+  "15048512": [
+    "xllm::layer::DeepseekV41DraftGraph::run(at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&, at::Tensor const&, long, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DraftInputs const&)> const&)",
+    "??:?"
+  ],
+  "15050547": [
+    "xllm::DeepseekV41NativeDraftCausalLM::swa_caches(std::vector<xllm::KVCache, std::allocator<xllm::KVCache> > const&) const",
+    "??:?"
+  ],
+  "15062031": [
+    "xllm::layer::DeepseekV41ProfileRange::DeepseekV41ProfileRange(std::basic_string_view<char, std::char_traits<char> >, long, long, long, long, long)",
+    "??:?"
+  ],
+  "15070661": [
+    "xllm::layer::deepseek_v41_cache_view(at::Tensor const&)",
+    "??:?"
+  ],
+  "15072375": [
+    "xllm::layer::deepseek_v41_gather_bf16_bits(at::Tensor const&, xllm::ProcessGroup*, bool)",
+    "??:?"
+  ],
+  "15074956": [
+    "xllm::layer::deepseek_v41_rms_norm(at::Tensor const&, at::Tensor const&, double)",
+    "??:?"
+  ],
+  "15074978": [
+    "xllm::layer::deepseek_v41_rms_norm(at::Tensor const&, at::Tensor const&, double)",
+    "??:?"
+  ],
+  "15075467": [
+    "xllm::layer::deepseek_v41_rms_norm(at::Tensor const&, at::Tensor const&, double)",
+    "??:?"
+  ],
+  "15077631": [
+    "xllm::layer::DeepseekV41HyperConnection::prepare(at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15081844": [
+    "xllm::layer::DeepseekV41HyperConnection::prepare(at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15081875": [
+    "xllm::layer::DeepseekV41HyperConnection::prepare(at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15082238": [
+    "xllm::layer::DeepseekV41HyperConnection::prepare(at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15082592": [
+    "xllm::layer::DeepseekV41HyperConnection::prepare(at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15089989": [
+    "xllm::layer::DeepseekV41Decoder::forward_tail(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15093644": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15093676": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15093912": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15093944": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15094179": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15094344": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15094452": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15094477": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15094493": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15098809": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15098827": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15099162": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15099463": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15099841": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15100742": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15100770": [
+    "xllm::layer::DeepseekV41AttentionProjection::project_output(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15106819": [
+    "xllm::layer::DeepseekV41Dense::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15106903": [
+    "xllm::layer::DeepseekV41Dense::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15107005": [
+    "xllm::layer::DeepseekV41Dense::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15107468": [
+    "xllm::layer::DeepseekV41Dense::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15109683": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15109701": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15109827": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15109880": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15110130": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15110183": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15110433": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15110651": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15110940": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15111069": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15111114": [
+    "xllm::layer::DeepseekV41AttentionProjection::rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15112566": [
+    "xllm::layer::DeepseekV41AttentionProjection::quantize(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15112677": [
+    "xllm::layer::DeepseekV41AttentionProjection::quantize(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15112779": [
+    "xllm::layer::DeepseekV41AttentionProjection::quantize(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15116811": [
+    "xllm::layer::DeepseekV41Dense::project(at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "15119255": [
+    "xllm::layer::DeepseekV41SparseAttention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15140794": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15140886": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141119": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141216": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141244": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141432": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141491": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141531": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15141574": [
+    "xllm::layer::DeepseekV41PagedAttention::physical_slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15142940": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15143114": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15143208": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15143412": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15143443": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15143476": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15143586": [
+    "xllm::layer::DeepseekV41Decoder::finish_eager(at::Tensor, at::Tensor, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15148922": [
+    "xllm::layer::DeepseekV41HyperConnection::combine(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15150725": [
+    "xllm::layer::DeepseekV41HyperConnection::combine(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15154351": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15154478": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15156621": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15158681": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15158850": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15158958": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15159221": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15159249": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15159295": [
+    "xllm::layer::DeepseekV41Moe::forward(at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15162594": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15162981": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15163005": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15163049": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15163500": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15163617": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15163647": [
+    "xllm::layer::DeepseekV41SharedMlp::forward(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15166344": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15166379": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15166400": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15167762": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15167788": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15167816": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15168352": [
+    "xllm::layer::DeepseekV41Gate::forward(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15171137": [
+    "xllm::layer::DeepseekV41W4A8Experts::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15171356": [
+    "xllm::layer::DeepseekV41W4A8Experts::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15171607": [
+    "xllm::layer::DeepseekV41W4A8Experts::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15171771": [
+    "xllm::layer::DeepseekV41W4A8Experts::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15177774": [
+    "xllm::layer::DeepseekV41SharedMlp::quantize(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15186287": [
+    "xllm::layer::DeepseekV41W4A8Experts::project_dispatched(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15186318": [
+    "xllm::layer::DeepseekV41W4A8Experts::project_dispatched(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15186368": [
+    "xllm::layer::DeepseekV41W4A8Experts::project_dispatched(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15191535": [
+    "xllm::layer::DeepseekV41DraftModel::logits(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15191627": [
+    "xllm::layer::DeepseekV41DraftModel::logits(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15328557": [
+    "xllm::layer::DeepseekV41DraftModel::write_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "15328586": [
+    "xllm::layer::DeepseekV41DraftModel::write_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "15328740": [
+    "xllm::layer::DeepseekV41DraftModel::write_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "15329904": [
+    "xllm::layer::DeepseekV41Attention::write_draft_context(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15330127": [
+    "xllm::layer::DeepseekV41Attention::write_draft_context(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15330902": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15330931": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15331024": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15331038": [
+    "xllm::layer::DeepseekV41AttentionProjection::prepare_context_kv(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15332282": [
+    "xllm::layer::DeepseekV41PagedAttention::commit_draft_context(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15332298": [
+    "xllm::layer::DeepseekV41PagedAttention::commit_draft_context(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15333531": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15333619": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15333639": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15333674": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15333825": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15333843": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334201": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334252": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334308": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334326": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334341": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334692": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334914": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334934": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334952": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15334972": [
+    "xllm::layer::DeepseekV41PagedAttention::commit(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15336898": [
+    "xllm::layer::deepseek_v41_markov_bias(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "15336934": [
+    "xllm::layer::deepseek_v41_markov_bias(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "15337044": [
+    "xllm::layer::deepseek_v41_markov_bias(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "15360050": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15361521": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15361554": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15361714": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15361918": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15361953": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15361985": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15362921": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15363272": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364124": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364155": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364313": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364369": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364382": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364835": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15364866": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15365057": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15365119": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15368192": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15369345": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15369462": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15369487": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15371410": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15371950": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15372200": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)",
+    "??:?"
+  ],
+  "15378691": [
+    "xllm::DeepseekV41NativeCausalLM::logits(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15395747": [
+    "xllm::DeepseekV41NativeCausalLM::forward(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&)::{lambda(long)#1}::operator()(long) const",
+    "??:?"
+  ],
+  "15397098": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15399675": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15399962": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15400138": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15400303": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15400557": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15400728": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15401087": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15401134": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15402336": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15402540": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15402794": [
+    "xllm::DeepseekV41NativeCausalLM::prepare_speculative_state(at::Tensor const&, at::Tensor const&, std::vector<xllm::KVCache, std::allocator<xllm::KVCache> >&, xllm::ModelInputParams const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15408480": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15408583": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15408683": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15408774": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15408863": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15408891": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15408909": [
+    "xllm::layer::DeepseekV41EngramHash::restore_history(at::Tensor const&)",
+    "??:?"
+  ],
+  "15410916": [
+    "xllm::layer::DeepseekV41EngramHash::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15424400": [
+    "xllm::layer::DeepseekV41EngramEmbedding::lookup(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15424421": [
+    "xllm::layer::DeepseekV41EngramEmbedding::lookup(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15425057": [
+    "xllm::layer::DeepseekV41TextModel::prepare_embeddings(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15425095": [
+    "xllm::layer::DeepseekV41TextModel::prepare_embeddings(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15425267": [
+    "xllm::layer::DeepseekV41TextModel::prepare_embeddings(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15434511": [
+    "xllm::layer::DeepseekV41DecodeGraph::run(xllm::layer::DeepseekV41DecodeInputs const&, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DecodeInputs const&, long)> const&)",
+    "??:?"
+  ],
+  "15434600": [
+    "xllm::layer::DeepseekV41DecodeGraph::run(xllm::layer::DeepseekV41DecodeInputs const&, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DecodeInputs const&, long)> const&)",
+    "??:?"
+  ],
+  "15434616": [
+    "xllm::layer::DeepseekV41DecodeGraph::run(xllm::layer::DeepseekV41DecodeInputs const&, bool, std::function<at::Tensor (xllm::layer::DeepseekV41DecodeInputs const&, long)> const&)",
+    "??:?"
+  ],
+  "15437403": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15437423": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15437486": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15437551": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15437908": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15437951": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15438079": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15441073": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15441424": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15441459": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15441862": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15443054": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15443332": [
+    "xllm::layer::DeepseekV41TextModel::forward_with_capture(at::Tensor const&, at::Tensor const&, std::vector<xllm::layer::DeepseekV41AttentionCache, std::allocator<xllm::layer::DeepseekV41AttentionCache> > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::vector<std::optional<at::Tensor>, std::allocator<std::optional<at::Tensor> > > const&, std::optional<at::Tensor> const&, xllm::AuxHiddenCapture*, long, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15451824": [
+    "xllm::layer::DeepseekV41PrefixCheckpoint::add_paged(at::Tensor const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15468995": [
+    "xllm::layer::DeepseekV41PrefixCheckpoint::save_fused(at::Tensor const&, at::Tensor const&, long, bool, bool, long, long)",
+    "??:?"
+  ],
+  "15469182": [
+    "xllm::layer::DeepseekV41PrefixCheckpoint::save_fused(at::Tensor const&, at::Tensor const&, long, bool, bool, long, long)",
+    "??:?"
+  ],
+  "15473207": [
+    "xllm::layer::DeepseekV41PrefixCheckpoint::add_recurrent(at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "15481619": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481637": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481674": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481829": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481882": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481938": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481958": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15481973": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15482329": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15482432": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15482452": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15482476": [
+    "xllm::layer::DeepseekV41EngramHash::write(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15483425": [
+    "xllm::layer::DeepseekV41EngramHash::map(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15483443": [
+    "xllm::layer::DeepseekV41EngramHash::map(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15483675": [
+    "xllm::layer::DeepseekV41EngramHash::map(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15483715": [
+    "xllm::layer::DeepseekV41EngramHash::map(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15484144": [
+    "xllm::layer::DeepseekV41EngramHash::dead_mask(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15484177": [
+    "xllm::layer::DeepseekV41EngramHash::dead_mask(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15484193": [
+    "xllm::layer::DeepseekV41EngramHash::dead_mask(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15486208": [
+    "at::operator-(c10::Scalar const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15486219": [
+    "at::operator-(c10::Scalar const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15486252": [
+    "at::operator-(c10::Scalar const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15486928": [
+    "xllm::layer::DeepseekV41EngramEmbedding::local(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15486962": [
+    "xllm::layer::DeepseekV41EngramEmbedding::local(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15492793": [
+    "xllm::layer::DeepseekV41EngramEmbedding::local(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15493022": [
+    "xllm::layer::DeepseekV41EngramEmbedding::local(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15501274": [
+    "xllm::layer::DeepseekV41EngramInjection::forward(at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15501303": [
+    "xllm::layer::DeepseekV41EngramInjection::forward(at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15508542": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15509678": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15509962": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15510167": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15510240": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15510342": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15510610": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15511367": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15513211": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15513824": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15513885": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15514762": [
+    "xllm::layer::DeepseekV41Attention::attend_prepared(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15518738": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15518776": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15518858": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15518887": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15519282": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15519435": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15519464": [
+    "xllm::layer::DeepseekV41Attention::publish(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15526153": [
+    "xllm::layer::DeepseekV41Indexer::prepare_query(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15526307": [
+    "xllm::layer::DeepseekV41Indexer::prepare_query(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15526409": [
+    "xllm::layer::DeepseekV41Indexer::prepare_query(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15526496": [
+    "xllm::layer::DeepseekV41Indexer::prepare_query(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15526744": [
+    "xllm::layer::DeepseekV41Indexer::prepare_query(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15530311": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15530686": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15530887": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15530914": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15530936": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15531115": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15531137": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15531185": [
+    "xllm::layer::DeepseekV41TokenCache::gather(at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15534153": [
+    "xllm::layer::DeepseekV41Indexer::score(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540396": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540448": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540807": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540850": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540902": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540926": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15540974": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15541472": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15541587": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15541937": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542032": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542055": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542107": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542420": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542462": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542591": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542627": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542682": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542709": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15542975": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15543177": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15543294": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15543324": [
+    "xllm::layer::DeepseekV41Indexer::candidates(at::Tensor const&, at::Tensor const&, long, long) const",
+    "??:?"
+  ],
+  "15546557": [
+    "xllm::layer::DeepseekV41Indexer::select(at::Tensor const&, at::Tensor const&, long, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15550367": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15553553": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15553631": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15553767": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555321": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555364": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555392": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555418": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555679": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555715": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15555766": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15556163": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15556450": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15556536": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15556840": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15556899": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15557032": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15557146": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15557194": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15558262": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15558395": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15558703": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15558748": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15559780": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15559869": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15559892": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15560210": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15560328": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15560435": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15560816": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15561208": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15561719": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15562134": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15562153": [
+    "xllm::layer::DeepseekV41PagedAttention::forward_with_window_floor(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "15577349": [
+    "xllm::layer::DeepseekV41Compressor::forward(at::Tensor const&, long, at::Tensor const&)",
+    "??:?"
+  ],
+  "15577754": [
+    "xllm::layer::DeepseekV41Indexer::prepare_key(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15577866": [
+    "xllm::layer::DeepseekV41Indexer::prepare_key(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15577888": [
+    "xllm::layer::DeepseekV41Indexer::prepare_key(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15578591": [
+    "xllm::layer::DeepseekV41TokenCache::commit(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15579652": [
+    "xllm::layer::DeepseekV41TokenCache::commit(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15579678": [
+    "xllm::layer::DeepseekV41TokenCache::commit(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15579707": [
+    "xllm::layer::DeepseekV41TokenCache::commit(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15579727": [
+    "xllm::layer::DeepseekV41TokenCache::commit(at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15584143": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15585190": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15585214": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15585473": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15585504": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15585688": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15585731": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15586303": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15586364": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15587183": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15587205": [
+    "xllm::layer::DeepseekV41Compressor::forward_impl(at::Tensor const&, long, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15601559": [
+    "xllm::layer::DeepseekV41Compressor::norm(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15605338": [
+    "xllm::layer::DeepseekV41Indexer::rope_quantize(at::Tensor const&, at::Tensor const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "15607595": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15607760": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15607785": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15607816": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15608161": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15608276": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15608366": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15608406": [
+    "xllm::layer::DeepseekV41TokenCache::slots(at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "15617500": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15617515": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15617530": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15617543": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15617556": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15617647": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15617688": [
+    "xllm::layer::DeepseekV41DecodeGraph::update(xllm::layer::DeepseekV41DecodeInputs&, xllm::layer::DeepseekV41DecodeInputs const&)",
+    "??:?"
+  ],
+  "15624992": [
+    "xllm::layer::DeepseekV41DecodeGraph::copy_table(at::Tensor&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15625077": [
+    "xllm::layer::DeepseekV41DecodeGraph::copy_table(at::Tensor&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15625098": [
+    "xllm::layer::DeepseekV41DecodeGraph::copy_table(at::Tensor&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15625113": [
+    "xllm::layer::DeepseekV41DecodeGraph::copy_table(at::Tensor&, at::Tensor const&)",
+    "??:?"
+  ],
+  "15626056": [
+    "xllm::layer::DeepseekV41DecodeGraph::copy_optional(std::optional<at::Tensor>&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15627751": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15627931": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15627958": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15628033": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15628155": [
+    "xllm::layer::DeepseekV41Decoder::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "15629761": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15629887": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15629966": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15629997": [
+    "xllm::layer::DeepseekV41Attention::forward(at::Tensor const&, at::Tensor const&, at::Tensor const&, xllm::layer::DeepseekV41AttentionCache const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, xllm::layer::DeepseekV41AttentionRuntime&)",
+    "??:?"
+  ],
+  "15630447": [
+    "xllm::layer::DeepseekV41TextModel::logits(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15630922": [
+    "xllm::layer::DeepseekV41TextModel::logits(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15630938": [
+    "xllm::layer::DeepseekV41TextModel::logits(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15632105": [
+    "xllm::layer::DeepseekV41TextModel::project_logits(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15632212": [
+    "xllm::layer::DeepseekV41TextModel::project_logits(at::Tensor const&) const",
+    "??:?"
+  ],
+  "15632715": [
+    "xllm::layer::DeepseekV41TextModel::select_hidden(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "15633217": [
+    "xllm::layer::DeepseekV41TextModel::select_hidden(at::Tensor const&, std::optional<at::Tensor> const&) const",
+    "??:?"
+  ],
+  "16635309": [
+    "xllm::Batch::prepare_forward_input(xllm::ModelArgs const&, xllm::ThreadPool*, int)",
+    "??:?"
+  ],
+  "16639128": [
+    "xllm::Batch::process_sample_output(xllm::RawForwardOutput const&, bool, std::optional<std::reference_wrapper<xllm::ModelArgs const> >)",
+    "??:?"
+  ],
+  "16639149": [
+    "xllm::Batch::process_sample_output(xllm::RawForwardOutput const&, bool, std::optional<std::reference_wrapper<xllm::ModelArgs const> >)",
+    "??:?"
+  ],
+  "16639460": [
+    "xllm::Batch::process_sample_output(xllm::RawForwardOutput const&, bool, std::optional<std::reference_wrapper<xllm::ModelArgs const> >)",
+    "??:?"
+  ],
+  "16639471": [
+    "xllm::Batch::process_sample_output(xllm::RawForwardOutput const&, bool, std::optional<std::reference_wrapper<xllm::ModelArgs const> >)",
+    "??:?"
+  ],
+  "16669487": [
+    "torch::detail::TensorDataContainer::TensorDataContainer(c10::ArrayRef<float>)",
+    "??:?"
+  ],
+  "16683723": [
+    "xllm::BatchInputBuilder::build_forward_input(unsigned int, unsigned int)",
+    "??:?"
+  ],
+  "16683756": [
+    "xllm::BatchInputBuilder::build_forward_input(unsigned int, unsigned int)",
+    "??:?"
+  ],
+  "16693406": [
+    "xllm::BatchInputBuilder::process_sequences()",
+    "??:?"
+  ],
+  "16699318": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16699346": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16702473": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16702501": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16704777": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16704805": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16705274": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16705302": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16705771": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16705799": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16706378": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16706406": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16707154": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16707182": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16707651": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16707679": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16708002": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16708030": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16708353": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16708381": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16711290": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16712401": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16712429": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16712895": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16712923": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16714444": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16716147": [
+    "xllm::BatchInputBuilder::state_to_forward_input()",
+    "??:?"
+  ],
+  "16740315": [
+    "xllm::BatchInputBuilder::process_single_sequence(int, xllm::BatchInputBuilder::BuilderState*, std::unordered_set<int, std::hash<int>, std::equal_to<int>, std::allocator<int> >*)",
+    "??:?"
+  ],
+  "16746191": [
+    "xllm::BatchInputBuilder::extract_tokens_and_positions(xllm::Sequence*, unsigned int, unsigned int, xllm::BatchInputBuilder::BuilderState*)",
+    "??:?"
+  ],
+  "16770046": [
+    "at::Tensor xllm::create_2d_tensor<int>(std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, c10::ScalarType)",
+    "??:?"
+  ],
+  "16770079": [
+    "at::Tensor xllm::create_2d_tensor<int>(std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, c10::ScalarType)",
+    "??:?"
+  ],
+  "17007946": [
+    "xllm::specBuilder::build_grouped_prefill_swa_slots(xllm::ForwardInput const&, int)",
+    "??:?"
+  ],
+  "17012608": [
+    "xllm::specBuilder::make_decode_row_context(xllm::ForwardInput const&)",
+    "??:?"
+  ],
+  "17034971": [
+    "xllm::specBuilder::make_cpu_int_tensor(std::vector<int, std::allocator<int> > const&)",
+    "??:?"
+  ],
+  "17036268": [
+    "xllm::specBuilder::host_to_device_async(at::Tensor const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17036410": [
+    "xllm::specBuilder::host_to_device_async(at::Tensor const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17036423": [
+    "xllm::specBuilder::host_to_device_async(at::Tensor const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17036450": [
+    "xllm::specBuilder::host_to_device_async(at::Tensor const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17036782": [
+    "xllm::specBuilder::set_token_position_tensors(xllm::ForwardInput&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, c10::TensorOptions const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17037020": [
+    "xllm::specBuilder::set_token_position_tensors(xllm::ForwardInput&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, c10::TensorOptions const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17037217": [
+    "xllm::specBuilder::set_token_position_tensors(xllm::ForwardInput&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, c10::TensorOptions const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17037378": [
+    "xllm::specBuilder::set_token_position_tensors(xllm::ForwardInput&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, c10::TensorOptions const&, c10::TensorOptions const&)",
+    "??:?"
+  ],
+  "17098413": [
+    "xllm::EmbeddingCache::write_prefill_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "17098435": [
+    "xllm::EmbeddingCache::write_prefill_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "17099679": [
+    "xllm::EmbeddingCache::write_prefill_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "17099993": [
+    "xllm::EmbeddingCache::write_prefill_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "17100096": [
+    "xllm::EmbeddingCache::write_prefill_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "17104002": [
+    "xllm::(anonymous namespace)::to_cpu_int64_contiguous(at::Tensor const&)",
+    "embedding_cache.cpp:?"
+  ],
+  "17104984": [
+    "xllm::EmbeddingCache::write_mtp_bootstrap_context(int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "17107072": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17108638": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17108747": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17108845": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17109383": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17109487": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17109578": [
+    "xllm::EmbeddingCache::write_target_context(std::vector<int, std::allocator<int> > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, at::Tensor const&, at::Tensor const&, int)",
+    "??:?"
+  ],
+  "17115434": [
+    "xllm::clone_contiguous_detached_tensor(at::Tensor const&)",
+    "??:?"
+  ],
+  "17115447": [
+    "xllm::clone_contiguous_detached_tensor(at::Tensor const&)",
+    "??:?"
+  ],
+  "17120003": [
+    "xllm::spec_verify::run_rejection_sampling(xllm::spec_verify::SamplerPolicy const&, xllm::DraftProposal const&, at::Tensor const&, xllm::ForwardOutput const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "17120075": [
+    "xllm::spec_verify::run_rejection_sampling(xllm::spec_verify::SamplerPolicy const&, xllm::DraftProposal const&, at::Tensor const&, xllm::ForwardOutput const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "17120208": [
+    "xllm::spec_verify::run_rejection_sampling(xllm::spec_verify::SamplerPolicy const&, xllm::DraftProposal const&, at::Tensor const&, xllm::ForwardOutput const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "17120640": [
+    "xllm::spec_verify::run_rejection_sampling(xllm::spec_verify::SamplerPolicy const&, xllm::DraftProposal const&, at::Tensor const&, xllm::ForwardOutput const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "18597341": [
+    "at::Tensor::select(long, long) const",
+    "??:?"
+  ],
+  "19770583": [
+    "xllm::DisaggPDService::FirstGeneration(google::protobuf::RpcController*, xllm::proto::DisaggGenerationsRequests const*, xllm::proto::Status*, google::protobuf::Closure*)",
+    "??:?"
+  ],
+  "19784466": [
+    "xllm::DisaggPDServiceImpl::decode_recv_first_generation(xllm::proto::DisaggGenerationsRequests const*, xllm::proto::Status*)",
+    "??:?"
+  ],
+  "19784937": [
+    "xllm::DisaggPDServiceImpl::decode_recv_first_generation(xllm::proto::DisaggGenerationsRequests const*, xllm::proto::Status*)",
+    "??:?"
+  ],
+  "20358519": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20358547": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20363922": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20363950": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20365436": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20365493": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20366029": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20366039": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20366133": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20366143": [
+    "xllm::SamplingParameters::init(std::vector<xllm::RequestSamplingParam const*, std::allocator<xllm::RequestSamplingParam const*> > const&, std::vector<int, std::allocator<int> > const&, std::vector<int, std::allocator<int> > const&, std::vector<std::vector<long, std::allocator<long> >, std::allocator<std::vector<long, std::allocator<long> > > > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, std::vector<at::Tensor, std::allocator<at::Tensor> > const&)",
+    "??:?"
+  ],
+  "20369999": [
+    "xllm::SamplingParameters::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "20372782": [
+    "xllm::SamplingParameters::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "20373118": [
+    "xllm::SamplingParameters::to(c10::Device const&, c10::ScalarType) const",
+    "??:?"
+  ],
+  "20388263": [
+    "xllm::RejectionSampler::RejectionSampler(at::Tensor const&, bool, bool, bool, long, bool)",
+    "??:?"
+  ],
+  "20388890": [
+    "xllm::RejectionSampler::forward(xllm::DraftProposal const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "20389279": [
+    "xllm::RejectionSampler::forward(xllm::DraftProposal const&, at::Tensor const&, at::Tensor const&, bool) const",
+    "??:?"
+  ],
+  "20392248": [
+    "xllm::RejectionSampler::greedy_sample(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "20392268": [
+    "xllm::RejectionSampler::greedy_sample(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "20393184": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393229": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393326": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393509": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393540": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393764": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393781": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20393934": [
+    "xllm::RejectionSampler::build_accepted_mask(at::Tensor const&)",
+    "??:?"
+  ],
+  "20404707": [
+    "xllm::RejectionSampler::greedy_sample_from_token_ids(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "20404885": [
+    "xllm::RejectionSampler::greedy_sample_from_token_ids(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "20404903": [
+    "xllm::RejectionSampler::greedy_sample_from_token_ids(at::Tensor const&, at::Tensor const&, at::Tensor const&, bool)",
+    "??:?"
+  ],
+  "20405479": [
+    "xllm::(anonymous namespace)::mask_out_after_first_reject(at::Tensor const&, at::Tensor const&)",
+    "rejection_sampler.cpp:?"
+  ],
+  "20405520": [
+    "xllm::(anonymous namespace)::mask_out_after_first_reject(at::Tensor const&, at::Tensor const&)",
+    "rejection_sampler.cpp:?"
+  ],
+  "20405539": [
+    "xllm::(anonymous namespace)::mask_out_after_first_reject(at::Tensor const&, at::Tensor const&)",
+    "rejection_sampler.cpp:?"
+  ],
+  "20413891": [
+    "xllm::Sampler::forward(at::Tensor&, xllm::SamplingParameters const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "20413922": [
+    "xllm::Sampler::forward(at::Tensor&, xllm::SamplingParameters const&, at::Tensor const&) const",
+    "??:?"
+  ],
+  "20427987": [
+    "xllm::Sampler::greedy_sample(at::Tensor const&)",
+    "??:?"
+  ],
+  "50266610": [
+    "xllm::parallel_state::gather(at::Tensor const&, xllm::ProcessGroup*, int)",
+    "??:?"
+  ],
+  "50266625": [
+    "xllm::parallel_state::gather(at::Tensor const&, xllm::ProcessGroup*, int)",
+    "??:?"
+  ],
+  "50266676": [
+    "xllm::parallel_state::gather(at::Tensor const&, xllm::ProcessGroup*, int)",
+    "??:?"
+  ],
+  "50293899": [
+    "xllm::ProcessGroup::allreduce(at::Tensor&)",
+    "??:?"
+  ],
+  "50293911": [
+    "xllm::ProcessGroup::allreduce(at::Tensor&)",
+    "??:?"
+  ],
+  "50294397": [
+    "xllm::ProcessGroup::allreduce_async(at::Tensor&)",
+    "??:?"
+  ],
+  "50296602": [
+    "xllm::ProcessGroup::allgather_base_async(at::Tensor const&, at::Tensor&)",
+    "??:?"
+  ],
+  "50298390": [
+    "xllm::ProcessGroup::allgather_base_sync(at::Tensor const&)",
+    "??:?"
+  ],
+  "50298424": [
+    "xllm::ProcessGroup::allgather_base_sync(at::Tensor const&)",
+    "??:?"
+  ],
+  "50298437": [
+    "xllm::ProcessGroup::allgather_base_sync(at::Tensor const&)",
+    "??:?"
+  ],
+  "50307987": [
+    "xllm::ProcessGroupImpl::allreduce(at::Tensor&)",
+    "??:?"
+  ],
+  "50309752": [
+    "xllm::ProcessGroupImpl::allgather_base_sync(at::Tensor const&)",
+    "??:?"
+  ],
+  "50309762": [
+    "xllm::ProcessGroupImpl::allgather_base_sync(at::Tensor const&)",
+    "??:?"
+  ],
+  "50315835": [
+    "xllm::MusaNativeCollectives::allgather(at::Tensor const&) const",
+    "??:?"
+  ],
+  "57070693": [
+    "xllm::kernel::musa::row_argmax(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "57070927": [
+    "xllm::kernel::musa::row_argmax(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "57071005": [
+    "xllm::kernel::musa::row_argmax(at::Tensor const&, at::Tensor const&)",
+    "??:?"
+  ],
+  "57727330": [
+    "xllm::kernel::musa::deepseek_v4_partial_rope(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, bool, at::Tensor&)",
+    "??:?"
+  ],
+  "57766134": [
+    "xllm::kernel::musa::deepseek_v41_gate_topk(at::Tensor const&, at::Tensor const&, long, bool, double)",
+    "??:?"
+  ],
+  "57766262": [
+    "xllm::kernel::musa::deepseek_v41_gate_topk(at::Tensor const&, at::Tensor const&, long, bool, double)",
+    "??:?"
+  ],
+  "57780528": [
+    "xllm::kernel::musa::deepseek_v41_engram_gate(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "57795609": [
+    "xllm::kernel::musa::deepseek_v41_rope_fp4_quant(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "57795716": [
+    "xllm::kernel::musa::deepseek_v41_rope_fp4_quant(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, bool)",
+    "??:?"
+  ],
+  "57828971": [
+    "xllm::kernel::musa::deepseek_v41_block32_qdq(at::Tensor const&)",
+    "??:?"
+  ],
+  "57829162": [
+    "xllm::kernel::musa::deepseek_v41_block32_qdq(at::Tensor const&)",
+    "??:?"
+  ],
+  "57863193": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_dispatch(at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ],
+  "57863376": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_dispatch(at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ],
+  "57863443": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_dispatch(at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ],
+  "57863543": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_dispatch(at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ],
+  "57875652": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_swiglu_quant(at::Tensor const&, at::Tensor const&, double, double, bool)",
+    "??:?"
+  ],
+  "57875891": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_swiglu_quant(at::Tensor const&, at::Tensor const&, double, double, bool)",
+    "??:?"
+  ],
+  "57881078": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_combine(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long)",
+    "??:?"
+  ],
+  "57888110": [
+    "xllm::kernel::musa::deepseek_v41_w4a8_masked_gemm(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, bool)",
+    "??:?"
+  ],
+  "57902988": [
+    "xllm::kernel::musa::deepseek_v41_mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double)",
+    "??:?"
+  ],
+  "57905112": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57905170": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906346": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906442": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906544": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906719": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906799": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906879": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57906902": [
+    "xllm::kernel::musa::(anonymous namespace)::mhc_prenorm(at::Tensor const&, at::Tensor const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double, bool)",
+    "deepseek_v41_mhc_prenorm.cpp:?"
+  ],
+  "57949313": [
+    "xllm::kernel::musa::deepseek_v41_indexer_score(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57949435": [
+    "xllm::kernel::musa::deepseek_v41_indexer_score(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57949555": [
+    "xllm::kernel::musa::deepseek_v41_indexer_score(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57949631": [
+    "xllm::kernel::musa::deepseek_v41_indexer_score(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57949665": [
+    "xllm::kernel::musa::deepseek_v41_indexer_score(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57955510": [
+    "xllm::kernel::musa::deepseek_v41_indexer_select(at::Tensor const&, at::Tensor const&, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57956412": [
+    "xllm::kernel::musa::deepseek_v41_indexer_select(at::Tensor const&, at::Tensor const&, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57962220": [
+    "xllm::kernel::musa::deepseek_v41_engram_gather(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57967593": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57967769": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57967945": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57969529": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57969890": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57969990": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57970044": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57970159": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57970238": [
+    "xllm::kernel::musa::deepseek_v41_paged_engram_hash(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, long, std::optional<at::Tensor> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "57977196": [
+    "xllm::kernel::musa::deepseek_v41_pair_pool(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor&, long, long)",
+    "??:?"
+  ],
+  "57980824": [
+    "xllm::kernel::musa::(anonymous namespace)::pair_pool_impl(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor&, long, long, at::Tensor const&)",
+    "deepseek_v41_pair_pool.cu:?"
+  ],
+  "57981235": [
+    "xllm::kernel::musa::(anonymous namespace)::pair_pool_impl(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor&, long, long, at::Tensor const&)",
+    "deepseek_v41_pair_pool.cu:?"
+  ],
+  "57981297": [
+    "xllm::kernel::musa::(anonymous namespace)::pair_pool_impl(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor&, at::Tensor&, long, long, at::Tensor const&)",
+    "deepseek_v41_pair_pool.cu:?"
+  ],
+  "57991854": [
+    "xllm::kernel::musa::deepseek_v41_snapshot_prefix(at::Tensor const&, at::Tensor const&, long, long, long, bool, bool, long)",
+    "??:?"
+  ],
+  "57991906": [
+    "xllm::kernel::musa::deepseek_v41_snapshot_prefix(at::Tensor const&, at::Tensor const&, long, long, long, bool, bool, long)",
+    "??:?"
+  ],
+  "57992018": [
+    "xllm::kernel::musa::deepseek_v41_snapshot_prefix(at::Tensor const&, at::Tensor const&, long, long, long, bool, bool, long)",
+    "??:?"
+  ],
+  "58008095": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58008193": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58008280": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58008301": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58008609": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58008637": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58009539": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58009701": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58010110": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58010135": [
+    "xllm::kernel::musa::deepseek_v41_mate_sparse_attention(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, double, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+    "??:?"
+  ],
+  "58189140": [
+    "xllm::kernel::musa::deepseek_v4_hc_pre_combine(at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "58195269": [
+    "xllm::kernel::musa::deepseek_v4_hc_post(at::Tensor const&, at::Tensor const&, at::Tensor const&, at::Tensor const&, std::optional<at::Tensor> const&)",
+    "??:?"
+  ],
+  "58205835": [
+    "xllm::kernel::musa::deepseek_v4_hc_pre_metadata(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ],
+  "58205888": [
+    "xllm::kernel::musa::deepseek_v4_hc_pre_metadata(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ],
+  "58205951": [
+    "xllm::kernel::musa::deepseek_v4_hc_pre_metadata(at::Tensor const&, at::Tensor const&, at::Tensor const&, long, long, double)",
+    "??:?"
+  ]
+}

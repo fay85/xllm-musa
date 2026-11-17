@@ -1,0 +1,3562 @@
+{
+  "status": "PASS_NATIVE_ROPE_MATHEMATICAL_BOUND_AND_DYNAMIC_GRAPH",
+  "checks": [
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9309049555006328
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8453656804377729
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9309049555006328
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8453656804377729
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9287424137770497
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.900075755317999
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8981943890556892
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8109255780700682
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9557901066287493
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8629745226515863
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9061855277555865
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.930570938896783
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9820195852642019
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9605399227761431
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9820195852642019
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9605399227761431
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8935767553991499
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.919692309751724
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9450271275787768
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9694563204240029
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.924571296192171
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9462935955381127
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8936021452494692
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9204513717427736
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9569343377104702
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9383028220213674
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9569343377104702
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9383028220213674
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9556803924282549
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9073260601764439
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.968161175823609
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.934417989487318
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9174123792253903
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9180419596628875
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9396123901746659
+    },
+    {
+      "graph": true,
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8934556407035755
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9940379736482955
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9881867114697768
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9940379736482955
+    },
+    {
+      "rotary": 64,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9881867114697768
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9519623873207611
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9639939548724987
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9519623873207611
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9639939548724987
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9522177776069183
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9352843151919633
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.940522317055451
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9598504974000363
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9827232059609579
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9738998225317416
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9189368723482082
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9411553505828749
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9958621568100076
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9765560990869148
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9958621568100076
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9765560990869148
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9687972090776712
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9747312355287887
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9929507481176997
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9640688420975048
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9804249086056164
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9829885474424574
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9728204145204093
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9882551983406672
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9945055685339381
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9731055947993505
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9945055685339381
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9731055947993505
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9769846701566463
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9754150639869548
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.985800954535086
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9868242193552816
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9651761308546003
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9852605736062603
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9828309062100438
+    },
+    {
+      "graph": true,
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9812320646111758
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959632460326021
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959128251333805
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959632460326021
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959128251333805
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9835814427731604
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9709344044139314
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9835814427731604
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9709344044139314
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9878340821102178
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9821612635216324
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9779559911308412
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9858659072175913
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9850049245454311
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9783072106631642
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9933049020484694
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9862143167185949
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.994636789401092
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9958853359213269
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.994636789401092
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9958853359213269
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.995652785604234
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9896729971648471
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9911435485069724
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9796078455760238
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9939789836733487
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9873887084963898
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9925563123699734
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.993688379276172
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9951392594043019
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9911332687583396
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9951392594043019
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9911332687583396
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9946230109207116
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9942853428765842
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9871356725563977
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.991914253330519
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9875448574888254
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.989641135197188
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9938830714455389
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9884270941205487
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959019374193775
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.995714019503514
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959019374193775
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.995714019503514
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9280401893523857
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8639439565239301
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9280401893523857
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.8639439565239301
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9300549898959162
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9477868917707544
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9300549898959162
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9477868917707544
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9715928042430974
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9785924280720426
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9715928042430974
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9785924280720426
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9929795801447983
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9947146555277868
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9929795801447983
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9947146555277868
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9812126579371465
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9627923876500513
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9812126579371465
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9627923876500513
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9891245184914229
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9930378034354068
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9891245184914229
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9930378034354068
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9771019029703024
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9736840329389342
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9771019029703024
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9736840329389342
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9952506349984572
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9955932155277802
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9952506349984572
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9955932155277802
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 0,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.0
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9953720140506265
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9779450643114312
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9953720140506265
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9779450643114312
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9917540752706184
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9912599624479973
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9917540752706184
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9912599624479973
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9951382393277444
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9953342231028143
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9951382393277444
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 6,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": true,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9953342231028143
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9960029212940698
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959404069192545
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9960029212940698
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "exact_bits": false,
+      "mathematical_error_bound_pass": true,
+      "maximum_error_over_bound": 0.9959404069192545
+    }
+  ],
+  "graphs": [
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 255,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 2047,
+      "passed": true
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "passed": true
+    }
+  ],
+  "timings": [
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          21.041778723398846,
+          20.807111263275146,
+          20.802222357855904,
+          20.850222640567356,
+          21.17111020618015
+        ],
+        "median_us": 20.850222640567356
+      },
+      "block256": {
+        "us_per_call": [
+          7.804444101121691,
+          7.832889424429999,
+          7.600444555282593,
+          7.686222261852688,
+          7.705777883529663
+        ],
+        "median_us": 7.705777883529663
+      },
+      "reverse_control": {
+        "us_per_call": [
+          20.819999112023247,
+          20.62844435373942,
+          20.878665977054172,
+          20.52755488289727,
+          20.78533305062188
+        ],
+        "median_us": 20.78533305062188
+      }
+    },
+    {
+      "heads": 1,
+      "rows": 1,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          20.85999912685818,
+          21.146221955617268,
+          20.846222506629097,
+          20.897332827250164,
+          21.98577854368422
+        ],
+        "median_us": 20.897332827250164
+      },
+      "block256": {
+        "us_per_call": [
+          7.993333207236396,
+          7.852444383833143,
+          8.129778173234728,
+          7.909777429368761,
+          7.926666736602783
+        ],
+        "median_us": 7.926666736602783
+      },
+      "reverse_control": {
+        "us_per_call": [
+          21.41066657172309,
+          21.570666631062824,
+          20.915999677446152,
+          21.434667375352646,
+          21.179110474056667
+        ],
+        "median_us": 21.41066657172309
+      }
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          25.089777840508354,
+          24.904444482591416,
+          25.013332896762424,
+          25.021778212653267,
+          24.82133176591661
+        ],
+        "median_us": 25.013332896762424
+      },
+      "block256": {
+        "us_per_call": [
+          8.50177804629008,
+          8.135110802120632,
+          8.624888790978325,
+          8.252888917922974,
+          8.248888783984714
+        ],
+        "median_us": 8.252888917922974
+      },
+      "reverse_control": {
+        "us_per_call": [
+          24.765335188971626,
+          24.598222308688694,
+          24.72577889760335,
+          24.976444244384766,
+          24.748002158270943
+        ],
+        "median_us": 24.748002158270943
+      }
+    },
+    {
+      "heads": 1,
+      "rows": 4,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          25.254665480719673,
+          25.285779105292427,
+          25.313332345750595,
+          25.273333655463325,
+          34.51822068956163
+        ],
+        "median_us": 25.285779105292427
+      },
+      "block256": {
+        "us_per_call": [
+          8.693333466847738,
+          8.690222104390463,
+          8.61111150847541,
+          8.36355553732978,
+          8.590667115317451
+        ],
+        "median_us": 8.61111150847541
+      },
+      "reverse_control": {
+        "us_per_call": [
+          24.807111422220867,
+          25.042666329277885,
+          24.9546660317315,
+          25.213779343499077,
+          25.12844403584798
+        ],
+        "median_us": 25.042666329277885
+      }
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          24.958666165669758,
+          24.938665495978462,
+          25.203553835550945,
+          25.162222650316025,
+          25.69911215040419
+        ],
+        "median_us": 25.162222650316025
+      },
+      "block256": {
+        "us_per_call": [
+          8.73333348168267,
+          8.668444554011026,
+          8.781333102120293,
+          8.712888426250881,
+          8.715555402967665
+        ],
+        "median_us": 8.715555402967665
+      },
+      "reverse_control": {
+        "us_per_call": [
+          24.893334176805283,
+          25.123111406962078,
+          24.923110008239746,
+          25.143112076653374,
+          25.41111045413547
+        ],
+        "median_us": 25.123111406962078
+      }
+    },
+    {
+      "heads": 1,
+      "rows": 6,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          25.464889738294815,
+          25.462667147318523,
+          25.54310957590739,
+          25.56000020768907,
+          25.879110230339897
+        ],
+        "median_us": 25.54310957590739
+      },
+      "block256": {
+        "us_per_call": [
+          8.717777331670126,
+          11.667111184861925,
+          8.988000286950005,
+          8.502666817771065,
+          8.506666951709324
+        ],
+        "median_us": 8.717777331670126
+      },
+      "reverse_control": {
+        "us_per_call": [
+          25.107110871209038,
+          25.093777974446613,
+          25.14222198062473,
+          25.100890795389812,
+          25.096890661451553
+        ],
+        "median_us": 25.100890795389812
+      }
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          21.43911123275757,
+          21.4373336897956,
+          21.52222130033705,
+          21.50977849960327,
+          21.521777576870388
+        ],
+        "median_us": 21.50977849960327
+      },
+      "block256": {
+        "us_per_call": [
+          8.115110794703165,
+          8.153333266576132,
+          7.860889037450154,
+          7.920444673962063,
+          7.988888687557644
+        ],
+        "median_us": 7.988888687557644
+      },
+      "reverse_control": {
+        "us_per_call": [
+          21.45822180642022,
+          21.70755598280165,
+          21.443111366695828,
+          21.43911123275757,
+          21.416000525156658
+        ],
+        "median_us": 21.443111366695828
+      }
+    },
+    {
+      "heads": 8,
+      "rows": 1,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          21.23466730117798,
+          21.84622287750244,
+          21.35866615507338,
+          21.691110399034287,
+          21.26266558965047
+        ],
+        "median_us": 21.35866615507338
+      },
+      "block256": {
+        "us_per_call": [
+          8.903111351860893,
+          8.574222193823921,
+          9.068888425827026,
+          9.060888820224339,
+          8.768444591098362
+        ],
+        "median_us": 8.903111351860893
+      },
+      "reverse_control": {
+        "us_per_call": [
+          21.563998858133953,
+          21.575110488467747,
+          21.68266640769111,
+          21.97955714331733,
+          21.975111961364746
+        ],
+        "median_us": 21.68266640769111
+      }
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          25.679556528727215,
+          26.041777928670246,
+          25.82133346133762,
+          25.711554951137966,
+          25.770666864183212
+        ],
+        "median_us": 25.770666864183212
+      },
+      "block256": {
+        "us_per_call": [
+          8.724444442325169,
+          8.527111344867283,
+          8.936888641781277,
+          8.931555350621542,
+          8.928889036178589
+        ],
+        "median_us": 8.928889036178589
+      },
+      "reverse_control": {
+        "us_per_call": [
+          26.327999432881672,
+          25.735555754767525,
+          25.713777542114258,
+          26.04488796657986,
+          25.82399845123291
+        ],
+        "median_us": 25.82399845123291
+      }
+    },
+    {
+      "heads": 8,
+      "rows": 4,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          26.105335023668076,
+          26.10888746049669,
+          25.663110944959854,
+          26.28177801767985,
+          25.467112329271103
+        ],
+        "median_us": 26.105335023668076
+      },
+      "block256": {
+        "us_per_call": [
+          9.21199984020657,
+          9.210666682985094,
+          9.047111537721422,
+          9.0466664897071,
+          9.024444553587172
+        ],
+        "median_us": 9.047111537721422
+      },
+      "reverse_control": {
+        "us_per_call": [
+          25.782667265997993,
+          25.78577995300293,
+          25.65644317203098,
+          25.330668025546604,
+          25.940442085266113
+        ],
+        "median_us": 25.782667265997993
+      }
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          25.53910944196913,
+          25.539999537997776,
+          25.872887505425346,
+          25.867554876539444,
+          25.895555814107258
+        ],
+        "median_us": 25.867554876539444
+      },
+      "block256": {
+        "us_per_call": [
+          9.328888522254097,
+          9.317777554194132,
+          9.472888708114624,
+          9.212444225947062,
+          9.131556087070042
+        ],
+        "median_us": 9.317777554194132
+      },
+      "reverse_control": {
+        "us_per_call": [
+          25.525331497192383,
+          25.862667295667862,
+          25.687556796603733,
+          25.524889098273384,
+          25.53910944196913
+        ],
+        "median_us": 25.53910944196913
+      }
+    },
+    {
+      "heads": 8,
+      "rows": 6,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          26.280442873636883,
+          25.93288951449924,
+          25.978220833672417,
+          25.97644329071045,
+          26.28577815161811
+        ],
+        "median_us": 25.978220833672417
+      },
+      "block256": {
+        "us_per_call": [
+          9.480888975991142,
+          9.131111039055718,
+          9.368444813622368,
+          9.295555618074205,
+          9.136888715955946
+        ],
+        "median_us": 9.295555618074205
+      },
+      "reverse_control": {
+        "us_per_call": [
+          26.295110914442276,
+          25.95955530802409,
+          26.144443617926704,
+          26.164889335632324,
+          26.289333237542046
+        ],
+        "median_us": 26.164889335632324
+      }
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          21.698665618896484,
+          21.688000361124676,
+          21.696000629001194,
+          21.229777071211075,
+          21.172889073689777
+        ],
+        "median_us": 21.688000361124676
+      },
+      "block256": {
+        "us_per_call": [
+          8.160000377231174,
+          7.831555604934692,
+          7.993333207236396,
+          8.046666781107584,
+          7.968888680140178
+        ],
+        "median_us": 7.993333207236396
+      },
+      "reverse_control": {
+        "us_per_call": [
+          21.713333659701878,
+          21.708888477749294,
+          22.10044463475545,
+          22.05910947587755,
+          22.032445006900364
+        ],
+        "median_us": 22.032445006900364
+      }
+    },
+    {
+      "heads": 64,
+      "rows": 1,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          22.09022177590264,
+          22.009778022766113,
+          21.680445141262478,
+          21.651111708747017,
+          21.688445409138996
+        ],
+        "median_us": 21.688445409138996
+      },
+      "block256": {
+        "us_per_call": [
+          7.946666081746419,
+          7.943555381562975,
+          8.209778202904594,
+          8.153333266576132,
+          7.763555314805773
+        ],
+        "median_us": 7.946666081746419
+      },
+      "reverse_control": {
+        "us_per_call": [
+          21.67511118782891,
+          22.02444341447618,
+          22.195998827616375,
+          22.363999154832626,
+          22.357776429918076
+        ],
+        "median_us": 22.195998827616375
+      }
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          27.61244508955214,
+          27.655998865763348,
+          27.657779057820637,
+          27.69511275821262,
+          27.612000041537815
+        ],
+        "median_us": 27.655998865763348
+      },
+      "block256": {
+        "us_per_call": [
+          9.757777717378405,
+          9.801333480411106,
+          9.994666443930733,
+          9.989778200785318,
+          10.003999869028727
+        ],
+        "median_us": 9.989778200785318
+      },
+      "reverse_control": {
+        "us_per_call": [
+          26.635999149746365,
+          26.984445254007976,
+          26.788889037238228,
+          26.63288911183675,
+          26.828887727525498
+        ],
+        "median_us": 26.788889037238228
+      }
+    },
+    {
+      "heads": 64,
+      "rows": 4,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          27.031999164157444,
+          27.789778179592556,
+          27.1799988216824,
+          27.640000979105633,
+          27.399110794067383
+        ],
+        "median_us": 27.399110794067383
+      },
+      "block256": {
+        "us_per_call": [
+          9.909778171115452,
+          9.899110926522148,
+          9.716000159581503,
+          9.76311100853814,
+          9.706666734483507
+        ],
+        "median_us": 9.76311100853814
+      },
+      "reverse_control": {
+        "us_per_call": [
+          27.404001024034287,
+          27.423556645711262,
+          28.274665938483345,
+          28.12088860405816,
+          27.43777698940701
+        ],
+        "median_us": 27.43777698940701
+      }
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "control": {
+        "us_per_call": [
+          29.3013334274292,
+          29.25377951727973,
+          29.489779472351074,
+          28.15377712249756,
+          27.37911277347141
+        ],
+        "median_us": 29.25377951727973
+      },
+      "block256": {
+        "us_per_call": [
+          10.907555288738674,
+          10.944445265663994,
+          11.036889420615303,
+          11.103555228975084,
+          10.947555965847439
+        ],
+        "median_us": 10.947555965847439
+      },
+      "reverse_control": {
+        "us_per_call": [
+          28.742220666673447,
+          29.13600073920356,
+          28.60844400193956,
+          28.08622254265679,
+          27.794668409559463
+        ],
+        "median_us": 28.60844400193956
+      }
+    },
+    {
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "control": {
+        "us_per_call": [
+          29.0333350499471,
+          29.349777433607315,
+          29.040000173780655,
+          28.313334782918293,
+          28.127556376987034
+        ],
+        "median_us": 29.0333350499471
+      },
+      "block256": {
+        "us_per_call": [
+          11.08000013563368,
+          11.079555087619358,
+          11.303999688890245,
+          10.702666309144762,
+          10.70622205734253
+        ],
+        "median_us": 11.079555087619358
+      },
+      "reverse_control": {
+        "us_per_call": [
+          29.360887739393448,
+          29.72933186425103,
+          29.727999369303387,
+          29.313333829243977,
+          28.18888823191325
+        ],
+        "median_us": 29.360887739393448
+      }
+    }
+  ],
+  "differences": [
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 3.0517578125e-05
+    },
+    {
+      "rotary": 64,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 3.0517578125e-05
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": false,
+      "block": 256,
+      "offset": 4095,
+      "mismatch": 2,
+      "max_finite_abs": 0.0078125
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 511,
+      "mismatch": 1,
+      "max_finite_abs": 2.384185791015625e-07
+    },
+    {
+      "graph": true,
+      "heads": 64,
+      "rows": 6,
+      "inverse": true,
+      "block": 256,
+      "offset": 4095,
+      "mismatch": 1,
+      "max_finite_abs": 1.52587890625e-05
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 7,
+      "max_finite_abs": 0.001953125
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 4,
+      "max_finite_abs": 0.0078125
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 7,
+      "max_finite_abs": 0.001953125
+    },
+    {
+      "rotary": 64,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 4,
+      "max_finite_abs": 0.0078125
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 0.001953125
+    },
+    {
+      "rotary": 128,
+      "heads": 1,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 0.001953125
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 5.960464477539063e-08
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 1,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 5.960464477539063e-08
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 7.62939453125e-06
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 4,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 7.62939453125e-06
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 2.384185791015625e-07
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 2,
+      "max_finite_abs": 0.0009765625
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 1,
+      "max_finite_abs": 2.384185791015625e-07
+    },
+    {
+      "rotary": 128,
+      "heads": 8,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 2,
+      "max_finite_abs": 0.0009765625
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 19,
+      "max_finite_abs": 0.00390625
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int32",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 17,
+      "max_finite_abs": 0.015625
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": false,
+      "block": 256,
+      "mismatch": 19,
+      "max_finite_abs": 0.00390625
+    },
+    {
+      "rotary": 128,
+      "heads": 64,
+      "rows": 256,
+      "dtype": "torch.int64",
+      "inverse": true,
+      "block": 256,
+      "mismatch": 17,
+      "max_finite_abs": 0.015625
+    }
+  ],
+  "module": "/expt/builds/e52_rope_table_production_module_v1/v41_rope_table_test_module.so",
+  "module_sha256": "23a5f54144e21e928491d44d275fe8d368df61cc10d0b558417663b86087b2ac",
+  "scope": "Native operator and dynamic Graph checks; no model accuracy claim"
+}

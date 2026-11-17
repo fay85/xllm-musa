@@ -1,0 +1,1 @@
+{"pid": 930, "start_ticks": "525532265", "command": ["python3", "/expt/scripts/validate_v41_rope_table_v2.py", "--output", "/expt/diagnostics/e52_rope_table_gpu_v2/result.json"]}

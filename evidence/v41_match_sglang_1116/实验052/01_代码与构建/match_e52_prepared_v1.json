@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"artifact\": \"/expt/artifacts/native_sg438_rope_table_v1/bin/xllm\", \"sha256\": \"7d2ffa0662fd53f0074d6f29c7a28e0f4db5e057cb1c0ad6febc706bfc74303f\", \"bytes\": 341814896, \"source_manifest\": \"/expt/builds/e52_native_rope_table_v1/source_manifest.json\", \"source_parent\": \"d19631240a283e17295a5823f19e79f8dec6c991\", \"at\": \"2026-11-17T14:15:25.169171+08:00\"}\n",
+  "stderr": ""
+}

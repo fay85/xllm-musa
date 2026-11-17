@@ -69,6 +69,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true));
     gather_bf16_bits_ =
         util::get_bool_env("XLLM_DSV41_GATHER_BF16_BITS", false);
+    direct_rope_table_ =
+        util::get_bool_env("XLLM_DSV41_DIRECT_ROPE_TABLE", false);
     CHECK(!gather_bf16_bits_ ||
           (tp_size() == 8 && musa_custom_allreduce_enabled(tp_group_)))
         << "BF16 bit gather requires the initialized TP8 custom communicator";
@@ -300,7 +302,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     const int32_t policy = static_cast<int32_t>(draft_custom_allreduce_) |
                            (static_cast<int32_t>(static_draft_) << 1) |
                            (static_cast<int32_t>(full_draft_graph_) << 2) |
-                           (static_cast<int32_t>(gather_bf16_bits_) << 3);
+                           (static_cast<int32_t>(gather_bf16_bits_) << 3) |
+                           (static_cast<int32_t>(direct_rope_table_) << 4);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -362,6 +365,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -.5);
     attention.dense_prequant_directory = dense_prequant_path_;
+    attention.direct_rope_table = direct_rope_table_;
     attention.sparse_library_path = sparse_path_;
     result.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     result.hc_epsilon = args_.hc_eps();
@@ -555,6 +559,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   bool full_draft_graph_ = false;
   bool markov_fp32_logits_ = false;
   bool gather_bf16_bits_ = false;
+  bool direct_rope_table_ = false;
   torch::Tensor markov_embed_;
   torch::Tensor markov_head_;
   torch::Tensor confidence_weight_;

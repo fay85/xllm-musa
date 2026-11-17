@@ -20,6 +20,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <utility>
 #include <vector>
 
+#include "core/kernels/musa/deepseek_v4_dsa_rope.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
 #include "core/layers/musa/deepseek_v41/rms_norm.h"
@@ -42,7 +43,8 @@ class DeepseekV41AttentionProjection final {
       bool decode_packed_qkv = false,
       bool verify_skinny_projection = false,
       const std::vector<torch::Tensor>& fp8_scales = {},
-      const std::string& prequant_directory = {})
+      const std::string& prequant_directory = {},
+      bool direct_rope_table = false)
       : weights_(check_weights(std::move(weights), fp8_scales)),
         q_a_(weights_[0],
              original_fp8_activation,
@@ -68,7 +70,8 @@ class DeepseekV41AttentionProjection final {
         groups_(groups),
         output_rank_(output_rank),
         epsilon_(epsilon),
-        original_fp8_activation_(original_fp8_activation) {
+        original_fp8_activation_(original_fp8_activation),
+        direct_rope_table_(direct_rope_table) {
     CHECK_GT(heads_, 0);
     CHECK_GT(groups_, 0);
     CHECK_EQ(heads_ % groups_, 0);
@@ -244,6 +247,13 @@ class DeepseekV41AttentionProjection final {
     if (input.size(0) == 0) {
       return input.clone();
     }
+    // Select before execution. Larger/strided inputs retain the defined
+    // reference path; a selected device kernel failure is never swallowed.
+    if (direct_rope_table_ && input.size(0) <= 6 && input.is_contiguous() &&
+        positions.is_contiguous() && table.is_contiguous()) {
+      return kernel::musa::deepseek_v41_rope_table(
+          input, positions, table, inverse);
+    }
     const int64_t width = table.size(1);
     const torch::Tensor rows =
         table.index_select(0, positions.to(torch::kInt64));
@@ -274,6 +284,7 @@ class DeepseekV41AttentionProjection final {
   int64_t head_dim_ = 0;
   double epsilon_;
   bool original_fp8_activation_;
+  bool direct_rope_table_ = false;
 };
 
 }  // namespace xllm::layer

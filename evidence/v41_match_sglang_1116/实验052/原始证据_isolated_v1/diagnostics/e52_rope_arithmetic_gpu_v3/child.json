@@ -1,0 +1,1 @@
+{"pid": 1173, "start_ticks": "525580299", "command": ["python3", "/expt/scripts/validate_v41_rope_arithmetic_v3.py", "--output", "/expt/diagnostics/e52_rope_arithmetic_gpu_v3/result.json"]}

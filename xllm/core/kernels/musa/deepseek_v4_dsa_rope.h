@@ -4,6 +4,8 @@
 
 #include <torch/types.h>
 
+#include <cstdint>
+
 namespace xllm::kernel::musa {
 
 // Fused partial interleaved RoPE for [tokens, dim] and
@@ -16,5 +18,14 @@ bool deepseek_v4_partial_rope(const torch::Tensor& input,
                               int64_t rope_head_dim,
                               bool inverse,
                               torch::Tensor& output);
+
+// BF16 input/output with a contiguous FP32 [cos_half, sin_half] table.
+// Positions are read on device, so changing their contents remains Graph-safe.
+// FP32 arithmetic and BF16 rounding are preserved; bitwise identity to the
+// separate FP32-output kernel and ATen cast is not promised.
+torch::Tensor deepseek_v41_rope_table(const torch::Tensor& input,
+                                      const torch::Tensor& positions,
+                                      const torch::Tensor& table,
+                                      bool inverse);
 
 }  // namespace xllm::kernel::musa

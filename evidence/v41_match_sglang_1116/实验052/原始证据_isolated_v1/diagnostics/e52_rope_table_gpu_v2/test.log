@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/expt/scripts/validate_v41_rope_table_v2.py", line 143, in <module>
+    _main()
+  File "/expt/scripts/validate_v41_rope_table_v2.py", line 106, in _main
+    check(actual, expected, context)
+  File "/expt/scripts/validate_v41_rope_table_v2.py", line 82, in check
+    assert max_ulp <= 1, "More than one BF16 output step is not a rounding-only basic check"
+AssertionError: More than one BF16 output step is not a rounding-only basic check

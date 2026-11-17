@@ -1,0 +1,6 @@
+*.log -whitespace
+*.txt -whitespace
+*.html -whitespace
+*.svg -whitespace
+*.py -whitespace
+*.patch -whitespace

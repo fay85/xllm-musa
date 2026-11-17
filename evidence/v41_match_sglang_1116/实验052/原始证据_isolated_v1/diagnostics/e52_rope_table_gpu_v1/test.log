@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/expt/scripts/validate_v41_rope_table_v1.py", line 135, in <module>
+    _main()
+  File "/expt/scripts/validate_v41_rope_table_v1.py", line 98, in _main
+    check(actual, expected, context)
+  File "/expt/scripts/validate_v41_rope_table_v1.py", line 74, in check
+    torch.testing.assert_close(a, e, rtol=0, atol=0, equal_nan=True)
+  File "/opt/venv/lib/python3.10/site-packages/torch/testing/_comparison.py", line 1589, in assert_close
+    raise error_metas[0].to_error(msg)
+AssertionError: Tensor-likes are not equal!
+
+Mismatched elements: 2 / 1048576 (0.0%)
+Greatest absolute difference: 0.00390625 at index (132, 6, 485)
+Greatest relative difference: 0.006011962890625 at index (143, 3, 455)

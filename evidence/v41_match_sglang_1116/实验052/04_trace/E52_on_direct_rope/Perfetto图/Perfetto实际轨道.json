@@ -1,0 +1,30 @@
+[
+  {
+    "name": "Global Track Events",
+    "uri": null
+  },
+  {
+    "name": "CPU runtime / driver thread 11011",
+    "uri": "/track_event_2"
+  },
+  {
+    "name": "GPU kernel stream 22",
+    "uri": "/track_event_3"
+  },
+  {
+    "name": "Native C++ / ATen thread 11011",
+    "uri": "/track_event_1"
+  },
+  {
+    "name": "Process 8807",
+    "uri": "/process_1"
+  },
+  {
+    "name": "Thread 11011",
+    "uri": "/thread_2"
+  },
+  {
+    "name": "Thread 11011 Callstacks",
+    "uri": "/process_1/thread_2_stack_samples_xllm.native_cpp.RecordFunction_entry_backtrace.COUNT"
+  }
+]

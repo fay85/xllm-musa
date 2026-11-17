@@ -78,6 +78,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
     gather_bf16_bits_ =
         util::get_bool_env("XLLM_DSV41_GATHER_BF16_BITS", false);
+    direct_rope_table_ =
+        util::get_bool_env("XLLM_DSV41_DIRECT_ROPE_TABLE", false);
     CHECK(!gather_bf16_bits_ ||
           (tp_size() == 8 && musa_custom_allreduce_enabled(tp_group_)))
         << "BF16 bit gather requires the initialized TP8 custom communicator";
@@ -815,7 +817,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         (static_cast<int32_t>(selective_spec_commit_) << 1) |
         (static_cast<int32_t>(verify_custom_allreduce_) << 2) |
         (static_cast<int32_t>(fused_spec_snapshot_) << 3) |
-        (static_cast<int32_t>(gather_bf16_bits_) << 4);
+        (static_cast<int32_t>(gather_bf16_bits_) << 4) |
+        (static_cast<int32_t>(direct_rope_table_) << 5);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -1089,6 +1092,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     attention.epsilon = args_.rms_norm_eps();
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
     attention.dense_prequant_directory = dense_prequant_path_;
+    attention.direct_rope_table = direct_rope_table_;
     attention.verify_skinny_projection =
         util::get_bool_env("XLLM_DSV41_VERIFY_SKINNY_PROJECTION", false);
     attention.decode_packed_qkv =
@@ -1467,6 +1471,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   bool owner_attention_ = false;
   bool owner_gather_outside_graph_ = false;
   bool gather_bf16_bits_ = false;
+  bool direct_rope_table_ = false;
   std::shared_ptr<layer::DeepseekV41DeepEpLlRuntime> deep_ep_ll_;
   // Graphs retain weight/cache pointers; destroy before model and Engram
   // assets.

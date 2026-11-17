@@ -1,0 +1,8 @@
+{
+  "xllm/core/kernels/musa/deepseek_v4_dsa_rope.cu": "d84232a469a6dd71def689a459c0568a02cc82eb6f902d9d939b2b55c8b0af62",
+  "xllm/core/kernels/musa/deepseek_v4_dsa_rope.h": "a50149b6db5304174b7ba8cc0090472169e240b4b4acce4e75de99832fb9d611",
+  "xllm/core/layers/musa/deepseek_v41/attention_projection.h": "8ddb0264d3b02cd36cc09b50c8e3c8c39cbcc0f846695a57006be6806c2ea156",
+  "xllm/core/layers/musa/deepseek_v41/attention.h": "120d57060fe2296b18a5b2d3dd105eceb44873dd54a7c082c208454e915c8a08",
+  "xllm/models/llm/musa/deepseek_v41_native.h": "472739a66dbaac9af813cae095ff81369a9ffbb80eda8f35ca90605bc770e1ee",
+  "xllm/models/llm/musa/deepseek_v41_dspark_native.h": "7abd8b66d23b66779cbfbc00792ec3059ae0de473ffca2530eca7524398e99a1"
+}

@@ -1,0 +1,315 @@
+checking .c
+/expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu
+checking .cpp
+/expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu
+mcc -fplugin=/usr/local/musa/tools/musamapping/libMusaMapping.so -DGFLAGS_IS_A_DLL=0 -DSPDLOG_COMPILED_LIB -DTORCH_CUDA=1 -DUSE_C10D_GLOO -DUSE_DISTRIBUTED -DUSE_MUSA -DUSE_RPC -DUSE_TENSORPIPE -DYLT_ENABLE_IBV -I/usr/local/musa/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/.. -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -I/usr/local/lib/python3.10/dist-packages/torch_musa_compiled/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/tvm_ffi/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/musa -I/usr/include/python3.10 -I/workspace/xllm-mt-main/xllm/. -I/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/xllm -I/workspace/xllm-mt-main/xllm/core/kernels/musa -I/workspace/xllm-mt-main/xllm/core/kernels/musa/../cuda -I/workspace/xllm-mt-main/xllm/core/kernels/musa/../cuda/moe -I/workspace/xllm-mt-main -I/workspace/xllm-mt-main/xllm/core -I/workspace/xllm-mt-main/third_party/etcd_cpp_apiv3 -I/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/xllm/proto -I/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/torch/include -I/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/include -I/workspace/xllm-mt-main/third_party -I/workspace/xllm-mt-main/third_party/Mooncake/mooncake-common/include -I/workspace/xllm-mt-main/third_party/Mooncake/mooncake-transfer-engine/include -I/workspace/xllm-mt-main/third_party/Mooncake/mooncake-store/include -I/workspace/xllm-mt-main/third_party/sentencepiece -I/workspace/xllm-mt-main/third_party/minja -I/workspace/xllm-mt-main/third_party/spdlog/include -fPIC -Od3 -fPIC -O3 -Wno-c++11-narrowing -D_GLIBCXX_USE_CXX11_ABI=1 -fplugin=/usr/local/musa/tools/musamapping/libMusaMapping.so -x musa -I. -x musa -I. -c /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu -o /expt/builds/e52_rope_table_module_v1/rope.o -DCCCL_DISABLE_NVFP8_SUPPORT -std=c++20 --offload-arch=mp_31 -I/usr/local/musa/include -I/usr/local/lib/python3.10/dist-packages/tvm_ffi/include -I/usr/local/lib/python3.10/dist-packages -I/usr/local/musa/tools/mutlass/include
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:92:9: warning: 'LOG' macro redefined [-Wmacro-redefined]
+#define LOG(n)                                 \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:610:9: note: previous definition is here
+#define LOG(severity) COMPACT_GOOGLE_LOG_ ## severity.stream()
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:95:9: warning: 'VLOG' macro redefined [-Wmacro-redefined]
+#define VLOG(n)                   \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:1419:9: note: previous definition is here
+#define VLOG(verboselevel) LOG_IF(INFO, VLOG_IS_ON(verboselevel))
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:99:9: warning: 'LOG_IF' macro redefined [-Wmacro-redefined]
+#define LOG_IF(n, condition)                                  \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:694:9: note: previous definition is here
+#define LOG_IF(severity, condition) \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:102:9: warning: 'VLOG_IF' macro redefined [-Wmacro-redefined]
+#define VLOG_IF(n, condition)                    \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:1421:9: note: previous definition is here
+#define VLOG_IF(verboselevel, condition) \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:106:9: warning: 'VLOG_IS_ON' macro redefined [-Wmacro-redefined]
+#define VLOG_IS_ON(verboselevel) (CAFFE2_LOG_THRESHOLD <= -(verboselevel))
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/vlog_is_on.h:73:9: note: previous definition is here
+#define VLOG_IS_ON(verboselevel)                                \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:121:9: warning: 'CHECK' macro redefined [-Wmacro-redefined]
+#define CHECK(condition) FATAL_IF(condition) << "Check failed: " #condition " "
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:710:9: note: previous definition is here
+#define CHECK(condition)  \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:125:9: warning: 'DCHECK' macro redefined [-Wmacro-redefined]
+#define DCHECK(condition) FATAL_IF(condition) << "Check failed: " #condition " "
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:1315:9: note: previous definition is here
+#define DCHECK(condition) CHECK(condition)
+        ^
+7 warnings generated when compiling for mp_31.
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:92:9: warning: 'LOG' macro redefined [-Wmacro-redefined]
+#define LOG(n)                                 \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:610:9: note: previous definition is here
+#define LOG(severity) COMPACT_GOOGLE_LOG_ ## severity.stream()
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:95:9: warning: 'VLOG' macro redefined [-Wmacro-redefined]
+#define VLOG(n)                   \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:1419:9: note: previous definition is here
+#define VLOG(verboselevel) LOG_IF(INFO, VLOG_IS_ON(verboselevel))
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:99:9: warning: 'LOG_IF' macro redefined [-Wmacro-redefined]
+#define LOG_IF(n, condition)                                  \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:694:9: note: previous definition is here
+#define LOG_IF(severity, condition) \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:102:9: warning: 'VLOG_IF' macro redefined [-Wmacro-redefined]
+#define VLOG_IF(n, condition)                    \
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:1421:9: note: previous definition is here
+#define VLOG_IF(verboselevel, condition) \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:106:9: warning: 'VLOG_IS_ON' macro redefined [-Wmacro-redefined]
+#define VLOG_IS_ON(verboselevel) (CAFFE2_LOG_THRESHOLD <= -(verboselevel))
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/vlog_is_on.h:73:9: note: previous definition is here
+#define VLOG_IS_ON(verboselevel)                                \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:121:9: warning: 'CHECK' macro redefined [-Wmacro-redefined]
+#define CHECK(condition) FATAL_IF(condition) << "Check failed: " #condition " "
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:710:9: note: previous definition is here
+#define CHECK(condition)  \
+        ^
+In file included from /expt/builds/e52_rope_table_module_v1/src/v41_rope_table_candidate.cu:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/extension.h:5:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/all.h:7:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include/torch/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/autograd.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/autograd/variable.h:11:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/NamedTensorUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/TensorNames.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/WrapDimUtils.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef.h:631:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/IListRef_inl.h:3:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List.h:491:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/List_inl.h:4:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue.h:1626:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/ATen/core/ivalue_inl.h:27:
+In file included from /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/Logging.h:29:
+/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/c10/util/logging_is_not_google_glog.h:125:9: warning: 'DCHECK' macro redefined [-Wmacro-redefined]
+#define DCHECK(condition) FATAL_IF(condition) << "Check failed: " #condition " "
+        ^
+/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include/glog/logging.h:1315:9: note: previous definition is here
+#define DCHECK(condition) CHECK(condition)
+        ^
+7 warnings generated when compiling for host.
