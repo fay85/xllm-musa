@@ -1,0 +1,78 @@
+{
+  "decision": "PHASE_PROMOTION_SMALL_GAIN_NOT_FINAL",
+  "run": "p49_full_draft_confirm_on_v1",
+  "source_commit": "9046ef0292aa7bff88d2c5bcf248714e278d9ec9",
+  "binary": "/expt/artifacts/native_sg438_runtime_timing_v1/bin/xllm",
+  "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1",
+  "source_manifest": "/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/builds/e48_native_timing_v1/source_manifest.json",
+  "configuration": "E39 policy plus D FULL_DRAFT_GRAPH=1; AttentionTP8/EP8/sharedTP8, proposal3, targetq4 Graph, static expert activation; ownerLL/prequant/E46dot off",
+  "metrics": {
+    "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 339.5425356924534,
+    "mean_TPOT_ms_per_token": 27.208561960096453,
+    "TPOT_sample_stdev_ms": 0.18960850432050835,
+    "mean_E2E_s": 7.277725835517049,
+    "output_tokens_per_latency_sum_second": 35.17582357261365,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+  },
+  "first_on_metrics": {
+    "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 331.44127801060677,
+    "mean_TPOT_ms_per_token": 26.94248822974224,
+    "TPOT_sample_stdev_ms": 0.28910790880121723,
+    "mean_E2E_s": 7.201775776594877,
+    "output_tokens_per_latency_sum_second": 35.54678845070086,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+  },
+  "reverse_off_metrics": {
+    "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+    "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+    "mean_TTFT_ms": 346.31387554109097,
+    "mean_TPOT_ms_per_token": 28.102810422287266,
+    "TPOT_sample_stdev_ms": 0.26297712000955886,
+    "mean_E2E_s": 7.512530533224345,
+    "output_tokens_per_latency_sum_second": 34.07640060400872,
+    "formal_requests": 5,
+    "input_output": [
+      256,
+      256
+    ],
+    "profiler_on": false,
+    "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+  },
+  "long_smoke": {
+    "usage": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 256,
+      "total_tokens": 2304,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "E2E_s": 54.734742308966815,
+    "first_content_s": 1.8715736446902156,
+    "cold_capture_not_formal_performance": true,
+    "post_long_checks_passed": true
+  },
+  "all16_normal_exit": true,
+  "independent_trace16_valid": true,
+  "final_three_rounds_done": false,
+  "formal_long_1warm5_done": false,
+  "same_window_sglang_done": false,
+  "goal_achieved": false,
+  "updated_at": "2026-11-17T12:28:06.288097+08:00"
+}

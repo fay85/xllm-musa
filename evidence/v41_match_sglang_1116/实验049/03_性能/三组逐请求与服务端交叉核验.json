@@ -1,0 +1,243 @@
+{
+  "groups": [
+    {
+      "name": "ON1",
+      "rows": [
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.1244709780439734,
+          "first_chunk_latency": 0.24881872441619635,
+          "time_per_output_token": 0.02696334217108932,
+          "request_id": null,
+          "recomputed_tpot_ms": 26.96334217108932
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.06869272980839,
+          "first_chunk_latency": 0.2479055104777217,
+          "time_per_output_token": 0.026748185173845758,
+          "request_id": null,
+          "recomputed_tpot_ms": 26.74818517384576
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.4229123769328,
+          "first_chunk_latency": 0.4584507029503584,
+          "time_per_output_token": 0.02731161440777428,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.311614407774282
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.360009212046862,
+          "first_chunk_latency": 0.4469773508608341,
+          "time_per_output_token": 0.027109928867396188,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.10992886739619
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.032793586142361,
+          "first_chunk_latency": 0.2550541013479233,
+          "time_per_output_token": 0.02657937052860564,
+          "request_id": null,
+          "recomputed_tpot_ms": 26.57937052860564
+        }
+      ],
+      "server_short_request_count": 12,
+      "all_server_accepted_proposed": [
+        130,
+        375
+      ]
+    },
+    {
+      "name": "OFF_reverse",
+      "rows": [
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.677284895442426,
+          "first_chunk_latency": 0.4570060120895505,
+          "time_per_output_token": 0.028314819150403434,
+          "request_id": null,
+          "recomputed_tpot_ms": 28.314819150403434
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.45344717707485,
+          "first_chunk_latency": 0.25775327254086733,
+          "time_per_output_token": 0.028218407468760715,
+          "request_id": null,
+          "recomputed_tpot_ms": 28.218407468760716
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.660028011538088,
+          "first_chunk_latency": 0.4515244299545884,
+          "time_per_output_token": 0.028268641496405882,
+          "request_id": null,
+          "recomputed_tpot_ms": 28.26864149640588
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.332904887385666,
+          "first_chunk_latency": 0.27699219435453415,
+          "time_per_output_token": 0.027670245855024048,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.67024585502405
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.438987694680691,
+          "first_chunk_latency": 0.28829346876591444,
+          "time_per_output_token": 0.02804193814084226,
+          "request_id": null,
+          "recomputed_tpot_ms": 28.04193814084226
+        }
+      ],
+      "server_short_request_count": 6,
+      "all_server_accepted_proposed": [
+        130,
+        375
+      ]
+    },
+    {
+      "name": "ON2",
+      "rows": [
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.298912707716227,
+          "first_chunk_latency": 0.2821937622502446,
+          "time_per_output_token": 0.027516544884180323,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.516544884180323
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.368457339704037,
+          "first_chunk_latency": 0.4375146748498082,
+          "time_per_output_token": 0.027180167313153838,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.180167313153838
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.1322717340663075,
+          "first_chunk_latency": 0.24665879923850298,
+          "time_per_output_token": 0.02700240366599139,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.00240366599139
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.387179282493889,
+          "first_chunk_latency": 0.4681494068354368,
+          "time_per_output_token": 0.027133450492778245,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.133450492778245
+        },
+        {
+          "success": 1,
+          "prompt_tokens": 256,
+          "completion_tokens": 256,
+          "latency": 7.201808113604784,
+          "first_chunk_latency": 0.2631960352882743,
+          "time_per_output_token": 0.02721024344437847,
+          "request_id": null,
+          "recomputed_tpot_ms": 27.21024344437847
+        }
+      ],
+      "server_short_request_count": 6,
+      "all_server_accepted_proposed": [
+        130,
+        375
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "name": "ON1",
+      "summary": {
+        "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+        "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+        "mean_TTFT_ms": 331.44127801060677,
+        "mean_TPOT_ms_per_token": 26.94248822974224,
+        "TPOT_sample_stdev_ms": 0.28910790880121723,
+        "mean_E2E_s": 7.201775776594877,
+        "output_tokens_per_latency_sum_second": 35.54678845070086,
+        "formal_requests": 5,
+        "input_output": [
+          256,
+          256
+        ],
+        "profiler_on": false,
+        "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+      }
+    },
+    {
+      "name": "OFF_reverse",
+      "summary": {
+        "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+        "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+        "mean_TTFT_ms": 346.31387554109097,
+        "mean_TPOT_ms_per_token": 28.102810422287266,
+        "TPOT_sample_stdev_ms": 0.26297712000955886,
+        "mean_E2E_s": 7.512530533224345,
+        "output_tokens_per_latency_sum_second": 34.07640060400872,
+        "formal_requests": 5,
+        "input_output": [
+          256,
+          256
+        ],
+        "profiler_on": false,
+        "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+      }
+    },
+    {
+      "name": "ON2",
+      "summary": {
+        "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+        "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+        "mean_TTFT_ms": 339.5425356924534,
+        "mean_TPOT_ms_per_token": 27.208561960096453,
+        "TPOT_sample_stdev_ms": 0.18960850432050835,
+        "mean_E2E_s": 7.277725835517049,
+        "output_tokens_per_latency_sum_second": 35.17582357261365,
+        "formal_requests": 5,
+        "input_output": [
+          256,
+          256
+        ],
+        "profiler_on": false,
+        "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+      }
+    }
+  ]
+}

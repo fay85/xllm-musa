@@ -1,0 +1,47 @@
+{
+  "nfs_root": "/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116",
+  "kept_count": 299,
+  "omitted_large_files": [
+    {
+      "path": "原始证据_reverse_control_v1.tar.gz",
+      "bytes": 166521
+    },
+    {
+      "path": "原始证据_confirm_on_v1.tar.gz",
+      "bytes": 193381
+    },
+    {
+      "path": "原始证据_full_draft_v1.tar.gz",
+      "bytes": 6007565
+    },
+    {
+      "path": "原始证据_full_draft_v1/trace_analysis/sj9/rank0.pt.trace.json",
+      "bytes": 21146580
+    },
+    {
+      "path": "原始证据_full_draft_v1/trace_analysis/sj9/rank0.native_stacks.jsonl",
+      "bytes": 19763799
+    },
+    {
+      "path": "原始证据_full_draft_v1/trace_analysis/sj10/rank0.pt.trace.json",
+      "bytes": 17764753
+    },
+    {
+      "path": "原始证据_full_draft_v1/trace_analysis/sj10/rank0.native_stacks.jsonl",
+      "bytes": 8031560
+    },
+    {
+      "path": "04_trace/E49_draft_body_correlated/actual_native_last.pftrace",
+      "bytes": 161618
+    },
+    {
+      "path": "04_trace/E49_full_draft_graph/actual_native_last.pftrace",
+      "bytes": 4305832
+    },
+    {
+      "path": "04_trace/E49_draft_body_graph/actual_native_last.pftrace",
+      "bytes": 10871
+    }
+  ],
+  "full_evidence": "exports/p49_full_draft_graph_sg438_v1_evidence.tar.gz + reverse_control_v1/confirm_on_v1 corresponding exports"
+}

@@ -1,0 +1,113 @@
+{
+  "at": "2026-11-17T11:54:24.866205+08:00",
+  "control": "E48 same ELF timing-unarmed control and reverse",
+  "candidate": "D query-only three-layer full draft Graph, context/head/Markov remain outside",
+  "new_reason": "E48 current-environment draft phase measured ~5.6ms/round; E14 prior environment inconclusive. Bounded re-evaluation after native MCCL and environment change; not assumption of gain.",
+  "differences": [
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj9",
+      "env_differences": {}
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    },
+    {
+      "host": "sj10",
+      "env_differences": {
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": [
+          "0",
+          "1"
+        ]
+      }
+    }
+  ],
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}

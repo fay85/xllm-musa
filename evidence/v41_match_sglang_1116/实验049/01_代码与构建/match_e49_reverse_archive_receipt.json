@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p49_full_draft_reverse_control_v1_evidence.tar.gz\", \"bytes\": 166521, \"sha256\": \"df3c54c8846a2a58ecb2be1ab0c75c707f2881690a741cbfa9e76b72671de2f6\", \"at\": \"2026-11-17T12:12:39.978106+08:00\"}\n",
+  "stderr": ""
+}

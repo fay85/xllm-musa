@@ -1,0 +1,24 @@
+{
+  "status": "RUNTIME_PHASE_CALIBRATION_COMPLETE_NOT_OPTIMIZATION",
+  "phases": {
+    "diagnostic": {
+      "status": "DIAGNOSTIC_CALIBRATION_PHASE",
+      "phase": "diagnostic",
+      "runtime_timing_enabled": true,
+      "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+      "mean_TTFT_ms": 264.9600156582892,
+      "mean_TPOT_ms_per_token": 26.802758059884404,
+      "TPOT_sample_stdev_ms": 0.02602994270835273,
+      "mean_E2E_s": 7.099663320928812,
+      "output_tokens_per_latency_sum_second": 36.058047885925504,
+      "formal_requests": 2,
+      "input_output": [
+        256,
+        256
+      ],
+      "profiler_on": false,
+      "binary_sha256": "0c3def50fab14e750e61dede83c36c43eb6ecd590b6451153fbd2491b0db1bc1"
+    }
+  },
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收"
+}
