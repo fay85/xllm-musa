@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/p45_owner_ll_spec5_v1_evidence.tar.gz\", \"bytes\": 6386542, \"sha256\": \"cabed2c844238c6d0aea1d86fa61d65e29ac4387a11405debd6b11dcf9d3c413\", \"at\": \"2026-11-17T10:01:07.625479+08:00\"}\n",
+  "stderr": "addr2line: DWARF error: invalid or unhandled FORM value: 0x23\n"
+}

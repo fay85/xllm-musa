@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"tools/musa_deepseek_v41/validate_deepep_w4a8_chain.py\": \"d08973ab734af7ed6097dd69065d26147f13bb36c55707e1c3d27c9dcf7ede14\", \"scripts/logger.py\": \"f0ea680e2c354c428264bcaef63c86b717554291265d75faf471bd20357a8f0e\", \"tools/musa_deepseek_v41/validate_deepep_w4a8.py\": \"56a623e27fcbabd11f00fae4a5fac1a68aeceeeefb48c5f1437582e5f49814f3\"}\n",
+  "stderr": ""
+}

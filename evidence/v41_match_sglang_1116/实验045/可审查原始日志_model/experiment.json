@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-17T09:52:30.837584+08:00",
+  "control": "p44_owner_gather_outside_graph_v1",
+  "single_variable": "num_speculative_tokens3->5",
+  "new_source": false,
+  "champion_unchanged": "p39_static_activation_on_v1"
+}

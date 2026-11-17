@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"at\": \"2026-11-17T09:52:30.179815+08:00\", \"host\": \"sj9\", \"container\": \"xiaopang1116_v41_match_prefill_sj9\", \"gpu_free\": true, \"gpu_exit\": 0}\n",
+  "stderr": ""
+}
