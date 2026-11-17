@@ -1,0 +1,1 @@
+d19631240a283e17295a5823f19e79f8dec6c991 + frozen E52 + staged E53 default-off RoPE/block32 QDQ fusion; live repository remains E52; neither candidate promoted

@@ -1,0 +1,1667 @@
+[
+  {
+    "path": "归档回执_on_v1.json",
+    "bytes": 212,
+    "sha256": "610419221112114691fe55e0a2c19731789cfc721ef575dc276bd93d19234793"
+  },
+  {
+    "path": "归档回执_isolated_checks_v1.json",
+    "bytes": 205,
+    "sha256": "bf727eb54f2c907e0b9ff5eef49667869593e0f3f33fe9923b91c23ca3e0f72c"
+  },
+  {
+    "path": "归档回执_off_v1.json",
+    "bytes": 213,
+    "sha256": "68c003072e121d4ee70471dfee6727f409982f242badd721cf25a775fd9addb7"
+  },
+  {
+    "path": "归档回执_reverse_off_v1.json",
+    "bytes": 220,
+    "sha256": "888b8155ee5e41aaa1b548eadecc05b1ecf4290d3a18de515c3230fc60543013"
+  },
+  {
+    "path": "02_隔离结果与接入顺序.md",
+    "bytes": 4158,
+    "sha256": "76202d2992af9c928283f7bf735161d11f07bee39349a5cfc813718a6541f0c0"
+  },
+  {
+    "path": "05_结论与下一步.md",
+    "bytes": 4230,
+    "sha256": "115944d54a9ef8224b0f355573e7c6e1ceca925f4bad0d0ec3bcce32b4c0b78c"
+  },
+  {
+    "path": "归档回执_production_checks_v1.json",
+    "bytes": 207,
+    "sha256": "a02ab6bd1d9d9b167393e2da9b690138a6278ed12751e5f6414ad8f941dcaa46"
+  },
+  {
+    "path": "给家明的commit说明.md",
+    "bytes": 1632,
+    "sha256": "c3c2b407cf730c230dcfa443208c44cc43ce3f4e60164c6ba375fe2097ab2b2b"
+  },
+  {
+    "path": "00_目标与边界.md",
+    "bytes": 2278,
+    "sha256": "7e94a8cf75cd9e38e0020538bd1c7edc28e1c97f2e1d9e062758d7f6114796e7"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/identity.json",
+    "bytes": 286329,
+    "sha256": "2e6aee02247c02f0f1a7c71857fe17b0e6eb0dd80088d7f489a77a393cd31833"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal.log",
+    "bytes": 22325,
+    "sha256": "1fd4430dc9fffe03bfded647c3eb07f013ff4b9bf19d2651df0107cfc9352f3b"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/summary.json",
+    "bytes": 546,
+    "sha256": "5528fc34c178caa40775d5923663ce0724da74b3d9746d85b4f8ce69b3e1d282"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "4d6d8e981c1e29b299707e878d0d150a9c89d7a49e4fca878f6aee150fa5b45f"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/status.json",
+    "bytes": 3586,
+    "sha256": "511df53cd41200ee7ced29471122fe2f98ed8861a45671024635f5f05be65d7e"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup.log",
+    "bytes": 18333,
+    "sha256": "4d819e334626f0bac020df98a5d28bf7312622fc22e64fcae0452943ed13c9d7"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/basic_1_sse.jsonl",
+    "bytes": 1583,
+    "sha256": "9ab7bb0dede064d039c55a0036e6553c7db9fb3cf9f14df1dbf1c575ad04949a"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/active.json",
+    "bytes": 977,
+    "sha256": "fe7ce7aaeff269e152a9889bb1b4293f599901697b8fd9005091db8866f25c14"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/job.json",
+    "bytes": 132,
+    "sha256": "c1ea93cc3fc231b33b180203b47d29985dd06fc2459478869dddff973e6e85b1"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/basic_2_sse.jsonl",
+    "bytes": 1302,
+    "sha256": "611b0764b11d906764bcbe3ed09e7e228169987b3b3928c151014293293f9ae7"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/basic_gate.json",
+    "bytes": 1870,
+    "sha256": "cad13a7415aa9f68654e9896ff23a0b968d6fb43ce2dfb0884fc7a3b790c2d1f"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11938,
+    "sha256": "974d15e0818099dccfbbdc6ec388693a0ff632cce9aa6f811aec9bf1cdc51115"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5115,
+    "sha256": "34a3aa297e6205b23884243a009bf5ecd55fd369184aa845f037b3a8ea1db4fd"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 664,
+    "sha256": "f97947eee81f05dd6455988b9bc6b25a3aa92adfcd6cf9797dd5b7bc638a9282"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "e249693b710c6179b631a1f8dff2bc50bd4b21137a9b5fdf02c95bca09ea8c93"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 881,
+    "sha256": "7c6b2100f499053af6f0f8f4d66dd38c6c37a9ae443357092b7610c37ffdc95a"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2347,
+    "sha256": "2472908dc159a38e72e25649890856fc05c694fa414eeab7aed97a4773429df8"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3626,
+    "sha256": "86028497e0a4940e882d65602ac2621f6e69308f39b5071b4ec19d6dbfadd946"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 834,
+    "sha256": "1cffdbeb2799ecf603312aeac0acef3ab9bbd384ba7e41d85952d645a1ac9c34"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9511,
+    "sha256": "dcb0b6beac27de7055788d0fc5c405f7b46344a94d08b183f708027647927797"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "1b8f8a6bfb77f3d779f44e68ff7d8a94b6004288ab9b67555b7c003a1f1f0865"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 667,
+    "sha256": "18931032e74a43be658255cad3afb22e89399c01c775f969d653510ae6e2fbc3"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "cf6db076d9bd46b2f6089b5e268ac806d29fdff6568a48fc35867c0e7ea50b16"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 830,
+    "sha256": "357ec845b50098226222b088a245f3d318f32f6ed425551714aead3edbc774b1"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2354,
+    "sha256": "50bf69065e5cc1dad5247abfc524fb1720913012d83e3278d7b3a3362be43e97"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3623,
+    "sha256": "8955f5740643410630ba75dca204233169c2a717a90b996117861ea0e98b071d"
+  },
+  {
+    "path": "原始证据_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "a0f19fb160a4291e3fe52791875994891a39d74b138df933c8638170800c2f5d"
+  },
+  {
+    "path": "原始证据_off_v1/trace/off_after_sse.jsonl",
+    "bytes": 2496,
+    "sha256": "f0499de5262b546c41f285611c5cd28933249724447dded1014116d55a381944"
+  },
+  {
+    "path": "原始证据_off_v1/trace/manifest.json",
+    "bytes": 7210,
+    "sha256": "ee8a5a2d673627298398fe5595a759a9b1f5b2f91c967c0ff9e8522c7ca629a9"
+  },
+  {
+    "path": "原始证据_off_v1/trace/requests.json",
+    "bytes": 1746,
+    "sha256": "cd8d96c6d29fd2d3adc58238963a6846e11820c67e29f32dccc1a42c74fff5d1"
+  },
+  {
+    "path": "原始证据_off_v1/trace/start_profile.json",
+    "bytes": 312,
+    "sha256": "b814e85db3d7215b1f6d93826727ccdbb3d19888a2ff6ba3816bc121296c9967"
+  },
+  {
+    "path": "原始证据_off_v1/trace/off_before_1_sse.jsonl",
+    "bytes": 2495,
+    "sha256": "25b42d561de890513ec204cb21fd0a2e70d7939ed35bca484d576e82123b7481"
+  },
+  {
+    "path": "原始证据_off_v1/trace/stop_profile.json",
+    "bytes": 310,
+    "sha256": "5e8f1befb02e40ec462ad2438f0b4c66fa16fbf4160ff9c357a3063952c2318e"
+  },
+  {
+    "path": "原始证据_off_v1/trace/finished.json",
+    "bytes": 120,
+    "sha256": "dbfd9e8a774b91dd319f428870ea2a61b9ca82d11a905d9593cde374aaa2fb23"
+  },
+  {
+    "path": "原始证据_off_v1/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211"
+  },
+  {
+    "path": "原始证据_off_v1/trace/profiled_sse.jsonl",
+    "bytes": 2491,
+    "sha256": "66070fe89658ca7b8b7d62c735bdc5236e913df42d9159b63b88cd76ad15edb5"
+  },
+  {
+    "path": "原始证据_off_v1/trace/job.json",
+    "bytes": 92,
+    "sha256": "86b1b977cb533acfd3ad21d5b0278759e8c6066a3ade432e14f1313d9f7130e9"
+  },
+  {
+    "path": "原始证据_off_v1/trace/off_before_2_sse.jsonl",
+    "bytes": 2496,
+    "sha256": "7dee57b8c28518bb59396164293f37446d0c1510aa198709cbffa4ff61a44b29"
+  },
+  {
+    "path": "原始证据_off_v1/build/source_manifest.json",
+    "bytes": 1337,
+    "sha256": "e05c4726550f82940a4b7aa82304833caf2d3a995debe165cfeee820b1779801"
+  },
+  {
+    "path": "原始证据_off_v1/build/finished.json",
+    "bytes": 80,
+    "sha256": "d8e2b31268441ef728c0d2c37f87b2cc8de50ae4b4b5211cdb32cdb11773aa0b"
+  },
+  {
+    "path": "原始证据_off_v1/build/artifact.json",
+    "bytes": 359,
+    "sha256": "4d10c9f2c0e7648d7e136c3994fc050fbc7d54e92f30b4998b203b965ddc2047"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "a8b4cbaedb03ac4c27ae126ec1edb62b95b8a72763aafc7aa2a85665ae13fd9d"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/role_config.json",
+    "bytes": 54134,
+    "sha256": "e25d47d6eb0b07f8edacc4add219e770c61b24c8fcaec239324a1f0a5037a562"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/runtime_identity.json",
+    "bytes": 10511,
+    "sha256": "fb19c28eb11ac1951fa283d6deb7ee24990d259186c2ea36f2b5613a38accd2a"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/status.json",
+    "bytes": 269,
+    "sha256": "b33712e0f5cd3f9bf963c5fb8f712dd5f16351d260b22647cd4db39709b24e28"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/rank0.log",
+    "bytes": 196179,
+    "sha256": "e24d0ec57d4e1ed6e00cfc18fd2ebcfb8865864d4a950456bb5145f8b0fcb9a2"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj9/resource_release.json",
+    "bytes": 4685,
+    "sha256": "ba465f5694d8d20efdaa31fc5b9eb0637a4d60f0f4c40d0721531b3f3add2ebf"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "ddc12ac28b412d6ec73bee83af0b2aca48e932a648fe43129077639021af060a"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/role_config.json",
+    "bytes": 57831,
+    "sha256": "999e582c63e8b0a2fb20e2539e87a0fe165cb6c4c5a56cfd24b374c01d7446e9"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/runtime_identity.json",
+    "bytes": 10283,
+    "sha256": "b4b6169a1de46f9db61c6c923067a7eee1eb4bb8235a1539d951d1a6549539a7"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/status.json",
+    "bytes": 251,
+    "sha256": "e6ca3ec7bfbec02f47ed6bf838cc97b1d93e8c547c3893b295acf0b1ba4ad6cb"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/rank0.log",
+    "bytes": 250065,
+    "sha256": "0cd9392443052b0f291490e6dda0a7050380eb5220fd381b13502fed6799d482"
+  },
+  {
+    "path": "原始证据_off_v1/roles/sj10/resource_release.json",
+    "bytes": 5518,
+    "sha256": "f9822a0f87e64c0cf730a34de886340f9cac97a204a273bce63d4b594dfbf6de"
+  },
+  {
+    "path": "原始证据_off_v1/trace_analysis/all_rank_validation.json",
+    "bytes": 1826424,
+    "sha256": "bc8efe6f3db4e9d3a754bca65a8ff99370fad71c8af13aabe8b0c0897af397e0"
+  },
+  {
+    "path": "原始证据_off_v1/trace_analysis/resolved_symbols.json",
+    "bytes": 168409,
+    "sha256": "ae9977ce712611e81eed9189b53f05e09667f5738112ae5431f1397f617cf56f"
+  },
+  {
+    "path": "01_隔离原型/match_e53_sj10_release.json",
+    "bytes": 215,
+    "sha256": "bcb4bb03f980eedd498e3625b348656d3415b56c5a478f4965cc3443e745b961"
+  },
+  {
+    "path": "01_隔离原型/v41_rope_qdq_test_module.cpp",
+    "bytes": 1307,
+    "sha256": "6fbe5f4a92604711c4b5439c3a59342a36481198f96b48752a78a2c1e88700aa"
+  },
+  {
+    "path": "01_隔离原型/match_e53_build_module_v1.py",
+    "bytes": 12146,
+    "sha256": "2dd2bba67537befac9938474cbed2c1c4c1d7a3f54729e8091cc326bd5e70524"
+  },
+  {
+    "path": "01_隔离原型/match_e53_gpu_final.json",
+    "bytes": 1808,
+    "sha256": "04c0f0b512d1443e9f6cfd8f32f405b943aaa2f566cf3f0d60259319ec8004f0"
+  },
+  {
+    "path": "01_隔离原型/validate_v41_rope_qdq_v1.py",
+    "bytes": 6968,
+    "sha256": "213cd1acbdc51b121449c3201bb4444f3613ae0c206814e53642dd8c60d450c3"
+  },
+  {
+    "path": "01_隔离原型/match_e53_gpu_started_v1.json",
+    "bytes": 150,
+    "sha256": "5ee2a19c80b6969818fd8b06e709bd06edfa7ada42d43c2d6d0a348e1bdcfeb8"
+  },
+  {
+    "path": "01_隔离原型/match_e53_isolated_archive_receipt.json",
+    "bytes": 265,
+    "sha256": "794c2eb16d053b95c8e1d0bb6b8ee3af65b79e3a311156943bf7cf2423835e21"
+  },
+  {
+    "path": "01_隔离原型/match_e53_start_gpu_v1.py",
+    "bytes": 11718,
+    "sha256": "d0e6faa9fe435d55fbdc2ad4c2cdd340d6d34795d44d222db74bb4203f5d9993"
+  },
+  {
+    "path": "01_隔离原型/v41_rope_qdq_candidate.cu",
+    "bytes": 5291,
+    "sha256": "31638e40902c92c8d36203ec5be50ad843f8e5a618ab4244fdd9969cef29ebeb"
+  },
+  {
+    "path": "01_隔离原型/match_e53_module_status1.json",
+    "bytes": 5656,
+    "sha256": "c139b8e0c4ae6d296f79a384e6b4aafcec43abb246ba3e82798c71a928165f1e"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_production_module_started.json",
+    "bytes": 151,
+    "sha256": "6e73fcc2595386a15f30c6638886679453e34342fd356510b26a12ca805c03ab"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_production_module_status2.json",
+    "bytes": 3186,
+    "sha256": "9d0c3420fc1bbd49d6b003f277333fdac426776bd71e4a14ace5be3dcd1211a1"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_production_gpu_poll1.json",
+    "bytes": 1897,
+    "sha256": "f18ee297748bcdedcc3314ca05fa7c8b777e381975a8111e2b559818d0b11b9b"
+  },
+  {
+    "path": "04_生产编译与检查/v41_rope_qdq_production_test_module.cpp",
+    "bytes": 2173,
+    "sha256": "864c1f24b8a78a7f6e121ff82d24a4ab89613350cf11d706b5f1155a5831dc38"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_production_gpu_started.json",
+    "bytes": 150,
+    "sha256": "98ec734d1f6c663811e59bce787d5f261f1a37c9852a3179300970f37e57b057"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_production_archive_receipt.json",
+    "bytes": 267,
+    "sha256": "e137677ca178c996b12542d101459cd825acf3d36edf96320c91a8472affa373"
+  },
+  {
+    "path": "04_生产编译与检查/match_e52_on_preflight_sj10.json",
+    "bytes": 215,
+    "sha256": "75734fca6acd57e08ca487845ed73495155c6302904d747e9e0028e5a27b4dcb"
+  },
+  {
+    "path": "04_生产编译与检查/生产检查与版本说明.md",
+    "bytes": 1523,
+    "sha256": "99c2b81959625244dd6af504bb66adfdca4da514abdc94cf92dfbfbf840c04fa"
+  },
+  {
+    "path": "04_生产编译与检查/源码复核.md",
+    "bytes": 1944,
+    "sha256": "3942ff58dd2ccca7f18fbcade9d35cd5968e237d29fc6939f127e8101ee8e051"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_artifact_receipt.json",
+    "bytes": 424,
+    "sha256": "3ee9a084b3b1a729e5ef5bc74cf438af673b9ed1b9d74814277e4d992896d5fc"
+  },
+  {
+    "path": "04_生产编译与检查/validate_v41_rope_qdq_production_v1.py",
+    "bytes": 11210,
+    "sha256": "62629cff19b5bf48c5235979a0a947e50c6757f52d8a08bc95e53d1a48efc93d"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_full_build_status1.json",
+    "bytes": 3421,
+    "sha256": "4a1d5c3037688af2e968e062820ae685ba557315053819170ad4db32c1a55cef"
+  },
+  {
+    "path": "04_生产编译与检查/match_e53_full_build_started.json",
+    "bytes": 151,
+    "sha256": "ca71f7225d521fac1eff0e4039cbe12443a7695e23ec55e98bafb049f3d4df7f"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/identity.json",
+    "bytes": 286329,
+    "sha256": "2e6aee02247c02f0f1a7c71857fe17b0e6eb0dd80088d7f489a77a393cd31833"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal.log",
+    "bytes": 22411,
+    "sha256": "f981a58d14c4c3a40266a6cf159533b16bc10a9738f2445c3858588b200a8518"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/summary.json",
+    "bytes": 545,
+    "sha256": "c860cf0633603b0489d36b75547be00d406cffae637e4449cd52792329ff484c"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "5b5ea3b2ac454c636f51bcf3922291e0d6d9f0612815745103c82e409666ce05"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/status.json",
+    "bytes": 3603,
+    "sha256": "00b55bc85078701c1e4d23414cafde241fed22379019a1b76cede28d9c1abce0"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup.log",
+    "bytes": 18380,
+    "sha256": "d8708820d121973f3d3eaadc436d3e7d2c954e4bc151a09cecb10398c8d7cf92"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/basic_1_sse.jsonl",
+    "bytes": 1584,
+    "sha256": "daff6a3ad1478e6fdc66ae127d73dab1a2704618533b262a7fd475fb25f9c0aa"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/active.json",
+    "bytes": 985,
+    "sha256": "db31cafc278271a6af3732afce3719ec60df9e18a094108005093bd132654e91"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/job.json",
+    "bytes": 140,
+    "sha256": "af685e7dabf8159e6c616233155cb888263777da05850492ba1f799316354aeb"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/basic_2_sse.jsonl",
+    "bytes": 1303,
+    "sha256": "ab446671a048eec3230666b410798f02bea639e3d331cc02dd1ee24574e7d196"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/basic_gate.json",
+    "bytes": 1870,
+    "sha256": "60535802fb392e20eafecd981e30eab74ee42b3c46c4dc07556ecd2107d384e1"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11996,
+    "sha256": "01e3c93764386434cfdc81348de03ed912642217009a30ce8a93aae395fe287b"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5135,
+    "sha256": "0028c038a3c94ab068ee7b116f1474fefb1bce403f46169b17e59f7f28c55991"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 661,
+    "sha256": "aff20c4efd2b7dfaf74923562bbd83a33c73916ec955d6491ecb0072a8fe069f"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "db042188c2424f7731ee50d63b773badb6d62825e1bd02df7bd3681f4b921fd5"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 863,
+    "sha256": "2b47ace009e0f22518487fa082520ab51904b8ed2c99afd4895aa6a9e43effe5"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2355,
+    "sha256": "cb84398555b092a6b0a90e33d155d26f0b02fb5d04a7a23c93e6931473e0c13f"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3627,
+    "sha256": "4d45f40acc146015aa7e4f3ce8812973fa1d1ed0dc92fcedaf71e99702419177"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 833,
+    "sha256": "f2fa317c16a78cc51dd304d2d72cfc5994bc4b93b8ad6cc5bcf8c16e48693840"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9550,
+    "sha256": "02bddb811c7ef91d6ba565022fa61373985fb6893ed8e4ae182ea6007ef58277"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "647dd5214a267c450970258ce36f93e5db877b56cb1608bdf14b03aebfbe3ae4"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 666,
+    "sha256": "d769bf89f3af5355395354d6e41fec264949215b35d2daa23013142e0c8bec34"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "66c997667bff0de3ee2aff4099cc371195e4dd96b017ed69d313adf708e514c0"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 830,
+    "sha256": "ba4ddfd753bfc865791833e058400e0e2d7ef6b8c0abc91b409fc5b4e15997ea"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2362,
+    "sha256": "1756a7d79312292f82cad416b1e9021d191ea39f94ebfef464f1e32bd61eb7c4"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3612,
+    "sha256": "b537da604e16d5ef4b32883f8eb741e0389c70aabad8273f08d839c4a5ef041f"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "040cb3f96a0a4e171494c9d001b270ef1d2534b228fd2d8fd0fae1c868ca7247"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "8383ae5b251d7080d9fda6456f192665521b1d3d6d3ca47a52414ad699d68e31"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/role_config.json",
+    "bytes": 54521,
+    "sha256": "04c8a615b05151d317e38ecff3132ca7608ec5e48dcbc4cd74db9ce4136c04a1"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/runtime_identity.json",
+    "bytes": 10511,
+    "sha256": "400e270ab757d9bbb9f8234e496253d8d7520aaf272bccf040971fbacf9cc022"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/status.json",
+    "bytes": 269,
+    "sha256": "ef8cde14db99e79c43fd48e072ed6760dcc8aaa3a8a15461a7f10ab7f50442f2"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/rank0.log",
+    "bytes": 160488,
+    "sha256": "6a2037936f03fa5d4a7ca8f07c2da310721d0fff90b3783d6a7cd5b28a63fc30"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj9/resource_release.json",
+    "bytes": 4685,
+    "sha256": "e2fd92d5d7b19a2f8c365cf323839013fb9831e344607eda489c37b0ea1ea736"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "14c6f806629360237de7f7fd54b812864fc9c7b2846e10b1618882ecacd2e5a5"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/role_config.json",
+    "bytes": 58346,
+    "sha256": "f3be92a71a7ea7483ed3b02fb9fb309fc6a6b94ef52c32fe3b2b86ed1dea9cd9"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/runtime_identity.json",
+    "bytes": 10283,
+    "sha256": "49a0ad91bb7f62501833e5281effc5df594433e9c7d23accc0392a516f1d59bc"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/status.json",
+    "bytes": 251,
+    "sha256": "3994171b3d3317955e967c68d6e9dacb3e497d9790d4f463977f5d6e05f5de1f"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/rank0.log",
+    "bytes": 236084,
+    "sha256": "d622f503ab895d8039aa66d829a0df280b131ef8278f44925b547c99f1a2c54d"
+  },
+  {
+    "path": "原始证据_reverse_off_v1/roles/sj10/resource_release.json",
+    "bytes": 5518,
+    "sha256": "adae325c84d1df3e4f83b76a577a72f43362c763b35274f396993e194091178c"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/identity.json",
+    "bytes": 286329,
+    "sha256": "2e6aee02247c02f0f1a7c71857fe17b0e6eb0dd80088d7f489a77a393cd31833"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal.log",
+    "bytes": 22354,
+    "sha256": "14329d49d365b3c020f3f3f0b32c15a00c875294f33aac72a83414c8517bd918"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/summary.json",
+    "bytes": 547,
+    "sha256": "d2e95e0c69cb937b9fcfe1239b43997f0e6ddc76de0cbe5c7b99863dd3d2f40c"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/finished.json",
+    "bytes": 64,
+    "sha256": "ced7885ef0e92a586839f4e94530e4e81d0cb18c08d0c668a7674d934cc84db8"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/status.json",
+    "bytes": 3583,
+    "sha256": "5a8159c79c4ede4ae0799aa61be7f4ec131e9e6f3bc72f62519f65ea5a4498d1"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup.log",
+    "bytes": 18324,
+    "sha256": "fecc3ae8386b114f615c351f352ce9e052b0eba7d8fd0f4dfa12e022aa8162f9"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/basic_1_sse.jsonl",
+    "bytes": 1585,
+    "sha256": "d2e2ae25b31a73ec928a9d446f7605f8e6dc2d3634cae7d31dbb479ef392fce7"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/active.json",
+    "bytes": 976,
+    "sha256": "755545f2c126b992f3e73f542da63b3a7ca3c9d67cd635ca26235970d542d052"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/job.json",
+    "bytes": 131,
+    "sha256": "91db6ad170f668171fbddcdb402dd711da26cd4277eab24b374785d29a48c647"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/basic_2_sse.jsonl",
+    "bytes": 1303,
+    "sha256": "83f549a848c613feacecb33eecb0056240a5b0e8d3c46584167a752b11e2f2ba"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/basic_gate.json",
+    "bytes": 1870,
+    "sha256": "a15fce6be1b2b0d52d8b6fa35a6e6bd2e783152b700470d69f9319d4803fa4b7"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 11928,
+    "sha256": "a3e12d179ceec06ad2c09413240fda9106f86acf27b47df59f1aebaa90b1e14c"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "45a1d1d719a91a3611d52a3a3c7a8a0be78a2333439a9ef9999f4127695b3a89"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_summary.json",
+    "bytes": 660,
+    "sha256": "5d16f6a009b58275f32c0d50ff1546581b9e90ab56b6a0aa30fd6d46059e9a56"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_data.db",
+    "bytes": 192512,
+    "sha256": "4dbb6539eadf2e2aa9f50ab90b186f255b62cc6fe3f32e30abea3e0a7e096f89"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_throughput.json",
+    "bytes": 871,
+    "sha256": "aa4317892721dbba539ac82622b2d84c9dfa381cbf88c9d876493122ec2b66c7"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_args.json",
+    "bytes": 2346,
+    "sha256": "54ebea2ff18e2df68745ec4c0a8aff3066da4f74669c6e24c754e6b043fb6a74"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/benchmark_percentile.json",
+    "bytes": 3628,
+    "sha256": "f0c5158019d59340ea74940e3d3fc05c63a63abaec7359322f4a1edb7168a9c5"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_5/workload_timeline.json",
+    "bytes": 834,
+    "sha256": "e0304d96e10188406b1910ceb0c9a23e7b63d02821d33391a60aa0f771b63358"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/benchmark.log",
+    "bytes": 9503,
+    "sha256": "ade0789662ee5b6095c93bf779acfdb41eef713abb42d201fab90389e6f34b2b"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/performance_summary.txt",
+    "bytes": 5155,
+    "sha256": "7469ed3a7d39977e0aa3a54585adc62fe9b44ca215ac4aae43d43d28ed5a94bc"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_summary.json",
+    "bytes": 664,
+    "sha256": "6d0f033795105b408f02d71da641a604329609e1217a2dbc51a99e0634c4d8c5"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_data.db",
+    "bytes": 40960,
+    "sha256": "853ad91113633214e6f3138ac460fbaab33badce74eb3f3fcb03927f5ecf478a"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_throughput.json",
+    "bytes": 830,
+    "sha256": "4b9b48c25b93a901c19fb32349d68d7a1673d8f1c7c3d5fdcbf1d5c40a1081f3"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_args.json",
+    "bytes": 2353,
+    "sha256": "b19693d6d464989e094f9fd102171bb17ff48bea7c06a5122b3b391fac7aecc5"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/benchmark_percentile.json",
+    "bytes": 3611,
+    "sha256": "c249eb1113a0d2a6e08e69322b94a95e1cda36841966f2f153897b0b5e7bdeb8"
+  },
+  {
+    "path": "原始证据_on_v1/formal_client/formal_warmup/deepseek-v4.1-flash-1017-w4afp8-mt/parallel_1_number_1/workload_timeline.json",
+    "bytes": 215,
+    "sha256": "dd77664bd9dad6c9ead832bf89642f459f562715c2e06e2d9bbbd340b58b494f"
+  },
+  {
+    "path": "原始证据_on_v1/trace/off_after_sse.jsonl",
+    "bytes": 2495,
+    "sha256": "16f72fe49730479a0e8df42ca46a40746a52d27536078169e2051104e1b3c183"
+  },
+  {
+    "path": "原始证据_on_v1/trace/manifest.json",
+    "bytes": 7178,
+    "sha256": "21902f328ac2b9f0e93c16f89c99cb6d778e78bb87aedac882116b794bbbbc40"
+  },
+  {
+    "path": "原始证据_on_v1/trace/requests.json",
+    "bytes": 1748,
+    "sha256": "4f277f086a4250fece27775ed08e768666950c5bf8500b10d28f3f94cf5b9909"
+  },
+  {
+    "path": "原始证据_on_v1/trace/start_profile.json",
+    "bytes": 311,
+    "sha256": "bd8bbfe66e49e39ae052cd9df25eb0b717c8e504393b0b8ea948c20313560391"
+  },
+  {
+    "path": "原始证据_on_v1/trace/off_before_1_sse.jsonl",
+    "bytes": 2498,
+    "sha256": "4b5cdc56f3a045a28d010245b4821acb31962b6806c2943dc36d045aff597ed4"
+  },
+  {
+    "path": "原始证据_on_v1/trace/stop_profile.json",
+    "bytes": 311,
+    "sha256": "4c8f24e7d1c31a2aacc81c5c9e06f5f0c4e0c9b4abcd40ba1dd2091bf6ad6d01"
+  },
+  {
+    "path": "原始证据_on_v1/trace/finished.json",
+    "bytes": 120,
+    "sha256": "cf03143c5195e6766daf35f494dff2dde05c54abe48032c6c1d2fa1099773045"
+  },
+  {
+    "path": "原始证据_on_v1/trace/request.json",
+    "bytes": 980,
+    "sha256": "ef12355e4de717f02ae044bd3dcda04518814fc24b264c2204cfbc08bc104211"
+  },
+  {
+    "path": "原始证据_on_v1/trace/profiled_sse.jsonl",
+    "bytes": 2488,
+    "sha256": "8c03bd8458c0cc97b77eb22aac37658a6484a0a52b4859cc654a5ef772c15b52"
+  },
+  {
+    "path": "原始证据_on_v1/trace/job.json",
+    "bytes": 92,
+    "sha256": "440f8cc21bc8fa3bcdaa74242d586a0da834b8062cb45d36d4f65c9218e823a1"
+  },
+  {
+    "path": "原始证据_on_v1/trace/off_before_2_sse.jsonl",
+    "bytes": 2499,
+    "sha256": "1dd9db3ea8b685e431aa8de6748159941cf0f71aaa521e68fd17b503b3509711"
+  },
+  {
+    "path": "原始证据_on_v1/post_long_checks/results.json",
+    "bytes": 928,
+    "sha256": "4c9e89d9899cd18c390e0e9c83174a155612c8e4f7c15267e41a30b5d2188f1f"
+  },
+  {
+    "path": "原始证据_on_v1/post_long_checks/arithmetic1_sse.jsonl",
+    "bytes": 1587,
+    "sha256": "e0cdd97aa97e8d0665d75ff08af5218c83f8359e55f9f975da010e4038d3b95c"
+  },
+  {
+    "path": "原始证据_on_v1/post_long_checks/arithmetic2_sse.jsonl",
+    "bytes": 1306,
+    "sha256": "b58a6048c56d38c96d4cf4fec7dde3a2a87120648cd926b3dda5333bef46004b"
+  },
+  {
+    "path": "原始证据_on_v1/post_long_checks/short_bucket_return_sse.jsonl",
+    "bytes": 2495,
+    "sha256": "ef4a1bc04721763fb8db5a46aaf521e01139d736a70b0801cc038bfc56895eeb"
+  },
+  {
+    "path": "原始证据_on_v1/long_smoke/finished.json",
+    "bytes": 58,
+    "sha256": "77aeb2a2a09e0001c61bd4fda3f5b570769f37a9ac5d3baa34461f6b6f754408"
+  },
+  {
+    "path": "原始证据_on_v1/long_smoke/result.json",
+    "bytes": 1778,
+    "sha256": "acfec77ff08fc407c2638c278184b15643919d66cfac9ffe36687d7d8357417a"
+  },
+  {
+    "path": "原始证据_on_v1/long_smoke/request.json",
+    "bytes": 4502,
+    "sha256": "73ec95cd5fb92739da76b01ff3a97aca1f030acd77f389e4e7cf1e164fd697ef"
+  },
+  {
+    "path": "原始证据_on_v1/long_smoke/response_sse.jsonl",
+    "bytes": 37319,
+    "sha256": "9d3ed2fba808b7e0f0b86ca0340a2783e8fa6e3457dfd75f3c64de8fbd43d3c7"
+  },
+  {
+    "path": "原始证据_on_v1/long_smoke/job.json",
+    "bytes": 84,
+    "sha256": "a159bb3bb94eb633966abbc53067baee1d097fe754185cb98f39af3a2efb0aae"
+  },
+  {
+    "path": "原始证据_on_v1/build/source_manifest.json",
+    "bytes": 1337,
+    "sha256": "e05c4726550f82940a4b7aa82304833caf2d3a995debe165cfeee820b1779801"
+  },
+  {
+    "path": "原始证据_on_v1/build/finished.json",
+    "bytes": 80,
+    "sha256": "d8e2b31268441ef728c0d2c37f87b2cc8de50ae4b4b5211cdb32cdb11773aa0b"
+  },
+  {
+    "path": "原始证据_on_v1/build/artifact.json",
+    "bytes": 359,
+    "sha256": "4d10c9f2c0e7648d7e136c3994fc050fbc7d54e92f30b4998b203b965ddc2047"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/supervisor_job.json",
+    "bytes": 109,
+    "sha256": "a364c45f6e2e209422673a879b91cc9d2a1368f712f38471985f8e9ec3405ceb"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/role_config.json",
+    "bytes": 54099,
+    "sha256": "8a8e8fcd897d31f32c9394187000817c25a29e674704dd414fbbfd71104ff7e2"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/runtime_identity.json",
+    "bytes": 10511,
+    "sha256": "000b2099e5f50e0a95338e65e23bf90836ddc6daa893b3aa5fcbe3394b000f10"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/status.json",
+    "bytes": 254,
+    "sha256": "e634f63098bba80161028b0e6b40188933164db46096b7a1f835bdead1f82a16"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/rank0.log",
+    "bytes": 286999,
+    "sha256": "9422545b1c5507e997f9fb7ace61ad41bd7305740313f4f3c921e6e0cf6b380f"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj9/resource_release.json",
+    "bytes": 4685,
+    "sha256": "b7bfc6a6c0fbecb046e5c8cd1b5914f2c8b2d34e7511af973cc20e12847cc9bd"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/supervisor_job.json",
+    "bytes": 110,
+    "sha256": "26c8a3a731b9fe6aefaad16e19e51b6956e18e668196826021644017e918fb6b"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/role_config.json",
+    "bytes": 57780,
+    "sha256": "8c5834f0c2c8dbfc978ffe23f3d0fe51e2f91b61de8ab73c2d601c3c7a2820fe"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/runtime_identity.json",
+    "bytes": 10283,
+    "sha256": "debfe5dc2bb6376e5892c11af1a55015c6f991e2e0fa799cee73c1e8097536a1"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/result.json",
+    "bytes": 148,
+    "sha256": "8c57e580aa3f683b20e7de2c8c82639a9f90a77aafd44fd92995affbdda6d634"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/status.json",
+    "bytes": 272,
+    "sha256": "30afff3d981ec9ae93e9033f94f31e5063017bf60aef5087af53cbbb22ed26dc"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/rank0.log",
+    "bytes": 358110,
+    "sha256": "c379c817b489908d799ced0cc25219f78631e0f6bc39d9f5523da6a6a7c13bc0"
+  },
+  {
+    "path": "原始证据_on_v1/roles/sj10/resource_release.json",
+    "bytes": 5518,
+    "sha256": "4484903675ff9c9d592791b64b9389c6a4d44b92a5573ee8b1b88d2413f3710d"
+  },
+  {
+    "path": "原始证据_on_v1/trace_analysis/all_rank_validation.json",
+    "bytes": 1846658,
+    "sha256": "2389a28ffe8505cd9a0bd8d640ea982a9516bae96b5cb7df4ccc2b48422afaff"
+  },
+  {
+    "path": "原始证据_on_v1/trace_analysis/resolved_symbols.json",
+    "bytes": 168423,
+    "sha256": "dcbc28cb852ff325eb871d3f4f215ba7c1f6e15a902d802cdd7a8bf8f1446d80"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/dry_run.txt",
+    "bytes": 111,
+    "sha256": "db8db0e1ccb7ea2c604335c43db9a240229949f51c1755aaf5d9b7ec00339d5e"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_manifest.json",
+    "bytes": 1337,
+    "sha256": "e05c4726550f82940a4b7aa82304833caf2d3a995debe165cfeee820b1779801"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/finished.json",
+    "bytes": 80,
+    "sha256": "d8e2b31268441ef728c0d2c37f87b2cc8de50ae4b4b5211cdb32cdb11773aa0b"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_parent.txt",
+    "bytes": 160,
+    "sha256": "02a2ab14a20a5d816dceb4e2bf2729b9d53999750a6690cd91d75aa2517850b8"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/build.log",
+    "bytes": 72436,
+    "sha256": "88468bc9a91c663eda94aa5cd15021e7cf2d830913af0fb2af8dadc9c7fbd612"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/launch.json",
+    "bytes": 84,
+    "sha256": "f158642a51a6b3825ba61726ed24fc8b6e43e7ed45ed58396dcad12e6af4ec62"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/artifact.json",
+    "bytes": 359,
+    "sha256": "4d10c9f2c0e7648d7e136c3994fc050fbc7d54e92f30b4998b203b965ddc2047"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/job.json",
+    "bytes": 882,
+    "sha256": "2f0d91b2d9aa757b3eded925ebbdb6e0a1b3f1012fb4ec6c3808065ceb87ca14"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/worker.py",
+    "bytes": 1537,
+    "sha256": "438a7f90b40a3a6ec4637875ae26360bd3e5a10b5b70a0352c9eabd5e6960e0f"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_before/xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+    "bytes": 11529,
+    "sha256": "daffb30d068c175526c2a9e153f47e26a736f00897754aaa46c17465c8f47aca"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_before/xllm/core/layers/musa/deepseek_v41/attention.h",
+    "bytes": 22967,
+    "sha256": "7b94608ad2e32ed22f8f1fae6f3d57691190e4c547871ed9e454d018f909d1ac"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_before/xllm/core/kernels/musa/deepseek_v4_dsa_rope.h",
+    "bytes": 1284,
+    "sha256": "f3855cbbd73fd2fac3db61fe261042608d80971ae7fb823c41a8a21e0265919c"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_before/xllm/core/kernels/musa/deepseek_v4_dsa_rope.cu",
+    "bytes": 11790,
+    "sha256": "76a0c4ad21c1d3a1447e4b6fc934e19aa95e73d0d570b79659727dc68fefe4e8"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_before/xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+    "bytes": 25599,
+    "sha256": "7f3145d300bf7f07cb2a25713191b251701d38e1e712b382b023a81e2c264c15"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_before/xllm/models/llm/musa/deepseek_v41_native.h",
+    "bytes": 67224,
+    "sha256": "3e2a8084b7b0eba80efffc2eb9774018bf071c23204fde618519aff526a3dcb5"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_after/xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+    "bytes": 12430,
+    "sha256": "d73f6293979cf64bfc5b08f93673e8aace35f3fa0237621e8f1a3a4610da54e7"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_after/xllm/core/layers/musa/deepseek_v41/attention.h",
+    "bytes": 23042,
+    "sha256": "5efcc3b865302271d62941c55cdb0dcfde34542040732596c5b183e61373c31a"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_after/xllm/core/kernels/musa/deepseek_v4_dsa_rope.h",
+    "bytes": 1701,
+    "sha256": "d81d219946d8bdbd8614ad844b4d3247895f5ef3a25534bde6e6599d3460d0fc"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_after/xllm/core/kernels/musa/deepseek_v4_dsa_rope.cu",
+    "bytes": 16948,
+    "sha256": "491b76744e2471bf2857e19f366d7db28d7e21f02b46802d18e382859fcdd710"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_after/xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+    "bytes": 25882,
+    "sha256": "6e1947703cff9af5343037577f764312b3ac8cdb7580d9ae71708251b533df91"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_native_rope_qdq_v1/source_after/xllm/models/llm/musa/deepseek_v41_native.h",
+    "bytes": 67488,
+    "sha256": "08d792f2359a68f5d3bab750600d2d29c43e24368a5033c839a0a8c285696cc5"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/source_manifest.json",
+    "bytes": 104,
+    "sha256": "4210d690ca0ebdffd9eca3805c7777648181d9e5d586914e6c71857c66ed54f6"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/import.log",
+    "bytes": 418,
+    "sha256": "a6100e6e3b88cb6078be385989db5f5fb64490e1df3e4a2adbf859d28df857fe"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/finished.json",
+    "bytes": 155,
+    "sha256": "a658d36c19d36e6f4020097a5acfef41653d0b92c58599a93c80b9ba9857d066"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/cpp.log",
+    "bytes": 3180,
+    "sha256": "d8fa1288584d77bf6b79cf2207660539240b367be15eb325ab56bed8773abb2f"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/commands.json",
+    "bytes": 14882,
+    "sha256": "8f279f88965ac3d86301909e8529f1b413b5c3c3f63f0bdc2d5ddaaef767ab34"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/job.json",
+    "bytes": 84,
+    "sha256": "901365d82e65fb513129aee6826fb6d521de453a13deeeb918f20606f74ff58b"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/worker.py",
+    "bytes": 2215,
+    "sha256": "73e5fda64d09afb51c7cdfb6dfdd81500ca29611ab3d55931f04875b0ab6f9d5"
+  },
+  {
+    "path": "原始证据_production_checks_v1/builds/e53_rope_qdq_production_module_v1/src/v41_rope_qdq_test_module.cpp",
+    "bytes": 2173,
+    "sha256": "864c1f24b8a78a7f6e121ff82d24a4ab89613350cf11d706b5f1155a5831dc38"
+  },
+  {
+    "path": "原始证据_production_checks_v1/scripts/validate_v41_rope_qdq_production_v1.py",
+    "bytes": 11210,
+    "sha256": "62629cff19b5bf48c5235979a0a947e50c6757f52d8a08bc95e53d1a48efc93d"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/test.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/finished.json",
+    "bytes": 101,
+    "sha256": "bf395201ced3e4915fb69e6e7814c5020e6067f5e77117e52aa6adf9b4f28254"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/result.json",
+    "bytes": 68063,
+    "sha256": "1887b294002091644df1ae53166c38f1bdbac127fe2a079ecf15673bf7729bf7"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/child.json",
+    "bytes": 197,
+    "sha256": "daa687a28c301325926e508fcff316d805558b6c5a5b4660845f4256ccfad980"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/job.json",
+    "bytes": 83,
+    "sha256": "7c3456e58325599c5bfe1a8326e6d21078eb7284839da29da6c5d572eeaf0ae5"
+  },
+  {
+    "path": "原始证据_production_checks_v1/diagnostics/e53_rope_qdq_production_gpu_v1/worker.py",
+    "bytes": 1367,
+    "sha256": "bea2ac02fe83c93e969fd63b53517f067cc6761e59bcc9eaca69ba707179a9da"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/cu.log",
+    "bytes": 40395,
+    "sha256": "836f16efcf321be6e87d16ce677a562ee05b6e07eae0de2a529df85e97be15a4"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/source_manifest.json",
+    "bytes": 203,
+    "sha256": "4c7422621ed26b0cb5c1700273150d35c45eed9c5c13be511f8073dcbc662654"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/import.log",
+    "bytes": 418,
+    "sha256": "a6100e6e3b88cb6078be385989db5f5fb64490e1df3e4a2adbf859d28df857fe"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/link.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/finished.json",
+    "bytes": 153,
+    "sha256": "6369fa46dae27726b1092a2f43b581d82f4d2ce27373e2a525d53dd4346825b3"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/cpp.log",
+    "bytes": 3136,
+    "sha256": "902bea2d2c6c9cc4a054233d3ca350747a754045e09fd6caeda169b15d5216ac"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/commands.json",
+    "bytes": 17652,
+    "sha256": "97cb0446fc0b666a7fd26b63d62fc39d79fceae90de2964b438388b22a56af01"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/job.json",
+    "bytes": 84,
+    "sha256": "44c4a3f22d830bf029840f5d2b39ed486ca2d0fcea365a7d8887f10a2264d6cc"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/worker.py",
+    "bytes": 2356,
+    "sha256": "8fa158a302f9f8a368384ef7828d3165ac7a66172f056b2351e8d58313aac876"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/src/v41_rope_qdq_test_module.cpp",
+    "bytes": 1307,
+    "sha256": "6fbe5f4a92604711c4b5439c3a59342a36481198f96b48752a78a2c1e88700aa"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/builds/e53_rope_qdq_module_v1/src/v41_rope_qdq_candidate.cu",
+    "bytes": 5291,
+    "sha256": "31638e40902c92c8d36203ec5be50ad843f8e5a618ab4244fdd9969cef29ebeb"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/scripts/validate_v41_rope_qdq_v1.py",
+    "bytes": 6968,
+    "sha256": "213cd1acbdc51b121449c3201bb4444f3613ae0c206814e53642dd8c60d450c3"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/worker.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/test.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/finished.json",
+    "bytes": 101,
+    "sha256": "36dd9304fa17a7d393c023f095b0de71e346fa3eccd798374f6d34b1771dc06d"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/result.json",
+    "bytes": 56457,
+    "sha256": "4b264033768458e7df36bf8ff7129b4239740cf2b073db6210c4943a1428a302"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/child.json",
+    "bytes": 175,
+    "sha256": "0484ef05cf9886b9dc4eb3f4181a6e5e74c44dd38604a4b1c19828384f10489a"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/job.json",
+    "bytes": 83,
+    "sha256": "4f5f33cc858a78fb9d02a40d2ee24ec610d64279fc2af5c7608ea1da46184630"
+  },
+  {
+    "path": "原始证据_isolated_checks_v1/diagnostics/e53_rope_qdq_gpu_v1/worker.py",
+    "bytes": 1334,
+    "sha256": "da86cf5cf944b8a1d91e06daec4c299c1f696aba5a76aae513fad140b2748c9f"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/actual_native_last.receipt.json",
+    "bytes": 1448,
+    "sha256": "843ca55045cc50e44fed485e5f5dde3d218ca98555be6af1fc2a63c7a415809f"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1242,
+    "sha256": "29ca8da67ac55be1f3e40ec2de6b8f3c1db64d8601af35fe1d1efebdd9e9078d"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/Perfetto图/rendered.json",
+    "bytes": 1195,
+    "sha256": "cd76f2b7bc9f14f034af894dbac37c8e0a58a9f4044972771e8d862c62a18e4d"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 188932,
+    "sha256": "a6357501ffdb268a16e833c9e9213d3308495ad75ea7e494dd4d68eedcf92e30"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 248054,
+    "sha256": "6b393ead1338892654d6e2b61421d6244f02347ffed01d57c119be5969ba848d"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 104655,
+    "sha256": "9e01c1789ca465276d343898888e96767afca8d977d1dff8a0004869b5f8c928"
+  },
+  {
+    "path": "04_trace/E53_off_rope_qdq/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 574,
+    "sha256": "66f2904c049dd07f1dc52c2b755f1a5da748501ca4e490a12be76a0682d81968"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/actual_native_last.receipt.json",
+    "bytes": 1447,
+    "sha256": "57cd911d46fc719ad568505598ae92a5154512edeac7c106e6af9168c9088341"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/Perfetto图/Perfetto页面文本.txt",
+    "bytes": 1242,
+    "sha256": "97768bdc1a22abea18691402bcf1cf0e7bca6193c81d525eb73795b141595240"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/Perfetto图/rendered.json",
+    "bytes": 1194,
+    "sha256": "046049bd18b1c5b9e246ff3efed8b8088bbdea386e4219b1509ff25e6dde2554"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/Perfetto图/实际C++回溯_ENTRY_COUNT火焰图.png",
+    "bytes": 189474,
+    "sha256": "bf244f36a24306044842817f3d4eaeea19fe20fc8adf16a62117e9d21bca1399"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/Perfetto图/完整实际C++调用链_ENTRY_COUNT.png",
+    "bytes": 248230,
+    "sha256": "34ad1060f7022aeb20b94ad226f0942094653d36c2f8cd66b0b6c37a51046393"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/Perfetto图/真实CPU区间与GPU时间线.png",
+    "bytes": 105031,
+    "sha256": "e814aa1381c8e0a0c118dd00731947bd73503844b58d6a69a76b93b197ffcdc8"
+  },
+  {
+    "path": "04_trace/E53_on_rope_qdq/Perfetto图/Perfetto实际轨道.json",
+    "bytes": 574,
+    "sha256": "545ccb06d0562765b9955f84ebbc97fee3c7f376032748be801edd01b59517c5"
+  },
+  {
+    "path": "03_候选源码/E52_before_manifest.json",
+    "bytes": 732,
+    "sha256": "d5e48bae8c0c61a84fc6d57d9601e3f6347a4f12f000cb8c2935c058af03b470"
+  },
+  {
+    "path": "03_候选源码/candidate_manifest.json",
+    "bytes": 732,
+    "sha256": "976b885e4b95957771fdeea1f1020f2f5669e1bcf0505a77585a956da4d68973"
+  },
+  {
+    "path": "03_候选源码/xllm/core/layers/musa/deepseek_v41/attention_projection.h",
+    "bytes": 12430,
+    "sha256": "d73f6293979cf64bfc5b08f93673e8aace35f3fa0237621e8f1a3a4610da54e7"
+  },
+  {
+    "path": "03_候选源码/xllm/core/layers/musa/deepseek_v41/attention.h",
+    "bytes": 23042,
+    "sha256": "5efcc3b865302271d62941c55cdb0dcfde34542040732596c5b183e61373c31a"
+  },
+  {
+    "path": "03_候选源码/xllm/core/kernels/musa/deepseek_v4_dsa_rope.h",
+    "bytes": 1701,
+    "sha256": "d81d219946d8bdbd8614ad844b4d3247895f5ef3a25534bde6e6599d3460d0fc"
+  },
+  {
+    "path": "03_候选源码/xllm/core/kernels/musa/deepseek_v4_dsa_rope.cu",
+    "bytes": 16948,
+    "sha256": "491b76744e2471bf2857e19f366d7db28d7e21f02b46802d18e382859fcdd710"
+  },
+  {
+    "path": "03_候选源码/xllm/models/llm/musa/deepseek_v41_dspark_native.h",
+    "bytes": 25882,
+    "sha256": "6e1947703cff9af5343037577f764312b3ac8cdb7580d9ae71708251b533df91"
+  },
+  {
+    "path": "03_候选源码/xllm/models/llm/musa/deepseek_v41_native.h",
+    "bytes": 67488,
+    "sha256": "08d792f2359a68f5d3bab750600d2d29c43e24368a5033c839a0a8c285696cc5"
+  },
+  {
+    "path": "03_性能/逐请求与实际工作量核验_off_v1_on_v1_reverse_off_v1.json",
+    "bytes": 76519,
+    "sha256": "f0573107bebba936bed355767960c9ad0a642680c1199408be9b4aa11475e9f1"
+  },
+  {
+    "path": "03_性能/逐请求与实际工作量核验_off_v1_on_v1.json",
+    "bytes": 69242,
+    "sha256": "97611ca11bbe13c3327236e872c8b682fd622294c89c772a0c8737e13b0ebe40"
+  },
+  {
+    "path": "03_性能/逐请求与实际工作量核验_off_v1.json",
+    "bytes": 34820,
+    "sha256": "048fd677133b86415510702fc1342a709bb15ca392dc95c7cfde05f807dbe286"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_on_release.py",
+    "bytes": 1141,
+    "sha256": "be874fd728503d52cb1ae9333a4e163ff3e35240a871bbc74b49f9b05ca6ad08"
+  },
+  {
+    "path": "06_恢复脚本/match_render_e53_on.py",
+    "bytes": 1262,
+    "sha256": "1ba9221d1d72366b83aff58ce399bce54349f20c65f967e4f32339dc0660fa9a"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_reverse_brief.py",
+    "bytes": 1083,
+    "sha256": "02e154a302e3f39312260b049586e643d0db18b858b37858c451ad1afa861ef7"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_on_role.py",
+    "bytes": 2850,
+    "sha256": "8b3f700248e8b0a97587d4e1b75440a3e7c4ddde2ea9d9f70419f9c1725001e0"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_gpu_status.py",
+    "bytes": 548,
+    "sha256": "1022c188a37d898d14b4a70904079530a592d1bd3baa2b1937e36c263ce50e69"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_download_reverse.py",
+    "bytes": 1223,
+    "sha256": "a4a4f3174a07522c8012284b6cab6c0f8015ad0c40da82c8374ea755abaa8ed5"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_stop_off_sj10.py",
+    "bytes": 2096,
+    "sha256": "a8d3430916216e83a6297e5b9b70732f80e259a882de1a399e907fdf72b931ac"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_off_client.py",
+    "bytes": 726,
+    "sha256": "195c7366cb9f8a96e8c21e404a5c002a7dcd559487e54991b6201cc198051653"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_prepare_service.py",
+    "bytes": 12320,
+    "sha256": "1edaae0851f2f26759e9233c137f4b1fe5284001f69e8610d63f718d0424a537"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_reverse_client.py",
+    "bytes": 734,
+    "sha256": "1c668daf52f8c86ea7bc3f512ec7491ae499d4c7053806f42729433025ad3c1f"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_reverse_release.py",
+    "bytes": 1150,
+    "sha256": "f3c3ecea34ffbc12e611d9ed62ffc90d74cd9fd74582ade923841a49e71d7512"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_download_production_checks.py",
+    "bytes": 1232,
+    "sha256": "0b3e51a5b7707fe172e77d74bc54f31e271ba1389aabe1b75f51bf43c1b45abe"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_export_artifact.py",
+    "bytes": 1325,
+    "sha256": "b7439825a4e0761a73c2adb4c273ce7d427322ccb6cd0ad287a7b9ac784992f1"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_off_release.py",
+    "bytes": 1142,
+    "sha256": "7e8b41dacb10f5b5d3b7d68062fc17aa8304148030617e41509e430295f98c9d"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_reverse_archive.py",
+    "bytes": 1070,
+    "sha256": "b9225f6f75112175e4b5d722f2fd974c55aed3e5d3ca0d520d0f766031dec1fa"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_live_off_sj10.py",
+    "bytes": 931,
+    "sha256": "20489d022668d9f1be3ccc3f37b5d3260a610b8a704a3311d6d864475f15a8f9"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_on_long_live.py",
+    "bytes": 453,
+    "sha256": "b2fe96df85521bf2a02d5ea133eba0d21edcd2229abd321d4d27f62a595b91ce"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_off_trace_live.py",
+    "bytes": 455,
+    "sha256": "be99374db9bb8bf3c626975eba8ea786bc4b3698c95ec94f6b8934f70f84f57a"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_reverse_role.py",
+    "bytes": 2855,
+    "sha256": "e635d71ad170e23ab4c3390bcc16c5aabbd714529641202b65262a6d8f77a1f9"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_stop_off_sj9.py",
+    "bytes": 2095,
+    "sha256": "433e52ce2c5e5742cd9c67b0efe2b7f63aa5a58c71a3b5b96aa9bd99fa6e31ca"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_validate_off_trace.py",
+    "bytes": 7916,
+    "sha256": "3df37cc307bfe12a4d93976a2b00228ed2c5fb9073e3a1c8ab31519e2aa4ace5"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_build_module_v1.py",
+    "bytes": 12146,
+    "sha256": "2dd2bba67537befac9938474cbed2c1c4c1d7a3f54729e8091cc326bd5e70524"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_off_trace.py",
+    "bytes": 4755,
+    "sha256": "74efa4bcc5da2a3dc7de7cb9c4a8ed33bb9b3f8700e1a68842fb2b88d10f27d5"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_validate_on_trace.py",
+    "bytes": 7913,
+    "sha256": "96c99432769673e2c80caa4b4b1fe79bdd27d49261f0dae20447909a6d60e781"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_production_gpu_status.py",
+    "bytes": 669,
+    "sha256": "2a8c8dbb0061b4625b15260ce835d33ac368079e83edb5e833e03168557e754e"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_full_build_status.py",
+    "bytes": 355,
+    "sha256": "b52a8ffb3cbfd28da41e10df005ac4e62fcddd69079640f9505eb273c2df5fa7"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_build_production_module.py",
+    "bytes": 6068,
+    "sha256": "93c226d16cf0487dffa29163812f6e88d66f6728416db0f27c77c152239cf66f"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_poll_on.py",
+    "bytes": 444,
+    "sha256": "3cc291e1f7da2171407b6183fa49199f735d5e890811a3cdbae34c61e7185e8e"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_on_trace.py",
+    "bytes": 4750,
+    "sha256": "9371ba9107ff55ae0f4c0c034a55368c5f98bbd92e78330bce4003f62494223b"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_full_build_v1.py",
+    "bytes": 201070,
+    "sha256": "6622765acbf6ae6726f59bb122e781ee26edc799752b5f0d4377c2eb05d510de"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_on_long.py",
+    "bytes": 2807,
+    "sha256": "b573be87587da598e7569a39c4d9e64ea9c10e138783b8b21ef514effd37da81"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_gpu_v1.py",
+    "bytes": 11718,
+    "sha256": "d0e6faa9fe435d55fbdc2ad4c2cdd340d6d34795d44d222db74bb4203f5d9993"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_live_off_sj9.py",
+    "bytes": 929,
+    "sha256": "a7671118e73a078b911339702d97adefb85db0973802ef9d21004571d812e815"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_client_v1.py",
+    "bytes": 7893,
+    "sha256": "7b0d839d34280ea698c432f82b7ed141a6f3348c57cf069ad501b96cca91ee01"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_production_gpu.py",
+    "bytes": 17440,
+    "sha256": "b8f54c9201e3746241c306fc269d078e6be11ba06d0a61cac6b7374b9f2a1735"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_download_on.py",
+    "bytes": 1209,
+    "sha256": "480c2438dd9ba5d85ad2d020b91f66a06366f65b976b99703c38d48f6c7a2dbd"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_download_off.py",
+    "bytes": 1211,
+    "sha256": "c7aec0ffb080297489c7f2fed60566b946e4d389214ce61ce3d2acf4dd5c3ddc"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_production_module_status.py",
+    "bytes": 260,
+    "sha256": "f92fff6009391bd08baf93afc833b7c09d17099fb4dbc8829d8ce44432f40307"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_prepare_reverse.py",
+    "bytes": 1113,
+    "sha256": "26af642b34c098a7ac0b0c733f27ba6a988bf4a44f16762040fde4098e70bbe0"
+  },
+  {
+    "path": "06_恢复脚本/match_analyze_e53_local.py",
+    "bytes": 8045,
+    "sha256": "fcc367c05f046738e98e4bd5098aa6c2be2c6a7a87a1f15e4bf8c92c39986102"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_module_status.py",
+    "bytes": 249,
+    "sha256": "90a9c88508a4647414718a8fae2dfc365fd7dea41375678511df75431a9aaf1f"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_stop_reverse_sj9.py",
+    "bytes": 2037,
+    "sha256": "3907644b18fd75f0540d8d97446c62d45fffdeee6b250970003f5fd29dc904a6"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_download_isolated.py",
+    "bytes": 1228,
+    "sha256": "d15af222d99bccbdb7a73e78adb62a65f95e197d49fec52228e2122b6b3ca4ae"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_on_post_long.py",
+    "bytes": 1692,
+    "sha256": "1739749d2992f811c0e608380c6218969e5857b330df6c1d3a20a15b370d196d"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_stop_on_sj9.py",
+    "bytes": 2094,
+    "sha256": "45496a96d18fbdf3c05d0239ee8c708823ade3a5da492ab0bc9b7b2cafdf2cbd"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_stop_on_sj10.py",
+    "bytes": 2266,
+    "sha256": "34eff90e9cd34cf5fbf04b598df3c449553aa8450e59d8258707000544ff902c"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_archive_isolated.py",
+    "bytes": 833,
+    "sha256": "9eacbd6913b377626eca8df697e036377b982338275a3a2e0e4f3fa7410d2364"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_off_role.py",
+    "bytes": 2851,
+    "sha256": "54396ea7cfd6189b6b9c783ba60434197ba14c99b8f244442cc7c975dcbe42eb"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_start_on_client.py",
+    "bytes": 725,
+    "sha256": "7dcb7ca8dc32a5ddec0b0025c55243310ab6f10cdcd723652f7ea3d79a10fb83"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_stop_reverse_sj10.py",
+    "bytes": 2038,
+    "sha256": "6dd2c2e9cab5243bc7a8369d7bdb40dea523f430c1f3c02be9a216d19ac8cf79"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_poll_off.py",
+    "bytes": 445,
+    "sha256": "6fcdc411a242edfc0ccbf08ed78f560cb7b32b127977c7b4cac8e91f4e2aa81f"
+  },
+  {
+    "path": "06_恢复脚本/match_e53_archive_production_checks.py",
+    "bytes": 907,
+    "sha256": "46e14bb304f1b1b1cc37e8e84242f2c28f8384b240b30dfeb2fa3a1a066ebda2"
+  }
+]

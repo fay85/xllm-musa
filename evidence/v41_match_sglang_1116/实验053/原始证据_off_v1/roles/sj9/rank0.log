@@ -1,0 +1,1578 @@
+[xllm_musa_backend_init] registered PrivateUse1 backend name musa
+[xllm_musa_backend_init] registered TorchMUSA hooks
+[xllm_musa_backend_init] installed CUDA-to-MUSA dispatch bridge
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261117 15:21:27.004467 22896 config.cpp:751] Invalid port range [42400, 42409], falling back to default [15000, 17000]
+I20261117 15:21:27.010814 22896 xllm.cpp:719] Registered torch_musa PrivateUse1 backend name=musa and hooks
+I20261117 15:21:27.010885 22896 verbose_trace_logger.cpp:68] Verbose trace logging is disabled.
+I20261117 15:21:27.011113 22896 xllm.cpp:590] set worker role to local worker
+I20261117 15:21:27.012315 22896 config_utils.cpp:207] Dumped startup config to /expt/runs/p53_rope_qdq_off_v1/sj9/resolved_rank0.json
+I20261117 15:21:27.051028 22896 master.cpp:532] 
+I20261117 15:21:27.051043 22896 master.cpp:533]       █     █     █▄   ▄█
+I20261117 15:21:27.051047 22896 master.cpp:542] ▀█▄ ▀ █     █     █ ▀▄▀ █  version 0.11.0
+I20261117 15:21:27.051050 22896 master.cpp:543]   █▶  █     █     █     █  model   /work/artifacts/model_view_w4afp8_mt_1017
+I20261117 15:21:27.051054 22896 master.cpp:545] ▄█▀ ▄ █▄▄▄▄ █▄▄▄▄ █     █  backend llm
+I20261117 15:21:27.051057 22896 master.cpp:547] 
+I20261117 15:21:27.051060 22896 master.cpp:720] Master init options: Options: [model_path: /work/artifacts/model_view_w4afp8_mt_1017, model_id: deepseek-v4.1-flash-1017-w4afp8-mt, draft_model_path: /work/artifacts/model_view_w4afp8_mt_1017, backend: llm, model_impl: native, limit_image_per_prompt: 8, block_size: 128, max_cache_size: 1073741824, max_memory_utilization: 0.9, enable_prefix_cache: 0, max_encoder_cache_size: 0, max_processor_cache_items: 256, max_linear_state_cache_slots: 0, max_tokens_per_batch: 256, max_seqs_per_batch: 1, max_tokens_per_chunk_for_prefill: 256, num_speculative_tokens: 3, speculative_algorithm: DSpark, draft_sampling_mode: greedy, speculative_suffix_cache_max_depth: 64, speculative_suffix_max_spec_factor: 1, speculative_suffix_max_spec_offset: 0, speculative_suffix_min_token_prob: 0.1, speculative_suffix_max_cached_requests: -1, speculative_suffix_use_tree_spec: 0, enable_mtp_draft_body_tp1: 0, enable_adaptive_speculative_decode: 0, adaptive_speculative_min_gain: 0, num_request_handling_threads: 4, enable_eplb: 0, redundant_experts_num: 1, eplb_update_interval: 1000, eplb_min_peak_load_improvement: 0.05, communication_backend: mccl, rank_tablefile: , expert_parallel_degree: 0, task_type: generate, enable_mla: 0, npu_kernel_backend: AUTO, enable_chunked_prefill: 1, enable_flashcomm1: 0, flashcomm1_min_prefill_tokens: 8192, enable_mmrs_fusion: 0, mmrs_comm_mode: aiv, dp_size: 1, cp_size: 1, ep_size: 8, tp_size: 1, sp_size: 1, cfg_size: 1, vae_size: 1, text_encoder_tp_size: 1, instance_name: 10.121.32.7:22000, master_node_addr: 10.121.32.7:22100, instance_role: PREFILL, transfer_listen_port: 22300, nnodes: 8, node_rank: 0, enable_schedule_overlap: 0, enable_disagg_pd: 1, enable_pd_ooc: 0, enable_offline_inference: 0, enable_sleep_mode: 0, disable_log_stats: 0, kv_cache_dtype: auto, kv_cache_transfer_mode: PULL, etcd_addr: 10.121.32.9:31179, etcd_namespace: xiaopang1117-p53_rope_qdq_off_v1, enable_service_routing: 1, tool_call_parser: , reasoning_parser: , priority_strategy: fcfs, enable_online_preempt_offline: 1, host_blocks_factor: 0, enable_kvcache_store: 0, prefetch_timeout: 120000, prefetch_batch_size: 2, prefetch_valid_blocks_per_batch: 1, layers_wise_copy_batchs: 4, store_protocol: tcp, store_rdma_devices: , store_master_server_address: , store_metadata_server: , store_local_hostname: , enable_multi_stream_parallel: 0, enable_profile_step_time: 0, enable_profile_token_budget: 0, enable_latency_aware_schedule: 0, profile_max_prompt_length: 2048, enable_profile_kv_blocks: 1, disable_ttft_profiling: 0, enable_forward_interruption: 0, enable_graph: 0, enable_graph_mode_decode_no_padding: 1, enable_prefill_piecewise_graph: 0, max_tokens_for_graph_mode: 2048, max_global_ttft_ms: 2147483647, max_global_tpot_ms: 2147483647, max_requests_per_batch: 1, spawn_worker_path: , enable_shm: 0, input_shm_size: 1024, output_shm_size: 128, is_local: 1, beam_width: 1, rec_worker_max_concurrency: 1, master_status: WAKEUP, server_idx: 0]
+I20261117 15:21:27.051107 22896 master.cpp:725] Resolved CP config: cp_size=1, world_size=8, dp_size=1, ep_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261117 15:21:27.051119 22896 master.cpp:803] Creating engine with devices: musa:0
+W20261117 15:21:27.051133 22896 master.cpp:812] Force to disable schedule overlap for prefill instance in disagg pd mode.
+I20261117 15:21:27.051137 22896 master.cpp:900] Using draft devices: musa:0
+I20261117 15:21:27.051160 22896 dist_manager.cpp:203] Multi-node serving world_size = 8, each_node_ranks = 1, current node rank = 0, nnodes = 8, dp_size = 1, cp_size = 1, ep_size = 8, tp_size = 8
+I20261117 15:21:27.051334 22896 xllm_server_registry.cpp:22] Register server CollectiveServer0.
+I20261117 15:21:27.051520 22930 worker_server.cpp:109] Create worker server with device: 0
+I20261117 15:21:27.051584 22930 threadpool.cpp:33] ThreadPool created, thread count 5, pool name WorkerService.copy, cpu_binding false.
+W20261117 15:21:27.055401 22896 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261117 15:21:27.056834 22896 server.cpp:1200] Server[xllm::CollectiveService] is serving on port=22100.
+I20261117 15:21:27.056850 22896 server.cpp:1203] Check out http://worker32007:22100 in web browser.
+I20261117 15:21:27.056939 22896 xllm_server.cpp:302] CollectiveServer0 server started on address 10.121.32.7:22100, idle_timeout_sec: -1, num_threads: 8
+I20261117 15:21:27.416867 22930 threadpool.cpp:33] ThreadPool created, thread count 4, pool name WorkerService.request, cpu_binding false.
+I20261117 15:21:27.417500 22930 xllm_server_registry.cpp:22] Register server DistributeWorkerServer0.
+W20261117 15:21:27.418133 22930 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261117 15:21:27.418819 22930 server.cpp:1200] Server[xllm::WorkerService] is serving on port=39415.
+I20261117 15:21:27.418830 22930 server.cpp:1203] Check out http://worker32007:39415 in web browser.
+I20261117 15:21:27.418839 22930 xllm_server.cpp:302] DistributeWorker server started on address 10.121.32.7:39415, idle_timeout_sec: -1, num_threads: 8
+I20261117 15:21:27.418846 22930 worker_server.cpp:159] Worker 0: server address: 10.121.32.7:39415
+I20261117 15:21:27.419399 22930 worker_server.cpp:537] Worker#0 connect to 10.121.32.7:22100 success.
+I20261117 15:21:28.057204 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:28.057489 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+E20261117 15:21:28.058353 22896 comm_channel.cpp:105] Hello request failed: [E2001][10.121.32.7:39415]Server is not initialized
+I20261117 15:21:29.574983 22930 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group world_group, rank=0, world_size=8, algorithm=2, max_bytes=8388608
+I20261117 15:21:30.289593 22930 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=0, world_size=8, enabled=0, max_bytes=8388608
+I20261117 15:21:30.301267 22930 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=0, world_size=8, algorithm=1, max_bytes=8388608
+W20261117 15:21:30.350234 22930 musa_custom_all_reduce.cpp:259] Custom all-reduce disabled for moe_tp_group: unsupported world size 1
+I20261117 15:21:30.351117 22930 worker_server.cpp:209] Worker CP config: cp_size=1, cp_group_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261117 15:21:30.351140 22930 threadpool.cpp:33] ThreadPool created, thread count 1, pool name Worker.async, cpu_binding false.
+I20261117 15:21:30.351322 22930 worker.cpp:55] Speculative decode is enabled, algorithm: DSpark
+I20261117 15:21:30.351357 22930 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 15:21:30.351490 22930 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 15:21:30.351637 22930 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261117 15:21:30.351665 24837 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:0
+I20261117 15:21:30.351786 24838 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:0
+I20261117 15:21:30.359426 24837 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 15:21:30.363796 24838 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 15:21:31.058763 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:39415, global_rank_: 0
+I20261117 15:21:31.058833 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.058972 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.060036 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:37159, global_rank_: 1
+I20261117 15:21:31.060058 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.060179 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.061096 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:34885, global_rank_: 2
+I20261117 15:21:31.061117 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.061244 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.062141 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:43057, global_rank_: 3
+I20261117 15:21:31.062237 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.062393 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.063256 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:45589, global_rank_: 4
+I20261117 15:21:31.063284 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.063407 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.064360 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:40191, global_rank_: 5
+I20261117 15:21:31.064381 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.064510 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.065449 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:32943, global_rank_: 6
+I20261117 15:21:31.065472 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261117 15:21:31.065603 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261117 15:21:31.066512 22896 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:38601, global_rank_: 7
+I20261117 15:21:31.066620 22896 dist_manager.cpp:338] Started cluster health check thread
+I20261117 15:21:31.066700 22896 threadpool.cpp:33] ThreadPool created, thread count 8, pool name LLMEngine.link, cpu_binding false.
+I20261117 15:21:35.093904 22896 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261117 15:21:35.095455 22896 threadpool.cpp:33] ThreadPool created, thread count 8, pool name LLMEngine.link, cpu_binding false.
+I20261117 15:21:35.098229 22896 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261117 15:21:35.101011 22896 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 15:21:35.103763 22896 llm_engine.cpp:260] Initializing model from: /work/artifacts/model_view_w4afp8_mt_1017
+I20261117 15:21:35.103798 22896 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261117 15:21:35.434330 22896 llm_engine.cpp:327] Block info, block_size: 128, n_local_kv_heads: 1, head_dim: 512, n_layers: 40, dtype: BFloat16, kv_cache_dtype: auto
+I20261117 15:21:35.800015 22896 llm_engine.cpp:367] Initializing model with ModelArgs: [model_type: deepseek_v41, encoder_embedding_mode: 0, embedding_mode: 0, dtype: bfloat16, hidden_size: 5120, hidden_act: silu, intermediate_size: 2304, moe_intermediate_size: 2304, n_routed_experts: 384, n_activated_experts: 6, num_experts_per_tok: 6, n_layers: 40, n_encoder_layers: 0, head_dim: 512, decoder_head_dim: 0, n_heads: 64, decoder_n_heads: 0, n_kv_heads: 1, decoder_n_kv_heads: -1, vocab_size: 129280, rms_norm_eps: 1e-20, layer_norm_eps: 0, rotary_dim: 0, rope_theta: 10000, rope_scaling_rope_type: yarn, rope_scaling_factor: 16, rope_scaling_low_freq_factor: 0, rope_scaling_high_freq_factor: 0, rope_scaling_original_max_position_embeddings: 65536, rope_scaling_mrope_section: [], max_position_embeddings: 1048576, use_absolute_position_embedding: 0, bos_token_id: 0, eos_token_id: 1, pad_token_id: 2, attn_scalar: 0, no_bias: 0, qkv_bias: 0, stop_token_ids: [1, ], vision_start_token_id: 0, vision_end_token_id: 0, vision_token_id: 0, image_token_id: 129264, video_token_id: 0, vision_custom_adapter: , vision_max_slice_nums: 0, mm_dropout: 0, mm_hidden_act: , mm_hidden_size: 1024, mm_image_size: 0, mm_intermediate_size: 2816, mm_num_channels: 3, mm_initializer_range: 0, mm_layer_norm_eps: 0, mm_num_attention_heads: 16, mm_num_beam_groups: 0, mm_num_beams: 0, mm_num_hidden_layers: 32, mm_num_return_sequences: 0, mm_output_attentions: 0, mm_output_hidden_states: 0, mm_output_scores: 0, mm_patch_size: 14, mm_projection_dim: 5120, mm_spatial_merge_size: 0, mm_spatial_patch_size: 0, mm_downsample_ratio: 3, mm_rope_theta: 10000, mm_remove_invalid_values: 0, mm_repetition_penalty: 0, mm_return_dict: 0, mm_return_dict_in_generate: 0, mm_temperature: 0, mm_tie_encoder_decoder: 0, mm_tie_word_embeddings: 0, mm_top_k: 0, mm_top_p: 0, mm_torchscript: 0, mm_use_bfloat16: 0, mm_head_dim: 64, mm_vocab_size: 0, mm_window_size: 0, mm_fullatt_block_indexes: [], mm_deepstack_visual_indexes: [], mm_tokens_per_second: 0, mm_temporal_patch_size: 0, mm_projector_type: , mm_projector_hidden_act: , mm_projector_n_layers: 0, mm_vision_feature_layer: 0, mm_vision_feature_select_strategy: , mm_image_do_center_crop: 0, mm_image_crop_height_size: 336, mm_image_crop_width_size: 336, mm_image_do_resize: 0, mm_image_resize_shortest_edge: 336, mm_image_resample: 0, mm_image_do_rescale: 0, mm_video_do_rescale: 0, mm_image_rescale_factor: 0, mm_image_do_normalize: 0, mm_image_normalize_mean: [], mm_image_normalize_std: [], mm_image_shortest_edge: 0, mm_image_longest_edge: 0, mm_image_min_pixels: 295936, mm_image_max_pixels: 0, mm_image_patch_size: 14, mm_image_temporal_patch_size: 0, mm_image_merge_size: 0, mm_image_min_tokens: 0, mm_image_max_tokens: 1024, mm_image_token_index: 0, mm_video_normalize_mean: [], mm_video_normalize_std: [], mm_video_shortest_edge: 0, mm_video_longest_edge: 0, mm_video_patch_size: 0, mm_video_temporal_patch_size: 0, mm_video_merge_size: 0, mm_video_min_tokens: 0, mm_video_max_tokens: 0, mm_video_max_pixels: 0, mm_pad_token_id: 0, tie_word_embeddings: 0, use_sliding_window: 0, sliding_window: -1, max_window_layers: 0, query_num: 0, num_speculative_tokens: 0, in_channels: -1, out_channels: -1, down_block_types: [], up_block_types: [], block_out_channels: [], layers_per_block: 1, latent_channels: -1, norm_num_groups: -1, sample_size: -1, scale_factor: 0, shift_factor: 0, mid_block_add_attention: 1, force_upcast: 1, use_quant_conv: 0, use_post_quant_conv: 0, joint_attention_dim: 0, pooled_projection_dim: 0, guidance_embeds: 1, axes_dims_rope: [], num_single_layers: 0, d_model: 0, num_layers: 0, d_kv: 0, d_ff: 0, act_fn: , is_gated_act: 1, relative_attention_num_buckets: 0, relative_attention_max_distance: 0, num_train_timesteps: 0, shift: 0, use_dynamic_shifting: 0, base_shift: 0, max_shift: 0, base_image_seq_len: 0, max_image_seq_len: 0]
+I20261117 15:21:35.800097 22896 llm_engine.cpp:368] Initializing model with quant args: QuantArgs: [quant_method: w4afp8, quantize_type: , bits: 0, moe_weight_bits: 8, only_expert_per_group: 0, group_size: 0, desc_act: 0, is_sym: 0, activation_dynamic: 1, preserve_smooth: 0, compressed_groups: 0, fmt: e4m3, ignored_modules: 0, quant_version: , quant_desc_count: 0]
+I20261117 15:21:35.800101 22896 llm_engine.cpp:369] Initializing model with tokenizer args: TokenizerArgs: [tokenizer_type: fast, add_bos_token: 0, add_eos_token: 0, bos_token: <｜begin▁of▁sentence｜>, eos_token: <｜end▁of▁sentence｜>, pad_token: <｜end▁of▁sentence｜>, tokenizer_class: PreTrainedTokenizerFast, pattern: ]
+I20261117 15:21:35.800105 22896 llm_engine.cpp:370] Initializing model with random seed: 1105
+I20261117 15:21:35.801805 24836 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 15:21:35.805227 24836 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261117 15:21:36.464882 24836 flashinfer_workspace.cpp:26] FlashinferWorkspace initialize on device: musa:0
+I20261117 15:21:36.471786 24836 flashinfer_workspace.cpp:35] FlashinferWorkspace initialize end with flashinfer_workspace_buffer_size: 134217728
+I20261117 15:21:36.626760 24836 worker_impl.cpp:2396] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261117 15:21:37.644404 25525 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 15:21:37.644470 25620 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 15:21:37.644377 25500 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 15:21:37.644380 25514 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 15:21:37.644345 25377 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 15:21:37.644387 25474 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 15:21:37.644341 25423 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 15:21:37.644384 25506 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 15:21:37.644403 25531 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 15:21:37.644337 25387 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 15:21:37.644408 25483 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 15:21:37.644347 25431 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 15:21:37.644408 25539 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 15:21:37.644411 25549 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 15:21:37.644353 25449 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 15:21:37.644414 25557 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 15:21:37.644345 25407 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 15:21:37.644354 25440 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 15:21:37.644435 25565 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 15:21:37.644435 25591 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 15:21:37.644440 25622 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 15:21:37.644446 25611 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 15:21:37.644434 25605 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 15:21:37.644448 25582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 15:21:37.644443 25616 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 15:21:37.644461 25598 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 15:21:37.644347 25415 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 15:21:37.644368 25458 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 15:21:37.644474 25574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 15:21:37.644363 25466 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 15:21:37.644376 25491 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 15:21:37.644371 25396 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 15:21:37.646085 25387 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 15:21:37.646595 25440 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 15:21:37.646962 25611 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 15:21:37.647229 25525 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 15:21:37.647241 25598 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 15:21:37.647328 25458 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 15:21:37.647540 25574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 15:21:37.647585 25620 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 15:21:37.647699 25514 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 15:21:37.647745 25466 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 15:21:37.647746 25474 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 15:21:37.647775 25491 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 15:21:37.647884 25500 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 15:21:37.647934 25483 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 15:21:37.648025 25423 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 15:21:37.648084 25377 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 15:21:37.648118 25506 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 15:21:37.648128 25539 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 15:21:37.648155 25549 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 15:21:37.648188 25449 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 15:21:37.648211 25557 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 15:21:37.648218 25531 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 15:21:37.648324 25407 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 15:21:37.648366 25565 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 15:21:37.648396 25431 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 15:21:37.648588 25582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 15:21:37.648600 25591 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 15:21:37.648702 25616 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 15:21:37.648722 25605 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 15:21:37.648726 25622 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 15:21:37.648846 25415 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 15:21:37.648862 25396 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 15:21:37.649029 25387 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 15:21:37.649052 25440 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 15:21:37.649135 25458 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 15:21:37.649232 25483 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 15:21:37.649358 25466 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 15:21:37.649408 25500 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 15:21:37.649454 25506 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 15:21:37.649554 25491 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 15:21:37.649585 25377 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 15:21:37.649595 25474 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 15:21:37.649598 25423 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 15:21:37.649854 25449 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 15:21:37.649957 25407 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 15:21:37.650012 25431 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 15:21:37.650060 25415 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 15:21:37.650137 25396 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 15:21:37.704674 25549 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 15:21:37.704967 25514 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 15:21:37.705262 25598 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 15:21:37.705382 25525 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 15:21:37.705884 25582 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 15:21:37.706101 25557 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 15:21:37.706941 25565 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 15:21:37.707036 25574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 15:21:37.707091 25539 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 15:21:37.707226 25591 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 15:21:37.707732 25531 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 15:21:41.283599 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 0
+I20261117 15:21:44.433543 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 1
+I20261117 15:21:46.149066 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 2
+I20261117 15:21:47.800697 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 3
+I20261117 15:21:49.416026 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 4
+I20261117 15:21:51.017522 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 5
+I20261117 15:21:52.632581 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 6
+I20261117 15:21:54.230795 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 7
+I20261117 15:21:55.845944 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 8
+I20261117 15:21:57.421046 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 9
+I20261117 15:21:58.985647 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 10
+I20261117 15:22:00.544359 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 11
+I20261117 15:22:02.079703 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 12
+I20261117 15:22:03.618007 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 13
+I20261117 15:22:06.479499 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 14
+I20261117 15:22:07.969570 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 15
+I20261117 15:22:09.509058 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 16
+I20261117 15:22:10.999655 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 17
+I20261117 15:22:12.561681 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 18
+I20261117 15:22:14.089752 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 19
+I20261117 15:22:15.634826 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 20
+I20261117 15:22:17.157596 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 21
+I20261117 15:22:18.664173 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 22
+I20261117 15:22:20.225162 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 23
+I20261117 15:22:21.738754 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 24
+I20261117 15:22:23.250422 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 25
+I20261117 15:22:24.771386 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 26
+I20261117 15:22:26.298619 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 27
+I20261117 15:22:27.879469 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 28
+I20261117 15:22:29.389083 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 29
+I20261117 15:22:30.947755 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 30
+I20261117 15:22:32.452915 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 31
+I20261117 15:22:33.941665 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 32
+I20261117 15:22:35.422983 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 33
+I20261117 15:22:36.893620 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 34
+I20261117 15:22:38.385917 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 35
+I20261117 15:22:39.903375 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 36
+I20261117 15:22:41.368865 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 37
+I20261117 15:22:42.868085 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 38
+I20261117 15:22:44.359119 24836 deepseek_v41_native.h:284] Native V4.1 loaded decoder layer 39
+I20261117 15:22:44.394713 22945 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:44.828109 22944 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:45.350098 24836 deepseek_v41_native.h:1015] Native V4.1 full-world EP reduction shares TP communicator
+I20261117 15:22:45.351231 24836 deepseek_v41_native.h:332] Native V4.1 weights ready, expert_format=w4afp8_mt, layers=40, tp=8, ep=8, engram_layers=2
+I20261117 15:22:45.905918 22945 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:47.090049 22942 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:47.642712 24836 worker_impl.cpp:2413] Weight loading completed, restored ATen threads=1
+I20261117 15:22:47.643117 22944 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:48.252334 22945 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:48.385926 22942 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:48.687970 22944 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:48.695328 22896 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 15:22:48.697793 22896 llm_engine.cpp:260] Initializing model from: /work/artifacts/model_view_w4afp8_mt_1017
+I20261117 15:22:48.697805 22896 llm_engine.cpp:327] Block info, block_size: 128, n_local_kv_heads: 1, head_dim: 512, n_layers: 3, dtype: BFloat16, kv_cache_dtype: auto
+I20261117 15:22:48.697809 22896 llm_engine.cpp:367] Initializing model with ModelArgs: [model_type: deepseek_v4_dspark, encoder_embedding_mode: 0, embedding_mode: 0, dtype: bfloat16, hidden_size: 5120, hidden_act: silu, intermediate_size: 2304, moe_intermediate_size: 2304, n_routed_experts: 384, n_activated_experts: 6, num_experts_per_tok: 6, n_layers: 3, n_encoder_layers: 0, head_dim: 512, decoder_head_dim: 0, n_heads: 64, decoder_n_heads: 0, n_kv_heads: 1, decoder_n_kv_heads: -1, vocab_size: 129280, rms_norm_eps: 1e-20, layer_norm_eps: 0, rotary_dim: 0, rope_theta: 10000, rope_scaling_rope_type: yarn, rope_scaling_factor: 16, rope_scaling_low_freq_factor: 0, rope_scaling_high_freq_factor: 0, rope_scaling_original_max_position_embeddings: 65536, rope_scaling_mrope_section: [], max_position_embeddings: 1048576, use_absolute_position_embedding: 0, bos_token_id: 0, eos_token_id: 1, pad_token_id: 2, attn_scalar: 0, no_bias: 0, qkv_bias: 0, stop_token_ids: [1, ], vision_start_token_id: 0, vision_end_token_id: 0, vision_token_id: 0, image_token_id: 129264, video_token_id: 0, vision_custom_adapter: , vision_max_slice_nums: 0, mm_dropout: 0, mm_hidden_act: , mm_hidden_size: 1024, mm_image_size: 0, mm_intermediate_size: 2816, mm_num_channels: 3, mm_initializer_range: 0, mm_layer_norm_eps: 0, mm_num_attention_heads: 16, mm_num_beam_groups: 0, mm_num_beams: 0, mm_num_hidden_layers: 32, mm_num_return_sequences: 0, mm_output_attentions: 0, mm_output_hidden_states: 0, mm_output_scores: 0, mm_patch_size: 14, mm_projection_dim: 5120, mm_spatial_merge_size: 0, mm_spatial_patch_size: 0, mm_downsample_ratio: 3, mm_rope_theta: 10000, mm_remove_invalid_values: 0, mm_repetition_penalty: 0, mm_return_dict: 0, mm_return_dict_in_generate: 0, mm_temperature: 0, mm_tie_encoder_decoder: 0, mm_tie_word_embeddings: 0, mm_top_k: 0, mm_top_p: 0, mm_torchscript: 0, mm_use_bfloat16: 0, mm_head_dim: 64, mm_vocab_size: 0, mm_window_size: 0, mm_fullatt_block_indexes: [], mm_deepstack_visual_indexes: [], mm_tokens_per_second: 0, mm_temporal_patch_size: 0, mm_projector_type: , mm_projector_hidden_act: , mm_projector_n_layers: 0, mm_vision_feature_layer: 0, mm_vision_feature_select_strategy: , mm_image_do_center_crop: 0, mm_image_crop_height_size: 336, mm_image_crop_width_size: 336, mm_image_do_resize: 0, mm_image_resize_shortest_edge: 336, mm_image_resample: 0, mm_image_do_rescale: 0, mm_video_do_rescale: 0, mm_image_rescale_factor: 0, mm_image_do_normalize: 0, mm_image_normalize_mean: [], mm_image_normalize_std: [], mm_image_shortest_edge: 0, mm_image_longest_edge: 0, mm_image_min_pixels: 295936, mm_image_max_pixels: 0, mm_image_patch_size: 14, mm_image_temporal_patch_size: 0, mm_image_merge_size: 0, mm_image_min_tokens: 0, mm_image_max_tokens: 1024, mm_image_token_index: 0, mm_video_normalize_mean: [], mm_video_normalize_std: [], mm_video_shortest_edge: 0, mm_video_longest_edge: 0, mm_video_patch_size: 0, mm_video_temporal_patch_size: 0, mm_video_merge_size: 0, mm_video_min_tokens: 0, mm_video_max_tokens: 0, mm_video_max_pixels: 0, mm_pad_token_id: 0, tie_word_embeddings: 0, use_sliding_window: 0, sliding_window: -1, max_window_layers: 0, query_num: 0, num_speculative_tokens: 0, in_channels: -1, out_channels: -1, down_block_types: [], up_block_types: [], block_out_channels: [], layers_per_block: 1, latent_channels: -1, norm_num_groups: -1, sample_size: -1, scale_factor: 0, shift_factor: 0, mid_block_add_attention: 1, force_upcast: 1, use_quant_conv: 0, use_post_quant_conv: 0, joint_attention_dim: 0, pooled_projection_dim: 0, guidance_embeds: 1, axes_dims_rope: [], num_single_layers: 0, d_model: 0, num_layers: 0, d_kv: 0, d_ff: 0, act_fn: , is_gated_act: 1, relative_attention_num_buckets: 0, relative_attention_max_distance: 0, num_train_timesteps: 0, shift: 0, use_dynamic_shifting: 0, base_shift: 0, max_shift: 0, base_image_seq_len: 0, max_image_seq_len: 0]
+I20261117 15:22:48.697844 22896 llm_engine.cpp:368] Initializing model with quant args: QuantArgs: [quant_method: w4afp8, quantize_type: , bits: 0, moe_weight_bits: 8, only_expert_per_group: 0, group_size: 0, desc_act: 0, is_sym: 0, activation_dynamic: 1, preserve_smooth: 0, compressed_groups: 0, fmt: e4m3, ignored_modules: 0, quant_version: , quant_desc_count: 0]
+I20261117 15:22:48.697846 22896 llm_engine.cpp:369] Initializing model with tokenizer args: TokenizerArgs: [tokenizer_type: sentencepiece, add_bos_token: 0, add_eos_token: 0, bos_token: , eos_token: , pad_token: , tokenizer_class: , pattern: ]
+I20261117 15:22:48.697849 22896 llm_engine.cpp:370] Initializing model with random seed: 1105
+I20261117 15:22:48.699566 24836 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 15:22:48.702708 24836 draft_model_config.cpp:356] Overriding draft model_type from deepseek_v41 to deepseek_v41_dspark for block-diffusion speculative decoding
+W20261117 15:22:48.702865 24836 draft_model_config.cpp:82] --num_speculative_tokens=3 overrides DSpark checkpoint dspark_block_size=5.
+I20261117 15:22:48.702869 24836 draft_model_config.cpp:131] DSpark draft compress_ratios=[0,0,0] over 3 draft layers (python_v41=1, from checkpoint tail)
+I20261117 15:22:48.703650 24836 worker_impl.cpp:2396] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261117 15:22:48.704646 24836 deepseek_v41_dspark_native.h:327] Native V4.1 draft TP/EP custom allreduce=0, static_inputs=0, full_draft_graph=0; shared expert remains replicated
+I20261117 15:22:48.704671 25716 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 15:22:48.704690 25757 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 15:22:48.704756 25927 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 15:22:48.704768 25948 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 15:22:48.704710 25786 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 15:22:48.704823 25935 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 15:22:48.704715 25826 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 15:22:48.704715 25720 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 15:22:48.704720 25833 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 15:22:48.704721 25810 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 15:22:48.704680 25733 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 15:22:48.704722 25840 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 15:22:48.704721 25865 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 15:22:48.704680 25726 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 15:22:48.704696 25779 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 15:22:48.704736 25848 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 15:22:48.704700 25771 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 15:22:48.704727 25856 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 15:22:48.704742 25912 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 15:22:48.704743 25881 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 15:22:48.704743 25873 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 15:22:48.704744 25897 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 15:22:48.704754 25942 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 15:22:48.704756 25904 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 15:22:48.704700 25764 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 15:22:48.704684 25741 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 15:22:48.704758 25889 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 15:22:48.704689 25751 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 15:22:48.704708 25794 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 15:22:48.704771 25920 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 15:22:48.704715 25802 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 15:22:48.704710 25818 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 15:22:48.706383 25720 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 15:22:48.706406 25726 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 15:22:48.706599 25881 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 15:22:48.707119 25912 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 15:22:48.707363 25826 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 15:22:48.708988 25757 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 15:22:48.709017 25920 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 15:22:48.709024 25751 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 15:22:48.709028 25927 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 15:22:48.709031 25889 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 15:22:48.709035 25779 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 15:22:48.709038 25764 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 15:22:48.709041 25865 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 15:22:48.709053 25856 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 15:22:48.709041 25840 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 15:22:48.709050 25771 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 15:22:48.709055 25786 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 15:22:48.709118 25904 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 15:22:48.709048 25873 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 15:22:48.709071 25897 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 15:22:48.709050 25942 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 15:22:48.709187 25751 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 15:22:48.709240 25779 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 15:22:48.709280 25786 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 15:22:48.709299 25826 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 15:22:48.709302 25848 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 15:22:48.709312 25935 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 15:22:48.709334 25948 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 15:22:48.709355 25764 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 15:22:48.709349 25771 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 15:22:48.709383 25726 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 15:22:48.709425 25757 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 15:22:48.709920 25818 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 15:22:48.709990 25733 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 15:22:48.710048 25818 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 15:22:48.710192 25733 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 15:22:48.710579 25716 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 15:22:48.710799 25716 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 15:22:48.711627 25794 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 15:22:48.711730 25741 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 15:22:48.711807 25794 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 15:22:48.711861 25802 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 15:22:48.711886 25741 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 15:22:48.712062 25810 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 15:22:48.712111 25802 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 15:22:48.712301 25810 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 15:22:48.712610 25833 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 15:22:48.712643 25720 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 15:22:48.720600 25873 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 15:22:48.721014 25881 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 15:22:48.721108 25904 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 15:22:48.722162 25889 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 15:22:48.722687 25833 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 15:22:48.722764 25897 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 15:22:48.723767 25848 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 15:22:48.724340 25840 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 15:22:48.724340 25865 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 15:22:48.724567 25912 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 15:22:48.726284 25856 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 15:22:56.889482 24836 deepseek_v41_dspark_native.h:153] Native V4.1 DSpark checkpoint loaded:3 pure-SWA stages, experts=128, topk=3, tp=8, ep=8
+I20261117 15:22:56.889544 24836 deepseek_v41_dspark_native.h:157] Native V4.1 DSpark Markov BF16 GEMM, FP32 logits=0
+I20261117 15:22:57.003710 22942 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.039180 22945 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.099192 24836 worker_impl.cpp:2413] Weight loading completed, restored ATen threads=1
+I20261117 15:22:57.099298 24836 dflash_worker_impl.cpp:467] Configured DeepSeek-V4 DSpark draft block size: 3
+I20261117 15:22:57.099300 24836 dflash_worker_impl.cpp:469] Configured DeepSeek-V4 DSpark SAS mode: native explicit indices
+I20261117 15:22:57.099586 24836 dspark_worker_impl.cpp:77] DSpark async output enabled=0
+I20261117 15:22:57.099591 24836 dspark_worker_impl.cpp:78] DSpark device-only decode inputs supported=0, draft prelaunch enabled=0
+I20261117 15:22:57.100576 24836 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261117 15:22:57.101583 22944 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.103132 26122 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00025-of-00048.safetensors
+I20261117 15:22:57.103082 26098 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00001-of-00048.safetensors
+I20261117 15:22:57.103102 26110 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00013-of-00048.safetensors
+I20261117 15:22:57.103106 26106 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00009-of-00048.safetensors
+I20261117 15:22:57.103106 26109 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00012-of-00048.safetensors
+I20261117 15:22:57.103111 26108 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00011-of-00048.safetensors
+I20261117 15:22:57.103103 26099 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00002-of-00048.safetensors
+I20261117 15:22:57.103096 26104 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00007-of-00048.safetensors
+I20261117 15:22:57.103085 26101 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00004-of-00048.safetensors
+I20261117 15:22:57.103102 26107 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00010-of-00048.safetensors
+I20261117 15:22:57.103113 26113 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00016-of-00048.safetensors
+I20261117 15:22:57.103116 26112 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00015-of-00048.safetensors
+I20261117 15:22:57.103116 26115 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00018-of-00048.safetensors
+I20261117 15:22:57.103087 26100 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00003-of-00048.safetensors
+I20261117 15:22:57.103118 26116 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00019-of-00048.safetensors
+I20261117 15:22:57.103120 26117 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00020-of-00048.safetensors
+I20261117 15:22:57.103122 26114 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00017-of-00048.safetensors
+I20261117 15:22:57.103089 26103 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00006-of-00048.safetensors
+I20261117 15:22:57.103124 26120 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00023-of-00048.safetensors
+I20261117 15:22:57.103113 26111 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00014-of-00048.safetensors
+I20261117 15:22:57.103127 26118 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00021-of-00048.safetensors
+I20261117 15:22:57.103121 26119 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00022-of-00048.safetensors
+I20261117 15:22:57.103096 26105 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00008-of-00048.safetensors
+I20261117 15:22:57.103135 26124 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00027-of-00048.safetensors
+I20261117 15:22:57.103137 26121 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00024-of-00048.safetensors
+I20261117 15:22:57.103092 26102 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00005-of-00048.safetensors
+I20261117 15:22:57.103139 26123 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00026-of-00048.safetensors
+I20261117 15:22:57.104198 26100 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00035-of-00048.safetensors
+I20261117 15:22:57.104238 26107 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00042-of-00048.safetensors
+I20261117 15:22:57.104259 26114 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer00.safetensors
+I20261117 15:22:57.104311 26100 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer18.safetensors
+I20261117 15:22:57.104322 26099 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00034-of-00048.safetensors
+I20261117 15:22:57.104359 26111 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00046-of-00048.safetensors
+I20261117 15:22:57.104373 26116 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer02.safetensors
+I20261117 15:22:57.103139 26125 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00028-of-00048.safetensors
+I20261117 15:22:57.103145 26126 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00029-of-00048.safetensors
+I20261117 15:22:57.103147 26129 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00032-of-00048.safetensors
+I20261117 15:22:57.103147 26128 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00031-of-00048.safetensors
+I20261117 15:22:57.103149 26127 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00030-of-00048.safetensors
+I20261117 15:22:57.104467 26121 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer07.safetensors
+I20261117 15:22:57.104521 26099 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer17.safetensors
+I20261117 15:22:57.104583 26120 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer06.safetensors
+I20261117 15:22:57.104652 26124 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer10.safetensors
+I20261117 15:22:57.104745 26111 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer29.safetensors
+I20261117 15:22:57.104763 26102 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00037-of-00048.safetensors
+I20261117 15:22:57.104789 26107 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer25.safetensors
+I20261117 15:22:57.104820 26098 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00033-of-00048.safetensors
+I20261117 15:22:57.104907 26102 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer20.safetensors
+I20261117 15:22:57.104928 26113 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00048-of-00048.safetensors
+I20261117 15:22:57.104997 26122 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer08.safetensors
+I20261117 15:22:57.105031 26098 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer16.safetensors
+I20261117 15:22:57.105123 26113 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer31.safetensors
+I20261117 15:22:57.105144 26119 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer05.safetensors
+I20261117 15:22:57.105194 26110 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00045-of-00048.safetensors
+I20261117 15:22:57.105204 26112 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00047-of-00048.safetensors
+I20261117 15:22:57.105275 26112 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer30.safetensors
+I20261117 15:22:57.105432 26110 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer28.safetensors
+I20261117 15:22:57.105455 26103 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00038-of-00048.safetensors
+I20261117 15:22:57.105504 26104 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00039-of-00048.safetensors
+I20261117 15:22:57.105512 26101 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00036-of-00048.safetensors
+I20261117 15:22:57.105518 26125 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer11.safetensors
+I20261117 15:22:57.105547 26103 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer21.safetensors
+I20261117 15:22:57.105556 26123 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer09.safetensors
+I20261117 15:22:57.105667 26104 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer22.safetensors
+I20261117 15:22:57.105681 26101 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer19.safetensors
+I20261117 15:22:57.105764 26106 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00041-of-00048.safetensors
+I20261117 15:22:57.105836 26127 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer13.safetensors
+I20261117 15:22:57.105854 26106 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer24.safetensors
+I20261117 15:22:57.106052 26115 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer01.safetensors
+I20261117 15:22:57.106143 26105 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00040-of-00048.safetensors
+I20261117 15:22:57.106293 26105 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer23.safetensors
+I20261117 15:22:57.106859 26128 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer14.safetensors
+I20261117 15:22:57.106923 26109 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00044-of-00048.safetensors
+I20261117 15:22:57.107081 26117 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer03.safetensors
+I20261117 15:22:57.107182 26109 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer27.safetensors
+I20261117 15:22:57.107687 26129 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer15.safetensors
+I20261117 15:22:57.108049 26126 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer12.safetensors
+I20261117 15:22:57.108844 26118 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer04.safetensors
+I20261117 15:22:57.108886 26108 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-00043-of-00048.safetensors
+I20261117 15:22:57.108965 26108 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer26.safetensors
+I20261117 15:22:57.111959 26121 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer39.safetensors
+I20261117 15:22:57.112040 26122 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp00.safetensors
+I20261117 15:22:57.112735 26124 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp02.safetensors
+I20261117 15:22:57.113183 26114 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer32.safetensors
+I20261117 15:22:57.113453 26116 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer34.safetensors
+I20261117 15:22:57.115192 26120 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer38.safetensors
+I20261117 15:22:57.116974 26119 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer37.safetensors
+I20261117 15:22:57.117094 26117 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer35.safetensors
+I20261117 15:22:57.117252 26115 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer33.safetensors
+I20261117 15:22:57.117897 26123 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-mtp01.safetensors
+I20261117 15:22:57.120460 26118 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_w4afp8_mt_1017/model-w4afp8-layer36.safetensors
+I20261117 15:22:57.160740 22942 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.201436 22945 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.219070 22944 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.346333 22942 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.378285 22945 comm_channel.cpp:715] Init_model_async succeed.
+I20261117 15:22:57.382477 24836 kv_cache_estimation.cpp:757] speculative kv cache capacity adjusted from 11.56 GB to 11.56 GB, target_constant_bytes=33816576, draft_constant_bytes=2654208, target_common_unit_bytes=819200, draft_common_unit_bytes=0, common_blocks_per_unit=2, token_unit_count=15107
+I20261117 15:22:57.382815 22896 llm_engine.cpp:550] worker #0: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382843 22896 llm_engine.cpp:550] worker #1: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382848 22896 llm_engine.cpp:550] worker #2: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382853 22896 llm_engine.cpp:550] worker #3: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382856 22896 llm_engine.cpp:550] worker #4: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382860 22896 llm_engine.cpp:550] worker #5: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382864 22896 llm_engine.cpp:550] worker #6: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382867 22896 llm_engine.cpp:550] worker #7: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.382962 24836 kv_cache_estimation.cpp:757] speculative kv cache capacity adjusted from 11.56 GB to 11.56 GB, target_constant_bytes=33816576, draft_constant_bytes=2654208, target_common_unit_bytes=819200, draft_common_unit_bytes=0, common_blocks_per_unit=2, token_unit_count=15107
+I20261117 15:22:57.383176 22896 llm_engine.cpp:550] worker #0: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383183 22896 llm_engine.cpp:550] worker #1: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383188 22896 llm_engine.cpp:550] worker #2: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383193 22896 llm_engine.cpp:550] worker #3: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383199 22896 llm_engine.cpp:550] worker #4: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383204 22896 llm_engine.cpp:550] worker #5: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383208 22896 llm_engine.cpp:550] worker #6: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383212 22896 llm_engine.cpp:550] worker #7: available memory: 11.56 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.9, max_cache_size: 1.00 GB
+I20261117 15:22:57.383221 22896 llm_engine.cpp:632] kv cache capacity: 1.00 GB, blocks: 1024, slot_size: 2048, index_slot_size: 256, indexer_layers: 0, scale_slot_size: 0, linear_slot_size: 0, linear_blocks: 0, state_slots: 0, gdn_state_bytes: 0.00 B, kpool_state_bytes: 0.00 B, max_linear_state_cache_slots: 0, reserved_state_bytes: 0.00 B, n_layers: 40, kv_cache_dtype: auto
+I20261117 15:22:57.383247 22896 kv_cache_shape.cpp:304] Initializing DSV4.1 kv cache with shape: [swa_count=6, c2_count=1269, c1_count=2538]
+I20261117 15:22:57.383597 24836 threadpool.cpp:33] ThreadPool created, thread count 2, pool name KVCacheTransfer.async, cpu_binding false.
+I20261117 15:22:57.384398 24836 transfer_engine_impl.cpp:976] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I20261117 15:22:57.384413 24836 transfer_engine_impl.cpp:115] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 22300
+I20261117 15:22:57.384454 24836 transfer_engine_impl.cpp:182] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:15084
+I20261117 15:22:57.384657 24836 transfer_engine_impl.cpp:263] Auto-discovering topology...
+I20261117 15:22:57.384661 24836 topology.cpp:168] IB device whitelist: mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3
+I20261117 15:22:57.416174 24836 topology.cpp:127] Device mlx5_0 port 1 is available
+I20261117 15:22:57.422935 24836 topology.cpp:127] Device mlx5_1 port 1 is available
+I20261117 15:22:57.424880 24836 topology.cpp:218] Skipping device: mlx5_bond_0
+I20261117 15:22:57.430662 24836 topology.cpp:127] Device mlx5_2 port 1 is available
+I20261117 15:22:57.435724 24836 topology.cpp:127] Device mlx5_3 port 1 is available
+I20261117 15:22:57.464205 24836 topology.cpp:127] Device mlx5_4 port 1 is available
+I20261117 15:22:57.492009 24836 topology.cpp:127] Device mlx5_5 port 1 is available
+I20261117 15:22:57.497052 24836 topology.cpp:127] Device mlx5_6 port 1 is available
+I20261117 15:22:57.497834 24836 topology.cpp:218] Skipping device: mlx5_7
+I20261117 15:22:57.497838 24836 topology.cpp:218] Skipping device: mlx5_8
+I20261117 15:22:57.520237 24836 topology.cpp:127] Device mlx5_9 port 1 is available
+I20261117 15:22:57.523962 24836 transfer_engine_impl.cpp:278] Topology discovery complete. Found 8 HCAs.
+I20261117 15:22:57.523985 24836 rdma_transport.cpp:76] [RDMA] Relaxed ordering disabled via MC_IB_PCI_RELAXED_ORDERING=0. Falling back to strict ordering.
+I20261117 15:22:57.523993 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.528790 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_6/ (network state: with network device)
+I20261117 15:22:57.529891 24836 rdma_context.cpp:288] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I20261117 15:22:57.529906 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.552597 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_0/ (network state: with network device)
+I20261117 15:22:57.553596 24836 rdma_context.cpp:288] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I20261117 15:22:57.553610 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.558701 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_1/ (network state: with network device)
+I20261117 15:22:57.559626 24836 rdma_context.cpp:288] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I20261117 15:22:57.559636 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.564133 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_2/ (network state: with network device)
+I20261117 15:22:57.565003 24836 rdma_context.cpp:288] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I20261117 15:22:57.565014 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.569489 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_3/ (network state: with network device)
+I20261117 15:22:57.570396 24836 rdma_context.cpp:288] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I20261117 15:22:57.570411 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.575031 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_4/ (network state: with network device)
+I20261117 15:22:57.575925 24836 rdma_context.cpp:288] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I20261117 15:22:57.575937 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.600620 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_5/ (network state: with network device)
+I20261117 15:22:57.601677 24836 rdma_context.cpp:288] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I20261117 15:22:57.601693 24836 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261117 15:22:57.606710 24836 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_9/ (network state: with network device)
+I20261117 15:22:57.607661 24836 rdma_context.cpp:288] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+I20261117 15:22:57.607787 24836 transfer_engine_impl.cpp:393] installTransport, type=rdma
+I20261117 15:22:57.607791 24836 mooncake_transfer_engine.cpp:197] [Mooncake][PDTransferEngine] transfer engine init success, handshake_endpoint=10.121.32.7:22300
+I20261117 15:22:57.634536 24836 server.cpp:1200] Server[xllm::MooncakeTransferEngineService] is serving on port=22300.
+I20261117 15:22:57.634558 24836 server.cpp:1203] Check out http://worker32007:22300 in web browser.
+I20261117 15:22:57.634565 24836 mooncake_transfer_engine.cpp:217] [Mooncake][PDTransferEngine] ready, handshake_endpoint=10.121.32.7:22300, data_endpoint=10.121.32.7:15084
+I20261117 15:22:57.640910 24836 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+I20261117 15:22:57.640928 24836 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[6, 128, 1, 512]
+I20261117 15:22:57.640930 24836 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: key_cache=[2538, 128, 1, 512], index_cache=[2538, 128, 1, 128], indexer_cache_scale=undefined, swa_cache=[6, 128, 1, 512]
+I20261117 15:22:57.640933 24836 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_2 shapes: key_cache=[1269, 128, 1, 512], index_cache=[1269, 128, 1, 128], indexer_cache_scale=undefined, swa_cache=[6, 128, 1, 512], compress_kv_state=[6, 32, 512], compress_score_state=[6, 32, 512]
+I20261117 15:22:57.747185 24836 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=54
+I20261117 15:22:57.747221 24836 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=40, buffers=54
+I20261117 15:22:57.747800 24836 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,0]
+I20261117 15:22:57.747807 24836 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[6, 128, 1, 512]
+I20261117 15:22:57.753391 24836 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=57
+I20261117 15:22:57.753398 24836 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=3, buffers=3
+I20261117 15:22:57.807327 22896 llm_engine.cpp:875] KV token capacity: N/A (grouped cache)
+I20261117 15:22:57.807374 22896 llm_engine.cpp:632] kv cache capacity: 1.00 GB, blocks: 1024, slot_size: 2048, index_slot_size: 256, indexer_layers: 0, scale_slot_size: 0, linear_slot_size: 0, linear_blocks: 0, state_slots: 0, gdn_state_bytes: 0.00 B, kpool_state_bytes: 0.00 B, max_linear_state_cache_slots: 0, reserved_state_bytes: 0.00 B, n_layers: 3, kv_cache_dtype: auto
+I20261117 15:22:57.807396 22896 kv_cache_shape.cpp:309] Initializing DSV4 kv cache with shape: [swa_count=6, c4_count=0, c128_count=0]
+I20261117 15:22:57.814716 22896 xservice_client.cpp:924] Successfully connected to xservice: 10.121.32.9:31183
+I20261117 15:22:57.814898 22896 xservice_client.cpp:924] Successfully connected to xservice: 10.121.32.9:31181
+I20261117 15:22:57.815928 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name AsyncResponseProcessor.response, cpu_binding false.
+I20261117 15:22:58.182461 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name AsyncResponseProcessor.rpc, cpu_binding false.
+I20261117 15:22:58.182751 22896 threadpool.cpp:33] ThreadPool created, thread count 16, pool name AsyncResponseProcessor.generate_output, cpu_binding false.
+I20261117 15:22:58.522086 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name DisaggPDScheduler.prefill, cpu_binding false.
+I20261117 15:22:58.522374 22896 threadpool.cpp:33] ThreadPool created, thread count 1, pool name DisaggPDScheduler.reservation_release, cpu_binding false.
+E20261117 15:22:58.522667 22896 xllm_server_registry.cpp:55] Server DisaggPDServer0 doesn't exist.
+I20261117 15:22:58.522768 28483 xllm_server_registry.cpp:22] Register server DisaggPDServer0.
+W20261117 15:22:58.524114 28483 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 256, new concurrency: 8
+I20261117 15:22:58.524641 28483 server.cpp:1200] Server[xllm::DisaggPDService] is serving on port=22200.
+I20261117 15:22:58.524645 28483 server.cpp:1203] Check out http://worker32007:22200 in web browser.
+I20261117 15:22:58.524657 28483 xllm_server.cpp:302] Disagg PD server started on address 10.121.32.7:22200, idle_timeout_sec: -1, num_threads: 8
+I20261117 15:22:58.622748 22896 disagg_pd_scheduler.cpp:361] Instance info: instance name = 10.121.32.7:22000, instance rpc_address = 10.121.32.7:22200, instance type = PREFILL
+I20261117 15:22:58.623009 24585 mooncake_kv_cache_transfer.cpp:299] get_cache_info success, cluster_id=513543441376892700, addr=10.121.32.7:15084
+I20261117 15:22:58.625679 22896 disagg_pd_scheduler.cpp:380] Instance declares kv_split_size = 1, cp_index_write_mode = 1 (replicated), dp_size = 1
+I20261117 15:22:58.626601 22896 xservice_client.cpp:407] Attached Native Provider Descriptor, engine=10.121.32.7:22000, model=deepseek-v4.1-flash-1017-w4afp8-mt, connector=pull
+I20261117 15:22:58.628383 22896 xservice_client.cpp:436] Success register instance to etcd.
+I20261117 15:22:58.628408 22896 chat_template.cpp:47] Using native C++ chat template for model_type: deepseek_v41
+I20261117 15:22:58.960405 22896 threadpool.cpp:33] ThreadPool created, thread count 4, pool name LLMMaster.request, cpu_binding false.
+W20261117 15:22:59.325591 22896 api_service.cpp:134] HTTP authentication is disabled because api_key is empty. Restrict access at the deployment boundary or set api_key.
+I20261117 15:22:59.325697 22896 xllm_server_registry.cpp:22] Register server HttpServer.
+I20261117 15:22:59.325711 22896 xllm_server.cpp:89] Use API route mode: master_node
+W20261117 15:22:59.327359 22896 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 256, new concurrency: 8
+I20261117 15:22:59.327491 22896 server.cpp:1200] Server[xllm::APIService] is serving on port=22000.
+I20261117 15:22:59.327495 22896 server.cpp:1203] Check out http://worker32007:22000 in web browser.
+I20261117 15:22:59.327499 22896 xllm_server.cpp:163] Brpc Server started on port 22000, idle_timeout_s: -1, num_threads: 8
+I20261117 15:22:59.327508 22896 xllm_server.cpp:176]      Started server process [22896]
+I20261117 15:22:59.327510 22896 xllm_server.cpp:177]      Waiting for application startup.
+I20261117 15:22:59.327512 22896 xllm_server.cpp:178]      Application startup complete.
+I20261117 15:23:07.708783 28482 disagg_pd_scheduler.cpp:494] Create rpc channel to instance: 10.121.32.9:32000
+W20261117 15:23:07.709697 28489 batch.cpp:424] dp_balance_shuffle_seqs is not implemented for current device
+I20261117 15:23:07.711889 24836 deepseek_v41_native.h:402] Native V4.1 prefill uses explicit FFI preparation sync
+I20261117 15:23:07.724139 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=19 kv=19
+I20261117 15:23:14.119611 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=19 kv=19
+I20261117 15:23:14.119656 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=19 kv=19
+I20261117 15:23:14.125527 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=19 kv=19
+I20261117 15:23:14.125548 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=19 kv=19
+I20261117 15:23:14.136029 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=19 kv=19
+I20261117 15:23:14.136046 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=19 kv=19
+I20261117 15:23:14.141135 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=19 kv=19
+I20261117 15:23:14.141148 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=19 kv=19
+I20261117 15:23:14.145919 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=19 kv=19
+I20261117 15:23:14.145932 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=19 kv=19
+I20261117 15:23:14.151026 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=19 kv=19
+I20261117 15:23:14.151037 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=19 kv=19
+I20261117 15:23:14.157812 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=19 kv=19
+I20261117 15:23:14.157825 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=19 kv=19
+I20261117 15:23:14.164115 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=19 kv=19
+I20261117 15:23:14.164129 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=19 kv=19
+I20261117 15:23:14.170269 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=19 kv=19
+I20261117 15:23:14.170280 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=19 kv=19
+I20261117 15:23:14.176493 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=19 kv=19
+I20261117 15:23:14.176505 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=19 kv=19
+I20261117 15:23:14.183449 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=19 kv=19
+I20261117 15:23:14.183461 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=19 kv=19
+I20261117 15:23:14.188657 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=19 kv=19
+I20261117 15:23:14.188669 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=19 kv=19
+I20261117 15:23:14.195439 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=19 kv=19
+I20261117 15:23:14.195451 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=19 kv=19
+I20261117 15:23:14.200543 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=19 kv=19
+I20261117 15:23:14.200557 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=19 kv=19
+I20261117 15:23:14.208544 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=19 kv=19
+I20261117 15:23:14.208556 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=19 kv=19
+I20261117 15:23:14.213330 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=19 kv=19
+I20261117 15:23:14.213339 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=19 kv=19
+I20261117 15:23:14.218137 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=19 kv=19
+I20261117 15:23:14.218147 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=19 kv=19
+I20261117 15:23:14.223340 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=19 kv=19
+I20261117 15:23:14.223349 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=19 kv=19
+I20261117 15:23:14.229969 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=19 kv=19
+I20261117 15:23:14.229979 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=19 kv=19
+I20261117 15:23:14.235109 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=19 kv=19
+I20261117 15:23:14.235121 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=19 kv=19
+I20261117 15:23:14.277756 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=19 kv=19
+I20261117 15:23:14.277787 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=19 kv=19
+I20261117 15:23:14.284615 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=19 kv=19
+I20261117 15:23:14.284627 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=19 kv=19
+I20261117 15:23:14.289665 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=19 kv=19
+I20261117 15:23:14.289677 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=19 kv=19
+I20261117 15:23:14.296095 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=19 kv=19
+I20261117 15:23:14.296108 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=19 kv=19
+I20261117 15:23:14.304102 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=19 kv=19
+I20261117 15:23:14.304116 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=19 kv=19
+I20261117 15:23:14.308944 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=19 kv=19
+I20261117 15:23:14.308956 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=19 kv=19
+I20261117 15:23:14.314098 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=19 kv=19
+I20261117 15:23:14.314111 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=19 kv=19
+I20261117 15:23:14.320741 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=19 kv=19
+I20261117 15:23:14.320753 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=19 kv=19
+I20261117 15:23:14.326212 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=19 kv=19
+I20261117 15:23:14.326224 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=19 kv=19
+I20261117 15:23:14.331074 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=19 kv=19
+I20261117 15:23:14.331086 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=19 kv=19
+I20261117 15:23:14.336376 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=19 kv=19
+I20261117 15:23:14.336387 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=19 kv=19
+I20261117 15:23:14.341560 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=19 kv=19
+I20261117 15:23:14.341571 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=19 kv=19
+I20261117 15:23:14.348340 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=19 kv=19
+I20261117 15:23:14.348354 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=19 kv=19
+I20261117 15:23:14.355542 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=19 kv=19
+I20261117 15:23:14.355556 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=19 kv=19
+I20261117 15:23:14.361027 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=19 kv=19
+I20261117 15:23:14.361037 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=19 kv=19
+I20261117 15:23:14.367975 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=19 kv=19
+I20261117 15:23:14.367988 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=19 kv=19
+I20261117 15:23:14.373440 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=19 kv=19
+I20261117 15:23:14.373450 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=19 kv=19
+I20261117 15:23:14.380344 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=19 kv=19
+I20261117 15:23:14.380357 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=19 kv=19
+I20261117 15:23:14.385457 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=19 kv=19
+I20261117 15:23:14.385468 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=19 kv=19
+I20261117 15:23:14.392248 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=19 kv=19
+I20261117 15:23:14.401748 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-VwEs7XnGHTNMo6bryF9Egs, x-request-id: 01a1e863-596c-78be-ab80-3f04c3f24153, sequence: 0, prompt_tokens: 19, generated_tokens: 1, queue_to_batch: 1.3ms, ttft: 6693.0ms, total_latency: 6693.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 64, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:23:14.401774 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-VwEs7XnGHTNMo6bryF9Egs, released_swa=0, free_swa=4
+I20261117 15:23:14.405972 28480 disagg_pd_scheduler.cpp:1196] [PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff
+I20261117 15:23:14.430974 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.431121 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.431248 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.431391 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.431480 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.431564 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.431728 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:14.433638 26248 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261117 15:23:28.761237 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=15 kv=15
+I20261117 15:23:29.485359 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=15 kv=15
+I20261117 15:23:29.485404 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=15 kv=15
+I20261117 15:23:29.490296 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=15 kv=15
+I20261117 15:23:29.490310 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=15 kv=15
+I20261117 15:23:29.495401 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=15 kv=15
+I20261117 15:23:29.495415 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=15 kv=15
+I20261117 15:23:29.499574 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=15 kv=15
+I20261117 15:23:29.499586 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=15 kv=15
+I20261117 15:23:29.503751 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=15 kv=15
+I20261117 15:23:29.503762 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=15 kv=15
+I20261117 15:23:29.507910 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=15 kv=15
+I20261117 15:23:29.507920 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=15 kv=15
+I20261117 15:23:29.512063 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=15 kv=15
+I20261117 15:23:29.512075 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=15 kv=15
+I20261117 15:23:29.516065 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=15 kv=15
+I20261117 15:23:29.516077 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=15 kv=15
+I20261117 15:23:29.520805 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=15 kv=15
+I20261117 15:23:29.520826 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=15 kv=15
+I20261117 15:23:29.524881 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=15 kv=15
+I20261117 15:23:29.524892 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=15 kv=15
+I20261117 15:23:29.528853 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=15 kv=15
+I20261117 15:23:29.528867 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=15 kv=15
+I20261117 15:23:29.532853 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=15 kv=15
+I20261117 15:23:29.532864 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=15 kv=15
+I20261117 15:23:29.536958 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=15 kv=15
+I20261117 15:23:29.536970 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=15 kv=15
+I20261117 15:23:29.540959 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=15 kv=15
+I20261117 15:23:29.540970 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=15 kv=15
+I20261117 15:23:29.546042 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=15 kv=15
+I20261117 15:23:29.546054 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=15 kv=15
+I20261117 15:23:29.550094 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=15 kv=15
+I20261117 15:23:29.550105 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=15 kv=15
+I20261117 15:23:29.554111 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=15 kv=15
+I20261117 15:23:29.554123 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=15 kv=15
+I20261117 15:23:29.558133 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=15 kv=15
+I20261117 15:23:29.558145 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=15 kv=15
+I20261117 15:23:29.562117 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=15 kv=15
+I20261117 15:23:29.562130 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=15 kv=15
+I20261117 15:23:29.566167 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=15 kv=15
+I20261117 15:23:29.566179 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=15 kv=15
+I20261117 15:23:29.571770 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=15 kv=15
+I20261117 15:23:29.571784 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=15 kv=15
+I20261117 15:23:29.575876 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=15 kv=15
+I20261117 15:23:29.575888 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=15 kv=15
+I20261117 15:23:29.579872 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=15 kv=15
+I20261117 15:23:29.579886 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=15 kv=15
+I20261117 15:23:29.584789 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=15 kv=15
+I20261117 15:23:29.584803 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=15 kv=15
+I20261117 15:23:29.589206 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=15 kv=15
+I20261117 15:23:29.589219 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=15 kv=15
+I20261117 15:23:29.593178 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=15 kv=15
+I20261117 15:23:29.593189 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=15 kv=15
+I20261117 15:23:29.597168 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=15 kv=15
+I20261117 15:23:29.597179 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=15 kv=15
+I20261117 15:23:29.601161 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=15 kv=15
+I20261117 15:23:29.601174 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=15 kv=15
+I20261117 15:23:29.605645 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=15 kv=15
+I20261117 15:23:29.605657 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=15 kv=15
+I20261117 15:23:29.609608 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=15 kv=15
+I20261117 15:23:29.609620 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=15 kv=15
+I20261117 15:23:29.613584 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=15 kv=15
+I20261117 15:23:29.613596 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=15 kv=15
+I20261117 15:23:29.617494 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=15 kv=15
+I20261117 15:23:29.617506 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=15 kv=15
+I20261117 15:23:29.621834 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=15 kv=15
+I20261117 15:23:29.621846 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=15 kv=15
+I20261117 15:23:29.625797 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=15 kv=15
+I20261117 15:23:29.625808 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=15 kv=15
+I20261117 15:23:29.629860 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=15 kv=15
+I20261117 15:23:29.629873 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=15 kv=15
+I20261117 15:23:29.633931 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=15 kv=15
+I20261117 15:23:29.633944 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=15 kv=15
+I20261117 15:23:29.638299 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=15 kv=15
+I20261117 15:23:29.638309 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=15 kv=15
+I20261117 15:23:29.642392 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=15 kv=15
+I20261117 15:23:29.642414 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=15 kv=15
+I20261117 15:23:29.646952 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=15 kv=15
+I20261117 15:23:29.646963 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=15 kv=15
+I20261117 15:23:29.651160 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=15 kv=15
+I20261117 15:23:29.659356 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-o7hoZ9MuwvcfFYij84gtae, x-request-id: 01a1e863-abad-79b6-a02d-cd68b372e637, sequence: 0, prompt_tokens: 15, generated_tokens: 1, queue_to_batch: 1.2ms, ttft: 902.0ms, total_latency: 902.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 64, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:23:29.659399 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-o7hoZ9MuwvcfFYij84gtae, released_swa=0, free_swa=4
+I20261117 15:23:34.648913 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:23:34.659984 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:23:34.660000 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:23:34.666123 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:23:34.666139 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:23:34.672859 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:23:34.672870 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:23:34.679319 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:23:34.679332 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:23:34.684845 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:23:34.684859 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:23:34.690346 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:23:34.690358 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:23:34.696020 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:23:34.696033 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:23:34.701845 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:23:34.701856 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:23:34.708575 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:23:34.708585 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:23:34.714298 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:23:34.714311 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:23:34.719734 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:23:34.719748 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:23:34.726044 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:23:34.726058 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:23:34.731909 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:23:34.731922 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:23:34.738255 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:23:34.738268 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:23:34.745585 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:23:34.745599 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:23:34.751799 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:23:34.751813 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:23:34.757091 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:23:34.757104 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:23:34.762323 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:23:34.762337 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:23:34.767355 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:23:34.767369 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:23:34.772588 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:23:34.772601 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:23:34.780272 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:23:34.780283 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:23:34.785531 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:23:34.785545 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:23:34.790710 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:23:34.790723 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:23:34.795956 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:23:34.795966 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:23:34.802738 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:23:34.802752 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:23:34.807826 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:23:34.807837 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:23:34.812958 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:23:34.812970 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:23:34.818274 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:23:34.818288 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:23:34.824836 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:23:34.824848 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:23:34.831061 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:23:34.831074 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:23:34.837164 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:23:34.837177 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:23:34.844221 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:23:34.844234 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:23:34.850785 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:23:34.850797 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:23:34.856287 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:23:34.856299 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:23:34.861784 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:23:34.861794 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:23:34.867197 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:23:34.867220 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:23:34.872817 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:23:34.872833 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:23:34.878100 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:23:34.878111 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:23:34.883325 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:23:34.883335 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:23:34.888582 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:23:34.894833 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-Xn3ZdbWxSc3N79cWmx48Ht, x-request-id: 01a1e863-c2ab-7f5e-b540-1ad7508624ac, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 252.0ms, total_latency: 252.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:23:34.894873 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-Xn3ZdbWxSc3N79cWmx48Ht, released_swa=0, free_swa=3
+I20261117 15:24:14.526046 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:24:14.531517 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:24:14.531529 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:24:14.536952 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:24:14.536963 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:24:14.543560 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:24:14.543571 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:24:14.548818 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:24:14.548832 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:24:14.553912 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:24:14.553927 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:24:14.560200 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:24:14.560212 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:24:14.565536 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:24:14.565548 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:24:14.572294 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:24:14.572309 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:24:14.579581 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:24:14.579594 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:24:14.584857 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:24:14.584873 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:24:14.591549 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:24:14.591562 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:24:14.597914 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:24:14.597925 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:24:14.604558 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:24:14.604573 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:24:14.611049 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:24:14.611063 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:24:14.617928 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:24:14.617939 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:24:14.623281 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:24:14.623291 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:24:14.628665 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:24:14.628679 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:24:14.634900 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:24:14.634912 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:24:14.641852 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:24:14.641867 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:24:14.647251 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:24:14.647264 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:24:14.654845 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:24:14.654861 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:24:14.661911 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:24:14.661924 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:24:14.667205 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:24:14.667219 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:24:14.672492 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:24:14.672505 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:24:14.678188 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:24:14.678200 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:24:14.684520 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:24:14.684532 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:24:14.689782 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:24:14.689795 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:24:14.696501 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:24:14.696514 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:24:14.702139 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:24:14.702152 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:24:14.707427 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:24:14.707436 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:24:14.712694 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:24:14.712706 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:24:14.719250 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:24:14.719262 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:24:14.726102 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:24:14.726117 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:24:14.731470 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:24:14.731492 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:24:14.736785 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:24:14.736799 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:24:14.742007 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:24:14.742019 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:24:14.747627 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:24:14.747640 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:24:14.754400 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:24:14.754415 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:24:14.761269 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:24:14.761281 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:24:14.767781 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:24:14.775120 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-db7HXrifkWhzoyx3sBg6JJ, x-request-id: 01a1e864-5f2c-7b9f-9229-99f5fb92a37b, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.0ms, ttft: 253.0ms, total_latency: 253.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:24:14.775146 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-db7HXrifkWhzoyx3sBg6JJ, released_swa=0, free_swa=3
+I20261117 15:24:20.244323 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:24:20.249764 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:24:20.249776 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:24:20.255960 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:24:20.255972 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:24:20.262650 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:24:20.262663 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:24:20.267838 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:24:20.267851 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:24:20.273038 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:24:20.273051 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:24:20.278121 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:24:20.278133 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:24:20.283317 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:24:20.283332 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:24:20.288429 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:24:20.288441 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:24:20.294920 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:24:20.294935 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:24:20.301602 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:24:20.301615 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:24:20.306708 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:24:20.306720 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:24:20.311892 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:24:20.311903 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:24:20.317159 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:24:20.317169 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:24:20.323333 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:24:20.323346 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:24:20.330114 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:24:20.330127 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:24:20.335320 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:24:20.335332 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:24:20.340404 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:24:20.340415 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:24:20.345568 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:24:20.345580 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:24:20.350608 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:24:20.350621 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:24:20.355989 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:24:20.356002 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:24:20.362368 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:24:20.362381 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:24:20.367610 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:24:20.367625 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:24:20.372840 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:24:20.372852 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:24:20.378127 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:24:20.378142 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:24:20.383730 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:24:20.383745 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:24:20.388855 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:24:20.388866 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:24:20.393963 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:24:20.393975 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:24:20.399226 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:24:20.399238 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:24:20.404825 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:24:20.404839 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:24:20.410956 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:24:20.410969 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:24:20.416179 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:24:20.416191 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:24:20.421442 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:24:20.421453 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:24:20.427026 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:24:20.427037 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:24:20.432358 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:24:20.432370 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:24:20.437736 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:24:20.437749 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:24:20.443041 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:24:20.443053 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:24:20.448601 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:24:20.448616 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:24:20.454449 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:24:20.454463 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:24:20.459841 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:24:20.459854 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:24:20.465237 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:24:20.471132 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-ssWQ2Y7Uj2mFSvCAQipa2i, x-request-id: 01a1e864-7584-7fb8-9444-3d1d0564c052, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.6ms, ttft: 231.0ms, total_latency: 231.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:24:20.471176 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-ssWQ2Y7Uj2mFSvCAQipa2i, released_swa=0, free_swa=3
+I20261117 15:24:26.094662 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:24:26.100337 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:24:26.100354 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:24:26.106668 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:24:26.106683 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:24:26.113366 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:24:26.113380 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:24:26.118840 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:24:26.118853 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:24:26.124163 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:24:26.124174 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:24:26.129500 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:24:26.129513 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:24:26.134730 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:24:26.134742 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:24:26.139995 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:24:26.140007 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:24:26.146567 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:24:26.146587 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:24:26.152642 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:24:26.152653 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:24:26.157655 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:24:26.157666 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:24:26.164129 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:24:26.164146 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:24:26.169184 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:24:26.169196 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:24:26.174399 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:24:26.174413 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:24:26.181149 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:24:26.181164 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:24:26.186314 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:24:26.186326 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:24:26.191399 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:24:26.191411 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:24:26.196473 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:24:26.196484 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:24:26.201485 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:24:26.201500 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:24:26.206712 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:24:26.206722 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:24:26.212910 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:24:26.212924 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:24:26.218007 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:24:26.218019 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:24:26.223152 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:24:26.223163 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:24:26.228363 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:24:26.228376 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:24:26.234814 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:24:26.234828 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:24:26.240015 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:24:26.240026 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:24:26.245061 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:24:26.245074 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:24:26.250319 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:24:26.250332 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:24:26.255887 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:24:26.255899 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:24:26.261137 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:24:26.261149 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:24:26.266311 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:24:26.266324 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:24:26.271526 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:24:26.271538 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:24:26.276954 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:24:26.276966 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:24:26.282181 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:24:26.282193 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:24:26.287487 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:24:26.287499 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:24:26.292660 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:24:26.292671 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:24:26.298103 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:24:26.298115 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:24:26.303335 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:24:26.303346 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:24:26.308444 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:24:26.308455 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:24:26.313597 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:24:26.320750 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-9Er85MWpczZjwvcbYizoWb, x-request-id: 01a1e864-8ba6-7823-aa11-b6d7f5c0dbd5, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.5ms, ttft: 230.0ms, total_latency: 230.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:24:26.320775 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-9Er85MWpczZjwvcbYizoWb, released_swa=0, free_swa=3
+I20261117 15:24:31.732911 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:24:31.741190 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:24:31.741201 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:24:31.746411 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:24:31.746425 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:24:31.753422 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:24:31.753434 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:24:31.758569 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:24:31.758580 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:24:31.763643 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:24:31.763654 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:24:31.768599 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:24:31.768610 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:24:31.773638 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:24:31.773658 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:24:31.778606 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:24:31.778618 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:24:31.784948 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:24:31.784960 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:24:31.789980 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:24:31.789994 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:24:31.795039 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:24:31.795051 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:24:31.800189 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:24:31.800201 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:24:31.805274 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:24:31.805287 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:24:31.811115 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:24:31.811127 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:24:31.817850 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:24:31.817862 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:24:31.823041 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:24:31.823055 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:24:31.827994 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:24:31.828006 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:24:31.832955 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:24:31.832966 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:24:31.837888 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:24:31.837898 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:24:31.843029 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:24:31.843041 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:24:31.849221 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:24:31.849232 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:24:31.854290 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:24:31.854300 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:24:31.859321 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:24:31.859335 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:24:31.864418 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:24:31.864429 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:24:31.871121 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:24:31.871133 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:24:31.876155 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:24:31.876170 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:24:31.882527 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:24:31.882542 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:24:31.887455 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:24:31.887468 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:24:31.892956 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:24:31.892970 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:24:31.897994 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:24:31.898006 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:24:31.903148 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:24:31.903159 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:24:31.908231 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:24:31.908243 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:24:31.913516 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:24:31.913532 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:24:31.918618 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:24:31.918629 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:24:31.923774 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:24:31.923785 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:24:31.928900 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:24:31.928910 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:24:31.934535 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:24:31.934547 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:24:31.939613 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:24:31.939625 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:24:31.944651 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:24:31.944664 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:24:31.949709 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:24:31.955425 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-ZpSZDP6V5LDxXEc8fkrPrz, x-request-id: 01a1e864-a265-7a77-b0e8-ab5c427f0281, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.5ms, ttft: 227.0ms, total_latency: 227.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:24:31.955451 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-ZpSZDP6V5LDxXEc8fkrPrz, released_swa=0, free_swa=3
+I20261117 15:24:37.390292 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:24:37.396008 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:24:37.396021 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:24:37.401546 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:24:37.401559 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:24:37.408178 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:24:37.408193 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:24:37.413661 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:24:37.413673 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:24:37.418990 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:24:37.419013 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:24:37.424206 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:24:37.424218 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:24:37.429550 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:24:37.429563 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:24:37.434990 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:24:37.435004 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:24:37.441589 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:24:37.441601 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:24:37.447016 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:24:37.447026 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:24:37.452342 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:24:37.452353 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:24:37.458170 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:24:37.458187 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:24:37.463469 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:24:37.463480 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:24:37.471110 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:24:37.471123 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:24:37.477952 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:24:37.477965 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:24:37.483403 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:24:37.483414 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:24:37.491079 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:24:37.491094 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:24:37.498114 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:24:37.498127 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:24:37.503319 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:24:37.503332 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:24:37.508735 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:24:37.508746 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:24:37.515213 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:24:37.515228 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:24:37.520653 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:24:37.520666 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:24:37.526043 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:24:37.526053 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:24:37.531510 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:24:37.531522 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:24:37.537375 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:24:37.537387 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:24:37.542644 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:24:37.542658 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:24:37.547904 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:24:37.547914 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:24:37.553295 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:24:37.553308 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:24:37.560776 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:24:37.560788 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:24:37.566107 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:24:37.566118 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:24:37.571492 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:24:37.571506 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:24:37.577438 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:24:37.577450 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:24:37.583103 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:24:37.583117 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:24:37.588434 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:24:37.588449 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:24:37.594888 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:24:37.594904 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:24:37.600385 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:24:37.600399 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:24:37.606243 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:24:37.606257 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:24:37.611785 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:24:37.611797 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:24:37.617208 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:24:37.617220 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:24:37.622692 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:24:37.630220 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-RpFi4o9EemWLGLY5ZfkLSD, x-request-id: 01a1e864-b87f-7caa-94e4-2e96417b908e, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.9ms, ttft: 244.0ms, total_latency: 244.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:24:37.630259 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-RpFi4o9EemWLGLY5ZfkLSD, released_swa=0, free_swa=3
+I20261117 15:25:49.916000 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:25:49.921442 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:25:49.921454 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:25:49.926867 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:25:49.926878 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:25:49.933447 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:25:49.933459 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:25:49.938627 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:25:49.938639 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:25:49.943709 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:25:49.943719 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:25:49.948766 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:25:49.948777 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:25:49.955919 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:25:49.955931 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:25:49.961504 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:25:49.961516 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:25:49.967940 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:25:49.967953 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:25:49.973140 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:25:49.973151 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:25:49.980069 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:25:49.980082 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:25:49.988739 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:25:49.988752 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:25:49.994045 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:25:49.994056 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:25:49.999374 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:25:49.999388 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:25:50.006176 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:25:50.006188 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:25:50.011546 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:25:50.011560 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:25:50.016863 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:25:50.016877 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:25:50.022204 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:25:50.022217 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:25:50.027670 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:25:50.027683 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:25:50.033648 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:25:50.033659 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:25:50.040004 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:25:50.040016 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:25:50.045333 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:25:50.045344 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:25:50.050621 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:25:50.050649 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:25:50.055985 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:25:50.055998 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:25:50.061690 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:25:50.061702 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:25:50.066936 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:25:50.066948 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:25:50.072172 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:25:50.072186 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:25:50.077631 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:25:50.077642 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:25:50.085112 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:25:50.085127 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:25:50.090512 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:25:50.090523 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:25:50.095942 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:25:50.095955 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:25:50.101441 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:25:50.101455 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:25:50.107091 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:25:50.107103 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:25:50.112527 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:25:50.112538 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:25:50.118003 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:25:50.118016 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:25:50.123427 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:25:50.123442 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:25:50.131788 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:25:50.131799 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:25:50.137202 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:25:50.137211 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:25:50.142571 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:25:50.142584 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:25:50.148002 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:25:50.153774 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-bGkDb5pwrbWyVwaJdwQKT3, x-request-id: 01a1e865-d30c-7e9d-9394-1cfa5d99d6a4, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.1ms, ttft: 241.0ms, total_latency: 241.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:25:50.153800 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-bGkDb5pwrbWyVwaJdwQKT3, released_swa=0, free_swa=3
+I20261117 15:25:50.371300 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:25:50.378491 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:25:50.378506 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:25:50.384016 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:25:50.384027 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:25:50.390758 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:25:50.390770 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:25:50.396217 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:25:50.396229 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:25:50.401506 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:25:50.401518 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:25:50.407943 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:25:50.407958 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:25:50.413260 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:25:50.413271 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:25:50.418639 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:25:50.418653 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:25:50.425242 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:25:50.425256 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:25:50.430620 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:25:50.430634 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:25:50.435981 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:25:50.435995 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:25:50.441315 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:25:50.441327 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:25:50.446668 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:25:50.446681 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:25:50.452075 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:25:50.452088 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:25:50.458873 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:25:50.458886 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:25:50.464311 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:25:50.464321 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:25:50.469596 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:25:50.469609 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:25:50.475020 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:25:50.475034 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:25:50.480284 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:25:50.480296 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:25:50.485719 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:25:50.485730 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:25:50.492231 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:25:50.492252 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:25:50.499236 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:25:50.499249 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:25:50.504796 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:25:50.504817 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:25:50.510212 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:25:50.510224 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:25:50.516043 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:25:50.516058 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:25:50.521405 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:25:50.521420 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:25:50.526722 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:25:50.526734 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:25:50.532112 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:25:50.532124 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:25:50.537874 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:25:50.537887 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:25:50.543332 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:25:50.543347 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:25:50.548731 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:25:50.548741 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:25:50.554150 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:25:50.554162 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:25:50.559862 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:25:50.559875 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:25:50.565514 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:25:50.565526 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:25:50.571086 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:25:50.571098 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:25:50.576514 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:25:50.576529 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:25:50.582365 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:25:50.582376 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:25:50.587816 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:25:50.587829 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:25:50.593183 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:25:50.593197 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:25:50.598656 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:25:50.606164 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-LucS9FZuZDCSAzHrut5Fzw, x-request-id: 01a1e865-d59e-716b-9485-f7fca12e3c93, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.4ms, ttft: 239.0ms, total_latency: 239.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:25:50.606199 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-LucS9FZuZDCSAzHrut5Fzw, released_swa=0, free_swa=3
+I20261117 15:25:50.817071 26643 api_service.cpp:1659] Starting profiler.
+I20261117 15:25:50.817108 26643 llm_engine.cpp:1754] Starting profiler on 8 worker(s).
+I20261117 15:25:50.817303 24586 worker_impl.cpp:1957] Starting profiling with backend: torch
+ERROR: External init callback must run in same thread as registerClient (1803544128 != -613459392)
+I20261117 15:25:51.351816 24836 torch_profiler.cpp:149] Refreshed 0 native MUSA graphs for profiler kernel visibility
+I20261117 15:25:51.351838 24836 torch_profiler.cpp:154] Torch profiler started (in-process Kineto). The trace will be written on /stop_profile; no external profiler is required.
+I20261117 15:25:51.357095 26643 api_service.cpp:1665] Profiler started.
+I20261117 15:25:52.704456 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:25:56.404937 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:25:56.405614 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:25:56.538950 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:25:56.538977 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:25:58.421999 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:25:58.422035 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:25:58.441134 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:25:58.441149 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:25:58.459674 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:25:58.459688 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:25:58.478482 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:25:58.478497 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:25:58.497328 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:25:58.497345 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:25:58.517282 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:25:58.517297 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:25:58.541244 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:25:58.541258 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:25:58.559455 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:25:58.559469 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:25:58.577805 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:25:58.577821 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:25:58.596926 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:25:58.596940 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:25:58.615579 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:25:58.615593 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:25:58.633972 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:25:58.633986 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:25:58.657562 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:25:58.657581 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:25:58.675700 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:25:58.675716 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:25:58.693806 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:25:58.693822 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:25:58.711972 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:25:58.711987 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:25:58.730254 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:25:58.730269 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:25:58.748744 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:25:58.748759 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:25:59.260941 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:25:59.260969 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:25:59.279239 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:25:59.279253 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:25:59.297575 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:25:59.297590 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:25:59.316377 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:25:59.316393 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:25:59.337273 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:25:59.337289 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:25:59.355865 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:25:59.355880 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:25:59.375226 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:25:59.375240 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:25:59.393832 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:25:59.393847 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:25:59.414942 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:25:59.414958 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:25:59.433168 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:25:59.433183 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:25:59.451561 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:25:59.451576 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:25:59.470011 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:25:59.470023 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:25:59.490775 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:25:59.490801 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:25:59.509298 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:25:59.509315 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:25:59.528396 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:25:59.528412 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:25:59.546893 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:25:59.546906 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:25:59.569813 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:25:59.569830 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:25:59.639684 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:25:59.639712 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:25:59.658265 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:25:59.658282 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:25:59.676991 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:26:01.311059 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-SJq9CinRGV28Ho6SrTAG3A, x-request-id: 01a1e865-da63-7124-bd2e-96a8d0542bc9, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.0ms, ttft: 9722.0ms, total_latency: 9722.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:26:01.311097 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-SJq9CinRGV28Ho6SrTAG3A, released_swa=0, free_swa=3
+I20261117 15:26:01.313731 27123 api_service.cpp:1695] Stopping profiler.
+I20261117 15:26:01.313766 27123 llm_engine.cpp:1778] Stopping profiler on 8 worker(s).
+I20261117 15:26:01.313910 24585 worker_impl.cpp:2005] Stopping profiling with backend: torch
+I20261117 15:26:01.796272 24836 torch_profiler.cpp:201] Restored 0 native MUSA graph execs after profiling
+I20261117 15:26:01.796327 24836 torch_profiler.cpp:206] Torch profiler stopped. Trace written to: /expt/profiling/p53_rope_qdq_off_v1/sj9/xllm_rank0_22896_1794900361313.pt.trace.json
+I20261117 15:26:01.844599 27123 api_service.cpp:1701] Profiler stopped.
+I20261117 15:26:07.184752 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=0 q=256 kv=256
+I20261117 15:26:07.190452 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=0 q=256 kv=256
+I20261117 15:26:07.190464 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=1 q=256 kv=256
+I20261117 15:26:07.196082 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=1 q=256 kv=256
+I20261117 15:26:07.196095 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=2 q=256 kv=256
+I20261117 15:26:07.203084 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=2 q=256 kv=256
+I20261117 15:26:07.203097 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=3 q=256 kv=256
+I20261117 15:26:07.208711 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=3 q=256 kv=256
+I20261117 15:26:07.208726 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=4 q=256 kv=256
+I20261117 15:26:07.214115 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=4 q=256 kv=256
+I20261117 15:26:07.214128 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=5 q=256 kv=256
+I20261117 15:26:07.220118 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=5 q=256 kv=256
+I20261117 15:26:07.220132 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=6 q=256 kv=256
+I20261117 15:26:07.225666 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=6 q=256 kv=256
+I20261117 15:26:07.225680 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=7 q=256 kv=256
+I20261117 15:26:07.231104 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=7 q=256 kv=256
+I20261117 15:26:07.231118 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=8 q=256 kv=256
+I20261117 15:26:07.237738 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=8 q=256 kv=256
+I20261117 15:26:07.237754 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=9 q=256 kv=256
+I20261117 15:26:07.243163 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=9 q=256 kv=256
+I20261117 15:26:07.243188 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=10 q=256 kv=256
+I20261117 15:26:07.248553 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=10 q=256 kv=256
+I20261117 15:26:07.248565 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=11 q=256 kv=256
+I20261117 15:26:07.254035 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=11 q=256 kv=256
+I20261117 15:26:07.254047 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=12 q=256 kv=256
+I20261117 15:26:07.259637 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=12 q=256 kv=256
+I20261117 15:26:07.259651 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=13 q=256 kv=256
+I20261117 15:26:07.265024 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=13 q=256 kv=256
+I20261117 15:26:07.265036 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=14 q=256 kv=256
+I20261117 15:26:07.271837 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=14 q=256 kv=256
+I20261117 15:26:07.271850 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=15 q=256 kv=256
+I20261117 15:26:07.276988 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=15 q=256 kv=256
+I20261117 15:26:07.276999 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=16 q=256 kv=256
+I20261117 15:26:07.282023 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=16 q=256 kv=256
+I20261117 15:26:07.282034 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=17 q=256 kv=256
+I20261117 15:26:07.287221 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=17 q=256 kv=256
+I20261117 15:26:07.287236 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=18 q=256 kv=256
+I20261117 15:26:07.292343 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=18 q=256 kv=256
+I20261117 15:26:07.292358 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=19 q=256 kv=256
+I20261117 15:26:07.297477 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=19 q=256 kv=256
+I20261117 15:26:07.297488 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=20 q=256 kv=256
+I20261117 15:26:07.303810 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=20 q=256 kv=256
+I20261117 15:26:07.303825 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=21 q=256 kv=256
+I20261117 15:26:07.308924 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=21 q=256 kv=256
+I20261117 15:26:07.308938 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=22 q=256 kv=256
+I20261117 15:26:07.314015 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=22 q=256 kv=256
+I20261117 15:26:07.314028 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=23 q=256 kv=256
+I20261117 15:26:07.319114 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=23 q=256 kv=256
+I20261117 15:26:07.319128 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=24 q=256 kv=256
+I20261117 15:26:07.324700 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=24 q=256 kv=256
+I20261117 15:26:07.324714 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=25 q=256 kv=256
+I20261117 15:26:07.330041 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=25 q=256 kv=256
+I20261117 15:26:07.330053 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=26 q=256 kv=256
+I20261117 15:26:07.335041 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=26 q=256 kv=256
+I20261117 15:26:07.335054 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=27 q=256 kv=256
+I20261117 15:26:07.340104 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=27 q=256 kv=256
+I20261117 15:26:07.340117 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=28 q=256 kv=256
+I20261117 15:26:07.345650 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=28 q=256 kv=256
+I20261117 15:26:07.345664 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=29 q=256 kv=256
+I20261117 15:26:07.350798 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=29 q=256 kv=256
+I20261117 15:26:07.350809 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=30 q=256 kv=256
+I20261117 15:26:07.355912 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=30 q=256 kv=256
+I20261117 15:26:07.355926 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=31 q=256 kv=256
+I20261117 15:26:07.361063 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=31 q=256 kv=256
+I20261117 15:26:07.361076 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=32 q=256 kv=256
+I20261117 15:26:07.366384 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=32 q=256 kv=256
+I20261117 15:26:07.366396 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=33 q=256 kv=256
+I20261117 15:26:07.371414 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=33 q=256 kv=256
+I20261117 15:26:07.371426 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=34 q=256 kv=256
+I20261117 15:26:07.376672 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=34 q=256 kv=256
+I20261117 15:26:07.376686 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=35 q=256 kv=256
+I20261117 15:26:07.381697 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=35 q=256 kv=256
+I20261117 15:26:07.381709 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=36 q=256 kv=256
+I20261117 15:26:07.387027 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=36 q=256 kv=256
+I20261117 15:26:07.387040 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=37 q=256 kv=256
+I20261117 15:26:07.392259 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=37 q=256 kv=256
+I20261117 15:26:07.392274 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=38 q=256 kv=256
+I20261117 15:26:07.397431 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=38 q=256 kv=256
+I20261117 15:26:07.397445 24836 text_model.h:246] V41_DIAGNOSTIC layer begin index=39 q=256 kv=256
+I20261117 15:26:07.402617 24836 text_model.h:274] V41_DIAGNOSTIC layer enqueued index=39 q=256 kv=256
+I20261117 15:26:07.408762 28489 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-12481178814234374860-uhTKwygoRccRKgmA68uuSm, x-request-id: 01a1e866-173a-7f41-9884-1b67f15862c0, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.3ms, ttft: 235.0ms, total_latency: 235.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 8, temperature: 0, num_prefix_cache_tokens: 0
+I20261117 15:26:07.408804 28489 disagg_pd_scheduler.cpp:1009] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-12481178814234374860-uhTKwygoRccRKgmA68uuSm, released_swa=0, free_swa=3
+I20261117 15:27:18.826259 22896 xllm_server.cpp:183]      Shutting down
+I20261117 15:27:18.826306 22896 xllm_server.cpp:184]      Waiting for application shutdown.
+I20261117 15:27:18.826311 22896 server.cpp:1260] Server[xllm::APIService] is going to quit
+I20261117 15:27:18.826552 22896 xllm_server.cpp:188]      Application shutdown complete.
+I20261117 15:27:18.826556 22896 xllm_server.cpp:189]      Finished server process [22896]
+I20261117 15:27:18.826640 22896 llm_master.cpp:151] LLMMaster stopping...
+I20261117 15:27:18.950901 22896 server.cpp:1260] Server[xllm::DisaggPDService] is going to quit
+I20261117 15:27:18.951236 22896 xllm_server_registry.cpp:38] Unregister server DisaggPDServer0.
+I20261117 15:27:19.344535 22896 server.cpp:1260] Server[xllm::CollectiveService] is going to quit
+I20261117 15:27:19.344689 22896 xllm_server_registry.cpp:38] Unregister server CollectiveServer0.
+I20261117 15:27:19.345150 22896 server.cpp:1260] Server[xllm::WorkerService] is going to quit
+I20261117 15:27:19.345338 22896 xllm_server_registry.cpp:38] Unregister server DistributeWorkerServer0.

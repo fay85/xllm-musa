@@ -1,0 +1,1 @@
+{"pid": 1666, "start_ticks": "525738714", "command": ["python3", "/expt/scripts/validate_v41_rope_qdq_v1.py", "--output", "/expt/diagnostics/e53_rope_qdq_gpu_v1/result.json"]}

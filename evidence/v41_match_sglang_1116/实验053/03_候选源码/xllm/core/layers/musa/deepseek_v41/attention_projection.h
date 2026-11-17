@@ -1,0 +1,309 @@
+/* Copyright 2026 The xLLM Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+==============================================================================*/
+#pragma once
+
+#include <glog/logging.h>
+#include <torch/torch.h>
+#include <torch/utils.h>
+
+#include <cmath>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "core/kernels/musa/deepseek_v4_dsa_rope.h"
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
+#include "core/layers/musa/deepseek_v41/feed_forward.h"
+#include "core/layers/musa/deepseek_v41/rms_norm.h"
+
+namespace xllm::layer {
+
+// Native V4.1 query/SWA-KV preparation and grouped output projection. The
+// decoder/backend owns cache writes, compressor/indexer, and TP all-reduce.
+// Default QDQ/BF16 and explicit original-FP8 projections share cache semantics.
+class DeepseekV41AttentionProjection final {
+ public:
+  // Weights: wq_a, q_norm, wq_b, wkv, kv_norm, grouped_wo_a, wo_b.
+  DeepseekV41AttentionProjection(
+      std::vector<torch::Tensor> weights,
+      int64_t heads,
+      int64_t groups,
+      int64_t output_rank,
+      double epsilon,
+      bool original_fp8_activation,
+      bool decode_packed_qkv = false,
+      bool verify_skinny_projection = false,
+      const std::vector<torch::Tensor>& fp8_scales = {},
+      const std::string& prequant_directory = {},
+      bool direct_rope_table = false,
+      bool fused_rope_qdq = false)
+      : weights_(check_weights(std::move(weights), fp8_scales)),
+        q_a_(weights_[0],
+             original_fp8_activation,
+             false,
+             projection_scale(fp8_scales, 0),
+             prequant_directory),
+        q_b_(weights_[2],
+             original_fp8_activation,
+             false,
+             projection_scale(fp8_scales, 2),
+             prequant_directory),
+        kv_(weights_[3],
+            original_fp8_activation,
+            verify_skinny_projection,
+            projection_scale(fp8_scales, 3),
+            prequant_directory),
+        o_b_(weights_[6],
+             original_fp8_activation,
+             false,
+             projection_scale(fp8_scales, 6),
+             prequant_directory),
+        heads_(heads),
+        groups_(groups),
+        output_rank_(output_rank),
+        epsilon_(epsilon),
+        original_fp8_activation_(original_fp8_activation),
+        direct_rope_table_(direct_rope_table),
+        fused_rope_qdq_(fused_rope_qdq) {
+    CHECK(!fused_rope_qdq_ || (direct_rope_table_ && original_fp8_activation_));
+    CHECK_GT(heads_, 0);
+    CHECK_GT(groups_, 0);
+    CHECK_EQ(heads_ % groups_, 0);
+    CHECK_GT(output_rank_, 0);
+    CHECK(std::isfinite(epsilon_) && epsilon_ > 0.0);
+    CHECK_EQ(weights_[0].dim(), 2);
+    CHECK_EQ(weights_[1].dim(), 1);
+    CHECK_EQ(weights_[1].size(0), weights_[0].size(0));
+    CHECK_EQ(weights_[2].dim(), 2);
+    CHECK_EQ(weights_[2].size(1), weights_[0].size(0));
+    CHECK_EQ(weights_[3].dim(), 2);
+    CHECK_EQ(weights_[3].size(1), weights_[0].size(1));
+    head_dim_ = weights_[3].size(0);
+    CHECK_GT(head_dim_, 0);
+    CHECK_EQ(weights_[2].size(0), heads_ * head_dim_);
+    CHECK_EQ(weights_[4].dim(), 1);
+    CHECK_EQ(weights_[4].size(0), head_dim_);
+    CHECK_EQ(weights_[5].sizes(),
+             torch::IntArrayRef(
+                 {groups_ * output_rank_, heads_ * head_dim_ / groups_}));
+    CHECK_EQ(weights_[6].sizes(),
+             torch::IntArrayRef({weights_[0].size(1), groups_ * output_rank_}));
+    CHECK(!original_fp8_activation_ || head_dim_ % 32 == 0);
+    CHECK(fp8_scales.empty() || !decode_packed_qkv)
+        << "FP8 projection candidate uses separate Q-A and KV allocations";
+    if (decode_packed_qkv) {
+      packed_qkv_ = std::make_unique<DeepseekV41Dense>(
+          torch::cat({weights_[0], weights_[3]}, 0).contiguous(),
+          original_fp8_activation_);
+    }
+  }
+
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> prepare(
+      const torch::Tensor& hidden,
+      const torch::Tensor& positions,
+      const torch::Tensor& table) const {
+    check_hidden(hidden);
+    check_rotary(positions, table, hidden.size(0));
+    torch::DeviceGuard guard(hidden.device());
+    torch::Tensor qr;
+    torch::Tensor key;
+    if (packed_qkv_ != nullptr && hidden.size(0) == 1) {
+      const torch::Tensor packed = packed_qkv_->forward(hidden);
+      qr = norm(packed.narrow(1, 0, weights_[0].size(0)), weights_[1]);
+      key = norm(packed.narrow(1, weights_[0].size(0), head_dim_), weights_[4]);
+    } else {
+      qr = norm(q_a_.forward(hidden), weights_[1]);
+      key = norm(kv_.forward(hidden), weights_[4]);
+    }
+    const torch::Tensor query =
+        q_b_.forward(qr).view({hidden.size(0), heads_, head_dim_});
+    return {rope(query, positions, table, /*inverse=*/false),
+            quantized_rope(key, positions, table, /*inverse=*/false),
+            qr};
+  }
+
+  torch::Tensor prepare_context_kv(const torch::Tensor& hidden,
+                                   const torch::Tensor& positions,
+                                   const torch::Tensor& table) const {
+    check_hidden(hidden);
+    check_rotary(positions, table, hidden.size(0));
+    torch::DeviceGuard guard(hidden.device());
+    const torch::Tensor key = norm(kv_.forward(hidden), weights_[4]);
+    return quantized_rope(key, positions, table, /*inverse=*/false);
+  }
+
+  torch::Tensor project_output(const torch::Tensor& attention,
+                               const torch::Tensor& positions,
+                               const torch::Tensor& table) const {
+    CHECK(attention.defined());
+    CHECK_EQ(attention.device(), weights_[0].device());
+    CHECK_EQ(attention.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(attention.dim(), 3);
+    CHECK_EQ(attention.size(1), heads_);
+    CHECK_EQ(attention.size(2), head_dim_);
+    check_rotary(positions, table, attention.size(0));
+    torch::DeviceGuard guard(attention.device());
+    if (attention.size(0) == 0) {
+      return torch::empty({0, weights_[0].size(1)}, attention.options());
+    }
+    const torch::Tensor value =
+        quantized_rope(attention, positions, table, /*inverse=*/true)
+            .view({attention.size(0), groups_, heads_ * head_dim_ / groups_});
+    const torch::Tensor grouped_weight =
+        weights_[5].view({groups_, output_rank_, heads_ * head_dim_ / groups_});
+    torch::Tensor low;
+    if (value.size(0) == 1 && groups_ == 1 && value.size(2) == 4096 &&
+        output_rank_ == 1024) {
+      // Same BF16 carrier and shape as the delivered SGLang split-K GEMV.
+      // Activation QDQ above remains in place; select before any execution.
+      low = kernel::musa::deepseek_v4_wo_a_m1(
+          value.contiguous(), grouped_weight, torch::Tensor{});
+      CHECK(low.defined()) << "Validated V4.1 wo_a M1 contract was rejected";
+    } else {
+      low = torch::einsum("tgd,grd->tgr", {value, grouped_weight});
+    }
+    return o_b_.forward(
+        low.reshape({attention.size(0), groups_ * output_rank_}));
+  }
+
+ private:
+  static std::vector<torch::Tensor> check_weights(
+      std::vector<torch::Tensor> weights,
+      const std::vector<torch::Tensor>& fp8_scales) {
+    CHECK_EQ(weights.size(), 7);
+    CHECK(fp8_scales.empty() || fp8_scales.size() == 7);
+    CHECK(weights[0].defined());
+    CHECK(weights[0].device().type() == torch::kPrivateUse1);
+    for (size_t index = 0; index < weights.size(); ++index) {
+      const torch::Tensor& weight = weights[index];
+      CHECK(weight.defined());
+      CHECK_EQ(weight.device(), weights[0].device());
+      const bool fp8 = !fp8_scales.empty() &&
+                       (index == 0 || index == 2 || index == 3 || index == 6);
+      CHECK_EQ(weight.scalar_type(),
+               fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16);
+      CHECK(fp8_scales.empty() || fp8_scales[index].defined() == fp8);
+      CHECK(weight.is_contiguous());
+      CHECK_GT(weight.numel(), 0);
+    }
+    return weights;
+  }
+
+  static torch::Tensor projection_scale(
+      const std::vector<torch::Tensor>& scales,
+      size_t index) {
+    return scales.empty() ? torch::Tensor{} : scales[index];
+  }
+
+  void check_hidden(const torch::Tensor& hidden) const {
+    CHECK(hidden.defined());
+    CHECK_EQ(hidden.device(), weights_[0].device());
+    CHECK_EQ(hidden.scalar_type(), torch::kBFloat16);
+    CHECK_EQ(hidden.dim(), 2);
+    CHECK_EQ(hidden.size(1), weights_[0].size(1));
+  }
+
+  void check_rotary(const torch::Tensor& positions,
+                    const torch::Tensor& table,
+                    int64_t rows) const {
+    CHECK(positions.defined() && table.defined());
+    CHECK_EQ(positions.device(), weights_[0].device());
+    CHECK_EQ(table.device(), weights_[0].device());
+    CHECK(positions.scalar_type() == torch::kInt64 ||
+          positions.scalar_type() == torch::kInt32);
+    CHECK_EQ(positions.dim(), 1);
+    CHECK_EQ(positions.numel(), rows);
+    CHECK_EQ(table.dim(), 2);
+    CHECK_EQ(table.scalar_type(), torch::kFloat32);
+    CHECK_GT(table.size(1), 0);
+    CHECK_EQ(table.size(1) % 2, 0);
+    CHECK_LE(table.size(1), head_dim_);
+  }
+
+  torch::Tensor norm(const torch::Tensor& input,
+                     const torch::Tensor& weight) const {
+    return deepseek_v41_rms_norm(input, weight, epsilon_);
+  }
+
+  torch::Tensor quantize(const torch::Tensor& input) const {
+    if (!original_fp8_activation_) {
+      return input;
+    }
+    return std::get<0>(kernel::musa::deepseek_v41_block32_qdq(
+                           input.reshape({-1, input.size(-1)}).contiguous()))
+        .reshape(input.sizes());
+  }
+
+  torch::Tensor quantized_rope(const torch::Tensor& input,
+                               const torch::Tensor& positions,
+                               const torch::Tensor& table,
+                               bool inverse) const {
+    // This is an explicit supported shape selection, never an exception retry.
+    if (fused_rope_qdq_ && input.size(0) > 0 && input.size(0) <= 6 &&
+        input.size(-1) == 512 && table.size(1) % 32 == 0 &&
+        input.is_contiguous() && positions.is_contiguous() &&
+        table.is_contiguous()) {
+      return kernel::musa::deepseek_v41_rope_table_qdq(
+          input, positions, table, inverse);
+    }
+    return quantize(rope(input, positions, table, inverse));
+  }
+
+  torch::Tensor rope(const torch::Tensor& input,
+                     const torch::Tensor& positions,
+                     const torch::Tensor& table,
+                     bool inverse) const {
+    if (input.size(0) == 0) {
+      return input.clone();
+    }
+    // Select before execution. Larger/strided inputs retain the defined
+    // reference path; a selected device kernel failure is never swallowed.
+    if (direct_rope_table_ && input.size(0) <= 6 && input.is_contiguous() &&
+        positions.is_contiguous() && table.is_contiguous()) {
+      return kernel::musa::deepseek_v41_rope_table(
+          input, positions, table, inverse);
+    }
+    const int64_t width = table.size(1);
+    const torch::Tensor rows =
+        table.index_select(0, positions.to(torch::kInt64));
+    const torch::Tensor cosine =
+        rows.narrow(1, 0, width / 2).repeat_interleave(2, -1).contiguous();
+    const torch::Tensor sine = rows.narrow(1, width / 2, width / 2)
+                                   .repeat_interleave(2, -1)
+                                   .contiguous();
+    const torch::Tensor value =
+        input.to(torch::kFloat32)
+            .reshape({input.size(0), -1, input.size(-1)})
+            .contiguous();
+    torch::Tensor output;
+    CHECK(kernel::musa::deepseek_v4_partial_rope(
+        value, cosine, sine, head_dim_ - width, width, inverse, output));
+    return output.reshape(input.sizes()).to(input.scalar_type());
+  }
+
+  std::vector<torch::Tensor> weights_;
+  std::unique_ptr<DeepseekV41Dense> packed_qkv_;
+  DeepseekV41Dense q_a_;
+  DeepseekV41Dense q_b_;
+  DeepseekV41Dense kv_;
+  DeepseekV41Dense o_b_;
+  int64_t heads_;
+  int64_t groups_;
+  int64_t output_rank_;
+  int64_t head_dim_ = 0;
+  double epsilon_;
+  bool original_fp8_activation_;
+  bool direct_rope_table_ = false;
+  bool fused_rope_qdq_ = false;
+};
+
+}  // namespace xllm::layer

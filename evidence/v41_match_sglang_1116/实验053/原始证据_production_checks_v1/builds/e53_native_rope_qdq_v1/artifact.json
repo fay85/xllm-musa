@@ -1,0 +1,8 @@
+{
+  "artifact": "/expt/artifacts/native_sg438_rope_qdq_v1/bin/xllm",
+  "sha256": "b9e480b25f364ee6b7e6b2675ecdf31bfb03039fa9e23909f962d4af96fd5886",
+  "bytes": 341844032,
+  "source_manifest": "/expt/builds/e53_native_rope_qdq_v1/source_manifest.json",
+  "source_parent": "d19631240a283e17295a5823f19e79f8dec6c991",
+  "at": "2026-11-17T14:52:40.635445+08:00"
+}

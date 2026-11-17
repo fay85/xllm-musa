@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"archive\": \"/expt/exports/e53_production_checks_v1.tar.gz\", \"bytes\": 79187, \"sha256\": \"f367408b46d0d20acd29eb0ac731b6607765d83188e5d4a0cdb51d3ec22fb921\", \"at\": \"2026-11-17T15:04:01.002157+08:00\"}\n",
+  "stderr": ""
+}

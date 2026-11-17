@@ -1,0 +1,20 @@
+{
+  "pid": 58039,
+  "start_ticks": "525822631",
+  "at": "2026-11-17T14:49:50.458558+08:00",
+  "cmd": [
+    "bash",
+    "/workspace/xllm-mt-main/scripts/ninja_safe.sh",
+    "/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310",
+    "-f",
+    "build.sg438.ninja",
+    "-j4",
+    "xllm"
+  ],
+  "env": {
+    "PATH": "/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/musa_link_wrapper:/opt/venv/bin:/usr/local/musa/bin:/usr/bin:/bin",
+    "MUSAMAPPING_PATH": "/usr/local/musa/tools/musamapping",
+    "LD_LIBRARY_PATH": "/opt/venv/lib/python3.10/site-packages/torch_musa/lib:/opt/venv/lib/python3.10/site-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/local/openmpi/lib",
+    "LIBRARY_PATH": "/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/xllm/core/layers/musa:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64"
+  }
+}
