@@ -897,6 +897,11 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
   if (!fp8_experts_loaded()) {
     return torch::Tensor();
   }
+  CHECK_EQ(topk_ids.dim(), 2);
+  const int64_t topk = topk_ids.size(1);
+  CHECK_EQ(topk_ids.size(0), input.size(0));
+  CHECK_EQ(topk_weights.sizes(), topk_ids.sizes());
+  CHECK_GT(topk, 0);
   torch::Tensor local_ids = topk_ids.contiguous();
   if (start_expert_id_ != 0 || num_experts_per_rank_ != num_total_experts_) {
     const torch::Tensor valid_ids =
@@ -914,16 +919,16 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
   const torch::Tensor expert_counts = std::get<2>(route_index);
 
   constexpr int64_t kAlignmentM = 128;
-  const int64_t num_assignments = input.size(0) * topk_;
+  const int64_t num_assignments = input.size(0) * topk;
   const int64_t ep_world_size =
       ep_pg_ == nullptr ? 1 : std::max<int64_t>(ep_pg_->world_size(), 1);
   CHECK(!compact_rows || (ep_world_size == 1 && start_expert_id_ == 0 &&
                           num_experts_per_rank_ == num_total_experts_))
       << "Compact grouped FP8 requires all EP1 routes on this rank";
-  const int64_t route_capacity =
-      ep_world_size > 1
-          ? ((num_assignments + ep_world_size - 1) / ep_world_size) * 2
-          : num_assignments;
+  // Every assignment can belong to this rank. In particular, EP dispatch
+  // has already gathered the owned rows here; dividing by EP again silently
+  // truncates concentrated routes in the padded metadata builder.
+  const int64_t route_capacity = num_assignments;
   const int64_t max_active_experts =
       std::min<int64_t>(num_experts_per_rank_, route_capacity);
   const int64_t max_padded_assignments =
@@ -947,7 +952,7 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
           input,
           dst_to_src,
           expert_counts,
-          topk_,
+          topk,
           compact_rows ? 1 : kAlignmentM,
           max_padded_assignments);
 
@@ -1083,17 +1088,12 @@ torch::Tensor RoutedMoeImpl::forward_dispatched_experts(
   }
 
   if (fp8_experts_loaded()) {
-    // EP dispatch carries one assignment per row. Re-express it as a
-    // top-k-shaped grouped-GEMM request so the existing MUSA FP8 path remains
-    // the production compute path; the unused slots use expert zero and have
-    // zero weight.
-    torch::Tensor grouped_ids = torch::zeros(
-        {input.size(0), topk_}, expert_ids.options().dtype(torch::kInt64));
-    grouped_ids.select(/*dim=*/1, /*index=*/0)
-        .copy_(expert_ids.to(torch::kInt64));
-    torch::Tensor grouped_weights = torch::zeros(
-        {input.size(0), topk_}, input.options().dtype(torch::kFloat32));
-    grouped_weights.select(/*dim=*/1, /*index=*/0).fill_(1.0);
+    // Dispatch has expanded top-k into one expert assignment per row.
+    // Preserve that shape: zero-weight dummy routes still consume padded
+    // capacity and can displace real routes on the owner of expert zero.
+    torch::Tensor grouped_ids = expert_ids.to(torch::kInt64).view({-1, 1});
+    torch::Tensor grouped_weights =
+        torch::ones({input.size(0), 1}, input.options().dtype(torch::kFloat32));
     torch::Tensor grouped_output =
         forward_grouped_fp8(input, grouped_ids, grouped_weights);
     if (grouped_output.defined()) {
@@ -1305,11 +1305,11 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
 
   const bool disable_fp8_gemv =
       env_flag_enabled("XLLM_MUSA_MOE_DISABLE_FP8_GEMV", false);
-  const bool use_fp8_gemv = !mega_moe_ && !ep_mate_moe_ && !disable_fp8_gemv &&
-                            input_params.meta.batch_forward_type.is_decode() &&
-                            input_2d.size(0) > 0 &&
-                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
-                            fp8_experts_loaded();
+  const bool use_fp8_gemv =
+      !mega_moe_ && !ep_dispatch_enabled_ && !ep_mate_moe_ &&
+      !disable_fp8_gemv && input_params.meta.batch_forward_type.is_decode() &&
+      input_2d.size(0) > 0 && input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
+      fp8_experts_loaded();
   if (!mega_moe_ && !ep_mate_moe_ && !use_fp8_gemv &&
       weights_2d.scalar_type() != input_2d.scalar_type()) {
     weights_2d = weights_2d.to(input_2d.dtype());
@@ -1355,8 +1355,7 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
         input_2d.size(0) <= kFp8GemvWorkspaceTokens
             ? fp8_gemv_output_workspace_.narrow(0, 0, input_2d.size(0))
             : torch::Tensor());
-  }
-  if (use_fp8_gemv) {
+  } else if (use_fp8_gemv) {
     output = forward_fp8_gemv(input_2d, ids_2d, weights_2d);
   }
 

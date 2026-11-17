@@ -14,8 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <musa_bf16.h>
 
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 #include "core/kernels/musa/mhc_ops.h"
@@ -55,6 +57,74 @@ __global__ void mhc_post_kernel(const scalar_t* __restrict__ x,
   }
   output[(token * hc_mult + stream) * hidden_size + hidden] =
       static_cast<scalar_t>(value);
+}
+
+// Four residual streams share each activation/residual load. One CTA owns
+// [token, hidden tile] and writes all four output streams.
+constexpr int32_t kPostTileThreads = 128;
+constexpr int32_t kPostValuesPerThread = 8;
+constexpr int32_t kPostHiddenTile = kPostTileThreads * kPostValuesPerThread;
+
+union PostBf16Pack {
+  int4 vector;
+  __mt_bfloat16 values[kPostValuesPerThread];
+};
+
+__global__ void mhc_post_2d_kernel(const __mt_bfloat16* __restrict__ x,
+                                   const __mt_bfloat16* __restrict__ residual,
+                                   const float* __restrict__ post,
+                                   const float* __restrict__ comb,
+                                   __mt_bfloat16* __restrict__ output,
+                                   int64_t hidden_size) {
+  const int64_t token = blockIdx.x;
+  const int64_t hidden = static_cast<int64_t>(blockIdx.y) * kPostHiddenTile +
+                         threadIdx.x * kPostValuesPerThread;
+  __shared__ float mixes[20];
+  if (threadIdx.x < 4) {
+    mixes[threadIdx.x] = post[token * 4 + threadIdx.x];
+  } else if (threadIdx.x < 20) {
+    mixes[threadIdx.x] = comb[token * 16 + threadIdx.x - 4];
+  }
+  __syncthreads();
+  if (hidden >= hidden_size) {
+    return;
+  }
+  PostBf16Pack activation;
+  activation.vector =
+      *reinterpret_cast<const int4*>(x + token * hidden_size + hidden);
+  float values[4][kPostValuesPerThread];
+#pragma unroll
+  for (int32_t target = 0; target < 4; ++target) {
+#pragma unroll
+    for (int32_t element = 0; element < kPostValuesPerThread; ++element) {
+      values[target][element] =
+          mixes[target] * __bfloat162float(activation.values[element]);
+    }
+  }
+#pragma unroll
+  for (int32_t source = 0; source < 4; ++source) {
+    PostBf16Pack input;
+    input.vector = *reinterpret_cast<const int4*>(
+        residual + (token * 4 + source) * hidden_size + hidden);
+#pragma unroll
+    for (int32_t target = 0; target < 4; ++target) {
+#pragma unroll
+      for (int32_t element = 0; element < kPostValuesPerThread; ++element) {
+        values[target][element] += mixes[4 + source * 4 + target] *
+                                   __bfloat162float(input.values[element]);
+      }
+    }
+  }
+#pragma unroll
+  for (int32_t target = 0; target < 4; ++target) {
+    PostBf16Pack result;
+#pragma unroll
+    for (int32_t element = 0; element < kPostValuesPerThread; ++element) {
+      result.values[element] = __float2bfloat16_rn(values[target][element]);
+    }
+    *reinterpret_cast<int4*>(output + (token * 4 + target) * hidden_size +
+                             hidden) = result.vector;
+  }
 }
 
 template <typename scalar_t>
@@ -124,20 +194,41 @@ torch::Tensor mhc_post(const torch::Tensor& x,
   torch::Tensor output =
       torch::empty({tokens, hc_mult, hidden_size}, residual_flat.options());
   if (tokens > 0) {
-    const dim3 block(kThreads);
-    const dim3 grid(
-        static_cast<uint32_t>(tokens),
-        static_cast<uint32_t>(hc_mult),
-        static_cast<uint32_t>((hidden_size + kThreads - 1) / kThreads));
-    mhc_post_kernel<c10::BFloat16>
-        <<<grid, block, 0, current_musa_stream(x.device())>>>(
-            x_flat.data_ptr<c10::BFloat16>(),
-            residual_flat.data_ptr<c10::BFloat16>(),
-            post_flat.data_ptr<float>(),
-            comb_flat.data_ptr<float>(),
-            output.data_ptr<c10::BFloat16>(),
-            hc_mult,
-            hidden_size);
+    const bool vector_aligned =
+        reinterpret_cast<uintptr_t>(x_flat.data_ptr()) % alignof(int4) == 0 &&
+        reinterpret_cast<uintptr_t>(residual_flat.data_ptr()) % alignof(int4) ==
+            0;
+    if (hc_mult == 4 && vector_aligned) {
+      const dim3 grid(
+          static_cast<uint32_t>(tokens),
+          static_cast<uint32_t>((hidden_size + kPostHiddenTile - 1) /
+                                kPostHiddenTile));
+      mhc_post_2d_kernel<<<grid,
+                           kPostTileThreads,
+                           0,
+                           current_musa_stream(x.device())>>>(
+          reinterpret_cast<const __mt_bfloat16*>(x_flat.data_ptr()),
+          reinterpret_cast<const __mt_bfloat16*>(residual_flat.data_ptr()),
+          post_flat.data_ptr<float>(),
+          comb_flat.data_ptr<float>(),
+          reinterpret_cast<__mt_bfloat16*>(output.data_ptr()),
+          hidden_size);
+    } else {
+      const dim3 block(kThreads);
+      const dim3 grid(
+          static_cast<uint32_t>(tokens),
+          static_cast<uint32_t>(hc_mult),
+          static_cast<uint32_t>((hidden_size + kThreads - 1) / kThreads));
+      mhc_post_kernel<c10::BFloat16>
+          <<<grid, block, 0, current_musa_stream(x.device())>>>(
+              x_flat.data_ptr<c10::BFloat16>(),
+              residual_flat.data_ptr<c10::BFloat16>(),
+              post_flat.data_ptr<float>(),
+              comb_flat.data_ptr<float>(),
+              output.data_ptr<c10::BFloat16>(),
+              hc_mult,
+              hidden_size);
+    }
     check_musa_kernel_launch("mhc_post");
   }
   return output.reshape(residual.sizes());

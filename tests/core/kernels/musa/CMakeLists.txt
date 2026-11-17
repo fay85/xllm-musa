@@ -115,3 +115,17 @@ cc_test(
   DEPS :musa_layers :common_layers :cuda_kernels :state_dict :parallel_state :kv_cache
        musa_python torch_python Python::Python torch GTest::gtest_main glog::glog
 )
+
+cc_test(
+  NAME fused_swiglu_quant_test
+  SRCS fused_swiglu_quant_test.cpp
+  DEPS :cuda_kernels musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)
+
+cc_test(
+  NAME mhc_norm_fusion_test
+  SRCS mhc_norm_fusion_test.cpp
+  DEPS :cuda_kernels musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)

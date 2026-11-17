@@ -334,9 +334,8 @@ void rescore_top_logits(const torch::Tensor& input,
 // returns the first one, which muDNN does not guarantee.
 bool row_argmax_supported(const torch::Tensor& input);
 
-torch::Tensor row_argmax(
-    const torch::Tensor& input,
-    const torch::Tensor& column_ids = torch::Tensor());
+torch::Tensor row_argmax(const torch::Tensor& input,
+                         const torch::Tensor& column_ids = torch::Tensor());
 
 void register_compact_vocab_column_ids(const torch::Tensor& compact_logits,
                                        const torch::Tensor& column_ids);
@@ -444,10 +443,12 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     int64_t group_size);
 
 // Fuses dense BF16 SwiGLU with group-128 FP8 activation quantization.
+// A finite 0 < swiglu_limit < 1e6 clamps gate above and up on both sides.
 // Returns {q [M,N] e4m3, scale [M,N/128] fp32} for input [M,2N].
 std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
     const torch::Tensor& input,
-    int64_t group_size);
+    int64_t group_size,
+    double swiglu_limit = 0.0);
 
 // Fuses the H=128 gated RMSNorm (rmsnorm(input) * weight * silu(gate)) with
 // group-128 FP8 quantization. `gate` is [rows, 128] or, with arbitrary token

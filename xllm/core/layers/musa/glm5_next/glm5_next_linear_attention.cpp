@@ -119,14 +119,6 @@ void load_conv_linear(ColumnParallelLinear& linear,
   }
 }
 
-torch::Tensor glm5_next_kda_apply_output_gate(
-    const torch::Tensor& normalized,
-    const torch::Tensor& output_gate) {
-  const torch::Tensor gated = normalized.to(torch::kFloat32) *
-                              torch::sigmoid(output_gate.to(torch::kFloat32));
-  return gated.to(normalized.scalar_type());
-}
-
 }  // namespace
 
 Glm5NextLinearAttentionInputProjectionImpl::
@@ -521,12 +513,20 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
     global_hidden_states = parallel_state::gather(
         hidden_states.contiguous(), cp_group_, cp_token_counts);
   }
+  // Keep the collective on its process-group stream.  Once its result is
+  // available, use one concrete compute stream for Torch and the KDA FFI
+  // kernels throughout the local attention calculation.
+  kernel::musa::TvmffiComputeStreamGuard compute_stream_guard(
+      hidden_states.device());
   const int64_t num_tokens = global_hidden_states.size(0);
   torch::Tensor projected = in_proj_qkvbfg_a_->forward(global_hidden_states);
   const auto projections = projected.split_with_sizes(
       {3 * local_projection_size_, local_num_heads_, head_dim_, head_dim_},
       /*dim=*/-1);
-  torch::Tensor mixed_qkv = projections[0].contiguous();
+  // The token-major causal-conv kernel accepts a row-strided [tokens, dim]
+  // input.  Keep the projection view so the three QKV channels share the
+  // projection allocation instead of copying the full [tokens, 3*dim] slice.
+  torch::Tensor mixed_qkv = projections[0];
   torch::Tensor beta = projections[1].contiguous();
   torch::Tensor raw_gate = f_b_proj_->forward(projections[2].contiguous())
                                .view({num_tokens, local_num_heads_, head_dim_})
@@ -651,18 +651,14 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   ssm_cache.index_copy_(
       0, batch->state_indices_long, final_state.to(ssm_cache.scalar_type()));
 
-  core_output = core_output.squeeze(/*dim=*/0)
-                    .reshape({-1, head_dim_})
-                    .to(torch::kFloat32);
+  core_output = core_output.squeeze(/*dim=*/0).reshape({-1, head_dim_});
   output_gate = output_gate.reshape({-1, head_dim_});
-  // RmsNormGated is the shared SiLU-gated primitive. GLM-5 uses a sigmoid
-  // gate, so apply it after normalization to preserve vLLM's
-  // FusedRMSNormGated(activation="sigmoid") semantics.
-  torch::Tensor normalized = o_norm_->forward(core_output);
-  normalized = glm5_next_kda_apply_output_gate(normalized, output_gate);
+  torch::Tensor normalized = o_norm_->forward_sigmoid(core_output, output_gate);
   torch::Tensor output =
-      o_proj_->forward(normalized.to(hidden_states.scalar_type())
-                           .view({num_tokens, local_projection_size_}));
+      o_proj_->forward(normalized.view({num_tokens, local_projection_size_}));
+  // Communication owns its stream/order. Do not make ReduceScatter wait on or
+  // execute inside the temporary Torch/FFI compute-stream guard.
+  compute_stream_guard.release();
   if (use_prefill_cp) {
     return reduce_scatter_kda_rows(output, *cp_group_, cp_token_counts);
   }

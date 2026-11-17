@@ -22,6 +22,7 @@ limitations under the License.
 #include <tuple>
 #include <utility>
 
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/dsa_topk_share_plan.h"
 #include "core/util/env_var.h"
 
@@ -190,6 +191,11 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     std::optional<PendingMHC>* pending_mhc,
     bool is_last_layer,
     kernel::musa::Glm5NextIndexerSelection* shared_selection) {
+  // Keep Torch and TVM-FFI work on one concrete compute stream for the whole
+  // layer.  The KDA path contains collectives on the MCCL stream; its
+  // ProcessGroup wait joins those collectives back to this current stream.
+  kernel::musa::TvmffiComputeStreamGuard compute_stream_guard(
+      hidden_states.device());
   const bool use_prefill_cp =
       prefill_cp_enabled_ &&
       (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);

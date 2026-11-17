@@ -19,6 +19,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   gdn_ops.h
   kda.h
   mhc_ops.h
+  sigmoid_gated_rms_norm.h
   flash_mla_sparse.h
   glm5_next_indexer.h
   llm_decode_metadata_update.h
@@ -39,6 +40,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   mhc_ops.cpp
   mhc_pre.cu
   mhc_post.cu
+  sigmoid_gated_rms_norm.cu
   mhc_head.cu
   flash_mla_sparse.cpp
   flash_mla_sparse_cache.cu

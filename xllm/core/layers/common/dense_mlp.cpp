@@ -17,8 +17,6 @@ limitations under the License.
 
 #include <glog/logging.h>
 
-#include <cmath>
-
 #include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
 #if defined(USE_MUSA)
@@ -165,8 +163,8 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
       gate_up.dim() == 2 && gate_up.size(0) > 0 &&
       gate_up.scalar_type() == torch::kBFloat16 && gate_up.is_contiguous();
   if (use_fused_path) {
-    auto [quantized, scale] =
-        xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, 128);
+    auto [quantized, scale] = xllm::kernel::musa::fused_swiglu_quant_fp8(
+        gate_up, /*group_size=*/128, swiglu_limit_);
     return down_proj_->forward_block_fp8_quantized(quantized, scale);
   }
 #endif
@@ -192,11 +190,8 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
 bool DenseMLPImpl::uses_fused_swiglu_quant() const {
   static const bool use_fused_swiglu_quant =
       util::get_bool_env("XLLM_FUSED_DENSE_SWIGLU_FP8", true);
-  const bool has_swiglu_limit = std::isfinite(swiglu_limit_) &&
-                                swiglu_limit_ > 0.0 &&
-                                swiglu_limit_ < 1000000.0;
   return use_fused_swiglu_quant && is_gated_ && !is_smoothquant_ &&
-         hidden_act_ == "silu" && !has_swiglu_limit &&
+         hidden_act_ == "silu" &&
          down_proj_->supports_block_fp8_quantized_input();
 }
 
@@ -214,8 +209,8 @@ torch::Tensor DenseMLPImpl::forward_block_fp8_quantized(
   CHECK(supports_block_fp8_quantized_input());
   torch::Tensor gate_up =
       gate_up_proj_->forward_block_fp8_quantized(input, input_scale);
-  auto [quantized, scale] =
-      xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, /*group_size=*/128);
+  auto [quantized, scale] = xllm::kernel::musa::fused_swiglu_quant_fp8(
+      gate_up, /*group_size=*/128, swiglu_limit_);
   return down_proj_->forward_block_fp8_quantized(quantized, scale);
 }
 #endif

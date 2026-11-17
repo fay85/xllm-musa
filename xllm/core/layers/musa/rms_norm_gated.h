@@ -44,6 +44,10 @@ class RmsNormGatedImpl final : public torch::nn::Module {
       const torch::Tensor& input,
       const torch::Tensor& gate);
 
+  // Sigmoid-gated BF16 H=128 path used by GLM KDA.
+  torch::Tensor forward_sigmoid(const torch::Tensor& input,
+                                const torch::Tensor& gate);
+
   void load_state_dict(const StateDict& state_dict);
 
  private:

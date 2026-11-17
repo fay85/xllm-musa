@@ -2397,6 +2397,135 @@ TEST(GlmEpTest, AllToAllDispatchCombineWorker) {
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
 }
 
+TEST(GlmEpTest, Fp8AllToAllMatchesDenseExpertsWorker) {
+  const char* rank_text = std::getenv("XLLM_GLM_EP_RANK");
+  const char* port_text = std::getenv("XLLM_GLM_EP_PORT");
+  if (rank_text == nullptr || port_text == nullptr) {
+    GTEST_SKIP() << "Requires eight-process EP launcher";
+  }
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard no_grad;
+  const int32_t rank = std::stoi(rank_text);
+  constexpr int32_t kWorld = 8;
+  const torch::Device device(torch::kPrivateUse1, rank);
+  c10::musa::MUSAGuard device_guard(device);
+  const auto stream = c10::musa::getStreamFromPool(false, rank);
+  c10::StreamGuard stream_guard(stream.unwrap());
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device, reinterpret_cast<void*>(stream.stream()));
+  auto group = create_process_group(rank,
+                                    rank,
+                                    {0, 1, 2, 3, 4, 5, 6, 7},
+                                    kWorld,
+                                    kWorld,
+                                    std::stoi(port_text) + 1,
+                                    "127.0.0.1",
+                                    "glm_ep_fp8_dispatch_test",
+                                    device);
+  ProcessGroup one(0, 1, device);
+  ParallelArgs distributed(rank, kWorld, 1, kWorld, group.get(), kWorld);
+  distributed.tp_group_ = &one;
+  distributed.cp_group_ = group.get();
+  distributed.moe_tp_group_ = &one;
+  distributed.moe_ep_group_ = group.get();
+  ParallelArgs serial(0, 1, &one);
+  serial.tp_group_ = &one;
+  serial.moe_tp_group_ = &one;
+
+  ModelArgs args;
+  args.model_type("glm5_next")
+      .hidden_size(128)
+      .moe_intermediate_size(128)
+      .n_routed_experts(288)
+      .num_experts_per_tok(8)
+      .n_activated_experts(8)
+      .n_shared_experts(0)
+      .swiglu_limit(10.0f)
+      .hidden_act("silu");
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  Weights weights;
+  Weights dense_weights;
+  // Constant power-of-two weights make FP8 dequantization exact. Each
+  // expert has a distinct scale; a missing or misrouted contribution is
+  // observable without tolerances hiding a small random activation.
+  for (int32_t expert = 0; expert < 288; ++expert) {
+    const std::string prefix = "experts." + std::to_string(expert) + ".";
+    const float scale = (1 + expert % 3) / 64.0f;
+    for (const std::string& projection :
+         {"gate_proj", "up_proj", "down_proj"}) {
+      weights[prefix + projection + ".weight"] =
+          torch::ones({128, 128}, torch::kFloat32).to(torch::kFloat8_e4m3fn);
+      weights[prefix + projection + ".weight_scale_inv"] =
+          torch::full({1, 1}, scale, torch::kFloat32);
+      dense_weights[prefix + projection + ".weight"] =
+          torch::full({128, 128}, scale, torch::kBFloat16);
+    }
+  }
+  setenv("XLLM_GLM5_MEGA_MOE", "0", 1);
+  setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
+  setenv("XLLM_GLM5_PREFILL_EP", "1", 1);
+  setenv("XLLM_GLM5_PREFILL_EP_BACKEND", "eager", 1);
+  QuantArgs quant;
+  quant.quant_method("fp8").weight_block_size({128, 128});
+  RoutedMoe distributed_moe(args, quant, distributed, options);
+  setenv("XLLM_GLM5_PREFILL_CP", "0", 1);
+  setenv("XLLM_GLM5_PREFILL_EP", "0", 1);
+  RoutedMoe serial_moe(args, QuantArgs(), serial, options);
+  distributed_moe->load_state_dict(StateDict(weights));
+  serial_moe->load_state_dict(StateDict(dense_weights));
+  distributed_moe->verify_loaded_weights();
+  serial_moe->verify_loaded_weights();
+
+  for (const bool decode : {false, true}) {
+    for (const int64_t tokens : {int64_t{1}, int64_t{7}, int64_t{65}}) {
+      const int64_t local_tokens = decode ? tokens : (rank == 7 ? 0 : tokens);
+      auto input = torch::ones({local_tokens, 128}, options);
+      for (const int64_t first_expert : {int64_t{0}, int64_t{280}}) {
+        auto ids =
+            (torch::arange(8, options.dtype(torch::kInt32)) + first_expert)
+                .unsqueeze(0)
+                .repeat({local_tokens, 1});
+        auto weights_for_route = torch::full(
+            {local_tokens, 8}, 0.125, options.dtype(torch::kFloat32));
+        ModelInputParams params;
+        params.meta.batch_forward_type =
+            decode ? BatchForwardType::DECODE : BatchForwardType::PREFILL;
+        RoutedMoeTokenShard token_shard;
+        token_shard.cp_rank = rank;
+        token_shard.cp_size = kWorld;
+        token_shard.global_rows =
+            torch::arange(local_tokens, options.dtype(torch::kInt64));
+        token_shard.request_rows = torch::zeros_like(token_shard.global_rows);
+        token_shard.positions = token_shard.global_rows.clone();
+        auto expected = serial_moe
+                            ->forward_with_selected_experts(
+                                input, weights_for_route, ids, params)
+                            .cpu()
+                            .to(torch::kFloat32);
+        auto actual =
+            distributed_moe
+                ->forward_with_selected_experts(input,
+                                                weights_for_route,
+                                                ids,
+                                                params,
+                                                false,
+                                                {},
+                                                decode ? nullptr : &token_shard)
+                .cpu()
+                .to(torch::kFloat32);
+        ASSERT_EQ(actual.sizes(), expected.sizes());
+        EXPECT_TRUE(torch::allclose(actual, expected, 0.02, 0.02))
+            << "rank=" << rank << " tokens=" << local_tokens
+            << " decode=" << decode << " first_expert=" << first_expert
+            << " expected mean=" << expected.mean().item<float>()
+            << " actual mean=" << actual.mean().item<float>();
+      }
+    }
+  }
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+}
+
 TEST(GlmLocalCpTest, MixedModelPrefillWorker) {
   const char* rank_text = std::getenv("XLLM_GLM_LOCAL_CP_RANK");
   const char* port_text = std::getenv("XLLM_GLM_LOCAL_CP_PORT");

@@ -20,6 +20,7 @@ limitations under the License.
 #include <musa_fp8.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <tuple>
@@ -765,16 +766,15 @@ __global__ void moe_ragged_swiglu_quant_kernel(
   }
 }
 
-
-__global__ void swiglu_quant_kernel(
-    const __mt_bfloat16* __restrict__ input,
-    __mt_fp8_e4m3* __restrict__ output_q,
-    float* __restrict__ output_s,
-    int64_t row_count,
-    int64_t intermediate_size,
-    int32_t hidden_dim_num_groups,
-    int32_t groups_per_block,
-    int64_t row_stride) {
+__global__ void swiglu_quant_kernel(const __mt_bfloat16* __restrict__ input,
+                                    __mt_fp8_e4m3* __restrict__ output_q,
+                                    float* __restrict__ output_s,
+                                    int64_t row_count,
+                                    int64_t intermediate_size,
+                                    int32_t hidden_dim_num_groups,
+                                    int32_t groups_per_block,
+                                    int64_t row_stride,
+                                    float swiglu_limit) {
   const int64_t row_idx = static_cast<int64_t>(blockIdx.y);
   if (row_idx >= row_count) {
     return;
@@ -804,8 +804,15 @@ __global__ void swiglu_quant_kernel(
   float local_absmax = 0.0f;
 #pragma unroll
   for (int32_t j = 0; j < kElemsPerThread; ++j) {
-    const float gate = __bfloat162float(gate_values.values[j]);
-    const float up = __bfloat162float(up_values.values[j]);
+    float gate = __bfloat162float(gate_values.values[j]);
+    float up = __bfloat162float(up_values.values[j]);
+    if (swiglu_limit > 0.0f) {
+      // Comparisons preserve NaNs, as Torch clamp does.
+      gate = gate > swiglu_limit ? swiglu_limit : gate;
+      up = up < -swiglu_limit ? -swiglu_limit : up;
+      up = up > swiglu_limit ? swiglu_limit : up;
+    }
+    // Match Activation: FP32 clamp/SiLU/multiply, then round once to BF16.
     const __mt_bfloat16 product =
         __float2bfloat16_rn((gate / (1.0f + expf(-gate))) * up);
     const float value = __bfloat162float(product);
@@ -852,7 +859,7 @@ union Bf16Pack4 {
 // BF16 like the unfused gated RMSNorm. Each row is exactly one group-128
 // quantization group of the following FP8 projection. Input row r gates with
 // head r % gate_heads of token r / gate_heads.
-__global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
+__global__ void __launch_bounds__(kGatedNormRowsPerBlock* kHardwareWarpThreads)
     gated_rms_norm_quant_kernel(const __mt_bfloat16* __restrict__ input,
                                 const __mt_bfloat16* __restrict__ gate,
                                 const __mt_bfloat16* __restrict__ weight,
@@ -865,8 +872,7 @@ __global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
                                 int32_t rows,
                                 float eps) {
   constexpr float kLog2e = 1.4426950408889634f;
-  const int32_t lane =
-      static_cast<int32_t>(threadIdx.x) % kHardwareWarpThreads;
+  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kHardwareWarpThreads;
   const int32_t row =
       static_cast<int32_t>(blockIdx.x) * kGatedNormRowsPerBlock +
       static_cast<int32_t>(threadIdx.x) / kHardwareWarpThreads;
@@ -917,9 +923,8 @@ __global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
                                     values[1] * scale,
                                     values[2] * scale,
                                     values[3] * scale);
-  *reinterpret_cast<uint32_t*>(output_q +
-                               static_cast<int64_t>(row) * kGatedNormDim +
-                               column) =
+  *reinterpret_cast<uint32_t*>(
+      output_q + static_cast<int64_t>(row) * kGatedNormDim + column) =
       static_cast<uint32_t>(
           __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3));
   if (lane == 0) {
@@ -929,7 +934,7 @@ __global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
 
 // out * sigmoid(gate), rounded to BF16 like mul_sigmoid_gate_inplace, then
 // quantized per group of 128 columns. One warp handles one group.
-__global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
+__global__ void __launch_bounds__(kGatedNormRowsPerBlock* kHardwareWarpThreads)
     mul_sigmoid_gate_quant_kernel(const __mt_bfloat16* __restrict__ input,
                                   const __mt_bfloat16* __restrict__ gate,
                                   __mt_fp8_e4m3* __restrict__ output_q,
@@ -938,8 +943,7 @@ __global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
                                   int64_t gate_row_stride,
                                   int32_t groups_per_row,
                                   int32_t total_groups) {
-  const int32_t lane =
-      static_cast<int32_t>(threadIdx.x) % kHardwareWarpThreads;
+  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kHardwareWarpThreads;
   const int32_t group =
       static_cast<int32_t>(blockIdx.x) * kGatedNormRowsPerBlock +
       static_cast<int32_t>(threadIdx.x) / kHardwareWarpThreads;
@@ -947,14 +951,15 @@ __global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
     return;
   }
   const int64_t row = group / groups_per_row;
-  const int32_t group_in_row = group - static_cast<int32_t>(row) * groups_per_row;
+  const int32_t group_in_row =
+      group - static_cast<int32_t>(row) * groups_per_row;
   const int32_t column =
       group_in_row * kGroupSize + lane * kGatedNormValuesPerLane;
 
   Bf16Pack4 input_pack;
   Bf16Pack4 gate_pack;
-  input_pack.vector = *reinterpret_cast<const uint2*>(
-      input + row * input_row_stride + column);
+  input_pack.vector =
+      *reinterpret_cast<const uint2*>(input + row * input_row_stride + column);
   gate_pack.vector =
       *reinterpret_cast<const uint2*>(gate + row * gate_row_stride + column);
 
@@ -1007,17 +1012,18 @@ __device__ __forceinline__ float norm_fast_rsqrt(float value) {
 // would otherwise leave stalled.
 template <int32_t VectorsPerThread>
 __global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
-    fused_add_gemma_rmsnorm_quant_kernel(const __mt_bfloat16* __restrict__ input,
-                                         __mt_bfloat16* __restrict__ normed_out,
-                                         __mt_bfloat16* __restrict__ residual,
-                                         const __mt_bfloat16* __restrict__ weight,
-                                         __mt_fp8_e4m3* __restrict__ output_q,
-                                         float* __restrict__ output_s,
-                                         int64_t hidden,
-                                         int32_t hidden_groups,
-                                         float inv_hidden,
-                                         float eps,
-                                         bool write_normed) {
+    fused_add_gemma_rmsnorm_quant_kernel(
+        const __mt_bfloat16* __restrict__ input,
+        __mt_bfloat16* __restrict__ normed_out,
+        __mt_bfloat16* __restrict__ residual,
+        const __mt_bfloat16* __restrict__ weight,
+        __mt_fp8_e4m3* __restrict__ output_q,
+        float* __restrict__ output_s,
+        int64_t hidden,
+        int32_t hidden_groups,
+        float inv_hidden,
+        float eps,
+        bool write_normed) {
   __shared__ float warp_sums[kNormQuantMaxThreads / kHardwareWarpThreads];
   const int32_t tid = static_cast<int32_t>(threadIdx.x);
   const int32_t lane = tid % kHardwareWarpThreads;
@@ -1088,9 +1094,9 @@ __global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
     float local_absmax = 0.0f;
 #pragma unroll
     for (int32_t i = 0; i < kElemsPerThread; ++i) {
-      normed_pack.values[i] = __float2bfloat16_rn(
-          values[v][i] * scale *
-          (__bfloat162float(w_pack[v].values[i]) + 1.0f));
+      normed_pack.values[i] =
+          __float2bfloat16_rn(values[v][i] * scale *
+                              (__bfloat162float(w_pack[v].values[i]) + 1.0f));
       values[v][i] = __bfloat162float(normed_pack.values[i]);
       local_absmax = fmaxf(local_absmax, fabsf(values[v][i]));
     }
@@ -1099,8 +1105,7 @@ __global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
           normed_pack.vector;
     }
 
-    local_absmax =
-        group_reduce_max<kThreadsPerGroup>(local_absmax, group_lane);
+    local_absmax = group_reduce_max<kThreadsPerGroup>(local_absmax, group_lane);
     const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
     const float quant_scale = 1.0f / scale_inv;
     const float4 scaled_0 = make_float4(values[v][0] * quant_scale,
@@ -1157,13 +1162,11 @@ void launch_fused_add_gemma_rmsnorm_quant(const torch::Tensor& input,
           : nullptr;
   __mt_bfloat16* residual_ptr =
       (residual != nullptr && residual->defined())
-          ? reinterpret_cast<__mt_bfloat16*>(
-                residual->data_ptr<at::BFloat16>())
+          ? reinterpret_cast<__mt_bfloat16*>(residual->data_ptr<at::BFloat16>())
           : nullptr;
   fused_add_gemma_rmsnorm_quant_kernel<VectorsPerThread><<<
       static_cast<unsigned int>(rows),
-      static_cast<unsigned int>(hidden /
-                                (kElemsPerThread * VectorsPerThread)),
+      static_cast<unsigned int>(hidden / (kElemsPerThread * VectorsPerThread)),
       0,
       stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
@@ -1236,11 +1239,20 @@ int32_t choose_subwarps_per_block(int64_t hidden_dim_num_groups) {
 
 std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
     const torch::Tensor& input,
-    int64_t group_size) {
+    int64_t group_size,
+    double swiglu_limit) {
   CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
         input.is_contiguous())
       << "Dense SwiGLU quant requires contiguous BF16 [M, 2N].";
+  CHECK(input.device().is_privateuseone());
+  CHECK_GT(input.size(1), 0);
   CHECK_EQ(group_size, kGroupSize);
+  // Use the same effective-limit convention as Activation.
+  const float effective_limit = std::isfinite(swiglu_limit) &&
+                                        swiglu_limit > 0.0 &&
+                                        swiglu_limit < 1000000.0
+                                    ? static_cast<float>(swiglu_limit)
+                                    : 0.0f;
   CHECK_EQ(input.size(1) % (2 * kGroupSize), 0);
 
   const int64_t num_rows = input.size(0);
@@ -1265,12 +1277,12 @@ std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  swiglu_quant_kernel<<<
-      dim3(static_cast<unsigned int>(group_tiles),
-           static_cast<unsigned int>(num_rows)),
-      static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
-      0,
-      stream>>>(
+  swiglu_quant_kernel<<<dim3(static_cast<unsigned int>(group_tiles),
+                             static_cast<unsigned int>(num_rows)),
+                        static_cast<unsigned int>(groups_per_block *
+                                                  kThreadsPerGroup),
+                        0,
+                        stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
       output_s.data_ptr<float>(),
@@ -1278,7 +1290,8 @@ std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
       intermediate_size,
       hidden_dim_num_groups,
       groups_per_tile,
-      /*row_stride=*/1);
+      /*row_stride=*/1,
+      effective_limit);
   C10_CUDA_CHECK(cudaGetLastError());
   return std::make_tuple(output_q, output_s);
 }
@@ -1345,7 +1358,7 @@ std::tuple<torch::Tensor, torch::Tensor> fused_gated_rms_norm_quant_fp8(
 }
 
 bool fused_gemma_rms_norm_quant_supported(const torch::Tensor& input,
-                                           const torch::Tensor& weight) {
+                                          const torch::Tensor& weight) {
   return input.dim() == 2 && weight.dim() == 1 &&
          weight.size(0) == input.size(1) &&
          input.scalar_type() == torch::kBFloat16 &&
@@ -1372,8 +1385,8 @@ fused_gemma_rms_norm_quant_fp8(const torch::Tensor& input,
       write_normed ? torch::empty_like(input) : torch::Tensor();
   torch::Tensor output_q = torch::empty(
       {rows, hidden}, input.options().dtype(torch::kFloat8_e4m3fn));
-  torch::Tensor output_s = torch::empty(
-      {rows, hidden_groups}, input.options().dtype(torch::kFloat32));
+  torch::Tensor output_s = torch::empty({rows, hidden_groups},
+                                        input.options().dtype(torch::kFloat32));
   if (rows == 0) {
     return std::make_tuple(normed_out, output_q, output_s);
   }
@@ -1408,8 +1421,8 @@ fused_gemma_rms_norm_quant_fp8(const torch::Tensor& input,
 }
 
 bool fused_add_gemma_rms_norm_quant_supported(const torch::Tensor& input,
-                                               const torch::Tensor& residual,
-                                               const torch::Tensor& weight) {
+                                              const torch::Tensor& residual,
+                                              const torch::Tensor& weight) {
   return fused_gemma_rms_norm_quant_supported(input, weight) &&
          residual.sizes() == input.sizes() &&
          residual.scalar_type() == torch::kBFloat16 &&
@@ -1431,8 +1444,8 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_gemma_rms_norm_quant_fp8(
   const int32_t hidden_groups = static_cast<int32_t>(hidden / kGroupSize);
   torch::Tensor output_q = torch::empty(
       {rows, hidden}, input.options().dtype(torch::kFloat8_e4m3fn));
-  torch::Tensor output_s = torch::empty(
-      {rows, hidden_groups}, input.options().dtype(torch::kFloat32));
+  torch::Tensor output_s = torch::empty({rows, hidden_groups},
+                                        input.options().dtype(torch::kFloat32));
   if (rows == 0) {
     return std::make_tuple(output_q, output_s);
   }
@@ -1468,8 +1481,7 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_gemma_rms_norm_quant_fp8(
 
 bool mul_sigmoid_gate_quant_supported(const torch::Tensor& input,
                                       const torch::Tensor& gate) {
-  return input.dim() == 2 && gate.dim() == 2 &&
-         gate.sizes() == input.sizes() &&
+  return input.dim() == 2 && gate.dim() == 2 && gate.sizes() == input.sizes() &&
          input.scalar_type() == torch::kBFloat16 &&
          gate.scalar_type() == torch::kBFloat16 &&
          input.size(1) % kGroupSize == 0 && input.stride(1) == 1 &&
@@ -1491,8 +1503,8 @@ std::tuple<torch::Tensor, torch::Tensor> fused_mul_sigmoid_gate_quant_fp8(
   const int32_t groups_per_row = static_cast<int32_t>(columns / kGroupSize);
   torch::Tensor output_q = torch::empty(
       {rows, columns}, input.options().dtype(torch::kFloat8_e4m3fn));
-  torch::Tensor output_s = torch::empty(
-      {rows, groups_per_row}, input.options().dtype(torch::kFloat32));
+  torch::Tensor output_s = torch::empty({rows, groups_per_row},
+                                        input.options().dtype(torch::kFloat32));
   const int64_t total_groups = rows * groups_per_row;
   if (total_groups == 0) {
     return std::make_tuple(output_q, output_s);

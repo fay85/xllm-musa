@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <c10/core/StreamGuard.h>
 #include <torch/torch.h>
 #include <tvm/ffi/container/array.h>
 #include <tvm/ffi/container/tensor.h>
@@ -90,6 +91,31 @@ class TvmffiStreamGuard final {
   // fallback). In that case the destructor must establish ordering from the
   // FFI stream to the compute stream before subsequent PyTorch operations.
   bool needs_sync_ = false;
+  bool uses_event_handoff_ = false;
+};
+
+// Makes the current Torch and TVM-FFI work use one valid stream for a whole
+// layer invocation.  The MUSA default stream can be represented by a null
+// native handle, while TVM-FFI kernels require a concrete handle.  In that
+// case this guard switches Torch to the same pool stream used by TVM-FFI and
+// adds one event dependency at each boundary.  It is a no-op for graph
+// capture and for an already valid current stream.
+class TvmffiComputeStreamGuard final {
+ public:
+  explicit TvmffiComputeStreamGuard(const torch::Device& device);
+  ~TvmffiComputeStreamGuard();
+
+  // Restore the caller's stream before an independent communication
+  // collective. The destructor is idempotent and performs the same release.
+  void release();
+
+  TvmffiComputeStreamGuard(const TvmffiComputeStreamGuard&) = delete;
+  TvmffiComputeStreamGuard& operator=(const TvmffiComputeStreamGuard&) = delete;
+
+ private:
+  torch::Device device_;
+  std::optional<c10::StreamGuard> stream_guard_;
+  bool active_ = false;
   bool uses_event_handoff_ = false;
 };
 

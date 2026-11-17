@@ -20,6 +20,7 @@ limitations under the License.
 #include "framework/state_dict/utils.h"
 #include "kernels/musa/gdn_ops.h"
 #include "kernels/musa/musa_ops_api.h"
+#include "kernels/musa/sigmoid_gated_rms_norm.h"
 #include "kernels/ops_api.h"
 
 namespace xllm::layer::musa {
@@ -81,6 +82,11 @@ std::tuple<torch::Tensor, torch::Tensor> RmsNormGatedImpl::forward_quant_fp8(
     const torch::Tensor& gate) {
   return xllm::kernel::musa::fused_gated_rms_norm_quant_fp8(
       input, gate, weight_, eps_);
+}
+
+torch::Tensor RmsNormGatedImpl::forward_sigmoid(const torch::Tensor& input,
+                                                const torch::Tensor& gate) {
+  return xllm::kernel::musa::sigmoid_gated_rms_norm(input, gate, weight_, eps_);
 }
 
 void RmsNormGatedImpl::load_state_dict(const StateDict& state_dict) {

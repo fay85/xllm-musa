@@ -371,6 +371,64 @@ TvmffiStreamGuard::~TvmffiStreamGuard() {
   }
 }
 
+TvmffiComputeStreamGuard::TvmffiComputeStreamGuard(const torch::Device& device)
+    : device_(device), active_(is_torch_device(device)) {
+  if (!active_ || is_current_stream_capturing() ||
+      get_forced_tvmffi_stream(device_.index()) != nullptr ||
+      current_stream_is_valid(device_.index())) {
+    return;
+  }
+
+  c10::musa::MUSAGuard device_guard(device_.index());
+  const c10::musa::MUSAStream current_stream =
+      c10::musa::getCurrentMUSAStream(device_.index());
+  const c10::musa::MUSAStream ffi_stream =
+      get_or_create_tvmffi_stream(device_.index());
+  TvmffiEventHandoff& event_handoff = get_or_create_tvmffi_event_handoff(
+      device_.index(), current_stream.device_type());
+  uses_event_handoff_ = enqueue_stream_dependency(
+      device_, current_stream, ffi_stream, event_handoff.current_to_ffi_event_);
+  if (!uses_event_handoff_) {
+    sync_current_stream(device_);
+  }
+
+  // The FFI stream is now also the current Torch stream.  Nested
+  // TvmffiStreamGuard instances therefore bind to this same stream without
+  // creating another handoff.
+  stream_guard_.emplace(ffi_stream.unwrap());
+  bind_tvmffi_stream(device_);
+}
+
+TvmffiComputeStreamGuard::~TvmffiComputeStreamGuard() { release(); }
+
+void TvmffiComputeStreamGuard::release() {
+  if (!active_ || !stream_guard_.has_value()) {
+    return;
+  }
+
+  // Restore the caller's stream before recording the completion dependency;
+  // subsequent work issued by the caller must observe all layer work queued
+  // on the unified FFI stream.
+  stream_guard_.reset();
+  c10::musa::MUSAGuard device_guard(device_.index());
+  const c10::musa::MUSAStream current_stream =
+      c10::musa::getCurrentMUSAStream(device_.index());
+  const c10::musa::MUSAStream ffi_stream =
+      get_or_create_tvmffi_stream(device_.index());
+  TvmffiEventHandoff& event_handoff = get_or_create_tvmffi_event_handoff(
+      device_.index(), current_stream.device_type());
+  if (uses_event_handoff_) {
+    if (!enqueue_stream_dependency(device_,
+                                   ffi_stream,
+                                   current_stream,
+                                   event_handoff.ffi_to_current_event_)) {
+      sync_ffi_stream(device_);
+    }
+  } else {
+    sync_ffi_stream(device_);
+  }
+}
+
 }  // namespace xllm::kernel::musa
 
 namespace {

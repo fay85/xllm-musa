@@ -98,6 +98,13 @@ torch::Tensor gather(const torch::Tensor& input,
   }
 
   torch::Tensor stacked = process_group->allgather_base_sync(input);
+  // allgather_base_sync stores equal-sized rank shards in a contiguous
+  // [world_size, rows, ...] tensor.  For the common row gather, flattening the
+  // first two dimensions is the same rank-major ordering as cat(unbind(0))
+  // and returns a view instead of launching a second device copy.
+  if (dim == 0 && stacked.dim() > 1 && stacked.is_contiguous()) {
+    return stacked.flatten(/*start_dim=*/0, /*end_dim=*/1);
+  }
   return torch::cat(stacked.unbind(0), /*dim=*/dim).contiguous();
 }
 

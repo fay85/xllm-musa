@@ -617,11 +617,12 @@ TEST(GlmKdaLayerTest, McclContextParallelWorker) {
           full->forward(input, global, full_cache, params);
       const int32_t gathers_before = counted.gathers;
       const int32_t scatters_before = counted.scatters;
+      const int32_t reductions_before = counted.reductions;
       const torch::Tensor actual = local->forward(
           input.narrow(0, begin, count), sharded, local_cache, params);
       EXPECT_EQ(counted.gathers, gathers_before + 1);
       EXPECT_EQ(counted.scatters, scatters_before + 1);
-      EXPECT_EQ(counted.reductions, 0);
+      EXPECT_EQ(counted.reductions, reductions_before);
       compare(actual, expected.narrow(0, begin, count), "prefill output");
       compare(
           local_cache.get_ssm_cache(),
@@ -660,6 +661,15 @@ TEST(GlmKdaLayerTest, McclContextParallelWorker) {
     compare(decode->forward(token, next, local_cache, params),
             full->forward(token, next, full_cache, params),
             "first token after CP");
+    // Serving keeps the CP layer instance for decode. Exercise that path,
+    // including its explicit head reduction, over multiple state updates.
+    for (int64_t step = 0; step < 8; ++step) {
+      const torch::Tensor next_token =
+          (torch::randn({batch_size, kHidden}, torch::kFloat32) * 0.3).to(opts);
+      compare(local->forward(next_token, next, local_cache, params),
+              full->forward(next_token, next, full_cache, params),
+              "CP layer decode step " + std::to_string(step));
+    }
   }
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
 }

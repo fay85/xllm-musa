@@ -534,10 +534,15 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
   input_t* conv_state = reinterpret_cast<input_t*>(params.conv_state_ptr) +
                         cache_idx * params.conv_state_batch_stride +
                         feature * params.conv_state_c_stride;
+  const int64_t x_base = static_cast<int64_t>(seq_start) * params.x_l_stride +
+                         static_cast<int64_t>(feature) * params.x_c_stride;
+  const int64_t out_base =
+      static_cast<int64_t>(seq_start) * params.out_l_stride +
+      static_cast<int64_t>(feature) * params.out_c_stride;
 
   auto load_x = [&](int token_idx) {
-    return static_cast<float>(x[(seq_start + token_idx) * params.x_l_stride +
-                                feature * params.x_c_stride]);
+    return static_cast<float>(
+        x[x_base + static_cast<int64_t>(token_idx) * params.x_l_stride]);
   };
 
   float col0 = 0.0f;
@@ -552,22 +557,18 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
 
     if (seq_len >= 3) {
       conv_state[0 * params.conv_state_l_stride] =
-          x[(seq_start + seq_len - 3) * params.x_l_stride +
-            feature * params.x_c_stride];
+          x[x_base + static_cast<int64_t>(seq_len - 3) * params.x_l_stride];
       conv_state[1 * params.conv_state_l_stride] =
-          x[(seq_start + seq_len - 2) * params.x_l_stride +
-            feature * params.x_c_stride];
+          x[x_base + static_cast<int64_t>(seq_len - 2) * params.x_l_stride];
       conv_state[2 * params.conv_state_l_stride] =
-          x[(seq_start + seq_len - 1) * params.x_l_stride +
-            feature * params.x_c_stride];
+          x[x_base + static_cast<int64_t>(seq_len - 1) * params.x_l_stride];
     } else if (seq_len == 2) {
       conv_state[0 * params.conv_state_l_stride] =
           load_initial_state ? conv_state[2 * params.conv_state_l_stride]
                              : input_t(0.0f);
-      conv_state[1 * params.conv_state_l_stride] =
-          x[seq_start * params.x_l_stride + feature * params.x_c_stride];
+      conv_state[1 * params.conv_state_l_stride] = x[x_base];
       conv_state[2 * params.conv_state_l_stride] =
-          x[(seq_start + 1) * params.x_l_stride + feature * params.x_c_stride];
+          x[x_base + params.x_l_stride];
     } else {
       const input_t previous1 = conv_state[1 * params.conv_state_l_stride];
       const input_t previous2 = conv_state[2 * params.conv_state_l_stride];
@@ -575,8 +576,7 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
           load_initial_state ? previous1 : input_t(0.0f);
       conv_state[1 * params.conv_state_l_stride] =
           load_initial_state ? previous2 : input_t(0.0f);
-      conv_state[2 * params.conv_state_l_stride] =
-          x[seq_start * params.x_l_stride + feature * params.x_c_stride];
+      conv_state[2 * params.conv_state_l_stride] = x[x_base];
     }
   } else {
     col0 = load_x(token_offset - 3);
@@ -605,8 +605,8 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
         constexpr float kLog2e = 1.4426950408889634f;
         value = value / (1.0f + exp2f(-value * kLog2e));
       }
-      out[(seq_start + token_offset + token_i) * params.out_l_stride +
-          feature * params.out_c_stride] = input_t(value);
+      out[out_base + static_cast<int64_t>(token_offset + token_i) *
+                         params.out_l_stride] = input_t(value);
     }
   }
 }
