@@ -1,0 +1,18 @@
+[Gloo] Rank 0 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I20261117 13:24:13.141563 43362 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=0, world_size=8, enabled=1, max_bytes=8388608
+I20261117 13:24:14.734798 43362 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=0, world_size=8, algorithm=1, max_bytes=8388608
+I20261117 13:24:18.470729 43362 musa_native_collectives.h:76] Native synchronous MCCL initialized for tp_group, local rank 0/8
+I20261117 13:24:19.729889 43362 musa_custom_all_reduce.cpp:548] [MUSA_TP_REDUCE] backend=custom, group=tp_group, rank=0, world_size=8, dtype=BFloat16, shape=[1, 5120], bytes=10240, out_of_place=true
+I20261117 13:24:20.421770 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=1
+I20261117 13:24:20.652851 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=4
+I20261117 13:24:20.884730 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=7
+I20261117 13:24:21.104524 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=10
+I20261117 13:24:21.330309 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=13
+I20261117 13:24:21.567687 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=16
+I20261117 13:24:21.832206 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=19
+I20261117 13:24:22.182359 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=22
+I20261117 13:24:22.662185 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=25
+I20261117 13:24:23.089375 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=28
+I20261117 13:24:23.424868 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=31
+I20261117 13:24:23.894191 43362 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=34

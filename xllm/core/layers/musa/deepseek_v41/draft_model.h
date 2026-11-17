@@ -16,6 +16,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/layers/musa/deepseek_v41/decoder.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
+#include "core/layers/musa/deepseek_v41/gather_bits.h"
 #include "core/layers/musa/deepseek_v41/rms_norm.h"
 namespace xllm::layer {
 
@@ -33,7 +34,8 @@ class DeepseekV41DraftModel final {
                         torch::Tensor head,
                         torch::Tensor rope,
                         ProcessGroup* attention_group = nullptr,
-                        ProcessGroup* expert_group = nullptr)
+                        ProcessGroup* expert_group = nullptr,
+                        bool gather_bf16_bits = false)
       : embedding_(std::move(embedding)),
         main_projection_(std::move(main_projection),
                          /*original_fp8_activation=*/true),
@@ -41,7 +43,8 @@ class DeepseekV41DraftModel final {
         output_norm_(std::move(output_norm)),
         head_(std::move(head)),
         rope_(std::move(rope)),
-        attention_group_(attention_group) {
+        attention_group_(attention_group),
+        gather_bf16_bits_(gather_bf16_bits) {
     CHECK_EQ(configs.size(), 3);
     CHECK_EQ(weights.size(), configs.size());
     CHECK(embedding_.defined() && main_norm_.defined() &&
@@ -113,7 +116,8 @@ class DeepseekV41DraftModel final {
     torch::DeviceGuard guard(embedding_.device());
     torch::Tensor hidden =
         torch::embedding(embedding_, tokens.to(torch::kInt64));
-    hidden = parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
+    hidden = deepseek_v41_gather_bf16_bits(
+        hidden, attention_group_, gather_bf16_bits_);
     hidden = hidden.unsqueeze(1).expand({-1, 4, -1}).contiguous();
     torch::Tensor pre_mix = torch::zeros(
         {tokens.numel(), 4}, hidden.options().dtype(torch::kFloat32));
@@ -141,7 +145,8 @@ class DeepseekV41DraftModel final {
     CHECK_EQ(hidden.dim(), 2);
     CHECK_EQ(hidden.size(1), head_.size(1));
     const torch::Tensor local = torch::nn::functional::linear(hidden, head_);
-    return parallel_state::gather(local, attention_group_, /*dim=*/-1);
+    return deepseek_v41_gather_bf16_bits(
+        local, attention_group_, gather_bf16_bits_);
   }
 
  private:
@@ -152,6 +157,7 @@ class DeepseekV41DraftModel final {
   torch::Tensor head_;
   torch::Tensor rope_;
   ProcessGroup* attention_group_;
+  bool gather_bf16_bits_ = false;
   double epsilon_ = 1e-6;
   std::vector<std::unique_ptr<DeepseekV41Decoder>> layers_;
 };

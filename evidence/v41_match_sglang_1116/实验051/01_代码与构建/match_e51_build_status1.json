@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"job.json\": \"{\\\"pid\\\": 56453, \\\"start_ticks\\\": \\\"525202274\\\", \\\"at\\\": \\\"2026-11-17T13:06:26.859241+08:00\\\"}\", \"finished.json\": \"{\\\"exit_code\\\": 1, \\\"at\\\": \\\"2026-11-17T13:06:27.976004+08:00\\\"}\", \"cpp.log\": \"In file included from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa/musa_custom_all_reduce.h:28,\\n                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:21,\\n                 from /expt/builds/e51_gather_module_v1/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:\\n/workspace/xllm-mt-main/xllm/core/platform/cuda/device_capture_lock.h:25:10: fatal error: common/macros.h: No such file or directory\\n   25 | #include \\\"common/macros.h\\\"\\n      |          ^~~~~~~~~~~~~~~~~\\ncompilation terminated.\\n\", \"worker.log\": \"Traceback (most recent call last):\\n  File \\\"/expt/builds/e51_gather_module_v1/worker.py\\\", line 11, in <module>\\n    assert p.returncode==0,name+' failed'\\nAssertionError: cpp failed\\n\"}\n",
+  "stderr": ""
+}

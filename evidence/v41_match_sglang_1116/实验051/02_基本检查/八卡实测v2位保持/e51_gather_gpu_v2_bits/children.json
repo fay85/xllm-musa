@@ -1,0 +1,74 @@
+[
+  {
+    "rank": 0,
+    "pid": 45258,
+    "start_ticks": "525344129",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 1,
+    "pid": 45259,
+    "start_ticks": "525344130",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 2,
+    "pid": 45260,
+    "start_ticks": "525344131",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 3,
+    "pid": 45261,
+    "start_ticks": "525344131",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 4,
+    "pid": 45262,
+    "start_ticks": "525344132",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 5,
+    "pid": 45263,
+    "start_ticks": "525344132",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 6,
+    "pid": 45264,
+    "start_ticks": "525344133",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  },
+  {
+    "rank": 7,
+    "pid": 45265,
+    "start_ticks": "525344133",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_bits_v2.py"
+  }
+]

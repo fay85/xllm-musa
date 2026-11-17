@@ -1,0 +1,2423 @@
+{
+  "rank": 3,
+  "status": "BIT_EXACT_AND_GRAPH_PASS",
+  "checks": [
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.bfloat16/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=640/dtype=torch.bfloat16/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=640/dtype=torch.bfloat16/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=640/dtype=torch.float32/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=640/dtype=torch.float32/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=640/dtype=torch.float32/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.bfloat16/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=16160/dtype=torch.bfloat16/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=16160/dtype=torch.bfloat16/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=False/width=16160/dtype=torch.float32/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=16160/dtype=torch.float32/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=False/width=16160/dtype=torch.float32/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.bfloat16/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=640/dtype=torch.bfloat16/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=640/dtype=torch.bfloat16/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=640/dtype=torch.float32/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=640/dtype=torch.float32/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=640/dtype=torch.float32/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.bfloat16/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=16160/dtype=torch.bfloat16/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=16160/dtype=torch.bfloat16/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=0/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=0/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=1/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=1/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=4/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=4/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=6/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "eager/nondefault=True/width=16160/dtype=torch.float32/q=6/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=16160/dtype=torch.float32/custom=False",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "special/nondefault=True/width=16160/dtype=torch.float32/custom=True",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/on/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/on/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/on/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/on/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/reverse_off/capture",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/reverse_off/variant=3",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/reverse_off/variant=-7",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/reverse_off/variant=111",
+      "bit_mismatches": 0,
+      "finite_value_mismatches": 0,
+      "same_nan_mask": true,
+      "same_inf_masks": true,
+      "required_exact": true
+    }
+  ],
+  "microbenchmarks": [
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/off",
+      "rows": 1,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        194.98199224472046,
+        195.35200595855713,
+        192.92399883270264,
+        193.9679980278015,
+        189.62899446487427
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/on",
+      "rows": 1,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        47.58500158786774,
+        47.14000225067139,
+        47.8380024433136,
+        46.401000022888184,
+        47.19700217247009
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=1/reverse_off",
+      "rows": 1,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        186.79399490356445,
+        186.33999824523926,
+        186.61199808120728,
+        187.52700090408325,
+        186.54199838638306
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/off",
+      "rows": 4,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        183.21599960327148,
+        181.11099004745483,
+        180.8300018310547,
+        186.60500049591064,
+        193.44600439071655
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/on",
+      "rows": 4,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        51.534003019332886,
+        50.01299977302551,
+        50.24099946022034,
+        50.48400163650513,
+        51.309001445770264
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=4/reverse_off",
+      "rows": 4,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        187.58000135421753,
+        186.94599866867065,
+        187.51099109649658,
+        188.0489945411682,
+        186.63100004196167
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/off",
+      "rows": 6,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        193.52400302886963,
+        188.63900899887085,
+        188.1749987602234,
+        187.51599788665771,
+        188.23399543762207
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/on",
+      "rows": 6,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        54.54699993133545,
+        54.434001445770264,
+        53.80300283432007,
+        53.49700450897217,
+        53.877002000808716
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.bfloat16/q=6/reverse_off",
+      "rows": 6,
+      "local_width": 640,
+      "dtype": "torch.bfloat16",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        189.25199508666992,
+        187.94000148773193,
+        187.92999982833862,
+        188.88099193572998,
+        188.49899768829346
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/off",
+      "rows": 1,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        186.85799837112427,
+        186.95600032806396,
+        186.99899911880493,
+        186.81700229644775,
+        186.21400594711304
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/on",
+      "rows": 1,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        185.31800508499146,
+        187.40299940109253,
+        185.6660008430481,
+        186.3979935646057,
+        184.47400331497192
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=1/reverse_off",
+      "rows": 1,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        187.02499866485596,
+        188.7850046157837,
+        187.51599788665771,
+        187.75899410247803,
+        189.28300142288208
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/off",
+      "rows": 4,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        187.80800104141235,
+        221.43900394439697,
+        186.7269992828369,
+        187.05400228500366,
+        186.8649959564209
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/on",
+      "rows": 4,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        186.35600805282593,
+        186.36600971221924,
+        187.8369927406311,
+        188.04399967193604,
+        186.0610008239746
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=4/reverse_off",
+      "rows": 4,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        187.30499744415283,
+        186.89299821853638,
+        186.91399097442627,
+        186.68100833892822,
+        186.73900365829468
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/off",
+      "rows": 6,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        193.72299909591675,
+        194.0640091896057,
+        193.93600225448608,
+        193.88500452041626,
+        193.68700981140137
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/on",
+      "rows": 6,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        192.64599084854126,
+        194.1100001335144,
+        194.01699304580688,
+        195.95999717712402,
+        193.6609983444214
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=640/dtype=torch.float32/q=6/reverse_off",
+      "rows": 6,
+      "local_width": 640,
+      "dtype": "torch.float32",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        192.90200471878052,
+        192.83100366592407,
+        192.55800247192383,
+        192.88499355316162,
+        191.89999103546143
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/off",
+      "rows": 1,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        221.21901512145996,
+        223.46301078796387,
+        223.46501350402832,
+        221.94900512695312,
+        220.56798934936523
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/on",
+      "rows": 1,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        70.38500308990479,
+        69.97699737548828,
+        69.69199776649475,
+        70.0410008430481,
+        70.7830011844635
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=1/reverse_off",
+      "rows": 1,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        222.478985786438,
+        221.89700603485107,
+        223.4950065612793,
+        221.9399929046631,
+        221.06201648712158
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/off",
+      "rows": 4,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        264.5080089569092,
+        265.6790018081665,
+        264.93000984191895,
+        263.22100162506104,
+        264.9510145187378
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/on",
+      "rows": 4,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        107.6219916343689,
+        107.83699750900269,
+        106.60400390625,
+        107.21100568771362,
+        107.1969985961914
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=4/reverse_off",
+      "rows": 4,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        263.5810136795044,
+        287.12401390075684,
+        309.96999740600586,
+        268.33598613739014,
+        263.8240098953247
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/off",
+      "rows": 6,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        266.7450189590454,
+        266.80400371551514,
+        266.5980100631714,
+        269.2919969558716,
+        269.0010070800781
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/on",
+      "rows": 6,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        206.86099529266357,
+        151.61300897598267,
+        165.01599550247192,
+        181.6230058670044,
+        133.95999670028687
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.bfloat16/q=6/reverse_off",
+      "rows": 6,
+      "local_width": 16160,
+      "dtype": "torch.bfloat16",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        272.02000617980957,
+        414.53099250793457,
+        448.0290412902832,
+        268.8660144805908,
+        392.1649932861328
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/off",
+      "rows": 1,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        416.81599617004395,
+        396.8279838562012,
+        533.2679748535156,
+        244.37298774719238,
+        283.64100456237793
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/on",
+      "rows": 1,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        237.7650022506714,
+        394.9170112609863,
+        241.3990020751953,
+        293.54801177978516,
+        406.97102546691895
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=1/reverse_off",
+      "rows": 1,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        380.11701107025146,
+        269.90201473236084,
+        237.89000511169434,
+        234.99000072479248,
+        237.87798881530762
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/off",
+      "rows": 4,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        409.58900451660156,
+        310.5530023574829,
+        524.3190288543701,
+        435.0820064544678,
+        269.4689989089966
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/on",
+      "rows": 4,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        276.49199962615967,
+        459.798002243042,
+        482.73701667785645,
+        274.6219873428345,
+        420.0469970703125
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=4/reverse_off",
+      "rows": 4,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        493.62401962280273,
+        357.8439950942993,
+        307.6429843902588,
+        491.8179988861084,
+        375.34098625183105
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/off",
+      "rows": 6,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        310.9380006790161,
+        380.148983001709,
+        445.80798149108887,
+        284.5669984817505,
+        322.5069999694824
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/on",
+      "rows": 6,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "on",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        311.8639945983887,
+        387.5200033187866,
+        447.02396392822266,
+        287.91699409484863,
+        387.31799125671387
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    },
+    {
+      "label": "graph/width=16160/dtype=torch.float32/q=6/reverse_off",
+      "rows": 6,
+      "local_width": 16160,
+      "dtype": "torch.float32",
+      "mode": "reverse_off",
+      "calls_per_graph": 8,
+      "replays_per_sample": 5,
+      "us_per_call_samples": [
+        279.9599885940552,
+        278.69999408721924,
+        281.003999710083,
+        484.7149848937988,
+        546.3310241699219
+      ],
+      "scope": "Isolated gather without model compute or rank skew, not model critical-path share"
+    }
+  ],
+  "stage": "finished",
+  "at_unix": 1794893353.943037,
+  "identity": {
+    "module": "/expt/builds/e51_gather_module_v4_bits/v41_gather_candidate_test_module.so",
+    "sha256": "fe7f5cff10ac3253f71d480038164b4f6782e38e2ff991a0db6668a44c2c455b",
+    "torch": "2.9.0",
+    "torch_musa": "2.9.0+0680da1",
+    "hidden_size": 5120,
+    "vocab_size": 129280
+  },
+  "special_value_mismatches": []
+}

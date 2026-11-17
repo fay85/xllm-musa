@@ -1,0 +1,15 @@
+{
+  "latency_s": 49.83215734641999,
+  "first_content_s": 1.9674574807286263,
+  "usage": {
+    "prompt_tokens": 2048,
+    "completion_tokens": 256,
+    "total_tokens": 2304,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "content": "Keeping experiment records helps engineers because it creates a reliable memory of what was actually done, which is essential when decisions must be made later. During an experiment, an engineer may run many trials and adjust parameters, and without written records it becomes difficult to remember which configuration produced which result. Clear records allow the engineer to trace a result back to its exact conditions, so the outcome can be trusted and repeated. This reproducibility is important because an experiment that cannot be repeated cannot be properly verified or improved. Records also help engineers compare alternatives fairly, since they can review past measurements instead of relying on impression or guesswork. When something fails, detailed notes make it easier to find the cause, because the engineer can see what changed and when the problem first appeared. Records also support collaboration, since other team members can understand the work without needing a verbal explanation from the person who ran the test. In addition, good records protect against lost time, because an engineer can avoid repeating experiments that were already completed. They also provide evidence for reports, design reviews, and safety or quality audits, where claims must be supported by documented data. Over the long term, experiment records become a knowledge base that helps future engineers learn from past work and avoid repeating old mistakes. For all these reasons, keeping clear and consistent",
+  "finish_reason": "length",
+  "scope": "One bounded long-shape cache/Graph bucket smoke, not formal performance round"
+}

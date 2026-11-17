@@ -23,6 +23,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/framework/model/aux_hidden_capture.h"
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/layers/musa/deepseek_v41/decoder.h"
+#include "core/layers/musa/deepseek_v41/gather_bits.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 
 namespace xllm::layer {
@@ -44,7 +45,8 @@ class DeepseekV41TextModel final {
                        ProcessGroup* expert_group = nullptr,
                        bool bounded_replay = false,
                        bool replicated_attention = false,
-                       bool owner_attention = false)
+                       bool owner_attention = false,
+                       bool gather_bf16_bits = false)
       : embedding_(std::move(embedding)),
         norm_(std::move(norm)),
         head_(std::move(head)),
@@ -52,6 +54,7 @@ class DeepseekV41TextModel final {
         compressed_rope_(std::move(compressed_rope)),
         attention_group_(attention_group) {
     owner_attention_ = owner_attention;
+    gather_bf16_bits_ = gather_bf16_bits;
     CHECK(!owner_attention_ || (replicated_attention && attention_group_));
     CHECK(!configs.empty());
     CHECK_EQ(configs.size(), weights.size());
@@ -132,7 +135,8 @@ class DeepseekV41TextModel final {
     CHECK_EQ(input_ids.device(), embedding_.device());
     torch::Tensor hidden =
         torch::embedding(embedding_, input_ids.to(torch::kInt64));
-    return parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
+    return deepseek_v41_gather_bf16_bits(
+        hidden, attention_group_, gather_bf16_bits_);
   }
 
   torch::Tensor forward_with_capture(
@@ -305,7 +309,8 @@ class DeepseekV41TextModel final {
     torch::DeviceGuard guard(embedding_.device());
     torch::Tensor hidden =
         torch::embedding(embedding_, input_ids.to(torch::kInt64));
-    hidden = parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
+    hidden = deepseek_v41_gather_bf16_bits(
+        hidden, attention_group_, gather_bf16_bits_);
     hidden = hidden.unsqueeze(1).expand({-1, 4, -1}).contiguous();
     torch::Tensor pre_mix = torch::zeros(
         {input_ids.size(0), 4}, hidden.options().dtype(torch::kFloat32));
@@ -384,7 +389,8 @@ class DeepseekV41TextModel final {
 
   torch::Tensor project_logits(const torch::Tensor& input) const {
     const torch::Tensor local = torch::linear(input, head_);
-    return parallel_state::gather(local, attention_group_, /*dim=*/-1);
+    return deepseek_v41_gather_bf16_bits(
+        local, attention_group_, gather_bf16_bits_);
   }
 
  private:
@@ -395,6 +401,7 @@ class DeepseekV41TextModel final {
   torch::Tensor compressed_rope_;
   double norm_epsilon_;
   bool owner_attention_ = false;
+  bool gather_bf16_bits_ = false;
   bool bounded_replay_ = false;
   int64_t replay_window_ = 0;
   int64_t late_layer_start_ = 0;

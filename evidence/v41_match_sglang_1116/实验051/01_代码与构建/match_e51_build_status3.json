@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"job.json\": \"{\\\"pid\\\": 56498, \\\"start_ticks\\\": \\\"525228147\\\", \\\"at\\\": \\\"2026-11-17T13:10:45.588358+08:00\\\"}\", \"finished.json\": \"{\\\"exit_code\\\": 0, \\\"at\\\": \\\"2026-11-17T13:11:11.056543+08:00\\\", \\\"sha256\\\": \\\"7ccc43c7cfcbce9c9a1b4a02eb54e621fbe953756a0e51f6d33a89ae7490bed9\\\", \\\"bytes\\\": 137435464}\", \"import.log\": \"IMPORT_PASS\\nCreatePlatform failed!\\n/opt/venv/lib/python3.10/site-packages/torch_musa/core/device.py:134: UserWarning: MUSA initialization: MUSA driver initialization failed, you might not have a Mthreads GPU. (Triggered internally at /data/dixonqin/torch_musa/torch_musa/csrc/core/MUSAFunctions.cpp:93.)\\n  return torch_musa._MUSAC._musa_getDeviceCount() > 0\\nNo MUSA runtime is found, using MUSA_HOME='/usr/local/musa'\\n\", \"cpp.log\": \"\", \"link.log\": \"\", \"worker.log\": \"\"}\n",
+  "stderr": ""
+}

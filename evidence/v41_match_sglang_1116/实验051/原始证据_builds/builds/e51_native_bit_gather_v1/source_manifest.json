@@ -1,0 +1,22 @@
+{
+  "xllm/core/layers/musa/deepseek_v41/text_model.h": {
+    "before": "ba4e1a3b5b7f331bdfcdaef64d8f3650a342a8bd263495120d037a1fdaf4458c",
+    "after": "d07b40eca02337e39f6040305702a8e988b3e4cb0b20b279061656276466144d"
+  },
+  "xllm/core/layers/musa/deepseek_v41/draft_model.h": {
+    "before": "ba58fd3ae5b246d4532cfe99799bd5ebf8595fc9f624ee5900d9825043b05209",
+    "after": "0da3512e1a8a6109954c25c4b986dc24835d8a2aaac09857e853a5e040fca004"
+  },
+  "xllm/models/llm/musa/deepseek_v41_native.h": {
+    "before": "0b768d9090800c3029387c742643e3650d2aff120603ee7f125b239ed24761d8",
+    "after": "472739a66dbaac9af813cae095ff81369a9ffbb80eda8f35ca90605bc770e1ee"
+  },
+  "xllm/models/llm/musa/deepseek_v41_dspark_native.h": {
+    "before": "b0a8c1641cf7f61a16044fa4b973bd27cf8dbefd942b0a72ddc8b0379de421bd",
+    "after": "7abd8b66d23b66779cbfbc00792ec3059ae0de473ffca2530eca7524398e99a1"
+  },
+  "xllm/core/layers/musa/deepseek_v41/gather_bits.h": {
+    "before": null,
+    "after": "2d678e26b1ef36910ab7b077452478f13ba2cde614086d9bd7b173da2a9f073f"
+  }
+}

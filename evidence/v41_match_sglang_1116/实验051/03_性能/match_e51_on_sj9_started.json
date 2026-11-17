@@ -1,0 +1,5 @@
+{
+  "exit_status": 1,
+  "stdout": "",
+  "stderr": "Traceback (most recent call last):\n  File \"<stdin>\", line 11, in <module>\nAssertionError: Stale resource preflight\n"
+}

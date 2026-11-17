@@ -1,0 +1,1304 @@
+{
+  "groups": [
+    {
+      "name": "OFF1",
+      "mode": "off_v1",
+      "summary": {
+        "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+        "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+        "mean_TTFT_ms": 300.21664537489414,
+        "mean_TPOT_ms_per_token": 25.551863701320162,
+        "TPOT_sample_stdev_ms": 0.27673525083603584,
+        "mean_E2E_s": 6.815941889211535,
+        "output_tokens_per_latency_sum_second": 37.55900566071492,
+        "formal_requests": 5,
+        "input_output": [
+          256,
+          256
+        ],
+        "profiler_on": false,
+        "binary_sha256": "61a191d34a9719b2792eaa565bb02a30d3d01ede929e4efcc6cc47ca8fe1f3f4"
+      },
+      "requests": [
+        {
+          "response_id": "chatcmpl-12481178814234374860-sKo2vRpqdHhnavU4vZTE6t",
+          "latency_s": 6.87138469144702,
+          "first_chunk_latency_s": 0.2605266524478793,
+          "recomputed_tpot_ms": 25.92493348627114,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:36:42.261058 53119 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-sKo2vRpqdHhnavU4vZTE6t, x-request-id: 01a1e801-d040-7591-b32f-fe20c9028bf4, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 246.2ms, ttft: 238.0ms, total_latency: 6852.4ms, avg tpot: 25.9ms, generation speed: 38.7 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-nSme3Vf29cgd9JQjYsyP4S",
+          "latency_s": 6.853375024162233,
+          "first_chunk_latency_s": 0.2823732141405344,
+          "recomputed_tpot_ms": 25.7686345491047,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:36:49.114583 53116 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-nSme3Vf29cgd9JQjYsyP4S, x-request-id: 01a1e801-eb18-702c-8d04-792368af04dc, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 270.3ms, ttft: 265.0ms, total_latency: 6836.6ms, avg tpot: 25.8ms, generation speed: 39.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-zfN6rsjCeuHapfngVMwwqj",
+          "latency_s": 6.732080450281501,
+          "first_chunk_latency_s": 0.25606652814894915,
+          "recomputed_tpot_ms": 25.39613302797079,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:36:55.846868 53117 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-zfN6rsjCeuHapfngVMwwqj, x-request-id: 01a1e802-05de-7d11-915c-d30f27006d11, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 244.3ms, ttft: 239.0ms, total_latency: 6715.6ms, avg tpot: 25.4ms, generation speed: 39.5 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-YAkCUNJ3UuTpsbfgtFStw5",
+          "latency_s": 6.898369846865535,
+          "first_chunk_latency_s": 0.4453867767006159,
+          "recomputed_tpot_ms": 25.305815961431055,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:37:02.745460 53118 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-YAkCUNJ3UuTpsbfgtFStw5, x-request-id: 01a1e802-202a-77d3-be39-72a48993b2dd, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 246.9ms, ttft: 241.0ms, total_latency: 6694.4ms, avg tpot: 25.3ms, generation speed: 39.7 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-rfc9rLtSjUC6huzuJjcYQP",
+          "latency_s": 6.724499433301389,
+          "first_chunk_latency_s": 0.25673005543649197,
+          "recomputed_tpot_ms": 25.363801481823128,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:37:09.470224 53119 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-rfc9rLtSjUC6huzuJjcYQP, x-request-id: 01a1e802-3b1d-7ed0-98f7-6b2224d0f000, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 245.6ms, ttft: 240.0ms, total_latency: 6708.3ms, avg tpot: 25.4ms, generation speed: 39.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        }
+      ]
+    },
+    {
+      "name": "ON1",
+      "mode": "on_v1",
+      "summary": {
+        "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+        "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+        "mean_TTFT_ms": 340.62464721500874,
+        "mean_TPOT_ms_per_token": 25.679871778131698,
+        "TPOT_sample_stdev_ms": 0.24378010808617107,
+        "mean_E2E_s": 6.888991950638593,
+        "output_tokens_per_latency_sum_second": 37.16073437656861,
+        "formal_requests": 5,
+        "input_output": [
+          256,
+          256
+        ],
+        "profiler_on": false,
+        "binary_sha256": "61a191d34a9719b2792eaa565bb02a30d3d01ede929e4efcc6cc47ca8fe1f3f4"
+      },
+      "requests": [
+        {
+          "response_id": "chatcmpl-12481178814234374860-yUZkRTAmkkZnGvakANfBSt",
+          "latency_s": 7.1032198537141085,
+          "first_chunk_latency_s": 0.46750022005289793,
+          "recomputed_tpot_ms": 26.022429935926315,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:43:51.013043 59473 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-yUZkRTAmkkZnGvakANfBSt, x-request-id: 01a1e808-5a29-76b4-be8e-532a880dd1f0, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 258.2ms, ttft: 249.0ms, total_latency: 6888.5ms, avg tpot: 26.0ms, generation speed: 38.6 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-HvKZpicvtu2voR9tKq8o85",
+          "latency_s": 6.847458712756634,
+          "first_chunk_latency_s": 0.25995209347456694,
+          "recomputed_tpot_ms": 25.833359291302223,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:43:57.860713 59470 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-HvKZpicvtu2voR9tKq8o85, x-request-id: 01a1e808-75eb-7555-9bb3-7c0adcd9126a, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 244.0ms, ttft: 238.0ms, total_latency: 6826.2ms, avg tpot: 25.8ms, generation speed: 38.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-E25z5SJVznxBnrmvmiK7my",
+          "latency_s": 6.789031711407006,
+          "first_chunk_latency_s": 0.2662896541878581,
+          "recomputed_tpot_ms": 25.579380616545677,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:44:04.649969 59471 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-E25z5SJVznxBnrmvmiK7my, x-request-id: 01a1e808-90a8-7dc2-b90c-dfc3957417fd, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 243.8ms, ttft: 239.0ms, total_latency: 6761.7ms, avg tpot: 25.6ms, generation speed: 39.2 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-nBZuR3q5WVDye8xmqmayD4",
+          "latency_s": 6.778840912505984,
+          "first_chunk_latency_s": 0.26430212054401636,
+          "recomputed_tpot_ms": 25.54721094887046,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:44:11.428948 59472 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-nBZuR3q5WVDye8xmqmayD4, x-request-id: 01a1e808-ab2e-795e-8b58-1261be98fdc1, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 252.9ms, ttft: 247.0ms, total_latency: 6761.8ms, avg tpot: 25.5ms, generation speed: 39.3 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-Uzcg3VVSwsuEiGmVJgX2gM",
+          "latency_s": 6.926408562809229,
+          "first_chunk_latency_s": 0.44507914781570435,
+          "recomputed_tpot_ms": 25.41697809801382,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:44:18.355671 59473 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-Uzcg3VVSwsuEiGmVJgX2gM, x-request-id: 01a1e808-c5a9-70d4-9529-8beda3c4916b, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 242.6ms, ttft: 237.0ms, total_latency: 6718.6ms, avg tpot: 25.4ms, generation speed: 39.5 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        }
+      ]
+    },
+    {
+      "name": "OFF2",
+      "mode": "reverse_off_v1",
+      "summary": {
+        "status": "FORMAL_SHORT_PASSED_NOT_FINAL_THREE_ROUND",
+        "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+        "mean_TTFT_ms": 299.26909282803535,
+        "mean_TPOT_ms_per_token": 25.681760457946975,
+        "TPOT_sample_stdev_ms": 0.22993322163656926,
+        "mean_E2E_s": 6.848118009604514,
+        "output_tokens_per_latency_sum_second": 37.38253336770175,
+        "formal_requests": 5,
+        "input_output": [
+          256,
+          256
+        ],
+        "profiler_on": false,
+        "binary_sha256": "61a191d34a9719b2792eaa565bb02a30d3d01ede929e4efcc6cc47ca8fe1f3f4"
+      },
+      "requests": [
+        {
+          "response_id": "chatcmpl-12481178814234374860-rkFbVPre2Mz9Rm3csmfjBx",
+          "latency_s": 6.8790117828175426,
+          "first_chunk_latency_s": 0.26173764932900667,
+          "recomputed_tpot_ms": 25.950094641131514,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:54:48.096001   614 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-rkFbVPre2Mz9Rm3csmfjBx, x-request-id: 01a1e812-61c5-7b54-81d0-18ac4ae6d95c, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 245.8ms, ttft: 236.0ms, total_latency: 6858.2ms, avg tpot: 26.0ms, generation speed: 38.7 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-tvjnmuiLujnuiQ6pNtiL8u",
+          "latency_s": 6.871890411712229,
+          "first_chunk_latency_s": 0.26519261952489614,
+          "recomputed_tpot_ms": 25.908618792891502,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:54:54.968292   611 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-tvjnmuiLujnuiQ6pNtiL8u, x-request-id: 01a1e812-7ca5-7998-8a81-51dc0e1d05b2, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 252.1ms, ttft: 247.0ms, total_latency: 6853.9ms, avg tpot: 25.9ms, generation speed: 38.7 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-HBD5t3zpd2BKuHQQBd5pV9",
+          "latency_s": 6.783700755797327,
+          "first_chunk_latency_s": 0.2605638047680259,
+          "recomputed_tpot_ms": 25.580929219722748,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:55:01.752136   612 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-HBD5t3zpd2BKuHQQBd5pV9, x-request-id: 01a1e812-977c-7185-935e-712eaec561e3, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 248.1ms, ttft: 244.0ms, total_latency: 6766.8ms, avg tpot: 25.6ms, generation speed: 39.2 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-NswjMJsoZjrH5LSwZxoSWY",
+          "latency_s": 6.951482851989567,
+          "first_chunk_latency_s": 0.45128360111266375,
+          "recomputed_tpot_ms": 25.49097745441923,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:55:08.703876   613 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-NswjMJsoZjrH5LSwZxoSWY, x-request-id: 01a1e812-b1fc-702c-868c-3e1b9b91641d, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 247.7ms, ttft: 243.0ms, total_latency: 6743.0ms, avg tpot: 25.5ms, generation speed: 39.4 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        },
+        {
+          "response_id": "chatcmpl-12481178814234374860-MxTyz3mbdTe6jr7MNy3s75",
+          "latency_s": 6.754504245705903,
+          "first_chunk_latency_s": 0.25756778940558434,
+          "recomputed_tpot_ms": 25.478182181569874,
+          "success": 1,
+          "sse_usage_if_present": null,
+          "actual_server_prompt_tokens": 256,
+          "actual_server_generated_tokens": 256,
+          "actual_server_prefix_cached_tokens": 0,
+          "server_terminal_line": "I20261117 13:55:15.458591   614 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-12481178814234374860-MxTyz3mbdTe6jr7MNy3s75, x-request-id: 01a1e812-cd23-7f48-92cd-46e219afebdd, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 246.5ms, ttft: 241.0ms, total_latency: 6737.9ms, avg tpot: 25.5ms, generation speed: 39.4 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0, speculative_accepted_tokens: 135, speculative_proposed_tokens: 366, speculative_token_acceptance_rate: 0.3689",
+          "content_sha256": "85a98b5e2aead8df3fc68ca5e8e50c40de603b421ab305fbee6415969326c508",
+          "content_characters": 1337,
+          "accepted_tokens": 135,
+          "proposed_tokens": 366,
+          "proposal3_rounds": 122.0
+        }
+      ]
+    }
+  ],
+  "trace_paths": [
+    {
+      "mode": "off_v1",
+      "rank_details": [
+        {
+          "pid": 47451,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47452,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47453,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47454,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47455,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47456,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47457,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        },
+        {
+          "pid": 47458,
+          "target_graphs": [
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3967,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 1,
+              "custom_reduce": 80,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            277,
+            277,
+            277,
+            277,
+            277
+          ]
+        }
+      ],
+      "profile_requests": [
+        {
+          "label": "off_before_1",
+          "E2E_s": 0.566003542393446,
+          "first_json_s": 0.28985573071986437,
+          "first_content_s": 0.2899307580664754,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        },
+        {
+          "label": "off_before_2",
+          "E2E_s": 0.5372279928997159,
+          "first_json_s": 0.267748917452991,
+          "first_content_s": 0.2678252160549164,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        },
+        {
+          "label": "profiled",
+          "E2E_s": 15.759417694061995,
+          "first_json_s": 9.984679874032736,
+          "first_content_s": 9.984755431301892,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        },
+        {
+          "label": "off_after",
+          "E2E_s": 0.756018403917551,
+          "first_json_s": 0.4396447939798236,
+          "first_content_s": 0.43972253520041704,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        }
+      ]
+    },
+    {
+      "mode": "on_v1",
+      "rank_details": [
+        {
+          "pid": 53804,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53805,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53806,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53807,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53808,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53809,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53810,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        },
+        {
+          "pid": 53811,
+          "target_graphs": [
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            },
+            {
+              "nodes": 3969,
+              "small_fp32_gemm": 6,
+              "bf16_to_fp32_cast": 166,
+              "mccl_allgather": 0,
+              "custom_reduce": 81,
+              "native_gate_gemv": 40
+            }
+          ],
+          "draft_nodes": [
+            279,
+            279,
+            279,
+            279,
+            279
+          ]
+        }
+      ],
+      "profile_requests": [
+        {
+          "label": "off_before_1",
+          "E2E_s": 0.5279985340312123,
+          "first_json_s": 0.25632511731237173,
+          "first_content_s": 0.2563981916755438,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        },
+        {
+          "label": "off_before_2",
+          "E2E_s": 0.5196537487208843,
+          "first_json_s": 0.24187533929944038,
+          "first_content_s": 0.24195352103561163,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        },
+        {
+          "label": "profiled",
+          "E2E_s": 15.72968393471092,
+          "first_json_s": 9.687608134001493,
+          "first_content_s": 9.687687968835235,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        },
+        {
+          "label": "off_after",
+          "E2E_s": 0.5578140178695321,
+          "first_json_s": 0.24733878392726183,
+          "first_content_s": 0.2474160147830844,
+          "content": "Keeping experiment records helps engineers because it creates",
+          "usage": {
+            "prompt_tokens": 256,
+            "completion_tokens": 8,
+            "total_tokens": 264,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "finish_reason": "length"
+        }
+      ]
+    }
+  ],
+  "on_faster_than_both_off": false,
+  "accuracy_status": "仅通过基础功能检查，未完成模型精度验收",
+  "attribution_limit": "Bit-exact gather operator passes; full-service performance does not improve. Full-vocabulary gather remains present; transformed transport adds encoding work. Trace is disturbed and cannot supply production Amdahl fractions."
+}

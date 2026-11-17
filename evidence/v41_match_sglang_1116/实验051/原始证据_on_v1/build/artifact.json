@@ -1,0 +1,8 @@
+{
+  "artifact": "/expt/artifacts/native_sg438_bit_gather_v1/bin/xllm",
+  "sha256": "61a191d34a9719b2792eaa565bb02a30d3d01ede929e4efcc6cc47ca8fe1f3f4",
+  "bytes": 341777560,
+  "source_manifest": "/expt/builds/e51_native_bit_gather_v1/source_manifest.json",
+  "source_parent": "a93a4542be60d2d719dee817f069b2a22ab7b0c1",
+  "at": "2026-11-17T13:32:40.132292+08:00"
+}

@@ -1,0 +1,168 @@
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:19,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:130:25: error: ‘MUSAStream’ does not name a type; did you mean ‘MUstream’?
+  130 |   void recordOnce(const MUSAStream& stream) {
+      |                         ^~~~~~~~~~
+      |                         MUstream
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:137:21: error: ‘MUSAStream’ does not name a type; did you mean ‘MUstream’?
+  137 |   void record(const MUSAStream& stream) {
+      |                     ^~~~~~~~~~
+      |                     MUstream
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:163:20: error: ‘MUSAStream’ does not name a type; did you mean ‘MUstream’?
+  163 |   void block(const MUSAStream& stream) {
+      |                    ^~~~~~~~~~
+      |                    MUstream
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In constructor ‘at::musa::MUSAEvent::MUSAEvent(c10::DeviceIndex, const musaIpcEventHandle_t*)’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:43:11: error: ‘MUSAGuard’ does not name a type
+   43 |     const MUSAGuard guard(device_index_);
+      |           ^~~~~~~~~
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In destructor ‘at::musa::MUSAEvent::~MUSAEvent()’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:54:15: error: ‘MUSAGuard’ does not name a type
+   54 |         const MUSAGuard guard(device_index_);
+      |               ^~~~~~~~~
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In member function ‘void at::musa::MUSAEvent::record()’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:127:12: error: ‘getCurrentMUSAStream’ was not declared in this scope; did you mean ‘c10::musa::getCurrentMUSAStream’?
+  127 |     record(getCurrentMUSAStream());
+      |            ^~~~~~~~~~~~~~~~~~~~
+      |            c10::musa::getCurrentMUSAStream
+In file included from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:164:12: note: ‘c10::musa::getCurrentMUSAStream’ declared here
+  164 | MUSAStream getCurrentMUSAStream(DeviceIndex device_index = -1);
+      |            ^~~~~~~~~~~~~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:19,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In member function ‘void at::musa::MUSAEvent::record(const int&)’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:139:26: error: request for member ‘device_index’ in ‘stream’, which is of non-class type ‘const int’
+  139 |       createEvent(stream.device_index());
+      |                          ^~~~~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch/include/c10/macros/Macros.h:1,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/c10/util/Exception.h:5,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/c10/core/Device.h:5,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/ATen/core/TensorBody.h:11,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/ATen/core/Tensor.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/function_hook.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/cpp_hook.h:2,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/variable.h:6,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/autograd.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/api/include/torch/autograd.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/api/include/torch/all.h:7,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/extension.h:5,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:4:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:142:5: error: request for member ‘device_index’ in ‘stream’, which is of non-class type ‘const int’
+  142 |     TORCH_CHECK(
+      |     ^~~~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch/include/c10/core/Device.h:5,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/ATen/core/TensorBody.h:11,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/ATen/core/Tensor.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/function_hook.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/cpp_hook.h:2,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/variable.h:6,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/autograd/autograd.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/api/include/torch/autograd.h:3,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/csrc/api/include/torch/all.h:7,
+                 from /opt/venv/lib/python3.10/site-packages/torch/include/torch/extension.h:5,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:4:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:142:5: error: request for member ‘device_index’ in ‘stream’, which is of non-class type ‘const int’
+  142 |     TORCH_CHECK(
+      |     ^~~~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:19,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:149:11: error: ‘MUSAGuard’ does not name a type
+  149 |     const MUSAGuard guard(device_index_);
+      |           ^~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/aten/utils/Utils.h:10,
+                 from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:9,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:150:5: error: invalid conversion from ‘int’ to ‘musaStream_t’ {aka ‘MUstream_st*’} [-fpermissive]
+  150 |     C10_MUSA_CHECK(musaEventRecord(event_, stream));
+      |     ^~~~~~~~~~~~~~
+      |     |
+      |     int
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:7,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/usr/local/musa/include/musa_runtime_api.h:3495:106: note:   initializing argument 2 of ‘musaError_t musaEventRecord(musaEvent_t, musaStream_t)’
+ 3495 | extern __host__ __musart_builtin__ musaError_t MUSARTAPI musaEventRecord(musaEvent_t event, musaStream_t stream __dv(0));
+      |                                                                                                          ^
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:19,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:156:46: error: request for member ‘stream’ in ‘stream’, which is of non-class type ‘const int’
+  156 |           reinterpret_cast<uintptr_t>(stream.stream()));
+      |                                              ^~~~~~
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In member function ‘void at::musa::MUSAEvent::block(const int&)’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:165:13: error: ‘MUSAGuard’ does not name a type
+  165 |       const MUSAGuard guard(stream.device_index());
+      |             ^~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/aten/utils/Utils.h:10,
+                 from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:9,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:166:7: error: invalid conversion from ‘int’ to ‘musaStream_t’ {aka ‘MUstream_st*’} [-fpermissive]
+  166 |       C10_MUSA_CHECK(musaStreamWaitEvent(stream, event_, 0));
+      |       ^~~~~~~~~~~~~~
+      |       |
+      |       int
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:7,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/usr/local/musa/include/musa_runtime_api.h:2790:91: note:   initializing argument 1 of ‘musaError_t musaStreamWaitEvent(musaStream_t, musaEvent_t, unsigned int)’
+ 2790 | extern __host__ __musart_builtin__ musaError_t MUSARTAPI musaStreamWaitEvent(musaStream_t stream, musaEvent_t event, unsigned int flags __dv(0));
+      |                                                                              ~~~~~~~~~~~~~^~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:19,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:172:48: error: request for member ‘stream’ in ‘stream’, which is of non-class type ‘const int’
+  172 |             reinterpret_cast<uintptr_t>(stream.stream()));
+      |                                                ^~~~~~
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In member function ‘float at::musa::MUSAEvent::elapsed_time(const at::musa::MUSAEvent&) const’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:183:11: error: ‘MUSAGuard’ does not name a type
+  183 |     const MUSAGuard guard(device_index_);
+      |           ^~~~~~~~~
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In member function ‘void at::musa::MUSAEvent::ipc_handle(musaIpcEventHandle_t*)’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:206:19: error: ‘getCurrentMUSAStream’ was not declared in this scope; did you mean ‘c10::musa::getCurrentMUSAStream’?
+  206 |       createEvent(getCurrentMUSAStream().device_index());
+      |                   ^~~~~~~~~~~~~~~~~~~~
+      |                   c10::musa::getCurrentMUSAStream
+In file included from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:164:12: note: ‘c10::musa::getCurrentMUSAStream’ declared here
+  164 | MUSAStream getCurrentMUSAStream(DeviceIndex device_index = -1);
+      |            ^~~~~~~~~~~~~~~~~~~~
+In file included from /opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:19,
+                 from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:208:11: error: ‘MUSAGuard’ does not name a type
+  208 |     const MUSAGuard guard(device_index_);
+      |           ^~~~~~~~~
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h: In member function ‘void at::musa::MUSAEvent::createEvent(c10::DeviceIndex)’:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAEvent.h:221:11: error: ‘MUSAGuard’ does not name a type
+  221 |     const MUSAGuard guard(device_index_);
+      |           ^~~~~~~~~
+In file included from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h: At global scope:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:1148:45: error: ‘MUSAStream’ is not a member of ‘at::musa’; did you mean ‘c10::musa::MUSAStream’?
+ 1148 |   std::unordered_map<std::string, at::musa::MUSAStream> mcclStreams_;
+      |                                             ^~~~~~~~~~
+In file included from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:18,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/core/MUSAStream.h:19:7: note: ‘c10::musa::MUSAStream’ declared here
+   19 | class MUSAStream {
+      |       ^~~~~~~~~~
+In file included from /workspace/xllm-mt-main/xllm/core/framework/parallel_state/musa_process_group.h:19,
+                 from /expt/builds/e51_gather_module_v2/src/tests/core/kernels/musa/v41_gather_candidate_test_module.cpp:9:
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:1148:55: error: template argument 2 is invalid
+ 1148 |   std::unordered_map<std::string, at::musa::MUSAStream> mcclStreams_;
+      |                                                       ^
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:1148:55: error: template argument 5 is invalid
+/opt/venv/lib/python3.10/site-packages/torch_musa/csrc/distributed/ProcessGroupMCCL.h:1148:8: error: ‘<expression error>’ in namespace ‘std’ does not name a type
+ 1148 |   std::unordered_map<std::string, at::musa::MUSAStream> mcclStreams_;
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

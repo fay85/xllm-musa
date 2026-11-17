@@ -1,0 +1,275 @@
+diff --git a/xllm/core/layers/musa/deepseek_v41/draft_model.h b/xllm/core/layers/musa/deepseek_v41/draft_model.h
+index 98eae6a9..c2be8a69 100644
+--- a/xllm/core/layers/musa/deepseek_v41/draft_model.h
++++ b/xllm/core/layers/musa/deepseek_v41/draft_model.h
+@@ -16,6 +16,7 @@ You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
+ #include "core/framework/parallel_state/parallel_state.h"
+ #include "core/layers/musa/deepseek_v41/decoder.h"
+ #include "core/layers/musa/deepseek_v41/feed_forward.h"
++#include "core/layers/musa/deepseek_v41/gather_bits.h"
+ #include "core/layers/musa/deepseek_v41/rms_norm.h"
+ namespace xllm::layer {
+ 
+@@ -33,7 +34,8 @@ class DeepseekV41DraftModel final {
+                         torch::Tensor head,
+                         torch::Tensor rope,
+                         ProcessGroup* attention_group = nullptr,
+-                        ProcessGroup* expert_group = nullptr)
++                        ProcessGroup* expert_group = nullptr,
++                        bool gather_bf16_bits = false)
+       : embedding_(std::move(embedding)),
+         main_projection_(std::move(main_projection),
+                          /*original_fp8_activation=*/true),
+@@ -41,7 +43,8 @@ class DeepseekV41DraftModel final {
+         output_norm_(std::move(output_norm)),
+         head_(std::move(head)),
+         rope_(std::move(rope)),
+-        attention_group_(attention_group) {
++        attention_group_(attention_group),
++        gather_bf16_bits_(gather_bf16_bits) {
+     CHECK_EQ(configs.size(), 3);
+     CHECK_EQ(weights.size(), configs.size());
+     CHECK(embedding_.defined() && main_norm_.defined() &&
+@@ -113,7 +116,8 @@ class DeepseekV41DraftModel final {
+     torch::DeviceGuard guard(embedding_.device());
+     torch::Tensor hidden =
+         torch::embedding(embedding_, tokens.to(torch::kInt64));
+-    hidden = parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
++    hidden = deepseek_v41_gather_bf16_bits(
++        hidden, attention_group_, gather_bf16_bits_);
+     hidden = hidden.unsqueeze(1).expand({-1, 4, -1}).contiguous();
+     torch::Tensor pre_mix = torch::zeros(
+         {tokens.numel(), 4}, hidden.options().dtype(torch::kFloat32));
+@@ -141,7 +145,8 @@ class DeepseekV41DraftModel final {
+     CHECK_EQ(hidden.dim(), 2);
+     CHECK_EQ(hidden.size(1), head_.size(1));
+     const torch::Tensor local = torch::nn::functional::linear(hidden, head_);
+-    return parallel_state::gather(local, attention_group_, /*dim=*/-1);
++    return deepseek_v41_gather_bf16_bits(
++        local, attention_group_, gather_bf16_bits_);
+   }
+ 
+  private:
+@@ -152,6 +157,7 @@ class DeepseekV41DraftModel final {
+   torch::Tensor head_;
+   torch::Tensor rope_;
+   ProcessGroup* attention_group_;
++  bool gather_bf16_bits_ = false;
+   double epsilon_ = 1e-6;
+   std::vector<std::unique_ptr<DeepseekV41Decoder>> layers_;
+ };
+diff --git a/xllm/core/layers/musa/deepseek_v41/text_model.h b/xllm/core/layers/musa/deepseek_v41/text_model.h
+index f063c0b9..5fe7fc40 100644
+--- a/xllm/core/layers/musa/deepseek_v41/text_model.h
++++ b/xllm/core/layers/musa/deepseek_v41/text_model.h
+@@ -23,6 +23,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ #include "core/framework/model/aux_hidden_capture.h"
+ #include "core/framework/parallel_state/parallel_state.h"
+ #include "core/layers/musa/deepseek_v41/decoder.h"
++#include "core/layers/musa/deepseek_v41/gather_bits.h"
+ #include "core/layers/musa/deepseek_v41/profile_range.h"
+ 
+ namespace xllm::layer {
+@@ -44,7 +45,8 @@ class DeepseekV41TextModel final {
+                        ProcessGroup* expert_group = nullptr,
+                        bool bounded_replay = false,
+                        bool replicated_attention = false,
+-                       bool owner_attention = false)
++                       bool owner_attention = false,
++                       bool gather_bf16_bits = false)
+       : embedding_(std::move(embedding)),
+         norm_(std::move(norm)),
+         head_(std::move(head)),
+@@ -52,6 +54,7 @@ class DeepseekV41TextModel final {
+         compressed_rope_(std::move(compressed_rope)),
+         attention_group_(attention_group) {
+     owner_attention_ = owner_attention;
++    gather_bf16_bits_ = gather_bf16_bits;
+     CHECK(!owner_attention_ || (replicated_attention && attention_group_));
+     CHECK(!configs.empty());
+     CHECK_EQ(configs.size(), weights.size());
+@@ -132,7 +135,8 @@ class DeepseekV41TextModel final {
+     CHECK_EQ(input_ids.device(), embedding_.device());
+     torch::Tensor hidden =
+         torch::embedding(embedding_, input_ids.to(torch::kInt64));
+-    return parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
++    return deepseek_v41_gather_bf16_bits(
++        hidden, attention_group_, gather_bf16_bits_);
+   }
+ 
+   torch::Tensor forward_with_capture(
+@@ -305,7 +309,8 @@ class DeepseekV41TextModel final {
+     torch::DeviceGuard guard(embedding_.device());
+     torch::Tensor hidden =
+         torch::embedding(embedding_, input_ids.to(torch::kInt64));
+-    hidden = parallel_state::gather(hidden, attention_group_, /*dim=*/-1);
++    hidden = deepseek_v41_gather_bf16_bits(
++        hidden, attention_group_, gather_bf16_bits_);
+     hidden = hidden.unsqueeze(1).expand({-1, 4, -1}).contiguous();
+     torch::Tensor pre_mix = torch::zeros(
+         {input_ids.size(0), 4}, hidden.options().dtype(torch::kFloat32));
+@@ -384,7 +389,8 @@ class DeepseekV41TextModel final {
+ 
+   torch::Tensor project_logits(const torch::Tensor& input) const {
+     const torch::Tensor local = torch::linear(input, head_);
+-    return parallel_state::gather(local, attention_group_, /*dim=*/-1);
++    return deepseek_v41_gather_bf16_bits(
++        local, attention_group_, gather_bf16_bits_);
+   }
+ 
+  private:
+@@ -395,6 +401,7 @@ class DeepseekV41TextModel final {
+   torch::Tensor compressed_rope_;
+   double norm_epsilon_;
+   bool owner_attention_ = false;
++  bool gather_bf16_bits_ = false;
+   bool bounded_replay_ = false;
+   int64_t replay_window_ = 0;
+   int64_t late_layer_start_ = 0;
+diff --git a/xllm/models/llm/musa/deepseek_v41_dspark_native.h b/xllm/models/llm/musa/deepseek_v41_dspark_native.h
+index d982a70c..c31c9821 100644
+--- a/xllm/models/llm/musa/deepseek_v41_dspark_native.h
++++ b/xllm/models/llm/musa/deepseek_v41_dspark_native.h
+@@ -67,6 +67,11 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+         util::get_bool_env("XLLM_DSV41_DRAFT_CUSTOM_AR", false);
+     CHECK(!draft_custom_allreduce_ ||
+           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true));
++    gather_bf16_bits_ =
++        util::get_bool_env("XLLM_DSV41_GATHER_BF16_BITS", false);
++    CHECK(!gather_bf16_bits_ ||
++          (tp_size() == 8 && musa_custom_allreduce_enabled(tp_group_)))
++        << "BF16 bit gather requires the initialized TP8 custom communicator";
+     static_draft_ = util::get_bool_env("XLLM_DSV41_STATIC_DRAFT", false);
+     full_draft_graph_ =
+         util::get_bool_env("XLLM_DSV41_FULL_DRAFT_GRAPH", false);
+@@ -122,7 +127,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+         checkpoint.copy(head, torch::kBFloat16, /*shard_dim=*/0),
+         rope,
+         tp_group_,
+-        draft_expert_reduction_group());
++        draft_expert_reduction_group(),
++        gather_bf16_bits_);
+     markov_embed_ =
+         checkpoint.copy("mtp.2.markov_head.embed.weight", torch::kBFloat16);
+     markov_head_ =
+@@ -293,7 +299,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+   void initialize_draft_collective_policy() const {
+     const int32_t policy = static_cast<int32_t>(draft_custom_allreduce_) |
+                            (static_cast<int32_t>(static_draft_) << 1) |
+-                           (static_cast<int32_t>(full_draft_graph_) << 2);
++                           (static_cast<int32_t>(full_draft_graph_) << 2) |
++                           (static_cast<int32_t>(gather_bf16_bits_) << 3);
+     if (tp_group_ != nullptr && tp_size() > 1) {
+       const torch::Tensor local =
+           torch::tensor({policy}, options_.dtype(torch::kInt32));
+@@ -547,6 +554,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
+   bool static_draft_ = false;
+   bool full_draft_graph_ = false;
+   bool markov_fp32_logits_ = false;
++  bool gather_bf16_bits_ = false;
+   torch::Tensor markov_embed_;
+   torch::Tensor markov_head_;
+   torch::Tensor confidence_weight_;
+diff --git a/xllm/models/llm/musa/deepseek_v41_native.h b/xllm/models/llm/musa/deepseek_v41_native.h
+index c7058775..5db4f497 100644
+--- a/xllm/models/llm/musa/deepseek_v41_native.h
++++ b/xllm/models/llm/musa/deepseek_v41_native.h
+@@ -76,6 +76,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+     CHECK(!owner_gather_outside_graph_ || owner_attention_);
+     CHECK(!owner_attention_ || replicated_attention_);
+     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
++    gather_bf16_bits_ =
++        util::get_bool_env("XLLM_DSV41_GATHER_BF16_BITS", false);
++    CHECK(!gather_bf16_bits_ ||
++          (tp_size() == 8 && musa_custom_allreduce_enabled(tp_group_)))
++        << "BF16 bit gather requires the initialized TP8 custom communicator";
++
+     const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
+     if (dense_prequant != nullptr) {
+       dense_prequant_path_ = dense_prequant;
+@@ -297,7 +303,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+         expert_reduction_group(),
+         bounded_replay_,
+         replicated_attention_,
+-        owner_attention_);
++        owner_attention_,
++        gather_bf16_bits_);
+     if (static_decode_) {
+       std::vector<int64_t> ratios;
+       ratios.reserve(args_.n_layers());
+@@ -807,7 +814,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+         static_cast<int32_t>(native_dspark_) |
+         (static_cast<int32_t>(selective_spec_commit_) << 1) |
+         (static_cast<int32_t>(verify_custom_allreduce_) << 2) |
+-        (static_cast<int32_t>(fused_spec_snapshot_) << 3);
++        (static_cast<int32_t>(fused_spec_snapshot_) << 3) |
++        (static_cast<int32_t>(gather_bf16_bits_) << 4);
+     if (tp_group_ != nullptr && tp_size() > 1) {
+       const torch::Tensor local =
+           torch::tensor({policy}, options_.dtype(torch::kInt32));
+@@ -1458,6 +1466,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+   bool replicated_attention_ = false;
+   bool owner_attention_ = false;
+   bool owner_gather_outside_graph_ = false;
++  bool gather_bf16_bits_ = false;
+   std::shared_ptr<layer::DeepseekV41DeepEpLlRuntime> deep_ep_ll_;
+   // Graphs retain weight/cache pointers; destroy before model and Engram
+   // assets.
+diff --git "a/home/xiaopang/\346\241\214\351\235\242/Albert\345\210\206\344\272\253/20261021\344\273\216xllm\345\274\200\345\247\213/\347\216\213\345\256\266\346\230\216/20261111\345\220\216\347\273\255\346\216\250\350\277\233Cpp\345\220\247/\344\273\245sglang_mt\345\267\245\344\275\234\344\270\272\346\257\215\346\234\254\345\216\273\345\201\232/03_\344\273\243\347\240\201/xllm-musa/xllm/core/layers/musa/deepseek_v41/gather_bits.h" "b/home/xiaopang/\346\241\214\351\235\242/Albert\345\210\206\344\272\253/20261021\344\273\216xllm\345\274\200\345\247\213/\347\216\213\345\256\266\346\230\216/20261111\345\220\216\347\273\255\346\216\250\350\277\233Cpp\345\220\247/\344\273\245sglang_mt\345\267\245\344\275\234\344\270\272\346\257\215\346\234\254\345\216\273\345\201\232/03_\344\273\243\347\240\201/xllm-musa/xllm/core/layers/musa/deepseek_v41/gather_bits.h"
+new file mode 100644
+index 0000000..eefea90
+--- /dev/null
++++ "b/home/xiaopang/\346\241\214\351\235\242/Albert\345\210\206\344\272\253/20261021\344\273\216xllm\345\274\200\345\247\213/\347\216\213\345\256\266\346\230\216/20261111\345\220\216\347\273\255\346\216\250\350\277\233Cpp\345\220\247/\344\273\245sglang_mt\345\267\245\344\275\234\344\270\272\346\257\215\346\234\254\345\216\273\345\201\232/03_\344\273\243\347\240\201/xllm-musa/xllm/core/layers/musa/deepseek_v41/gather_bits.h"
+@@ -0,0 +1,52 @@
++/* Copyright 2026 The xLLM Authors. All Rights Reserved.
++ * SPDX-License-Identifier: Apache-2.0
++ */
++#pragma once
++
++#include <glog/logging.h>
++#include <torch/torch.h>
++
++#include <cstdint>
++
++#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
++#include "core/framework/parallel_state/parallel_state.h"
++
++namespace xllm::layer {
++
++// Gather the complete BF16 embedding/vocabulary shards without floating-point
++// addition of model values. Each signed 16-bit encoding is exactly
++// representable as FP32, and only its owning rank contributes a nonzero
++// integer. Decoding the sum therefore preserves all original bits, including -0
++// and NaN payloads. This is a model-specific small-row path, not a generic
++// AllGather replacement.
++inline torch::Tensor deepseek_v41_gather_bf16_bits(const torch::Tensor& input,
++                                                   ProcessGroup* group,
++                                                   bool enabled) {
++  constexpr int64_t kMaxRows = 6;
++  constexpr int64_t kMaxEncodedBytes = 4 * 1024 * 1024;
++  const bool supported =
++      enabled && group != nullptr && group->world_size() == 8 &&
++      input.device().type() == torch::kPrivateUse1 && input.dim() == 2 &&
++      input.is_contiguous() && input.scalar_type() == torch::kBFloat16 &&
++      input.size(0) > 0 && input.size(0) <= kMaxRows && input.size(1) > 0 &&
++      input.numel() <= kMaxEncodedBytes / (8 * sizeof(float)) &&
++      (input.numel() * 8 * sizeof(float)) % 16 == 0;
++  if (!supported) {
++    return parallel_state::gather(input, group, /*dim=*/-1);
++  }
++  torch::DeviceGuard guard(input.device());
++  const int64_t width = input.size(1);
++  const int64_t rank = group->rank();
++  CHECK_GE(rank, 0);
++  CHECK_LT(rank, 8);
++  const torch::Tensor encoded = input.view(torch::kInt16).to(torch::kFloat32);
++  torch::Tensor padded = torch::zeros({input.size(0), width * 8},
++                                      input.options().dtype(torch::kFloat32));
++  padded.narrow(/*dim=*/1, rank * width, width).copy_(encoded);
++  auto gathered = musa_allreduce_tp_custom(group, padded);
++  CHECK(gathered.has_value())
++      << "Selected V4.1 BF16 bit gather requires supported custom TP reduction";
++  return gathered->to(torch::kInt16).view(torch::kBFloat16);
++}
++
++}  // namespace xllm::layer

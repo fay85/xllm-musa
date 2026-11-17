@@ -1,0 +1,12 @@
+[Gloo] Rank 2 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I20261117 13:29:02.504292 45260 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=2, world_size=8, enabled=1, max_bytes=8388608
+I20261117 13:29:03.967032 45260 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=2, world_size=8, algorithm=1, max_bytes=8388608
+I20261117 13:29:07.397980 45260 musa_native_collectives.h:76] Native synchronous MCCL initialized for tp_group, local rank 2/8
+I20261117 13:29:08.533151 45260 musa_custom_all_reduce.cpp:548] [MUSA_TP_REDUCE] backend=custom, group=tp_group, rank=2, world_size=8, dtype=Float, shape=[1, 5120], bytes=20480, out_of_place=true
+I20261117 13:29:09.401614 45260 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=1
+I20261117 13:29:09.630489 45260 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=4
+I20261117 13:29:09.861315 45260 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=7
+I20261117 13:29:11.038383 45260 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=19
+I20261117 13:29:11.423411 45260 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=22
+I20261117 13:29:11.913268 45260 musa_custom_all_reduce.cpp:677] Registered 8 custom-allreduce graph buffers for group tp_group, generation=25

@@ -1,0 +1,74 @@
+[
+  {
+    "rank": 0,
+    "pid": 43362,
+    "start_ticks": "525315057",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 1,
+    "pid": 43363,
+    "start_ticks": "525315058",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 2,
+    "pid": 43364,
+    "start_ticks": "525315058",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 3,
+    "pid": 43365,
+    "start_ticks": "525315059",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 4,
+    "pid": 43366,
+    "start_ticks": "525315059",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 5,
+    "pid": 43367,
+    "start_ticks": "525315060",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 6,
+    "pid": 43368,
+    "start_ticks": "525315060",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  },
+  {
+    "rank": 7,
+    "pid": 43369,
+    "start_ticks": "525315061",
+    "exe": "/usr/bin/python3.10",
+    "exe_sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+    "cgroup": "0::/\n",
+    "script": "/expt/scripts/validate_v41_gather_candidate_v1.py"
+  }
+]

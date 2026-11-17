@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/expt/builds/e51_gather_module_v2/worker.py", line 11, in <module>
+    assert p.returncode==0,name+' failed'
+AssertionError: cpp failed

@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\n  \"at\": \"2026-11-17T13:24:07.015656+08:00\",\n  \"container\": \"xiaopang1117_v41_sg438_decode_sj10\",\n  \"container_id\": \"7eefcf3aedcb80825833e6b47295689965905518e51823cab8bedecfad6374f3\",\n  \"files\": {\n    \"/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/scripts/validate_v41_gather_candidate_v1.py\": {\n      \"size\": 8961,\n      \"sha256\": \"5a47d23b79c229df256a93aad94bbeb358fe945c1910d9c6a4d408d93b18f716\"\n    },\n    \"/data/nfs_shared/xiaopang/v41_xllm_match_sglang_20261116/scripts/e51_gather_gpu_supervisor_v1.py\": {\n      \"size\": 5320,\n      \"sha256\": \"bf66f6dd0771b4a7a62a307637e56fdb28a9e41e0ad51f98f7142a2f2e4396dd\"\n    }\n  },\n  \"launch_exit\": 0,\n  \"launch_stdout\": \"{\\\"pid\\\": 43361, \\\"start_ticks\\\": \\\"525315022\\\"}\\n\",\n  \"launch_stderr\": \"\"\n}\n",
+  "stderr": ""
+}

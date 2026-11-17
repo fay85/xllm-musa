@@ -67,6 +67,11 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_DRAFT_CUSTOM_AR", false);
     CHECK(!draft_custom_allreduce_ ||
           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true));
+    gather_bf16_bits_ =
+        util::get_bool_env("XLLM_DSV41_GATHER_BF16_BITS", false);
+    CHECK(!gather_bf16_bits_ ||
+          (tp_size() == 8 && musa_custom_allreduce_enabled(tp_group_)))
+        << "BF16 bit gather requires the initialized TP8 custom communicator";
     static_draft_ = util::get_bool_env("XLLM_DSV41_STATIC_DRAFT", false);
     full_draft_graph_ =
         util::get_bool_env("XLLM_DSV41_FULL_DRAFT_GRAPH", false);
@@ -122,7 +127,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
         checkpoint.copy(head, torch::kBFloat16, /*shard_dim=*/0),
         rope,
         tp_group_,
-        draft_expert_reduction_group());
+        draft_expert_reduction_group(),
+        gather_bf16_bits_);
     markov_embed_ =
         checkpoint.copy("mtp.2.markov_head.embed.weight", torch::kBFloat16);
     markov_head_ =
@@ -293,7 +299,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   void initialize_draft_collective_policy() const {
     const int32_t policy = static_cast<int32_t>(draft_custom_allreduce_) |
                            (static_cast<int32_t>(static_draft_) << 1) |
-                           (static_cast<int32_t>(full_draft_graph_) << 2);
+                           (static_cast<int32_t>(full_draft_graph_) << 2) |
+                           (static_cast<int32_t>(gather_bf16_bits_) << 3);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -547,6 +554,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   bool static_draft_ = false;
   bool full_draft_graph_ = false;
   bool markov_fp32_logits_ = false;
+  bool gather_bf16_bits_ = false;
   torch::Tensor markov_embed_;
   torch::Tensor markov_head_;
   torch::Tensor confidence_weight_;

@@ -1,0 +1,7 @@
+{
+  "xllm/core/layers/musa/deepseek_v41/gather_bits.h": "2d678e26b1ef36910ab7b077452478f13ba2cde614086d9bd7b173da2a9f073f",
+  "xllm/core/layers/musa/deepseek_v41/text_model.h": "d07b40eca02337e39f6040305702a8e988b3e4cb0b20b279061656276466144d",
+  "xllm/core/layers/musa/deepseek_v41/draft_model.h": "0da3512e1a8a6109954c25c4b986dc24835d8a2aaac09857e853a5e040fca004",
+  "xllm/models/llm/musa/deepseek_v41_native.h": "472739a66dbaac9af813cae095ff81369a9ffbb80eda8f35ca90605bc770e1ee",
+  "xllm/models/llm/musa/deepseek_v41_dspark_native.h": "7abd8b66d23b66779cbfbc00792ec3059ae0de473ffca2530eca7524398e99a1"
+}

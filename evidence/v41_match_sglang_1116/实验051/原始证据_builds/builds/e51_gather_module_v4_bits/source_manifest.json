@@ -1,0 +1,4 @@
+{
+  "tests/core/kernels/musa/v41_gather_candidate_test_module.cpp": "186f9943d4207bce0edbd6887e28c2250cec6888b672583b10d09c2103ca1dfe",
+  "xllm/core/layers/musa/deepseek_v41/gather_bits.h": "2d678e26b1ef36910ab7b077452478f13ba2cde614086d9bd7b173da2a9f073f"
+}

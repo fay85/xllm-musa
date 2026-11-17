@@ -76,6 +76,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     CHECK(!owner_gather_outside_graph_ || owner_attention_);
     CHECK(!owner_attention_ || replicated_attention_);
     native_dspark_ = util::get_bool_env("XLLM_DSV41_DSPARK_NATIVE", false);
+    gather_bf16_bits_ =
+        util::get_bool_env("XLLM_DSV41_GATHER_BF16_BITS", false);
+    CHECK(!gather_bf16_bits_ ||
+          (tp_size() == 8 && musa_custom_allreduce_enabled(tp_group_)))
+        << "BF16 bit gather requires the initialized TP8 custom communicator";
+
     const char* dense_prequant = std::getenv("XLLM_DSV41_DENSE_PREQUANT_DIR");
     if (dense_prequant != nullptr) {
       dense_prequant_path_ = dense_prequant;
@@ -297,7 +303,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         expert_reduction_group(),
         bounded_replay_,
         replicated_attention_,
-        owner_attention_);
+        owner_attention_,
+        gather_bf16_bits_);
     if (static_decode_) {
       std::vector<int64_t> ratios;
       ratios.reserve(args_.n_layers());
@@ -807,7 +814,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         static_cast<int32_t>(native_dspark_) |
         (static_cast<int32_t>(selective_spec_commit_) << 1) |
         (static_cast<int32_t>(verify_custom_allreduce_) << 2) |
-        (static_cast<int32_t>(fused_spec_snapshot_) << 3);
+        (static_cast<int32_t>(fused_spec_snapshot_) << 3) |
+        (static_cast<int32_t>(gather_bf16_bits_) << 4);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -1458,6 +1466,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   bool replicated_attention_ = false;
   bool owner_attention_ = false;
   bool owner_gather_outside_graph_ = false;
+  bool gather_bf16_bits_ = false;
   std::shared_ptr<layer::DeepseekV41DeepEpLlRuntime> deep_ep_ll_;
   // Graphs retain weight/cache pointers; destroy before model and Engram
   // assets.
