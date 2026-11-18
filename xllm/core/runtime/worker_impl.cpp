@@ -597,8 +597,8 @@ bool WorkerImpl::allocate_kv_cache_storage(
         kv_cache_shape.has_kpool_tail_shape(),
         ::xllm::KVCacheConfig::get_instance().max_linear_state_cache_slots());
     if (gdn_ckpt_slots > 0) {
-      xllm::kernel::musa::init_gdn_int8_checkpoint_pool(
-          kv_caches_, gdn_ckpt_slots);
+      xllm::kernel::musa::init_gdn_int8_checkpoint_pool(kv_caches_,
+                                                        gdn_ckpt_slots);
     }
   }
 #endif
@@ -919,6 +919,11 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
 #elif defined(USE_MLU)
   reads_distinct_state = is_glm5_next_target_model(context_.get_model_args()) &&
                          is_prefill && !params.is_spec_verify;
+#elif defined(USE_MUSA)
+  const ModelArgs& args = context_.get_model_args();
+  reads_distinct_state = (is_qwen3_5_target_model_type(args.model_type()) ||
+                          args.model_type() == "qwen3_next") &&
+                         is_prefill && !params.is_spec_verify;
 #endif
   if (is_prefill && params.meta.requires_host_restore) {
     CHECK(hierarchy_kv_cache_transfer_ != nullptr)
@@ -930,8 +935,8 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
         << "failed to wait for Host cache load before LINEAR state restore";
 #if defined(USE_MUSA)
     // On MUSA, synchronize_all_layers() installs GPU stream wait events on
-    // compute_stream_ (non-blocking on host). Clear the handle so Executor::forward()
-    // does not re-install duplicate wait_event calls.
+    // compute_stream_ (non-blocking on host). Clear the handle so
+    // Executor::forward() does not re-install duplicate wait_event calls.
     params.parallel.layer_wise_load_synchronizer = nullptr;
 #endif
   }
@@ -975,6 +980,20 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
               params.linear_state_validity_mask.begin() + row * repeat;
           std::fill(mbegin, mbegin + repeat, 1);
         }
+      }
+      if (reads_distinct_state &&
+          effective_read_ids != params.embedding.linear_state_read_ids) {
+        // Compressed checkpoint IDs address a separate pool. After restore,
+        // direct-read prefill kernels must use the active slots in both host
+        // metadata and the optional device tensor consumed by graph replay.
+        params.embedding.linear_state_read_ids = effective_read_ids;
+        if (params.embedding.linear_state_read_indices.defined()) {
+          params.embedding.linear_state_read_indices = torch::tensor(
+              effective_read_ids,
+              params.embedding.linear_state_read_indices.options());
+        }
+        LOG_FIRST_N(INFO, 4)
+            << "MUSA GDN Int8 direct-read indices normalized to active slots";
       }
       restore_linear_state_slots(kv_caches_,
                                  params.embedding.linear_state_ids,
@@ -2520,32 +2539,35 @@ uint32_t WorkerImpl::transfer_kv_blocks(
   if (hierarchy_kv_cache_transfer_ != nullptr) {
     if (!block_transfer_info.empty() &&
         block_transfer_info.front().transfer_type == TransferType::D2H2G) {
-      // Record a lightweight compute_stream_ event in FIFO order on threadpool_,
-      // then hand off the actual D2H copy + stream sync + Mooncake Put to
-      // d2h_threadpool_ so WorkerImpl.schedule never stalls GPU forward launch.
+      // Record a lightweight compute_stream_ event in FIFO order on
+      // threadpool_, then hand off the actual D2H copy + stream sync + Mooncake
+      // Put to d2h_threadpool_ so WorkerImpl.schedule never stalls GPU forward
+      // launch.
       auto result = std::make_shared<std::promise<uint32_t>>();
       std::future<uint32_t> future = result->get_future();
-      threadpool_.schedule(
-          [this, batch_id, block_transfer_info = std::move(block_transfer_info), result]() mutable {
-            StreamEventPtr compute_done = compute_stream_->record_event();
-            d2h_threadpool_.schedule(
-                [this,
-                 batch_id,
-                 block_transfer_info = std::move(block_transfer_info),
-                 compute_done = std::move(compute_done),
-                 result]() mutable {
-                  try {
-                    if (compute_done != nullptr) {
-                      compute_done->synchronize();
-                    }
-                    result->set_value(
-                        hierarchy_kv_cache_transfer_->transfer_kv_blocks(
-                            batch_id, block_transfer_info));
-                  } catch (...) {
-                    result->set_exception(std::current_exception());
-                  }
-                });
-          });
+      threadpool_.schedule([this,
+                            batch_id,
+                            block_transfer_info =
+                                std::move(block_transfer_info),
+                            result]() mutable {
+        StreamEventPtr compute_done = compute_stream_->record_event();
+        d2h_threadpool_.schedule([this,
+                                  batch_id,
+                                  block_transfer_info =
+                                      std::move(block_transfer_info),
+                                  compute_done = std::move(compute_done),
+                                  result]() mutable {
+          try {
+            if (compute_done != nullptr) {
+              compute_done->synchronize();
+            }
+            result->set_value(hierarchy_kv_cache_transfer_->transfer_kv_blocks(
+                batch_id, block_transfer_info));
+          } catch (...) {
+            result->set_exception(std::current_exception());
+          }
+        });
+      });
       return future.get();
     }
     return hierarchy_kv_cache_transfer_->transfer_kv_blocks(

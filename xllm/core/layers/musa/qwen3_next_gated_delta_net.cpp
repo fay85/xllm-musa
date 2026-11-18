@@ -108,6 +108,11 @@ torch::Tensor Qwen3NextGatedDeltaNetImpl::project_qkvz(
   return project_input(qkvz_proj_, hidden_states);
 }
 
+torch::Tensor Qwen3NextGatedDeltaNetImpl::project_ba(
+    const NormalizedHiddenStates& hidden_states) {
+  return project_input(ba_proj_, hidden_states);
+}
+
 void Qwen3NextGatedDeltaNetImpl::load_state_dict(const StateDict& state_dict) {
   load_projection_state_dict(state_dict);
   load_common_state_dict(state_dict);
@@ -358,6 +363,30 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::fusable_ba_weight() const {
     return torch::Tensor();
   }
   return Qwen3NextGatedDeltaNetImpl::fusable_ba_weight();
+}
+
+torch::Tensor Qwen3_5GatedDeltaNetImpl::project_qkvz(
+    const NormalizedHiddenStates& hidden_states) {
+  if (use_merged_projections()) {
+    return Qwen3NextGatedDeltaNetImpl::project_qkvz(hidden_states);
+  }
+  auto qkv = project_input(in_proj_qkv_, hidden_states).unsqueeze(0);
+  auto z_proj = project_input(in_proj_z_, hidden_states).unsqueeze(0);
+  auto qkvz = merge_qkvz_from_split_activations(qkv, z_proj);
+  const int64_t num_tokens = hidden_states.values.size(0);
+  return qkvz.view({num_tokens, qkvz.size(-1)}).contiguous();
+}
+
+torch::Tensor Qwen3_5GatedDeltaNetImpl::project_ba(
+    const NormalizedHiddenStates& hidden_states) {
+  if (use_merged_projections()) {
+    return Qwen3NextGatedDeltaNetImpl::project_ba(hidden_states);
+  }
+  auto b_proj = project_input(in_proj_b_, hidden_states).unsqueeze(0);
+  auto a_proj = project_input(in_proj_a_, hidden_states).unsqueeze(0);
+  auto ba = merge_ba_from_split_activations(b_proj, a_proj);
+  const int64_t num_tokens = hidden_states.values.size(0);
+  return ba.view({num_tokens, ba.size(-1)}).contiguous();
 }
 
 void Qwen3_5GatedDeltaNetImpl::load_projection_state_dict(

@@ -659,6 +659,8 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
       {max_tokens_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_linear_state_indices_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
+  persistent_linear_state_read_indices_ = torch::zeros(
+      {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_kv_cache_tokens_nums_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_num_accepted_tokens_ = torch::ones(
@@ -854,6 +856,27 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
               .to(device_),
           /*non_blocking=*/true);
     }
+    CHECK_LE(linear_state_rows, persistent_linear_state_read_indices_.numel());
+    torch::Tensor linear_state_read_indices =
+        persistent_linear_state_read_indices_.slice(
+            /*dim=*/0, /*start=*/0, /*end=*/linear_state_rows);
+    if (params.embedding.linear_state_read_indices.defined()) {
+      linear_state_read_indices.copy_(
+          params.embedding.linear_state_read_indices.slice(
+              /*dim=*/0, /*start=*/0, linear_state_rows),
+          /*non_blocking=*/true);
+    } else if (!params.embedding.linear_state_read_ids.empty()) {
+      CHECK_EQ(
+          static_cast<int64_t>(params.embedding.linear_state_read_ids.size()),
+          linear_state_rows);
+      linear_state_read_indices.copy_(
+          torch::tensor(params.embedding.linear_state_read_ids, torch::kInt)
+              .to(device_),
+          /*non_blocking=*/true);
+    } else {
+      linear_state_read_indices.copy_(linear_state_indices,
+                                      /*non_blocking=*/true);
+    }
   }
   const int64_t validity_rows =
       static_cast<int64_t>(params.linear_state_validity_mask.size());
@@ -960,6 +983,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
     params_for_capture.embedding.linear_state_indices =
         persistent_linear_state_indices(
             static_cast<uint32_t>(linear_state_rows));
+    params_for_capture.embedding.linear_state_read_indices =
+        persistent_linear_state_read_indices(
+            static_cast<uint32_t>(linear_state_rows));
   }
   if (validity_rows > 0) {
     params_for_capture.linear_state_validity_mask_tensor =
@@ -967,10 +993,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
             /*dim=*/0, /*start=*/0, /*end=*/validity_rows);
   }
   if (embedding.defined()) {
-    const uint32_t emb_rows =
-        params.pcp_input_is_sharded
-            ? static_cast<uint32_t>(embedding.size(0))
-            : padded_num_tokens;
+    const uint32_t emb_rows = params.pcp_input_is_sharded
+                                  ? static_cast<uint32_t>(embedding.size(0))
+                                  : padded_num_tokens;
     params_for_capture.embedding.input_embedding =
         persistent_embedding(emb_rows);
   }
@@ -1148,6 +1173,7 @@ size_t MusaGraphPersistentParam::get_persistent_tensor_bytes() const {
   total += bytes(persistent_positions_);
   total += bytes(persistent_new_cache_slots_);
   total += bytes(persistent_linear_state_indices_);
+  total += bytes(persistent_linear_state_read_indices_);
   total += bytes(persistent_kv_cache_tokens_nums_);
   total += bytes(persistent_num_accepted_tokens_);
   total += bytes(persistent_block_tables_);
@@ -1219,8 +1245,8 @@ torch::Tensor MusaGraphPersistentParam::fa3_scheduler_metadata(
     return generate();
   }
   const int64_t kv_tile = kv_dtype == torch::kFloat8_e4m3fn
-                                 ? 128
-                                 : xllm::kernel::musa::fa3_decode_kv_tile_size();
+                              ? 128
+                              : xllm::kernel::musa::fa3_decode_kv_tile_size();
   const int64_t kv_blocks = (max_seqlen_k + kv_tile - 1) / kv_tile;
   const int64_t key = (static_cast<int64_t>(max_seqlen_q) << 32) | kv_blocks;
   auto it = single_sequence_fa3_metadata_.find(key);
@@ -2121,9 +2147,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   const bool fa3_cache_dtype = dtype == torch::ScalarType::BFloat16 ||
                                dtype == torch::ScalarType::Float8_e4m3fn;
   const bool fa3_graph_decode =
-      s_use_fa3_decode(gqa_ratio) && fa3_cache_dtype &&
-      head_dim == 256 && (gqa_ratio == 6 || gqa_ratio == 8) &&
-      !attn_metadata->is_prefill && !attn_metadata->is_chunked_prefill &&
+      s_use_fa3_decode(gqa_ratio) && fa3_cache_dtype && head_dim == 256 &&
+      (gqa_ratio == 6 || gqa_ratio == 8) && !attn_metadata->is_prefill &&
+      !attn_metadata->is_chunked_prefill &&
       attn_metadata->block_table.defined();
 
   // Update plan_info if attn_metadata exists and device-graph mode is on
@@ -2232,9 +2258,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
             attn_metadata->expanded_decode.kv_seq_lens,
             k_cache.scalar_type());
   } else if (params.is_spec_verify && attn_metadata->is_chunked_prefill &&
-             s_use_fa3_decode(gqa_ratio) &&
-             fa3_cache_dtype && head_dim == 256 &&
-             (gqa_ratio == 6 || gqa_ratio == 8) &&
+             s_use_fa3_decode(gqa_ratio) && fa3_cache_dtype &&
+             head_dim == 256 && (gqa_ratio == 6 || gqa_ratio == 8) &&
              attn_metadata->block_table.defined() &&
              attn_metadata->kv_seq_lens.defined()) {
     // MUSA spec verify (no expanded rows): FA3 decode with q_len=K+1 per
@@ -3559,9 +3584,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // Prefill (including non-spec-verify chunked prefill) without a piecewise
   // graph runs eager.
-  if (is_prefill ||
-      (params.meta.batch_forward_type.is_chunked_prefill() &&
-       !params.is_spec_verify)) {
+  if (is_prefill || (params.meta.batch_forward_type.is_chunked_prefill() &&
+                     !params.is_spec_verify)) {
     COUNTER_INC(num_model_execution_total_eager);
     const bool time_fwd = s_enable_prefill_fwd_timing();
     if (time_fwd) {
@@ -3969,9 +3993,10 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   if (cache_hit) {
     return true;
   }
-  if (!can_admit_prefill_graph(prefill_graphs_.size(),
-                               execution_config.musa_prefill_graph_max_entries(),
-                               /*cache_hit=*/false)) {
+  if (!can_admit_prefill_graph(
+          prefill_graphs_.size(),
+          execution_config.musa_prefill_graph_max_entries(),
+          /*cache_hit=*/false)) {
     LOG_FIRST_N(WARNING, 8)
         << "MUSA Prefill graph cache at limit: entries="
         << prefill_graphs_.size()
@@ -3994,16 +4019,15 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   c10::musa::MUSAGuard device_guard(device_.index());
   std::size_t physical_free_bytes = 0;
   std::size_t physical_total_bytes = 0;
-  bool mem_ok =
-      musaMemGetInfo(&physical_free_bytes, &physical_total_bytes) ==
-          musaSuccess &&
-      can_admit_prefill_graph_with_memory(
-          prefill_graphs_.size(),
-          execution_config.musa_prefill_graph_max_entries(),
-          /*cache_hit=*/false,
-          prefill_graphs_oom_latched_,
-          physical_free_bytes,
-          reserve_mb);
+  bool mem_ok = musaMemGetInfo(&physical_free_bytes, &physical_total_bytes) ==
+                    musaSuccess &&
+                can_admit_prefill_graph_with_memory(
+                    prefill_graphs_.size(),
+                    execution_config.musa_prefill_graph_max_entries(),
+                    /*cache_hit=*/false,
+                    prefill_graphs_oom_latched_,
+                    physical_free_bytes,
+                    reserve_mb);
   if (!mem_ok) {
     // Release any idle blocks cached by MUSACachingAllocator on other streams
     // before concluding that physical memory is exhausted.

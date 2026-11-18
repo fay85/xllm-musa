@@ -179,6 +179,14 @@ class MusaGraphPersistentParam final {
     }
     return persistent_linear_state_indices_;
   }
+  torch::Tensor persistent_linear_state_read_indices(
+      uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_linear_state_read_indices_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_linear_state_read_indices_;
+  }
   torch::Tensor persistent_num_accepted_tokens(
       uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
@@ -246,16 +254,17 @@ class MusaGraphPersistentParam final {
 
   // Generates FA3 scheduler metadata. One-sequence batches reuse the result
   // until their query length or KV block count changes.
-  torch::Tensor fa3_scheduler_metadata(int32_t batch_size,
-                                       int32_t num_heads_q,
-                                       int32_t num_heads_kv,
-                                       int32_t head_dim,
-                                       int32_t max_seqlen_q,
-                                       int32_t max_seqlen_k,
-                                       int32_t window_size_left,
-                                       const torch::Tensor& cu_seqlens_q,
-                                       const torch::Tensor& seqused_k,
-                                       torch::ScalarType kv_dtype = torch::kBFloat16);
+  torch::Tensor fa3_scheduler_metadata(
+      int32_t batch_size,
+      int32_t num_heads_q,
+      int32_t num_heads_kv,
+      int32_t head_dim,
+      int32_t max_seqlen_q,
+      int32_t max_seqlen_k,
+      int32_t window_size_left,
+      const torch::Tensor& cu_seqlens_q,
+      const torch::Tensor& seqused_k,
+      torch::ScalarType kv_dtype = torch::kBFloat16);
 
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,
@@ -282,6 +291,7 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_embedding_;
   torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
+  torch::Tensor persistent_linear_state_read_indices_;
   torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
