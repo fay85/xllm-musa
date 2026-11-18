@@ -149,7 +149,8 @@ void apply_top_k_top_p(torch::Tensor& logits,
       auto p = top_p.unsqueeze(-1);
       auto probs = sorted.softmax(-1).to(torch::kFloat32);
       auto cum = probs.cumsum(-1);
-      auto p_mask = cum > p;
+      // Keep the token that crosses the cumulative probability threshold.
+      auto p_mask = (cum - probs) > p;
       p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
       sorted.masked_fill_(p_mask, ninf);
     }
