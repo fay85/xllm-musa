@@ -201,11 +201,10 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
         per_dp_counts[dp_rank] >= cap) {
       continue;
     }
-    const size_t hit =
-        pool != nullptr
-            ? pool->probe_prefix_hit_tokens(const_cast<Sequence*>(sequence),
-                                            dp_rank)
-            : 0;
+    const size_t hit = pool != nullptr
+                           ? pool->probe_prefix_hit_tokens(
+                                 const_cast<Sequence*>(sequence), dp_rank)
+                           : 0;
     const size_t avail = total_blocks >= used_blocks[dp_rank]
                              ? total_blocks - used_blocks[dp_rank]
                              : 0;
@@ -267,11 +266,27 @@ void SchedulerPolicy::drain_request_queue(
       queued->expand_sequences(/*force=*/false);
     }
 
-    if (queued->sequences()[0]->kv_state().kv_cache_tokens_num() == 0) {
+    const bool has_kv =
+        queued->sequences()[0]->kv_state().kv_cache_tokens_num() > 0;
+    const bool is_chunked_continuation =
+        has_kv && batch_mode_.enable_chunked_prefill &&
+        queued->sequences()[0]->is_chunked_prefill_stage();
+    if (has_kv) {
+      // Tail admissions bypass the running requeue path. Preserve its
+      // connection, expansion and cache lifecycle before they wait for a slot.
+      queued->update_connection_status();
+      if (queued->finished() || queued->cancelled()) {
+        // collect_finished owns terminal cleanup before active requeueing.
+        state.running_requests.emplace_back(queued);
+        continue;
+      }
+      handle_running_requests(queued, state);
+    }
+
+    if (!has_kv) {
       // New request goes to waiting queue (back = FIFO from MPMC).
       state.prefill_queue.push(queued, /*if_back=*/true);
-    } else if (batch_mode_.enable_chunked_prefill &&
-               queued->sequences()[0]->is_chunked_prefill_stage()) {
+    } else if (is_chunked_continuation) {
       // Partial prefill continuation. Keep it on the chunk tail so a newer
       // full prompt cannot be requeued ahead of it.
       if (batch_mode_.priority_strategy == "fcfs") {
@@ -358,7 +373,8 @@ void SchedulerPolicy::schedule_prefill_from_queue(
 #if defined(USE_MUSA)
     if (limit_prefill_to_one_sequence(state) &&
         count_prefill_sequences(state.running_sequences) >=
-            static_cast<size_t>(std::max<int32_t>(state.options.dp_size(), 1))) {
+            static_cast<size_t>(
+                std::max<int32_t>(state.options.dp_size(), 1))) {
       break;
     }
 #endif
@@ -426,10 +442,10 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       // allocation reuses the same rank. This keeps the admission check
       // consistent with the allocation path (same available-blocks metric
       // and round-robin tie-break, see KVCacheManager::select_dp_rank).
-      const int32_t dp_rank = should_limit_prefill_requests(state)
-                                  ? select_prefill_dp_rank(
-                                        request->sequences()[0].get(), state)
-                                  : state.kv_cache_manager->select_dp_rank();
+      const int32_t dp_rank =
+          should_limit_prefill_requests(state)
+              ? select_prefill_dp_rank(request->sequences()[0].get(), state)
+              : state.kv_cache_manager->select_dp_rank();
       if (dp_rank < 0) {
         if (request->sequences()[0]->dp_rank() >= 0) {
           skipped.emplace_back(request);
@@ -506,8 +522,7 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       // Latency check.
       double seq_estimate_latency = 0;
       if (options_.enable_latency_aware_schedule()) {
-        size_t kv_cache_tokens_num =
-            prefill_sequence->kv_cache_tokens_num();
+        size_t kv_cache_tokens_num = prefill_sequence->kv_cache_tokens_num();
         seq_estimate_latency = state.profile_manager->predict_step_time(
             num_tokens + kv_cache_tokens_num, kv_cache_tokens_num, false);
         if (budget.estimate_latency + allocated_estimate_latency +
@@ -635,15 +650,15 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
   // prompts in ranges like (32768, 34816) or 22k never overshoot their final
   // reusable LINEAR checkpoint without splitting earlier chunks unnecessarily.
   if (has_linear_attention_layers(state.model_args) &&
-      state.enable_prefix_cache &&
-      seq->num_tokens() > max_tokens_per_chunk &&
+      state.enable_prefix_cache && seq->num_tokens() > max_tokens_per_chunk &&
       remaining_in_seq > 0) {
-    const size_t block_size =
-        static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+    const size_t block_size = static_cast<size_t>(
+        std::max<int32_t>(1, state.kv_cache_manager->block_size()));
     const size_t cp_align =
-        static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) * block_size;
-    const size_t fine_stride =
-        std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
+        static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) *
+        block_size;
+    const size_t fine_stride = std::max<size_t>(
+        cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
     const size_t target_ckpt =
         ((seq->num_tokens() - 1) / fine_stride) * fine_stride;
     if (kv_cache_tokens_num < target_ckpt &&
@@ -1236,10 +1251,9 @@ void SchedulerPolicy::handle_unschedulable_head(
       state.kv_cache_manager->has_pending_async_block_release()) {
     return;
   }
-  const bool any_dp_busy = std::any_of(
-      state.busy_dp_ranks.begin(), state.busy_dp_ranks.end(), [](bool b) {
-        return b;
-      });
+  const bool any_dp_busy = std::any_of(state.busy_dp_ranks.begin(),
+                                       state.busy_dp_ranks.end(),
+                                       [](bool b) { return b; });
   if (any_dp_busy) {
     return;
   }
