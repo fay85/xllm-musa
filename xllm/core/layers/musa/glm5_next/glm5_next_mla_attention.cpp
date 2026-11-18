@@ -15,14 +15,9 @@ limitations under the License.
 
 #include "core/layers/musa/glm5_next/glm5_next_mla_attention.h"
 
-#include <c10/core/StreamGuard.h>
-#include <c10/musa/MUSAGuard.h>
-#include <musa_runtime_api.h>
-
 #include <algorithm>
 #include <limits>
 #include <memory>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -33,31 +28,6 @@ namespace xllm::layer {
 namespace {
 constexpr int64_t kHaloRows = 3;
 
-struct IndexerGemmOverlap {
-  explicit IndexerGemmOverlap(int32_t device_id)
-      : stream(
-            c10::musa::getStreamFromPool(/*isHighPriority=*/false, device_id)) {
-    CHECK_EQ(musaEventCreateWithFlags(&ready, musaEventDisableTiming),
-             musaSuccess);
-    CHECK_EQ(musaEventCreateWithFlags(&done, musaEventDisableTiming),
-             musaSuccess);
-  }
-
-  c10::musa::MUSAStream stream;
-  musaEvent_t ready = nullptr;
-  musaEvent_t done = nullptr;
-};
-
-IndexerGemmOverlap* indexer_gemm_overlap(int32_t device_id) {
-  using States =
-      std::unordered_map<int32_t, std::unique_ptr<IndexerGemmOverlap>>;
-  thread_local States* states = new States();
-  auto& state = (*states)[device_id];
-  if (!state) {
-    state = std::make_unique<IndexerGemmOverlap>(device_id);
-  }
-  return state.get();
-}
 constexpr int64_t kPoolPacketBytes = 132;
 constexpr int64_t kPoolPageRows = 64;
 constexpr int32_t kHaloTag = 0;
@@ -700,17 +670,8 @@ Glm5NextMLAAttentionImpl::Glm5NextMLAAttentionImpl(const ModelArgs& args,
         ReplicatedLinear(q_rank_, 32 * 128, false, QuantArgs(), options_));
     index_kw_ = register_module(
         "indexer_wk_weights_proj",
-        ReplicatedLinear(hidden_size_, 128 + 32, false, QuantArgs(), options_));
-    index_weights_ =
-        register_module("indexer_weights_proj",
-                        ReplicatedLinear(hidden_size_,
-                                         32,
-                                         false,
-                                         QuantArgs(),
-                                         options_.dtype(torch::kFloat32)));
-    index_gate_ = register_module(
-        "indexer_compress_gate",
-        ReplicatedLinear(hidden_size_, 128, false, QuantArgs(), options_));
+        ReplicatedLinear(
+            hidden_size_, 128 + 32 + 128, false, QuantArgs(), options_));
     index_norm_ = register_module(
         "indexer_k_norm", RMSNorm(128, 1e-6, options_.dtype(torch::kFloat32)));
     index_norm_->set_layernorm_mode();
@@ -831,11 +792,9 @@ void Glm5NextMLAAttentionImpl::materialize_weights() {
     auto wk = dense("indexer.wk.weight");
     auto head_weight =
         dense_weight("indexer.weights_proj.weight", torch::kFloat32);
-    index_kw_->load_state_dict(
-        weight_dict(torch::cat({wk, head_weight.to(torch::kBFloat16)}, 0)));
-    index_weights_->load_state_dict(weight_dict(head_weight));
-    index_gate_->load_state_dict(
-        weight_dict(dense("indexer.index_kpool_compress_gate")));
+    auto gate_weight = dense("indexer.index_kpool_compress_gate");
+    index_kw_->load_state_dict(weight_dict(
+        torch::cat({wk, head_weight.to(torch::kBFloat16), gate_weight}, 0)));
     index_norm_->load_state_dict(StateDict(
         {{"weight", dense_weight("indexer.k_norm.weight", torch::kFloat32)},
          {"bias", dense_weight("indexer.k_norm.bias", torch::kFloat32)}}));
@@ -867,8 +826,6 @@ void Glm5NextMLAAttentionImpl::verify_loaded_weights() const {
   if (enable_indexer_) {
     CHECK(index_q_->is_weight_loaded());
     CHECK(index_kw_->is_weight_loaded());
-    CHECK(index_weights_->is_weight_loaded());
-    CHECK(index_gate_->is_weight_loaded());
     index_norm_->verify_loaded_weights("indexer.k_norm.");
   }
 }
@@ -945,9 +902,8 @@ Glm5NextMLAAttentionImpl::forward(
     auto key = std::get<0>(index_norm_->forward(key_fp32))
                    .to(torch::kBFloat16)
                    .contiguous();
-    auto head_weights =
-        index_weights_->forward(hidden_states.to(torch::kFloat32));
-    auto gate = index_gate_->forward(hidden_states);
+    auto head_weights = kw.narrow(1, 128, 32).to(torch::kFloat32).contiguous();
+    auto gate = kw.narrow(1, 160, 128).contiguous();
     auto index_cache = cache.get_index_cache();
     auto tail = cache.get_kpool_tail();
     auto cu = metadata.q_cu_seq_lens.defined()
@@ -1045,6 +1001,7 @@ Glm5NextMLAAttentionImpl::forward_cp(
   // every rate-4 window even when a pool crosses several tiny/empty shards.
   torch::Tensor indexer_cache;
   torch::Tensor indexer_tail;
+  torch::Tensor indexer_weights;
   c10::intrusive_ptr<c10d::Work> indexer_work;
   if (enable_indexer_) {
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerUpdate");
@@ -1057,7 +1014,8 @@ Glm5NextMLAAttentionImpl::forward_cp(
       auto key_fp32 = kw.narrow(1, 0, 128).to(torch::kFloat32).contiguous();
       key_gate.narrow(1, 0, 128).copy_(
           std::get<0>(index_norm_->forward(key_fp32)));
-      key_gate.narrow(1, 128, 128).copy_(index_gate_->forward(hidden_states));
+      key_gate.narrow(1, 128, 128).copy_(kw.narrow(1, 160, 128));
+      indexer_weights = kw.narrow(1, 128, 32).to(torch::kFloat32).contiguous();
     }
     auto extended = layout.with_halo(key_gate);
     indexer_cache = cache.get_index_cache();
@@ -1134,35 +1092,9 @@ Glm5NextMLAAttentionImpl::forward_cp(
     auto weights = torch::empty({local_count, 32},
                                 hidden_states.options().dtype(torch::kFloat32));
     if (local_count > 0) {
-      const bool overlap_weights = hidden_states.device().is_privateuseone() &&
-                                   !kernel::musa::is_stream_capturing();
-      if (!overlap_weights) {
-        iq.copy_(index_q_->forward(q_norm).view({local_count, 32, 128}));
-        weights.copy_(
-            index_weights_->forward(hidden_states.to(torch::kFloat32)));
-      } else {
-        const int32_t device_id =
-            static_cast<int32_t>(hidden_states.device().index());
-        IndexerGemmOverlap* overlap = indexer_gemm_overlap(device_id);
-        const c10::musa::MUSAStream current =
-            c10::musa::getCurrentMUSAStream(device_id);
-        CHECK_EQ(musaEventRecord(overlap->ready, current.stream()),
-                 musaSuccess);
-        CHECK_EQ(musaStreamWaitEvent(overlap->stream.stream(),
-                                     overlap->ready,
-                                     /*flags=*/0),
-                 musaSuccess);
-        {
-          c10::StreamGuard guard(overlap->stream.unwrap());
-          weights.copy_(
-              index_weights_->forward(hidden_states.to(torch::kFloat32)));
-        }
-        CHECK_EQ(musaEventRecord(overlap->done, overlap->stream.stream()),
-                 musaSuccess);
-        iq.copy_(index_q_->forward(q_norm).view({local_count, 32, 128}));
-        CHECK_EQ(musaStreamWaitEvent(current.stream(), overlap->done, 0),
-                 musaSuccess);
-      }
+      iq.copy_(index_q_->forward(q_norm).view({local_count, 32, 128}));
+      CHECK(indexer_weights.defined());
+      weights.copy_(indexer_weights);
     }
     selection = km::glm5_next_indexer_select(iq,
                                              weights,

@@ -118,8 +118,6 @@ class Glm5NextMLAAttentionImpl final : public torch::nn::Module {
   RMSNorm kv_norm_{nullptr};
   ReplicatedLinear index_q_{nullptr};
   ReplicatedLinear index_kw_{nullptr};
-  ReplicatedLinear index_weights_{nullptr};
-  ReplicatedLinear index_gate_{nullptr};
   RMSNorm index_norm_{nullptr};
   torch::Tensor ape_;
   torch::Tensor w_k_;

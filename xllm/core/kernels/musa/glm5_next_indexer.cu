@@ -377,60 +377,84 @@ __global__ void scatter_indexer_cp(const uint8_t* gathered,
   }
 }
 
-__device__ void hadamard128(float& value, float* shared, int32_t row_in_block) {
-  const int32_t lane = threadIdx.x;
-  const int32_t base = row_in_block * 128;
-  shared[base + lane] = value;
-  __syncthreads();
-  for (int32_t stride = 1; stride < 128; stride *= 2) {
-    const float other = shared[base + (lane ^ stride)];
-    const float next = (lane & stride) ? other - value : value + other;
-    __syncthreads();
-    shared[base + lane] = next;
-    value = next;
-    __syncthreads();
-  }
-  value = static_cast<float>(c10::BFloat16(value * 0.08838834764831845f));
-}
-
-__device__ float quant_scale128(float value,
-                                float* shared,
-                                int32_t row_in_block) {
-  const int32_t lane = threadIdx.x;
-  const int32_t base = row_in_block * 128;
-  shared[base + lane] = fabsf(value);
-  __syncthreads();
-  for (int32_t offset = 64; offset > 0; offset /= 2) {
-    if (lane < offset) {
-      shared[base + lane] =
-          fmaxf(shared[base + lane], shared[base + lane + offset]);
-    }
-    __syncthreads();
-  }
-  return exp2f(ceilf(log2f(fmaxf(shared[base], 1.0e-4f) / 448.0f)));
-}
-
-// Four query heads share a block. Each head still owns a private 128-lane
-// Hadamard and absmax so the FP8 scale matches the one-head kernel.
-template <int32_t kHeads>
+// One warp owns one query head. Each lane loads four values, matching
+// sglang's fused indexer Q kernel and keeping all Hadamard stages inside a
+// warp. Four warps share a block to provide the same 128-thread launch shape.
+template <int32_t kWarpsPerBlock>
 __global__ void quantize_query_grouped(const c10::BFloat16* query,
                                        const float* weights,
                                        c10::Float8_e4m3fn* output,
                                        float* scaled_weights,
                                        int64_t rows) {
-  __shared__ float shared[kHeads * 128];
-  const int32_t row_in_block = threadIdx.y;
-  const int64_t row = static_cast<int64_t>(blockIdx.x) * kHeads + row_in_block;
-  const int32_t lane = threadIdx.x;
-  float value = 0.0f;
+  constexpr int32_t kWarpThreads = 32;
+  constexpr int32_t kItemsPerLane = 4;
+  const int32_t warp = threadIdx.x / kWarpThreads;
+  const int32_t lane = threadIdx.x % kWarpThreads;
+  const int64_t row = static_cast<int64_t>(blockIdx.x) * kWarpsPerBlock + warp;
+  const int32_t base = lane * kItemsPerLane;
+  float value[kItemsPerLane];
   if (row < rows) {
-    value = static_cast<float>(query[row * 128 + lane]);
+#pragma unroll
+    for (int32_t item = 0; item < kItemsPerLane; ++item) {
+      value[item] = static_cast<float>(query[row * 128 + base + item]);
+    }
+  } else {
+#pragma unroll
+    for (int32_t item = 0; item < kItemsPerLane; ++item) {
+      value[item] = 0.0f;
+    }
   }
-  hadamard128(value, shared, row_in_block);
-  const float scale = quant_scale128(value, shared, row_in_block);
+
+  // The first two Hadamard stages stay within the four values held by a lane.
+  // The remaining five stages exchange values through lane shuffles.
+#pragma unroll
+  for (int32_t step = 1; step < kItemsPerLane; step <<= 1) {
+#pragma unroll
+    for (int32_t group = 0; group < kItemsPerLane; group += 2 * step) {
+#pragma unroll
+      for (int32_t offset = 0; offset < step; ++offset) {
+        const float left = value[group + offset];
+        const float right = value[group + step + offset];
+        value[group + offset] = left + right;
+        value[group + step + offset] = left - right;
+      }
+    }
+  }
+#pragma unroll
+  for (int32_t lane_mask = 1; lane_mask < kWarpThreads; lane_mask <<= 1) {
+#pragma unroll
+    for (int32_t item = 0; item < kItemsPerLane; ++item) {
+      const float other =
+          __shfl_xor_sync(0xffffffffu, value[item], lane_mask, kWarpThreads);
+      value[item] =
+          (lane & lane_mask) ? other - value[item] : value[item] + other;
+    }
+  }
+
+#pragma unroll
+  for (int32_t item = 0; item < kItemsPerLane; ++item) {
+    value[item] =
+        static_cast<float>(c10::BFloat16(value[item] * 0.08838834764831845f));
+  }
+  float max_value = 0.0f;
+#pragma unroll
+  for (int32_t item = 0; item < kItemsPerLane; ++item) {
+    max_value = fmaxf(max_value, fabsf(value[item]));
+  }
+#pragma unroll
+  for (int32_t offset = kWarpThreads / 2; offset > 0; offset >>= 1) {
+    max_value =
+        fmaxf(max_value,
+              __shfl_xor_sync(0xffffffffu, max_value, offset, kWarpThreads));
+  }
+  const float scale = exp2f(ceilf(log2f(fmaxf(max_value, 1.0e-4f) / 448.0f)));
   if (row < rows) {
-    output[row * 128 + lane] =
-        QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
+#pragma unroll
+    for (int32_t item = 0; item < kItemsPerLane; ++item) {
+      output[row * 128 + base + item] =
+          QuantConverter<c10::Float8_e4m3fn>::convert(
+              __fdiv_rn(value[item], scale));
+    }
     if (lane == 0) {
       scaled_weights[row] = weights[row] * scale * (1.0f / 64.0f);
     }
@@ -824,14 +848,13 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
                               query.options().dtype(torch::kFloat8_e4m3fn));
     auto scaled_weights = torch::empty_like(weights);
     const int64_t query_rows = tokens * 32;
-    quantize_query_grouped<4><<<static_cast<int32_t>((query_rows + 3) / 4),
-                                dim3(128, 4),
-                                0,
-                                stream>>>(query.data_ptr<c10::BFloat16>(),
-                                          weights.data_ptr<float>(),
-                                          quant.data_ptr<c10::Float8_e4m3fn>(),
-                                          scaled_weights.data_ptr<float>(),
-                                          query_rows);
+    quantize_query_grouped<4>
+        <<<static_cast<int32_t>((query_rows + 3) / 4), 128, 0, stream>>>(
+            query.data_ptr<c10::BFloat16>(),
+            weights.data_ptr<float>(),
+            quant.data_ptr<c10::Float8_e4m3fn>(),
+            scaled_weights.data_ptr<float>(),
+            query_rows);
     check_musa_kernel_launch("GLM IndexPool query quantization");
     // At most 16 MiB of FP32 logits per chunk, and <=128 query rows to match
     // the exported scheduler. Main history is never expanded per head.
