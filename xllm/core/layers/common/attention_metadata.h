@@ -39,6 +39,8 @@ class AclGraphTaskUpdateContext;
 
 namespace xllm::layer {
 
+class Glm5NextCpLayout;
+
 struct ExpandedDecodeMetadata {
   bool enabled = false;
   torch::Tensor kv_seq_lens;
@@ -281,6 +283,11 @@ struct AttentionMetadata {
   int64_t glm5_prefill_local_row_end = 0;
   torch::Tensor glm5_prefill_local_row_indices;
   std::vector<int32_t> glm5_prefill_row_offsets;
+  // Per-forward CP prefill plan shared by every DSA layer. The plan owns the
+  // device-side gather/restore indices and candidate metadata that only depend
+  // on the request layout, so layers do not repeat D2H/H2D round trips or host
+  // index construction on the prefill critical path.
+  std::shared_ptr<const Glm5NextCpLayout> glm5_prefill_cp_layout;
 #endif
 
 #if defined(USE_NPU)

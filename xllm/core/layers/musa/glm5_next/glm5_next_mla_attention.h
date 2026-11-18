@@ -20,6 +20,7 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 
@@ -35,6 +36,16 @@ limitations under the License.
 #include "core/layers/common/rms_norm.h"
 
 namespace xllm::layer {
+
+// Immutable per-forward scheduling plan for Hybrid Prefill CP. It is built once
+// from the global positions before the decoder-layer loop and then shared by
+// all DSA layers, mirroring sglang's device-side CP metadata organization.
+class Glm5NextCpLayout;
+
+std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
+    const torch::Tensor& global_positions,
+    const AttentionMetadata& metadata,
+    ProcessGroup& group);
 
 // Complete NoPE sparse-attention layer, including replicated rate-4 IndexPool.
 // Ordinary TP shards main head projections. Hybrid Prefill CP uses TP=1,
@@ -68,7 +79,6 @@ class Glm5NextMLAAttentionImpl final : public torch::nn::Module {
 
  private:
   std::pair<torch::Tensor, kernel::musa::Glm5NextIndexerSelection> forward_cp(
-      const torch::Tensor& positions,
       const torch::Tensor& hidden_states,
       const AttentionMetadata& metadata,
       KVCache& cache,

@@ -202,6 +202,16 @@ class Glm5NextModelImpl final
       cp_local_row_begin_ = attn_metadata.glm5_prefill_local_row_begin;
       cp_local_row_end_ = attn_metadata.glm5_prefill_local_row_end;
       cp_row_offsets_ = attn_metadata.glm5_prefill_row_offsets;
+      // The model already owns the full packed positions before sharding the
+      // activations below. Build the CP gather/restore plan from that global
+      // tensor once per forward and reuse it in every DSA layer instead of
+      // all-gathering positions and repeating D2H/H2D work per layer.
+      {
+        RECORD_USER_SCOPE("nn.Module: Glm5NextModel.CPLayoutPlan");
+        modified_input_params.attn_metadata->glm5_prefill_cp_layout =
+            layer::build_glm5_next_cp_layout(
+                positions, attn_metadata, *cp_group_);
+      }
     }
 
     torch::Tensor input_embedding = input_params.embedding.input_embedding;

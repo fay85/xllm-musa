@@ -37,18 +37,20 @@ std::string scale_name(const std::string& weight) {
 StateDict weight_dict(const torch::Tensor& weight) {
   return StateDict({{"weight", weight}});
 }
+}  // namespace
+
 // Plain activation ownership and round-robin query ownership are separate.
-// Only small scheduling metadata is inspected on the host in this eager path.
-class DsaCpLayout final {
+// The plan is immutable for one forward: building it once before the layer loop
+// keeps the CP layout's length/padding/restore metadata and its host-derived
+// candidate indices out of every DSA layer's critical path.
+class Glm5NextCpLayout final {
  public:
-  DsaCpLayout(const AttentionMetadata& metadata,
-              const torch::Tensor& positions,
-              int64_t local_rows,
-              ProcessGroup& group,
-              const KVCache& cache,
-              bool enable_indexer)
+  Glm5NextCpLayout(const AttentionMetadata& metadata,
+                   const torch::Tensor& global_positions_in,
+                   int64_t local_rows,
+                   ProcessGroup& group)
       : group_(group),
-        device_(positions.device()),
+        device_(global_positions_in.device()),
         offsets_(metadata.glm5_prefill_row_offsets),
         graph_capture_(metadata.enable_cuda_graph ||
                        kernel::musa::is_stream_capturing()) {
@@ -75,23 +77,20 @@ class DsaCpLayout final {
     CHECK_EQ(metadata.glm5_prefill_local_row_begin, begin);
     CHECK_EQ(metadata.glm5_prefill_local_row_end, begin + count);
     CHECK_EQ(local_rows, count) << "DSA CP requires Plain local rows";
-    CHECK_EQ(positions.numel(), count);
-    global_positions = parallel_state::gather(
-        positions.to(torch::kInt64).contiguous(), &group_, counts);
+    CHECK_EQ(global_positions_in.numel(), total);
+    global_positions = global_positions_in.to(torch::kInt64).contiguous();
     auto table = metadata.block_table.to(torch::kInt32).contiguous();
     auto ids = metadata.linear_state_indices.to(torch::kInt32).contiguous();
     auto read_ids =
         metadata.linear_state_read_indices.defined()
             ? metadata.linear_state_read_indices.to(torch::kInt32).contiguous()
             : ids;
-    auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
     CHECK_EQ(table.dim(), 2);
     const int64_t batch = table.size(0);
     CHECK_GT(batch, 0);
     CHECK_EQ(metadata.q_cu_seq_lens.numel(), batch + 1);
     CHECK_EQ(ids.numel(), batch);
     CHECK_EQ(read_ids.numel(), batch);
-    CHECK_EQ(slots.numel(), total);
     CHECK_GT(metadata.max_seq_len, 0);
     CHECK_LE(metadata.max_seq_len, table.size(1) * 256);
     if (graph_capture) {
@@ -101,7 +100,6 @@ class DsaCpLayout final {
           << "GLM5 CP graph requires evenly sharded rows";
     }
     std::unordered_set<int32_t> state_owners;
-    std::unordered_set<int64_t> write_slots;
     std::vector<int32_t> requests(static_cast<size_t>(total));
     std::vector<int64_t> pool_slots;
     pool_slots.reserve(total / 4 + batch);
@@ -121,42 +119,33 @@ class DsaCpLayout final {
       }
       tail_cu.emplace_back(tail_rows.size());
     } else {
-      auto pos_host = global_positions.cpu();
       auto cu_host =
           metadata.q_cu_seq_lens.to(torch::kCPU, torch::kInt32).contiguous();
+      auto start_indices =
+          metadata.q_cu_seq_lens.narrow(0, 0, batch).to(torch::kInt64);
+      auto starts_host =
+          global_positions.index_select(0, start_indices).cpu().contiguous();
       auto table_host = table.to(torch::kCPU, torch::kInt32).contiguous();
       auto ids_host = ids.to(torch::kCPU, torch::kInt32).contiguous();
       auto read_host = read_ids.to(torch::kCPU, torch::kInt32).contiguous();
-      auto slots_host = slots.to(torch::kCPU, torch::kInt64).contiguous();
       const int32_t* cu = cu_host.data_ptr<int32_t>();
       for (int64_t request = 0; request < batch; ++request) {
         CHECK_LT(cu[request], cu[request + 1]);
         const int32_t id = ids_host.data_ptr<int32_t>()[request];
         CHECK_GT(id, 0);
-        if (enable_indexer) {
-          CHECK_LT(id, cache.get_kpool_tail().size(0));
-        }
         CHECK(state_owners.insert(id).second);
         CHECK_GE(read_host.data_ptr<int32_t>()[request], 0);
-        if (enable_indexer) {
-          CHECK_LT(read_host.data_ptr<int32_t>()[request],
-                   cache.get_kpool_tail().size(0));
-        }
-        const int64_t start = pos_host.data_ptr<int64_t>()[cu[request]];
+        const int64_t start = starts_host.data_ptr<int64_t>()[request];
         CHECK_GE(start, 0);
         CHECK_LE(start + cu[request + 1] - cu[request], metadata.max_seq_len);
         for (int64_t row = cu[request]; row < cu[request + 1]; ++row) {
-          const int64_t position = pos_host.data_ptr<int64_t>()[row];
+          const int64_t position = start + row - cu[request];
           CHECK_EQ(position, start + row - cu[request])
               << "CP requires consecutive unpadded request positions";
           const int32_t page =
               table_host.data_ptr<int32_t>()[request * table_host.size(1) +
                                              position / 256];
           CHECK_GE(page, 0);
-          CHECK_LT(page, cache.get_k_cache().size(0));
-          const int64_t slot = page * 256 + position % 256;
-          CHECK_EQ(slots_host.data_ptr<int64_t>()[row], slot);
-          CHECK(write_slots.insert(slot).second);
           requests[static_cast<size_t>(row)] = request;
           if (position % 4 == 3) {
             pool_rows.emplace_back(row);
@@ -172,23 +161,26 @@ class DsaCpLayout final {
       }
     }
     if (graph_capture) {
-      rows = torch::zeros({total}, positions.options().dtype(torch::kInt32));
+      rows = torch::zeros({total},
+                          global_positions.options().dtype(torch::kInt32));
     } else {
       rows = torch::tensor(requests, torch::kInt32).to(device_);
     }
     if (graph_capture) {
+      auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
+      CHECK_EQ(slots.numel(), total);
       pool_physical = torch::floor_divide(slots.slice(0, 3, total, 4), 4);
     } else {
       pool_physical = indices(pool_slots);
     }
     if (graph_capture) {
-      tail_boundaries =
-          torch::arange(0, 5, 4, positions.options().dtype(torch::kInt32));
+      tail_boundaries = torch::arange(
+          0, 5, 4, global_positions.options().dtype(torch::kInt32));
     } else {
       tail_boundaries = torch::tensor(tail_cu, torch::kInt32).to(device_);
     }
     interleaved =
-        torch::arange(count, positions.options().dtype(torch::kInt64)) *
+        torch::arange(count, global_positions.options().dtype(torch::kInt64)) *
             group.world_size() +
         group.rank();
     std::vector<int64_t> permutation;
@@ -212,7 +204,8 @@ class DsaCpLayout final {
     if (graph_capture) {
       std::vector<torch::Tensor> peer_ranges;
       peer_ranges.reserve(group.world_size());
-      const auto index_options = positions.options().dtype(torch::kInt64);
+      const auto index_options =
+          global_positions.options().dtype(torch::kInt64);
       for (int32_t peer = 0; peer < group.world_size(); ++peer) {
         if (peer < count) {
           peer_ranges.emplace_back(
@@ -350,6 +343,7 @@ class DsaCpLayout final {
   torch::Tensor permutation_, inverse_, restore_;
 };
 
+namespace {
 // MATE's FP8 pool page stores payload and scale in separate planes. Transfer
 // one compact 132-byte record per newly completed pool, never the full cache.
 torch::Tensor pool_byte_indices(const torch::Tensor& physical) {
@@ -361,8 +355,19 @@ torch::Tensor pool_byte_indices(const torch::Tensor& physical) {
                                            64 * 128 + row * 4 + column - 128))
       .flatten();
 }
-
 }  // namespace
+
+std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
+    const torch::Tensor& global_positions,
+    const AttentionMetadata& metadata,
+    ProcessGroup& group) {
+  return std::make_shared<const Glm5NextCpLayout>(
+      metadata,
+      global_positions,
+      metadata.glm5_prefill_local_row_end -
+          metadata.glm5_prefill_local_row_begin,
+      group);
+}
 
 Glm5NextMLAAttentionImpl::Glm5NextMLAAttentionImpl(const ModelArgs& args,
                                                    const ParallelArgs& parallel,
@@ -663,8 +668,7 @@ Glm5NextMLAAttentionImpl::forward(
       cp_group_ != nullptr && metadata.glm5_prefill_cp_enabled;
   CHECK_EQ(metadata.glm5_prefill_cp_enabled, use_prefill_cp);
   if (use_prefill_cp) {
-    return forward_cp(
-        positions, hidden_states, metadata, cache, shared_selection);
+    return forward_cp(hidden_states, metadata, cache, shared_selection);
   }
   auto main_cache = cache.get_k_cache();
   CHECK_EQ(main_cache.dim(), 4);
@@ -760,7 +764,6 @@ Glm5NextMLAAttentionImpl::forward(
 
 std::pair<torch::Tensor, kernel::musa::Glm5NextIndexerSelection>
 Glm5NextMLAAttentionImpl::forward_cp(
-    const torch::Tensor& positions,
     const torch::Tensor& hidden_states,
     const AttentionMetadata& metadata,
     KVCache& cache,
@@ -774,15 +777,10 @@ Glm5NextMLAAttentionImpl::forward_cp(
     CHECK_EQ(cache.get_index_cache().dim(), 4);
     CHECK_EQ(cache.get_index_cache().size(0), cache.get_k_cache().size(0));
   }
-  auto layout = [&]() {
-    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPLayout");
-    return DsaCpLayout(metadata,
-                       positions,
-                       hidden_states.size(0),
-                       *cp_group_,
-                       cache,
-                       enable_indexer_);
-  }();
+  CHECK(metadata.glm5_prefill_cp_layout != nullptr)
+      << "GLM5 CP layout must be built once before the decoder-layer loop";
+  const Glm5NextCpLayout& layout = *metadata.glm5_prefill_cp_layout;
+  CHECK_EQ(hidden_states.size(0), layout.count);
   auto table = metadata.block_table.to(torch::kInt32).contiguous();
   auto ids = metadata.linear_state_indices.to(torch::kInt32).contiguous();
   auto read_ids =
