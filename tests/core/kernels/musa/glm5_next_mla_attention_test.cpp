@@ -1871,12 +1871,17 @@ class DsaCpCountingGroup final : public ProcessGroup {
     ++reductions;
     return delegate_.allreduce_async(input);
   }
-  int64_t exchanges = 0, reductions = 0, latent_gathers = 0, pool_gathers = 0;
+  int64_t exchanges = 0, reductions = 0, latent_gathers = 0, pool_gathers = 0,
+          halo_gathers = 0;
 
  private:
   void record(const torch::Tensor& input) {
     if (input.dim() == 1) {
-      EXPECT_EQ(input.scalar_type(), torch::kInt64);  // positions only
+      if (input.scalar_type() == torch::kUInt8) {
+        ++pool_gathers;  // fused pool packets and recurrent tail rows
+      } else {
+        EXPECT_EQ(input.scalar_type(), torch::kInt64);  // positions only
+      }
       return;
     }
     EXPECT_EQ(input.dim(), 2);
@@ -1886,7 +1891,12 @@ class DsaCpCountingGroup final : public ProcessGroup {
     } else {
       EXPECT_EQ(input.scalar_type(), torch::kBFloat16);
       EXPECT_TRUE(input.size(1) == 512 || input.size(1) == 256);
-      latent_gathers += input.size(1) == 512;
+      if (input.size(1) == 512) {
+        ++latent_gathers;
+      } else {
+        EXPECT_EQ(input.size(0), 3);
+        ++halo_gathers;
+      }
     }
   }
   ProcessGroup& delegate_;
@@ -2072,16 +2082,20 @@ TEST(GlmDsaCpTest, McclContextParallelWorker) {
         const int64_t count = partitions[rank].numel();
         sharded.glm5_prefill_local_row_begin = begin;
         sharded.glm5_prefill_local_row_end = begin + count;
+        sharded.glm5_prefill_cp_layout =
+            build_glm5_next_cp_layout(pos, sharded, counted);
         const int64_t exchanges = counted.exchanges,
-                      gathers = counted.latent_gathers;
+                      gathers = counted.latent_gathers,
+                      pool_gathers = counted.pool_gathers,
+                      halo_gathers = counted.halo_gathers;
         auto actual = local->forward(pos.narrow(0, begin, count),
                                      input.narrow(0, begin, count),
                                      sharded,
                                      local_cache);
-        EXPECT_EQ(
-            counted.exchanges,
-            exchanges + 3);  // two activation exchanges + bounded key/gate halo
+        EXPECT_EQ(counted.exchanges, exchanges + 2);  // activation scatter/restore
         EXPECT_EQ(counted.latent_gathers, gathers + 1);
+        EXPECT_EQ(counted.pool_gathers, pool_gathers + 1);
+        EXPECT_EQ(counted.halo_gathers, halo_gathers + 1);
         EXPECT_EQ(counted.reductions, 0);
         compare(actual.first,
                 expected.first.narrow(0, begin, count),

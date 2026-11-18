@@ -25,6 +25,10 @@ limitations under the License.
 
 namespace xllm::layer {
 namespace {
+constexpr int64_t kHaloRows = 3;
+constexpr int64_t kPoolPacketBytes = 132;
+constexpr int64_t kPoolPageRows = 64;
+
 bool is_fp8(const torch::Tensor& tensor) {
   return tensor.scalar_type() == torch::kFloat8_e4m3fn;
 }
@@ -36,6 +40,19 @@ std::string scale_name(const std::string& weight) {
 
 StateDict weight_dict(const torch::Tensor& weight) {
   return StateDict({{"weight", weight}});
+}
+
+// MATE's FP8 pool page stores payload and scale in separate planes. Transfer
+// one compact 132-byte record per newly completed pool, never the full cache.
+torch::Tensor pool_byte_indices(const torch::Tensor& physical) {
+  auto column = torch::arange(kPoolPacketBytes, physical.options()).unsqueeze(0);
+  auto page = physical.div(kPoolPageRows, "floor").unsqueeze(1);
+  auto row = physical.remainder(kPoolPageRows).unsqueeze(1);
+  return (page * (kPoolPageRows * kPoolPacketBytes) +
+          torch::where(column.lt(128),
+                       row * 128 + column,
+                       kPoolPageRows * 128 + row * 4 + column - 128))
+      .flatten();
 }
 }  // namespace
 
@@ -179,6 +196,114 @@ class Glm5NextCpLayout final {
     } else {
       tail_boundaries = torch::tensor(tail_cu, torch::kInt32).to(device_);
     }
+    const int32_t world_size = group_.world_size();
+    pool_counts.assign(world_size, 0);
+    tail_counts.assign(world_size, 0);
+    pool_rank_offsets.assign(world_size + 1, 0);
+    std::vector<int32_t> tail_owners(tail_rows.size(), -1);
+    std::vector<int32_t> tail_rank_offsets(tail_rows.size(), -1);
+    std::vector<std::vector<int64_t>> rank_tail_orders(world_size);
+    for (int32_t rank = 0; rank < world_size; ++rank) {
+      const auto first =
+          std::lower_bound(pool_rows.begin(), pool_rows.end(), offsets_[rank]);
+      const auto last = std::lower_bound(
+          pool_rows.begin(), pool_rows.end(), offsets_[rank + 1]);
+      pool_counts[rank] = static_cast<int32_t>(last - first);
+      pool_rank_offsets[rank + 1] =
+          pool_rank_offsets[rank] + pool_counts[rank];
+      rank_tail_orders[rank].reserve(static_cast<size_t>(batch * 4));
+    }
+    int32_t tail_owner = 0;
+    for (size_t index = 0; index < tail_rows.size(); ++index) {
+      const int64_t row = tail_rows[index];
+      while (tail_owner + 1 < world_size &&
+             row >= offsets_[tail_owner + 1]) {
+        ++tail_owner;
+      }
+      CHECK_GE(row, offsets_[tail_owner]);
+      CHECK_LT(row, offsets_[tail_owner + 1]);
+      tail_owners[index] = tail_owner;
+      tail_rank_offsets[index] =
+          static_cast<int32_t>(rank_tail_orders[tail_owner].size());
+      rank_tail_orders[tail_owner].emplace_back(index);
+      ++tail_counts[tail_owner];
+    }
+    pool_begin = pool_rank_offsets[group_.rank()];
+    local_pool_count = pool_counts[group_.rank()];
+    local_tail_count = tail_counts[group_.rank()];
+    all_pool_byte_indices = pool_byte_indices(pool_physical);
+    CHECK_EQ(all_pool_byte_indices.numel(),
+             static_cast<int64_t>(pool_rows.size()) * kPoolPacketBytes);
+    local_pool_byte_indices = all_pool_byte_indices.narrow(
+        0,
+        static_cast<int64_t>(pool_begin) * kPoolPacketBytes,
+        static_cast<int64_t>(local_pool_count) * kPoolPacketBytes);
+    const auto tail_row_indices = indices(tail_rows);
+    tail_positions = global_positions.index_select(0, tail_row_indices);
+    std::vector<int64_t> local_tail_rows;
+    local_tail_rows.reserve(static_cast<size_t>(local_tail_count));
+    for (size_t index = 0; index < tail_rows.size(); ++index) {
+      if (tail_owners[index] == group_.rank()) {
+        local_tail_rows.emplace_back(tail_rows[index] - begin);
+      }
+    }
+    local_tail_indices = indices(local_tail_rows);
+
+    const int32_t max_pool_count =
+        *std::max_element(pool_counts.begin(), pool_counts.end());
+    const int32_t max_tail_count =
+        *std::max_element(tail_counts.begin(), tail_counts.end());
+    const int64_t pool_payload_bytes =
+        static_cast<int64_t>(max_pool_count) * kPoolPacketBytes;
+    tail_payload_offset = (pool_payload_bytes + 511) / 512 * 512;
+    indexer_payload_bytes =
+        tail_payload_offset + static_cast<int64_t>(max_tail_count) * 512;
+    CHECK_GT(indexer_payload_bytes, 0);
+    const auto byte_options = global_positions.options().dtype(torch::kUInt8);
+    indexer_payload = torch::empty({indexer_payload_bytes}, byte_options);
+    indexer_gather =
+        torch::empty({world_size, indexer_payload_bytes}, byte_options);
+    std::vector<int64_t> tail_gather_bytes;
+    tail_gather_bytes.reserve(tail_rows.size() * 512);
+    for (size_t index = 0; index < tail_rows.size(); ++index) {
+      const int64_t first = static_cast<int64_t>(tail_owners[index]) *
+                                indexer_payload_bytes +
+                            tail_payload_offset +
+                            static_cast<int64_t>(tail_rank_offsets[index]) * 512;
+      for (int64_t byte = 0; byte < 512; ++byte) {
+        tail_gather_bytes.emplace_back(first + byte);
+      }
+    }
+    tail_gather_byte_indices = indices(tail_gather_bytes);
+
+    std::vector<int64_t> local_halo_rows;
+    local_halo_rows.reserve(kHaloRows);
+    for (int64_t row = std::max<int64_t>(0, count - kHaloRows); row < count;
+         ++row) {
+      local_halo_rows.emplace_back(row);
+    }
+    halo_local_indices = indices(local_halo_rows);
+    std::vector<int64_t> halo_sources;
+    halo_sources.reserve(kHaloRows);
+    for (int64_t row = std::max<int64_t>(0, begin - kHaloRows); row < begin;
+         ++row) {
+      const int32_t owner = static_cast<int32_t>(
+          std::upper_bound(offsets_.begin(), offsets_.end(), row) -
+          offsets_.begin() - 1);
+      CHECK_GE(owner, 0);
+      CHECK_LT(owner, world_size);
+      const int64_t source_first =
+          std::max<int64_t>(0, counts[owner] - kHaloRows);
+      const int64_t source_row = row - offsets_[owner];
+      CHECK_GE(source_row, source_first);
+      halo_sources.emplace_back(static_cast<int64_t>(owner) * kHaloRows +
+                                source_row - source_first);
+    }
+    halo_source_indices = indices(halo_sources);
+    const auto halo_options =
+        global_positions.options().dtype(torch::kBFloat16);
+    halo_input = torch::zeros({kHaloRows, 256}, halo_options);
+    halo_gather = torch::empty({world_size, kHaloRows, 256}, halo_options);
     interleaved =
         torch::arange(count, global_positions.options().dtype(torch::kInt64)) *
             group.world_size() +
@@ -280,59 +405,74 @@ class Glm5NextCpLayout final {
     return parallel_state::gather(value.contiguous(), &group_, counts)
         .index_select(0, restore_);
   }
-  std::vector<int64_t> local_rows(const std::vector<int64_t>& selected) const {
-    const auto first =
-        std::lower_bound(selected.begin(), selected.end(), begin);
-    const auto last = std::lower_bound(first, selected.end(), begin + count);
-    return {first, last};
-  }
-  torch::Tensor gather_packets(const torch::Tensor& local,
-                               const std::vector<int64_t>& selected) const {
-    if (selected.empty()) {
+  torch::Tensor with_halo(const torch::Tensor& local) const {
+    if (group_.world_size() <= 1) {
       return local;
     }
-    std::vector<int32_t> sizes;
-    sizes.reserve(group_.world_size());
-    for (int32_t rank = 0; rank < group_.world_size(); ++rank) {
-      sizes.emplace_back(
-          std::lower_bound(
-              selected.begin(), selected.end(), offsets_[rank + 1]) -
-          std::lower_bound(selected.begin(), selected.end(), offsets_[rank]));
+    const int64_t valid_rows = std::min<int64_t>(kHaloRows, count);
+    if (valid_rows > 0) {
+      halo_input.narrow(0, 0, valid_rows)
+          .copy_(local.index_select(0, halo_local_indices));
     }
-    return parallel_state::gather(local.contiguous(), &group_, sizes);
-  }
-  torch::Tensor with_halo(const torch::Tensor& local) const {
-    std::vector<int64_t> send, receive, selected;
-    send.reserve(group_.world_size());
-    receive.reserve(group_.world_size());
-    selected.reserve(3 * group_.world_size());
-    const int64_t halo_begin = std::max<int64_t>(0, begin - 3);
-    for (int32_t peer = 0; peer < group_.world_size(); ++peer) {
-      const int64_t first = std::max<int64_t>(begin, offsets_[peer] - 3);
-      const int64_t last = std::min<int64_t>(begin + count, offsets_[peer]);
-      send.emplace_back(std::max<int64_t>(0, last - first));
-      for (int64_t row = first; row < last; ++row) {
-        selected.emplace_back(row - begin);
-      }
-      receive.emplace_back(
-          std::max<int64_t>(0,
-                            std::min<int64_t>(begin, offsets_[peer + 1]) -
-                                std::max<int64_t>(halo_begin, offsets_[peer])));
+    auto work = group_.allgather_base_async(halo_input, halo_gather);
+    if (work.defined()) {
+      work->wait();
     }
-    auto halo =
-        torch::empty({begin - halo_begin, local.size(1)}, local.options());
-    group_.all_to_all_single(
-        halo, local.index_select(0, indices(selected)), receive, send);
+    if (begin == 0) {
+      return local;
+    }
+    auto halo = halo_gather.view({group_.world_size() * kHaloRows,
+                                  local.size(1)})
+                    .index_select(0, halo_source_indices);
     return torch::cat({halo, local}, 0);
+  }
+  void pack_indexer_payload(const torch::Tensor& key_gate,
+                            const torch::Tensor& index_cache) const {
+    if (local_pool_count > 0) {
+      auto packets = index_cache.flatten().index_select(0, local_pool_byte_indices);
+      indexer_payload
+          .narrow(0, 0, local_pool_count * kPoolPacketBytes)
+          .copy_(packets);
+    }
+    if (local_tail_count > 0) {
+      auto tail_rows = key_gate.index_select(0, local_tail_indices)
+                           .contiguous()
+                           .view(torch::kUInt8)
+                           .flatten();
+      CHECK_EQ(tail_rows.numel(), local_tail_count * 512);
+      indexer_payload
+          .narrow(0, tail_payload_offset, local_tail_count * 512)
+          .copy_(tail_rows);
+    }
+  }
+  c10::intrusive_ptr<c10d::Work> launch_indexer_gather() const {
+    if (group_.world_size() <= 1) {
+      return nullptr;
+    }
+    return group_.allgather_base_async(indexer_payload, indexer_gather);
   }
   int64_t total = 0;
   int64_t begin = 0;
   int64_t count = 0;
+  int64_t pool_begin = 0;
+  int64_t local_pool_count = 0;
+  int64_t local_tail_count = 0;
+  int64_t tail_payload_offset = 0;
+  int64_t indexer_payload_bytes = 0;
   std::vector<int32_t> counts;
   std::vector<int64_t> pool_rows;
   std::vector<int64_t> tail_rows;
+  std::vector<int32_t> pool_counts;
+  std::vector<int32_t> tail_counts;
+  std::vector<int32_t> pool_rank_offsets;
   torch::Tensor global_positions, rows, interleaved, pool_physical,
-      tail_boundaries;
+      tail_boundaries, all_pool_byte_indices, local_pool_byte_indices,
+      tail_positions, local_tail_indices, tail_gather_byte_indices,
+      halo_source_indices, halo_local_indices;
+  // These buffers are reused by every layer. The layout itself stays immutable
+  // across the forward, so mutation is confined to its communication workspace.
+  mutable torch::Tensor halo_input, halo_gather, indexer_payload,
+      indexer_gather;
 
  private:
   ProcessGroup& group_;
@@ -342,20 +482,6 @@ class Glm5NextCpLayout final {
   std::vector<int64_t> send_counts_, recv_counts_;
   torch::Tensor permutation_, inverse_, restore_;
 };
-
-namespace {
-// MATE's FP8 pool page stores payload and scale in separate planes. Transfer
-// one compact 132-byte record per newly completed pool, never the full cache.
-torch::Tensor pool_byte_indices(const torch::Tensor& physical) {
-  auto column = torch::arange(132, physical.options()).unsqueeze(0);
-  auto page = physical.div(64, "floor").unsqueeze(1);
-  auto row = physical.remainder(64).unsqueeze(1);
-  return (page * (64 * 132) + torch::where(column.lt(128),
-                                           row * 128 + column,
-                                           64 * 128 + row * 4 + column - 128))
-      .flatten();
-}
-}  // namespace
 
 std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
     const torch::Tensor& global_positions,
@@ -795,6 +921,9 @@ Glm5NextMLAAttentionImpl::forward_cp(
            main_cache.scalar_type() == torch::kUInt8 ? 528 : 512);
   // Compression uses Plain rows, whose short predecessor halo reconstructs
   // every rate-4 window even when a pool crosses several tiny/empty shards.
+  torch::Tensor indexer_cache;
+  torch::Tensor indexer_tail;
+  c10::intrusive_ptr<c10d::Work> indexer_work;
   if (enable_indexer_) {
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerUpdate");
     auto key_gate = torch::empty({layout.count, 256}, hidden_states.options());
@@ -806,8 +935,8 @@ Glm5NextMLAAttentionImpl::forward_cp(
       key_gate.narrow(1, 128, 128).copy_(index_gate_->forward(hidden_states));
     }
     auto extended = layout.with_halo(key_gate);
-    auto index_cache = cache.get_index_cache();
-    auto tail = cache.get_kpool_tail();
+    indexer_cache = cache.get_index_cache();
+    indexer_tail = cache.get_kpool_tail();
     km::glm5_next_indexer_update_cp(extended.narrow(1, 0, 128).contiguous(),
                                     extended.narrow(1, 128, 128).contiguous(),
                                     ape_,
@@ -816,37 +945,14 @@ Glm5NextMLAAttentionImpl::forward_cp(
                                     ids,
                                     read_ids,
                                     table,
-                                    index_cache,
-                                    tail,
+                                    indexer_cache,
+                                    indexer_tail,
                                     layout.begin,
                                     layout.count,
-                                    std::max<int64_t>(0, layout.begin - 3));
-    const auto owned_pools = layout.local_rows(layout.pool_rows);
-    const int64_t pool_begin =
-        std::lower_bound(
-            layout.pool_rows.begin(), layout.pool_rows.end(), layout.begin) -
-        layout.pool_rows.begin();
-    auto local_bytes = pool_byte_indices(
-        layout.pool_physical.narrow(0, pool_begin, owned_pools.size()));
-    auto packets = index_cache.flatten()
-                       .index_select(0, local_bytes)
-                       .view({static_cast<int64_t>(owned_pools.size()), 132});
-    auto gathered = layout.gather_packets(packets, layout.pool_rows);
-    index_cache.flatten().index_copy_(
-        0, pool_byte_indices(layout.pool_physical), gathered.flatten());
-    auto tail_local_rows =
-        layout.indices(layout.local_rows(layout.tail_rows)) - layout.begin;
-    auto tail_data = layout.gather_packets(
-        key_gate.index_select(0, tail_local_rows), layout.tail_rows);
-    km::glm5_next_indexer_update_tail(
-        tail_data.narrow(1, 0, 128).contiguous(),
-        tail_data.narrow(1, 128, 128).contiguous(),
-        layout.global_positions.index_select(0,
-                                             layout.indices(layout.tail_rows)),
-        layout.tail_boundaries,
-        ids,
-        read_ids,
-        tail);
+                                    std::max<int64_t>(0,
+                                                      layout.begin - kHaloRows));
+    layout.pack_indexer_payload(key_gate, indexer_cache);
+    extended = torch::Tensor();
   }
   // Reuse the activation exchange for shared selection metadata when present.
   // Byte packing is lossless for BF16 activations and int32 token IDs.
@@ -872,6 +978,12 @@ Glm5NextMLAAttentionImpl::forward_cp(
           torch::cat({input_bytes, pack_selection(*shared_selection)}, 1);
     }
     scattered = layout.scatter(input_bytes);
+  }
+  if (enable_indexer_) {
+    // The compressed pool/tail payload is consumed only by indexer select.
+    // Start its collective before the local projection work and join it at the
+    // final use so the communication can overlap that work.
+    indexer_work = layout.launch_indexer_gather();
   }
   auto local_hidden = scattered.narrow(1, 0, hidden_size_ * 2)
                           .contiguous()
@@ -902,6 +1014,40 @@ Glm5NextMLAAttentionImpl::forward_cp(
   }
   km::Glm5NextIndexerSelection selection;
   if (enable_indexer_) {
+    if (indexer_work.defined()) {
+      indexer_work->wait();
+    }
+    auto gathered_indexer = layout.indexer_gather;
+    auto cache_bytes = indexer_cache.flatten();
+    int64_t pool_offset = 0;
+    for (int32_t rank = 0; rank < static_cast<int32_t>(layout.pool_counts.size());
+         ++rank) {
+      const int64_t rank_pool_count = layout.pool_counts[rank];
+      if (rank_pool_count > 0) {
+        auto packets = gathered_indexer.select(0, rank)
+                           .narrow(0, 0, rank_pool_count * kPoolPacketBytes)
+                           .view({rank_pool_count, kPoolPacketBytes});
+        auto destination = layout.all_pool_byte_indices.narrow(
+            0, pool_offset * kPoolPacketBytes, rank_pool_count * kPoolPacketBytes);
+        cache_bytes.index_copy_(0, destination, packets.flatten());
+      }
+      pool_offset += rank_pool_count;
+    }
+    if (!layout.tail_rows.empty()) {
+      auto tail_data =
+          gathered_indexer.flatten()
+              .index_select(0, layout.tail_gather_byte_indices)
+              .view({static_cast<int64_t>(layout.tail_rows.size()), 512})
+              .view(torch::kBFloat16);
+      km::glm5_next_indexer_update_tail(
+          tail_data.narrow(1, 0, 128).contiguous(),
+          tail_data.narrow(1, 128, 128).contiguous(),
+          layout.tail_positions,
+          layout.tail_boundaries,
+          ids,
+          read_ids,
+          indexer_tail);
+    }
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerSelect");
     auto iq = torch::empty({local_count, 32, 128}, hidden_states.options());
     auto weights = torch::empty({local_count, 32},
