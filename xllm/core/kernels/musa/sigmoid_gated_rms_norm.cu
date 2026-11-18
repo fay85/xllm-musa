@@ -103,7 +103,7 @@ torch::Tensor sigmoid_gated_rms_norm(const torch::Tensor& input,
   CHECK_EQ(reinterpret_cast<uintptr_t>(weight.data_ptr()) % alignof(uint2), 0);
   CHECK(std::isfinite(eps) && eps > 0.0);
   CHECK_LE(input.size(0), std::numeric_limits<int32_t>::max());
-  XLLMDeviceGuard guard(input.device());
+  XLLMDeviceGuard device_guard(input.device());
   torch::Tensor output = torch::empty(input.sizes(), input.options());
   const int32_t rows = static_cast<int32_t>(input.size(0));
   if (rows == 0) {

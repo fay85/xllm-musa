@@ -158,7 +158,7 @@ torch::Tensor deepseek_v4_compress_decode_batch_graph(
     CHECK(tensor.device() == kv_steps.device());
   }
   CHECK(score_steps.device() == kv_steps.device());
-  const XLLMOptionalDeviceGuard guard(kv_steps.device());
+  const XLLMOptionalDeviceGuard device_guard(kv_steps.device());
   // Match the frozen scalar cache route. During native MUSA Graph capture,
   // the CUDA-compat accessor can still select the mapped caller stream and
   // let a kernel escape capture; eager keeps its established mapped ordering.

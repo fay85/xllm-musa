@@ -127,7 +127,7 @@ void sparse_mla_cache_write(const torch::Tensor& latent,
   if (latent.size(0) == 0) {
     return;
   }
-  XLLMDeviceGuard guard(latent.device());
+  XLLMDeviceGuard device_guard(latent.device());
   write_cache<<<latent.size(0), 128, 0, current_musa_stream(latent.device())>>>(
       latent.data_ptr<c10::BFloat16>(),
       slots.data_ptr<int64_t>(),
@@ -155,7 +155,7 @@ void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
   if (latent.size(0) == 0) {
     return;
   }
-  XLLMDeviceGuard guard(latent.device());
+  XLLMDeviceGuard device_guard(latent.device());
   write_fp8_cache<<<latent.size(0),
                     128,
                     0,
@@ -192,7 +192,7 @@ torch::Tensor sparse_mla_map_indices(const torch::Tensor& logical,
   if (logical.numel() == 0) {
     return output;
   }
-  XLLMDeviceGuard guard(logical.device());
+  XLLMDeviceGuard device_guard(logical.device());
   const int64_t blocks = std::min<int64_t>((logical.numel() + 255) / 256, 4096);
   map_indices<<<blocks, 256, 0, current_musa_stream(logical.device())>>>(
       logical.data_ptr<int32_t>(),

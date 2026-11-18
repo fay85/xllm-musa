@@ -343,17 +343,31 @@ void ProcessGroup::all_to_all_single(
 }
 
 void ProcessGroup::send(const torch::Tensor& tensor, int dst, int tag) {
-  CHECK(pg_ != nullptr) << "Process group is not initialized.";
-  CHECK(tensor.defined()) << "send tensor is not defined";
-  std::vector<torch::Tensor> tensors = {tensor};
-  pg_->send(tensors, dst, tag)->wait();
+  send_async(tensor, dst, tag)->wait();
 }
 
 void ProcessGroup::recv(torch::Tensor& tensor, int src, int tag) {
+  recv_async(tensor, src, tag)->wait();
+}
+
+c10::intrusive_ptr<c10d::Work> ProcessGroup::send_async(
+    const torch::Tensor& tensor,
+    int dst,
+    int tag) {
+  CHECK(pg_ != nullptr) << "Process group is not initialized.";
+  CHECK(tensor.defined()) << "send tensor is not defined";
+  std::vector<torch::Tensor> tensors = {tensor};
+  return pg_->send(tensors, dst, tag);
+}
+
+c10::intrusive_ptr<c10d::Work> ProcessGroup::recv_async(
+    torch::Tensor& tensor,
+    int src,
+    int tag) {
   CHECK(pg_ != nullptr) << "Process group is not initialized.";
   CHECK(tensor.defined()) << "recv tensor is not defined";
   std::vector<torch::Tensor> tensors = {tensor};
-  pg_->recv(tensors, src, tag)->wait();
+  return pg_->recv(tensors, src, tag);
 }
 
 std::string ProcessGroup::hccl_comm_name(bool init_comm) {

@@ -285,7 +285,7 @@ bool deepseek_v4_q_rmsnorm_rope_out(const torch::Tensor& query,
       !valid_rope_out(query, cos, sin, output, query.size(1))) {
     return false;
   }
-  const XLLMOptionalDeviceGuard guard(query.device());
+  const XLLMOptionalDeviceGuard device_guard(query.device());
   const dim3 grid(static_cast<uint32_t>((query.size(1) + kWarpsPerBlock - 1) / kWarpsPerBlock),
                   static_cast<uint32_t>(query.size(0)));
   deepseek_v4_q_rmsnorm_rope_out_kernel<<<grid, kThreads, 0, current_musa_stream(query.device())>>>(
@@ -309,7 +309,7 @@ bool deepseek_v4_weighted_rmsnorm_rope_out(const torch::Tensor& input,
       weight.is_alias_of(output)) {
     return false;
   }
-  const XLLMOptionalDeviceGuard guard(input.device());
+  const XLLMOptionalDeviceGuard device_guard(input.device());
   deepseek_v4_weighted_rmsnorm_rope_out_kernel<<<static_cast<uint32_t>(input.size(0)),
       kKvCompatThreads, 0, current_musa_stream(input.device())>>>(
       input.data_ptr<c10::BFloat16>(), output.data_ptr<c10::BFloat16>(),

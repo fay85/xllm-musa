@@ -526,7 +526,7 @@ torch::Tensor deepseek_v4_indexer_weighted_sum(const torch::Tensor& scores,
   CHECK_EQ(
       reinterpret_cast<uintptr_t>(scores.data_ptr<float>()) % alignof(float4),
       0);
-  const XLLMOptionalDeviceGuard guard(scores.device());
+  const XLLMOptionalDeviceGuard device_guard(scores.device());
   torch::Tensor output = torch::empty(
       {scores.size(0) * scores.size(1), scores.size(3)}, scores.options());
   const int64_t key_tiles = (scores.size(3) / 4 + 31) / 32;
@@ -562,7 +562,7 @@ void deepseek_v4_indexer_relu_weight(const torch::Tensor& scores,
                static_cast<int64_t>(4096) * kThreads);
   CHECK_EQ(weights.size(0), scores.size(0) * scores.size(1));
   CHECK_EQ(weights.size(1), scores.size(2));
-  const XLLMOptionalDeviceGuard guard(scores.device());
+  const XLLMOptionalDeviceGuard device_guard(scores.device());
   if (scores.size(3) % 4 == 0 &&
       reinterpret_cast<uintptr_t>(scores.data_ptr<float>()) % alignof(float4) ==
           0) {
@@ -606,7 +606,7 @@ void deepseek_v4_indexer_mask_scores(const torch::Tensor& scores,
   CHECK_EQ(valid_slots.dim(), 2);
   CHECK_EQ(valid_slots.size(0), scores.size(0) / query_rows_per_sequence);
   CHECK_EQ(valid_slots.size(1), scores.size(1));
-  const XLLMOptionalDeviceGuard guard(scores.device());
+  const XLLMOptionalDeviceGuard device_guard(scores.device());
   if (tiled_metadata_enabled() && scores.size(0) <= 112 &&
       scores.size(1) <= 65536) {
     indexer_mask_scores_tiled_kernel<<<
@@ -671,7 +671,7 @@ void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
   CHECK_EQ(logical.sizes(), selected.sizes());
   CHECK_EQ(physical.sizes(), selected.sizes());
   CHECK_EQ(extra.sizes(), torch::IntArrayRef({selected.size(0), kExtra}));
-  const XLLMOptionalDeviceGuard guard(selected.device());
+  const XLLMOptionalDeviceGuard device_guard(selected.device());
   const int64_t elements = selected.size(0) * (kTopk + kExtra);
   const bool tiled = tiled_metadata_enabled() && page_size == 128 &&
                      selected.size(0) <= 112 && capacity <= 65536;

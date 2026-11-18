@@ -28,6 +28,8 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 namespace {
+constexpr int64_t kPoolPacketBytes = 132;
+
 // Every thread owns one channel. Each butterfly reads the previous stage
 // before any lane overwrites shared memory.
 __device__ float hadamard(float value, float* shared) {
@@ -243,18 +245,22 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
 }
 
 // Finalize only the request's four-entry ring after all pools read its old
-// tail.
-__global__ void update_pool_tails(const c10::BFloat16* keys,
-                                  const c10::BFloat16* gates,
-                                  const int64_t* positions,
-                                  const int32_t* cu,
-                                  const int32_t* state_ids,
-                                  const int32_t* read_ids,
-                                  const c10::BFloat16* snapshot,
-                                  c10::BFloat16* tail,
-                                  int64_t states) {
-  const int32_t request = blockIdx.x;
-  const int32_t lane = threadIdx.x;
+// tail. Keys/gates are either native row tensors or rows embedded in the
+// combined CP payload.
+__device__ void update_pool_tails_impl(
+    int32_t request,
+    int32_t lane,
+    const c10::BFloat16* keys,
+    const c10::BFloat16* gates,
+    const uint8_t* gathered,
+    const int64_t* tail_offsets,
+    const int64_t* positions,
+    const int32_t* cu,
+    const int32_t* state_ids,
+    const int32_t* read_ids,
+    const c10::BFloat16* snapshot,
+    c10::BFloat16* tail,
+    int64_t states) {
   const int64_t state = state_ids[request];
   const int64_t source = read_ids[request];
   if (state <= 0 || state >= states) {
@@ -273,10 +279,21 @@ __global__ void update_pool_tails(const c10::BFloat16* keys,
     if (position < 0) {
       continue;
     }
+    const c10::BFloat16* row_keys = nullptr;
+    const c10::BFloat16* row_gates = nullptr;
+    if (gathered != nullptr) {
+      const int64_t offset = tail_offsets[row];
+      row_keys = reinterpret_cast<const c10::BFloat16*>(gathered + offset);
+      row_gates =
+          reinterpret_cast<const c10::BFloat16*>(gathered + offset + 256);
+    } else {
+      row_keys = keys + row * 128;
+      row_gates = gates + row * 128;
+    }
     const int64_t ring = position % 4;
     if (!(written & (1 << ring))) {
-      tail[state * 1024 + ring * 128 + lane] = keys[row * 128 + lane];
-      tail[state * 1024 + 512 + ring * 128 + lane] = gates[row * 128 + lane];
+      tail[state * 1024 + ring * 128 + lane] = row_keys[lane];
+      tail[state * 1024 + 512 + ring * 128 + lane] = row_gates[lane];
       written |= 1 << ring;
     }
     if (position == 0) {
@@ -291,6 +308,74 @@ __global__ void update_pool_tails(const c10::BFloat16* keys,
     if (written == 15) {
       break;
     }
+  }
+}
+
+__global__ void update_pool_tails(const c10::BFloat16* keys,
+                                  const c10::BFloat16* gates,
+                                  const int64_t* positions,
+                                  const int32_t* cu,
+                                  const int32_t* state_ids,
+                                  const int32_t* read_ids,
+                                  const c10::BFloat16* snapshot,
+                                  c10::BFloat16* tail,
+                                  int64_t states) {
+  update_pool_tails_impl(blockIdx.x,
+                         threadIdx.x,
+                         keys,
+                         gates,
+                         nullptr,
+                         nullptr,
+                         positions,
+                         cu,
+                         state_ids,
+                         read_ids,
+                         snapshot,
+                         tail,
+                         states);
+}
+
+// Materialize all gathered compressed pools and the recurrent tail in one
+// launch. The two halves touch disjoint cache regions and run independently in
+// the same block grid.
+__global__ void scatter_indexer_cp(
+    const uint8_t* gathered,
+    const int64_t* pool_source_offsets,
+    const int64_t* pool_cache_byte_indices,
+    int64_t pool_count,
+    const int64_t* tail_source_offsets,
+    const int64_t* positions,
+    const int32_t* cu,
+    const int32_t* state_ids,
+    const int32_t* read_ids,
+    uint8_t* cache,
+    const c10::BFloat16* snapshot,
+    c10::BFloat16* tail,
+    int64_t states,
+    int32_t request_count,
+    int64_t tail_count) {
+  const int64_t block = blockIdx.x;
+  if (block < pool_count) {
+    for (int64_t byte = threadIdx.x; byte < kPoolPacketBytes;
+         byte += blockDim.x) {
+      cache[pool_cache_byte_indices[block * kPoolPacketBytes + byte]] =
+          gathered[pool_source_offsets[block] + byte];
+    }
+  }
+  if (block < request_count && tail_count > 0) {
+    update_pool_tails_impl(static_cast<int32_t>(block),
+                           threadIdx.x,
+                           nullptr,
+                           nullptr,
+                           gathered,
+                           tail_source_offsets,
+                           positions,
+                           cu,
+                           state_ids,
+                           read_ids,
+                           snapshot,
+                           tail,
+                           states);
   }
 }
 
@@ -723,5 +808,67 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
       tail.data_ptr<c10::BFloat16>(),
       tail.size(0));
   check_musa_kernel_launch("GLM CP IndexPool tail update");
+}
+
+void glm5_next_indexer_scatter_cp(
+    const torch::Tensor& gathered,
+    const torch::Tensor& pool_source_offsets,
+    const torch::Tensor& pool_cache_byte_indices,
+    const torch::Tensor& tail_source_offsets,
+    const torch::Tensor& positions,
+    const torch::Tensor& cu,
+    const torch::Tensor& ids,
+    const torch::Tensor& read_ids,
+    torch::Tensor& cache,
+    torch::Tensor& tail) {
+  RECORD_USER_SCOPE("kernel: glm5_next_indexer_scatter_cp");
+  XLLMDeviceGuard device_guard(gathered.device());
+  check_tensor(gathered, gathered, torch::kUInt8);
+  for (const auto& value : {pool_source_offsets,
+                            pool_cache_byte_indices,
+                            tail_source_offsets,
+                            positions}) {
+    check_tensor(value, gathered, torch::kInt64);
+  }
+  for (const auto& value : {cu, ids, read_ids}) {
+    check_tensor(value, gathered, torch::kInt32);
+  }
+  check_tensor(cache, gathered, torch::kUInt8);
+  check_tensor(tail, gathered, torch::kBFloat16);
+  CHECK_EQ(gathered.dim(), 1);
+  CHECK_EQ(pool_cache_byte_indices.numel(),
+           pool_source_offsets.numel() * kPoolPacketBytes);
+  CHECK_EQ(tail_source_offsets.numel(), positions.numel());
+  CHECK_GT(ids.numel(), 0);
+  CHECK_EQ(cu.numel(), ids.numel() + 1);
+  CHECK_EQ(read_ids.sizes(), ids.sizes());
+  CHECK_EQ(cache.dim(), 4);
+  CHECK_EQ(cache.sizes().slice(1), torch::IntArrayRef({64, 1, 132}));
+  CHECK_EQ(tail.dim(), 4);
+  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  const int64_t pool_count = pool_source_offsets.numel();
+  const int64_t blocks = std::max(pool_count, ids.numel());
+  CHECK_LE(blocks, std::numeric_limits<int32_t>::max());
+  auto snapshot = tail.clone();
+  scatter_indexer_cp<<<static_cast<int32_t>(blocks),
+                       128,
+                       0,
+                       current_musa_stream(gathered.device())>>>(
+      gathered.data_ptr<uint8_t>(),
+      pool_source_offsets.data_ptr<int64_t>(),
+      pool_cache_byte_indices.data_ptr<int64_t>(),
+      pool_count,
+      tail_source_offsets.data_ptr<int64_t>(),
+      positions.data_ptr<int64_t>(),
+      cu.data_ptr<int32_t>(),
+      ids.data_ptr<int32_t>(),
+      read_ids.data_ptr<int32_t>(),
+      cache.data_ptr<uint8_t>(),
+      snapshot.data_ptr<c10::BFloat16>(),
+      tail.data_ptr<c10::BFloat16>(),
+      tail.size(0),
+      static_cast<int32_t>(ids.numel()),
+      tail_source_offsets.numel());
+  check_musa_kernel_launch("GLM CP Indexed cache and tail scatter");
 }
 }  // namespace xllm::kernel::musa

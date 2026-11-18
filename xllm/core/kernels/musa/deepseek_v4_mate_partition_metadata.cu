@@ -87,7 +87,7 @@ void deepseek_v4_rebase_mate_partitions(torch::Tensor metadata,
     CHECK(tensor.scalar_type() == torch::kInt32 && tensor.is_contiguous());
     CHECK(tensor.device() == metadata.device());
   }
-  const XLLMOptionalDeviceGuard guard(metadata.device());
+  const XLLMOptionalDeviceGuard device_guard(metadata.device());
   const musaStream_t stream = is_stream_capturing()
                                   ? c10::musa::getCurrentMUSAStream().stream()
                                   : current_musa_stream(metadata.device());

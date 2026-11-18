@@ -348,6 +348,70 @@ TEST_F(GlmSparseTest, ProductionTop512PoolsExpands2048TokensAndThreeTokenTail) {
   }
 }
 
+TEST_F(GlmSparseTest, CpPayloadScatterWritesPoolsAndTail) {
+  const auto opts =
+      torch::TensorOptions().device(device_).dtype(torch::kBFloat16);
+  auto keys = torch::randn({4, 128}, opts) * 0.1;
+  auto gates = torch::randn({4, 128}, opts) * 0.1;
+  auto tail_payload = torch::cat({keys, gates}, 1).contiguous();
+  constexpr int64_t kTailBytes = 4 * 512;
+  auto gathered = torch::empty(
+      {kTailBytes + 132},
+      torch::TensorOptions().device(device_).dtype(torch::kUInt8));
+  gathered.narrow(0, 0, kTailBytes)
+      .copy_(tail_payload.view(torch::kUInt8).flatten());
+  auto packet = torch::arange(132, torch::kInt64).to(torch::kUInt8).to(device_);
+  gathered.narrow(0, kTailBytes, 132).copy_(packet);
+
+  std::vector<int64_t> destinations;
+  for (int64_t byte = 0; byte < 128; ++byte) {
+    destinations.emplace_back(byte);
+  }
+  for (int64_t byte = 0; byte < 4; ++byte) {
+    destinations.emplace_back(8192 + byte);
+  }
+  const auto int64_options =
+      torch::TensorOptions().device(device_).dtype(torch::kInt64);
+  auto pool_source_offsets = torch::tensor({kTailBytes}, int64_options);
+  auto pool_cache_indices = torch::tensor(destinations, int64_options);
+  auto tail_source_offsets =
+      torch::arange(0, kTailBytes, 512, int64_options);
+  auto positions =
+      torch::arange(4, torch::TensorOptions().device(device_).dtype(
+                           torch::kInt64));
+  auto cu = torch::tensor({0, 4}, torch::kInt32).to(device_);
+  auto ids = torch::tensor({1}, torch::kInt32).to(device_);
+  auto cache = torch::zeros(
+      {1, 64, 1, 132},
+      torch::TensorOptions().device(device_).dtype(torch::kUInt8));
+  auto tail = torch::zeros({2, 2, 4, 128}, opts);
+
+  kernel::musa::glm5_next_indexer_scatter_cp(gathered,
+                                             pool_source_offsets,
+                                             pool_cache_indices,
+                                             tail_source_offsets,
+                                             positions,
+                                             cu,
+                                             ids,
+                                             ids,
+                                             cache,
+                                             tail);
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+  auto cache_cpu = cache.flatten().cpu();
+  auto packet_cpu = packet.cpu();
+  for (size_t index = 0; index < destinations.size(); ++index) {
+    EXPECT_EQ(cache_cpu[destinations[index]].item<uint8_t>(),
+              packet_cpu[index].item<uint8_t>());
+  }
+  auto tail_cpu = tail.cpu();
+  auto keys_cpu = keys.cpu();
+  auto gates_cpu = gates.cpu();
+  for (int64_t ring = 0; ring < 4; ++ring) {
+    EXPECT_TRUE(torch::equal(tail_cpu[1][0][ring], keys_cpu[ring]));
+    EXPECT_TRUE(torch::equal(tail_cpu[1][1][ring], gates_cpu[ring]));
+  }
+}
+
 ModelArgs model_args(int64_t heads = 8,
                      int64_t hidden = 64,
                      int64_t rank = 32) {
@@ -1871,8 +1935,20 @@ class DsaCpCountingGroup final : public ProcessGroup {
     ++reductions;
     return delegate_.allreduce_async(input);
   }
+  c10::intrusive_ptr<c10d::Work> send_async(const torch::Tensor& tensor,
+                                            int dst,
+                                            int tag = 0) override {
+    ++halo_sends;
+    return delegate_.send_async(tensor, dst, tag);
+  }
+  c10::intrusive_ptr<c10d::Work> recv_async(torch::Tensor& tensor,
+                                            int src,
+                                            int tag = 0) override {
+    ++halo_recvs;
+    return delegate_.recv_async(tensor, src, tag);
+  }
   int64_t exchanges = 0, reductions = 0, latent_gathers = 0, pool_gathers = 0,
-          halo_gathers = 0;
+          halo_gathers = 0, halo_sends = 0, halo_recvs = 0;
 
  private:
   void record(const torch::Tensor& input) {
@@ -1890,13 +1966,8 @@ class DsaCpCountingGroup final : public ProcessGroup {
       ++pool_gathers;
     } else {
       EXPECT_EQ(input.scalar_type(), torch::kBFloat16);
-      EXPECT_TRUE(input.size(1) == 512 || input.size(1) == 256);
-      if (input.size(1) == 512) {
-        ++latent_gathers;
-      } else {
-        EXPECT_EQ(input.size(0), 3);
-        ++halo_gathers;
-      }
+      EXPECT_EQ(input.size(1), 512);
+      ++latent_gathers;
     }
   }
   ProcessGroup& delegate_;
@@ -2087,7 +2158,36 @@ TEST(GlmDsaCpTest, McclContextParallelWorker) {
         const int64_t exchanges = counted.exchanges,
                       gathers = counted.latent_gathers,
                       pool_gathers = counted.pool_gathers,
-                      halo_gathers = counted.halo_gathers;
+                      halo_gathers = counted.halo_gathers,
+                      halo_sends = counted.halo_sends,
+                      halo_recvs = counted.halo_recvs;
+        int64_t expected_halo_sends = 0;
+        int64_t expected_halo_recvs = 0;
+        if (count > 0) {
+          const int64_t source_end = begin + count;
+          for (int32_t dst = rank + 1; dst < kWorld; ++dst) {
+            if (partitions[dst].numel() == 0) {
+              continue;
+            }
+            if (sharded.glm5_prefill_row_offsets[dst] - 3 >= source_end) {
+              break;
+            }
+            ++expected_halo_sends;
+          }
+        }
+        int32_t last_owner = -1;
+        for (int64_t row = std::max<int64_t>(0, begin - 3); row < begin;
+             ++row) {
+          const int32_t owner = static_cast<int32_t>(
+              std::upper_bound(sharded.glm5_prefill_row_offsets.begin(),
+                               sharded.glm5_prefill_row_offsets.end(),
+                               row) -
+              sharded.glm5_prefill_row_offsets.begin() - 1);
+          if (owner != last_owner) {
+            ++expected_halo_recvs;
+            last_owner = owner;
+          }
+        }
         auto actual = local->forward(pos.narrow(0, begin, count),
                                      input.narrow(0, begin, count),
                                      sharded,
@@ -2095,7 +2195,9 @@ TEST(GlmDsaCpTest, McclContextParallelWorker) {
         EXPECT_EQ(counted.exchanges, exchanges + 2);  // activation scatter/restore
         EXPECT_EQ(counted.latent_gathers, gathers + 1);
         EXPECT_EQ(counted.pool_gathers, pool_gathers + 1);
-        EXPECT_EQ(counted.halo_gathers, halo_gathers + 1);
+        EXPECT_EQ(counted.halo_gathers, halo_gathers);
+        EXPECT_EQ(counted.halo_sends, halo_sends + expected_halo_sends);
+        EXPECT_EQ(counted.halo_recvs, halo_recvs + expected_halo_recvs);
         EXPECT_EQ(counted.reductions, 0);
         compare(actual.first,
                 expected.first.narrow(0, begin, count),

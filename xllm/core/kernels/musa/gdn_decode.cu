@@ -2685,7 +2685,7 @@ torch::Tensor fused_gated_delta_rule_decode(
   const float softplus_beta = 1.0f;
   const float softplus_threshold = 20.0f;
 
-  const at::cuda::OptionalCUDAGuard guard(device_of(mixed_qkv));
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(mixed_qkv));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
   if (mixed_qkv.scalar_type() == torch::kBFloat16) {
@@ -3248,7 +3248,7 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
           intermediate.scalar_type() == x.scalar_type())
         << "MTP conv intermediate shape mismatch";
   }
-  const at::cuda::OptionalCUDAGuard guard(device_of(x));
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(x));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   switch (x.scalar_type()) {
     case torch::kBFloat16:
@@ -3328,7 +3328,7 @@ void causal_conv1d_mtp_verify_with_projection(
         proj_output.size(1) == proj_weight.size(0))
       << "fused MTP conv projection output mismatch: "
       << proj_output.sizes();
-  const at::cuda::OptionalCUDAGuard guard(device_of(x));
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(x));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   if (num_accepted_tokens.scalar_type() == torch::kInt32) {
     dispatch_causal_conv1d_mtp_verify_superstate_proj<int32_t>(
