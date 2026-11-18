@@ -480,6 +480,20 @@ void DisaggPDScheduler::start_rpc_server() {
 }
 
 void DisaggPDScheduler::step(const absl::Duration& timeout) {
+  const bool mark_prefill_busy =
+      options_.instance_role() == InstanceRole::PREFILL &&
+      (if_queue_not_empty() || request_queue_.size() > 0);
+  if (mark_prefill_busy) {
+    executing_prefill_step_.store(1, std::memory_order_relaxed);
+  }
+  struct ExecutingPrefillResetGuard {
+    std::atomic<uint32_t>* flag;
+    ~ExecutingPrefillResetGuard() {
+      if (flag != nullptr) {
+        flag->store(0, std::memory_order_relaxed);
+      }
+    }
+  } busy_guard{mark_prefill_busy ? &executing_prefill_step_ : nullptr};
   ContinuousScheduler::step(timeout);
   if (use_async_prefill_dp()) {
     return;

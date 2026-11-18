@@ -192,6 +192,78 @@ void PrefillFirstPolicy::schedule(
     }
   }
 
+  static thread_local const Request* last_deferred_chunk_req = nullptr;
+  static thread_local absl::Time deferred_chunk_since = absl::InfinitePast();
+  static thread_local int32_t consecutive_fast_passes = 0;
+  static thread_local int32_t total_fast_passes_on_req = 0;
+  static thread_local double accumulated_deferred_ms_on_req = 0.0;
+  const Request* oldest_chunk_req =
+      !state.chunk_queue.empty() ? state.chunk_queue.top().get() : nullptr;
+  if (oldest_chunk_req != last_deferred_chunk_req) {
+    last_deferred_chunk_req = oldest_chunk_req;
+    deferred_chunk_since = absl::InfinitePast();
+    consecutive_fast_passes = 0;
+    total_fast_passes_on_req = 0;
+    accumulated_deferred_ms_on_req = 0.0;
+  }
+  const absl::Time sched_now = absl::Now();
+  const double active_deferred_ms =
+      (consecutive_fast_passes > 0 &&
+       deferred_chunk_since != absl::InfinitePast())
+          ? std::max(0.0,
+                     absl::ToDoubleMilliseconds(sched_now - deferred_chunk_since))
+          : 0.0;
+  const double chunk_deferred_ms =
+      accumulated_deferred_ms_on_req + active_deferred_ms;
+  // Cap both per-chunk-boundary passes (<=1) and cumulative deferral across the
+  // entire life of a multi-chunk cold request (<=2 passes, <700ms total) so
+  // warm bursts never push a 1.8s 24K cold prefill out to 4-6s.
+  const bool allow_chunk_deferral =
+      consecutive_fast_passes < 1 && total_fast_passes_on_req < 2 &&
+      chunk_deferred_ms < 700.0;
+
+  // When a prefix-cached request is split at a fine linear-state checkpoint
+  // boundary (e.g. 2048 + short final tail), let its single-step final tail
+  // finish ahead of multi-chunk cold continuations in chunk_queue subject to
+  // the bounded deferral cap on oldest_chunk_req.
+  if (batch_mode_.priority_strategy == "fcfs" && is_prefill_instance &&
+      state.chunk_queue.size() > 1 && state.chunk_queue.supports_sort() &&
+      allow_chunk_deferral) {
+    auto fcfs_cmp = create_comparator("fcfs", /*is_reversed=*/true);
+    const size_t max_chunk =
+        std::max<size_t>(1, options_.max_tokens_per_chunk_for_prefill());
+    std::unordered_map<const Request*, double> chunk_scores;
+    chunk_scores.reserve(state.chunk_queue.size());
+    for (const std::shared_ptr<Request>& req : state.chunk_queue) {
+      if (req == nullptr) {
+        continue;
+      }
+      const size_t rem =
+          estimate_remaining_prefill_tokens(req, state, block_pool);
+      const double wait_ms = std::max(
+          0.0, absl::ToDoubleMilliseconds(sched_now - req->created_time()));
+      const bool is_one_step = rem <= max_chunk;
+      const double multi_floor = static_cast<double>(max_chunk) + 1024.0;
+      const double score =
+          is_one_step
+              ? (static_cast<double>(rem) - 2.0 * wait_ms)
+              : std::max(multi_floor,
+                         static_cast<double>(max_chunk + rem) - 10.0 * wait_ms);
+      chunk_scores.emplace(req.get(), score);
+    }
+    state.chunk_queue.sort(
+        [&chunk_scores, &fcfs_cmp](const std::shared_ptr<Request>& a,
+                                   const std::shared_ptr<Request>& b) {
+          const auto it_a = chunk_scores.find(a.get());
+          const auto it_b = chunk_scores.find(b.get());
+          if (it_a != chunk_scores.end() && it_b != chunk_scores.end() &&
+              std::abs(it_a->second - it_b->second) > 512.0) {
+            return it_a->second < it_b->second;
+          }
+          return fcfs_cmp(a, b);
+        });
+  }
+
   // A completed D2H release must first be available to the decode request
   // that triggered preemption. Do not let the restore waiter reclaim the
   // released blocks before that request can retry.
@@ -228,34 +300,41 @@ void PrefillFirstPolicy::schedule(
   // while chunk_queue still has multiple chunks remaining.
   std::vector<size_t> reserved_full_footprint(
       static_cast<size_t>(state.options.dp_size()), 0);
-  static thread_local const Request* last_deferred_chunk_req = nullptr;
-  static thread_local int32_t consecutive_fast_passes = 0;
   bool fast_single_chunk_first = false;
+  bool run_one_step_alone = false;
+  size_t diag_rem_new = 0;
+  size_t diag_rem_chunk = 0;
   if (is_prefill_instance && batch_mode_.enable_chunked_prefill &&
       !state.chunk_queue.empty() && !state.prefill_queue.empty() &&
-      !should_defer_new_prefill(state)) {
+      !should_defer_new_prefill(state) && allow_chunk_deferral) {
     const size_t max_chunk =
         std::max<size_t>(1, options_.max_tokens_per_chunk_for_prefill());
     const size_t rem_new = estimate_remaining_prefill_tokens(
         state.prefill_queue.top(), state, block_pool);
     const size_t rem_chunk = estimate_remaining_prefill_tokens(
         state.chunk_queue.top(), state, block_pool);
-    const Request* chunk_top_ptr = state.chunk_queue.top().get();
-    if (chunk_top_ptr != last_deferred_chunk_req) {
-      last_deferred_chunk_req = chunk_top_ptr;
-      consecutive_fast_passes = 0;
-    }
-    const double chunk_wait_ms =
-        std::max(0.0, absl::ToDoubleMilliseconds(absl::Now() - state.chunk_queue.top()->created_time()));
-    const bool big_chunk_advantage =
-        rem_chunk > max_chunk || (rem_new <= 2048 && rem_new * 2 < rem_chunk);
-    if (rem_new > 0 && rem_new <= max_chunk && big_chunk_advantage &&
-        rem_new < rem_chunk && consecutive_fast_passes < 8 &&
-        chunk_wait_ms < 2500.0) {
-      ++consecutive_fast_passes;
-      fast_single_chunk_first = true;
-      const size_t block_size =
-          static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+    diag_rem_new = rem_new;
+    diag_rem_chunk = rem_chunk;
+
+    const bool single_seq_prefill =
+        should_limit_prefill_requests(state) && state.options.dp_size() <= 1;
+    const size_t chunk_take = std::min(
+        rem_chunk, std::min(max_chunk, budget.remaining_token_budget));
+    const size_t leftover_after_chunk =
+        single_seq_prefill
+            ? 0
+            : (budget.remaining_token_budget > chunk_take
+                   ? budget.remaining_token_budget - chunk_take
+                   : 0);
+    // Only preempt an in-progress cold chunk for a genuinely short single-step
+    // request (<= min(max_chunk/2, 4096) tokens and at most half of rem_chunk),
+    // preventing ~7K warm tails from starving 8K cold chunks.
+    const size_t max_fast_preempt_tokens =
+        std::min<size_t>(max_chunk / 2, 4096);
+    const bool srpt_advantage = (rem_new * 2 <= rem_chunk);
+    if (rem_new > 0 && rem_new <= max_fast_preempt_tokens && srpt_advantage) {
+      const size_t block_size = static_cast<size_t>(
+          std::max<int32_t>(1, state.kv_cache_manager->block_size()));
       for (const std::shared_ptr<Request>& req : state.chunk_queue) {
         if (req == nullptr || req->sequences().empty() ||
             req->sequences()[0] == nullptr) {
@@ -268,25 +347,65 @@ void PrefillFirstPolicy::schedule(
               (s->num_tokens() + block_size - 1) / block_size;
         }
       }
+      if (rem_new > leftover_after_chunk) {
+        run_one_step_alone = true;
+      } else {
+        fast_single_chunk_first = true;
+      }
     }
   }
+
   if (fast_single_chunk_first) {
     schedule_prefill_from_queue(
         &state.prefill_queue, state, budget, finished, reserved_full_footprint);
     schedule_prefill_from_queue(
         &state.chunk_queue, state, budget, finished, reserved_full_footprint);
-  } else {
-    if (is_prefill_instance && !state.chunk_queue.empty()) {
-      // Reset fast-pass burst counter whenever chunk_queue advances a chunk.
-      last_deferred_chunk_req = nullptr;
-      consecutive_fast_passes = 0;
+  } else if (run_one_step_alone) {
+    schedule_prefill_from_queue(
+        &state.prefill_queue, state, budget, finished, reserved_full_footprint);
+    if (state.running_sequences.empty()) {
+      schedule_prefill_from_queue(
+          &state.chunk_queue, state, budget, finished, reserved_full_footprint);
     }
+  } else {
     schedule_prefill_from_queue(
         &state.chunk_queue, state, budget, finished, reserved_full_footprint);
-    // Then new prefill requests.
     if (!should_defer_new_prefill(state)) {
       schedule_prefill_from_queue(
           &state.prefill_queue, state, budget, finished, reserved_full_footprint);
+    }
+  }
+
+  if (is_prefill_instance && oldest_chunk_req != nullptr &&
+      !state.running_requests.empty()) {
+    bool oldest_scheduled = false;
+    for (const auto& r : state.running_requests) {
+      if (r.get() == oldest_chunk_req) {
+        oldest_scheduled = true;
+        break;
+      }
+    }
+    if (oldest_scheduled) {
+      if (consecutive_fast_passes > 0 &&
+          deferred_chunk_since != absl::InfinitePast()) {
+        accumulated_deferred_ms_on_req += std::max(
+            0.0, absl::ToDoubleMilliseconds(absl::Now() - deferred_chunk_since));
+      }
+      consecutive_fast_passes = 0;
+      deferred_chunk_since = absl::InfinitePast();
+    } else {
+      if (consecutive_fast_passes == 0) {
+        deferred_chunk_since = absl::Now();
+      }
+      ++consecutive_fast_passes;
+      ++total_fast_passes_on_req;
+      VLOG(1) << "[PREFILL_SRPT] deferred oldest_chunk="
+              << oldest_chunk_req->request_id()
+              << " step_passes=" << consecutive_fast_passes
+              << " total_passes=" << total_fast_passes_on_req
+              << " deferred_ms=" << chunk_deferred_ms
+              << " rem_new=" << diag_rem_new
+              << " rem_chunk=" << diag_rem_chunk;
     }
   }
 

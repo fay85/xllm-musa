@@ -97,7 +97,14 @@ class DisaggPDScheduler : public ContinuousScheduler {
   ~DisaggPDScheduler() override;
 
   uint32_t get_waiting_requests_num() const override {
-    return prefill_queue_->size() +
+    const ssize_t pending_mpmc = request_queue_.size();
+    const uint32_t mpmc_count =
+        pending_mpmc > 0 ? static_cast<uint32_t>(pending_mpmc) : 0;
+    const uint32_t chunk_count =
+        chunk_queue_ != nullptr ? static_cast<uint32_t>(chunk_queue_->size())
+                                : 0;
+    return prefill_queue_->size() + chunk_count + mpmc_count +
+           executing_prefill_step_.load(std::memory_order_relaxed) +
            prefetching_requests_.load(std::memory_order_relaxed);
   };
 
@@ -322,6 +329,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
   std::unordered_set<std::string> linked_instance_;
 
   std::string server_name_;
+  std::atomic<uint32_t> executing_prefill_step_{0};
 };
 
 }  // namespace xllm
