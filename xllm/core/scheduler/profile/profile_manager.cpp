@@ -42,6 +42,7 @@ limitations under the License.
 #include "platform/platform.h"
 #include "runtime/acl_graph_bucket_policy.h"
 #include "scheduler/profile/graph_warmup.h"
+#include "framework/config/parallel_config.h"
 #include "util/rec_model_utils.h"
 #include "util/utils.h"
 
@@ -1349,6 +1350,52 @@ void ProfileManager::warmup_prefill_for_graph() {
       chunk_buckets.push_back(256);
     }
     double chunk_warmup_ms = 0.0;
+    // Under CP>1 + MTP, non-final full chunks (n_tokens < seq_len, numel ==
+    // max_chunk_tokens) execute with skip_pcp_gather=true (and sharded draft
+    // input), which is part of get_prefill_graph_key(). Pre-capture both the
+    // initial (prefix=0, chunked=0) and continuation (prefix>0, chunked=1)
+    // non-final chunk keys at startup so the first >8K cold request never pays
+    // online lazy graph capture.
+    auto run_nonfinal_chunk_warmup = [&](int32_t chunk_tokens,
+                                         int32_t prefix_len) -> double {
+      const int32_t total_len = prefix_len + chunk_tokens + prefix_step;
+      std::shared_ptr<Request> request = generate_single_request(
+          total_len, prefix_len, /*is_graph_warmup=*/true);
+      std::vector<std::shared_ptr<Request>> requests{request};
+      std::vector<Sequence*> sequences{request->sequences()[0].get()};
+      std::vector<size_t> sequences_budget{
+          static_cast<size_t>(chunk_tokens)};
+      auto batches = BatchFactory::get_instance(options_.dp_size())
+                         ->create_batches(requests, sequences, sequences_budget);
+      absl::Time t0 = absl::Now();
+      engine_->step(batches);
+      if (options_.enable_schedule_overlap()) {
+        engine_->update_last_step_result(batches);
+      }
+      const double ms = absl::ToDoubleMilliseconds(absl::Now() - t0);
+      block_manager_pool_->deallocate_without_cache(
+          request->sequences()[0].get());
+      return ms;
+    };
+    const int32_t max_chunk_cfg =
+        ::xllm::SchedulerConfig::get_instance()
+            .max_tokens_per_chunk_for_prefill();
+    if (::xllm::ParallelConfig::get_instance().cp_size() > 1 && max_chunk_cfg > 0 &&
+        prefill_tokens == max_chunk_cfg) {
+      chunk_warmup_ms +=
+          run_nonfinal_chunk_warmup(prefill_tokens, /*prefix_len=*/0);
+      chunk_warmup_ms +=
+          run_nonfinal_chunk_warmup(prefill_tokens, /*prefix_len=*/prefix_step);
+    }
+    for (int32_t short_cold : {256, 512}) {
+      if (short_cold < prefill_tokens && short_cold % stride == 0) {
+        chunk_warmup_ms += run_request(short_cold,
+                                       /*prefix_length=*/0,
+                                       /*batch_size=*/1,
+                                       /*extra_token_length=*/0,
+                                       /*is_graph_warmup=*/true);
+      }
+    }
     for (int32_t b : chunk_buckets) {
       chunk_warmup_ms += run_request(prefix_step + b,
                                      /*prefix_length=*/prefix_step,
