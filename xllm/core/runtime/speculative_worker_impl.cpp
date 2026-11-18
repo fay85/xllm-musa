@@ -24,6 +24,7 @@ limitations under the License.
 #include "core/framework/speculative/spec_input_builder.h"
 #include "runtime/llm_worker_impl.h"
 #include "runtime/vlm_worker_impl.h"
+#include "util/env_var.h"
 #include "util/slice.h"
 #include "util/tensor_helper.h"
 #include "util/timer.h"
@@ -253,6 +254,23 @@ bool SpeculativeWorkerImpl::init_model(const std::string& model_weights_path,
         model_weights_path, random_seed, master_status);
     if (result) {
       dtype_ = impl_->dtype();
+#if defined(USE_MUSA)
+      // The outer worker also launches speculative preparation and forwards.
+      // Keep its compute stream policy aligned with the target/draft workers.
+      static const bool use_pool_compute_stream = util::get_bool_env(
+          "XLLM_MUSA_POOL_COMPUTE_STREAM", /*default_value=*/true);
+      const bool is_qwen3 =
+          impl_->context_.get_model_args().model_type() == "qwen3";
+      if (use_pool_compute_stream && !is_qwen3) {
+        compute_stream_ = device_.get_stream_from_pool();
+      } else if (use_pool_compute_stream) {
+        LOG(WARNING) << "MUSA pool compute streams are not validated for Qwen3 "
+                        "attention; using the default compute stream.";
+      }
+      LOG(INFO) << "MUSA speculative compute stream initialized: "
+                << *compute_stream_ << ", use_pool_compute_stream="
+                << (use_pool_compute_stream && !is_qwen3);
+#endif
     }
   }
   enable_fused_kernel_ =
