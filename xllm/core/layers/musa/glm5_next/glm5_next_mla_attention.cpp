@@ -669,17 +669,24 @@ Glm5NextMLAAttentionImpl::forward(
   auto main_cache = cache.get_k_cache();
   CHECK_EQ(main_cache.dim(), 4);
   CHECK_EQ(main_cache.size(1), 256);
-  auto projected = fused_qkv_a_proj_->forward(hidden_states);
-  auto q_raw = projected.narrow(1, 0, q_rank_).contiguous();
-  auto c_raw = projected.narrow(1, q_rank_, 512).contiguous();
-  auto q_norm = std::get<0>(q_norm_->forward(q_raw));
-  auto latent = std::get<0>(kv_norm_->forward(c_raw));
-  auto q = q_b_proj_->forward(q_norm).view({hidden_states.size(0), -1, 256});
+  torch::Tensor q_norm;
+  torch::Tensor latent;
+  torch::Tensor q;
+  {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.Projections");
+    auto projected = fused_qkv_a_proj_->forward(hidden_states);
+    auto q_raw = projected.narrow(1, 0, q_rank_).contiguous();
+    auto c_raw = projected.narrow(1, q_rank_, 512).contiguous();
+    q_norm = std::get<0>(q_norm_->forward(q_raw));
+    latent = std::get<0>(kv_norm_->forward(c_raw));
+    q = q_b_proj_->forward(q_norm).view({hidden_states.size(0), -1, 256});
+  }
   kernel::musa::Glm5NextIndexerSelection selection;
   auto pos = positions.to(torch::kInt64).contiguous();
   auto table = metadata.block_table.to(torch::kInt32).contiguous();
   CHECK_EQ(table.device(), hidden_states.device());
   if (enable_indexer_) {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.Indexer");
     auto iq = index_q_->forward(q_norm).view({hidden_states.size(0), 32, 128});
     auto kw = index_kw_->forward(hidden_states);
     auto key_fp32 = kw.narrow(1, 0, 128).to(torch::kFloat32).contiguous();
@@ -725,21 +732,29 @@ Glm5NextMLAAttentionImpl::forward(
   CHECK_EQ(slots.sizes(), pos.sizes());
   slots =
       torch::where(selection.rows.ge(0), slots, torch::full_like(slots, -1));
-  auto attention = glm5_next_mla_attention(q,
-                                           latent,
-                                           w_k_,
-                                           w_v_,
-                                           selection.tokens,
-                                           selection.lengths,
-                                           selection.rows,
-                                           pos,
-                                           table,
-                                           slots,
-                                           main_cache);
+  torch::Tensor attention;
+  {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.SparseAttention");
+    attention = glm5_next_mla_attention(q,
+                                        latent,
+                                        w_k_,
+                                        w_v_,
+                                        selection.tokens,
+                                        selection.lengths,
+                                        selection.rows,
+                                        pos,
+                                        table,
+                                        slots,
+                                        main_cache);
+  }
   // MUSA Linear may reuse its matmul scratch on the next invocation. The
   // attention layer returns owned activations so callers can retain a prefill
   // result while extending the same layer's cache with subsequent forwards.
-  auto output = o_proj_->forward(attention.flatten(1, 2)).clone();
+  torch::Tensor output;
+  {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.OutputProjection");
+    output = o_proj_->forward(attention.flatten(1, 2)).clone();
+  }
   return {output, std::move(selection)};
 }
 
@@ -759,12 +774,15 @@ Glm5NextMLAAttentionImpl::forward_cp(
     CHECK_EQ(cache.get_index_cache().dim(), 4);
     CHECK_EQ(cache.get_index_cache().size(0), cache.get_k_cache().size(0));
   }
-  DsaCpLayout layout(metadata,
-                     positions,
-                     hidden_states.size(0),
-                     *cp_group_,
-                     cache,
-                     enable_indexer_);
+  auto layout = [&]() {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPLayout");
+    return DsaCpLayout(metadata,
+                       positions,
+                       hidden_states.size(0),
+                       *cp_group_,
+                       cache,
+                       enable_indexer_);
+  }();
   auto table = metadata.block_table.to(torch::kInt32).contiguous();
   auto ids = metadata.linear_state_indices.to(torch::kInt32).contiguous();
   auto read_ids =
@@ -780,6 +798,7 @@ Glm5NextMLAAttentionImpl::forward_cp(
   // Compression uses Plain rows, whose short predecessor halo reconstructs
   // every rate-4 window even when a pool crosses several tiny/empty shards.
   if (enable_indexer_) {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerUpdate");
     auto key_gate = torch::empty({layout.count, 256}, hidden_states.options());
     if (layout.count > 0) {
       auto kw = index_kw_->forward(hidden_states);
@@ -846,12 +865,16 @@ Glm5NextMLAAttentionImpl::forward_cp(
         .contiguous()
         .view(torch::kUInt8);
   };
-  auto input_bytes = hidden_states.contiguous().view(torch::kUInt8);
-  if (shared_selection != nullptr) {
-    input_bytes =
-        torch::cat({input_bytes, pack_selection(*shared_selection)}, 1);
+  torch::Tensor scattered;
+  {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPScatter");
+    auto input_bytes = hidden_states.contiguous().view(torch::kUInt8);
+    if (shared_selection != nullptr) {
+      input_bytes =
+          torch::cat({input_bytes, pack_selection(*shared_selection)}, 1);
+    }
+    scattered = layout.scatter(input_bytes);
   }
-  auto scattered = layout.scatter(input_bytes);
   auto local_hidden = scattered.narrow(1, 0, hidden_size_ * 2)
                           .contiguous()
                           .view(torch::kBFloat16);
@@ -861,6 +884,7 @@ Glm5NextMLAAttentionImpl::forward_cp(
   auto latent = torch::empty({local_count, 512}, hidden_states.options());
   torch::Tensor q_norm, q;
   if (local_count > 0) {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPProjections");
     auto projected = fused_qkv_a_proj_->forward(local_hidden);
     auto q_raw = projected.narrow(1, 0, q_rank_).contiguous();
     auto c_raw = projected.narrow(1, q_rank_, 512).contiguous();
@@ -870,13 +894,17 @@ Glm5NextMLAAttentionImpl::forward_cp(
   }
   auto global_latent = layout.gather_interleaved(latent);
   auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
-  if (main_cache.scalar_type() == torch::kUInt8) {
-    km::flash_mla_sparse_fp8_cache_write(global_latent, slots, main_cache);
-  } else {
-    km::flash_mla_sparse_cache_write(global_latent, slots, main_cache);
+  {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CacheWrite");
+    if (main_cache.scalar_type() == torch::kUInt8) {
+      km::flash_mla_sparse_fp8_cache_write(global_latent, slots, main_cache);
+    } else {
+      km::flash_mla_sparse_cache_write(global_latent, slots, main_cache);
+    }
   }
   km::Glm5NextIndexerSelection selection;
   if (enable_indexer_) {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerSelect");
     auto iq = torch::empty({local_count, 32, 128}, hidden_states.options());
     auto weights = torch::empty({local_count, 32},
                                 hidden_states.options().dtype(torch::kFloat32));
@@ -903,6 +931,7 @@ Glm5NextMLAAttentionImpl::forward_cp(
   auto output =
       torch::empty({local_count, hidden_size_}, hidden_states.options());
   if (local_count > 0) {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPSparseAttention");
     auto attention =
         glm5_next_mla_attention(q,
                                 latent,
@@ -916,7 +945,10 @@ Glm5NextMLAAttentionImpl::forward_cp(
                                 slots.index_select(0, layout.interleaved),
                                 main_cache,
                                 /*write_cache=*/false);
-    output.copy_(o_proj_->forward(attention.flatten(1, 2)));
+    {
+      RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPOutputProjection");
+      output.copy_(o_proj_->forward(attention.flatten(1, 2)));
+    }
   }
   auto selected_bytes = torch::cat({selection.tokens,
                                     selection.lengths.unsqueeze(1),
@@ -924,8 +956,12 @@ Glm5NextMLAAttentionImpl::forward_cp(
                                    1)
                             .contiguous()
                             .view(torch::kUInt8);
-  auto plain = layout.restore(
-      torch::cat({output.view(torch::kUInt8), selected_bytes}, 1));
+  torch::Tensor plain;
+  {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPRestore");
+    plain = layout.restore(
+        torch::cat({output.view(torch::kUInt8), selected_bytes}, 1));
+  }
   auto plain_output =
       plain.narrow(1, 0, hidden_size_ * 2).contiguous().view(torch::kBFloat16);
   auto values = plain.narrow(1, hidden_size_ * 2, (width + 2) * 4)

@@ -159,11 +159,17 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   CHECK_EQ(lengths.scalar_type(), torch::kInt32);
   CHECK(lengths.is_contiguous());
   // Map before cache mutation so unsupported metadata fails before writes.
-  auto indices = kernel::musa::flash_mla_sparse_map_indices(
-      candidates, rows, positions, block_table, cache.size(1), cache.size(0));
-  auto q_latent = torch::bmm(q.transpose(0, 1), w_k.transpose(1, 2))
-                      .transpose(0, 1)
-                      .contiguous();
+  auto indices = [&]() {
+    RECORD_USER_SCOPE("MLA: CandidateMap");
+    return kernel::musa::flash_mla_sparse_map_indices(
+        candidates, rows, positions, block_table, cache.size(1), cache.size(0));
+  }();
+  auto q_latent = [&]() {
+    RECORD_USER_SCOPE("MLA: AbsorbQuery");
+    return torch::bmm(q.transpose(0, 1), w_k.transpose(1, 2))
+        .transpose(0, 1)
+        .contiguous();
+  }();
   torch::Tensor z;
   if (fp8) {
     if (write_cache) {
@@ -188,6 +194,9 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
                                             lengths,
                                             0.0625);
   }
-  return torch::bmm(z.transpose(0, 1), w_v).transpose(0, 1).contiguous();
+  {
+    RECORD_USER_SCOPE("MLA: ExpandValue");
+    return torch::bmm(z.transpose(0, 1), w_v).transpose(0, 1).contiguous();
+  }
 }
 }  // namespace xllm::layer
