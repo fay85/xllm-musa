@@ -19,6 +19,7 @@
 // softmax/multiply/sum sequence over those tensors; this removes cat/copy
 // launches without changing recurrent pooling arithmetic.
 
+#include <ATen/record_function.h>
 #include <torch/torch.h>
 
 #include <cstdint>
@@ -125,6 +126,7 @@ bool deepseek_v4_compress_c4_update_and_prepare(torch::Tensor& kv_state,
                                                 int64_t absolute_position,
                                                 torch::Tensor& pooled_kv,
                                                 torch::Tensor& pooled_score) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_c4_update_and_prepare");
   if (!kv_state.defined() || kv_state.device().is_cpu() ||
       kv_state.dim() != 2 || kv_state.size(0) != kStateRows ||
       kv_state.size(1) <= 0 || kv_state.size(1) % kCoeff != 0 ||
@@ -181,6 +183,7 @@ bool deepseek_v4_compress_c4_update_and_prepare(torch::Tensor& kv_state,
 bool deepseek_v4_compress_c4_weighted_sum(const torch::Tensor& pooled_kv,
                                           const torch::Tensor& weights,
                                           torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_c4_weighted_sum");
   if (!pooled_kv.defined() || pooled_kv.device().is_cpu() ||
       pooled_kv.dim() != 2 || pooled_kv.size(0) != kStateRows ||
       pooled_kv.size(1) <= 0) {

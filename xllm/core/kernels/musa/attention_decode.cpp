@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <unistd.h>
 
@@ -428,6 +429,7 @@ void fa3_decode(const torch::Tensor& query,
                 int64_t num_splits,
                 torch::Tensor& output,
                 torch::Tensor& output_lse) {
+  RECORD_USER_SCOPE("kernel: fa3_decode");
   CHECK(scheduler_metadata.defined())
       << "fa3_decode: scheduler_metadata must be precomputed";
   CHECK(cu_seqlens_q.defined() && cu_seqlens_q.scalar_type() == torch::kInt32);
@@ -523,6 +525,7 @@ void fa3_decode(const torch::Tensor& query,
                 double sm_scale,
                 torch::Tensor& output,
                 torch::Tensor& output_lse) {
+  RECORD_USER_SCOPE("kernel: fa3_decode");
   fa3_decode(query,
              k_cache,
              v_cache,
@@ -551,6 +554,7 @@ void fa3_prefill(const torch::Tensor& query,
                  double sm_scale,
                  torch::Tensor& output,
                  torch::Tensor& output_lse) {
+  RECORD_USER_SCOPE("kernel: fa3_prefill");
   CHECK(query.defined() && key.defined() && value.defined());
   CHECK(output.defined() && output_lse.defined());
   CHECK_EQ(query.dim(), 3) << "fa3_prefill: query must be [tokens, heads, dim]";
@@ -653,6 +657,7 @@ torch::Tensor fa3_prefill_scheduler_metadata(
     const torch::Tensor& cu_seqlens_q,
     const torch::Tensor& cu_seqlens_k_new,
     const torch::Tensor& seqused_k) {
+  RECORD_USER_SCOPE("kernel: fa3_prefill_scheduler_metadata");
   CHECK_GT(batch_size, 0);
   CHECK_GT(num_heads_kv, 0);
   CHECK_EQ(num_heads_q % num_heads_kv, 0);
@@ -721,6 +726,7 @@ void fa3_prefill_paged(const torch::Tensor& query,
                        double sm_scale,
                        torch::Tensor& output,
                        torch::Tensor& output_lse) {
+  RECORD_USER_SCOPE("kernel: fa3_prefill_paged");
   CHECK(query.defined() && k_cache.defined() && v_cache.defined());
   CHECK(cu_seqlens_q.defined() && cu_seqlens_k_new.defined());
   CHECK(seqused_k.defined() && page_table.defined());
@@ -841,6 +847,7 @@ void batch_decode(const std::string& uri,
                   const torch::Tensor& paged_kv_indptr_host,
                   const torch::Tensor& paged_kv_indices_host,
                   const torch::Tensor& paged_kv_last_page_len_host) {
+  RECORD_USER_SCOPE("kernel: batch_decode");
   (void)use_tensor_core;
   {
     VLOG(kGraphExecutorLogVerboseLevel) << "plan_info: " << plan_info;

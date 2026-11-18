@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAStream.h>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
@@ -3265,6 +3266,7 @@ void deepseek_v4_c128_prefill_metadata(torch::Tensor indices,
                                        int64_t token_pack,
                                        int64_t compressed_len,
                                        int64_t compiled_compressed_kv_len) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_c128_prefill_metadata");
   constexpr int64_t kTopk = 512;
   CHECK(indices.defined() && topk_length.defined());
   CHECK_EQ(indices.scalar_type(), torch::kInt32);
@@ -3304,6 +3306,7 @@ torch::Tensor deepseek_v4_dense_attention_decode(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_dense_attention_decode");
   CHECK(q.defined() && kv.defined())
       << "deepseek_v4_dense_attention_decode expects q and kv.";
   CHECK_EQ(q.dim(), 3) << "q must be [1, num_heads, head_dim].";
@@ -3832,6 +3835,7 @@ torch::Tensor deepseek_v4_paged_attention_sas(const torch::Tensor& q,
                                               const torch::Tensor& attn_sink,
                                               double softmax_scale,
                                               const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_paged_attention_sas");
 #if defined(USE_DCU)
   return torch::Tensor();
 #else
@@ -3926,6 +3930,7 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_paged_attention_sas_batched");
 #if defined(USE_DCU)
   return torch::Tensor();
 #else
@@ -4039,6 +4044,7 @@ torch::Tensor deepseek_v4_paged_attention_verify_compressed(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_paged_attention_verify_compressed");
 #if defined(USE_DCU)
   return torch::Tensor();
 #else
@@ -4195,6 +4201,7 @@ torch::Tensor deepseek_v4_paged_attention_verify_c128(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_paged_attention_verify_c128");
   return deepseek_v4_paged_attention_verify_compressed(
       q,
       cache,
@@ -4226,6 +4233,8 @@ torch::Tensor deepseek_v4_paged_attention_decode_with_paged_compressed_kv(
     double softmax_scale,
     const std::optional<torch::Tensor>& retained_mass_output,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE(
+      "kernel: deepseek_v4_paged_attention_decode_with_paged_compressed_kv");
   return deepseek_v4_paged_attention_decode_with_paged_compressed_kv_impl(
       q,
       cache,
@@ -4256,6 +4265,7 @@ torch::Tensor deepseek_v4_paged_attention_decode(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_paged_attention_decode");
   return deepseek_v4_paged_attention_decode_with_paged_compressed_kv(
       q,
       cache,
@@ -4286,6 +4296,7 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mate_sparse_attention_decode");
   return try_dsv4_mate_model1_sparse_decode(q,
                                             packed_cache,
                                             physical_indices,
@@ -4309,6 +4320,7 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_batched(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mate_sparse_attention_decode_batched");
   return try_dsv4_mate_model1_sparse_decode(q,
                                             packed_cache,
                                             physical_indices,
@@ -4335,6 +4347,8 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_partitioned(
     double softmax_scale,
     int64_t query_width,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE(
+      "kernel: deepseek_v4_mate_sparse_attention_decode_partitioned");
   CHECK(query_width == 7);
   return try_dsv4_mate_model1_sparse_decode(q,
                                             packed_cache,
@@ -4366,6 +4380,7 @@ torch::Tensor deepseek_v4_mate_sparse_attention_prefill(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mate_sparse_attention_prefill");
   return try_dsv4_mate_model1_sparse_prefill(
       q, kv, compressed_kv, attn_sink, softmax_scale, output);
 }
@@ -4378,6 +4393,7 @@ torch::Tensor deepseek_v4_mate_c4_sparse_attention_prefill(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mate_c4_sparse_attention_prefill");
   return try_dsv4_mate_model1_c4_sparse_prefill(q,
                                                 kv,
                                                 compressed_kv,
@@ -4397,6 +4413,7 @@ torch::Tensor deepseek_v4_mate_local_sparse_attention_prefill(
     int64_t compress_ratio,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mate_local_sparse_attention_prefill");
   const char* chunk_setting = std::getenv("XLLM_DSV4_LONG_PREFILL_QUERY_CHUNK");
   if (chunk_setting != nullptr && q.dim() == 3 && kv.dim() == 2 &&
       kv.size(0) >= 4096) {

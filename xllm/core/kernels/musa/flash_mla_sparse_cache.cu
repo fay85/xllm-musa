@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <algorithm>
@@ -110,6 +111,7 @@ void check_tensor(const torch::Tensor& tensor,
 void sparse_mla_cache_write(const torch::Tensor& latent,
                             const torch::Tensor& slots,
                             torch::Tensor& cache) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_cache_write");
   CHECK(latent.device().is_privateuseone());
   check_tensor(latent, latent, torch::kBFloat16);
   check_tensor(cache, latent, torch::kBFloat16);
@@ -137,6 +139,7 @@ void sparse_mla_cache_write(const torch::Tensor& latent,
 void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
                                 const torch::Tensor& slots,
                                 torch::Tensor& cache) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_fp8_cache_write");
   CHECK(latent.device().is_privateuseone());
   check_tensor(latent, latent, torch::kBFloat16);
   check_tensor(cache, latent, torch::kUInt8);
@@ -170,6 +173,7 @@ torch::Tensor sparse_mla_map_indices(const torch::Tensor& logical,
                                      const torch::Tensor& block_table,
                                      int64_t page_size,
                                      int64_t num_pages) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_map_indices");
   CHECK(logical.device().is_privateuseone());
   check_tensor(logical, logical, torch::kInt32);
   check_tensor(rows, logical, torch::kInt32);

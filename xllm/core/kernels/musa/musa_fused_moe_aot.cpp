@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa.h>
 #include <tvm/ffi/extra/stl.h>
@@ -535,6 +536,7 @@ torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
                                 const torch::Tensor& w2_scale,
                                 const torch::Tensor& topk_weights,
                                 const torch::Tensor& topk_ids) {
+  RECORD_USER_SCOPE("kernel: fused_moe_aot_fp8");
   check_fp8_inputs(
       hidden_states, w13, w13_scale, w2, w2_scale, topk_weights, topk_ids);
   const KernelConfig* config =
@@ -583,6 +585,7 @@ torch::Tensor fused_moe_aot_bf16(const torch::Tensor& hidden_states,
                                  const torch::Tensor& w2,
                                  const torch::Tensor& topk_weights,
                                  const torch::Tensor& topk_ids) {
+  RECORD_USER_SCOPE("kernel: fused_moe_aot_bf16");
   check_bf16_inputs(hidden_states, w13, w2, topk_weights, topk_ids);
   const KernelConfig* config =
       find_config(hidden_states.size(0), /*use_fp8=*/false);

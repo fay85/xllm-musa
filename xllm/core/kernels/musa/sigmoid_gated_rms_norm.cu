@@ -1,6 +1,7 @@
 /* Copyright 2026 The xLLM Authors. All Rights Reserved.
 Licensed under the Apache License, Version 2.0.
 ==============================================================================*/
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa_bf16.h>
 
@@ -77,6 +78,7 @@ torch::Tensor sigmoid_gated_rms_norm(const torch::Tensor& input,
                                      const torch::Tensor& gate,
                                      const torch::Tensor& weight,
                                      double eps) {
+  RECORD_USER_SCOPE("kernel: sigmoid_gated_rms_norm");
   CHECK(input.device().is_privateuseone());
   CHECK_EQ(input.device(), gate.device());
   CHECK_EQ(input.device(), weight.device());

@@ -17,6 +17,7 @@ limitations under the License.
 // https://github.com/Dao-AILab/causal-conv1d/blob/main/csrc/causal_conv1d_fwd.cu
 
 #include <ATen/cuda/CUDAContext.h>
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/util/BFloat16.h>
@@ -644,6 +645,7 @@ void causal_conv1d_fwd(const at::Tensor& x,
                        const std::optional<at::Tensor>& has_initial_state,
                        bool silu_activation,
                        int64_t pad_slot_id) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d_fwd");
   auto input_type = x.scalar_type();
   auto weight_type = weight.scalar_type();
   TORCH_CHECK(input_type == at::ScalarType::Float ||
@@ -748,6 +750,7 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
                                    const at::Tensor& has_initial_state,
                                    bool silu_activation,
                                    int64_t pad_slot_id) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d_fwd_token_major");
   TORCH_CHECK(x.dim() == 2 && x.stride(1) == 1);
   TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
   TORCH_CHECK(weight.dim() == 2 && weight.size(1) == 4);

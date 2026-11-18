@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <cmath>
@@ -130,6 +131,7 @@ torch::Tensor mhc_head(const torch::Tensor& residual,
                        const torch::Tensor& hc_head_base,
                        double norm_eps,
                        double hc_eps) {
+  RECORD_USER_SCOPE("kernel: mhc_head");
   CHECK(residual.defined() && residual.dim() >= 3);
   CHECK_EQ(residual.device().type(), torch::kPrivateUse1);
   CHECK_EQ(residual.scalar_type(), torch::kBFloat16);
@@ -183,6 +185,7 @@ torch::Tensor mhc_head(const torch::Tensor& residual,
 }
 
 torch::Tensor mhc_contract_mean(const torch::Tensor& residual) {
+  RECORD_USER_SCOPE("kernel: mhc_contract_mean");
   CHECK(residual.defined() && residual.dim() >= 3);
   CHECK_EQ(residual.device().type(), torch::kPrivateUse1);
   CHECK_EQ(residual.scalar_type(), torch::kBFloat16);

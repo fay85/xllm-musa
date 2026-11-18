@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_runtime.h>
 #include <glog/logging.h>
@@ -121,6 +122,7 @@ torch::Tensor rejection_sample_target_only_k1(
     const torch::Tensor& uniform_rand,
     const torch::Tensor& recovery_exponential,
     const torch::Tensor& bonus_token_ids) {
+  RECORD_USER_SCOPE("kernel: rejection_sample_target_only_k1");
   CHECK_EQ(draft_token_ids.dim(), 2);
   CHECK_EQ(draft_token_ids.size(1), 1);
   CHECK_EQ(draft_probs.sizes(), draft_token_ids.sizes());

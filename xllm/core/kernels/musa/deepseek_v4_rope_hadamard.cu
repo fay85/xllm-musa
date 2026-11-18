@@ -11,6 +11,7 @@
 // interleaved 64-wide RoPE tail with the normalized 128-wide Hadamard transform
 // and updates the freshly produced query in place.
 
+#include <ATen/record_function.h>
 #include <c10/util/BFloat16.h>
 #include <torch/torch.h>
 
@@ -191,6 +192,7 @@ void dispatch_rope_hadamard(const torch::Tensor& query,
 bool deepseek_v4_rope_hadamard_inplace(torch::Tensor& query,
                                        const torch::Tensor& cos,
                                        const torch::Tensor& sin) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_rope_hadamard_inplace");
   if (!matches_rope_hadamard_contract(query, cos, sin) ||
       !query.is_contiguous()) {
     return false;
@@ -206,6 +208,7 @@ bool deepseek_v4_rope_hadamard_out(const torch::Tensor& query,
                                    const torch::Tensor& cos,
                                    const torch::Tensor& sin,
                                    torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_rope_hadamard_out");
   if (!matches_rope_hadamard_contract(query, cos, sin) ||
       !output.defined() || output.sizes() != query.sizes() ||
       output.device() != query.device() ||

@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <glog/logging.h>
@@ -190,6 +191,7 @@ bool row_argmax_supported(const torch::Tensor& input) {
 
 torch::Tensor row_argmax(const torch::Tensor& input,
                          const torch::Tensor& column_ids) {
+  RECORD_USER_SCOPE("kernel: row_argmax");
   CHECK(row_argmax_supported(input))
       << "unsupported row argmax input: " << input.sizes() << " "
       << input.scalar_type();

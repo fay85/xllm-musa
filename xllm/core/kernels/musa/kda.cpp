@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "core/kernels/musa/kda.h"
 
+#include <ATen/record_function.h>
 #include <c10/musa/MUSAGuard.h>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
@@ -166,6 +167,7 @@ void flash_kda(const torch::Tensor& q_input,
                const std::optional<torch::Tensor>& initial_state,
                const std::optional<torch::Tensor>& final_state,
                const std::optional<torch::Tensor>& cu_seqlens) {
+  RECORD_USER_SCOPE("kernel: flash_kda");
   CHECK(q_input.device().is_privateuseone());
   c10::musa::MUSAGuard device_guard(q_input.device());
   bool varlen = cu_seqlens.has_value();

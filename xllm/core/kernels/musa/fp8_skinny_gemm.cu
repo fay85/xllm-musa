@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <musa_bf16.h>
@@ -254,6 +255,7 @@ void fp8_skinny_gemm(const torch::Tensor& a,
                      const torch::Tensor& a_scale,
                      const torch::Tensor& b_scale,
                      torch::Tensor& out) {
+  RECORD_USER_SCOPE("kernel: fp8_skinny_gemm");
   CHECK(fp8_skinny_gemm_supported(a, b, a_scale, b_scale, out))
       << "unsupported skinny FP8 GEMM: a=" << a.sizes() << ", b=" << b.sizes()
       << ", out=" << out.sizes();

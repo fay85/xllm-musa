@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
@@ -477,6 +478,7 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
                         bool interleaved,
                         const torch::Tensor& position_ids,
                         int64_t k_head_offset) {
+  RECORD_USER_SCOPE("kernel: fused_qk_norm_rope");
   run_fused_qk_norm_rope(qkv,
                          num_heads_q,
                          num_heads_k,
@@ -526,6 +528,7 @@ void fused_qk_norm_rope_with_cache(torch::Tensor& qkv,
                                    torch::Tensor& k_cache,
                                    torch::Tensor& v_cache,
                                    const torch::Tensor& slot_mapping) {
+  RECORD_USER_SCOPE("kernel: fused_qk_norm_rope_with_cache");
   CHECK(fused_qk_norm_rope_cache_supported(
       qkv, k_cache, v_cache, slot_mapping, num_heads_kv, head_dim))
       << "unsupported paged cache for fused QK-norm RoPE: k_cache="

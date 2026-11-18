@@ -7,6 +7,7 @@
  *     https://github.com/jd-opensource/xllm/blob/main/LICENSE
  */
 
+#include <ATen/record_function.h>
 #include <c10/util/BFloat16.h>
 #include <c10/util/Float8_e4m3fn.h>
 #include <torch/extension.h>
@@ -144,6 +145,7 @@ void launch_deepseek_v4_int8_roundtrip(const torch::Tensor& input,
 bool deepseek_v4_fp8_quantize_dequantize(torch::Tensor& tensor,
                                          int64_t quant_dim,
                                          int64_t block_size) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_fp8_quantize_dequantize");
   if (!tensor.defined() || tensor.device().is_cpu() ||
       !tensor.is_contiguous() || tensor.dim() < 1 || quant_dim <= 0 ||
       block_size <= 0 || quant_dim % block_size != 0 ||
@@ -180,6 +182,7 @@ bool deepseek_v4_fp8_quantize_dequantize(torch::Tensor& tensor,
 
 bool deepseek_v4_int8_quantize_dequantize(const torch::Tensor& input,
                                           torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_int8_quantize_dequantize");
   if (!input.defined() || input.device().is_cpu() || !input.is_contiguous() ||
       input.dim() < 1 || input.numel() == 0) {
     return false;

@@ -1,5 +1,6 @@
 // Copyright 2026 The xLLM Authors. Licensed under the Apache License,
 // Version 2.0.
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
 
@@ -494,6 +495,7 @@ void deepseek_v4_indexer_gather_keys_fp32(const torch::Tensor& cache,
                                           const torch::Tensor& blocks,
                                           const torch::Tensor& keys,
                                           const torch::Tensor& valid_slots) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_gather_keys_fp32");
   gather_keys(cache, scales, blocks, keys, valid_slots, torch::kFloat32);
 }
 
@@ -502,11 +504,13 @@ void deepseek_v4_indexer_gather_keys_bf16(const torch::Tensor& cache,
                                           const torch::Tensor& blocks,
                                           const torch::Tensor& keys,
                                           const torch::Tensor& valid_slots) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_gather_keys_bf16");
   gather_keys(cache, scales, blocks, keys, valid_slots, torch::kBFloat16);
 }
 
 torch::Tensor deepseek_v4_indexer_weighted_sum(const torch::Tensor& scores,
                                                const torch::Tensor& weights) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_weighted_sum");
   CHECK(scores.defined());
   CHECK(scores.device().is_privateuseone());
   check_tensor(scores, scores, torch::kFloat32);
@@ -545,6 +549,7 @@ torch::Tensor deepseek_v4_indexer_weighted_sum(const torch::Tensor& scores,
 
 void deepseek_v4_indexer_relu_weight(const torch::Tensor& scores,
                                      const torch::Tensor& weights) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_relu_weight");
   CHECK(scores.defined());
   CHECK(scores.device().is_privateuseone());
   check_tensor(scores, scores, torch::kFloat32);
@@ -586,6 +591,7 @@ void deepseek_v4_indexer_mask_scores(const torch::Tensor& scores,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& valid_slots,
                                      int64_t query_rows_per_sequence) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_mask_scores");
   CHECK(scores.defined());
   CHECK(scores.device().is_privateuseone());
   check_tensor(scores, scores, torch::kFloat32);
@@ -641,6 +647,7 @@ void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
                                      const torch::Tensor& logical,
                                      const torch::Tensor& physical,
                                      const torch::Tensor& extra) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_map_outputs");
   CHECK(selected.defined());
   CHECK(selected.device().is_privateuseone());
   check_tensor(selected, selected, torch::kInt64);

@@ -18,6 +18,7 @@ limitations under the License.
 // the schedule-overlap compute stream for an empty local shard.  Materialize
 // the complete result with stream-ordered device copy/memset instead.
 
+#include <ATen/record_function.h>
 #include <torch/torch.h>
 
 #include <cstddef>
@@ -236,6 +237,7 @@ __global__ void deepseek_v4_state_gather_many_kernel(
 
 void deepseek_v4_sp_pad_local_out(const torch::Tensor& input,
                                   torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_sp_pad_local_out");
   CHECK(input.defined() && input.dim() > 0 && input.is_contiguous());
   CHECK(output.defined() && output.dim() == input.dim() &&
         output.is_contiguous());
@@ -274,6 +276,7 @@ void deepseek_v4_sp_pad_local_out(const torch::Tensor& input,
 
 torch::Tensor deepseek_v4_sp_pad_local(const torch::Tensor& input,
                                        int64_t padded_rows) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_sp_pad_local");
   CHECK(input.defined() && input.dim() > 0 && input.is_contiguous());
   CHECK(!input.device().is_cpu());
   CHECK(padded_rows >= input.size(0));

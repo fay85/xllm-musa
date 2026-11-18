@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <ATen/Dispatch.h>
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <cstdlib>
@@ -82,6 +83,7 @@ torch::Tensor deepseek_v4_gate_gemv(
     const torch::Tensor& input,
     const torch::Tensor& weight,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_gate_gemv");
   CHECK(input.defined() && weight.defined())
       << "deepseek_v4_gate_gemv expects input and weight.";
   CHECK_EQ(input.dim(), 2) << "deepseek_v4_gate_gemv input must be [T, H].";

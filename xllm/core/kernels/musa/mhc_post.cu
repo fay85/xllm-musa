@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa_bf16.h>
 
@@ -163,6 +164,7 @@ torch::Tensor mhc_post(const torch::Tensor& x,
                        const torch::Tensor& residual,
                        const torch::Tensor& post,
                        const torch::Tensor& comb) {
+  RECORD_USER_SCOPE("kernel: mhc_post");
   CHECK(x.defined() && residual.defined() && post.defined() && comb.defined());
   CHECK_GE(residual.dim(), 3);
   CHECK_EQ(x.scalar_type(), residual.scalar_type());
@@ -235,6 +237,7 @@ torch::Tensor mhc_post(const torch::Tensor& x,
 }
 
 torch::Tensor mhc_inverse_rms(const torch::Tensor& residual, double eps) {
+  RECORD_USER_SCOPE("kernel: mhc_inverse_rms");
   CHECK(residual.defined() && residual.dim() >= 2);
   CHECK_EQ(residual.device().type(), torch::kPrivateUse1);
   CHECK_EQ(residual.scalar_type(), torch::kBFloat16);

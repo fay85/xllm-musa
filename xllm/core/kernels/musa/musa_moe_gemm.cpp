@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa_runtime.h>
 #include <tvm/ffi/extra/stl.h>
@@ -457,6 +458,7 @@ torch::Tensor contiguous_moe_gemm_bf16(const torch::Tensor& input,
                                        const torch::Tensor& weights,
                                        const torch::Tensor& token_counts,
                                        torch::ScalarType output_dtype) {
+  RECORD_USER_SCOPE("kernel: contiguous_moe_gemm_bf16");
   CHECK(input.defined() && weights.defined() && token_counts.defined())
       << "Mate contiguous BF16 MoE GEMM received an undefined tensor.";
   CHECK_EQ(input.dim(), 2)
@@ -516,6 +518,7 @@ torch::Tensor ragged_moe_gemm_bf16(const torch::Tensor& input,
                                    const torch::Tensor& row_expert_ids,
                                    torch::ScalarType output_dtype,
                                    int64_t alignment) {
+  RECORD_USER_SCOPE("kernel: ragged_moe_gemm_bf16");
   CHECK(input.defined() && weights.defined() && row_expert_ids.defined())
       << "Mate Ragged BF16 MoE GEMM received an undefined tensor.";
   CHECK_EQ(input.dim(), 2);
@@ -571,6 +574,7 @@ torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
                                       const torch::Tensor& weight_scale,
                                       const torch::Tensor& token_counts,
                                       torch::ScalarType output_dtype) {
+  RECORD_USER_SCOPE("kernel: contiguous_moe_gemm_fp8");
   CHECK(input.defined() && input_scale.defined() && weights.defined() &&
         weight_scale.defined() && token_counts.defined())
       << "Mate contiguous FP8 MoE GEMM received an undefined tensor.";
@@ -643,6 +647,7 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
                                   const torch::Tensor& row_expert_ids,
                                   torch::ScalarType output_dtype,
                                   int64_t alignment) {
+  RECORD_USER_SCOPE("kernel: ragged_moe_gemm_fp8");
   CHECK(input.defined() && input_scale.defined() && weights.defined() &&
         weight_scale.defined() && row_expert_ids.defined())
       << "Mate Ragged FP8 MoE GEMM received an undefined tensor.";

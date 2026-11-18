@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <glog/logging.h>
@@ -268,6 +269,7 @@ void rescore_top_logits(const torch::Tensor& input,
                         const torch::Tensor& weight,
                         torch::Tensor& logits,
                         int64_t top_k) {
+  RECORD_USER_SCOPE("kernel: rescore_top_logits");
   CHECK(input.dim() == 2 && weight.dim() == 2 && logits.dim() == 2)
       << "rescore_top_logits expects 2-D input, weight and logits";
   CHECK(input.scalar_type() == torch::kBFloat16 &&

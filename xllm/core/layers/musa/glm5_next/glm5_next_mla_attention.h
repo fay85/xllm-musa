@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <ATen/record_function.h>
 #include <c10/core/DeviceGuard.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
@@ -135,6 +136,7 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   CHECK_EQ(q.scalar_type(), torch::kBFloat16);
   CHECK(q.device().is_privateuseone());
   c10::DeviceGuard device_guard(q.device());
+  RECORD_USER_SCOPE("kernel: glm5_next_mla_attention");
   CHECK(q.size(1) == 8 || q.size(1) == 16 || q.size(1) == 32 ||
         q.size(1) == 64);
   CHECK_EQ(latent.sizes(), torch::IntArrayRef({q.size(0), 512}));

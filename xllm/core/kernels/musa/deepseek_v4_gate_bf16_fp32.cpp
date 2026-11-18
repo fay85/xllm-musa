@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <tvm/ffi/container/tuple.h>
 
@@ -31,6 +32,7 @@ torch::Tensor deepseek_v4_gate_bf16_fp32(
     const torch::Tensor& weight,
     const std::optional<torch::Tensor>& output,
     const std::string& uri) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_gate_bf16_fp32");
   if (!input.defined() || !weight.defined() || input.dim() != 2 ||
       weight.dim() != 2 || input.scalar_type() != torch::kBFloat16 ||
       weight.scalar_type() != torch::kBFloat16 ||

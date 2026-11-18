@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <cstdint>
@@ -70,6 +71,7 @@ void deepseek_v4_rebase_mate_partitions(torch::Tensor metadata,
                                         const torch::Tensor& local_splits,
                                         torch::Tensor cumulative_splits,
                                         int64_t query_width) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_rebase_mate_partitions");
   CHECK(query_width == 7);
   CHECK(local_splits.dim() == 2 && local_splits.size(0) > 1 &&
         local_splits.size(0) <= kMaxPartitionSequences);

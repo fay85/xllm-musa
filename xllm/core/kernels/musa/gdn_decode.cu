@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
@@ -143,6 +144,7 @@ inline torch::Tensor recurrent_gdn_step(torch::Tensor& state,
 }  // namespace
 
 torch::Tensor l2_norm(torch::Tensor& x, double eps) {
+  RECORD_USER_SCOPE("kernel: l2_norm");
   return x / (x.pow(2).sum(-1, /*keepdim=*/true) + eps).sqrt();
 }
 
@@ -188,6 +190,7 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
 torch::Tensor causal_conv1d_update(
     CausalConv1dUpdateParams& params,
     const std::optional<torch::Tensor>& output_buf) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d_update");
   auto x = params.x;
   auto weight = params.weight;
   if (weight.dim() == 3) {
@@ -317,6 +320,7 @@ torch::Tensor causal_conv1d_update(
 
 torch::Tensor gated_layer_norm(GatedLayerNormParams& params,
                                const std::optional<torch::Tensor>& output_buf) {
+  RECORD_USER_SCOPE("kernel: gated_layer_norm");
   if (output_buf.has_value() && output_buf->defined() && params.is_rms_norm &&
       params.norm_before_gate && params.z.has_value() &&
       params.z.value().defined() && !params.bias.defined()) {
@@ -504,6 +508,7 @@ void gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
                                        int64_t num_heads_v,
                                        int64_t head_qk,
                                        int64_t head_v) {
+  RECORD_USER_SCOPE("kernel: gdn_fused_qkvzba_split_contiguous");
   launch_gdn_fused_qkvzba_split_contiguous(mixed_qkvz,
                                            mixed_ba,
                                            mixed_qkv,
@@ -706,6 +711,7 @@ torch::Tensor recurrent_gated_delta_rule(
     const std::optional<torch::Tensor>& /*num_accepted_tokens*/,
     const std::optional<torch::Tensor>& g,
     const std::optional<torch::Tensor>& /*gk*/) {
+  RECORD_USER_SCOPE("kernel: recurrent_gated_delta_rule");
   CHECK(scale.has_value()) << "recurrent_gated_delta_rule requires scale";
   CHECK(g.has_value()) << "recurrent_gated_delta_rule requires g";
   CHECK(beta.has_value()) << "recurrent_gated_delta_rule requires beta";
@@ -868,6 +874,7 @@ bool mate_gdn_decode_module_available(const std::string& uri) {
 
 torch::Tensor mate_gated_delta_rule_decode(
     musa::MateGatedDeltaRuleDecodeParams& params) {
+  RECORD_USER_SCOPE("kernel: mate_gated_delta_rule_decode");
   CHECK(params.use_qk_l2norm)
       << "mate GDN decode requires internal Q/K normalization";
   CHECK(std::isfinite(params.scale) && params.scale > 0.0)
@@ -1095,6 +1102,7 @@ bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
 
 torch::Tensor mate_gated_delta_rule_mtp(
     musa::MateGatedDeltaRuleMtpParams& params) {
+  RECORD_USER_SCOPE("kernel: mate_gated_delta_rule_mtp");
   const bool write_checkpoints = params.checkpoint_state_indices.defined();
   auto q = write_checkpoints ? params.q : params.q.contiguous();
   auto k = write_checkpoints ? params.k : params.k.contiguous();
@@ -1227,6 +1235,7 @@ std::tuple<torch::Tensor, torch::Tensor> recurrent_one(
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params) {
+  RECORD_USER_SCOPE("kernel: fused_sigmoid_gating_delta_rule_update");
   auto a_f = params.a.to(torch::kFloat32);
   auto b_f = params.b.to(torch::kFloat32);
   auto dt_bias_f = params.dt_bias.to(torch::kFloat32);
@@ -1561,6 +1570,7 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
 void l2_norm_pair_fused_inplace(torch::Tensor& query,
                                 torch::Tensor& key,
                                 double eps) {
+  RECORD_USER_SCOPE("kernel: l2_norm_pair_fused_inplace");
   l2_norm_pair_fused_out(query, key, query, key, eps);
 }
 
@@ -2573,6 +2583,7 @@ void launch(const torch::Tensor& mixed_qkv,
 
 torch::Tensor fused_gated_delta_rule_decode(
     musa::MateGatedDeltaRuleDecodeParams& params) {
+  RECORD_USER_SCOPE("kernel: fused_gated_delta_rule_decode");
   CHECK(params.use_qk_l2norm)
       << "fused GDN decode requires internal Q/K normalization";
   CHECK(std::isfinite(params.scale) && params.scale > 0.0)
@@ -3225,6 +3236,7 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
                               torch::Tensor intermediate,
                               bool silu_activation,
                               bool write_superstate) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d_mtp_verify");
   check_mtp_verify_conv_args(
       x, weight, conv_state, cache_indices, num_accepted_tokens, output);
   CHECK(write_superstate || intermediate.defined());
@@ -3298,6 +3310,7 @@ void causal_conv1d_mtp_verify_with_projection(
     const torch::Tensor& proj_input,
     const torch::Tensor& proj_weight,
     torch::Tensor proj_output) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d_mtp_verify_with_projection");
   check_mtp_verify_conv_args(
       x, weight, conv_state, cache_indices, num_accepted_tokens, output);
   CHECK(causal_conv1d_mtp_verify_with_projection_supported(x.size(0),

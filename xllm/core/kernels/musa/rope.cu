@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <ATen/cuda/CUDAContext.h>
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <torch/all.h>
@@ -126,6 +127,7 @@ void rotary_embedding(torch::Tensor& positions,
                       std::optional<torch::Tensor> key,
                       torch::Tensor& cos_sin_cache,
                       bool is_neox) {
+  RECORD_USER_SCOPE("kernel: rotary_embedding");
   int64_t head_size = cos_sin_cache.size(-1);
   int64_t num_tokens = positions.numel();
   int positions_ndim = positions.dim();
@@ -247,6 +249,7 @@ void partial_rotary_embedding_inplace(torch::Tensor& positions,
                                       int64_t head_size,
                                       int64_t rotary_dim,
                                       bool is_neox) {
+  RECORD_USER_SCOPE("kernel: partial_rotary_embedding_inplace");
   CHECK(head_size > 0)
       << "partial_rotary_embedding_inplace: head_size must be > 0";
   CHECK(rotary_dim > 0 && rotary_dim <= head_size)

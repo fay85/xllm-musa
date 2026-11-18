@@ -18,6 +18,7 @@ limitations under the License.
 // while 128 lanes split the 4096-element reduction.  Keeping this in the MUSA
 // directory avoids changing the CUDA implementation used by other vendors.
 
+#include <ATen/record_function.h>
 #include <torch/torch.h>
 
 #include "core/kernels/musa/musa_kernel_utils.h"
@@ -246,6 +247,7 @@ torch::Tensor deepseek_v4_wo_a_m1(const torch::Tensor& input,
                                   const torch::Tensor& weight,
                                   const torch::Tensor& head_scales,
                                   const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_wo_a_m1");
   if (!matches_wo_a_m1_contract(input, weight, head_scales)) {
     return torch::Tensor();
   }
@@ -294,6 +296,7 @@ torch::Tensor deepseek_v4_shared_expert_m1(
     double swiglu_limit,
     const std::optional<torch::Tensor>& intermediate,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_shared_expert_m1");
   const bool contract =
       input.defined() && gate_up_weight.defined() && down_weight.defined() &&
       !input.device().is_cpu() && input.device() == gate_up_weight.device() &&
@@ -359,6 +362,7 @@ torch::Tensor deepseek_v4_shared_expert_m1(
 torch::Tensor deepseek_v4_shared_swiglu(const torch::Tensor& input,
                                         double swiglu_limit,
                                         const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_shared_swiglu");
   const bool contract =
       input.defined() && output.defined() && !input.device().is_cpu() &&
       input.device() == output.device() &&

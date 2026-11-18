@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_runtime.h>
 
@@ -103,6 +104,7 @@ void scatter_selected_state(torch::Tensor& cache,
                             int64_t checkpoint_stride,
                             bool add_step_to_destination,
                             cudaStream_t stream) {
+  RECORD_USER_SCOPE("kernel: scatter_selected_state");
   CHECK(cache.defined() && cache.numel() > 0);
   CHECK(intermediate.defined() && intermediate.numel() > 0);
   CHECK(cache.is_contiguous());
@@ -144,6 +146,7 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
                                    const torch::Tensor& logical_state_indices,
                                    const torch::Tensor& accepted_tokens,
                                    int64_t checkpoint_stride) {
+  RECORD_USER_SCOPE("kernel: scatter_gdn_mtp_verify_states");
   CHECK(logical_state_indices.scalar_type() == torch::kInt64);
   CHECK(accepted_tokens.scalar_type() == torch::kInt64);
   CHECK(logical_state_indices.is_contiguous());

@@ -8,6 +8,7 @@
  */
 
 #include <ATen/Dispatch.h>
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <cstdint>
@@ -110,6 +111,7 @@ torch::Tensor deepseek_v4_shared_expert_gate(const torch::Tensor& hidden_states,
                                              const torch::Tensor& gate_weight,
                                              const torch::Tensor& shared_output,
                                              torch::Tensor routed_output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_shared_expert_gate");
   CHECK(hidden_states.defined() && gate_weight.defined() &&
         shared_output.defined() && routed_output.defined());
   CHECK_EQ(hidden_states.dim(), 2);

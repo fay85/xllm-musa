@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <tvm/ffi/container/tuple.h>
 #include <tvm/ffi/extra/stl.h>
@@ -94,6 +95,7 @@ torch::Tensor deepseek_v4_masked_fp8_moe_gemm(
     int64_t expected_tokens,
     const std::optional<torch::Tensor>& output,
     const std::string& uri) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_masked_fp8_moe_gemm");
   if (!has_supported_contract(
           input, input_scale, weight, weight_scale, masked_tokens) ||
       expected_tokens <= 0) {

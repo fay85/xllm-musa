@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <tvm/ffi/container/tuple.h>
 #include <tvm/ffi/extra/stl.h>
 #include <tvm/ffi/string.h>
@@ -38,6 +39,7 @@ torch::Tensor gemm_fp8_nt_groupwise(
     const torch::Tensor& b_scale,
     torch::ScalarType output_dtype,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: gemm_fp8_nt_groupwise");
   const int64_t m = a.size(0);
   const int64_t n = b.size(0);
 

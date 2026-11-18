@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa_runtime.h>
 
@@ -61,6 +62,7 @@ void moe_route_post(const torch::Tensor& scores,
                     torch::Tensor& ids,
                     bool renormalize,
                     double scale) {
+  RECORD_USER_SCOPE("kernel: moe_route_post");
   CHECK(scores.defined() && selected.defined() && weights.defined() &&
         ids.defined());
   CHECK(scores.device().is_privateuseone());

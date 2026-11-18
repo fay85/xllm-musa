@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAStream.h>
 #include <c10/util/Float8_e4m3fn.h>
 #include <glog/logging.h>
@@ -2644,6 +2645,7 @@ torch::Tensor deepseek_v4_gather_cache(
     int64_t sequence_index,
     int64_t kv_len,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_gather_cache");
   CHECK(cache.defined() && block_table.defined())
       << "deepseek_v4_gather_cache expects cache and block_table.";
   CHECK_GT(kv_len, 0) << "deepseek_v4_gather_cache expects positive kv_len.";
@@ -2698,6 +2700,7 @@ torch::Tensor deepseek_v4_gather_cache(
 void deepseek_v4_scatter_cache(torch::Tensor cache,
                                torch::Tensor slot_ids,
                                torch::Tensor values) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_scatter_cache");
   if (!cache.defined() || !slot_ids.defined() || !values.defined() ||
       cache.numel() == 0 || slot_ids.numel() == 0 || values.numel() == 0) {
     return;
@@ -2775,6 +2778,7 @@ void deepseek_v4_scatter_cache(torch::Tensor cache,
 void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                 torch::Tensor slot_ids,
                                 torch::Tensor values) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_pack_fp8_cache");
 #if defined(USE_DCU)
   CHECK(false) << "DeepSeek-V4 MODEL1 FP8 cache packing is not implemented "
                   "for DCU.";
@@ -2864,6 +2868,7 @@ void deepseek_v4_indexer_cache_quant_scatter(torch::Tensor cache,
                                              torch::Tensor scale_cache,
                                              torch::Tensor slot_ids,
                                              torch::Tensor values) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_cache_quant_scatter");
   if (!cache.defined() || !scale_cache.defined() || !slot_ids.defined() ||
       !values.defined() || cache.numel() == 0 || scale_cache.numel() == 0 ||
       slot_ids.numel() == 0 || values.numel() == 0) {
@@ -2921,6 +2926,7 @@ torch::Tensor deepseek_v4_indexer_cache_gather(
     int64_t kv_len,
     torch::ScalarType output_dtype,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_cache_gather");
   CHECK(cache.defined() && scale_cache.defined() && block_table.defined());
   CHECK_EQ(cache.scalar_type(), torch::kInt8);
   CHECK_EQ(scale_cache.scalar_type(), torch::kFloat16);
@@ -3266,6 +3272,7 @@ torch::Tensor deepseek_v4_indexer_topk(
     int64_t mate_window_size, int64_t mate_block_size,
     const std::optional<torch::Tensor>& mate_physical_indices,
     const std::optional<torch::Tensor>& mate_extra_physical_indices) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_topk");
   return deepseek_v4_indexer_topk_impl(
       query, weights, cache, scale_cache, block_table, sequence_index, kv_len,
       topk, query_absolute_start, compress_ratio, output,
@@ -3284,6 +3291,7 @@ torch::Tensor deepseek_v4_indexer_topk_graph(
     int64_t mate_block_size, const torch::Tensor& mate_physical_indices,
     const torch::Tensor& mate_extra_physical_indices,
     const torch::Tensor& dynamic_kv_len) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_topk_graph");
   CHECK(dynamic_kv_len.defined());
   CHECK(output.defined() && mate_physical_indices.defined() &&
         mate_extra_physical_indices.defined());
@@ -3312,6 +3320,7 @@ torch::Tensor deepseek_v4_indexer_topk_graph_batched(
     const torch::Tensor& mate_physical_indices,
     const torch::Tensor& mate_extra_physical_indices,
     const torch::Tensor& dynamic_kv_len) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_indexer_topk_graph_batched");
   CHECK(query_rows_per_sequence > 0);
   CHECK_EQ(query.size(0) % query_rows_per_sequence, 0);
   const int64_t sequence_count = query.size(0) / query_rows_per_sequence;
@@ -3331,6 +3340,7 @@ void deepseek_v4_mate_causal_lengths(const torch::Tensor& kv_seq_lens,
                                      int64_t window,
                                      torch::Tensor topk_lengths,
                                      torch::Tensor extra_lengths) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mate_causal_lengths");
   CHECK_EQ(kv_seq_lens.dim(), 1);
   CHECK_GT(compress_ratio, 0);
   CHECK_GE(topk, 0);
@@ -3357,6 +3367,7 @@ void deepseek_v4_prepare_c128_mate_indices(
     torch::Tensor logical_indices,
     torch::Tensor physical_indices,
     torch::Tensor extra_physical_indices) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_prepare_c128_mate_indices");
   CHECK_EQ(kv_seq_lens.dim(), 1);
   CHECK_EQ(kv_seq_lens.scalar_type(), torch::kInt32);
   CHECK_GT(block_size, 0);
@@ -3405,6 +3416,7 @@ void deepseek_v4_prepare_c128_mate_indices_batched(
     torch::Tensor logical_indices,
     torch::Tensor physical_indices,
     torch::Tensor extra_physical_indices) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_prepare_c128_mate_indices_batched");
   CHECK_EQ(query_width, 7);
   CHECK_EQ(kv_seq_lens.dim(), 1);
   CHECK_EQ(kv_seq_lens.scalar_type(), torch::kInt32);
@@ -3457,6 +3469,7 @@ torch::Tensor deepseek_v4_logical_to_physical_topk(
     int64_t sequence_index,
     int64_t block_size,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_logical_to_physical_topk");
   CHECK(logical_indices.defined() && block_table.defined());
   CHECK_EQ(logical_indices.scalar_type(), torch::kInt32)
       << "DeepSeek-V4 logical TopK indices must be int32.";
@@ -3615,6 +3628,7 @@ torch::Tensor deepseek_v4_compress_pool(
     int64_t head_dim,
     int64_t compressor_coeff,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_pool");
   CHECK(kv.defined() && score.defined() && ape.defined());
   CHECK_EQ(kv.dim(), 2);
   CHECK_EQ(score.dim(), 2);
@@ -3691,6 +3705,7 @@ torch::Tensor deepseek_v4_compress_decode(
     int64_t absolute_position,
     bool compute_boundary_output,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_decode");
   CHECK(kv_state.defined() && score_state.defined() && kv_step.defined() &&
         score_step.defined() && ape.defined());
   CHECK(compress_ratio == 4 || compress_ratio == 128);
@@ -3779,6 +3794,7 @@ torch::Tensor deepseek_v4_compress_decode_sequence_c4(
     int64_t head_dim,
     int64_t absolute_start_position,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_decode_sequence_c4");
   CHECK(kv_state.defined() && score_state.defined() && kv_steps.defined() &&
         score_steps.defined() && ape.defined());
   CHECK_GT(head_dim, 0);
@@ -3862,6 +3878,7 @@ torch::Tensor deepseek_v4_compress_decode_sequence_graph(
     int64_t head_dim,
     const torch::Tensor& start_position,
     const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_decode_sequence_graph");
   CHECK(compress_ratio == 4 || compress_ratio == 128);
   CHECK_GT(head_dim, 0);
   const int64_t coeff = compress_ratio == 4 ? 2 : 1;
@@ -3936,6 +3953,7 @@ torch::Tensor deepseek_v4_hc_pre_combine(
     const torch::Tensor& x_hc,
     const torch::Tensor& pre,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_hc_pre_combine");
   CHECK(x_hc.defined() && pre.defined())
       << "deepseek_v4_hc_pre_combine expects x_hc and pre.";
   CHECK_EQ(x_hc.dim(), 3)
@@ -3984,6 +4002,7 @@ torch::Tensor deepseek_v4_hc_post(const torch::Tensor& x,
                                   const torch::Tensor& post,
                                   const torch::Tensor& comb,
                                   const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_hc_post");
   CHECK(x.defined() && residual.defined() && post.defined() && comb.defined())
       << "deepseek_v4_hc_post expects all inputs.";
   CHECK_GE(residual.dim(), 3);
@@ -4067,6 +4086,7 @@ torch::Tensor deepseek_v4_scale_to_fp32(
     const torch::Tensor& input,
     double scale,
     const std::optional<torch::Tensor>& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_scale_to_fp32");
   CHECK(input.defined() && !input.device().is_cpu() && input.is_contiguous());
   CHECK(input.scalar_type() == torch::kFloat32 ||
         input.scalar_type() == torch::kBFloat16 ||

@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <cmath>
@@ -122,6 +123,7 @@ torch::Tensor deepseek_v4_compress_decode_batch_graph(
     int64_t query_width,
     const torch::Tensor& positions,
     const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_compress_decode_batch_graph");
   CHECK(compress_ratio == 4 || compress_ratio == 128);
   CHECK(head_dim > 0 && query_width > 0);
   CHECK(kv_state.dim() == 3 && kv_state.size(0) > 1 && kv_state.size(0) <= 16);

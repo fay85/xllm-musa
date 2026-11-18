@@ -18,6 +18,7 @@ limitations under the License.
 // FP8-FP8 ABI consumes group-128 FP32 power-of-two scales, so the quantization
 // and output layout are implemented locally instead of reusing the donor ABI.
 
+#include <ATen/record_function.h>
 #include <torch/torch.h>
 
 #include "core/kernels/musa/musa_fp8_quant_utils.cuh"
@@ -108,6 +109,7 @@ bool deepseek_v4_mega_moe_pre_dispatch(
     const torch::Tensor& output_scale,
     const torch::Tensor& output_topk_ids,
     const torch::Tensor& output_topk_weights) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_mega_moe_pre_dispatch");
   const int64_t num_tokens = input.dim() == 2 ? input.size(0) : 0;
   const int64_t hidden_size = input.dim() == 2 ? input.size(1) : 0;
   const int64_t topk = topk_ids.dim() == 2 ? topk_ids.size(1) : 0;

@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <optional>
@@ -179,6 +180,7 @@ void batch_prefill(const std::string& uri,
                    torch::Tensor output,
                    std::optional<torch::Tensor>& output_lse,
                    const std::optional<torch::Tensor>& mask) {
+  RECORD_USER_SCOPE("kernel: batch_prefill");
   batch_prefill_impl(uri,
                      plan_info,
                      float_workspace_buffer,
@@ -212,6 +214,7 @@ void batch_prefill_non_causal(const std::string& uri,
                               torch::Tensor output,
                               std::optional<torch::Tensor>& output_lse,
                               const std::optional<torch::Tensor>& mask) {
+  RECORD_USER_SCOPE("kernel: batch_prefill_non_causal");
   batch_prefill_impl(uri,
                      plan_info,
                      float_workspace_buffer,
@@ -250,6 +253,7 @@ void batch_chunked_prefill(const std::string& uri,
                            const torch::Tensor& paged_kv_indptr_host,
                            const torch::Tensor& paged_kv_indices_host,
                            const torch::Tensor& paged_kv_last_page_len_host) {
+  RECORD_USER_SCOPE("kernel: batch_chunked_prefill");
   VLOG(kGraphExecutorLogVerboseLevel) << "plan_info: " << plan_info;
 
   // The mate FlashInfer FFI in this build requires CPU (kDLCPU) paged_kv

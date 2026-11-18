@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "core/kernels/musa/flash_mla_sparse.h"
 
+#include <ATen/record_function.h>
 #include <c10/musa/MUSAGuard.h>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
@@ -43,6 +44,7 @@ torch::Tensor sparse_mla_bf16(const torch::Tensor& query,
                               const torch::Tensor& indices,
                               const torch::Tensor& lengths,
                               double scale) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_bf16");
   CHECK(query.defined());
   CHECK(query.device().is_privateuseone());
   check_tensor(query, query.device(), torch::kBFloat16);
@@ -105,6 +107,7 @@ torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
                                   const torch::Tensor& indices,
                                   const torch::Tensor& lengths,
                                   double scale) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_nope_fp8");
   CHECK(query.device().is_privateuseone());
   check_tensor(query, query.device(), torch::kBFloat16);
   check_tensor(cache, query.device(), torch::kUInt8);

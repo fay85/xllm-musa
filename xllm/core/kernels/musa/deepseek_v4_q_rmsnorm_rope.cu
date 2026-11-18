@@ -18,6 +18,7 @@
 // reducing the 512-wide variance and rotating the final interleaved 64 values
 // without an intermediate normalized-query allocation.
 
+#include <ATen/record_function.h>
 #include <c10/util/BFloat16.h>
 #include <torch/torch.h>
 
@@ -279,6 +280,7 @@ bool deepseek_v4_q_rmsnorm_rope_out(const torch::Tensor& query,
                                     const torch::Tensor& sin,
                                     double eps,
                                     const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_q_rmsnorm_rope_out");
   if (!query.defined() || query.dim() != 3 ||
       !valid_rope_out(query, cos, sin, output, query.size(1))) {
     return false;
@@ -300,6 +302,7 @@ bool deepseek_v4_weighted_rmsnorm_rope_out(const torch::Tensor& input,
                                            const torch::Tensor& sin,
                                            double eps,
                                            const torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_weighted_rmsnorm_rope_out");
   if (!valid_rope_out(input, cos, sin, output, 1) || !weight.defined() ||
       weight.device() != input.device() || weight.scalar_type() != torch::kBFloat16 ||
       weight.dim() != 1 || weight.size(0) != kHiddenDim || !weight.is_contiguous() ||
@@ -320,6 +323,7 @@ bool deepseek_v4_q_rmsnorm_rope_inplace(torch::Tensor& query,
                                         const torch::Tensor& cos,
                                         const torch::Tensor& sin,
                                         double eps) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_q_rmsnorm_rope_inplace");
   if (!query.defined() || !cos.defined() || !sin.defined() ||
       query.device().is_cpu() || query.dim() != 3 || query.size(0) <= 0 ||
       query.size(1) <= 0 || query.size(2) != kHiddenDim ||
@@ -360,6 +364,7 @@ bool deepseek_v4_weighted_rmsnorm_rope_inplace(torch::Tensor& input,
                                                const torch::Tensor& cos,
                                                const torch::Tensor& sin,
                                                double eps) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_weighted_rmsnorm_rope_inplace");
   const int64_t hidden_dim = input.defined() && input.dim() >= 2
                                  ? input.size(input.dim() - 1)
                                  : int64_t{0};

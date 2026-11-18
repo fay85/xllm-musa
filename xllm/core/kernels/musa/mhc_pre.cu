@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 
 #include <cmath>
@@ -327,6 +328,7 @@ MHCPreOutput mhc_pre(const torch::Tensor& residual,
                      double hc_sinkhorn_eps,
                      double hc_post_mult_value,
                      int64_t sinkhorn_repeat) {
+  RECORD_USER_SCOPE("kernel: mhc_pre");
   CHECK(residual.defined() && residual.dim() >= 3);
   CHECK_EQ(residual.scalar_type(), torch::kBFloat16);
   CHECK_EQ(residual.device().type(), torch::kPrivateUse1);

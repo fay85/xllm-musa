@@ -15,6 +15,7 @@ limitations under the License.
 
 // c10/cuda headers are remapped by mcc_wrapper on MUSA builds; keep the
 // shared CUDA exception macros while launching with an explicit musaStream_t.
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <glog/logging.h>
 #include <musa.h>
@@ -135,6 +136,7 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
                                          const torch::Tensor& reduce_weight,
                                          int64_t num_tokens,
                                          int32_t top_k) {
+  RECORD_USER_SCOPE("kernel: moe_combine_result_indexed");
   CHECK_GE(num_tokens, 0);
   CHECK_LE(num_tokens,
            static_cast<int64_t>(std::numeric_limits<uint32_t>::max()));

@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
 
@@ -385,6 +386,7 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                            torch::Tensor& tail,
                                            int64_t max_context,
                                            int64_t token_topk) {
+  RECORD_USER_SCOPE("kernel: glm5_next_indexer");
   CHECK(query.device().is_privateuseone());
   XLLMDeviceGuard device_guard(query.device());
   check_tensor(query, query, torch::kBFloat16);
@@ -511,6 +513,7 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     const torch::Tensor& cache,
     int64_t max_context,
     int64_t token_topk) {
+  RECORD_USER_SCOPE("kernel: glm5_next_indexer_select");
   XLLMDeviceGuard device_guard(query.device());
   check_tensor(query, query, torch::kBFloat16);
   check_tensor(weights, query, torch::kFloat32);
@@ -628,6 +631,7 @@ void glm5_next_indexer_update_cp(const torch::Tensor& keys,
                                  int64_t first_row,
                                  int64_t count,
                                  int64_t key_begin) {
+  RECORD_USER_SCOPE("kernel: glm5_next_indexer_update_cp");
   XLLMDeviceGuard device_guard(keys.device());
   CHECK_GE(count, 0);
   CHECK_GE(first_row, key_begin);
@@ -688,6 +692,7 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
                                    const torch::Tensor& ids,
                                    const torch::Tensor& read_ids,
                                    torch::Tensor& tail) {
+  RECORD_USER_SCOPE("kernel: glm5_next_indexer_update_tail");
   XLLMDeviceGuard device_guard(keys.device());
   for (const auto& value : {keys, gates, tail}) {
     check_tensor(value, keys, torch::kBFloat16);

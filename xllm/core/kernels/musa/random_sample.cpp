@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
+
 #include <cstdint>
 
 #include "core/kernels/musa/musa_ops_api.h"
@@ -20,6 +22,7 @@ limitations under the License.
 namespace xllm::kernel::musa {
 
 torch::Tensor random_sample(const torch::Tensor& probs) {
+  RECORD_USER_SCOPE("kernel: random_sample");
   CHECK(probs.dim() == 2 || probs.dim() == 3)
       << "probs must be a 2D or 3D tensor";
 

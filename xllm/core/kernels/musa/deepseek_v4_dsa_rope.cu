@@ -8,6 +8,7 @@
  */
 
 #include <ATen/Dispatch.h>
+#include <ATen/record_function.h>
 #include <torch/extension.h>
 
 #include <cstdint>
@@ -108,6 +109,7 @@ bool deepseek_v4_partial_rope(const torch::Tensor& input,
                               int64_t rope_head_dim,
                               bool inverse,
                               torch::Tensor& output) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_partial_rope");
   if (!input.defined() || !cos.defined() || !sin.defined() ||
       input.device().is_cpu() || input.dim() < 2 || input.dim() > 3 ||
       !input.is_contiguous() || !cos.is_contiguous() || !sin.is_contiguous() ||

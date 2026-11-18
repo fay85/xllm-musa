@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_runtime.h>
@@ -45,6 +46,7 @@ __global__ void replace_token_kernel(int32_t* __restrict__ dst,
 void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,
                    bool synchronize_stream) {
+  RECORD_USER_SCOPE("kernel: replace_token");
   CHECK(dst.scalar_type() == torch::kInt)
       << "replace_token: dst must be int32, got " << dst.scalar_type();
   CHECK(src.scalar_type() == torch::kLong)

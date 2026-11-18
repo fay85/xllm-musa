@@ -18,6 +18,7 @@ limitations under the License.
 // Keeping route ids and expert padding in int32 avoids PrivateUse1 integer
 // promotion and removes host synchronization from the prefill data path.
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
 
@@ -1411,6 +1412,7 @@ deepseek_v4_fp8_moe_quant_prepare(const torch::Tensor& input,
                                   int64_t topk,
                                   int64_t alignment_m,
                                   int64_t max_padded_assignments) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_fp8_moe_quant_prepare");
   CHECK(input.defined() && input.dim() == 2 && input.is_contiguous());
   CHECK(sorted_assignment.defined() && sorted_assignment.dim() == 1 &&
         sorted_assignment.is_contiguous());
@@ -1701,6 +1703,7 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_swiglu_quantize(
     const torch::Tensor& gate_up,
     const torch::Tensor& ragged_tokens_info,
     double swiglu_limit) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_fp8_moe_swiglu_quantize");
   CHECK(gate_up.defined() && gate_up.dim() == 2 && gate_up.is_contiguous());
   CHECK(gate_up.scalar_type() == torch::kBFloat16 ||
         gate_up.scalar_type() == torch::kFloat16);
@@ -1796,6 +1799,7 @@ torch::Tensor deepseek_v4_fp8_moe_restore(
     const torch::Tensor& sorted_output,
     const torch::Tensor& padded_assignment,
     int64_t num_assignments) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_fp8_moe_restore");
   CHECK(sorted_output.defined() && sorted_output.dim() == 2 &&
         sorted_output.is_contiguous());
   CHECK(padded_assignment.defined() && padded_assignment.dim() == 1 &&
@@ -1835,6 +1839,7 @@ torch::Tensor deepseek_v4_fp8_moe_restore_combine(
     const torch::Tensor& route_to_padded,
     const torch::Tensor& topk_weights,
     const torch::Tensor& output_buffer) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_fp8_moe_restore_combine");
   CHECK(sorted_output.defined() && sorted_output.dim() == 2 &&
         sorted_output.is_contiguous());
   CHECK(route_to_padded.defined() && route_to_padded.dim() == 1 &&

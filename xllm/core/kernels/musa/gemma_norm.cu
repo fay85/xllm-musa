@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_bf16.h>
@@ -820,6 +821,7 @@ void gemma_rms_norm(torch::Tensor output,
                     torch::Tensor input,
                     torch::Tensor weight,
                     double eps) {
+  RECORD_USER_SCOPE("kernel: gemma_rms_norm");
   rms_norm_entry</*IsGemma=*/true>(output, input, weight, eps);
 }
 
@@ -827,6 +829,7 @@ void rms_norm(torch::Tensor output,
               torch::Tensor input,
               torch::Tensor weight,
               double eps) {
+  RECORD_USER_SCOPE("kernel: rms_norm");
   rms_norm_entry</*IsGemma=*/false>(output, input, weight, eps);
 }
 
@@ -834,6 +837,7 @@ void fused_add_gemma_rms_norm(torch::Tensor& input,
                               torch::Tensor& residual,
                               torch::Tensor& weight,
                               double epsilon) {
+  RECORD_USER_SCOPE("kernel: fused_add_gemma_rms_norm");
   fused_add_rms_norm_entry</*IsGemma=*/true>(input, residual, weight, epsilon);
 }
 
@@ -841,6 +845,7 @@ void fused_add_rms_norm(torch::Tensor& input,
                         torch::Tensor& residual,
                         torch::Tensor& weight,
                         double epsilon) {
+  RECORD_USER_SCOPE("kernel: fused_add_rms_norm");
   fused_add_rms_norm_entry</*IsGemma=*/false>(input, residual, weight, epsilon);
 }
 

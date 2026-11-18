@@ -18,6 +18,7 @@ limitations under the License.
 // residual square sum in one pass; stage 1 reduces them, applies RMS/sigmoid,
 // and writes the weighted sum of the four residual streams.
 
+#include <ATen/record_function.h>
 #include <torch/torch.h>
 
 #include "core/kernels/musa/musa_kernel_utils.h"
@@ -145,6 +146,7 @@ torch::Tensor deepseek_v4_hc_head(
     double hc_eps,
     const std::optional<torch::Tensor>& output,
     const std::optional<torch::Tensor>& workspace) {
+  RECORD_USER_SCOPE("kernel: deepseek_v4_hc_head");
   CHECK(residual.defined() && residual.dim() == 3 && residual.is_contiguous());
   CHECK(residual.size(1) == kHcMult && residual.size(2) == kHiddenSize);
   CHECK(weight.defined() && weight.scalar_type() == torch::kFloat32 &&

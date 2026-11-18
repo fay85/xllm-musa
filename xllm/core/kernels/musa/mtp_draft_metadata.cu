@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <glog/logging.h>
@@ -374,6 +375,7 @@ bool greedy_accepted_tokens_supported(const torch::Tensor& draft_token_ids,
 
 torch::Tensor greedy_accepted_tokens(const torch::Tensor& draft_token_ids,
                                      const torch::Tensor& target_token_ids) {
+  RECORD_USER_SCOPE("kernel: greedy_accepted_tokens");
   CHECK(greedy_accepted_tokens_supported(draft_token_ids, target_token_ids))
       << "unsupported greedy acceptance: draft=" << draft_token_ids.sizes()
       << ", target=" << target_token_ids.sizes();

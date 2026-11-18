@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <glog/logging.h>
 #include <unistd.h>
 
@@ -1594,6 +1595,7 @@ torch::Tensor causal_conv1d(
     int64_t activation_mode,
     int64_t /*pad_slot_id*/,
     int64_t /*run_mode*/) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d");
   const auto device = x.device();
 
   auto x_t = x.t().contiguous();
@@ -1653,6 +1655,7 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                     const torch::Tensor& cache_indices,
                                     const torch::Tensor& has_initial_state,
                                     bool silu_activation) {
+  RECORD_USER_SCOPE("kernel: causal_conv1d_prefill");
   CHECK(query_start_loc.defined() && is_torch_device(query_start_loc.device()))
       << "causal_conv1d_prefill requires device query_start_loc";
   CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))

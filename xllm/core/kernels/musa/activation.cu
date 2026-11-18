@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include <ATen/ops/mv.h>
 #include <ATen/ops/swish_glu.h>
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <glog/logging.h>
@@ -409,6 +410,7 @@ torch::Tensor matmul(torch::Tensor a,
                      torch::Tensor b,
                      std::optional<torch::Tensor> bias,
                      std::optional<torch::Tensor> output_buf) {
+  RECORD_USER_SCOPE("kernel: matmul");
   if (output_buf.has_value() && output_buf->defined() && a.dim() == 2 &&
       b.dim() == 2) {
     auto& out = *output_buf;

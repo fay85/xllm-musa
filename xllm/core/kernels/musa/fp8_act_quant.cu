@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <glog/logging.h>
@@ -1914,6 +1915,7 @@ fused_moe_decode_preprocess_bf16(const torch::Tensor& input,
 
 torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
                                            int64_t alignment) {
+  RECORD_USER_SCOPE("kernel: fused_moe_ragged_swiglu_bf16");
   CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
         input.is_contiguous())
       << "Ragged BF16 SwiGLU requires contiguous BF16 [M, 2N].";
@@ -1947,6 +1949,7 @@ torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
 
 torch::Tensor fused_moe_indexed_swiglu_bf16(const torch::Tensor& input,
                                             const torch::Tensor& valid_rows) {
+  RECORD_USER_SCOPE("kernel: fused_moe_indexed_swiglu_bf16");
   CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
         input.is_contiguous())
       << "Indexed BF16 SwiGLU requires contiguous BF16 [M, 2N].";
@@ -2059,6 +2062,7 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
                                        const torch::Tensor& topk_weights,
                                        int64_t num_tokens,
                                        int64_t alignment) {
+  RECORD_USER_SCOPE("kernel: fused_moe_ragged_combine");
   CHECK(down.scalar_type() == torch::kBFloat16 && down.dim() == 2 &&
         down.is_contiguous())
       << "Ragged MoE combine requires contiguous BF16 [M, H].";

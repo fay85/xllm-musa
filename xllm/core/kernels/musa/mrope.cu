@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <ATen/cuda/CUDAContext.h>
+#include <ATen/record_function.h>
 #include <c10/core/DeviceGuard.h>
 #include <c10/cuda/CUDAException.h>
 #include <glog/logging.h>
@@ -92,6 +93,7 @@ void partial_mrope_embedding(const torch::Tensor& positions,
                              int64_t rotary_dim,
                              const std::vector<int64_t>& mrope_section,
                              bool interleaved) {
+  RECORD_USER_SCOPE("kernel: partial_mrope_embedding");
   CHECK_EQ(positions.dim(), 2);
   CHECK_EQ(positions.size(0), 3);
   CHECK_EQ(query.dim(), 2);
