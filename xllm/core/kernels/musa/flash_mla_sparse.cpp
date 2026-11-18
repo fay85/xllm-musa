@@ -22,6 +22,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <string>
 
@@ -82,8 +83,15 @@ torch::Tensor sparse_mla_bf16(const torch::Tensor& query,
     return output;
   }
   CHECK(ensure_tilelang_loader());
-  auto function =
-      get_function("sparse_mla_bf16_v1_mp31_h" + std::to_string(heads), "main");
+  const char* persistent = std::getenv("XLLM_GLM5_SPARSE_MLA_PERSISTENT");
+  const bool use_persistent =
+      persistent != nullptr && persistent[0] == '1' && persistent[1] == '\0';
+  const std::string module = std::string("sparse_mla_bf16_v1_mp31_h") +
+                             std::to_string(heads) +
+                             (use_persistent ? "_persistent" : "");
+  auto function = get_function(module, "main");
+  const int32_t persistent_blocks =
+      use_persistent ? properties.multiProcessorCount : 0;
   auto max_logits = torch::empty({query.size(0), heads},
                                  query.options().dtype(torch::kFloat32));
   auto lse = torch::empty_like(max_logits);
@@ -97,7 +105,7 @@ torch::Tensor sparse_mla_bf16(const torch::Tensor& query,
            to_ffi_tensor(lse),
            to_ffi_tensor(lengths),
            static_cast<float>(scale * std::log2(std::exp(1.0))),
-           /*persistent_blocks=*/0,
+           persistent_blocks,
            /*kv_span_bytes=*/cache.numel() * cache.element_size());
   return output;
 }

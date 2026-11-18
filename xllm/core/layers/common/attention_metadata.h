@@ -283,6 +283,10 @@ struct AttentionMetadata {
   int64_t glm5_prefill_local_row_end = 0;
   torch::Tensor glm5_prefill_local_row_indices;
   std::vector<int32_t> glm5_prefill_row_offsets;
+  // Decoder layers receive round-robin rows when this is set. DSA keeps that
+  // order through the layer. KDA restores global order only for its recurrence
+  // and returns round-robin rows. The model restores Plain rows once at exit.
+  bool glm5_prefill_cp_round_robin = false;
   // Per-forward CP prefill plan shared by every DSA layer. The plan owns the
   // device-side gather/restore indices and candidate metadata that only depend
   // on the request layout, so layers do not repeat D2H/H2D round trips or host

@@ -247,20 +247,19 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
 // Finalize only the request's four-entry ring after all pools read its old
 // tail. Keys/gates are either native row tensors or rows embedded in the
 // combined CP payload.
-__device__ void update_pool_tails_impl(
-    int32_t request,
-    int32_t lane,
-    const c10::BFloat16* keys,
-    const c10::BFloat16* gates,
-    const uint8_t* gathered,
-    const int64_t* tail_offsets,
-    const int64_t* positions,
-    const int32_t* cu,
-    const int32_t* state_ids,
-    const int32_t* read_ids,
-    const c10::BFloat16* snapshot,
-    c10::BFloat16* tail,
-    int64_t states) {
+__device__ void update_pool_tails_impl(int32_t request,
+                                       int32_t lane,
+                                       const c10::BFloat16* keys,
+                                       const c10::BFloat16* gates,
+                                       const uint8_t* gathered,
+                                       const int64_t* tail_offsets,
+                                       const int64_t* positions,
+                                       const int32_t* cu,
+                                       const int32_t* state_ids,
+                                       const int32_t* read_ids,
+                                       const c10::BFloat16* snapshot,
+                                       c10::BFloat16* tail,
+                                       int64_t states) {
   const int64_t state = state_ids[request];
   const int64_t source = read_ids[request];
   if (state <= 0 || state >= states) {
@@ -338,22 +337,21 @@ __global__ void update_pool_tails(const c10::BFloat16* keys,
 // Materialize all gathered compressed pools and the recurrent tail in one
 // launch. The two halves touch disjoint cache regions and run independently in
 // the same block grid.
-__global__ void scatter_indexer_cp(
-    const uint8_t* gathered,
-    const int64_t* pool_source_offsets,
-    const int64_t* pool_cache_byte_indices,
-    int64_t pool_count,
-    const int64_t* tail_source_offsets,
-    const int64_t* positions,
-    const int32_t* cu,
-    const int32_t* state_ids,
-    const int32_t* read_ids,
-    uint8_t* cache,
-    const c10::BFloat16* snapshot,
-    c10::BFloat16* tail,
-    int64_t states,
-    int32_t request_count,
-    int64_t tail_count) {
+__global__ void scatter_indexer_cp(const uint8_t* gathered,
+                                   const int64_t* pool_source_offsets,
+                                   const int64_t* pool_cache_byte_indices,
+                                   int64_t pool_count,
+                                   const int64_t* tail_source_offsets,
+                                   const int64_t* positions,
+                                   const int32_t* cu,
+                                   const int32_t* state_ids,
+                                   const int32_t* read_ids,
+                                   uint8_t* cache,
+                                   const c10::BFloat16* snapshot,
+                                   c10::BFloat16* tail,
+                                   int64_t states,
+                                   int32_t request_count,
+                                   int64_t tail_count) {
   const int64_t block = blockIdx.x;
   if (block < pool_count) {
     for (int64_t byte = threadIdx.x; byte < kPoolPacketBytes;
@@ -379,48 +377,228 @@ __global__ void scatter_indexer_cp(
   }
 }
 
-__global__ void quantize_query(const c10::BFloat16* query,
-                               const float* weights,
-                               c10::Float8_e4m3fn* output,
-                               float* scaled_weights) {
-  const int64_t row = blockIdx.x;
+__device__ void hadamard128(float& value, float* shared, int32_t row_in_block) {
   const int32_t lane = threadIdx.x;
-  __shared__ float shared[128];
-  const float value =
-      hadamard(static_cast<float>(query[row * 128 + lane]), shared);
-  const float scale = quant_scale(value, shared);
-  output[row * 128 + lane] =
-      QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
-  if (lane == 0) {
-    scaled_weights[row] = weights[row] * scale * (1.0f / 64.0f);
+  const int32_t base = row_in_block * 128;
+  shared[base + lane] = value;
+  __syncthreads();
+  for (int32_t stride = 1; stride < 128; stride *= 2) {
+    const float other = shared[base + (lane ^ stride)];
+    const float next = (lane & stride) ? other - value : value + other;
+    __syncthreads();
+    shared[base + lane] = next;
+    value = next;
+    __syncthreads();
+  }
+  value = static_cast<float>(c10::BFloat16(value * 0.08838834764831845f));
+}
+
+__device__ float quant_scale128(float value,
+                                float* shared,
+                                int32_t row_in_block) {
+  const int32_t lane = threadIdx.x;
+  const int32_t base = row_in_block * 128;
+  shared[base + lane] = fabsf(value);
+  __syncthreads();
+  for (int32_t offset = 64; offset > 0; offset /= 2) {
+    if (lane < offset) {
+      shared[base + lane] =
+          fmaxf(shared[base + lane], shared[base + lane + offset]);
+    }
+    __syncthreads();
+  }
+  return exp2f(ceilf(log2f(fmaxf(shared[base], 1.0e-4f) / 448.0f)));
+}
+
+// Four query heads share a block. Each head still owns a private 128-lane
+// Hadamard and absmax so the FP8 scale matches the one-head kernel.
+template <int32_t kHeads>
+__global__ void quantize_query_grouped(const c10::BFloat16* query,
+                                       const float* weights,
+                                       c10::Float8_e4m3fn* output,
+                                       float* scaled_weights,
+                                       int64_t rows) {
+  __shared__ float shared[kHeads * 128];
+  const int32_t row_in_block = threadIdx.y;
+  const int64_t row = static_cast<int64_t>(blockIdx.x) * kHeads + row_in_block;
+  const int32_t lane = threadIdx.x;
+  float value = 0.0f;
+  if (row < rows) {
+    value = static_cast<float>(query[row * 128 + lane]);
+  }
+  hadamard128(value, shared, row_in_block);
+  const float scale = quant_scale128(value, shared, row_in_block);
+  if (row < rows) {
+    output[row * 128 + lane] =
+        QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
+    if (lane == 0) {
+      scaled_weights[row] = weights[row] * scale * (1.0f / 64.0f);
+    }
   }
 }
 
-__global__ void expand_pools(const int64_t* selected,
-                             const int64_t* positions,
-                             const int32_t* rows,
-                             const int32_t* pool_lengths,
-                             int32_t* tokens,
-                             int32_t* lengths,
-                             int64_t selected_width,
-                             int64_t width,
-                             int64_t token_topk) {
+__device__ __forceinline__ uint32_t topk_rank_key(float value) {
+  const uint32_t bits = __float_as_uint(value);
+  return (bits & 0x80000000u) != 0u ? ~bits : (bits | 0x80000000u);
+}
+
+__device__ __forceinline__ uint32_t topk_rank_key8(float value) {
+  return topk_rank_key(value) >> 24;
+}
+
+// Radix-select the top pool ids for one query.  The ordering matches stable
+// descending top-k: a larger score wins, and the smaller pool id wins a tie.
+// The selected ids are unordered; token expansion below does not depend on
+// their order.
+__device__ int32_t radix_select_pools(const float* scores,
+                                      int32_t pool_length,
+                                      int32_t wanted,
+                                      int32_t* selected) {
+  constexpr int32_t kThreads = 256;
+  constexpr int32_t kRadix = 256;
+  constexpr int32_t kScratch = 4096;
+  __shared__ int32_t histogram[2][kRadix + 32];
+  __shared__ int32_t threshold_bin;
+  __shared__ int32_t scratch_count;
+  __shared__ int32_t selected_count;
+  __shared__ int32_t scratch[kScratch];
+  const int32_t lane = threadIdx.x;
+  if (lane == 0) {
+    selected_count = 0;
+    scratch_count = 0;
+    threshold_bin = 0;
+  }
+  if (lane < kRadix + 1) {
+    histogram[0][lane] = 0;
+  }
+  __syncthreads();
+  for (int32_t pool = lane; pool < pool_length; pool += kThreads) {
+    atomicAdd(&histogram[0][topk_rank_key8(scores[pool])], 1);
+  }
+  __syncthreads();
+  // Eight steps end in histogram[0].  Each value is the count of this bin and
+  // every higher bin, which is the descending rank boundary.
+  for (int32_t stride = 1; stride < kRadix; stride *= 2) {
+    const int32_t source = (stride & 1) == 1 ? 1 : 0;
+    if (lane < kRadix) {
+      int32_t value = histogram[source][lane];
+      if (lane + stride < kRadix) {
+        value += histogram[source][lane + stride];
+      }
+      histogram[source ^ 1][lane] = value;
+    }
+    __syncthreads();
+  }
+  if (lane < kRadix && histogram[0][lane] >= wanted &&
+      (lane + 1 == kRadix || histogram[0][lane + 1] < wanted)) {
+    threshold_bin = lane;
+  }
+  __syncthreads();
+  const int32_t bin = threshold_bin;
+  const int32_t strict =
+      lane + 1 < kRadix ? histogram[0][lane == bin ? bin + 1 : lane] : 0;
+  int32_t kept_above = 0;
+  if (lane == 0) {
+    kept_above = bin + 1 < kRadix ? histogram[0][bin + 1] : 0;
+  }
+  __shared__ int32_t above_count;
+  if (lane == 0) {
+    above_count = bin + 1 < kRadix ? histogram[0][bin + 1] : 0;
+  }
+  __syncthreads();
+  for (int32_t pool = lane; pool < pool_length; pool += kThreads) {
+    const uint32_t key = topk_rank_key8(scores[pool]);
+    if (static_cast<int32_t>(key) > bin) {
+      const int32_t pos = atomicAdd(&selected_count, 1);
+      if (pos < wanted) {
+        selected[pos] = pool;
+      }
+    } else if (static_cast<int32_t>(key) == bin) {
+      const int32_t pos = atomicAdd(&scratch_count, 1);
+      if (pos < kScratch) {
+        scratch[pos] = pool;
+      }
+    }
+  }
+  __syncthreads();
+  const int32_t need = wanted - above_count;
+  const int32_t candidates = scratch_count;
+  // Fill the remaining slots from the threshold bin in increasing pool-id
+  // order. Sorting that bin dominated a 20k prefill; sparse attention consumes
+  // the selected set, and the smaller id remains the stable tie break.
+  if (need > 0 && candidates <= kScratch) {
+    const int32_t limit = min(candidates, kScratch);
+    const int32_t emit = min(need, limit);
+    for (int32_t item = lane; item < emit; item += kThreads) {
+      selected[above_count + item] = scratch[item];
+    }
+    if (lane == 0) {
+      selected_count = above_count + emit;
+    }
+    __syncthreads();
+  } else if (need > 0) {
+    for (int32_t pool = lane; pool < pool_length && need > 0;
+         pool += kThreads) {
+      if (static_cast<int32_t>(topk_rank_key8(scores[pool])) == bin) {
+        const int32_t slot = atomicAdd(&selected_count, 1);
+        if (slot < wanted) {
+          selected[slot] = pool;
+        }
+      }
+    }
+    __syncthreads();
+  }
+  return selected_count;
+}
+
+// One block owns one query row.  It selects token_topk/4 pools, expands each
+// pool to four logical token ids, and appends the unpadded causal tail.
+__global__ void select_pool_tokens(const float* scores,
+                                   const int32_t* pool_lengths,
+                                   const int64_t* positions,
+                                   const int32_t* rows,
+                                   int32_t* tokens,
+                                   int32_t* lengths,
+                                   int64_t score_width,
+                                   int64_t selected_width,
+                                   int64_t width,
+                                   int64_t token_topk) {
+  constexpr int32_t kThreads = 256;
+  constexpr int32_t kMaxSelected = 512;
+  __shared__ int32_t selected[kMaxSelected];
+  __shared__ int32_t selected_count;
   const int64_t row = blockIdx.x;
+  const int32_t lane = threadIdx.x;
   const int64_t visible = rows[row] >= 0 ? positions[row] + 1 : 0;
   const int64_t tail = visible % 4;
   const int64_t end = visible <= token_topk ? visible : token_topk + tail;
-  if (threadIdx.x == 0) {
+  const int32_t pool_length = max(pool_lengths[row], 0);
+  const int32_t wanted = static_cast<int32_t>(
+      min(selected_width, static_cast<int64_t>(pool_length)));
+  if (lane == 0) {
     lengths[row] = static_cast<int32_t>(end);
+    selected_count = 0;
   }
-  for (int64_t col = threadIdx.x; col < width; col += blockDim.x) {
+  __syncthreads();
+  if (visible > token_topk && wanted > 0) {
+    const int32_t found = radix_select_pools(
+        scores + row * score_width, pool_length, wanted, selected);
+    if (lane == 0) {
+      selected_count = min(found, wanted);
+    }
+  }
+  __syncthreads();
+  for (int64_t col = lane; col < width; col += kThreads) {
     int32_t token = -1;
     if (col < end && visible <= token_topk) {
       token = static_cast<int32_t>(col);
-    } else if (visible > token_topk && col < token_topk &&
-               col / 4 < selected_width) {
-      const int64_t pool = selected[row * selected_width + col / 4];
-      if (pool >= 0 && pool < pool_lengths[row]) {
-        token = static_cast<int32_t>(pool * 4 + col % 4);
+    } else if (visible > token_topk && col < token_topk) {
+      const int64_t pool_slot = col / 4;
+      if (pool_slot < selected_count) {
+        const int32_t pool = selected[pool_slot];
+        if (pool >= 0 && pool < pool_length) {
+          token = pool * 4 + static_cast<int32_t>(col % 4);
+        }
       }
     } else if (col >= token_topk && col < end) {
       token = static_cast<int32_t>((visible / 4) * 4 + col - token_topk);
@@ -640,17 +818,20 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
   const auto stream = current_musa_stream(query.device());
   const int64_t pools = (max_context + 3) / 4;
   const int64_t count = std::min<int64_t>(token_topk / 4, pools);
-  auto selected =
-      torch::full({tokens, count}, -1, query.options().dtype(torch::kInt64));
+  torch::Tensor scores;
   if (max_context > token_topk) {
     auto quant = torch::empty({tokens, 1, 32, 128},
                               query.options().dtype(torch::kFloat8_e4m3fn));
     auto scaled_weights = torch::empty_like(weights);
-    quantize_query<<<tokens * 32, 128, 0, stream>>>(
-        query.data_ptr<c10::BFloat16>(),
-        weights.data_ptr<float>(),
-        quant.data_ptr<c10::Float8_e4m3fn>(),
-        scaled_weights.data_ptr<float>());
+    const int64_t query_rows = tokens * 32;
+    quantize_query_grouped<4><<<static_cast<int32_t>((query_rows + 3) / 4),
+                                dim3(128, 4),
+                                0,
+                                stream>>>(query.data_ptr<c10::BFloat16>(),
+                                          weights.data_ptr<float>(),
+                                          quant.data_ptr<c10::Float8_e4m3fn>(),
+                                          scaled_weights.data_ptr<float>(),
+                                          query_rows);
     check_musa_kernel_launch("GLM IndexPool query quantization");
     // At most 16 MiB of FP32 logits per chunk, and <=128 query rows to match
     // the exported scheduler. Main history is never expanded per head.
@@ -681,23 +862,33 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
                      true)
                 .cast<ffi::Tensor>();
       }
-      auto scores = own_logits(std::move(ffi_logits), query.options())
-                        .narrow(1, 0, pools);
-      scores.masked_fill_(pool_ids.ge(lens.unsqueeze(1)), -INFINITY);
-      selected.narrow(0, first, size)
-          .copy_(std::get<1>(scores.topk(count, -1, true, false)));
+      auto chunk_scores = own_logits(std::move(ffi_logits), query.options())
+                              .narrow(1, 0, pools);
+      chunk_scores.masked_fill_(pool_ids.ge(lens.unsqueeze(1)), -INFINITY);
+      if (!scores.defined()) {
+        scores = torch::empty({tokens, pools},
+                              query.options().dtype(torch::kFloat32));
+      }
+      scores.narrow(0, first, size).copy_(chunk_scores);
     }
   }
-  expand_pools<<<tokens, 256, 0, stream>>>(selected.data_ptr<int64_t>(),
-                                           positions.data_ptr<int64_t>(),
-                                           result.rows.data_ptr<int32_t>(),
-                                           pool_lengths.data_ptr<int32_t>(),
-                                           result.tokens.data_ptr<int32_t>(),
-                                           result.lengths.data_ptr<int32_t>(),
-                                           count,
-                                           width,
-                                           token_topk);
-  check_musa_kernel_launch("GLM IndexPool candidate expansion");
+  if (!scores.defined()) {
+    scores = torch::empty({tokens, std::max<int64_t>(pools, 1)},
+                          query.options().dtype(torch::kFloat32));
+  }
+  CHECK_LE(count, 512);
+  select_pool_tokens<<<tokens, 256, 0, stream>>>(
+      scores.data_ptr<float>(),
+      pool_lengths.data_ptr<int32_t>(),
+      positions.data_ptr<int64_t>(),
+      result.rows.data_ptr<int32_t>(),
+      result.tokens.data_ptr<int32_t>(),
+      result.lengths.data_ptr<int32_t>(),
+      scores.size(1),
+      count,
+      width,
+      token_topk);
+  check_musa_kernel_launch("GLM IndexPool fused candidate selection");
   return result;
 }
 // CP owns a contiguous range of pool-ending rows. Only the preceding three
@@ -810,17 +1001,16 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
   check_musa_kernel_launch("GLM CP IndexPool tail update");
 }
 
-void glm5_next_indexer_scatter_cp(
-    const torch::Tensor& gathered,
-    const torch::Tensor& pool_source_offsets,
-    const torch::Tensor& pool_cache_byte_indices,
-    const torch::Tensor& tail_source_offsets,
-    const torch::Tensor& positions,
-    const torch::Tensor& cu,
-    const torch::Tensor& ids,
-    const torch::Tensor& read_ids,
-    torch::Tensor& cache,
-    torch::Tensor& tail) {
+void glm5_next_indexer_scatter_cp(const torch::Tensor& gathered,
+                                  const torch::Tensor& pool_source_offsets,
+                                  const torch::Tensor& pool_cache_byte_indices,
+                                  const torch::Tensor& tail_source_offsets,
+                                  const torch::Tensor& positions,
+                                  const torch::Tensor& cu,
+                                  const torch::Tensor& ids,
+                                  const torch::Tensor& read_ids,
+                                  torch::Tensor& cache,
+                                  torch::Tensor& tail) {
   RECORD_USER_SCOPE("kernel: glm5_next_indexer_scatter_cp");
   XLLMDeviceGuard device_guard(gathered.device());
   check_tensor(gathered, gathered, torch::kUInt8);

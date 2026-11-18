@@ -257,9 +257,16 @@ RoutedMoeTokenShard make_routed_moe_token_shard(
                         metadata.glm5_prefill_local_row_begin;
   CHECK_EQ(positions.sizes(), torch::IntArrayRef({count}));
   CHECK_EQ(metadata.q_cu_seq_lens.device(), positions.device());
-  auto rows = torch::arange(metadata.glm5_prefill_local_row_begin,
-                            metadata.glm5_prefill_local_row_end,
-                            positions.options().dtype(torch::kInt64));
+  torch::Tensor rows;
+  if (metadata.glm5_prefill_cp_round_robin) {
+    rows = metadata.glm5_prefill_local_row_indices.to(positions.device(),
+                                                     torch::kInt64);
+    CHECK_EQ(rows.numel(), count);
+  } else {
+    rows = torch::arange(metadata.glm5_prefill_local_row_begin,
+                         metadata.glm5_prefill_local_row_end,
+                         positions.options().dtype(torch::kInt64));
+  }
   auto requests =
       torch::bucketize(rows,
                        metadata.q_cu_seq_lens.slice(0, 1).to(torch::kInt64),

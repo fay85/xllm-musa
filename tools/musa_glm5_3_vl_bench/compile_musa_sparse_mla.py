@@ -87,28 +87,38 @@ def main() -> None:
     _export_indexer(args.ops_path)
     if args.indexer_only:
         return
+    variants = [(False, "")]
+    if os.environ.get("XLLM_GLM5_SPARSE_MLA_PERSISTENT", "0") == "1":
+        # Opt-in only. The persistent module uses the same tensor ABI and is
+        # selected by sparse_mla_bf16 when XLLM_GLM5_SPARSE_MLA_PERSISTENT=1.
+        variants.append((True, "_persistent"))
     for heads in args.heads:
-        name = f"sparse_mla_bf16_v1_mp31_h{heads}"
-        prim = factory.get_tir(
-            heads, 512, has_topk_length=True, has_attn_sink=False,
-            is_persistence=False,
-        )
-        kernel = tilelang.compile(
-            prim, target="musa", execution_backend="tvm_ffi",
-            pass_configs=factory.pass_configs, compile_flags=factory.compile_flags,
-        )
-        directory = args.ops_path / name
-        directory.mkdir(parents=True, exist_ok=True)
-        output = directory / f"{name}.so"
-        _export(kernel, output)
-        manifest = {
-            "abi": 1, "mate": importlib.metadata.version("mate"),
-            "heads": heads, "head_dim": 512, "dtype": "bfloat16",
-            "factory_sha256": hashlib.sha256(factory.func_source.encode()).hexdigest(),
-            "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
-        }
-        output.with_suffix(".json").write_text(json.dumps(manifest, indent=2) + "\n")
-        logger.info("Exported %s", output)
+        for persistent, suffix in variants:
+            name = f"sparse_mla_bf16_v1_mp31_h{heads}{suffix}"
+            prim = factory.get_tir(
+                heads, 512, has_topk_length=True, has_attn_sink=False,
+                is_persistence=persistent,
+            )
+            kernel = tilelang.compile(
+                prim, target="musa", execution_backend="tvm_ffi",
+                pass_configs=factory.pass_configs,
+                compile_flags=factory.compile_flags,
+            )
+            directory = args.ops_path / name
+            directory.mkdir(parents=True, exist_ok=True)
+            output = directory / f"{name}.so"
+            _export(kernel, output)
+            manifest = {
+                "abi": 1, "mate": importlib.metadata.version("mate"),
+                "heads": heads, "head_dim": 512, "dtype": "bfloat16",
+                "persistent": persistent,
+                "factory_sha256": hashlib.sha256(
+                    factory.func_source.encode()).hexdigest(),
+                "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+            }
+            output.with_suffix(".json").write_text(
+                json.dumps(manifest, indent=2) + "\n")
+            logger.info("Exported %s", output)
 
     from mate.jit.mla_ops import gen_mla_ops_spec
     from mate.sparse_mla.tilelang.sparse_mla_v32_decode_fwd_scheduled import (

@@ -47,11 +47,23 @@ std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
     const AttentionMetadata& metadata,
     ProcessGroup& group);
 
+// Round-robin CP helpers. Local row counts match the Plain shard counts, but
+// the row order is global_row % cp_size == rank.
+torch::Tensor glm5_cp_local_rows(const Glm5NextCpLayout& layout);
+torch::Tensor glm5_cp_restore_plain_rows(
+    const Glm5NextCpLayout& layout,
+    const torch::Tensor& round_robin_local);
+torch::Tensor glm5_cp_gather_plain_order(
+    const Glm5NextCpLayout& layout,
+    const torch::Tensor& round_robin_local);
+torch::Tensor glm5_cp_pack_round_robin_order(const Glm5NextCpLayout& layout,
+                                             const torch::Tensor& global_rows);
+
 // Complete NoPE sparse-attention layer, including replicated rate-4 IndexPool.
 // Ordinary TP shards main head projections. Hybrid Prefill CP uses TP=1,
 // interleaved local queries with all heads, and replicated compressed caches.
-// CP input/output activations and returned/shared selections use Plain local
-// row order; positions are local, while scheduling metadata remains global.
+// The default CP contract is Plain local row order. Round-robin CP keeps
+// interleaved rows through the layer, including shared selections.
 // Uses canonical self_attn.* checkpoint names after the caller strips its layer
 // prefix. BF16/FP32 weights and E4M3 weights with FP32 128x128 block scales are
 // accepted; projections run BF16, head-weight scoring runs FP32 (as in vLLM).
@@ -176,7 +188,8 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   }();
   auto q_latent = [&]() {
     RECORD_USER_SCOPE("MLA: AbsorbQuery");
-    return torch::bmm(q.transpose(0, 1), w_k.transpose(1, 2))
+    return torch::bmm(q.transpose(0, 1).contiguous(),
+                      w_k.transpose(1, 2).contiguous())
         .transpose(0, 1)
         .contiguous();
   }();
@@ -206,7 +219,9 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   }
   {
     RECORD_USER_SCOPE("MLA: ExpandValue");
-    return torch::bmm(z.transpose(0, 1), w_v).transpose(0, 1).contiguous();
+    return torch::bmm(z.transpose(0, 1).contiguous(), w_v.contiguous())
+        .transpose(0, 1)
+        .contiguous();
   }
 }
 }  // namespace xllm::layer

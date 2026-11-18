@@ -40,6 +40,7 @@ limitations under the License.
 #include "core/layers/common/word_embedding.h"
 #include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
 #include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
+#include "core/layers/musa/glm5_next/glm5_next_mla_attention.h"
 #include "core/util/env_var.h"
 #include "models/llm/llm_model_base.h"
 #include "models/model_registry.h"
@@ -216,14 +217,20 @@ class Glm5NextModelImpl final
 
     torch::Tensor input_embedding = input_params.embedding.input_embedding;
     if (use_prefill_cp) {
+      // DSA, KDA and routed MoE all accept the plain CP shard.  Avoid the
+      // round-robin transpose that previously crossed every sparse layer.
       const int64_t begin = attn_metadata.glm5_prefill_local_row_begin;
-      const int64_t count = attn_metadata.glm5_prefill_local_row_end - begin;
-      positions = positions.narrow(0, begin, count).contiguous();
+      const int64_t end = attn_metadata.glm5_prefill_local_row_end;
+      positions = positions.slice(/*dim=*/0, begin, end).contiguous();
       if (input_embedding.defined()) {
-        input_embedding = input_embedding.narrow(0, begin, count).contiguous();
+        input_embedding =
+            input_embedding.slice(/*dim=*/0, begin, end).contiguous();
       } else {
-        tokens = tokens.narrow(0, begin, count).contiguous();
+        tokens = tokens.slice(/*dim=*/0, begin, end).contiguous();
       }
+      modified_input_params.attn_metadata->glm5_prefill_cp_round_robin = false;
+      modified_input_params.attn_metadata->glm5_prefill_local_row_indices =
+          torch::arange(begin, end, positions.options().dtype(torch::kInt32));
     }
     torch::Tensor hidden_states =
         input_embedding.defined()
@@ -272,6 +279,8 @@ class Glm5NextModelImpl final
     }
     CHECK(!pending_mhc.has_value());
     hidden_states = kernel::musa::mhc_contract_mean(hidden_states);
+    // Hidden states are already the plain local shard.  The executor restores
+    // the global sequence from the recorded row offsets.
     // CP4 restores/selects request outputs in the CausalLM LM Head path; the
     // model itself continues to return Plain local rows to the executor.
     if (hidden_states.numel() != 0) {
@@ -360,6 +369,7 @@ class Glm5NextModelImpl final
       target.glm5_prefill_local_row_indices =
           source.glm5_prefill_local_row_indices;
       target.glm5_prefill_row_offsets = source.glm5_prefill_row_offsets;
+      target.glm5_prefill_cp_round_robin = source.glm5_prefill_cp_round_robin;
     };
     if (!graph_state->metadata) {
       graph_state->metadata =

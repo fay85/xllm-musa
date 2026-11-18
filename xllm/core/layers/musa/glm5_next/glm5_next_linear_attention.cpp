@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "layers/musa/glm5_next/glm5_next_linear_attention.h"
 
+#include "layers/musa/glm5_next/glm5_next_mla_attention.h"
+
 #include <c10/core/DeviceGuard.h>
 #include <glog/logging.h>
 
@@ -510,8 +512,15 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   if (use_prefill_cp) {
     cp_token_counts =
         validate_kda_cp_input(hidden_states, attn_metadata, *cp_group_);
-    global_hidden_states = parallel_state::gather(
-        hidden_states.contiguous(), cp_group_, cp_token_counts);
+    if (attn_metadata.glm5_prefill_cp_round_robin) {
+      CHECK(attn_metadata.glm5_prefill_cp_layout != nullptr)
+          << "Round-robin KDA requires the shared CP layout";
+      global_hidden_states = glm5_cp_gather_plain_order(
+          *attn_metadata.glm5_prefill_cp_layout, hidden_states);
+    } else {
+      global_hidden_states = parallel_state::gather(
+          hidden_states.contiguous(), cp_group_, cp_token_counts);
+    }
   }
   // Keep the collective on its process-group stream.  Once its result is
   // available, use one concrete compute stream for Torch and the KDA FFI
@@ -660,7 +669,12 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   // execute inside the temporary Torch/FFI compute-stream guard.
   compute_stream_guard.release();
   if (use_prefill_cp) {
-    return reduce_scatter_kda_rows(output, *cp_group_, cp_token_counts);
+    torch::Tensor partial = output;
+    if (attn_metadata.glm5_prefill_cp_round_robin) {
+      partial = glm5_cp_pack_round_robin_order(
+          *attn_metadata.glm5_prefill_cp_layout, output);
+    }
+    return reduce_scatter_kda_rows(partial, *cp_group_, cp_token_counts);
   }
   if (cp_group_ != nullptr) {
     // CP shards KDA heads, while decode keeps the token replicated on every
