@@ -310,6 +310,12 @@ void deepseek_v4_scatter_single_cache_native(const torch::Tensor& cache,
                                              const torch::Tensor& slot,
                                              const torch::Tensor& value);
 
+// Up to six BF16 rows on the native MUSA stream. Invalid slots are ignored;
+// repeated slots take the last input row, matching the stable-sort path.
+void deepseek_v41_scatter_small_cache_native(const torch::Tensor& cache,
+                                             const torch::Tensor& slots,
+                                             const torch::Tensor& values);
+
 void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                 torch::Tensor slot_ids,
                                 torch::Tensor values);

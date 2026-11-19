@@ -80,6 +80,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     CHECK(!full_draft_graph_ || (static_draft_ && draft_custom_allreduce_));
     markov_fp32_logits_ =
         util::get_bool_env("XLLM_DSV41_MARKOV_FP32_LOGITS", false);
+    draft_small_commit_ =
+        util::get_bool_env("XLLM_DSV41_DRAFT_SMALL_COMMIT", false);
   }
 
   void load_model(std::unique_ptr<ModelLoader> loader) override {
@@ -303,7 +305,8 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
                            (static_cast<int32_t>(static_draft_) << 1) |
                            (static_cast<int32_t>(full_draft_graph_) << 2) |
                            (static_cast<int32_t>(gather_bf16_bits_) << 3) |
-                           (static_cast<int32_t>(direct_rope_table_) << 4);
+                           (static_cast<int32_t>(direct_rope_table_) << 4) |
+                           (static_cast<int32_t>(draft_small_commit_) << 5);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -324,6 +327,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     LOG(INFO) << "Native V4.1 draft TP/EP custom allreduce="
               << draft_custom_allreduce_ << ", static_inputs=" << static_draft_
               << ", full_draft_graph=" << full_draft_graph_
+              << ", small_context_commit=" << draft_small_commit_
               << "; shared expert remains replicated";
   }
 
@@ -366,6 +370,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -.5);
     attention.dense_prequant_directory = dense_prequant_path_;
     attention.direct_rope_table = direct_rope_table_;
+    attention.draft_small_commit = draft_small_commit_;
     attention.sparse_library_path = sparse_path_;
     result.sinkhorn_iterations = args_.hc_sinkhorn_iters();
     result.hc_epsilon = args_.hc_eps();
@@ -560,6 +565,7 @@ class DeepseekV41NativeDraftCausalLM final : public CausalLM {
   bool markov_fp32_logits_ = false;
   bool gather_bf16_bits_ = false;
   bool direct_rope_table_ = false;
+  bool draft_small_commit_ = false;
   torch::Tensor markov_embed_;
   torch::Tensor markov_head_;
   torch::Tensor confidence_weight_;

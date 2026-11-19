@@ -56,6 +56,7 @@ struct DeepseekV41AttentionConfig {
   bool decode_packed_qkv = false;
   bool direct_rope_table = false;
   bool verify_skinny_projection = false;
+  bool draft_small_commit = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
   std::string dense_prequant_directory;
@@ -293,7 +294,7 @@ class DeepseekV41Attention final {
         projection_.prepare_context_kv(hidden, positions, rope_table);
     DeepseekV41PagedAttention(
         swa_cache, config_.window, config_.scale, config_.sparse_library_path)
-        .commit_draft_context(cache_slots, values);
+        .commit_draft_context(cache_slots, values, config_.draft_small_commit);
   }
 
  private:

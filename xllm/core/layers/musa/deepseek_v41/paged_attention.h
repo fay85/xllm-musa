@@ -298,7 +298,8 @@ class DeepseekV41PagedAttention final {
   }
 
   void commit_draft_context(const torch::Tensor& slots,
-                            const torch::Tensor& values) {
+                            const torch::Tensor& values,
+                            bool fused_small_commit = false) {
     CHECK(slots.defined() && values.defined());
     CHECK_EQ(slots.device(), cache_.device());
     CHECK_EQ(values.device(), cache_.device());
@@ -309,6 +310,12 @@ class DeepseekV41PagedAttention final {
     CHECK_EQ(values.sizes(),
              torch::IntArrayRef({slots.size(0), cache_.size(2)}));
     torch::DeviceGuard guard(cache_.device());
+    if (fused_small_commit && slots.numel() > 1 && slots.numel() <= 6) {
+      const DeepseekV41ProfileRange range("V41/DSpark/small_context_commit");
+      kernel::musa::deepseek_v41_scatter_small_cache_native(
+          cache_, slots, values);
+      return;
+    }
     commit(slots.to(torch::kInt64), values);
   }
 

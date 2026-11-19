@@ -617,6 +617,49 @@ __global__ void __launch_bounds__(kScatterCacheBlockSize, 1)
   }
 }
 
+template <typename Index>
+__global__ void __launch_bounds__(kScatterCacheBlockSize, 1)
+    dsv41_scatter_small_cache_kernel(const uint16_t* __restrict__ values,
+                                     uint16_t* __restrict__ cache,
+                                     const Index* __restrict__ slots,
+                                     int64_t rows,
+                                     int64_t cache_rows,
+                                     int64_t width) {
+  const int64_t row = static_cast<int64_t>(blockIdx.x);
+  const int64_t slot = static_cast<int64_t>(slots[row]);
+  if (slot < 0 || slot >= cache_rows) {
+    return;
+  }
+  // At most six rows: resolve duplicate destinations without a sort or
+  // dynamic output allocation. Only the last row can write a given slot.
+  for (int64_t later = row + 1; later < rows; ++later) {
+    if (static_cast<int64_t>(slots[later]) == slot) {
+      return;
+    }
+  }
+  for (int64_t column = threadIdx.x; column < width; column += blockDim.x) {
+    cache[slot * width + column] = values[row * width + column];
+  }
+}
+
+template <typename Index>
+void launch_dsv41_scatter_small_cache(const torch::Tensor& cache,
+                                      const torch::Tensor& slots,
+                                      const torch::Tensor& values) {
+  const int64_t width = cache.size(-1);
+  dsv41_scatter_small_cache_kernel<Index>
+      <<<static_cast<uint32_t>(slots.numel()),
+         kScatterCacheBlockSize,
+         0,
+         c10::musa::getCurrentMUSAStream().stream()>>>(
+          reinterpret_cast<const uint16_t*>(values.data_ptr()),
+          reinterpret_cast<uint16_t*>(cache.data_ptr()),
+          slots.data_ptr<Index>(),
+          slots.numel(),
+          cache.numel() / width,
+          width);
+}
+
 template <typename scalar_t, typename index_t>
 __global__ void __launch_bounds__(kScatterCacheBlockSize, 1)
     dsv4_scatter_flashmla_cache_kernel(const scalar_t* __restrict__ values,
@@ -2848,6 +2891,40 @@ void deepseek_v4_scatter_single_cache_native(const torch::Tensor& cache,
           cache.numel() / width,
           row_bytes);
   check_musa_kernel_launch("dsv4 native single-row cache scatter");
+}
+
+void deepseek_v41_scatter_small_cache_native(const torch::Tensor& cache,
+                                             const torch::Tensor& slots,
+                                             const torch::Tensor& values) {
+  CHECK(cache.defined() && slots.defined() && values.defined());
+  CHECK(cache.device().type() == torch::kPrivateUse1);
+  CHECK_EQ(cache.device(), values.device());
+  CHECK_EQ(cache.device(), slots.device());
+  CHECK_EQ(cache.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(values.scalar_type(), cache.scalar_type());
+  CHECK(slots.scalar_type() == torch::kInt32 ||
+        slots.scalar_type() == torch::kInt64);
+  CHECK(cache.is_contiguous() && slots.is_contiguous() &&
+        values.is_contiguous());
+  CHECK(!cache.is_alias_of(values) && !cache.is_alias_of(slots));
+  CHECK_GE(cache.dim(), 2);
+  CHECK_EQ(slots.dim(), 1);
+  CHECK_EQ(values.dim(), 2);
+  CHECK_EQ(values.size(0), slots.numel());
+  CHECK_LE(slots.numel(), 6);
+  const int64_t width = cache.size(-1);
+  CHECK_GT(width, 0);
+  CHECK_EQ(values.size(1), width);
+  if (slots.numel() == 0) {
+    return;
+  }
+  torch::DeviceGuard guard(cache.device());
+  if (slots.scalar_type() == torch::kInt32) {
+    launch_dsv41_scatter_small_cache<int32_t>(cache, slots, values);
+  } else {
+    launch_dsv41_scatter_small_cache<int64_t>(cache, slots, values);
+  }
+  check_musa_kernel_launch("dsv41 native small-row latest-wins cache scatter");
 }
 
 void deepseek_v4_scatter_cache(torch::Tensor cache,
