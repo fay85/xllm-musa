@@ -1,0 +1,172 @@
+{
+  "scope": "non-scored, fresh P+D+router. Five sequential 2000/1024; all SSE matched length/zero-prefix D terminals; text SHA 16b1d823d10311c16daf4445df1df6b04e6a32b3fa90864123171b59b2dc9688, accepted/proposed 732/1470",
+  "sample_window": "first ~350 ms after request; idle_cpu over preceding ~300 ms, clock tick granularity 10 ms. rchar counts bytes returned by reads, not disk I/O",
+  "model_tokenizer_json_bytes": 6367146,
+  "rows": [
+    {
+      "id": "chatcmpl-12481178814234374860-68qDX4iJgwLNNwqTyyvmM2",
+      "uuid": "01a1f3c2-9f59-7f87-ad4c-76e2421c2f06",
+      "ingress_to_prefill_queue_ms": 188.990624,
+      "cpu_ms": 200,
+      "idle_cpu_ms": 10,
+      "rchar": 6373641,
+      "read_bytes": 0,
+      "minor_faults": 17811,
+      "files": [],
+      "busiest_350ms": [
+        [
+          19,
+          27775
+        ],
+        [
+          0,
+          28382
+        ],
+        [
+          0,
+          27795
+        ],
+        [
+          0,
+          27779
+        ],
+        [
+          0,
+          27777
+        ]
+      ]
+    },
+    {
+      "id": "chatcmpl-12481178814234374860-nY5zzZkQGQAJEgfdgiqqXe",
+      "uuid": "01a1f3c5-79c1-7796-9075-e7902f369299",
+      "ingress_to_prefill_queue_ms": 194.957436,
+      "cpu_ms": 200,
+      "idle_cpu_ms": 10,
+      "rchar": 6373159,
+      "read_bytes": 0,
+      "minor_faults": 17653,
+      "files": [],
+      "busiest_350ms": [
+        [
+          19,
+          27772
+        ],
+        [
+          0,
+          28382
+        ],
+        [
+          0,
+          27795
+        ],
+        [
+          0,
+          27779
+        ],
+        [
+          0,
+          27777
+        ]
+      ]
+    },
+    {
+      "id": "chatcmpl-12481178814234374860-httFzGKiEtuTFFMp57eton",
+      "uuid": "01a1f3c5-be39-74de-aecd-d459ff7cd1fd",
+      "ingress_to_prefill_queue_ms": 0.467297,
+      "cpu_ms": 0,
+      "idle_cpu_ms": 10,
+      "rchar": 5835,
+      "read_bytes": 0,
+      "minor_faults": 3,
+      "files": [],
+      "busiest_350ms": [
+        [
+          1,
+          27738
+        ],
+        [
+          0,
+          28382
+        ],
+        [
+          0,
+          27795
+        ],
+        [
+          0,
+          27779
+        ],
+        [
+          0,
+          27777
+        ]
+      ]
+    },
+    {
+      "id": "chatcmpl-12481178814234374860-nqg896LyCnKhn6suqmNeZF",
+      "uuid": "01a1f3c6-017d-7fd4-8a60-41ad5b9cf8f5",
+      "ingress_to_prefill_queue_ms": 186.336125,
+      "cpu_ms": 200,
+      "idle_cpu_ms": 10,
+      "rchar": 6374083,
+      "read_bytes": 0,
+      "minor_faults": 17669,
+      "files": [],
+      "busiest_350ms": [
+        [
+          19,
+          27762
+        ],
+        [
+          1,
+          27772
+        ],
+        [
+          0,
+          28382
+        ],
+        [
+          0,
+          27795
+        ],
+        [
+          0,
+          27779
+        ]
+      ]
+    },
+    {
+      "id": "chatcmpl-12481178814234374860-JRcGwDd8Y4LRGVaPwoDvRn",
+      "uuid": "01a1f3c6-459c-7d23-bb11-68e1a2e0cc4b",
+      "ingress_to_prefill_queue_ms": 196.697269,
+      "cpu_ms": 200,
+      "idle_cpu_ms": 0,
+      "rchar": 6373736,
+      "read_bytes": 0,
+      "minor_faults": 17656,
+      "files": [],
+      "busiest_350ms": [
+        [
+          20,
+          27777
+        ],
+        [
+          0,
+          28382
+        ],
+        [
+          0,
+          27795
+        ],
+        [
+          0,
+          27779
+        ],
+        [
+          0,
+          27775
+        ]
+      ]
+    }
+  ]
+}
