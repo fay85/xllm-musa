@@ -27,7 +27,8 @@ class DFlash2WorkerImpl final : public DFlashWorkerImpl {
  public:
   DFlash2WorkerImpl(const ParallelArgs& parallel_args,
                     const torch::Device& device,
-                    const runtime::Options& options);
+                    const runtime::Options& options,
+                    WorkerType worker_type = WorkerType::LLM);
 
   ~DFlash2WorkerImpl() override;
 

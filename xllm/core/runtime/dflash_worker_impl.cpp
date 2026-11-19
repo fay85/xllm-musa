@@ -44,6 +44,7 @@ limitations under the License.
 #include "framework/sampling/sampling_params.h"
 #if defined(USE_MUSA)
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
+#include "core/layers/musa/qwen3_gated_delta_net_base.h"
 #endif
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
@@ -244,6 +245,9 @@ runtime::Options draft_options(const runtime::Options& options,
       .draft_graph_query_width(draft_query_width)
       .enable_dflash_xfia(enable_dflash_xfia)
       .enable_graph_aux_hidden_states(false);
+  if (SpeculativeConfig::is_dflash2_algorithm(options.speculative_algorithm())) {
+    opts.kv_cache_dtype("auto");
+  }
   return opts;
 }
 
@@ -474,13 +478,14 @@ bool enable_dflash_proposal_xfia(const ParallelArgs& parallel_args,
 
 DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
                                    const torch::Device& device,
-                                   const runtime::Options& options)
+                                   const runtime::Options& options,
+                                   WorkerType worker_type)
     : DraftModelSpecWorkerImpl(
           parallel_args,
           device,
           options,
           target_options(options),
-          WorkerType::LLM,
+          worker_type,
           [&parallel_args, &device, &options] {
             // The draft consumes the target's aux hidden states, which the
             // worker does not expose under CP; reject cp_size > 1 except
@@ -650,10 +655,10 @@ bool DFlashWorkerImpl::init_model(const std::string& model_weights_path,
       CHECK_EQ(requested_block_size, draft_args.dflash2_block_size())
           << "DFlash2 runtime block size must match the draft model's "
              "configured dflash_config.block_size.";
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
       CHECK(!target_is_hybrid_recurrent_ ||
             ::xllm::ExecutionConfig::get_instance().enable_graph())
-          << "DFlash2 with a hybrid recurrent target requires ACL Graph: the "
+          << "DFlash2 with a hybrid recurrent target requires graph mode: the "
              "expanded spec-verify replay path preserves the accepted GDN "
              "checkpoint, while eager validation is not lossless.";
 #endif
@@ -844,9 +849,32 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
   if (embeddings.defined()) {
     CHECK(processed_target_input.positions_host.defined())
         << "DFlash prefill requires processed positions_host.";
+    // Qwen3.5 mRoPE stores positions as [3, tokens]. The draft RoPE consumes
+    // one text position per hidden row, which is axis 0 for text tokens.
+    torch::Tensor context_positions_host = processed_target_input.positions_host;
+    torch::Tensor context_positions = processed_target_input.positions;
+    if (context_positions_host.dim() == 2 &&
+        context_positions_host.size(0) == 3) {
+      context_positions_host = context_positions_host[0].contiguous();
+      if (context_positions.defined() && context_positions.dim() == 2 &&
+          context_positions.size(0) == 3) {
+        context_positions = context_positions[0].contiguous();
+      }
+    }
+    if (context_positions.defined() &&
+        context_positions.numel() == context_positions_host.numel() * 3) {
+      context_positions =
+          context_positions.reshape({3, context_positions_host.numel()})[0]
+              .contiguous();
+    }
+    if (!context_positions.defined() ||
+        context_positions.numel() != context_positions_host.numel()) {
+      context_positions = context_positions_host.to(
+          processed_target_input.positions.device(), /*non_blocking=*/true);
+    }
     Slice<int32_t> positions = {
-        processed_target_input.positions_host.data_ptr<int32_t>(),
-        static_cast<size_t>(processed_target_input.positions_host.numel())};
+        context_positions_host.data_ptr<int32_t>(),
+        static_cast<size_t>(context_positions_host.numel())};
     CHECK_EQ(positions.size(), static_cast<size_t>(embeddings.size(0)))
         << "DFlash prefill hidden/position count mismatch.";
     torch::Tensor context_cache_slots =
@@ -867,7 +895,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     std::vector<std::string> failed_request_ids =
         write_context_kv(processed_target_input,
                          embeddings,
-                         processed_target_input.positions,
+                         context_positions,
                          context_cache_slots);
     output.failed_request_ids.insert(
         output.failed_request_ids.end(),
@@ -1279,6 +1307,18 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
                target_output,
                max_val_tokens,
                did_prune ? per_seq_val_tokens : std::vector<int32_t>{});
+#if defined(USE_MUSA)
+  if (validate_input.input_params.gdn_mtp_verify_cache != nullptr &&
+      validate_input.input_params.gdn_mtp_verify_cache->enabled &&
+      val_output.next_tokens.defined() && val_output.next_tokens.dim() == 2) {
+    layer::scatter_gdn_mtp_verify_ssm_states(
+        *validate_input.input_params.gdn_mtp_verify_cache,
+        impl_->kv_caches(),
+        validate_input.input_params,
+        val_output.next_tokens);
+    validate_input.input_params.gdn_mtp_verify_cache->enabled = false;
+  }
+#endif
   // Post-process: mask sampler output beyond each seq's prefix_len so seq
   // accepted counts respect the per-seq decision even under batch-max
   // dense rejection sampling.
@@ -1621,6 +1661,19 @@ void DFlashWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
     input_params.num_accepted_tokens =
         torch::tensor(accepted_prefix_lengths,
                       validate_input.token_ids.options().dtype(torch::kInt32));
+#if defined(USE_MUSA)
+    // The MUSA spec-verify graph captures only when this cache is armed. MTP
+    // does the same before validate; DFlash2's block width is num_speculative
+    // tokens plus the anchor, which the t8 Mate checkpoint kernel accepts.
+    if (layer::use_mate_gdn_mtp_kernel()) {
+      if (input_params.gdn_mtp_verify_cache == nullptr) {
+        input_params.gdn_mtp_verify_cache =
+            std::make_shared<GdnMtpVerifyCache>();
+      }
+      input_params.gdn_mtp_verify_cache->enabled = true;
+      input_params.gdn_mtp_verify_cache->layer_states.clear();
+    }
+#endif
     if (!input_params.attention.host.q_seq_lens.empty()) {
       std::vector<int32_t> q_cu_seq_lens;
       q_cu_seq_lens.reserve(input_params.attention.host.q_seq_lens.size() + 1);

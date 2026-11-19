@@ -17,11 +17,16 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <shared_mutex>
+
 #include "common/metrics.h"
 #include "core/framework/config/execution_config.h"
 #if defined(USE_NPU)
 #include "core/platform/npu/device_capture_lock.h"
 #include "torch_npu/csrc/core/npu/NPUGraph.h"
+#elif defined(USE_MUSA)
+#include "core/platform/cuda/device_capture_lock.h"
+#include "core/platform/musa_graph_handle.h"
 #endif
 #include "core/framework/parallel_state/process_group.h"
 #include "core/framework/speculative/dflash_async_input_builder.h"
@@ -53,6 +58,8 @@ struct DFlash2WorkerImpl::DraftGraphResources {
   std::unique_ptr<Stream> capture_stream;
 #if defined(USE_NPU)
   c10_npu::MempoolId_t pool = c10_npu::graph_pool_handle();
+#elif defined(USE_MUSA)
+  c10::musa::MempoolId_t pool = at::musa::graph_pool_handle();
 #endif
 };
 
@@ -66,13 +73,16 @@ struct DFlash2WorkerImpl::DraftGraph {
   DraftBlock output;
 #if defined(USE_NPU)
   c10_npu::NPUGraph graph;
+#elif defined(USE_MUSA)
+  MusaGraphHandle graph;
 #endif
 };
 
 DFlash2WorkerImpl::DFlash2WorkerImpl(const ParallelArgs& parallel_args,
                                      const torch::Device& device,
-                                     const runtime::Options& options)
-    : DFlashWorkerImpl(parallel_args, device, options),
+                                     const runtime::Options& options,
+                                     WorkerType worker_type)
+    : DFlashWorkerImpl(parallel_args, device, options, worker_type),
       sampling_process_group_(
           speculative_worker::sampling_process_group(parallel_args)) {
   prelaunch_enabled_ =
@@ -537,8 +547,96 @@ DFlashWorkerImpl::DraftBlock DFlash2WorkerImpl::replay_prelaunch_graph(
   }
   entry.graph.replay();
   return entry.output;
+#elif defined(USE_MUSA)
+  torch::InferenceMode inference_guard;
+  const int64_t batch = output.next_tokens.size(0);
+  const torch::Tensor source_table =
+      query.input_params.attention.device.block_tables;
+  const int64_t source_cols = source_table.size(1);
+  const int64_t table_cols = next_pow2_block_table_cols(source_cols);
+  const uint64_t mode = (input.sampling_params.all_greedy_sample ? 1 : 0) |
+                        (input.sampling_params.all_random_sample ? 2 : 0) |
+                        (input.sampling_params.temperatures.defined() ? 4 : 0);
+  const uint64_t key = (static_cast<uint64_t>(batch) << 32) |
+                       (static_cast<uint64_t>(table_cols) << 4) | mode;
+  auto iterator = draft_graphs_.find(key);
+  const bool first_capture = iterator == draft_graphs_.end();
+  if (first_capture) {
+    if (draft_graph_resources_ == nullptr) {
+      draft_graph_resources_ = std::make_unique<DraftGraphResources>();
+      draft_graph_resources_->capture_stream = device_.get_stream_from_pool();
+    }
+    auto entry = std::make_unique<DraftGraph>();
+    entry->input = input;
+    entry->input.sampling_params.do_sample =
+        input.sampling_params.do_sample.clone();
+    if (input.sampling_params.temperatures.defined()) {
+      entry->input.sampling_params.temperatures =
+          input.sampling_params.temperatures.clone();
+    }
+    entry->query = query;
+    entry->query.input_params.attention.device.block_tables =
+        torch::zeros({batch, table_cols}, source_table.options());
+    entry->accepted_tokens = torch::empty_like(output.next_tokens);
+    entry->embeddings = torch::empty_like(output.embeddings);
+    entry->base_positions = torch::empty({batch}, query.positions.options());
+    entry->noise = torch::empty_like(noise);
+    iterator = draft_graphs_.emplace(key, std::move(entry)).first;
+  }
+  DraftGraph& entry = *iterator->second;
+  entry.accepted_tokens.copy_(output.next_tokens, /*non_blocking=*/true);
+  entry.embeddings.copy_(output.embeddings, /*non_blocking=*/true);
+  entry.base_positions.copy_(base_positions, /*non_blocking=*/true);
+  entry.noise.copy_(noise, /*non_blocking=*/true);
+  entry.query.input_params.attention.device.block_tables.copy_(
+      source_table, /*non_blocking=*/true);
+  entry.input.sampling_params.do_sample.copy_(input.sampling_params.do_sample);
+  if (input.sampling_params.temperatures.defined()) {
+    entry.input.sampling_params.temperatures.copy_(
+        input.sampling_params.temperatures);
+  }
+  if (first_capture) {
+    auto& capture_lock =
+        cuda::DeviceCaptureLock::get_instance().get_write_lock(device_.index());
+    std::unique_lock<std::shared_mutex> lock(capture_lock);
+    Stream& capture_stream = *draft_graph_resources_->capture_stream;
+    capture_stream.wait_stream(*compute_stream_);
+    c10::StreamGuard capture_guard = capture_stream.set_stream_guard();
+    for (int32_t step = 0; step < 2; ++step) {
+      entry.output = execute_prelaunch_body(entry.input,
+                                            entry.query,
+                                            entry.accepted_tokens,
+                                            entry.embeddings,
+                                            entry.base_positions,
+                                            entry.noise,
+                                            capture_stream);
+    }
+    CHECK_EQ(capture_stream.synchronize(), 0);
+    torch::Tensor token_ids =
+        torch::empty_like(entry.output.proposal.token_ids());
+    CHECK(entry.output.proposal.draft_probs().has_value());
+    torch::Tensor draft_probs =
+        torch::empty_like(*entry.output.proposal.draft_probs());
+    entry.graph.capture_begin(draft_graph_resources_->pool,
+                              musaStreamCaptureModeThreadLocal,
+                              /*owns_user_pool_ref=*/false);
+    entry.output = execute_prelaunch_body(entry.input,
+                                          entry.query,
+                                          entry.accepted_tokens,
+                                          entry.embeddings,
+                                          entry.base_positions,
+                                          entry.noise,
+                                          capture_stream);
+    token_ids.copy_(entry.output.proposal.token_ids());
+    draft_probs.copy_(*entry.output.proposal.draft_probs());
+    entry.output.proposal =
+        DraftProposal(std::move(token_ids), std::move(draft_probs));
+    entry.graph.capture_end();
+  }
+  entry.graph.replay();
+  return entry.output;
 #else
-  LOG(FATAL) << "DFlash2 prelaunch graph requires NPU";
+  LOG(FATAL) << "DFlash2 prelaunch graph requires NPU or MUSA";
   return {};
 #endif
 }

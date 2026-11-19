@@ -107,7 +107,8 @@ bool supports_block_diffusion_draft(std::string_view algorithm) {
     return SpeculativeConfig::is_dflash2_algorithm(algorithm);
   }
   if (Platform::is_musa()) {
-    return algorithm == "DSpark";
+    return algorithm == "DSpark" ||
+           SpeculativeConfig::is_dflash2_algorithm(algorithm);
   }
   return false;
 }
@@ -188,8 +189,9 @@ void configure_block_diffusion_model(ModelArgs& args,
   const bool is_dspark = algorithm == "DSpark";
   const bool is_deepseek_v4_dspark =
       is_dspark && util::is_deepseek_v4_model_type(args.model_type());
-  CHECK(!Platform::is_musa() || is_deepseek_v4_dspark)
-      << "MUSA block-diffusion draft requires DeepSeek-V4 DSpark.";
+  CHECK(!Platform::is_musa() || is_deepseek_v4_dspark ||
+        SpeculativeConfig::is_dflash2_algorithm(algorithm))
+      << "MUSA block-diffusion draft requires DeepSeek-V4 DSpark or DFlash2.";
   std::string draft_model_type = std::string(kDFlashDraftModelType);
   if (is_dspark) {
     draft_model_type = std::string(kDSparkDraftModelType);

@@ -203,7 +203,10 @@ void apply_rotary(RotaryParams& params) {
                          : std::nullopt;
   cuda::rotary_embedding(pos_ids, params.q, key, cos_sin, is_neox);
 #else
-  cuda::rotary_embedding(pos_ids, params.q, params.k, cos_sin, is_neox);
+  std::optional<torch::Tensor> key =
+      params.k.defined() ? std::optional<torch::Tensor>(params.k)
+                         : std::nullopt;
+  cuda::rotary_embedding(pos_ids, params.q, key, cos_sin, is_neox);
 #endif
 #elif defined(USE_ILU)
   torch::Tensor ilu_cos_sin;

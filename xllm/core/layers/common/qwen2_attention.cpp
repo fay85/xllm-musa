@@ -180,8 +180,15 @@ torch::Tensor Qwen2AttentionImpl::forward(
   }
 
   // 4. rope
+  // Qwen3.5 target prefill feeds mRoPE positions shaped [3, tokens] into the
+  // plain Qwen3 DFlash2 drafter. Its RoPE consumes the text axis only.
+  torch::Tensor rope_positions = positions;
+  if (rope_positions.defined() && T > 0 &&
+      rope_positions.numel() == T * 3) {
+    rope_positions = rope_positions.reshape({3, T})[0];
+  }
   if (!fused_qk_norm_rope_applied) {
-    rotary_emb_->forward(q, k, positions, attn_metadata);
+    rotary_emb_->forward(q, k, rope_positions, attn_metadata);
   }
   q = q.view({T, q_size_});
   k = k.view({T, kv_size_});

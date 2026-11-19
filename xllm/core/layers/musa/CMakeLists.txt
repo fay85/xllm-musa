@@ -24,6 +24,7 @@ set(_MUSA_LAYERS_HDRS
   deepseek_v4/dsa_metadata_builder_musa.h
   deepseek_v4/deepseek_v4_gate.h
   deepseek_v4/deepseek_v4_moe.h
+  dflash2_context_kv.h
 )
 set(_MUSA_LAYERS_SRCS
   attention.cpp
@@ -47,6 +48,7 @@ set(_MUSA_LAYERS_SRCS
   deepseek_v4/dsa_metadata_builder_musa.cpp
   deepseek_v4/deepseek_v4_gate.cpp
   deepseek_v4/deepseek_v4_moe.cpp
+  dflash2_context_kv.cpp
 )
 set(_DSV4_ROLE_LAYER_SOURCES
   deepseek_v4/deepseek_v4_attention.cpp
