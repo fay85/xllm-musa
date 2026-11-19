@@ -34,6 +34,11 @@ constexpr uint32_t kHistGroups = 4;
 constexpr uint32_t kSglBlockSize = 512;
 constexpr uint32_t kHistGroupThreads = kSglBlockSize / kHistGroups;
 constexpr uint32_t kSglTopK = 512;
+constexpr int64_t kMqaLogitsSkipChunkElements = 8'000'000;
+constexpr int64_t kMqaLogitsFreeMemNumerator = 1;
+constexpr int64_t kMqaLogitsFreeMemDenominator = 5;
+constexpr int64_t kMqaLogitsTotalMemNumerator = 3;
+constexpr int64_t kMqaLogitsTotalMemDenominator = 10;
 
 // Every thread owns one channel. Each butterfly reads the previous stage
 // before any lane overwrites shared memory.
@@ -1180,11 +1185,28 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
             scaled_weights.data_ptr<float>(),
             query_rows);
     check_musa_kernel_launch("GLM IndexPool query quantization");
-    // At most 16 MiB of FP32 logits per chunk, and <=128 query rows to match
-    // the exported scheduler. Main history is never expanded per head.
-    const int64_t chunk = std::max<int64_t>(
-        1, std::min<int64_t>(128, (16 * 1024 * 1024) / (pools * 4)));
-    auto pool_ids = torch::arange(pools, ints).unsqueeze(0);
+    // Match sglang's policy. Keep the full logits matrix for normal batches,
+    // and only query the memory budget for workloads large enough to need it.
+    const int64_t logits_elements = tokens * pools;
+    int64_t chunk = tokens;
+    if (logits_elements >= kMqaLogitsSkipChunkElements) {
+      size_t free_memory = 0;
+      size_t total_memory = 0;
+      CHECK_EQ(musaMemGetInfo(&free_memory, &total_memory), musaSuccess);
+      const size_t free_memory_budget = free_memory *
+                                        kMqaLogitsFreeMemNumerator /
+                                        kMqaLogitsFreeMemDenominator;
+      const size_t total_memory_budget = total_memory *
+                                         kMqaLogitsTotalMemNumerator /
+                                         kMqaLogitsTotalMemDenominator;
+      const size_t logits_budget =
+          std::min(free_memory_budget, total_memory_budget);
+      const int64_t rows_per_chunk = static_cast<int64_t>(
+          logits_budget / (static_cast<size_t>(pools) * sizeof(float)));
+      chunk = std::max<int64_t>(1, std::min(tokens, rows_per_chunk));
+    }
+    scores =
+        torch::empty({tokens, pools}, query.options().dtype(torch::kFloat32));
     for (int64_t first = 0; first < tokens; first += chunk) {
       const int64_t size = std::min<int64_t>(chunk, tokens - first);
       auto lens = pool_lengths.narrow(0, first, size);
@@ -1206,16 +1228,11 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
                      to_ffi_tensor(table),
                      to_ffi_tensor(scheduling),
                      pools,
-                     true)
+                     false)
                 .cast<ffi::Tensor>();
       }
       auto chunk_scores = own_logits(std::move(ffi_logits), query.options())
                               .narrow(1, 0, pools);
-      chunk_scores.masked_fill_(pool_ids.ge(lens.unsqueeze(1)), -INFINITY);
-      if (!scores.defined()) {
-        scores = torch::empty({tokens, pools},
-                              query.options().dtype(torch::kFloat32));
-      }
       scores.narrow(0, first, size).copy_(chunk_scores);
     }
   }
