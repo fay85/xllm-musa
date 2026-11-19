@@ -44,6 +44,8 @@ limitations under the License.
 #include "framework/sampling/sampling_params.h"
 #if defined(USE_MUSA)
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
+#include "core/runtime/pcp_target_stream_handoff.h"
+#include "core/runtime/pcp_target_stream_policy.h"
 #endif
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
@@ -66,6 +68,17 @@ limitations under the License.
 
 namespace xllm {
 namespace {
+
+#if defined(USE_MUSA)
+Stream& pcp_prefill_target_pool_stream(Device& device) {
+  static thread_local std::unordered_map<int32_t, std::unique_ptr<Stream>> streams;
+  auto& stream = streams[device.index()];
+  if (stream == nullptr) {
+    stream = device.get_stream_from_pool();
+  }
+  return *stream;
+}
+#endif
 
 using speculative_worker::clear_all_output_embeddings;
 using speculative_worker::clear_selected_embeddings;
@@ -776,13 +789,54 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
   Timer timer;
   dsv4_reset_initialized_requests(this, input);
   ForwardInput processed_target_input;
+  Stream* target_stream = compute_stream_.get();
+  StreamEventPtr target_input_ready;
+  StreamEventPtr target_output_ready;
+#if defined(USE_MUSA)
+  static const bool enable_batch_target_pool = []() {
+    const char* value = std::getenv("XLLM_DSV4_PCP_BATCH_TARGET_POOL_STREAM");
+    return value != nullptr && std::string(value) == "1";
+  }();
+  speculative_worker::PcpTargetStreamPolicy pool_policy;
+  pool_policy.enabled = enable_batch_target_pool;
+  pool_policy.deepseek_v4 = util::is_deepseek_v4_model_type(
+      context_.get_model_args().model_type());
+  pool_policy.pd_prefill = options_.enable_disagg_pd() &&
+                           options_.instance_role() == InstanceRole::PREFILL;
+  pool_policy.prefill_like = input.input_params.meta.batch_forward_type.no_decode();
+  pool_policy.spec_verify = input.input_params.is_spec_verify;
+  pool_policy.graph_warmup = input.input_params.meta.is_graph_warmup;
+  pool_policy.schedule_overlap = enable_schedule_overlap();
+  pool_policy.cp_size = parallel_args_.cp_size();
+  pool_policy.dp_size = parallel_args_.dp_size();
+  pool_policy.num_sequences = input.input_params.meta.num_sequences;
+  if (speculative_worker::pcp_batch_target_pool_allowed(pool_policy)) {
+    target_stream = &pcp_prefill_target_pool_stream(device_);
+    // Request-state reset above may enqueue work on the original stream.
+    // The prepare-stream input event is also retained by run_worker_no_sync.
+    target_input_ready = speculative_worker::record_target_stream_handoff(
+        *compute_stream_, *target_stream);
+  }
+#endif
   ForwardOutput output =
       speculative_worker::run_worker_no_sync(*impl_,
                                              input,
                                              *prepare_stream_,
-                                             *compute_stream_,
+                                             *target_stream,
                                              &processed_target_input)
           .value();
+#if defined(USE_MUSA)
+  if (target_stream != compute_stream_.get()) {
+    // Non-overlap LLM forwards do not return ready_event. Establish an
+    // explicit exit dependency before any default-stream output consumer.
+    target_output_ready = speculative_worker::record_target_stream_handoff(
+        *target_stream, *compute_stream_);
+    LOG_FIRST_N(INFO, 1) << "[DSV4_PCP_BATCH_TARGET_POOL] sequences=2 cp=2"
+                         << " original=" << *compute_stream_
+                         << " target=" << *target_stream
+                         << " entry_and_exit_event=1 completion_wait_unchanged=1";
+  }
+#endif
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
 
