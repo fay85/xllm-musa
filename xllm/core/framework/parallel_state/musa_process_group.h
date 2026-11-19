@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/process_group.h"
+#include "core/util/env_var.h"
 
 namespace xllm {
 
@@ -49,6 +50,15 @@ class ProcessGroupImpl : public ProcessGroup {
     auto store = create_tcp_store(host, port, rank);
     pg_ = std::make_unique<c10d::ProcessGroupMCCL>(
         store, rank, rank_size, pg_options);
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+    // Reuse the CP collective stream instead of MCCL's separate unbatched P2P
+    // communicator stream.
+    if (group_name == "cp_group" &&
+        util::get_bool_env("XLLM_MUSA_MCCL_EAGER_P2P", false)) {
+      pg_->eagerConnectSingleDevice(device);
+    }
+#endif
     custom_all_reduce_ = std::make_unique<MusaCustomAllReduce>(
         rank, rank_size, group_name, device, store);
   }
@@ -73,6 +83,15 @@ class ProcessGroupImpl : public ProcessGroup {
     auto store = create_tcp_store(host, port, local_rank);
     pg_ = std::make_unique<c10d::ProcessGroupMCCL>(
         store, local_rank, rank_size, pg_options);
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+    // Reuse the CP collective stream instead of MCCL's separate unbatched P2P
+    // communicator stream.
+    if (group_name == "cp_group" &&
+        util::get_bool_env("XLLM_MUSA_MCCL_EAGER_P2P", false)) {
+      pg_->eagerConnectSingleDevice(device);
+    }
+#endif
     // Explicit CP ranks take this constructor. Prefill PCP broadcasts and
     // allgathers on cp_group, and those collectives use this all-reduce.
     if (group_name == "cp_group") {

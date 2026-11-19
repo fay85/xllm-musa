@@ -212,9 +212,16 @@ std::optional<ForwardOutput> LLMWorkerImpl::step(const ForwardInput& input) {
   }
 #endif
 
+#if defined(USE_MUSA)
+  CHECK(compute_stream_ != nullptr) << "compute stream is not initialized";
+  c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+  wait_input_ready_events(input, *compute_stream_);
+  return step_internal(input, ForwardSyncPolicy::LEGACY);
+#else
   std::unique_ptr<Stream> stream = device_.current_stream();
   wait_input_ready_events(input, *stream);
   return step_internal(input, ForwardSyncPolicy::LEGACY);
+#endif
 }
 
 std::optional<ForwardOutput> LLMWorkerImpl::step_for_schedule_overlap(
