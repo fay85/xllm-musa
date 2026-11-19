@@ -113,6 +113,9 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_FULL_DECODE_GRAPH", false);
     static_decode_ = full_decode_graph_ ||
                      util::get_bool_env("XLLM_DSV41_STATIC_DECODE", false);
+    decode_3072_bucket_ =
+        util::get_bool_env("XLLM_DSV41_DECODE_3072_BUCKET", false);
+    CHECK(!decode_3072_bucket_ || full_decode_graph_);
     if (static_decode_) {
       CHECK(!native_dspark_ ||
             (selective_spec_commit_ && verify_custom_allreduce_))
@@ -317,11 +320,14 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
           std::move(ratios),
           owner_attention_ ? std::function<void()>(
                                  [this]() { deep_ep_ll_->reset_for_capture(); })
-                           : std::function<void()>{});
+                           : std::function<void()>{},
+          decode_3072_bucket_);
       CHECK(native_dspark_ || args_.layers_to_capture().empty());
       LOG(INFO) << "Native V4.1 fixed-capacity C1 Decode/verify enabled, graph="
                 << full_decode_graph_
-                << ", rows=1..6, capacities=512/4096; Prefill stays eager";
+                << ", rows=1..6, capacities="
+                << (decode_3072_bucket_ ? "512/3072/4096" : "512/4096")
+                << "; Prefill stays eager";
     }
     if (!args_.layers_to_capture().empty()) {
       auxiliary_ = std::make_unique<AuxHiddenCapture>(
@@ -818,7 +824,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         (static_cast<int32_t>(verify_custom_allreduce_) << 2) |
         (static_cast<int32_t>(fused_spec_snapshot_) << 3) |
         (static_cast<int32_t>(gather_bf16_bits_) << 4) |
-        (static_cast<int32_t>(direct_rope_table_) << 5);
+        (static_cast<int32_t>(direct_rope_table_) << 5) |
+        (static_cast<int32_t>(decode_3072_bucket_) << 6);
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -1466,6 +1473,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   std::unique_ptr<AuxHiddenCapture> auxiliary_;
   std::unique_ptr<layer::DeepseekV41TextModel> model_;
   bool static_decode_ = false;
+  bool decode_3072_bucket_ = false;
   bool full_decode_graph_ = false;
   bool replicated_attention_ = false;
   bool owner_attention_ = false;

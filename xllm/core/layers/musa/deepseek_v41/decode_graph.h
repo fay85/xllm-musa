@@ -26,6 +26,7 @@ BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/layers/musa/deepseek_v41/attention.h"
+#include "core/layers/musa/deepseek_v41/decode_capacity.h"
 #include "core/layers/musa/deepseek_v41/state_checkpoint.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/musa_graph_handle.h"
@@ -55,10 +56,12 @@ class DeepseekV41DecodeGraph final {
 
   explicit DeepseekV41DecodeGraph(
       std::vector<int64_t> ratios,
-      std::function<void()> communication_capture_boundary = {})
+      std::function<void()> communication_capture_boundary = {},
+      bool enable_3072_bucket = false)
       : communication_capture_boundary_(
             std::move(communication_capture_boundary)),
-        ratios_(std::move(ratios)) {}
+        ratios_(std::move(ratios)),
+        enable_3072_bucket_(enable_3072_bucket) {}
 
   torch::Tensor run(const DeepseekV41DecodeInputs& input,
                     bool replay_graph,
@@ -70,7 +73,8 @@ class DeepseekV41DecodeGraph final {
     CHECK_GT(input.context_length, 0);
     CHECK_LE(input.context_length, 4096);
     CHECK_EQ(input.caches.size(), ratios_.size());
-    const int64_t capacity = input.context_length <= 512 ? 512 : 4096;
+    const int64_t capacity = deepseek_v41_decode_capacity(
+        input.context_length, enable_3072_bucket_);
     const Key key{capacity,
                   (input.context_length - input.tokens.numel()) % 2,
                   input.swa_table.size(1),
@@ -302,6 +306,7 @@ class DeepseekV41DecodeGraph final {
 
   std::function<void()> communication_capture_boundary_;
   std::vector<int64_t> ratios_;
+  const bool enable_3072_bucket_;
   std::optional<c10::musa::MempoolId_t> pool_;
   std::map<Key, std::unique_ptr<Entry>> entries_;
 };
