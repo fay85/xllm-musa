@@ -22,6 +22,7 @@ limitations under the License.
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <string>
 
 #include "async_response_processor.h"
 #include "common/metrics.h"
@@ -120,6 +121,59 @@ bool has_prefill_sequence(const std::vector<Sequence*>& sequences) {
       sequences.begin(), sequences.end(), [](const Sequence* sequence) {
         return sequence != nullptr && sequence->is_prefill_stage();
       });
+}
+
+bool pcp_environment_is_one(const char* name) {
+  const char* setting = std::getenv(name);
+  return setting != nullptr && std::string(setting) == "1";
+}
+
+int32_t pcp_prefill_microbatch_limit(const SchedulerState& state,
+                                   const BatchMode& mode) {
+  const char* setting = std::getenv("XLLM_DSV4_PCP_PREFILL_MICROBATCH");
+  const auto& options = state.options;
+  if (setting == nullptr || std::string(setting) != "2" ||
+      !pcp_environment_is_one("XLLM_DSV4_PCP") ||
+      !pcp_environment_is_one("XLLM_DSV4_SINGLE_SEQUENCE_PREFILL") ||
+      !pcp_environment_is_one("XLLM_DSV4_PCP_MULTI_SEQUENCE_EXPERIMENT") ||
+      !pcp_environment_is_one("XLLM_DSV4_PCP_PER_SEQUENCE") ||
+      state.model_args.model_type() != "deepseek_v4" ||
+      mode.enable_mix_batch || !mode.enable_chunked_prefill ||
+      !options.enable_disagg_pd() || !options.instance_role().has_value() ||
+      options.instance_role().value() != InstanceRole::PREFILL ||
+      options.cp_size() != 2 || options.dp_size() != 1 ||
+      options.nnodes() != 8 ||
+      ParallelConfig::get_instance().ep_size() != 1 ||
+      options.enable_schedule_overlap() ||
+      ExecutionConfig::get_instance().enable_prefill_piecewise_graph()) {
+    return 0;
+  }
+  return 2;
+}
+
+bool compatible_pcp_prefill_sequence(
+    const Sequence* candidate,
+    const std::vector<Sequence*>& running_sequences,
+    const std::vector<size_t>& running_budgets,
+    size_t candidate_tokens) {
+  constexpr size_t kMinPcpQueryTokens = 2048;
+  if (candidate == nullptr || !candidate->is_chunked_prefill_stage() ||
+      running_sequences.size() != 1 || running_budgets.size() != 1 ||
+      running_budgets.front() < kMinPcpQueryTokens ||
+      candidate_tokens != running_budgets.front()) {
+    return false;
+  }
+  const Sequence* running = running_sequences.front();
+  return running != nullptr && running != candidate &&
+         running->is_chunked_prefill_stage() &&
+         running->request_id() != candidate->request_id() &&
+         running->num_prompt_tokens() == candidate->num_prompt_tokens() &&
+         running->num_tokens() == candidate->num_tokens() &&
+         running->kv_cache_tokens_num() == candidate->kv_cache_tokens_num() &&
+         running->num_need_compute_tokens() ==
+             candidate->num_need_compute_tokens() &&
+         running->dp_rank() >= 0 &&
+         running->dp_rank() == candidate->dp_rank();
 }
 #endif
 
@@ -285,6 +339,17 @@ void SchedulerPolicy::schedule_prefill_from_queue(
   const bool single_sequence_prefill = !batch_mode_.enable_mix_batch &&
                                        single_prefill_env != nullptr &&
                                        std::string(single_prefill_env) == "1";
+#if defined(USE_MUSA)
+  const int32_t pcp_microbatch_limit =
+      pcp_prefill_microbatch_limit(state, batch_mode_);
+#else
+  const int32_t pcp_microbatch_limit = 0;
+#endif
+  if (pcp_microbatch_limit > 0) {
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_PCP_PREFILL_MICROBATCH] limit="
+        << pcp_microbatch_limit;
+  }
   if (single_sequence_prefill) {
     LOG_FIRST_N(INFO, 1)
         << "[DSV4_SINGLE_SEQUENCE_PREFILL] one prefill sequence per step; "
@@ -295,17 +360,12 @@ void SchedulerPolicy::schedule_prefill_from_queue(
          budget.remaining_token_budget > 0 &&
          budget.latency_budget > budget.estimate_latency) {
 #if defined(USE_MUSA)
-    if (limit_prefill_to_one_sequence(state) &&
+    const bool piecewise_graph_limit = limit_prefill_to_one_sequence(state);
+    if (piecewise_graph_limit &&
         has_prefill_sequence(state.running_sequences)) {
       break;
     }
 #endif
-    // Keep the validated single-sequence SP prefill route while diagnosing
-    // packed-prefill collectives. Do not serialize decode or reject pending
-    // requests; they remain in this queue for subsequent prefill steps.
-    if (single_sequence_prefill && !state.running_sequences.empty()) {
-      break;
-    }
     // Memory-utilization short-circuit.
     if (!options_.enable_disagg_pd() &&
         state.kv_cache_manager->kv_cache_utilization() >=
@@ -316,6 +376,21 @@ void SchedulerPolicy::schedule_prefill_from_queue(
     }
 
     std::shared_ptr<Request> request(queue->top());
+    // Keep the validated single-sequence SP prefill route while diagnosing
+    // packed-prefill collectives. Do not serialize decode or reject pending
+    // requests; they remain in this queue for subsequent prefill steps.
+    // Prefix matching can change cached/remaining lengths. Only decide here
+    // whether a second single-sequence request may be considered; compare the
+    // actual shape after matching below, before allocating its new KV pages.
+    const bool joining_pcp_microbatch =
+        pcp_microbatch_limit == 2 && state.running_sequences.size() == 1 &&
+        state.running_sequences_budgets.size() == 1 &&
+        request->sequences().size() == 1 && !request->check_beam_search();
+    if (single_sequence_prefill && !state.running_sequences.empty() &&
+        !joining_pcp_microbatch) {
+      break;
+    }
+
     if (request->finished() || request->cancelled()) {
       clear_mtp_bootstrap(request.get(), state);
       state.kv_cache_manager->deallocate(request.get());
@@ -400,6 +475,10 @@ void SchedulerPolicy::schedule_prefill_from_queue(
         prefill_sequence->set_dp_rank(dp_rank);
       }
 
+      if (joining_pcp_microbatch ||
+          !prefill_sequence->kv_state().has_any_blocks()) {
+        allocate_shared_blocks_for(prefill_sequence.get(), state);
+      }
       size_t num_tokens = compute_prefill_tokens(
           prefill_sequence.get(),
           budget.remaining_token_budget - allocated_tokens,
@@ -414,6 +493,23 @@ void SchedulerPolicy::schedule_prefill_from_queue(
                                        budget.dp_group_token_used[dp_rank];
         num_tokens = std::min(num_tokens, group_remaining);
       }
+#if defined(USE_MUSA)
+      if (joining_pcp_microbatch) {
+        // compute_prefill_tokens() returns a budget, not always the remaining
+        // query count. Use the post-prefix-match length that the allocator
+        // will actually schedule. A clipped second chunk is not admissible.
+        num_tokens = std::min(num_tokens,
+                              prefill_sequence->num_need_compute_tokens());
+        if (!compatible_pcp_prefill_sequence(
+                prefill_sequence.get(),
+                state.running_sequences,
+                state.running_sequences_budgets,
+                num_tokens)) {
+          can_schedule = false;
+          break;
+        }
+      }
+#endif
       if (num_tokens == 0) {
         continue;
       }
@@ -447,8 +543,11 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       //   and sequence is reset inside kv_cache_manager->allocate().
       // - In-flight chunked requests: existing blocks are preserved.
       // No external deallocate needed here.
-      if (!allocate_for_prefill(
-              prefill_sequence.get(), num_tokens, &actual_tokens, state)) {
+      if (!allocate_for_prefill(prefill_sequence.get(),
+                                num_tokens,
+                                &actual_tokens,
+                                state,
+                                /*skip_shared=*/joining_pcp_microbatch)) {
         const char* barrier_diagnostic =
             std::getenv("XLLM_DSV4_DECODE_BATCH_BARRIER");
         if (barrier_diagnostic != nullptr) {
@@ -466,6 +565,20 @@ void SchedulerPolicy::schedule_prefill_from_queue(
         blocks_exhausted = true;
         break;
       }
+
+#if defined(USE_MUSA)
+      if (joining_pcp_microbatch &&
+          !compatible_pcp_prefill_sequence(prefill_sequence.get(),
+                                           state.running_sequences,
+                                           state.running_sequences_budgets,
+                                           actual_tokens)) {
+        // Do not commit an incompatible second sequence. Allocation may have
+        // reserved pages, but no compute was scheduled and its cached-token
+        // count was not advanced. Keep those pages with the queued request.
+        can_schedule = false;
+        break;
+      }
+#endif
 
       prefill_sequences_budget.emplace_back(actual_tokens);
       prefill_sequences.emplace_back(prefill_sequence.get());
@@ -503,6 +616,22 @@ void SchedulerPolicy::schedule_prefill_from_queue(
         state.running_sequences_budgets.end(),
         prefill_sequences_budget.begin(),
         prefill_sequences_budget.end());
+#if defined(USE_MUSA)
+    if (joining_pcp_microbatch) {
+      CHECK_EQ(state.running_sequences.size(), 2);
+      CHECK_EQ(state.running_sequences_budgets.size(), 2);
+      LOG(INFO) << "[DSV4_PCP_PREFILL_MICROBATCH] accepted sequences=2"
+                << " request0=" << state.running_sequences[0]->request_id()
+                << " request1=" << state.running_sequences[1]->request_id()
+                << " query0=" << state.running_sequences_budgets[0]
+                << " query1=" << state.running_sequences_budgets[1]
+                << " cached0="
+                << state.running_sequences[0]->kv_cache_tokens_num()
+                << " cached1="
+                << state.running_sequences[1]->kv_cache_tokens_num()
+                << " dp_rank=" << state.running_sequences[0]->dp_rank();
+    }
+#endif
     cache_in_batch_prefix(prefill_sequences, prefill_sequences_budget, state);
 
     // Update reserved footprint for the admission gate.
@@ -553,6 +682,30 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                            kv_split_for_align,
                                            state.kv_cache_manager->block_size(),
                                            remaining_in_seq);
+
+  if (has_linear_attention_layers(state.model_args) &&
+      state.enable_prefix_cache &&
+      seq->num_tokens() > 3 * max_tokens_per_chunk &&
+      kv_cache_tokens_num >= 3 * max_tokens_per_chunk &&
+      remaining_in_seq > 0) {
+    const size_t block_size =
+        static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+    const size_t cp_align =
+        static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) * block_size;
+    const size_t fine_stride =
+        std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
+    const size_t next_fine_boundary =
+        ((kv_cache_tokens_num / fine_stride) + 1) * fine_stride;
+    if (next_fine_boundary < seq->num_tokens()) {
+      num_tokens = std::min(num_tokens, next_fine_boundary - kv_cache_tokens_num);
+    } else if (seq->num_tokens() > cp_align) {
+      const size_t last_cp_boundary =
+          ((seq->num_tokens() - 1) / cp_align) * cp_align;
+      if (last_cp_boundary > kv_cache_tokens_num) {
+        num_tokens = std::min(num_tokens, last_cp_boundary - kv_cache_tokens_num);
+      }
+    }
+  }
 
   return num_tokens;
 }

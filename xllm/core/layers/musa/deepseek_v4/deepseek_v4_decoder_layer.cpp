@@ -19,17 +19,24 @@ limitations under the License.
 
 #include <cstdlib>
 #include <string>
+#include <string_view>
 
 #include "core/common/flash_comm1_context.h"
+#include "core/framework/parallel_state/musa_process_group.h"
 #include "core/kernels/musa/deepseek_v4_hc_policy.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/common/dsa_metadata.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_gate_policy.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_hc_tiled_prefill.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_pd_reduce_scatter_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_runtime_options.h"
 
 namespace xllm {
 namespace layer {
+
+namespace {
+constexpr int64_t kShortMoeGatherMaxRows = 4096;
+}  // namespace
 
 DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
     const ModelContext& context,
@@ -50,15 +57,20 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   norm_eps_ = static_cast<double>(args.rms_norm_eps());
 
   attention_ = register_module("attn", DeepseekV4Attention(context, layer_id));
-  CHECK(parallel_args.single_rank_group_ != nullptr)
-      << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
-         "process group for replicated attention";
-  ParallelArgs prefill_parallel_args = parallel_args;
-  prefill_parallel_args.tp_group_ = parallel_args.single_rank_group_;
-  prefill_attention_ = register_module(
-      "prefill_attn",
-      DeepseekV4Attention(
-          args, quant_args, prefill_parallel_args, options, layer_id));
+  // The DSpark draft model is explicitly excluded from Prefill-SP in
+  // DeepseekV4ModelImpl::forward. Do not allocate/load a second full-head
+  // Attention and its workspaces for a lane that can never run.
+  if (args.dspark_block_size() == 0) {
+    CHECK(parallel_args.single_rank_group_ != nullptr)
+        << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
+           "process group for replicated attention";
+    ParallelArgs prefill_parallel_args = parallel_args;
+    prefill_parallel_args.tp_group_ = parallel_args.single_rank_group_;
+    prefill_attention_ = register_module(
+        "prefill_attn",
+        DeepseekV4Attention(
+            args, quant_args, prefill_parallel_args, options, layer_id));
+  }
   attn_norm_ = register_module(
       "attn_norm", RMSNorm(hidden_size, args.rms_norm_eps(), options));
   ffn_norm_ = register_module(
@@ -110,7 +122,9 @@ void DeepseekV4DecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
   }
   if (attn_state.size() > 0) {
     attention_->load_state_dict(attn_state);
-    prefill_attention_->load_state_dict(attn_state);
+    if (prefill_attention_) {
+      prefill_attention_->load_state_dict(attn_state);
+    }
   }
 
   auto attn_norm_state = state_dict.get_dict_with_prefix("attn_norm.");
@@ -206,6 +220,7 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
                    kv_cache.get_compress_index_score_state()};
   DeepseekV4Attention active_attention = attention_;
   if (sequence_parallel_context_ != nullptr) {
+    CHECK(prefill_attention_) << "DSpark draft cannot enter Prefill-SP";
     prefill_attention_->set_sequence_parallel_context(
         sequence_parallel_context_);
     active_attention = prefill_attention_;
@@ -251,12 +266,16 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
     ffn_input = gather_sequence(ffn_input, *fc1_ctx);
   }
 
-  const char* skip_sp_moe_gather_env =
-      std::getenv("XLLM_DSV4_SP_SKIP_MOE_ALLGATHER");
-  const bool skip_sp_moe_gather = skip_sp_moe_gather_env != nullptr &&
-                                  std::string(skip_sp_moe_gather_env) == "1" &&
-                                  sequence_parallel_context_ != nullptr;
-  if (sequence_parallel_context_ != nullptr && !skip_sp_moe_gather) {
+  const bool skip_sp_moe_gather =
+      dsv4_runtime_option<DeepseekV4Env::SP_SKIP_MOE_ALLGATHER>().is_one() &&
+      sequence_parallel_context_ != nullptr;
+  const bool batch_pcp =
+      pcp_context_ != nullptr && dsv4_musa_pcp::is_batch(*pcp_context_);
+  if (batch_pcp) {
+    CHECK(!skip_sp_moe_gather);
+    // All expert shards must consume the same sequence-major token order.
+    ffn_input = dsv4_musa_pcp::gather_batch_global(ffn_input, *pcp_context_);
+  } else if (sequence_parallel_context_ != nullptr && !skip_sp_moe_gather) {
     const dsv4_musa_sp::DeepseekV4SPContext& sp = *sequence_parallel_context_;
     CHECK_EQ(ffn_input.size(0), sp.local_tokens)
         << "DeepSeek-V4 SP MoE input has unexpected local token rows";
@@ -264,13 +283,39 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
         pcp_context_ != nullptr && pcp_context_->global_sp.has_value()
             ? pcp_context_->global_sp.value()
             : sp;
-    ffn_input = dsv4_musa_sp::gather_global(ffn_input, gather_context);
+    // Match the qualified short-row PCP path. Long/chunked rendezvous and
+    // other model or asynchronous gather callers retain their old contract.
+    const bool short_pcp_gather =
+        pcp_context_ != nullptr && pcp_context_->global_sp.has_value() &&
+        gather_context.world_size == kDsv4PrefillReduceWorldSize &&
+        gather_context.total_tokens >= kDsv4PrefillReduceMinRows &&
+        gather_context.total_tokens < kShortMoeGatherMaxRows &&
+        gather_context.local_tokens * gather_context.world_size ==
+            gather_context.total_tokens &&
+        ffn_input.scalar_type() == torch::kBFloat16;
+    if (short_pcp_gather) {
+      auto* musa_group =
+          dynamic_cast<ProcessGroupImpl*>(gather_context.process_group);
+      CHECK(musa_group != nullptr);
+      torch::Tensor local_input = ffn_input.contiguous();
+      auto gathered_shape = local_input.sizes().vec();
+      gathered_shape.insert(gathered_shape.begin(), gather_context.world_size);
+      torch::Tensor gathered =
+          torch::empty(gathered_shape, local_input.options());
+      musa_group->allgather_on_compute_stream(local_input, gathered);
+      ffn_input = gathered.flatten(/*start_dim=*/0, /*end_dim=*/1);
+      LOG_FIRST_N(INFO, 2)
+          << "[DSV4_SHORT_MOE_GATHER_COMPUTE_STREAM] rows="
+          << gather_context.total_tokens;
+    } else {
+      ffn_input = dsv4_musa_sp::gather_global(ffn_input, gather_context);
+    }
   }
   if (pcp_context_ != nullptr) {
     CHECK(!skip_sp_moe_gather);
     // Experts remain sharded over the full eight-rank world. All expert
     // groups must reduce the same global token rows, not different CP halves.
-    if (!pcp_context_->global_sp.has_value()) {
+    if (!batch_pcp && !pcp_context_->global_sp.has_value()) {
       ffn_input = dsv4_musa_pcp::relay_kv(ffn_input, *pcp_context_);
     }
   }
@@ -336,7 +381,8 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       reduce_scatter_context = &sp;
     }
   }
-  if (pcp_context_ != nullptr && sequence_parallel_context_ != nullptr &&
+  if (pcp_context_ != nullptr && !batch_pcp &&
+      sequence_parallel_context_ != nullptr &&
       dsv4_pd_reduce_scatter_enabled()) {
     const auto& sp = *sequence_parallel_context_;
     ProcessGroup* group = pcp_context_->moe_group;

@@ -17,11 +17,14 @@ limitations under the License.
 #include <musa_runtime.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <string>
 #include <utility>
+
+#include "core/framework/parallel_state/musa_process_group.h"
 
 namespace xllm::layer::dsv4_musa_pcp {
 namespace {
@@ -33,12 +36,21 @@ constexpr int64_t kMinRowsPerGroup = 1024;
 // attention kernels expect).
 constexpr int64_t kRowAlignment = 128;
 
+void broadcast_rows(torch::Tensor& rows,
+                    const Context& context,
+                    int32_t root_rank) {
+  auto* musa_group = dynamic_cast<ProcessGroupImpl*>(context.cross_group);
+  CHECK(musa_group != nullptr);
+  CHECK_EQ(musa_group->world_size(), kSupportedCpSize);
+  musa_group->broadcast_on_compute_stream(rows, root_rank);
+}
+
 void synchronize_peer_groups(const Context& context) {
   CHECK(context.global_group != nullptr);
   CHECK_EQ(musaDeviceSynchronize(), musaSuccess);
-  // A fast CP pair must not launch spinning MCCL work while another pair
-  // still allocates buffers or finishes a TP collective on the same devices.
-  musa_long_prefill_host_barrier(context.global_group);
+  // Diagnostic candidate: CP collectives run on the compute stream.
+  // Keep local producer completion and preallocated receive buffers; test
+  // whether the world host rendezvous remains necessary for this route.
 }
 
 bool pcp_env_enabled() {
@@ -70,6 +82,63 @@ int64_t balanced_front_rows(int64_t total_rows) {
     }
   }
   return best_rows;
+}
+
+torch::Tensor indices_to_device(const std::vector<int64_t>& indices,
+                                const torch::Device& device) {
+  return torch::tensor(indices,
+                       torch::TensorOptions().dtype(torch::kInt64))
+      .to(device);
+}
+
+// Preserve arbitrary trailing dimensions: KV can be [rows, 1, head_dim],
+// hidden can be [rows, hc, hidden], and token IDs have only one dimension.
+torch::Tensor exchange_partitioned_rows(
+    const torch::Tensor& rows,
+    const std::vector<std::array<int64_t, 2>>& counts,
+    const Context& context) {
+  CHECK(rows.defined());
+  CHECK_GT(rows.dim(), 0);
+  CHECK(!counts.empty());
+  CHECK_GE(context.cp_rank, 0);
+  CHECK_LT(context.cp_rank, kSupportedCpSize);
+  std::array<int64_t, 2> totals{0, 0};
+  for (const auto& count : counts) {
+    CHECK_GE(count[0], 0);
+    CHECK_GE(count[1], 0);
+    totals[0] += count[0];
+    totals[1] += count[1];
+  }
+  CHECK_EQ(rows.size(0), totals[static_cast<size_t>(context.cp_rank)]);
+  const torch::Tensor send_buffer = rows.contiguous();
+  auto front_shape = rows.sizes().vec();
+  auto back_shape = front_shape;
+  front_shape[0] = totals[0];
+  back_shape[0] = totals[1];
+  torch::Tensor front = context.cp_rank == 0
+                            ? send_buffer
+                            : torch::empty(front_shape, rows.options());
+  torch::Tensor back = context.cp_rank == 1
+                           ? send_buffer
+                           : torch::empty(back_shape, rows.options());
+  // Counts are derived from the same immutable layout on both CP groups.
+  // Zero-sized collectives are skipped identically by every participating rank.
+  if (totals[0] > 0) {
+    broadcast_rows(front, context, /*root_rank=*/0);
+  }
+  if (totals[1] > 0) {
+    broadcast_rows(back, context, /*root_rank=*/1);
+  }
+  std::vector<torch::Tensor> sequence_parts;
+  sequence_parts.reserve(2 * counts.size());
+  std::array<int64_t, 2> offsets{0, 0};
+  for (const auto& count : counts) {
+    sequence_parts.emplace_back(front.narrow(/*dim=*/0, offsets[0], count[0]));
+    sequence_parts.emplace_back(back.narrow(/*dim=*/0, offsets[1], count[1]));
+    offsets[0] += count[0];
+    offsets[1] += count[1];
+  }
+  return torch::cat(sequence_parts, /*dim=*/0);
 }
 
 }  // namespace
@@ -121,11 +190,7 @@ void build_context(int64_t total_rows,
           ? total_rows / 2
           : balanced_front_rows(total_rows);
   if (front_rows < 0 || front_rows >= total_rows) {
-    if (total_rows < 2 * kMinRowsPerGroup) {
-      // fall through with front_rows == 0
-    } else {
-      return;
-    }
+    return;
   }
   Context value;
   value.cross_group = cross_group;
@@ -192,9 +257,170 @@ void build_context(int64_t total_rows,
                        << context->value().group_sp->local_tokens;
 }
 
+void build_batch_context(const SequenceLayout& layout,
+                         const ParallelArgs& parallel_args,
+                         const torch::Tensor& global_tokens,
+                         std::optional<Context>* context) {
+  CHECK(context != nullptr);
+  context->reset();
+  const char* setting = std::getenv("XLLM_DSV4_PCP_PER_SEQUENCE");
+  constexpr int32_t kSupportedTpSize = 4;
+  constexpr int32_t kWorldSize = kSupportedCpSize * kSupportedTpSize;
+  if (setting == nullptr || std::string(setting) != "1" ||
+      !pcp_env_enabled() || ::xllm::kernel::musa::is_stream_capturing() ||
+      layout.spans().size() != 2 || !global_tokens.defined() ||
+      global_tokens.dim() != 1 ||
+      global_tokens.numel() != layout.total_rows() ||
+      parallel_args.cp_size() != kSupportedCpSize ||
+      parallel_args.ep_size() != 1 || parallel_args.cp_group_ == nullptr ||
+      parallel_args.tp_group_ == nullptr ||
+      parallel_args.process_group_ == nullptr ||
+      parallel_args.moe_tp_group_ == nullptr) {
+    return;
+  }
+  ProcessGroup* cross_group = parallel_args.cp_group_;
+  ProcessGroup* tp_group = parallel_args.tp_group_;
+  ProcessGroup* global_group = parallel_args.process_group_;
+  ProcessGroup* moe_group = parallel_args.moe_tp_group_;
+  if (cross_group->world_size() != kSupportedCpSize ||
+      tp_group->world_size() != kSupportedTpSize ||
+      global_group->world_size() != kWorldSize ||
+      moe_group->world_size() != kWorldSize) {
+    return;
+  }
+  const int32_t cp_rank = cross_group->rank();
+  const int32_t tp_rank = tp_group->rank();
+  if (cp_rank < 0 || cp_rank >= kSupportedCpSize || tp_rank < 0 ||
+      tp_rank >= kSupportedTpSize ||
+      global_group->rank() != cp_rank * kSupportedTpSize + tp_rank ||
+      moe_group->rank() != global_group->rank()) {
+    return;
+  }
+  const auto front_count = layout.group_rows(/*cp_rank=*/0);
+  const auto own_count = layout.group_rows(cp_rank);
+  const auto restore = layout.restore_indices(/*max_rows=*/layout.total_rows());
+  if (!front_count.has_value() || !own_count.has_value() ||
+      !restore.has_value()) {
+    return;
+  }
+
+  Context value;
+  value.cross_group = cross_group;
+  value.global_group = global_group;
+  value.moe_group = moe_group;
+  value.cp_rank = cp_rank;
+  value.cp_size = kSupportedCpSize;
+  value.front_rows = *front_count;
+  value.total_rows = layout.total_rows();
+  value.global_input_ids = global_tokens;
+  value.batch_layout = layout;
+
+  std::vector<int64_t> group_indices;
+  group_indices.reserve(static_cast<size_t>(*own_count));
+  for (const auto& span : layout.spans()) {
+    const int64_t start = span.packed_start +
+                          (cp_rank == 0 ? 0 : span.front_rows);
+    const int64_t count = cp_rank == 0 ? span.front_rows
+                                      : span.length - span.front_rows;
+    for (int64_t row = 0; row < count; ++row) {
+      group_indices.emplace_back(start + row);
+    }
+  }
+  CHECK_EQ(static_cast<int64_t>(group_indices.size()), *own_count);
+  value.batch_group_indices =
+      indices_to_device(group_indices, global_tokens.device());
+  value.batch_restore_indices =
+      indices_to_device(*restore, global_tokens.device());
+
+  dsv4_musa_sp::DeepseekV4SPContext group_sp;
+  group_sp.process_group = tp_group;
+  group_sp.rank = tp_rank;
+  group_sp.world_size = kSupportedTpSize;
+  group_sp.total_tokens = *own_count;
+  group_sp.local_tokens = layout.rank_capacity();
+  group_sp.local_offset = std::min<int64_t>(
+      static_cast<int64_t>(tp_rank) * group_sp.local_tokens, *own_count);
+  group_sp.local_valid_tokens = std::max<int64_t>(
+      0, std::min<int64_t>(group_sp.local_tokens,
+                           *own_count - group_sp.local_offset));
+  // This field is no longer a valid global position for a batch. Consumers
+  // must use batch_layout.rank_spans()/local_rows_from_global() instead.
+  group_sp.global_row_start = 0;
+  group_sp.global_input_ids =
+      global_tokens.index_select(/*dim=*/0, value.batch_group_indices);
+  value.batch_local_indices = value.batch_group_indices.narrow(
+      /*dim=*/0, group_sp.local_offset, group_sp.local_valid_tokens);
+  value.group_sp = std::move(group_sp);
+  // Uniform single-sequence ReduceScatter relies on contiguous rank ranges.
+  // This batch has a different permutation; never populate the old fast-path
+  // marker, even when front/back counts happen to be equal.
+  value.global_sp = std::nullopt;
+  *context = std::move(value);
+  LOG_FIRST_N(INFO, 8)
+      << "[DSV4_PCP_BATCH_LAYOUT] cp_rank=" << cp_rank
+      << " tp_rank=" << tp_rank << " sequences=" << layout.spans().size()
+      << " rows=" << layout.total_rows()
+      << " rank_capacity=" << layout.rank_capacity()
+      << " local_valid=" << context->value().group_sp->local_valid_tokens;
+}
+
+torch::Tensor local_rows_from_global(const torch::Tensor& global,
+                                     const Context& context,
+                                     bool pad_to_capacity) {
+  CHECK(is_batch(context));
+  CHECK(context.group_sp.has_value());
+  CHECK(global.defined());
+  CHECK_GT(global.dim(), 0);
+  CHECK_EQ(global.size(0), context.total_rows);
+  CHECK_EQ(global.device(), context.batch_local_indices.device());
+  torch::Tensor local =
+      global.index_select(/*dim=*/0, context.batch_local_indices);
+  if (!pad_to_capacity) {
+    return local;
+  }
+  return dsv4_musa_sp::pad_local(local, context.group_sp.value());
+}
+
+torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
+                                 const Context& context) {
+  CHECK(is_batch(context));
+  CHECK(context.group_sp.has_value());
+  CHECK(local_rows.defined());
+  CHECK_GT(local_rows.dim(), 0);
+  const auto& group_sp = context.group_sp.value();
+  CHECK(local_rows.size(0) == group_sp.local_tokens ||
+        local_rows.size(0) == group_sp.local_valid_tokens);
+  torch::Tensor padded = local_rows;
+  if (local_rows.size(0) != group_sp.local_tokens) {
+    padded = dsv4_musa_sp::pad_local(local_rows, group_sp);
+  }
+  // Match the validated r6 dependent gather route: prepare receive storage
+  // before enqueue and keep the collective/consumer on the compute stream.
+  // Unlike the old contiguous-rank fast path, always restore the batch row
+  // permutation after gathering all eight equal-capacity payloads.
+  auto* musa_group = dynamic_cast<ProcessGroupImpl*>(context.global_group);
+  CHECK(musa_group != nullptr);
+  torch::Tensor input = padded.contiguous();
+  auto gathered_shape = input.sizes().vec();
+  gathered_shape.insert(gathered_shape.begin(), context.global_group->world_size());
+  torch::Tensor gathered = torch::empty(gathered_shape, input.options());
+  musa_group->allgather_on_compute_stream(input, gathered);
+  const torch::Tensor rank_major =
+      gathered.flatten(/*start_dim=*/0, /*end_dim=*/1);
+  CHECK_EQ(rank_major.size(0), context.batch_layout->padded_rows());
+  CHECK_EQ(rank_major.device(), context.batch_restore_indices.device());
+  return rank_major.index_select(/*dim=*/0, context.batch_restore_indices);
+}
+
 torch::Tensor shard_rows(const torch::Tensor& global, const Context& context) {
   if (!global.defined()) {
     return global;
+  }
+  if (is_batch(context)) {
+    CHECK_GT(global.dim(), 0);
+    CHECK_EQ(global.size(0), context.total_rows);
+    CHECK_EQ(global.device(), context.batch_group_indices.device());
+    return global.index_select(/*dim=*/0, context.batch_group_indices);
   }
   const int64_t start = context.cp_rank == 0 ? 0 : context.front_rows;
   return global.narrow(/*dim=*/0, start, group_rows(context)).contiguous();
@@ -203,6 +429,8 @@ torch::Tensor shard_rows(const torch::Tensor& global, const Context& context) {
 torch::Tensor exchange_rows_global_slots(const torch::Tensor& local_rows,
                                          const torch::Tensor& global_slots,
                                          Context& context) {
+  CHECK(!is_batch(context))
+      << "Batched PCP compression must preserve per-sequence block ranges";
   CHECK(local_rows.defined() && global_slots.defined());
   const int64_t total_rows = global_slots.numel();
   const int64_t local_row_count = local_rows.size(0);
@@ -226,7 +454,38 @@ torch::Tensor exchange_rows_global_slots(const torch::Tensor& local_rows,
   return relay_kv(local_rows, compressed_context);
 }
 
+torch::Tensor exchange_batch_compressed_rows(
+    const torch::Tensor& local_rows,
+    const torch::Tensor& global_slots,
+    int64_t ratio,
+    Context& context) {
+  CHECK(is_batch(context));
+  CHECK(local_rows.defined() && global_slots.defined());
+  const auto spans = context.batch_layout->compressed_spans(ratio);
+  CHECK(spans.has_value());
+  std::vector<std::array<int64_t, 2>> counts;
+  counts.reserve(spans->size());
+  int64_t expected_rows = 0;
+  for (const auto& span : *spans) {
+    counts.emplace_back(std::array<int64_t, 2>{
+        span.split_block - span.first_block, span.end_block - span.split_block});
+    expected_rows += span.end_block - span.first_block;
+  }
+  CHECK_EQ(global_slots.numel(), expected_rows)
+      << "Compressed slots must remain in sequence-major completed-row order";
+  return exchange_partitioned_rows(local_rows, counts, context);
+}
+
 torch::Tensor relay_kv(torch::Tensor rows, Context& context) {
+  if (is_batch(context)) {
+    std::vector<std::array<int64_t, 2>> counts;
+    counts.reserve(context.batch_layout->spans().size());
+    for (const auto& span : context.batch_layout->spans()) {
+      counts.emplace_back(std::array<int64_t, 2>{span.front_rows,
+                                                span.length - span.front_rows});
+    }
+    return exchange_partitioned_rows(rows, counts, context);
+  }
   // Bidirectional half exchange via two broadcasts.  Raw p2p on the 2-rank
   // group aborts inside MCCL 2.28.9 (unhandled error at ProcessGroupMCCL
   // 3321) on the first real-data exchange inside the attention forward,
@@ -239,9 +498,9 @@ torch::Tensor relay_kv(torch::Tensor rows, Context& context) {
   const int64_t own_rows = rows.size(0);
   CHECK_EQ(own_rows, is_front ? front : back)
       << "PCP relay received unexpected group row count";
-  // The completion rendezvous below finishes all broadcasts before this
-  // local buffer is released. Retaining one full FFN buffer per layer wastes
-  // gigabytes and prevents the allocator from reusing stable storage.
+  // CP broadcasts and their consumers remain on the compute stream.
+  // Tensor storage is reused only after same-stream consumers complete;
+  // do not retain a full FFN buffer per layer.
   torch::Tensor send_buffer = rows.contiguous();
 
   auto front_shape = rows.sizes().vec();
@@ -253,10 +512,12 @@ torch::Tensor relay_kv(torch::Tensor rows, Context& context) {
   torch::Tensor back_half =
       is_front ? torch::empty(back_shape, rows.options()) : send_buffer;
 
-  synchronize_peer_groups(context);
-  context.cross_group->broadcast(front_half, /*root_rank=*/0);
-  context.cross_group->broadcast(back_half, /*root_rank=*/1);
-  synchronize_peer_groups(context);
+  // Producer writes, CP broadcasts, and the consumer are ordered on the
+  // same compute stream. Keep receive storage allocated before enqueue.
+  broadcast_rows(front_half, context, /*root_rank=*/0);
+  broadcast_rows(back_half, context, /*root_rank=*/1);
+  // Both broadcasts and the concatenation use the caller's compute stream.
+  // Completion for these local buffers follows compute-stream order.
   return torch::cat({front_half, back_half}, 0);
 }
 torch::Tensor relay_state(torch::Tensor state, Context& context) {
@@ -267,14 +528,14 @@ torch::Tensor relay_state(torch::Tensor state, Context& context) {
   // both legs bookkeeping-free on the later group; the chunk-boundary
   // backward leg is relay_state_back.
   if (context.cp_rank == 0) {
-    context.cross_group->broadcast(state, /*root_rank=*/0);
+    broadcast_rows(state, context, /*root_rank=*/0);
     return state;
   }
   if (!state.defined()) {
     return state;
   }
   torch::Tensor received = torch::empty_like(state);
-  context.cross_group->broadcast(received, /*root_rank=*/0);
+  broadcast_rows(received, context, /*root_rank=*/0);
   return received;
 }
 
@@ -283,18 +544,29 @@ void relay_state_back(torch::Tensor& state_slot, Context& context) {
   // recurrent state back so the front group continues the next chunk from
   // the true end-of-chunk state.
   if (context.cp_rank == 1) {
-    context.cross_group->broadcast(state_slot, /*root_rank=*/1);
+    broadcast_rows(state_slot, context, /*root_rank=*/1);
     return;
   }
   if (!state_slot.defined()) {
     return;
   }
   torch::Tensor received = torch::empty_like(state_slot);
-  context.cross_group->broadcast(received, /*root_rank=*/1);
+  broadcast_rows(received, context, /*root_rank=*/1);
   state_slot = received;
 }
 
 void finish(torch::Tensor& local_hidden_states, Context& context) {
+  if (is_batch(context)) {
+    // The model has already gathered within TP4. Reconstruct sequence-major
+    // order across CP groups before HC head, auxiliary capture, or PULL handoff.
+    CHECK_EQ(local_hidden_states.size(0), group_rows(context));
+    local_hidden_states = relay_kv(local_hidden_states, context);
+    CHECK_EQ(local_hidden_states.size(0), context.total_rows);
+    LOG_FIRST_N(INFO, 8) << "[DSV4_PCP_BATCH_FINISH] cp_rank=" << context.cp_rank
+                         << " rows=" << local_hidden_states.size(0)
+                         << " sequences=" << context.batch_layout->spans().size();
+    return;
+  }
   if (context.global_sp.has_value()) {
     CHECK_EQ(local_hidden_states.size(0), context.global_sp->local_tokens);
     local_hidden_states = dsv4_musa_sp::gather_global(
@@ -317,13 +589,13 @@ void finish(torch::Tensor& local_hidden_states, Context& context) {
             << " total_rows=" << context.total_rows;
   synchronize_peer_groups(context);
   if (context.cp_rank == 1) {
-    context.cross_group->broadcast(local_hidden_states, /*root_rank=*/1);
+    broadcast_rows(local_hidden_states, context, /*root_rank=*/1);
   } else {
     auto back_shape = local_hidden_states.sizes().vec();
     back_shape[0] = context.total_rows - context.front_rows;
     torch::Tensor back =
         torch::empty(back_shape, local_hidden_states.options());
-    context.cross_group->broadcast(back, /*root_rank=*/1);
+    broadcast_rows(back, context, /*root_rank=*/1);
     local_hidden_states = torch::cat({local_hidden_states, back}, 0);
   }
   // Keep both CP groups on the same full hidden state before the next chunk.
@@ -331,13 +603,13 @@ void finish(torch::Tensor& local_hidden_states, Context& context) {
   // advances with the assembled prompt, which deadlocks the next chunk's
   // collective path for long prompts with uneven group sizes.
   if (context.cp_rank == 0) {
-    context.cross_group->broadcast(local_hidden_states, /*root_rank=*/0);
+    broadcast_rows(local_hidden_states, context, /*root_rank=*/0);
   } else {
     auto full_shape = local_hidden_states.sizes().vec();
     full_shape[0] = context.total_rows;
     torch::Tensor full =
         torch::empty(full_shape, local_hidden_states.options());
-    context.cross_group->broadcast(full, /*root_rank=*/0);
+    broadcast_rows(full, context, /*root_rank=*/0);
     local_hidden_states = std::move(full);
   }
   synchronize_peer_groups(context);

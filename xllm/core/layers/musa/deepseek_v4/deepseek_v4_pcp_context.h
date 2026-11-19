@@ -22,6 +22,7 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/parallel_state/parallel_args.h"
 #include "core/framework/parallel_state/process_group.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_pcp_layout.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_sp_context.h"
 
 namespace xllm::layer::dsv4_musa_pcp {
@@ -49,6 +50,12 @@ struct Context final {
   torch::Tensor global_input_ids;
   // Same local query rows, collected in one operation over all physical ranks.
   std::optional<dsv4_musa_sp::DeepseekV4SPContext> global_sp;
+  // Opt-in packed batch. All consumers must use these mappings; scalar
+  // global_row_start cannot describe two disjoint request intervals.
+  std::optional<SequenceLayout> batch_layout;
+  torch::Tensor batch_group_indices;
+  torch::Tensor batch_local_indices;
+  torch::Tensor batch_restore_indices;
 };
 
 bool enabled();
@@ -59,6 +66,29 @@ void build_context(int64_t total_rows,
                    const ParallelArgs& parallel_args,
                    const torch::Tensor& global_tokens,
                    std::optional<Context>* context);
+
+// Eager-only, validated CP2/TP4 microbatch=2. Unsupported configurations leave
+// context empty; the caller must not reinterpret an admitted merged batch as
+// a single-sequence request. Admission fallback belongs in the scheduler.
+void build_batch_context(const SequenceLayout& layout,
+                         const ParallelArgs& parallel_args,
+                         const torch::Tensor& global_tokens,
+                         std::optional<Context>* context);
+
+inline bool is_batch(const Context& context) {
+  return context.batch_layout.has_value();
+}
+
+// Select this rank's rows from a sequence-major tensor. Padding is appended
+// only when requested and never receives a global position or a cache slot.
+torch::Tensor local_rows_from_global(const torch::Tensor& global,
+                                     const Context& context,
+                                     bool pad_to_capacity);
+
+// Gather the common padded rank capacity over all eight physical ranks, then
+// invert the packed permutation to unpadded sequence-major order.
+torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
+                                 const Context& context);
 
 // Global rows owned by this rank's group.
 inline int64_t group_rows(const Context& context) {
@@ -74,6 +104,15 @@ torch::Tensor shard_rows(const torch::Tensor& global, const Context& context);
 torch::Tensor exchange_rows_global_slots(const torch::Tensor& local_rows,
                                          const torch::Tensor& global_slots,
                                          Context& context);
+
+// Completed compressed rows are partitioned by absolute cached positions.
+// Local input is sequence-ordered inside each CP group. Result matches global
+// compressed slot order [A rows, B rows], not [all front rows, all back rows].
+torch::Tensor exchange_batch_compressed_rows(
+    const torch::Tensor& local_rows,
+    const torch::Tensor& global_slots,
+    int64_t ratio,
+    Context& context);
 
 // Per-layer K/V exchange, both directions.  Each group projects only its own
 // rows; after the exchange both groups hold the full chunk rows in global
