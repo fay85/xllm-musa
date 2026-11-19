@@ -1,0 +1,85 @@
+{
+  "length": 2000,
+  "count": 5,
+  "samples": [
+    {
+      "phase": "warmup",
+      "id": "02ee8f314a4a4a81a1ed9e44d63f4316",
+      "accepted": 731,
+      "proposed": 1470,
+      "verify": 294,
+      "dp_rank": 2,
+      "text_sha256": "1e32f5c8e1f94c3d4dfc198a5b66c762a07040b9e4efedcc460ae0c2d51bb0f5",
+      "ttft_ms": 7380.657903850079,
+      "tpot_ms": 15.613103439286716,
+      "e2e_s": 23.35286272224039
+    },
+    {
+      "phase": "formal",
+      "id": "20d59f14ad4c43e7a520ee9738dee7bd",
+      "accepted": 731,
+      "proposed": 1470,
+      "verify": 294,
+      "dp_rank": 3,
+      "text_sha256": "1e32f5c8e1f94c3d4dfc198a5b66c762a07040b9e4efedcc460ae0c2d51bb0f5",
+      "ttft_ms": 1224.0674681961536,
+      "tpot_ms": 15.545067541257552,
+      "e2e_s": 17.12667156290263
+    },
+    {
+      "phase": "formal",
+      "id": "a0c70a201dd949dea9a403674813458d",
+      "accepted": 731,
+      "proposed": 1470,
+      "verify": 294,
+      "dp_rank": 4,
+      "text_sha256": "1e32f5c8e1f94c3d4dfc198a5b66c762a07040b9e4efedcc460ae0c2d51bb0f5",
+      "ttft_ms": 1042.2101765871048,
+      "tpot_ms": 15.588273425365298,
+      "e2e_s": 16.989013890735805
+    },
+    {
+      "phase": "formal",
+      "id": "3d66ec6e6e8e4331a4120dc3ceec3d19",
+      "accepted": 731,
+      "proposed": 1470,
+      "verify": 294,
+      "dp_rank": 5,
+      "text_sha256": "1e32f5c8e1f94c3d4dfc198a5b66c762a07040b9e4efedcc460ae0c2d51bb0f5",
+      "ttft_ms": 996.9278126955032,
+      "tpot_ms": 15.527825879036856,
+      "e2e_s": 16.881893686950207
+    },
+    {
+      "phase": "formal",
+      "id": "af3520361a6a4fb0988325435213baf2",
+      "accepted": 731,
+      "proposed": 1470,
+      "verify": 294,
+      "dp_rank": 6,
+      "text_sha256": "1e32f5c8e1f94c3d4dfc198a5b66c762a07040b9e4efedcc460ae0c2d51bb0f5",
+      "ttft_ms": 1030.7939108461142,
+      "tpot_ms": 15.562735744665503,
+      "e2e_s": 16.951472577638924
+    },
+    {
+      "phase": "formal",
+      "id": "9efdb718347e497186d067693701c4f2",
+      "accepted": 731,
+      "proposed": 1470,
+      "verify": 294,
+      "dp_rank": 7,
+      "text_sha256": "1e32f5c8e1f94c3d4dfc198a5b66c762a07040b9e4efedcc460ae0c2d51bb0f5",
+      "ttft_ms": 1031.0856560245156,
+      "tpot_ms": 15.53888498866459,
+      "e2e_s": 16.92736499942839
+    }
+  ],
+  "token_ids_sha256": "a8c5f07aca35012af440ddf108420e626f78a86562b0830c29f49ff7a1aff115",
+  "means": {
+    "ttft_ms": 1065.0170048698783,
+    "tpot_ms": 15.55255751579796,
+    "e2e_s": 16.975283343531192
+  },
+  "throughput": 60.32299899077785
+}
