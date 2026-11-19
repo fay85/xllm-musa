@@ -487,23 +487,26 @@ DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
           target_options(options),
           worker_type,
           [&parallel_args, &device, &options] {
-            // The draft consumes the target's aux hidden states, which the
-            // worker does not expose under CP; reject cp_size > 1 except
-            // DeepSeek-V4 on NPU, or GLM-5-Next on NPU with the DFlash2
-            // algorithm specifically (design.md §3.1 Gate B4). GLM-5-Next's
-            // aux-hidden-buffer CP restore is proven correct
-            // (test_glm5_next_cp.py's
-            // test_layer_capture_restores_global_rows_with_context_parallelism)
-            // but was only verified for DFlash2's dispatch path; other
-            // block-diffusion algorithms (DFlash(1), DSpark) stay rejected.
+            // The draft consumes the target's aux hidden states in the
+            // original token order. cp_size > 1 stays rejected unless the
+            // target gathers those rows back at the capture layers.
+            // DeepSeek-V4 and GLM-5-Next DFlash2 already do. Qwen3.5 on MUSA
+            // does too: PCP still shards the forward, and the captured hidden
+            // states are gathered back to the full sequence.
             bool allow_cp = false;
             if (parallel_args.cp_size() > 1 &&
                 (Platform::is_npu() || Platform::is_musa())) {
               const std::string model_type =
                   util::get_model_type(options.model_path(), options.backend());
+              const bool qwen35_dflash2_on_musa =
+                  Platform::is_musa() &&
+                  SpeculativeConfig::is_dflash2_algorithm(
+                      options.speculative_algorithm()) &&
+                  (model_type == "qwen3_5" || model_type == "qwen3_5_moe");
               allow_cp = util::is_deepseek_v4_model_type(model_type) ||
                          SpeculativeConfig::is_glm5_next_dflash2(
-                             model_type, options.speculative_algorithm());
+                             model_type, options.speculative_algorithm()) ||
+                         qwen35_dflash2_on_musa;
             }
             if (!allow_cp) {
               CHECK_LE(parallel_args.cp_size(), 1)
@@ -1278,7 +1281,14 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
                                         local_total_val_tokens);
   // Stage host-originating template data before target launch: a nominally
   // asynchronous pageable H2D can otherwise drain target's execution stream.
+  static const bool dflash2_prof = []() {
+    const char* v = std::getenv("XLLM_DFLASH2_PROFILE");
+    return v != nullptr && std::string(v) == "1";
+  }();
+  Timer prof_step_timer;
   const bool prelaunch = !did_prune && prepare_draft_prelaunch(input);
+  const double prof_prep_ms = dflash2_prof ? prof_step_timer.elapsed_milliseconds() : 0.0;
+  double prof_target_sync_ms = 0.0;
   ForwardOutput target_output =
       speculative_worker::run_worker_no_sync(
           *impl_, validate_input, *prepare_stream_, *compute_stream_)
@@ -1377,6 +1387,8 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
     }
     CHECK(accepted_ready->synchronize())
         << "DFlash2 accepted-token copy failed";
+    prof_target_sync_ms =
+        dflash2_prof ? prof_step_timer.elapsed_milliseconds() : 0.0;
     val_output.next_tokens = std::move(accepted_host);
   } else {
     compute_stream_->synchronize();
@@ -1398,7 +1410,27 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
         val_output.next_tokens,
         val_output.embeddings,
         options_.num_speculative_tokens());
+    const double prof_before_finish_ms =
+        dflash2_prof ? prof_step_timer.elapsed_milliseconds() : 0.0;
     finish_draft_prelaunch(input);
+    if (dflash2_prof) {
+      static thread_local int64_t prof_cnt = 0;
+      static thread_local double sum_prep = 0, sum_tgt = 0, sum_draft = 0, sum_tot = 0;
+      const double prof_end_ms = prof_step_timer.elapsed_milliseconds();
+      sum_prep += prof_prep_ms;
+      sum_tgt += (prof_target_sync_ms - prof_prep_ms);
+      sum_draft += (prof_end_ms - prof_before_finish_ms);
+      sum_tot += prof_end_ms;
+      if (++prof_cnt % 20 == 0) {
+        LOG(INFO) << "[DFLASH2_PROF] batch=" << batch_size
+                  << " steps=" << prof_cnt
+                  << " prep_ms=" << (sum_prep / 20.0)
+                  << " target_val_ms=" << (sum_tgt / 20.0)
+                  << " draft_wait_ms=" << (sum_draft / 20.0)
+                  << " total_run_val_ms=" << (sum_tot / 20.0);
+        sum_prep = sum_tgt = sum_draft = sum_tot = 0;
+      }
+    }
   } else {
     std::vector<std::string> failed_request_ids =
         write_target_context_to_cache(input, val_output);
@@ -1605,11 +1637,14 @@ void DFlashWorkerImpl::update_decode_step_input(
     const int32_t current_position = input_positions[seq_id] + position_offset;
     const int32_t current_kv_len = specBuilder::calc_kv_len(
         input.input_params.attention.host.kv_seq_lens, seq_id, position_offset);
-    const int32_t expected_kv_len = current_position + 1;
 
-    CHECK_EQ(expected_kv_len, current_kv_len)
-        << "DFlash decode context position/kv_len mismatch, seq_id=" << seq_id
-        << ", current_position=" << current_position
+    // Multimodal VLM (M-RoPE) compresses 2D visual patch positions, so
+    // model position can be smaller than physical KV length - 1.
+    CHECK_GE(current_position, 0)
+        << "DFlash decode context invalid position, seq_id=" << seq_id
+        << ", current_position=" << current_position;
+    CHECK_GE(current_kv_len, 1)
+        << "DFlash decode context invalid kv_len, seq_id=" << seq_id
         << ", current_kv_len=" << current_kv_len;
 
     token_ids_vec.emplace_back(rewrite_fake_token ? state.token_id
@@ -1675,13 +1710,22 @@ void DFlashWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
     }
 #endif
     if (!input_params.attention.host.q_seq_lens.empty()) {
-      std::vector<int32_t> q_cu_seq_lens;
-      q_cu_seq_lens.reserve(input_params.attention.host.q_seq_lens.size() + 1);
-      q_cu_seq_lens.emplace_back(0);
-      for (int32_t q_len : input_params.attention.host.q_seq_lens) {
-        q_cu_seq_lens.emplace_back(q_cu_seq_lens.back() + q_len);
+      const auto& q_seq_lens = input_params.attention.host.q_seq_lens;
+      const bool already_cumulative =
+          q_seq_lens.size() ==
+              static_cast<size_t>(input.input_params.meta.num_sequences + 1) &&
+          q_seq_lens.front() == 0;
+      if (already_cumulative) {
+        input_params.attention.host.q_cu_seq_lens = q_seq_lens;
+      } else {
+        std::vector<int32_t> q_cu_seq_lens;
+        q_cu_seq_lens.reserve(q_seq_lens.size() + 1);
+        q_cu_seq_lens.emplace_back(0);
+        for (int32_t q_len : q_seq_lens) {
+          q_cu_seq_lens.emplace_back(q_cu_seq_lens.back() + q_len);
+        }
+        input_params.attention.host.q_cu_seq_lens = std::move(q_cu_seq_lens);
       }
-      input_params.attention.host.q_cu_seq_lens = std::move(q_cu_seq_lens);
     }
     // The generic builder materializes the device buffer before the hybrid
     // cumulative lengths above are canonicalized.  Rebind it so GDN sees

@@ -34,6 +34,16 @@ torch::Tensor random_sample(const torch::Tensor& probs) {
   const int64_t batch_size = p.size(0);
   const int64_t vocab_size = p.size(1);
 
+  if (vocab_size >= 2048) {
+    auto exp_noise = torch::empty_like(p).exponential_();
+    exp_noise.clamp_min_(1e-30f);
+    auto samples = (p / exp_noise).argmax(/*dim=*/-1).to(torch::kInt64);
+    if (probs.dim() == 3) {
+      return samples.reshape({probs.size(0), probs.size(1)});
+    }
+    return samples.flatten();
+  }
+
   auto cdf = p.cumsum(/*dim=*/-1);
 
   auto u =

@@ -22,6 +22,8 @@ limitations under the License.
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <mutex>
+#include <utility>
 #include <vector>
 
 #include "core/kernels/musa/musa_ops_api.h"
@@ -152,10 +154,19 @@ bool is_16b_aligned(const torch::Tensor& tensor) {
 struct CompactVocabEntry {
   const void* data_ptr = nullptr;
   int64_t cols = 0;
+  int64_t full_vocab_size = 0;
+  torch::Tensor column_ids;
+};
+
+struct DeviceCompactVocabEntry {
+  int64_t cols = 0;
+  int64_t full_vocab_size = 0;
   torch::Tensor column_ids;
 };
 
 thread_local CompactVocabEntry s_last_compact_vocab;
+std::mutex g_device_compact_vocab_mu;
+DeviceCompactVocabEntry g_device_compact_vocab[16];
 
 }  // namespace
 
@@ -167,7 +178,28 @@ void register_compact_vocab_column_ids(const torch::Tensor& compact_logits,
   }
   s_last_compact_vocab.data_ptr = compact_logits.data_ptr();
   s_last_compact_vocab.cols = compact_logits.size(-1);
+  s_last_compact_vocab.full_vocab_size = 0;
   s_last_compact_vocab.column_ids = column_ids;
+}
+
+void register_compact_vocab_metadata(const torch::Tensor& compact_logits,
+                                     const torch::Tensor& column_ids,
+                                     int64_t full_vocab_size) {
+  register_compact_vocab_column_ids(compact_logits, column_ids);
+  if (!compact_logits.defined() || !column_ids.defined()) {
+    return;
+  }
+  s_last_compact_vocab.full_vocab_size = full_vocab_size;
+  if (!column_ids.is_cpu()) {
+    const int32_t dev = column_ids.device().index();
+    if (dev >= 0 && dev < 16 &&
+        g_device_compact_vocab[dev].cols != column_ids.size(0)) {
+      std::lock_guard<std::mutex> lock(g_device_compact_vocab_mu);
+      g_device_compact_vocab[dev].cols = column_ids.size(0);
+      g_device_compact_vocab[dev].full_vocab_size = full_vocab_size;
+      g_device_compact_vocab[dev].column_ids = column_ids;
+    }
+  }
 }
 
 torch::Tensor lookup_compact_vocab_column_ids(const torch::Tensor& logits) {
@@ -177,6 +209,32 @@ torch::Tensor lookup_compact_vocab_column_ids(const torch::Tensor& logits) {
   if (logits.data_ptr() == s_last_compact_vocab.data_ptr &&
       logits.size(-1) == s_last_compact_vocab.cols) {
     return s_last_compact_vocab.column_ids;
+  }
+  return torch::Tensor();
+}
+
+std::pair<torch::Tensor, int64_t> lookup_compact_vocab_metadata(
+    const torch::Tensor& logits) {
+  if (!logits.defined() || !s_last_compact_vocab.column_ids.defined()) {
+    return {torch::Tensor(), 0};
+  }
+  if (logits.data_ptr() == s_last_compact_vocab.data_ptr &&
+      logits.size(-1) == s_last_compact_vocab.cols) {
+    return {s_last_compact_vocab.column_ids,
+            s_last_compact_vocab.full_vocab_size};
+  }
+  return {torch::Tensor(), 0};
+}
+
+torch::Tensor lookup_device_compact_vocab_column_ids(int32_t device_index,
+                                                     int64_t compact_cols) {
+  if (device_index < 0 || device_index >= 16 || compact_cols <= 0) {
+    return torch::Tensor();
+  }
+  std::lock_guard<std::mutex> lock(g_device_compact_vocab_mu);
+  const DeviceCompactVocabEntry& entry = g_device_compact_vocab[device_index];
+  if (entry.column_ids.defined() && entry.cols == compact_cols) {
+    return entry.column_ids;
   }
   return torch::Tensor();
 }

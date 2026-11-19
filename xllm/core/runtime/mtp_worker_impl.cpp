@@ -1244,8 +1244,7 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
               !draft_vocab_path.empty()) {
             head = make_block_fp8_draft_lm_head(
                 head, draft_impl_->context_, draft_vocab_path);
-            if (draft_sampling_mode_ == DraftSamplingMode::GREEDY &&
-                !draft_vocab_path.empty()) {
+            if (!draft_vocab_path.empty()) {
               head->set_defer_row_subset_expansion(true);
             }
             LOG(INFO) << "MTP draft proposes with a block-FP8 LM head"
@@ -3341,9 +3340,14 @@ bool MTPWorkerImpl::supports_device_target_context_execution() const {
 
   static const bool musa_device_context_enabled =
       ::xllm::util::get_bool_env("XLLM_MUSA_MTP_DEVICE_CONTEXT", false);
+  const bool has_cross_dp_collectives =
+      parallel_args_.dp_size() > 1 &&
+      (parallel_args_.ep_size() > 1 ||
+       context_.get_model_args().n_routed_experts() > 0 ||
+       !parallel_args_.mapping_data().empty());
   if (!musa_device_context_enabled ||
       ::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel() ||
-      parallel_args_.dp_size() > 1 || !device_.unwrap().is_privateuseone()) {
+      has_cross_dp_collectives || !device_.unwrap().is_privateuseone()) {
     return false;
   }
 
@@ -3379,8 +3383,13 @@ bool MTPWorkerImpl::supports_combined_first_draft_execution() const {
   }
 #endif
 
+  const bool has_cross_dp_collectives =
+      parallel_args_.dp_size() > 1 &&
+      (parallel_args_.ep_size() > 1 ||
+       context_.get_model_args().n_routed_experts() > 0 ||
+       !parallel_args_.mapping_data().empty());
   if (::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel() ||
-      parallel_args_.dp_size() > 1) {
+      has_cross_dp_collectives) {
     return false;
   }
 
@@ -3559,17 +3568,27 @@ void MTPWorkerImpl::submit_pending_first_draft(
 
 bool MTPWorkerImpl::pending_draft_context_matches(
     const ForwardInput& input) const {
+  const bool need_dp_sync =
+      parallel_args_.dp_size() > 1 &&
+      (combined_draft_execution_path_ ==
+           mtp_async::CombinedDraftExecutionPath::GLM_MOE_DSA_SPARSE_ATTENTION ||
+       parallel_args_.ep_size() > 1 ||
+       context_.get_model_args().n_routed_experts() > 0 ||
+       !parallel_args_.mapping_data().empty() ||
+       (adaptive_spec_controller_ != nullptr &&
+        adaptive_spec_controller_->enabled()));
   return pending_draft_context_.output.has_value() &&
          pending_draft_context_.embedding_ids ==
              input.input_params.embedding.embedding_ids &&
          pending_draft_context_.request_ids ==
              input.input_params.embedding.request_ids &&
-         pending_draft_context_.dp_global_token_nums ==
-             input.input_params.parallel.dp_global_token_nums &&
-         pending_draft_context_.raw_dp_global_token_nums ==
-             input.input_params.parallel.raw_dp_global_token_nums &&
-         pending_draft_context_.dp_global_batch_generations ==
-             input.input_params.parallel.dp_global_batch_generations;
+         (!need_dp_sync ||
+          (pending_draft_context_.dp_global_token_nums ==
+               input.input_params.parallel.dp_global_token_nums &&
+           pending_draft_context_.raw_dp_global_token_nums ==
+               input.input_params.parallel.raw_dp_global_token_nums &&
+           pending_draft_context_.dp_global_batch_generations ==
+               input.input_params.parallel.dp_global_batch_generations));
 }
 
 void MTPWorkerImpl::record_validate_metrics(

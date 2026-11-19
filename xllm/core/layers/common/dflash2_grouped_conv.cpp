@@ -66,13 +66,13 @@ torch::Tensor dflash2_grouped_conv(const torch::Tensor& hidden_states,
     torch::Tensor valid =
         positions.slice(/*dim=*/0, /*start=*/tap, /*end=*/num_tokens)
             .ge(tap)
-            .view({num_tokens - tap, 1, 1})
-            .to(hidden_states.dtype());
+            .view({num_tokens - tap, 1, 1});
+    torch::Tensor tap_term =
+        coefficients.select(/*dim=*/1, /*index=*/tap)
+            .slice(/*dim=*/0, /*start=*/tap, /*end=*/num_tokens) *
+        blocks.slice(/*dim=*/0, /*start=*/0, /*end=*/num_tokens - tap);
     output.slice(/*dim=*/0, /*start=*/tap, /*end=*/num_tokens)
-        .add_(coefficients.select(/*dim=*/1, /*index=*/tap)
-                  .slice(/*dim=*/0, /*start=*/tap, /*end=*/num_tokens) *
-              blocks.slice(/*dim=*/0, /*start=*/0, /*end=*/num_tokens - tap) *
-              valid);
+        .add_(torch::where(valid, tap_term, torch::zeros_like(tap_term)));
   }
   return output.flatten(/*start_dim=*/1);
 }

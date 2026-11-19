@@ -26,6 +26,13 @@ limitations under the License.
 #include "kernels/ops_api.h"
 #include "sampler.h"
 
+#if defined(USE_MUSA)
+namespace xllm::kernel::musa {
+torch::Tensor lookup_device_compact_vocab_column_ids(int32_t device_index,
+                                                     int64_t compact_cols);
+}  // namespace xllm::kernel::musa
+#endif
+
 namespace xllm {
 
 namespace {
@@ -46,20 +53,100 @@ torch::Tensor normalize_recovered_probs(torch::Tensor recovered_probs) {
   return recovered_probs;
 }
 
+bool is_packed_sparse_draft_probs(const torch::Tensor& draft_probs,
+                                  int64_t vocab_size) {
+  return draft_probs.defined() && draft_probs.dim() == 3 &&
+         draft_probs.size(-1) >= 3 && draft_probs.size(-1) <= 2049 &&
+         draft_probs.size(-1) < vocab_size &&
+         ((draft_probs.size(-1) - 1) % 2 == 0);
+}
+
+torch::Tensor lookup_compact_draft_column_ids(const torch::Tensor& draft_probs,
+                                              int64_t vocab_size) {
+#if defined(USE_MUSA)
+  if (draft_probs.defined() && !draft_probs.is_cpu() &&
+      draft_probs.dim() == 3 && draft_probs.size(-1) > 2049 &&
+      draft_probs.size(-1) < vocab_size) {
+    return xllm::kernel::musa::lookup_device_compact_vocab_column_ids(
+        draft_probs.device().index(), draft_probs.size(-1) - 1);
+  }
+#else
+  (void)draft_probs;
+  (void)vocab_size;
+#endif
+  return torch::Tensor();
+}
+
 torch::Tensor sample_recovered_tokens(const DraftProposal& draft_proposal,
-                                      const torch::Tensor& target_probs) {
+                                      const torch::Tensor& target_probs,
+                                      bool allow_inplace_target = false) {
   const torch::Tensor& draft_token_ids = draft_proposal.token_ids();
   const std::optional<torch::Tensor>& draft_probs =
       draft_proposal.draft_probs();
+  const int64_t vocab_size = target_probs.size(-1);
   torch::Tensor recovered_probs;
   if (draft_probs.has_value()) {
-    recovered_probs = target_probs.sub(draft_probs.value()).clamp_min_(0);
+    torch::Tensor compact_col_ids =
+        lookup_compact_draft_column_ids(draft_probs.value(), vocab_size);
+    if (compact_col_ids.defined()) {
+      const torch::Tensor& packed = draft_probs.value();
+      const int64_t compact_cols = compact_col_ids.size(0);
+      torch::Tensor compact_probs =
+          packed.narrow(/*dim=*/-1, /*start=*/1, /*length=*/compact_cols)
+              .reshape({-1, compact_cols});
+      recovered_probs =
+          allow_inplace_target ? target_probs : target_probs.clone();
+      torch::Tensor flat_rec = recovered_probs.reshape({-1, vocab_size});
+      torch::Tensor updated =
+          flat_rec.index_select(/*dim=*/1, compact_col_ids)
+              .sub_(compact_probs)
+              .clamp_min_(0.0f);
+      flat_rec.index_copy_(/*dim=*/1, compact_col_ids, updated);
+#if defined(USE_MUSA)
+      return Sampler::random_sample(recovered_probs);
+#else
+      return Sampler::random_sample(normalize_recovered_probs(recovered_probs));
+#endif
+    }
+  }
+  if (draft_probs.has_value() &&
+      is_packed_sparse_draft_probs(draft_probs.value(), vocab_size)) {
+    const torch::Tensor& packed = draft_probs.value();
+    const int64_t top_k = (packed.size(-1) - 1) / 2;
+    torch::Tensor candidate_ids =
+        packed.narrow(/*dim=*/-1, /*start=*/1, /*length=*/top_k)
+            .to(torch::kLong);
+    torch::Tensor candidate_probs =
+        packed.narrow(/*dim=*/-1, /*start=*/1 + top_k, /*length=*/top_k);
+    recovered_probs = allow_inplace_target ? target_probs : target_probs.clone();
+    torch::Tensor updated =
+        recovered_probs.gather(/*dim=*/-1, candidate_ids)
+            .sub_(candidate_probs)
+            .clamp_min_(0.0f);
+    recovered_probs.scatter_(/*dim=*/-1, candidate_ids, updated);
+#if defined(USE_MUSA)
+    return Sampler::random_sample(recovered_probs);
+#else
+    return Sampler::random_sample(normalize_recovered_probs(recovered_probs));
+#endif
+  }
+  if (draft_probs.has_value()) {
+    if (allow_inplace_target) {
+      recovered_probs = target_probs;
+      recovered_probs.sub_(draft_probs.value()).clamp_min_(0);
+    } else {
+      recovered_probs = target_probs.sub(draft_probs.value()).clamp_min_(0);
+    }
   } else {
-    recovered_probs = target_probs.clone();
+    recovered_probs = allow_inplace_target ? target_probs : target_probs.clone();
     recovered_probs.scatter_(
         /*dim=*/-1, draft_token_ids.unsqueeze(-1), /*value=*/0);
   }
+#if defined(USE_MUSA)
+  return Sampler::random_sample(recovered_probs);
+#else
   return Sampler::random_sample(normalize_recovered_probs(recovered_probs));
+#endif
 }
 
 torch::Tensor mask_out_after_first_reject(
@@ -88,6 +175,47 @@ std::tuple<torch::Tensor, torch::Tensor> finalize_random_sample(
   return {accepted_token_ids, masked_accepted_token_ids};
 }
 
+std::tuple<torch::Tensor, torch::Tensor> random_sample_with_ownership(
+    const DraftProposal& draft_proposal,
+    const torch::Tensor& target_probs,
+    const torch::Tensor& uniform_rand,
+    const torch::Tensor& bonus_token_ids,
+    bool mask_out_rejected_tokens,
+    bool allow_inplace_target) {
+  const torch::Tensor& draft_token_ids = draft_proposal.token_ids();
+  const std::optional<torch::Tensor>& draft_probs =
+      draft_proposal.draft_probs();
+  auto selected_target_probs =
+      index_select_2d(target_probs, /*dim=*/-1, draft_token_ids);
+
+  const int64_t vocab_size = target_probs.size(-1);
+  torch::Tensor acceptance_probs;
+  if (draft_probs.has_value()) {
+    const bool has_leading_selected_prob =
+        is_packed_sparse_draft_probs(draft_probs.value(), vocab_size) ||
+        lookup_compact_draft_column_ids(draft_probs.value(), vocab_size)
+            .defined();
+    torch::Tensor selected_draft_probs =
+        has_leading_selected_prob
+            ? draft_probs->select(/*dim=*/-1, /*index=*/0)
+            : index_select_2d(draft_probs.value(), /*dim=*/-1, draft_token_ids);
+    acceptance_probs =
+        selected_target_probs / selected_draft_probs.clamp_min(1e-12f);
+  } else {
+    acceptance_probs = selected_target_probs;
+  }
+  auto accepted = (uniform_rand < acceptance_probs);
+
+  auto recovered_token_ids = sample_recovered_tokens(
+      draft_proposal, target_probs, allow_inplace_target);
+
+  return finalize_random_sample(accepted,
+                                recovered_token_ids,
+                                draft_token_ids,
+                                bonus_token_ids,
+                                mask_out_rejected_tokens);
+}
+
 }  // namespace
 
 RejectionSampler::RejectionSampler(const torch::Tensor& do_sample,
@@ -113,10 +241,28 @@ SampleOutput RejectionSampler::forward(const DraftProposal& draft_proposal,
                                        const torch::Tensor& target_logits,
                                        const torch::Tensor& bonus_token_ids,
                                        bool mask_out_rejected_tokens) const {
-  draft_proposal.validate(
-      /*expected_batch_size=*/do_sample_.size(0),
-      /*expected_vocab_size=*/target_logits.size(-1),
-      /*expected_num_speculative_tokens=*/target_logits.size(1) - 1);
+  const int64_t expected_batch_size = do_sample_.size(0);
+  const int64_t expected_vocab_size = target_logits.size(-1);
+  const int64_t expected_n_spec = target_logits.size(1) - 1;
+  const bool has_sparse_draft_probs =
+      draft_proposal.draft_probs().has_value() &&
+      (is_packed_sparse_draft_probs(*draft_proposal.draft_probs(),
+                                    expected_vocab_size) ||
+       lookup_compact_draft_column_ids(*draft_proposal.draft_probs(),
+                                       expected_vocab_size)
+           .defined());
+  if (has_sparse_draft_probs) {
+    const torch::Tensor& ids = draft_proposal.token_ids();
+    const torch::Tensor& sp = *draft_proposal.draft_probs();
+    CHECK(ids.defined() && ids.dim() == 2 &&
+          ids.size(0) == expected_batch_size && ids.size(1) == expected_n_spec);
+    CHECK(sp.size(0) == expected_batch_size && sp.size(1) == expected_n_spec);
+  } else {
+    draft_proposal.validate(
+        /*expected_batch_size=*/expected_batch_size,
+        /*expected_vocab_size=*/expected_vocab_size,
+        /*expected_num_speculative_tokens=*/expected_n_spec);
+  }
   const torch::Tensor& draft_token_ids = draft_proposal.token_ids();
 
   // The bonus row is sampled by the target worker and does not participate in
@@ -130,9 +276,9 @@ SampleOutput RejectionSampler::forward(const DraftProposal& draft_proposal,
         target_draft_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
   }
 
-  // The fused kernel needs dense draft_probs; greedy proposals carry none.
+  // The fused kernel needs dense draft_probs; greedy/sparse proposals skip it.
   bool use_fused_kernel = draft_proposal.draft_probs().has_value() &&
-                          enable_fused_kernel_ &&
+                          !has_sparse_draft_probs && enable_fused_kernel_ &&
                           (!logprobs_ && mask_out_rejected_tokens);
 
   torch::Tensor accepted_token_ids;
@@ -150,11 +296,12 @@ SampleOutput RejectionSampler::forward(const DraftProposal& draft_proposal,
                                  bonus_token_ids,
                                  mask_out_rejected_tokens);
     }
-    return random_sample(draft_proposal,
-                         target_probs,
-                         uniform_rand,
-                         bonus_token_ids,
-                         mask_out_rejected_tokens);
+    return random_sample_with_ownership(draft_proposal,
+                                        target_probs,
+                                        uniform_rand,
+                                        bonus_token_ids,
+                                        mask_out_rejected_tokens,
+                                        /*allow_inplace_target=*/all_random_sample_);
   };
 
   if (all_greedy_sample_) {
@@ -237,29 +384,12 @@ std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::random_sample(
     const torch::Tensor& uniform_rand,
     const torch::Tensor& bonus_token_ids,
     bool mask_out_rejected_tokens) {
-  const torch::Tensor& draft_token_ids = draft_proposal.token_ids();
-  const std::optional<torch::Tensor>& draft_probs =
-      draft_proposal.draft_probs();
-  auto selected_target_probs =
-      index_select_2d(target_probs, /*dim=*/-1, draft_token_ids);
-
-  // Greedy proposals use q(token)=1.
-  torch::Tensor acceptance_probs =
-      draft_probs.has_value()
-          ? selected_target_probs / index_select_2d(draft_probs.value(),
-                                                    /*dim=*/-1,
-                                                    draft_token_ids)
-          : selected_target_probs;
-  auto accepted = (uniform_rand < acceptance_probs);
-
-  auto recovered_token_ids =
-      sample_recovered_tokens(draft_proposal, target_probs);
-
-  return finalize_random_sample(accepted,
-                                recovered_token_ids,
-                                draft_token_ids,
-                                bonus_token_ids,
-                                mask_out_rejected_tokens);
+  return random_sample_with_ownership(draft_proposal,
+                                      target_probs,
+                                      uniform_rand,
+                                      bonus_token_ids,
+                                      mask_out_rejected_tokens,
+                                      /*allow_inplace_target=*/false);
 }
 
 std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::random_sample_fused(

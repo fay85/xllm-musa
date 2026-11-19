@@ -69,6 +69,9 @@ struct AtomicLogicalRegion {
   uint64_t length = 0;
   uint64_t logical_stride = 0;
   uint64_t physical_stride = 0;
+  // Uniform spans stay one region. series_repeat is the span repeat_count;
+  // 1 means this region is a single unrolled step.
+  uint64_t series_repeat = 1;
   int32_t owner_tp_rank = 0;
   const CacheTensorManifest* tensor = nullptr;
   const WorkerCacheLayoutManifest* worker = nullptr;
@@ -302,7 +305,21 @@ void expand_manifest(const WorkerCacheLayoutManifest& manifest,
       if (!writers.writes(tensor, span, manifest.coordinates.tp_rank)) {
         continue;
       }
-      for (uint64_t repeat = 0; repeat < span.repeat_count; ++repeat) {
+      if (span.repeat_count == 0 || span.bytes_per_region == 0) {
+        continue;
+      }
+      uint64_t logical_stride = span.logical_stride_bytes;
+      uint64_t physical_stride = span.physical_stride_bytes;
+      // A zero stride with a repeat is a packed run, not N copies of one byte.
+      if (span.repeat_count > 1 && logical_stride == 0 && physical_stride == 0) {
+        logical_stride = span.bytes_per_region;
+        physical_stride = span.bytes_per_region;
+      }
+      const bool uniform_series =
+          span.repeat_count > 1 && logical_stride >= span.bytes_per_region &&
+          physical_stride >= span.bytes_per_region;
+      const uint64_t expand_count = uniform_series ? 1 : span.repeat_count;
+      for (uint64_t repeat = 0; repeat < expand_count; ++repeat) {
         AtomicLogicalRegion region;
         region.cache_namespace = tensor.cache_namespace;
         region.layer_id = tensor.layer_id;
@@ -310,12 +327,13 @@ void expand_manifest(const WorkerCacheLayoutManifest& manifest,
         region.group_id = tensor.group_id;
         region.logical_tensor = span.logical_tensor;
         region.logical_offset =
-            span.logical_offset_bytes + repeat * span.logical_stride_bytes;
+            span.logical_offset_bytes + repeat * logical_stride;
         region.physical_offset =
-            span.physical_offset_bytes + repeat * span.physical_stride_bytes;
+            span.physical_offset_bytes + repeat * physical_stride;
         region.length = span.bytes_per_region;
-        region.logical_stride = span.logical_stride_bytes;
-        region.physical_stride = span.physical_stride_bytes;
+        region.logical_stride = logical_stride;
+        region.physical_stride = physical_stride;
+        region.series_repeat = uniform_series ? span.repeat_count : 1;
         region.owner_tp_rank = span.owner_tp_rank;
         region.tensor = &tensor;
         region.worker = &manifest;
@@ -768,47 +786,86 @@ void fold_repeat_to_span(std::vector<StridedRegionTemplate>* templates) {
 
 void fold_contiguous_templates(std::vector<StridedRegionTemplate>* templates) {
   fold_repeat_to_span(templates);
-  std::vector<StridedRegionTemplate> merged;
-  merged.reserve(templates->size());
-  for (StridedRegionTemplate& t : *templates) {
-    if (!merged.empty()) {
-      StridedRegionTemplate& prev = merged.back();
-      StridedRegionTemplate key = t;
-      key.bytes_per_region = prev.bytes_per_region;
-      if (prev.repeat_count == 1 && t.repeat_count == 1 &&
-          same_template_key(prev, key) &&
-          !add_overflows(prev.local_offset_in_resource,
-                         prev.bytes_per_region) &&
-          !add_overflows(prev.remote_offset_in_resource,
-                         prev.bytes_per_region) &&
-          prev.local_offset_in_resource + prev.bytes_per_region ==
-              t.local_offset_in_resource &&
-          prev.remote_offset_in_resource + prev.bytes_per_region ==
-              t.remote_offset_in_resource &&
-          !add_overflows(prev.bytes_per_region, t.bytes_per_region)) {
-        prev.bytes_per_region += t.bytes_per_region;
-        continue;
+  // First join consecutive strided-series continuations (e.g. adjacent heads
+  // of the same conv-state slot) so interleaved state templates become
+  // adjacent and widen into a single contiguous span in the merge pass below.
+  {
+    std::vector<StridedRegionTemplate> joined;
+    joined.reserve(templates->size());
+    for (StridedRegionTemplate& t : *templates) {
+      if (!joined.empty()) {
+        StridedRegionTemplate& prev = joined.back();
+        if (prev.repeat_count > 1 && t.repeat_count > 1 &&
+            prev.local_stride > 0 && prev.remote_stride > 0 &&
+            prev.local_stride == t.local_stride &&
+            prev.remote_stride == t.remote_stride &&
+            same_template_key(prev, t) &&
+            !multiply_overflows(prev.repeat_count, prev.local_stride) &&
+            !multiply_overflows(prev.repeat_count, prev.remote_stride) &&
+            !add_overflows(prev.local_offset_in_resource,
+                           prev.repeat_count * prev.local_stride) &&
+            !add_overflows(prev.remote_offset_in_resource,
+                           prev.repeat_count * prev.remote_stride) &&
+            prev.local_offset_in_resource +
+                    prev.repeat_count * prev.local_stride ==
+                t.local_offset_in_resource &&
+            prev.remote_offset_in_resource +
+                    prev.repeat_count * prev.remote_stride ==
+                t.remote_offset_in_resource &&
+            !add_overflows(prev.repeat_count, t.repeat_count)) {
+          prev.repeat_count += t.repeat_count;
+          continue;
+        }
       }
-      // Interleaved repeats that tile the same stride (e.g. one template per
-      // conv-state slot, stride = state_len * elem) widen into one repeat.
-      if (prev.repeat_count > 1 && t.repeat_count == prev.repeat_count &&
-          t.local_stride == prev.local_stride &&
-          t.remote_stride == prev.remote_stride &&
-          same_template_key(prev, key) &&
-          prev.local_offset_in_resource + prev.bytes_per_region ==
-              t.local_offset_in_resource &&
-          prev.remote_offset_in_resource + prev.bytes_per_region ==
-              t.remote_offset_in_resource &&
-          prev.bytes_per_region + t.bytes_per_region <= prev.local_stride &&
-          prev.bytes_per_region + t.bytes_per_region <= prev.remote_stride) {
-        prev.bytes_per_region += t.bytes_per_region;
-        continue;
-      }
+      joined.emplace_back(std::move(t));
     }
-    merged.emplace_back(std::move(t));
+    *templates = std::move(joined);
   }
-  *templates = std::move(merged);
+  auto merge_pass = [](std::vector<StridedRegionTemplate>* list) {
+    std::vector<StridedRegionTemplate> merged;
+    merged.reserve(list->size());
+    for (StridedRegionTemplate& t : *list) {
+      if (!merged.empty()) {
+        StridedRegionTemplate& prev = merged.back();
+        StridedRegionTemplate key = t;
+        key.bytes_per_region = prev.bytes_per_region;
+        if (prev.repeat_count == 1 && t.repeat_count == 1 &&
+            same_template_key(prev, key) &&
+            !add_overflows(prev.local_offset_in_resource,
+                           prev.bytes_per_region) &&
+            !add_overflows(prev.remote_offset_in_resource,
+                           prev.bytes_per_region) &&
+            prev.local_offset_in_resource + prev.bytes_per_region ==
+                t.local_offset_in_resource &&
+            prev.remote_offset_in_resource + prev.bytes_per_region ==
+                t.remote_offset_in_resource &&
+            !add_overflows(prev.bytes_per_region, t.bytes_per_region)) {
+          prev.bytes_per_region += t.bytes_per_region;
+          continue;
+        }
+        // Interleaved repeats that tile the same stride (e.g. one template per
+        // conv-state slot, stride = state_len * elem) widen into one repeat.
+        if (prev.repeat_count > 1 && t.repeat_count == prev.repeat_count &&
+            t.local_stride == prev.local_stride &&
+            t.remote_stride == prev.remote_stride &&
+            same_template_key(prev, key) &&
+            prev.local_offset_in_resource + prev.bytes_per_region ==
+                t.local_offset_in_resource &&
+            prev.remote_offset_in_resource + prev.bytes_per_region ==
+                t.remote_offset_in_resource &&
+            prev.bytes_per_region + t.bytes_per_region <= prev.local_stride &&
+            prev.bytes_per_region + t.bytes_per_region <= prev.remote_stride) {
+          prev.bytes_per_region += t.bytes_per_region;
+          continue;
+        }
+      }
+      merged.emplace_back(std::move(t));
+    }
+    *list = std::move(merged);
+  };
+  merge_pass(templates);
   fold_repeat_to_span(templates);
+  merge_pass(templates);
 }
 
 void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
@@ -854,6 +911,11 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
   };
 
   for (const PlannedAtomicRegion& candidate : *candidates) {
+    if (candidate.logical_series_stride == 0 &&
+        candidate.region.repeat_count > 1) {
+      push_new(candidate);
+      continue;
+    }
     bool placed = false;
     if (candidate.logical_series_stride > 0 &&
         candidate.local_series_stride >= candidate.region.bytes_per_region &&
@@ -1371,6 +1433,127 @@ Status select_replicated_index_source_page(
   return Status();
 }
 
+
+struct TensorIdentity {
+  CacheNamespace cache_namespace;
+  int64_t layer_id;
+  int32_t role;
+  int32_t group_id;
+
+  bool operator<(const TensorIdentity& other) const {
+    return std::tie(cache_namespace, layer_id, role, group_id) <
+           std::tie(other.cache_namespace,
+                    other.layer_id,
+                    other.role,
+                    other.group_id);
+  }
+};
+
+bool same_span_transfer_geometry(const LogicalSpan& lhs,
+                                 const LogicalSpan& rhs) {
+  return lhs.logical_tensor == rhs.logical_tensor &&
+         lhs.logical_offset_bytes == rhs.logical_offset_bytes &&
+         lhs.physical_offset_bytes == rhs.physical_offset_bytes &&
+         lhs.bytes_per_region == rhs.bytes_per_region &&
+         lhs.repeat_count == rhs.repeat_count &&
+         lhs.logical_stride_bytes == rhs.logical_stride_bytes &&
+         lhs.physical_stride_bytes == rhs.physical_stride_bytes &&
+         lhs.owner_tp_rank == rhs.owner_tp_rank;
+}
+
+// Identical per-resource geometry does not need one candidate per repeated
+// token. Unrolling a full KV pool here builds millions of regions and the
+// later sort corrupts the heap. Copy each span as one strided region instead.
+bool append_identical_span_regions(const WorkerCacheLayoutManifest& source,
+                                   const WorkerCacheLayoutManifest& destination,
+                                   const SpanWriters& writers,
+                                   ReshardPlanTemplate* plan) {
+  if (source.tensors.size() != destination.tensors.size()) {
+    return false;
+  }
+  std::map<TensorIdentity, const CacheTensorManifest*> dest_by_key;
+  for (const CacheTensorManifest& tensor : destination.tensors) {
+    const TensorIdentity key{tensor.cache_namespace,
+                             tensor.layer_id,
+                             tensor.role,
+                             tensor.group_id};
+    if (!dest_by_key.emplace(key, &tensor).second) {
+      return false;
+    }
+  }
+
+  std::vector<StridedRegionTemplate> regions;
+  for (const CacheTensorManifest& source_tensor : source.tensors) {
+    const TensorIdentity key{source_tensor.cache_namespace,
+                             source_tensor.layer_id,
+                             source_tensor.role,
+                             source_tensor.group_id};
+    const auto dest_it = dest_by_key.find(key);
+    if (dest_it == dest_by_key.end() ||
+        source_tensor.storage_offset_bytes !=
+            dest_it->second->storage_offset_bytes ||
+        source_tensor.resource_stride_bytes !=
+            dest_it->second->resource_stride_bytes ||
+        source_tensor.explicit_resource_offsets !=
+            dest_it->second->explicit_resource_offsets ||
+        source_tensor.shard.spans.size() !=
+            dest_it->second->shard.spans.size()) {
+      return false;
+    }
+    const CacheTensorManifest& dest_tensor = *dest_it->second;
+    for (size_t span_index = 0; span_index < source_tensor.shard.spans.size();
+         ++span_index) {
+      const LogicalSpan& source_span = source_tensor.shard.spans[span_index];
+      const LogicalSpan& dest_span = dest_tensor.shard.spans[span_index];
+      if (!same_span_transfer_geometry(source_span, dest_span) ||
+          source_span.repeat_count == 0 || source_span.bytes_per_region == 0) {
+        return false;
+      }
+      const bool source_writes = writers.writes(
+          source_tensor, source_span, source.coordinates.tp_rank);
+      const bool destination_writes = writers.writes(
+          dest_tensor, dest_span, destination.coordinates.tp_rank);
+      if (source_writes != destination_writes) {
+        return false;
+      }
+      if (!source_writes) {
+        continue;
+      }
+      StridedRegionTemplate region;
+      region.cache_namespace = source_tensor.cache_namespace;
+      region.layer_id = source_tensor.layer_id;
+      region.role = source_tensor.role;
+      region.group_id = source_tensor.group_id;
+      region.logical_tensor = source_span.logical_tensor;
+      region.local_buffer_id =
+          static_cast<uint64_t>(source_tensor.mooncake_buffer_id);
+      region.remote_buffer_id =
+          static_cast<uint64_t>(dest_tensor.mooncake_buffer_id);
+      region.local_offset_in_resource =
+          source_tensor.storage_offset_bytes + source_span.physical_offset_bytes;
+      region.remote_offset_in_resource =
+          dest_tensor.storage_offset_bytes + dest_span.physical_offset_bytes;
+      region.bytes_per_region = source_span.bytes_per_region;
+      region.repeat_count = source_span.repeat_count;
+      region.local_stride = source_span.physical_stride_bytes;
+      region.remote_stride = dest_span.physical_stride_bytes;
+      region.local_resource_count = source_tensor.resource_count;
+      region.remote_resource_count = dest_tensor.resource_count;
+      region.local_resource_stride = source_tensor.resource_stride_bytes;
+      region.remote_resource_stride = dest_tensor.resource_stride_bytes;
+      region.local_buffer_bytes = source_tensor.buffer_bytes;
+      region.remote_buffer_bytes = dest_tensor.buffer_bytes;
+      region.local_explicit_resource_offsets =
+          source_tensor.explicit_resource_offsets;
+      region.remote_explicit_resource_offsets =
+          dest_tensor.explicit_resource_offsets;
+      regions.emplace_back(std::move(region));
+    }
+  }
+  plan->regions = std::move(regions);
+  return true;
+}
+
 Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
                                 const WorkerCacheLayoutManifest& destination,
                                 ReshardPlanTemplate* plan,
@@ -1393,18 +1576,28 @@ Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
   plan->destination_addr = destination.addr;
   plan->regions.clear();
 
+  if (append_identical_span_regions(source, destination, writers, plan)) {
+    return select_replicated_index_source_page(
+        source, source_cp_index_write_mode, plan);
+  }
+
   std::vector<AtomicLogicalRegion> source_regions;
   std::vector<AtomicLogicalRegion> destination_regions;
   expand_manifest(source, writers, &source_regions);
   expand_manifest(destination, SpanWriters::everything(), &destination_regions);
   const RegionGroups source_groups = group_regions(source_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);
-  std::vector<PlannedAtomicRegion> candidates;
+  // Compact each logical tensor before the next one is expanded into
+  // candidates. Regions with different template keys never merge, so this
+  // is the same plan as compacting the full list, without holding every
+  // repeated token in one vector (that sort was corrupting the heap).
+  std::vector<StridedRegionTemplate> planned_regions;
   for (const auto& [key, sources] : source_groups) {
     const auto destination_it = destination_groups.find(key);
     if (destination_it == destination_groups.end()) {
       continue;
     }
+    std::vector<PlannedAtomicRegion> candidates;
     const Status overlap_status = visit_overlaps(
         sources,
         destination_it->second,
@@ -1422,7 +1615,17 @@ Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
               logical_end(source_region), logical_end(destination_region));
           PlannedAtomicRegion candidate;
           candidate.logical_offset = logical_begin;
-          if (source_region.logical_stride > 0 &&
+          const bool aligned_series =
+              source_region.series_repeat > 1 &&
+              destination_region.series_repeat > 1 &&
+              source_region.length > 0 &&
+              source_region.length == destination_region.length &&
+              source_region.logical_offset == destination_region.logical_offset &&
+              source_region.logical_stride == destination_region.logical_stride &&
+              source_region.logical_stride >= source_region.length &&
+              logical_begin == source_region.logical_offset &&
+              overlap_end == logical_begin + source_region.length;
+          if (!aligned_series && source_region.logical_stride > 0 &&
               source_region.logical_stride ==
                   destination_region.logical_stride &&
               source_region.physical_stride >= source_region.length &&
@@ -1450,6 +1653,12 @@ Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
               destination_region.physical_offset + logical_begin -
               destination_region.logical_offset;
           region.bytes_per_region = overlap_end - logical_begin;
+          if (aligned_series) {
+            region.repeat_count = std::min(source_region.series_repeat,
+                                            destination_region.series_repeat);
+            region.local_stride = source_region.physical_stride;
+            region.remote_stride = destination_region.physical_stride;
+          }
           region.local_resource_count = source_region.tensor->resource_count;
           region.remote_resource_count =
               destination_region.tensor->resource_count;
@@ -1469,8 +1678,13 @@ Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
     if (!overlap_status.ok()) {
       return overlap_status;
     }
+    std::vector<StridedRegionTemplate> group_regions;
+    compact_planned_regions(&candidates, &group_regions);
+    planned_regions.insert(planned_regions.end(),
+                           std::make_move_iterator(group_regions.begin()),
+                           std::make_move_iterator(group_regions.end()));
   }
-  compact_planned_regions(&candidates, &plan->regions);
+  plan->regions = std::move(planned_regions);
   return select_replicated_index_source_page(
       source, source_cp_index_write_mode, plan);
 }

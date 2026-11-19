@@ -197,9 +197,11 @@ FlashInferAttentionImpl::FlashInferAttentionImpl(int64_t num_heads,
 
 // DFlash2 drafts use head_dim 128, which is outside the FA3 shape set, and
 // they jointly denoise a proposal block. FlashInfer's prefill plan is causal,
-// so this path attends with an explicit left/right window. The gathered length
-// is fixed from the block-table width (capped at 4096) so a MUSA graph replay
-// keeps the same launches while kv_seq_lens still masks the live prefix.
+// so this path attends with an explicit left/right window over each sequence's
+// live tail window [max(0, kv_len - gather_len), kv_len). The gathered width
+// depends only on the static sliding window and block-table width so a MUSA
+// graph replay keeps fixed tensor shapes while per-sequence gather origins
+// update on device, and GQA broadcasts without expanding K/V across groups.
 void run_dflash2_band_attention(const AttentionMetadata& attn_metadata,
                                 const torch::Tensor& query,
                                 torch::Tensor& output,
@@ -228,50 +230,84 @@ void run_dflash2_band_attention(const AttentionMetadata& attn_metadata,
   CHECK_EQ(num_heads % num_kv_heads, 0);
   const int64_t groups = num_heads / num_kv_heads;
   const int64_t table_blocks = attn_metadata.block_table.size(1);
-  const int64_t max_kv =
-      std::min<int64_t>(4096, table_blocks * block_size);
-  CHECK_GT(max_kv, 0);
+  const int64_t table_capacity = table_blocks * block_size;
+  CHECK_GT(table_capacity, 0);
+  const int64_t max_window_tokens =
+      window_left >= 0 ? (window_left + query_len) : 4096;
+  const int64_t gather_len =
+      std::min<int64_t>(table_capacity, max_window_tokens);
+  CHECK_GT(gather_len, 0);
   const int64_t window_right = *attn_metadata.non_causal_window_right;
 
   const auto index_options =
       torch::TensorOptions().dtype(torch::kLong).device(query.device());
-  const torch::Tensor pos = torch::arange(max_kv, index_options);
-  const torch::Tensor block_index = torch::floor_divide(pos, block_size);
-  const torch::Tensor offset = torch::remainder(pos, block_size);
+  const torch::Tensor kv_lens_1d = attn_metadata.kv_seq_lens.to(torch::kLong);
+  const torch::Tensor start_pos =
+      (kv_lens_1d - gather_len).clamp(0, table_capacity - gather_len);
+  const torch::Tensor rel_pos = torch::arange(gather_len, index_options);
+  const torch::Tensor k_pos_2d =
+      start_pos.unsqueeze(1) + rel_pos.unsqueeze(0);
+  const torch::Tensor block_index = torch::floor_divide(k_pos_2d, block_size);
+  const torch::Tensor offsets = torch::remainder(k_pos_2d, block_size);
   const torch::Tensor table = attn_metadata.block_table.to(torch::kLong);
-  const torch::Tensor blocks =
-      table.index({torch::indexing::Slice(), block_index});
+  const torch::Tensor blocks = torch::gather(table, /*dim=*/1, block_index);
   const torch::Tensor safe_blocks = blocks.clamp_min(0);
-  const torch::Tensor offsets = offset.view({1, -1}).expand({batch, max_kv});
-  torch::Tensor keys = k_cache.index({safe_blocks, offsets});
-  torch::Tensor values = v_cache.index({safe_blocks, offsets});
-  keys = keys.repeat_interleave(groups, /*dim=*/2)
-             .permute({0, 2, 1, 3});
-  values = values.repeat_interleave(groups, /*dim=*/2)
-               .permute({0, 2, 1, 3});
+  const torch::Tensor flat_slots =
+      (safe_blocks * block_size + offsets).reshape({-1});
+  const auto q_dtype = query.scalar_type();
+  auto gather_kv_to_qdtype = [&](const torch::Tensor& cache) {
+    torch::Tensor gathered;
+    if (cache.element_size() == 1) {
+      gathered = cache.view(torch::kByte)
+                     .reshape({-1, num_kv_heads, head_size})
+                     .index_select(/*dim=*/0, flat_slots)
+                     .view(cache.scalar_type())
+                     .to(q_dtype);
+    } else {
+      gathered = cache.reshape({-1, num_kv_heads, head_size})
+                     .index_select(/*dim=*/0, flat_slots)
+                     .to(q_dtype);
+    }
+    return gathered.view({batch, gather_len, num_kv_heads, head_size})
+        .permute({0, 2, 1, 3});
+  };
+  torch::Tensor keys = gather_kv_to_qdtype(k_cache);
+  torch::Tensor values = gather_kv_to_qdtype(v_cache);
 
-  const torch::Tensor q =
-      query.view({batch, query_len, num_heads, head_size})
-          .permute({0, 2, 1, 3})
-          .to(torch::kFloat32);
+  // Group-broadcast GQA without repeat_interleave on K/V:
+  // q_grouped: [batch, num_kv_heads, groups * query_len, head_size]
+  // keys:      [batch, num_kv_heads, gather_len, head_size]
+  const torch::Tensor q_grouped =
+      query.view({batch, query_len, num_kv_heads, groups, head_size})
+          .permute({0, 2, 3, 1, 4})
+          .reshape({batch, num_kv_heads, groups * query_len, head_size});
   torch::Tensor scores =
-      torch::matmul(q, keys.to(torch::kFloat32).transpose(-1, -2)) * scale;
-  const torch::Tensor kv_lens =
-      attn_metadata.kv_seq_lens.to(torch::kLong).view({batch, 1, 1, 1});
+      (torch::matmul(q_grouped, keys.transpose(-1, -2)).to(torch::kFloat32) *
+       scale)
+          .view({batch, num_kv_heads, groups, query_len, gather_len});
+  const torch::Tensor kv_lens = kv_lens_1d.view({batch, 1, 1, 1, 1});
   const torch::Tensor q_pos =
       kv_lens - query_len +
-      torch::arange(query_len, index_options).view({1, 1, query_len, 1});
-  const torch::Tensor k_pos = pos.view({1, 1, 1, max_kv});
+      torch::arange(query_len, index_options).view({1, 1, 1, query_len, 1});
+  const torch::Tensor k_pos = k_pos_2d.view({batch, 1, 1, 1, gather_len});
   torch::Tensor visible = k_pos < kv_lens;
   if (window_left >= 0) {
     visible = visible & (k_pos >= q_pos - window_left);
   }
   visible = visible & (k_pos <= q_pos + window_right);
-  scores.masked_fill_(~visible, -std::numeric_limits<float>::infinity());
+  // Keep softmax inputs finite even for padded/zero-length rows in a graph
+  // bucket, then zero out rows with no visible keys.
+  const torch::Tensor any_visible = visible.any(/*dim=*/-1, /*keepdim=*/true);
+  const torch::Tensor safe_visible = visible | ~any_visible;
+  scores.masked_fill_(~safe_visible, -std::numeric_limits<float>::infinity());
   const torch::Tensor probs =
-      torch::softmax(scores, /*dim=*/-1).to(query.scalar_type());
-  torch::Tensor out = torch::matmul(probs, values.to(query.scalar_type()));
-  out = out.permute({0, 2, 1, 3})
+      torch::softmax(scores, /*dim=*/-1)
+          .masked_fill(~any_visible, 0.0f)
+          .to(query.scalar_type())
+          .view({batch, num_kv_heads, groups * query_len, gather_len});
+  torch::Tensor out = torch::matmul(probs, values);
+  out = out.view({batch, num_kv_heads, groups, query_len, head_size})
+            .permute({0, 3, 1, 2, 4})
             .contiguous()
             .view({query.size(0), num_heads, head_size});
   output.copy_(out);

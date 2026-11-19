@@ -32,6 +32,14 @@ limitations under the License.
 #include "framework/parallel_state/parallel_state.h"
 #include "kernels/ops_api.h"
 
+#if defined(USE_MUSA)
+namespace xllm::kernel::musa {
+void register_compact_vocab_metadata(const torch::Tensor& compact_logits,
+                                     const torch::Tensor& column_ids,
+                                     int64_t full_vocab_size);
+}  // namespace xllm::kernel::musa
+#endif
+
 namespace xllm {
 namespace layer {
 
@@ -717,8 +725,8 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
     if (output_column_ids_.defined()) {
       CHECK_EQ(output.dim(), 2) << "row-subset linear expects a 2-D output";
       if (defer_row_subset_expansion_ && world_size_ == 1) {
-        xllm::kernel::musa::register_compact_vocab_column_ids(
-            output, output_column_ids_);
+        xllm::kernel::musa::register_compact_vocab_metadata(
+            output, output_column_ids_, full_out_features_);
       } else {
         torch::Tensor full_output =
             torch::full({output.size(0), full_out_features_},

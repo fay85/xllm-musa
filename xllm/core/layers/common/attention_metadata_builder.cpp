@@ -176,18 +176,22 @@ void populate_fa3_attention_metadata(
             .contiguous();
   }
 
-  if (!attn_metadata.fa3_metadata.paged_kv_indptr_host.defined()) {
-    attn_metadata.fa3_metadata.paged_kv_indptr_host =
-        to_host_int32_contiguous(params.attention.device.paged_kv_indptr);
-  }
-  if (!attn_metadata.fa3_metadata.paged_kv_indices_host.defined()) {
-    attn_metadata.fa3_metadata.paged_kv_indices_host =
-        to_host_int32_contiguous(params.attention.device.paged_kv_indices);
-  }
-  if (!attn_metadata.fa3_metadata.paged_kv_last_page_len_host.defined()) {
-    attn_metadata.fa3_metadata.paged_kv_last_page_len_host =
-        to_host_int32_contiguous(
-            params.attention.device.paged_kv_last_page_len);
+  // DFlash2 draft proposals run device-only band attention and may execute
+  // inside MUSA prelaunch graph capture, where D2H copies are forbidden.
+  if (!attn_metadata.is_dflash_proposal) {
+    if (!attn_metadata.fa3_metadata.paged_kv_indptr_host.defined()) {
+      attn_metadata.fa3_metadata.paged_kv_indptr_host =
+          to_host_int32_contiguous(params.attention.device.paged_kv_indptr);
+    }
+    if (!attn_metadata.fa3_metadata.paged_kv_indices_host.defined()) {
+      attn_metadata.fa3_metadata.paged_kv_indices_host =
+          to_host_int32_contiguous(params.attention.device.paged_kv_indices);
+    }
+    if (!attn_metadata.fa3_metadata.paged_kv_last_page_len_host.defined()) {
+      attn_metadata.fa3_metadata.paged_kv_last_page_len_host =
+          to_host_int32_contiguous(
+              params.attention.device.paged_kv_last_page_len);
+    }
   }
 
   if (attn_mask.has_value() && attn_mask->dim() == 1) {

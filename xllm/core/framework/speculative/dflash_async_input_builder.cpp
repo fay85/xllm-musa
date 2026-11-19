@@ -24,13 +24,18 @@ NextDraftInputs prepare_next_draft(const torch::Tensor& accepted_tokens,
                                    const torch::Tensor& base_positions,
                                    const torch::Tensor& block_table,
                                    int64_t mask_token_id,
-                                   int64_t block_size) {
+                                   int64_t block_size,
+                                   const torch::Tensor& base_cache_positions) {
   CHECK_EQ(accepted_tokens.dim(), 2);
   CHECK_EQ(base_positions.dim(), 1);
   CHECK_EQ(block_table.dim(), 2);
   CHECK_EQ(base_positions.numel(), accepted_tokens.size(0));
   CHECK_EQ(block_table.size(0), accepted_tokens.size(0));
   CHECK_GT(block_size, 0);
+  const torch::Tensor cache_base_1d =
+      base_cache_positions.defined() ? base_cache_positions : base_positions;
+  CHECK_EQ(cache_base_1d.dim(), 1);
+  CHECK_EQ(cache_base_1d.numel(), accepted_tokens.size(0));
   const int64_t width = accepted_tokens.size(1);
   torch::Tensor row =
       torch::arange(width, base_positions.options().dtype(torch::kLong))
@@ -46,19 +51,23 @@ NextDraftInputs prepare_next_draft(const torch::Tensor& accepted_tokens,
                    result.anchor_tokens.unsqueeze(1),
                    torch::full_like(accepted_tokens, mask_token_id))
           .reshape({-1});
-  torch::Tensor base = base_positions.to(torch::kLong).unsqueeze(1);
+  torch::Tensor model_base = base_positions.to(torch::kLong).unsqueeze(1);
+  torch::Tensor cache_base = cache_base_1d.to(torch::kLong).unsqueeze(1);
   torch::Tensor next_positions =
-      base + result.accepted_counts.unsqueeze(1) + row;
+      model_base + result.accepted_counts.unsqueeze(1) + row;
+  torch::Tensor next_cache_positions =
+      cache_base + result.accepted_counts.unsqueeze(1) + row;
   result.query_positions = next_positions.reshape({-1});
   result.query_slots = speculative::map_positions_to_cache_slots(
-      block_table, next_positions, block_size);
+      block_table, next_cache_positions, block_size);
   result.kv_lengths =
-      (base_positions.to(torch::kLong) + result.accepted_counts + width)
+      (cache_base_1d.to(torch::kLong) + result.accepted_counts + width)
           .to(torch::kInt32);
-  torch::Tensor context_positions = base + row;
+  torch::Tensor context_positions = model_base + row;
+  torch::Tensor context_cache_positions = cache_base + row;
   result.context_positions = context_positions.reshape({-1});
   torch::Tensor context_slots = speculative::map_positions_to_cache_slots(
-      block_table, context_positions, block_size);
+      block_table, context_cache_positions, block_size);
   result.context_slots = torch::where(valid.reshape({-1}).ne(0),
                                       context_slots,
                                       torch::full_like(context_slots, -1));

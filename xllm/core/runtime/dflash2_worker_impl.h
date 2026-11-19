@@ -62,6 +62,7 @@ class DFlash2WorkerImpl final : public DFlashWorkerImpl {
                                     const torch::Tensor& accepted_tokens,
                                     const torch::Tensor& embeddings,
                                     const torch::Tensor& base_positions,
+                                    const torch::Tensor& base_cache_positions,
                                     const torch::Tensor& noise,
                                     Stream& stream);
   struct DraftGraph;
@@ -69,7 +70,8 @@ class DFlash2WorkerImpl final : public DFlashWorkerImpl {
                                     ForwardInput query,
                                     const SampleOutput& output,
                                     const torch::Tensor& noise,
-                                    const torch::Tensor& base_positions);
+                                    const torch::Tensor& base_positions,
+                                    const torch::Tensor& base_cache_positions);
   struct DraftGraphResources;
   std::unique_ptr<DraftGraphResources> draft_graph_resources_;
   std::unordered_map<uint64_t, std::unique_ptr<DraftGraph>> draft_graphs_;
@@ -81,6 +83,7 @@ class DFlash2WorkerImpl final : public DFlashWorkerImpl {
     SamplingParameters sampling;
     torch::Tensor noise;
     torch::Tensor base_positions;
+    torch::Tensor base_cache_positions;
   };
   struct PendingDraft {
     ForwardInput identity;
@@ -95,6 +98,7 @@ class DFlash2WorkerImpl final : public DFlashWorkerImpl {
   std::optional<ForwardInput> prepared_prelaunch_;
   torch::Tensor prepared_noise_;
   torch::Tensor prepared_base_positions_;
+  torch::Tensor prepared_base_cache_positions_;
   std::optional<PendingDraft> pending_draft_;
 
   struct BlockSampleOutput {

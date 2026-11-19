@@ -26,7 +26,13 @@ limitations under the License.
 #include "core/framework/sampling/json_object_grammar.h"
 #include "logits_utils.h"
 #if defined(USE_MUSA)
+#include <limits>
+#include <utility>
 #include "core/kernels/musa/musa_ops_api.h"
+namespace xllm::kernel::musa {
+std::pair<torch::Tensor, int64_t> lookup_compact_vocab_metadata(
+    const torch::Tensor& logits);
+}  // namespace xllm::kernel::musa
 #endif
 #include "sampling_params.h"
 
@@ -87,6 +93,122 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
                               const SamplingParameters& params,
                               const torch::Tensor& filter_mask) const {
   SampleOutput output;
+#if defined(USE_MUSA)
+  auto [compact_column_ids, compact_full_vocab_size] =
+      xllm::kernel::musa::lookup_compact_vocab_metadata(logits);
+  if (compact_column_ids.defined()) {
+    const bool use_sample_indices_compact =
+        params.selected_token_idxes.numel() != params.sample_idxes.numel();
+    const bool needs_full_vocab_logits =
+        params.logprobs || params.use_beam_search || filter_mask.defined() ||
+        params.filter_mask.defined() || params.filter_bitmask.defined() ||
+        params.frequency_penalties.defined() ||
+        params.presence_penalties.defined() ||
+        params.repetition_penalties.defined() || compact_full_vocab_size <= 0;
+    if (needs_full_vocab_logits) {
+      if (compact_full_vocab_size > logits.size(1)) {
+        torch::Tensor full_logits =
+            torch::full({logits.size(0), compact_full_vocab_size},
+                        -std::numeric_limits<float>::infinity(),
+                        logits.options());
+        full_logits.index_copy_(/*dim=*/1, compact_column_ids, logits);
+        logits = full_logits;
+      }
+    } else {
+      torch::Tensor compact_logits =
+          use_sample_indices_compact
+              ? logits.index_select(/*dim=*/0, params.sample_idxes)
+              : logits;
+      if (params.all_greedy_sample && !params.return_probs) {
+        if (xllm::kernel::musa::row_argmax_supported(compact_logits)) {
+          output.next_tokens = xllm::kernel::musa::row_argmax(
+              compact_logits, compact_column_ids);
+        } else {
+          output.next_tokens =
+              compact_column_ids
+                  .index_select(/*dim=*/0,
+                                compact_logits.argmax(/*dim=*/-1).reshape({-1}))
+                  .view({compact_logits.size(0)});
+        }
+        return output;
+      }
+
+      torch::Tensor sample_temperatures = params.temperatures;
+      torch::Tensor sample_top_k = params.top_k;
+      torch::Tensor sample_top_p = params.top_p;
+      if (use_sample_indices_compact) {
+        if (params.temperatures.defined()) {
+          sample_temperatures =
+              params.temperatures.index_select(/*dim=*/0, params.sample_idxes);
+        }
+        if (params.top_k.defined()) {
+          sample_top_k =
+              params.top_k.index_select(/*dim=*/0, params.sample_idxes);
+        }
+        if (params.top_p.defined()) {
+          sample_top_p =
+              params.top_p.index_select(/*dim=*/0, params.sample_idxes);
+        }
+      } else if (sample_temperatures.defined() || sample_top_k.defined() ||
+                 sample_top_p.defined()) {
+        compact_logits = compact_logits.clone();
+      }
+
+      TopKSampleWindow topk_window;
+      apply_top_k_top_p(compact_logits,
+                        sample_temperatures,
+                        sample_top_k,
+                        sample_top_p,
+                        &topk_window);
+      if (topk_window.values.defined() && params.all_random_sample) {
+        auto window_probs = torch::softmax(
+            topk_window.values, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+        auto picks = random_sample(window_probs);
+        auto compact_picks =
+            topk_window.indices.gather(/*dim=*/-1, picks.view({-1, 1}))
+                .view({-1});
+        auto selected_probs =
+            window_probs.gather(/*dim=*/-1, picks.view({-1, 1}));
+        auto compact_probs =
+            torch::zeros({compact_logits.size(0), compact_logits.size(1)},
+                         window_probs.options());
+        compact_probs.scatter_(
+            /*dim=*/-1, /*index=*/topk_window.indices, /*src=*/window_probs);
+        output.next_tokens = compact_column_ids.index_select(
+            /*dim=*/0, compact_picks.to(torch::kLong));
+        if (params.return_probs) {
+          output.probs =
+              torch::cat({selected_probs, compact_probs}, /*dim=*/-1);
+        }
+        return output;
+      }
+
+      CHECK(params.do_sample.defined()) << "params.do_sample must be defined";
+      CHECK_EQ(compact_logits.size(0), params.do_sample.size(0));
+      auto compact_probs = torch::softmax(
+          compact_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+      torch::Tensor compact_picks;
+      if (params.all_random_sample) {
+        compact_picks = random_sample(compact_probs);
+      } else if (params.all_greedy_sample) {
+        compact_picks = compact_probs.argmax(/*dim=*/-1);
+      } else {
+        auto rnd = random_sample(compact_probs);
+        auto grd = compact_probs.argmax(/*dim=*/-1);
+        compact_picks = torch::where(params.do_sample, rnd, grd);
+      }
+      auto compact_picks_long = compact_picks.to(torch::kLong);
+      output.next_tokens =
+          compact_column_ids.index_select(/*dim=*/0, compact_picks_long);
+      if (params.return_probs) {
+        auto selected_probs = compact_probs.gather(
+            /*dim=*/-1, compact_picks_long.view({-1, 1}));
+        output.probs = torch::cat({selected_probs, compact_probs}, /*dim=*/-1);
+      }
+      return output;
+    }
+  }
+#endif
   torch::Tensor sample_logits =
       apply_logits_processors(logits, params, filter_mask);
 
@@ -109,7 +231,7 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
   }
 
   if (params.all_greedy_sample && !params.logprobs && !params.return_probs &&
-      !use_sample_indices && !filter_mask.defined()) {
+      !filter_mask.defined()) {
     output.next_tokens = greedy_sample(sample_logits).to(torch::kLong);
     return output;
   }

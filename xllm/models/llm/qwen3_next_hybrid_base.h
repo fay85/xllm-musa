@@ -146,10 +146,11 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
                                                /*device=*/device_,
                                                metadata_build_options);
     attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
-    // Auxiliary capture records every row on every rank, so it keeps the
-    // replicated layout.
+    // PCP still splits the prompt. Captured layers gather those rows back
+    // to the original token order, as GLM5-Next and DeepSeek-V4 do, so the
+    // draft sees one row per token.
     std::optional<layer::musa_pcp::Context> pcp_context;
-    if (parallel_args_.cp_size() > 1 && !aux_capture_.enabled()) {
+    if (parallel_args_.cp_size() > 1) {
       layer::musa_pcp::build_context(attn_metadata,
                                      parallel_args_,
                                      static_cast<int32_t>(tokens.size(0)),
@@ -224,7 +225,27 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       // converts target output layer L to capture index L + 1, matching the
       // established Qwen3 DFlash convention. Hybrid layers keep the residual
       // stream split between h and residual, so capture their sum.
+#if defined(USE_MUSA)
+      // Non-final chunks skip the hidden gather and return local rows, so
+      // their capture stays local too. Every other CP forward gathers the
+      // captured rows; finish() returns the same full sequence.
+      if (pcp_context.has_value() && !input_params.skip_pcp_gather &&
+          aux_capture_.should_capture(static_cast<int32_t>(i))) {
+        torch::Tensor captured_h =
+            layer::musa_pcp::gather_rows(h, *pcp_context);
+        std::optional<torch::Tensor> captured_residual;
+        if (residual.has_value()) {
+          captured_residual =
+              layer::musa_pcp::gather_rows(residual.value(), *pcp_context);
+        }
+        aux_capture_.capture_layer(
+            static_cast<int32_t>(i), captured_h, captured_residual);
+      } else {
+        aux_capture_.capture_layer(static_cast<int32_t>(i), h, residual);
+      }
+#else
       aux_capture_.capture_layer(static_cast<int32_t>(i), h, residual);
+#endif
       auto& layer = layers_[i];
       h = layer->forward(h,
                          residual,

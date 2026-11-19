@@ -32,10 +32,12 @@ struct NextDraftInputs {
 
 // Fixed-width device preparation. The valid prefix is written to context KV;
 // unused rows use slot -1 and the proposal starts after the accepted inputs.
-NextDraftInputs prepare_next_draft(const torch::Tensor& accepted_tokens,
-                                   const torch::Tensor& base_positions,
-                                   const torch::Tensor& block_table,
-                                   int64_t mask_token_id,
-                                   int64_t block_size);
+NextDraftInputs prepare_next_draft(
+    const torch::Tensor& accepted_tokens,
+    const torch::Tensor& base_positions,
+    const torch::Tensor& block_table,
+    int64_t mask_token_id,
+    int64_t block_size,
+    const torch::Tensor& base_cache_positions = torch::Tensor());
 
 }  // namespace xllm::dflash_async

@@ -650,8 +650,7 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
   // prompts in ranges like (32768, 34816) or 22k never overshoot their final
   // reusable LINEAR checkpoint without splitting earlier chunks unnecessarily.
   if (has_linear_attention_layers(state.model_args) &&
-      state.enable_prefix_cache && seq->num_tokens() > max_tokens_per_chunk &&
-      remaining_in_seq > 0) {
+      state.enable_prefix_cache && remaining_in_seq > 0) {
     const size_t block_size = static_cast<size_t>(
         std::max<int32_t>(1, state.kv_cache_manager->block_size()));
     const size_t cp_align =

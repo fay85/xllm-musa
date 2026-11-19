@@ -24,6 +24,7 @@ namespace py = pybind11;
 #include <acl/acl.h>
 #endif
 
+#include <algorithm>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -712,6 +713,20 @@ int main(int argc, char** argv) {
   FLAGS_minloglevel = 0;
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging("xllm");
+  // Cap default ATen/OpenMP intra-op threads when OMP_NUM_THREADS is unset.
+  // On high-core hosts (e.g. 256 cores), each worker / MMInputTransfer thread
+  // entering a CPU op otherwise spawns and retains a full-core OpenMP team,
+  // exhausting cgroup pids.max and hurting throughput via oversubscription.
+  if (std::getenv("OMP_NUM_THREADS") == nullptr) {
+    constexpr int32_t kDefaultMaxAtenThreads = 4;
+    const int32_t cur_threads = torch::get_num_threads();
+    if (cur_threads > kDefaultMaxAtenThreads) {
+      torch::set_num_threads(kDefaultMaxAtenThreads);
+      LOG(INFO) << "Capped default ATen intra-op threads from " << cur_threads
+                << " to " << kDefaultMaxAtenThreads
+                << " (set OMP_NUM_THREADS to override)";
+    }
+  }
 #if defined(USE_MUSA)
   initialize_musa_backend();
 #endif

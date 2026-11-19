@@ -17,6 +17,7 @@ limitations under the License.
 #include <absl/time/time.h>
 #include <glog/logging.h>
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -151,6 +152,7 @@ void PrefillFirstPolicy::schedule(
         const absl::Time now = absl::Now();
         const size_t max_chunk =
             std::max<size_t>(1, options_.max_tokens_per_chunk_for_prefill());
+        constexpr double kPrefillScoreBucketWidth = 128.0;
         std::unordered_map<const Request*, double> srpt_scores;
         srpt_scores.reserve(state.prefill_queue.size());
         for (const std::shared_ptr<Request>& req : state.prefill_queue) {
@@ -159,29 +161,25 @@ void PrefillFirstPolicy::schedule(
           }
           const size_t rem =
               estimate_remaining_prefill_tokens(req, state, block_pool);
-          const double wait_ms =
-              std::max(0.0, absl::ToDoubleMilliseconds(now - req->created_time()));
-          // Keep single-chunk completions (e.g., prefix-cache hits) in a
-          // fast lane with gentle aging, while multi-chunk cold requests age
-          // aggressively (10 tokens/ms) so 30k-37k prompts do not starve for
-          // 10+ seconds behind 15k-23k requests and inflate p95 tail latency.
+          const double wait_ms = std::max(
+              0.0, absl::ToDoubleMilliseconds(now - req->created_time()));
           const bool is_fast = rem <= max_chunk;
-          const double multi_floor = static_cast<double>(max_chunk) + 1024.0;
           const double score =
-              is_fast
-                  ? (static_cast<double>(rem) - 2.0 * wait_ms)
-                  : std::max(multi_floor,
-                             static_cast<double>(max_chunk + rem) - 10.0 * wait_ms);
-          srpt_scores.emplace(req.get(), score);
+              is_fast ? (static_cast<double>(rem) - 2.0 * wait_ms)
+                      : (static_cast<double>(max_chunk + rem) - 10.0 * wait_ms);
+          srpt_scores.emplace(req.get(),
+                              std::floor(score / kPrefillScoreBucketWidth));
         }
         state.prefill_queue.sort(
             [&srpt_scores, &fcfs_cmp](const std::shared_ptr<Request>& a,
                                       const std::shared_ptr<Request>& b) {
-              const auto it_a = srpt_scores.find(a.get());
-              const auto it_b = srpt_scores.find(b.get());
-              if (it_a != srpt_scores.end() && it_b != srpt_scores.end() &&
-                  std::abs(it_a->second - it_b->second) > 128.0) {
-                return it_a->second < it_b->second;
+              if (a == nullptr || b == nullptr) {
+                return a != nullptr;
+              }
+              const double score_a = srpt_scores.at(a.get());
+              const double score_b = srpt_scores.at(b.get());
+              if (score_a != score_b) {
+                return score_a < score_b;
               }
               return fcfs_cmp(a, b);
             });
@@ -232,6 +230,7 @@ void PrefillFirstPolicy::schedule(
     auto fcfs_cmp = create_comparator("fcfs", /*is_reversed=*/true);
     const size_t max_chunk =
         std::max<size_t>(1, options_.max_tokens_per_chunk_for_prefill());
+    constexpr double kChunkScoreBucketWidth = 512.0;
     std::unordered_map<const Request*, double> chunk_scores;
     chunk_scores.reserve(state.chunk_queue.size());
     for (const std::shared_ptr<Request>& req : state.chunk_queue) {
@@ -249,16 +248,19 @@ void PrefillFirstPolicy::schedule(
               ? (static_cast<double>(rem) - 2.0 * wait_ms)
               : std::max(multi_floor,
                          static_cast<double>(max_chunk + rem) - 10.0 * wait_ms);
-      chunk_scores.emplace(req.get(), score);
+      chunk_scores.emplace(req.get(),
+                           std::floor(score / kChunkScoreBucketWidth));
     }
     state.chunk_queue.sort(
         [&chunk_scores, &fcfs_cmp](const std::shared_ptr<Request>& a,
                                    const std::shared_ptr<Request>& b) {
-          const auto it_a = chunk_scores.find(a.get());
-          const auto it_b = chunk_scores.find(b.get());
-          if (it_a != chunk_scores.end() && it_b != chunk_scores.end() &&
-              std::abs(it_a->second - it_b->second) > 512.0) {
-            return it_a->second < it_b->second;
+          if (a == nullptr || b == nullptr) {
+            return a != nullptr;
+          }
+          const double score_a = chunk_scores.at(a.get());
+          const double score_b = chunk_scores.at(b.get());
+          if (score_a != score_b) {
+            return score_a < score_b;
           }
           return fcfs_cmp(a, b);
         });

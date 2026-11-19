@@ -243,14 +243,18 @@ bool has_decode_lookahead_capacity(const DecodeRowContext& ctx,
   CHECK_GT(num_tokens, 0);
   CHECK_GT(block_size, 0);
   for (int32_t seq = 0; seq < ctx.num_sequences; ++seq) {
-    const int64_t first_position = ctx.positions[seq];
-    const int64_t last_position = first_position + num_tokens - 1;
-    const int64_t last_block = last_position / block_size;
-    if (first_position < 0 || last_position >= max_position_embeddings ||
-        last_block >= ctx.block_table_stride) {
+    const int64_t first_model_position = ctx.positions[seq];
+    const int64_t last_model_position = first_model_position + num_tokens - 1;
+    const int64_t first_cache_position =
+        calc_kv_len(ctx.kv_seq_lens, seq, /*offset=*/0) - 1;
+    const int64_t last_cache_position = first_cache_position + num_tokens - 1;
+    const int64_t last_block = last_cache_position / block_size;
+    if (first_model_position < 0 ||
+        last_model_position >= max_position_embeddings ||
+        first_cache_position < 0 || last_block >= ctx.block_table_stride) {
       return false;
     }
-    for (int64_t block = first_position / block_size; block <= last_block;
+    for (int64_t block = first_cache_position / block_size; block <= last_block;
          ++block) {
       if (ctx.block_tables[seq * ctx.block_table_stride + block] < 0) {
         return false;

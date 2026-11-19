@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -560,6 +561,13 @@ class MemoryAudioReader : public MemoryMediaReader {
 };
 
 bool OpenCVImageDecoder::decode(std::string_view raw_data, torch::Tensor& t) {
+  static std::once_flag opencv_threads_init_once;
+  std::call_once(opencv_threads_init_once, []() {
+    // MMInputTransfer already parallelizes across images with its own
+    // ThreadPool; keep per-image OpenCV calls single-threaded to prevent
+    // nested thread-pool explosion and CPU oversubscription.
+    cv::setNumThreads(1);
+  });
   cv::Mat buffer(1, raw_data.size(), CV_8UC1, (void*)raw_data.data());
   if (raw_data.empty()) {
     LOG(ERROR) << "opencv image decode got empty data";

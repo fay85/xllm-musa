@@ -1,3 +1,4 @@
+#include <absl/container/flat_hash_set.h>
 /* Copyright 2026 The xLLM Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -555,13 +556,14 @@ std::vector<IndexedTensorSnapshot> snapshot_linear_attention_state(
     if (conv_cache.defined() && conv_cache.numel() > 0) {
       snapshots.emplace_back(IndexedTensorSnapshot{
           conv_cache,
-          torch::index_select(conv_cache, /*dim=*/0, indices),
+          torch::index_select(conv_cache, /*dim=*/0, indices).to(torch::kCPU),
           indices});
     }
     torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
     if (ssm_cache.defined() && ssm_cache.numel() > 0) {
-      // MTP keeps K+1 SSM checkpoints per conv row; the spec-verify forward
-      // rewrites all of them, so snapshot every checkpoint slot of the row.
+      // MTP/DFlash2 keeps K+1 SSM checkpoints per conv row (up to 9.2 GiB
+      // across 48 GDN layers at bucket=64). Stage snapshots on host RAM so
+      // lazy graph capture never exhausts device HBM.
       torch::Tensor ssm_indices = indices;
       if (conv_cache.defined() && conv_cache.size(0) > 0 &&
           ssm_cache.size(0) > conv_cache.size(0) &&
@@ -574,9 +576,13 @@ std::vector<IndexedTensorSnapshot> snapshot_linear_attention_state(
       }
       snapshots.emplace_back(IndexedTensorSnapshot{
           ssm_cache,
-          torch::index_select(ssm_cache, /*dim=*/0, ssm_indices),
+          torch::index_select(ssm_cache, /*dim=*/0, ssm_indices)
+              .to(torch::kCPU),
           ssm_indices});
     }
+  }
+  if (indices.defined() && !indices.is_cpu()) {
+    Device::empty_cache(indices.device().index());
   }
   return snapshots;
 }
@@ -586,7 +592,11 @@ void restore_linear_attention_state(
     const torch::Tensor& indices) {
   for (IndexedTensorSnapshot& snapshot : snapshots) {
     (void)indices;
-    snapshot.target.index_copy_(/*dim=*/0, snapshot.indices, snapshot.rows);
+    torch::Tensor dev_rows =
+        snapshot.rows.device() == snapshot.target.device()
+            ? snapshot.rows
+            : snapshot.rows.to(snapshot.target.device());
+    snapshot.target.index_copy_(/*dim=*/0, snapshot.indices, dev_rows);
   }
 }
 
@@ -3648,11 +3658,23 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     const uint64_t q_len =
         static_cast<uint64_t>(std::max<int32_t>(params.meta.q_max_seq_len, 1));
     const uint64_t key = static_cast<uint64_t>(n_tokens) | (q_len << 32);
+    static thread_local absl::flat_hash_set<std::pair<uintptr_t, uint64_t>>
+        s_failed_spec_verify_keys;
+    const auto fail_key =
+        std::make_pair(reinterpret_cast<uintptr_t>(this), key);
     auto it = spec_verify_graphs_.find(key);
     if (it != spec_verify_graphs_.end()) {
       auto result = it->second->replay(tokens, positions, kv_caches, params);
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
+    if (s_failed_spec_verify_keys.contains(fail_key)) {
+      ModelInputParams eager_params = params;
+      eager_params.enable_graph = false;
+      eager_params.attn_metadata.reset();
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, eager_params);
+    }
+    Device::empty_cache(device_.index());
     std::unique_ptr<MusaGraph> graph;
     std::unique_ptr<MusaMemPool> pool_owner;
     bool ok = false;
@@ -3696,9 +3718,16 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     graph.reset();
     pool_owner.reset();
     rollback_vmm_mempool(kPhysicalPoolIdDecode);
+    Device::empty_cache(device_.index());
+    s_failed_spec_verify_keys.insert(fail_key);
     LOG(WARNING) << "Failed to capture MUSA spec-verify graph for num_tokens="
                  << n_tokens << " q_len=" << q_len
-                 << "; falling back to eager mode.";
+                 << "; latching key and falling back to eager mode.";
+    ModelInputParams eager_params = params;
+    eager_params.enable_graph = false;
+    eager_params.attn_metadata.reset();
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, eager_params);
   }
 
   if (params.meta.batch_forward_type.is_chunked_prefill() ||
@@ -3865,6 +3894,18 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       return output;
     }
 
+    static thread_local absl::flat_hash_set<std::pair<uintptr_t, uint32_t>>
+        s_failed_decode_keys;
+    const auto decode_fail_key =
+        std::make_pair(reinterpret_cast<uintptr_t>(this), graph_shape_key);
+    if (s_failed_decode_keys.contains(decode_fail_key)) {
+      ModelInputParams eager_params = params;
+      eager_params.enable_graph = false;
+      eager_params.attn_metadata.reset();
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, eager_params);
+    }
+    Device::empty_cache(device_.index());
     // Graph doesn't exist for this bucket num_tokens, try to create it lazily
     std::unique_ptr<MusaGraph> graph;
     std::unique_ptr<MusaMemPool> pool_owner;
@@ -3928,6 +3969,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     graph.reset();
     pool_owner.reset();
     rollback_vmm_mempool(kPhysicalPoolIdDecode);
+    Device::empty_cache(device_.index());
+    s_failed_decode_keys.insert(decode_fail_key);
     LOG(WARNING) << "Failed to capture MUSA decode graph for bucket "
                  << "num_tokens: " << bucket_num_tokens
                  << " (actual num_tokens: " << n_tokens

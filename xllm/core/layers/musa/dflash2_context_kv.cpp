@@ -64,6 +64,9 @@ class DFlash2ContextKV::Impl final {
                                               args.rope_theta(),
                                               /*interleaved=*/false,
                                               tensor_options_);
+    // {0, query_len}. Built once on device so draft-graph capture does not
+    // allocate a host tensor while the stream is capturing.
+    cu_query_lens_ = torch::zeros({2}, tensor_options_.dtype(torch::kInt32));
   }
   void load_state_dict(const StateDict& state_dict) {
     const int32_t num_layers = num_layers_;
@@ -229,11 +232,15 @@ class DFlash2ContextKV::Impl final {
                            const torch::Tensor& positions) const {
     CHECK(rotary_embedding_ != nullptr);
     torch::Tensor rotated_key = key.clone();
-    const torch::Tensor cu_query_lens = torch::tensor(
-        {int64_t{0}, key.size(0)}, positions.options().dtype(torch::kInt32));
+    const torch::Tensor positions_i32 = positions.scalar_type() == torch::kInt32
+                                            ? positions
+                                            : positions.to(torch::kInt32);
+    // Index 0 stays 0. fill_ is a device kernel and is legal during capture;
+    // torch::tensor({0, n}) copies from the host and aborts the capture.
+    cu_query_lens_.slice(/*dim=*/0, /*start=*/1, /*end=*/2).fill_(key.size(0));
     rotary_embedding_->forward(rotated_key,
-                               positions.to(torch::kInt32),
-                               cu_query_lens,
+                               positions_i32,
+                               cu_query_lens_,
                                key.size(0),
                                /*is_prompt=*/false);
     return rotated_key;
@@ -246,6 +253,7 @@ class DFlash2ContextKV::Impl final {
   torch::Tensor k_norm_weight_;
   torch::TensorOptions tensor_options_;
   std::shared_ptr<RotaryEmbeddingImpl> rotary_embedding_;
+  mutable torch::Tensor cu_query_lens_;
   int32_t num_layers_ = 0;
   int64_t hidden_size_ = 0;
   int64_t head_dim_ = 0;
