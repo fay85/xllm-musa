@@ -81,6 +81,16 @@ cc_test(
     GTest::gtest_main
 )
 
+cc_test(
+  NAME
+    deepseek_v4_pd_reduce_scatter_policy_test
+  CPU_ONLY
+  SRCS
+    deepseek_v4_pd_reduce_scatter_policy_test.cpp
+  DEPS
+    GTest::gtest_main
+)
+
 if(USE_CUDA)
   add_subdirectory(cuda)
 endif()
