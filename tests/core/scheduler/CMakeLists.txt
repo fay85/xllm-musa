@@ -1,5 +1,15 @@
 include(cc_test)
 
+cc_test(
+  NAME
+    overlap_retirement_policy_test
+  CPU_ONLY
+  SRCS
+    overlap_retirement_policy_test.cpp
+  DEPS
+    GTest::gtest_main
+)
+
 add_subdirectory(profile)
 
 cc_test(
