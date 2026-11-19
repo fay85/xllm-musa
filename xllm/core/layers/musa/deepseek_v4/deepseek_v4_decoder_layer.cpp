@@ -271,7 +271,20 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       sequence_parallel_context_ != nullptr;
   const bool batch_pcp =
       pcp_context_ != nullptr && dsv4_musa_pcp::is_batch(*pcp_context_);
-  if (batch_pcp) {
+  const bool batch_moe_reduce_scatter =
+      batch_pcp && pcp_context_->batch_moe_rank_sp.has_value() &&
+      (input_params.meta.batch_forward_type.is_prefill() ||
+       input_params.meta.batch_forward_type.is_chunked_prefill()) &&
+      ffn_input.scalar_type() == torch::kBFloat16;
+  if (batch_moe_reduce_scatter) {
+    CHECK(!skip_sp_moe_gather);
+    const auto& sp = pcp_context_->group_sp.value();
+    // HC padding may be nonzero. Only real rows participate as input; the
+    // gather pads again with zeros before running the token-wise MoE.
+    ffn_input = dsv4_musa_pcp::gather_batch_rank_major(
+        ffn_input.narrow(/*dim=*/0, /*start=*/0, sp.local_valid_tokens),
+        *pcp_context_);
+  } else if (batch_pcp) {
     CHECK(!skip_sp_moe_gather);
     // All expert shards must consume the same sequence-major token order.
     ffn_input = dsv4_musa_pcp::gather_batch_global(ffn_input, *pcp_context_);
@@ -336,9 +349,14 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
                            : global_input_ids.reshape({-1});
     }
     if (pcp_context_ != nullptr) {
-      flat_input_ids = pcp_context_->global_input_ids;
+      flat_input_ids = batch_moe_reduce_scatter
+                           ? pcp_context_->batch_moe_rank_sp->global_input_ids
+                           : pcp_context_->global_input_ids;
       CHECK(flat_input_ids.defined());
-      CHECK_EQ(flat_input_ids.numel(), pcp_context_->total_rows);
+      CHECK_EQ(flat_input_ids.numel(),
+               batch_moe_reduce_scatter
+                   ? pcp_context_->batch_moe_rank_sp->total_tokens
+                   : pcp_context_->total_rows);
     }
     const int64_t token_count = flat_input_ids.size(0);
     const int64_t hidden_rows = ffn_input_2d.size(0);
@@ -366,6 +384,15 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       gate_->forward(ffn_input_2d, gate_input_ids, batch_gate_verify);
   std::optional<dsv4_musa_sp::DeepseekV4SPContext> global_moe_context;
   const dsv4_musa_sp::DeepseekV4SPContext* reduce_scatter_context = nullptr;
+  if (batch_moe_reduce_scatter) {
+    reduce_scatter_context = &pcp_context_->batch_moe_rank_sp.value();
+    CHECK_EQ(ffn_input_2d.size(0), reduce_scatter_context->total_tokens);
+    LOG_FIRST_N(INFO, 4)
+        << "[DSV4_PCP_BATCH_MOE_RANK_RS] valid_rows=" << pcp_context_->total_rows
+        << " transport_rows=" << reduce_scatter_context->total_tokens
+        << " local_rows=" << reduce_scatter_context->local_tokens
+        << " rank=" << reduce_scatter_context->rank;
+  }
   if (sequence_parallel_context_ != nullptr && pcp_context_ == nullptr &&
       dsv4_pd_reduce_scatter_enabled()) {
     const auto& sp = *sequence_parallel_context_;

@@ -56,6 +56,9 @@ struct Context final {
   torch::Tensor batch_group_indices;
   torch::Tensor batch_local_indices;
   torch::Tensor batch_restore_indices;
+  // MoE-only rank-major transport, including padding. This must never be
+  // used as Attention geometry or as a KV/position/slot mapping.
+  std::optional<dsv4_musa_sp::DeepseekV4SPContext> batch_moe_rank_sp;
 };
 
 bool enabled();
@@ -89,6 +92,16 @@ torch::Tensor local_rows_from_global(const torch::Tensor& global,
 // invert the packed permutation to unpadded sequence-major order.
 torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
                                  const Context& context);
+
+// Gather within this CP group's TP4, preserving group-packed row order.
+// The opt-in compute-stream route retains producer/consumer stream ordering.
+torch::Tensor gather_batch_group(const torch::Tensor& local_rows,
+                                const Context& context);
+
+// Preserve equal-capacity rank-major order for a matching ReduceScatter.
+// Callers must remove/zero local padding before expert computation.
+torch::Tensor gather_batch_rank_major(const torch::Tensor& local_rows,
+                                     const Context& context);
 
 // Global rows owned by this rank's group.
 inline int64_t group_rows(const Context& context) {

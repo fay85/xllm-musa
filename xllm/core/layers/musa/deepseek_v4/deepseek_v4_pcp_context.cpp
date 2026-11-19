@@ -25,6 +25,7 @@ limitations under the License.
 #include <utility>
 
 #include "core/framework/parallel_state/musa_process_group.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_pd_reduce_scatter_policy.h"
 
 namespace xllm::layer::dsv4_musa_pcp {
 namespace {
@@ -355,6 +356,34 @@ void build_batch_context(const SequenceLayout& layout,
   // This batch has a different permutation; never populate the old fast-path
   // marker, even when front/back counts happen to be equal.
   value.global_sp = std::nullopt;
+  const char* moe_setting =
+      std::getenv("XLLM_DSV4_PCP_BATCH_MOE_REDUCE_SCATTER");
+  if (moe_setting != nullptr && std::string(moe_setting) == "1" &&
+      dsv4_pd_reduce_scatter_enabled() &&
+      dsv4_pd_reduce_scatter_eligible(layout.padded_rows(),
+                                      layout.rank_capacity(),
+                                      kWorldSize,
+                                      /*prefill=*/true,
+                                      /*bf16=*/true,
+                                      /*skip_gather=*/false)) {
+    dsv4_musa_sp::DeepseekV4SPContext moe_sp;
+    moe_sp.process_group = moe_group;
+    moe_sp.rank = moe_group->rank();
+    moe_sp.world_size = kWorldSize;
+    moe_sp.total_tokens = layout.padded_rows();
+    moe_sp.local_tokens = layout.rank_capacity();
+    // Here valid means transported MoE rows, not real query rows. Padding
+    // never enters Attention/cache metadata and is discarded by its owner.
+    moe_sp.local_valid_tokens = moe_sp.local_tokens;
+    moe_sp.local_offset = moe_sp.rank * moe_sp.local_tokens;
+    if (dsv4_musa_sp::long_prefill_rendezvous_enabled(moe_sp)) {
+      moe_sp.global_input_ids =
+          torch::zeros({layout.padded_rows()}, global_tokens.options());
+      moe_sp.global_input_ids.index_copy_(
+          /*dim=*/0, value.batch_restore_indices, global_tokens);
+      value.batch_moe_rank_sp = std::move(moe_sp);
+    }
+  }
   *context = std::move(value);
   LOG_FIRST_N(INFO, 8)
       << "[DSV4_PCP_BATCH_LAYOUT] cp_rank=" << cp_rank
@@ -381,8 +410,8 @@ torch::Tensor local_rows_from_global(const torch::Tensor& global,
   return dsv4_musa_sp::pad_local(local, context.group_sp.value());
 }
 
-torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
-                                 const Context& context) {
+torch::Tensor gather_batch_rank_major(const torch::Tensor& local_rows,
+                                     const Context& context) {
   CHECK(is_batch(context));
   CHECK(context.group_sp.has_value());
   CHECK(local_rows.defined());
@@ -396,8 +425,8 @@ torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
   }
   // Match the validated r6 dependent gather route: prepare receive storage
   // before enqueue and keep the collective/consumer on the compute stream.
-  // Unlike the old contiguous-rank fast path, always restore the batch row
-  // permutation after gathering all eight equal-capacity payloads.
+  // Every rank sees the same transport order, including any trailing padding
+  // within a rank. Only the sequence-major wrapper removes that padding.
   auto* musa_group = dynamic_cast<ProcessGroupImpl*>(context.global_group);
   CHECK(musa_group != nullptr);
   torch::Tensor input = padded.contiguous();
@@ -408,6 +437,50 @@ torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
   const torch::Tensor rank_major =
       gathered.flatten(/*start_dim=*/0, /*end_dim=*/1);
   CHECK_EQ(rank_major.size(0), context.batch_layout->padded_rows());
+  return rank_major;
+}
+
+torch::Tensor gather_batch_group(const torch::Tensor& local_rows,
+                                const Context& context) {
+  CHECK(is_batch(context));
+  CHECK(context.group_sp.has_value());
+  const auto& sp = context.group_sp.value();
+  static const bool compute_stream_enabled = []() {
+    const char* setting =
+        std::getenv("XLLM_DSV4_PCP_BATCH_GROUP_GATHER_COMPUTE");
+    return setting != nullptr && std::string(setting) == "1";
+  }();
+  if (!compute_stream_enabled || ::xllm::kernel::musa::is_stream_capturing()) {
+    return dsv4_musa_sp::gather_global(local_rows, sp);
+  }
+  CHECK(local_rows.defined());
+  CHECK_GT(local_rows.dim(), 0);
+  CHECK_EQ(sp.world_size, 4);
+  CHECK_EQ(local_rows.size(0), sp.local_tokens);
+  CHECK_GT(sp.total_tokens, 0);
+  CHECK_LE(sp.total_tokens, sp.local_tokens * sp.world_size);
+  auto* musa_group = dynamic_cast<ProcessGroupImpl*>(sp.process_group);
+  CHECK(musa_group != nullptr);
+  CHECK_EQ(musa_group->world_size(), sp.world_size);
+  // Do not reuse the legacy >=4096 host-rendezvous policy: a packed batch
+  // can place 3840 rows in CP0 and 4160 in CP1. Both groups use the same
+  // stream contract; allocate receives before enqueue and crop only padding.
+  torch::Tensor input = local_rows.contiguous();
+  auto shape = input.sizes().vec();
+  shape.insert(shape.begin(), sp.world_size);
+  torch::Tensor gathered = torch::empty(shape, input.options());
+  musa_group->allgather_on_compute_stream(input, gathered);
+  LOG_FIRST_N(INFO, 4)
+      << "[DSV4_PCP_BATCH_GROUP_GATHER_COMPUTE] cp_rank=" << context.cp_rank
+      << " tp_rank=" << sp.rank << " group_rows=" << sp.total_tokens
+      << " local_rows=" << sp.local_tokens;
+  return gathered.flatten(/*start_dim=*/0, /*end_dim=*/1)
+      .narrow(/*dim=*/0, /*start=*/0, sp.total_tokens);
+}
+
+torch::Tensor gather_batch_global(const torch::Tensor& local_rows,
+                                 const Context& context) {
+  const torch::Tensor rank_major = gather_batch_rank_major(local_rows, context);
   CHECK_EQ(rank_major.device(), context.batch_restore_indices.device());
   return rank_major.index_select(/*dim=*/0, context.batch_restore_indices);
 }

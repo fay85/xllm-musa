@@ -1180,8 +1180,10 @@ class DeepseekV4ModelImpl
               pcp_context.has_value() && pcp_context->global_sp.has_value()
                   ? pcp_context->global_sp.value()
                   : sequence_parallel_context.value();
-          auxiliary_hidden = layer::dsv4_musa_sp::gather_global(
-              auxiliary_hidden, gather_context);
+          auxiliary_hidden =
+              pcp_context.has_value() && layer::dsv4_musa_pcp::is_batch(*pcp_context)
+                  ? layer::dsv4_musa_pcp::gather_batch_group(auxiliary_hidden, *pcp_context)
+                  : layer::dsv4_musa_sp::gather_global(auxiliary_hidden, gather_context);
         }
         if (pcp_context.has_value()) {
           // Each TP group has only its own CP rows after the SP gather.
@@ -1201,8 +1203,9 @@ class DeepseekV4ModelImpl
     }
     if (sequence_parallel_context.has_value()) {
       if (!pcp_context.has_value() || !pcp_context->global_sp.has_value()) {
-        h = layer::dsv4_musa_sp::gather_global(
-            h, sequence_parallel_context.value());
+        h = pcp_context.has_value() && layer::dsv4_musa_pcp::is_batch(*pcp_context)
+                ? layer::dsv4_musa_pcp::gather_batch_group(h, *pcp_context)
+                : layer::dsv4_musa_sp::gather_global(h, sequence_parallel_context.value());
       }
       for (layer::DeepseekV4DecoderLayer& layer : layers_) {
         layer->set_sequence_parallel_context(nullptr);

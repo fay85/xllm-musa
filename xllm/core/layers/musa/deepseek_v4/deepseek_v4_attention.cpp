@@ -5491,8 +5491,11 @@ DeepseekV4AttentionImpl::forward_current_impl(
                       sp_joint_compressor_projection_weight_.scalar_type()))
             : kernel::matmul(params);
     CHECK_EQ(packed_local.size(1), 2 * main_width + 2 * indexer_width);
-    auto packed_global = dsv4_musa_sp::gather_global(
-        dsv4_musa_sp::pad_local(packed_local, *sp_context), *sp_context);
+    auto padded_local = dsv4_musa_sp::pad_local(packed_local, *sp_context);
+    auto packed_global =
+        pcp_batch
+            ? dsv4_musa_pcp::gather_batch_group(padded_local, *pcp_context_)
+            : dsv4_musa_sp::gather_global(padded_local, *sp_context);
     joint_main_kv_projection = packed_global.slice(
         /*dim=*/1, /*start=*/0, /*end=*/main_width);
     joint_main_score_projection = packed_global.slice(
@@ -5522,8 +5525,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
                              compression_hidden_states.options().dtype(
                                  projection->weight().scalar_type()))
               : projection->forward(compression_hidden_states);
-      return dsv4_musa_sp::gather_global(
-          dsv4_musa_sp::pad_local(local, *sp_context), *sp_context);
+      return dsv4_musa_pcp::gather_batch_group(
+          dsv4_musa_sp::pad_local(local, *sp_context), *pcp_context_);
     };
     joint_main_kv_projection = project_group(compressor_wkv_);
     joint_main_score_projection = project_group(compressor_wgate_);
