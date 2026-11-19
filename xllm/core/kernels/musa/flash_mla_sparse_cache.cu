@@ -56,6 +56,51 @@ __global__ void write_fp8_cache(const c10::BFloat16* latent,
     __syncthreads();
   }
 }
+
+__global__ void pack_fp8_cache(const c10::BFloat16* latent,
+                               uint8_t* packed,
+                               int64_t rows) {
+  const int64_t row = blockIdx.x;
+  if (row >= rows) {
+    return;
+  }
+  __shared__ float values[128];
+  const int32_t lane = threadIdx.x;
+  for (int32_t group = 0; group < 4; ++group) {
+    const float value =
+        static_cast<float>(latent[row * 512 + group * 128 + lane]);
+    values[lane] = fabsf(value);
+    __syncthreads();
+    for (int32_t offset = 64; offset > 0; offset /= 2) {
+      if (lane < offset) {
+        values[lane] = fmaxf(values[lane], values[lane + offset]);
+      }
+      __syncthreads();
+    }
+    const float scale = fmaxf(__fdiv_rn(values[0], 448.0f), 1.0e-4f);
+    if (lane == 0) {
+      reinterpret_cast<float*>(packed + row * 528 + 512)[group] = scale;
+    }
+    reinterpret_cast<c10::Float8_e4m3fn*>(packed +
+                                          row * 528)[group * 128 + lane] =
+        QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
+    __syncthreads();
+  }
+}
+
+__global__ void write_packed_fp8_cache(const uint8_t* packed,
+                                       const int64_t* slots,
+                                       uint8_t* cache,
+                                       int64_t capacity) {
+  const int64_t row = blockIdx.x;
+  const int64_t slot = slots[row];
+  if (slot < 0 || slot >= capacity) {
+    return;
+  }
+  for (int64_t byte = threadIdx.x; byte < 528; byte += blockDim.x) {
+    cache[slot * 528 + byte] = packed[row * 528 + byte];
+  }
+}
 __global__ void write_cache(const c10::BFloat16* latent,
                             const int64_t* slots,
                             c10::BFloat16* cache,
@@ -165,6 +210,60 @@ void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
       cache.data_ptr<uint8_t>(),
       cache.size(0) * cache.size(1));
   check_musa_kernel_launch("sparse MLA FP8 cache write");
+}
+
+torch::Tensor sparse_mla_fp8_cache_pack(const torch::Tensor& latent) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_fp8_cache_pack");
+  CHECK(latent.device().is_privateuseone());
+  check_tensor(latent, latent, torch::kBFloat16);
+  CHECK_EQ(latent.dim(), 2);
+  CHECK_EQ(latent.size(1), 512);
+  auto packed = torch::empty({latent.size(0), 528},
+                             latent.options().dtype(torch::kUInt8));
+  if (latent.size(0) == 0) {
+    return packed;
+  }
+  XLLMDeviceGuard device_guard(latent.device());
+  pack_fp8_cache<<<latent.size(0),
+                   128,
+                   0,
+                   current_musa_stream(latent.device())>>>(
+      latent.data_ptr<c10::BFloat16>(),
+      packed.data_ptr<uint8_t>(),
+      latent.size(0));
+  check_musa_kernel_launch("sparse MLA FP8 cache pack");
+  return packed;
+}
+
+void sparse_mla_fp8_cache_write_packed(const torch::Tensor& packed,
+                                       const torch::Tensor& slots,
+                                       torch::Tensor& cache) {
+  RECORD_USER_SCOPE("kernel: sparse_mla_fp8_cache_write_packed");
+  CHECK(packed.device().is_privateuseone());
+  check_tensor(packed, packed, torch::kUInt8);
+  check_tensor(slots, packed, torch::kInt64);
+  check_tensor(cache, packed, torch::kUInt8);
+  CHECK_EQ(packed.dim(), 2);
+  CHECK_EQ(packed.size(1), 528);
+  CHECK_EQ(slots.dim(), 1);
+  CHECK_EQ(slots.numel(), packed.size(0));
+  CHECK_EQ(cache.dim(), 4);
+  CHECK_EQ(cache.size(2), 1);
+  CHECK_EQ(cache.size(3), 528);
+  CHECK_GT(cache.size(1), 0);
+  if (packed.size(0) == 0) {
+    return;
+  }
+  XLLMDeviceGuard device_guard(packed.device());
+  write_packed_fp8_cache<<<packed.size(0),
+                           128,
+                           0,
+                           current_musa_stream(packed.device())>>>(
+      packed.data_ptr<uint8_t>(),
+      slots.data_ptr<int64_t>(),
+      cache.data_ptr<uint8_t>(),
+      cache.size(0) * cache.size(1));
+  check_musa_kernel_launch("sparse MLA packed FP8 cache write");
 }
 
 torch::Tensor sparse_mla_map_indices(const torch::Tensor& logical,

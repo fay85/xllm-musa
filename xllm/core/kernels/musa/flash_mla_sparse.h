@@ -52,6 +52,16 @@ void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
                                 const torch::Tensor& slots,
                                 torch::Tensor& cache);
 
+// Pack BF16 latent rows into the inline FP8 cache format before a CP
+// collective. Each row contains 512 E4M3 values followed by four FP32 scales.
+torch::Tensor sparse_mla_fp8_cache_pack(const torch::Tensor& latent);
+
+// Write rows that are already in the inline FP8 cache format. Negative slots
+// are ignored, matching sparse_mla_fp8_cache_write.
+void sparse_mla_fp8_cache_write_packed(const torch::Tensor& packed,
+                                       const torch::Tensor& slots,
+                                       torch::Tensor& cache);
+
 // Map per-query logical token candidates [T,K] to physical cache slots. Rows
 // identify requests in block_table, positions are inclusive causal bounds.
 // Invalid requests, pages, future tokens and out-of-cache slots become -1.
@@ -88,6 +98,17 @@ inline void flash_mla_sparse_fp8_cache_write(const torch::Tensor& latent,
                                              const torch::Tensor& slots,
                                              torch::Tensor& cache) {
   sparse_mla_fp8_cache_write(latent, slots, cache);
+}
+
+inline torch::Tensor flash_mla_sparse_fp8_cache_pack(
+    const torch::Tensor& latent) {
+  return sparse_mla_fp8_cache_pack(latent);
+}
+
+inline void flash_mla_sparse_fp8_cache_write_packed(const torch::Tensor& packed,
+                                                    const torch::Tensor& slots,
+                                                    torch::Tensor& cache) {
+  sparse_mla_fp8_cache_write_packed(packed, slots, cache);
 }
 
 inline torch::Tensor flash_mla_sparse_map_indices(

@@ -181,6 +181,15 @@ class Glm5NextCpLayout final {
         tail_cu.emplace_back(tail_rows.size());
       }
     }
+    std::vector<int64_t> request_begins(static_cast<size_t>(total));
+    int64_t request_begin = 0;
+    for (int64_t row = 0; row < total; ++row) {
+      if (row > 0 && requests[static_cast<size_t>(row)] !=
+                         requests[static_cast<size_t>(row - 1)]) {
+        request_begin = row;
+      }
+      request_begins[static_cast<size_t>(row)] = request_begin;
+    }
     if (graph_capture) {
       rows = torch::zeros({total},
                           global_positions.options().dtype(torch::kInt32));
@@ -293,28 +302,70 @@ class Glm5NextCpLayout final {
       local_halo_rows.emplace_back(row);
     }
     halo_local_indices = indices(local_halo_rows);
+    // A halo is needed only when a complete four-token pool owned by the
+    // destination reaches into this rank's rows.  Checking pool_rows avoids
+    // sending the last three rows merely because two CP shards are adjacent.
+    // In particular, a prompt whose CP boundaries are aligned to four-token
+    // pools needs no halo traffic at all.
+    auto pool_needs_rows_from = [&](int64_t pool_row,
+                                    int32_t destination,
+                                    int32_t source) {
+      for (int64_t row = std::max(request_begins[static_cast<size_t>(pool_row)],
+                                  pool_row - kHaloRows);
+           row < pool_row && row < offsets_[destination];
+           ++row) {
+        const int32_t owner = static_cast<int32_t>(
+            std::upper_bound(offsets_.begin(), offsets_.end(), row) -
+            offsets_.begin() - 1);
+        if (owner == source) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     halo_send_ranks.clear();
-    if (count > 0) {
-      const int64_t source_end = begin + count;
-      for (int32_t dst = group_.rank() + 1; dst < world_size; ++dst) {
-        if (counts[dst] == 0) {
-          continue;
-        }
-        const int64_t destination_begin = offsets_[dst];
-        if (destination_begin - kHaloRows >= source_end) {
-          break;
-        }
-        halo_send_ranks.emplace_back(dst);
+    for (int32_t destination = group_.rank() + 1; destination < world_size;
+         ++destination) {
+      if (counts[destination] == 0) {
+        continue;
+      }
+      const auto first = std::lower_bound(
+          pool_rows.begin(), pool_rows.end(), offsets_[destination]);
+      const auto last = std::lower_bound(
+          pool_rows.begin(), pool_rows.end(), offsets_[destination + 1]);
+      const bool needed = std::any_of(first, last, [&](int64_t pool_row) {
+        return pool_needs_rows_from(pool_row, destination, group_.rank());
+      });
+      if (needed) {
+        halo_send_ranks.emplace_back(destination);
       }
     }
     halo_recv_sources.clear();
     halo_recv_counts.clear();
     halo_recv_offsets.clear();
     halo_recv_rows = 0;
+    std::vector<int64_t> needed_halo_rows;
+    needed_halo_rows.reserve(kHaloRows);
+    const auto local_pool_first =
+        std::lower_bound(pool_rows.begin(), pool_rows.end(), begin);
+    const auto local_pool_last =
+        std::lower_bound(pool_rows.begin(), pool_rows.end(), begin + count);
+    for (auto pool = local_pool_first; pool != local_pool_last; ++pool) {
+      const int64_t pool_row = *pool;
+      for (int64_t row = std::max(request_begins[static_cast<size_t>(pool_row)],
+                                  pool_row - kHaloRows);
+           row < begin && row < pool_row;
+           ++row) {
+        if (std::find(needed_halo_rows.begin(), needed_halo_rows.end(), row) ==
+            needed_halo_rows.end()) {
+          needed_halo_rows.emplace_back(row);
+        }
+      }
+    }
     std::vector<int64_t> halo_sources;
-    halo_sources.reserve(kHaloRows);
-    for (int64_t row = std::max<int64_t>(0, begin - kHaloRows); row < begin;
-         ++row) {
+    halo_sources.reserve(needed_halo_rows.size());
+    for (int64_t row : needed_halo_rows) {
       const int32_t owner = static_cast<int32_t>(
           std::upper_bound(offsets_.begin(), offsets_.end(), row) -
           offsets_.begin() - 1);
@@ -1018,22 +1069,26 @@ Glm5NextMLAAttentionImpl::forward_cp(
       indexer_weights = kw.narrow(1, 128, 32).to(torch::kFloat32).contiguous();
     }
     auto extended = layout.with_halo(key_gate);
+    CHECK_GE(extended.size(0), layout.count);
+    // The pool-aligned layout can omit the predecessor halo when no local
+    // pool crosses a rank boundary. Derive the global row from the actual
+    // prefix returned by with_halo so the indexer shape contract stays valid.
+    const int64_t key_begin = layout.begin - (extended.size(0) - layout.count);
     indexer_cache = cache.get_index_cache();
     indexer_tail = cache.get_kpool_tail();
-    km::glm5_next_indexer_update_cp(
-        extended.narrow(1, 0, 128).contiguous(),
-        extended.narrow(1, 128, 128).contiguous(),
-        ape_,
-        layout.global_positions,
-        cu,
-        ids,
-        read_ids,
-        table,
-        indexer_cache,
-        indexer_tail,
-        layout.begin,
-        layout.count,
-        std::max<int64_t>(0, layout.begin - kHaloRows));
+    km::glm5_next_indexer_update_cp(extended.narrow(1, 0, 128).contiguous(),
+                                    extended.narrow(1, 128, 128).contiguous(),
+                                    ape_,
+                                    layout.global_positions,
+                                    cu,
+                                    ids,
+                                    read_ids,
+                                    table,
+                                    indexer_cache,
+                                    indexer_tail,
+                                    layout.begin,
+                                    layout.count,
+                                    key_begin);
     layout.pack_indexer_payload(key_gate, indexer_cache);
     extended = torch::Tensor();
   }
@@ -1068,14 +1123,21 @@ Glm5NextMLAAttentionImpl::forward_cp(
   if (indexer_work.defined()) {
     indexer_work->wait();
   }
-  auto global_latent =
-      parallel_state::gather(latent.contiguous(), cp_group_, layout.counts);
   auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
   {
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CacheWrite");
     if (main_cache.scalar_type() == torch::kUInt8) {
-      km::flash_mla_sparse_fp8_cache_write(global_latent, slots, main_cache);
+      // Quantize before the CP gather so communication carries the exact
+      // packed cache representation instead of the wider BF16 latent. The
+      // local latent remains BF16 for query absorption below.
+      auto packed_latent = km::flash_mla_sparse_fp8_cache_pack(latent);
+      auto global_packed =
+          parallel_state::gather(packed_latent, cp_group_, layout.counts);
+      km::flash_mla_sparse_fp8_cache_write_packed(
+          global_packed, slots, main_cache);
     } else {
+      auto global_latent =
+          parallel_state::gather(latent.contiguous(), cp_group_, layout.counts);
       km::flash_mla_sparse_cache_write(global_latent, slots, main_cache);
     }
   }

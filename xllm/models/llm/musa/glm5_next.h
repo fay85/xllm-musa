@@ -32,6 +32,7 @@ limitations under the License.
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/model/model_output.h"
 #include "core/framework/model_context.h"
+#include "core/framework/parallel_state/parallel_state.h"
 #include "core/kernels/musa/mhc_ops.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/attention_metadata.h"
@@ -281,8 +282,9 @@ class Glm5NextModelImpl final
     hidden_states = kernel::musa::mhc_contract_mean(hidden_states);
     // Hidden states are already the plain local shard.  The executor restores
     // the global sequence from the recorded row offsets.
-    // CP4 restores/selects request outputs in the CausalLM LM Head path; the
-    // model itself continues to return Plain local rows to the executor.
+    // CP prefill path restores/selects request outputs in the CausalLM LM Head
+    // path; the model itself continues to return Plain local rows to the
+    // executor.
     if (hidden_states.numel() != 0) {
       RECORD_USER_SCOPE("nn.Module: RMSNorm_22");
       hidden_states = std::get<0>(norm_->forward(hidden_states));
@@ -298,10 +300,11 @@ class Glm5NextModelImpl final
            hidden_states.size(0) == cp_local_row_end_ - cp_local_row_begin_;
   }
 
-  // CP4 restores the Plain local rows after the final local norm.  The
-  // all-gather uses a fixed padded row count because CP0 permits S % CP != 0
-  // and empty ranks.  Copying is performed on device; row offsets are the
-  // metadata contract prepared by the model-level split.
+  // CP prefill path restores the Plain local rows after the final local norm.
+  // Unequal CP row counts use a fixed padded row count because CP0 permits
+  // S % CP != 0 and empty ranks.  Equal row counts use a direct rank-major
+  // gather.  Row offsets are the metadata contract prepared by the model-level
+  // split.
   torch::Tensor restore_prefill_cp_hidden(
       const torch::Tensor& local_hidden_states) const {
     CHECK(prefill_cp_enabled_);
@@ -312,6 +315,20 @@ class Glm5NextModelImpl final
     CHECK_EQ(local_hidden_states.size(0),
              cp_local_row_end_ - cp_local_row_begin_);
     CHECK_EQ(cp_global_rows_, cp_row_offsets_.back());
+    const int64_t local_rows = cp_local_row_end_ - cp_local_row_begin_;
+    bool equal_rows = true;
+    for (size_t rank = 0; rank < cp_row_offsets_.size() - 1; ++rank) {
+      if (cp_row_offsets_[rank + 1] - cp_row_offsets_[rank] != local_rows) {
+        equal_rows = false;
+        break;
+      }
+    }
+    if (equal_rows) {
+      std::vector<int32_t> counts(cp_group_->world_size(),
+                                  static_cast<int32_t>(local_rows));
+      return parallel_state::gather(
+          local_hidden_states.contiguous(), cp_group_, counts);
+    }
     int64_t max_rows = 0;
     for (size_t rank = 0; rank + 1 < cp_row_offsets_.size(); ++rank) {
       max_rows = std::max(max_rows,
@@ -342,6 +359,75 @@ class Glm5NextModelImpl final
       }
     }
     return restored;
+  }
+
+  // Collect only rows requested by the LM head or pooler. Each rank writes
+  // the rows it owns into a fixed-size buffer and the CP all-gather restores
+  // the requested order. Duplicate and reordered selections are preserved.
+  torch::Tensor select_prefill_cp_hidden(
+      const torch::Tensor& local_hidden_states,
+      const torch::Tensor& selected_indices) const {
+    CHECK(prefill_cp_enabled_);
+    CHECK(cp_group_ != nullptr);
+    CHECK_EQ(local_hidden_states.dim(), 2);
+    CHECK_EQ(local_hidden_states.size(0),
+             cp_local_row_end_ - cp_local_row_begin_);
+    if (!selected_indices.defined()) {
+      return restore_prefill_cp_hidden(local_hidden_states);
+    }
+    CHECK_EQ(selected_indices.dim(), 1);
+    if (selected_indices.numel() == 0) {
+      return local_hidden_states.index_select(
+          0,
+          selected_indices.to(
+              torch::dtype(torch::kLong).device(local_hidden_states.device())));
+    }
+
+    const torch::Tensor selected_cpu =
+        selected_indices.to(torch::dtype(torch::kLong).device(torch::kCPU));
+    std::vector<int64_t> local_rows;
+    std::vector<int64_t> output_rows;
+    local_rows.reserve(static_cast<size_t>(selected_indices.numel()));
+    output_rows.reserve(static_cast<size_t>(selected_indices.numel()));
+    const int32_t rank = cp_group_->rank();
+    const int32_t world_size = cp_group_->world_size();
+    for (int64_t output = 0; output < selected_cpu.numel(); ++output) {
+      const int64_t global_row = selected_cpu[output].item<int64_t>();
+      CHECK_GE(global_row, 0);
+      CHECK_LT(global_row, cp_global_rows_);
+      const auto owner_it = std::upper_bound(
+          cp_row_offsets_.begin(), cp_row_offsets_.end(), global_row);
+      const int32_t owner =
+          static_cast<int32_t>(owner_it - cp_row_offsets_.begin() - 1);
+      CHECK_GE(owner, 0);
+      CHECK_LT(owner, world_size);
+      if (owner == rank) {
+        local_rows.emplace_back(global_row - cp_row_offsets_[owner]);
+        output_rows.emplace_back(output);
+      }
+    }
+
+    auto partial =
+        torch::zeros({selected_indices.numel(), local_hidden_states.size(1)},
+                     local_hidden_states.options());
+    if (!local_rows.empty()) {
+      const auto local_row_tensor =
+          torch::tensor(local_rows,
+                        torch::TensorOptions()
+                            .dtype(torch::kLong)
+                            .device(local_hidden_states.device()));
+      const auto output_row_tensor =
+          torch::tensor(output_rows,
+                        torch::TensorOptions()
+                            .dtype(torch::kLong)
+                            .device(local_hidden_states.device()));
+      partial.index_copy_(
+          0,
+          output_row_tensor,
+          local_hidden_states.index_select(0, local_row_tensor));
+    }
+    auto gathered = cp_group_->allgather_base_sync(partial);
+    return gathered.sum(0);
   }
 
   void prepare_graph_forward_metadata(ModelGraphMetadataState* state,
@@ -563,9 +649,14 @@ class Glm5NextForCausalLMImpl final
       return LlmForCausalLMImplBase<Glm5NextModel>::logits(hidden_states,
                                                            selected_indices);
     }
-    torch::Tensor restored = model_->restore_prefill_cp_hidden(hidden_states);
-    return LlmForCausalLMImplBase<Glm5NextModel>::logits(restored,
-                                                         selected_indices);
+    if (!selected_indices.defined()) {
+      return LlmForCausalLMImplBase<Glm5NextModel>::logits(
+          model_->restore_prefill_cp_hidden(hidden_states), selected_indices);
+    }
+    torch::Tensor selected =
+        model_->select_prefill_cp_hidden(hidden_states, selected_indices);
+    return LlmForCausalLMImplBase<Glm5NextModel>::logits(selected,
+                                                         torch::Tensor());
   }
 
   torch::Tensor logits(const torch::Tensor& hidden_states,
@@ -575,9 +666,16 @@ class Glm5NextForCausalLMImpl final
       return LlmForCausalLMImplBase<Glm5NextModel>::logits(
           hidden_states, selected_indices, out_hidden);
     }
-    torch::Tensor restored = model_->restore_prefill_cp_hidden(hidden_states);
+    if (!selected_indices.defined()) {
+      return LlmForCausalLMImplBase<Glm5NextModel>::logits(
+          model_->restore_prefill_cp_hidden(hidden_states),
+          selected_indices,
+          out_hidden);
+    }
+    torch::Tensor selected =
+        model_->select_prefill_cp_hidden(hidden_states, selected_indices);
     return LlmForCausalLMImplBase<Glm5NextModel>::logits(
-        restored, selected_indices, out_hidden);
+        selected, torch::Tensor(), out_hidden);
   }
 
   torch::Tensor pooler(const torch::Tensor& hidden_states,
@@ -586,9 +684,14 @@ class Glm5NextForCausalLMImpl final
       return LlmForCausalLMImplBase<Glm5NextModel>::pooler(hidden_states,
                                                            selected_indices);
     }
-    torch::Tensor restored = model_->restore_prefill_cp_hidden(hidden_states);
-    return LlmForCausalLMImplBase<Glm5NextModel>::pooler(restored,
-                                                         selected_indices);
+    if (!selected_indices.defined()) {
+      return LlmForCausalLMImplBase<Glm5NextModel>::pooler(
+          model_->restore_prefill_cp_hidden(hidden_states), selected_indices);
+    }
+    torch::Tensor selected =
+        model_->select_prefill_cp_hidden(hidden_states, selected_indices);
+    return LlmForCausalLMImplBase<Glm5NextModel>::pooler(selected,
+                                                         torch::Tensor());
   }
 
   bool is_hybrid_linear_attention() { return true; }
