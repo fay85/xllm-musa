@@ -361,6 +361,7 @@ def stream_chat(
     prompt_tokens = None
     completion_tokens = None
     cached_tokens = None
+    stream_error = None
     try:
         response_cm = urllib.request.urlopen(request, timeout=timeout)
     except urllib.error.HTTPError as exc:
@@ -372,6 +373,13 @@ def stream_chat(
             if not line.startswith("data:") or line[5:].strip() == "[DONE]":
                 continue
             chunk = json.loads(line[5:])
+            if chunk.get("error"):
+                error = chunk["error"]
+                if isinstance(error, dict):
+                    stream_error = error.get("message") or json.dumps(error, ensure_ascii=False)
+                else:
+                    stream_error = str(error)
+                continue
             usage = chunk.get("usage") or {}
             if usage:
                 prompt_tokens = usage.get("prompt_tokens", prompt_tokens)
@@ -387,6 +395,8 @@ def stream_chat(
                     last = now
                     pieces.append(piece)
     if first is None:
+        if stream_error:
+            raise RuntimeError(f"server stream error: {stream_error}")
         raise RuntimeError(f"no content streamed for {request_id}")
     return {
         "request_id": request_id,

@@ -562,6 +562,32 @@ TEST(SchedulerPolicyTest, UnifiedPrefixHitIncludesScheduledSuffixCapacity) {
             kPrefixTokens + kChunkTokens);
 }
 
+TEST(SchedulerPolicyTest, CpPrefillLeavesNonEmptyTailForEveryRank) {
+  constexpr int32_t kCpSize = 8;
+  constexpr int32_t kMaxChunkTokens = 32768;
+  constexpr int32_t kPromptTokens = 32769;
+  ContinuousScheduler::Options options = create_scheduler_options(
+      /*max_tokens_per_batch=*/kMaxChunkTokens,
+      /*max_seqs_per_batch=*/16,
+      /*num_speculative_tokens=*/0,
+      /*max_tokens_per_chunk_for_prefill=*/kMaxChunkTokens,
+      /*dp_size=*/1);
+  options.cp_size_ = kCpSize;
+
+  auto engine = std::make_unique<FakeEngine>(
+      /*num_blocks=*/256, /*block_size=*/256);
+  auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), options);
+  auto requests = generate_request(
+      {kPromptTokens}, {1}, std::nullopt, std::nullopt, 100000);
+  ASSERT_TRUE(scheduler->add_request(requests[0]));
+
+  auto batches = scheduler->prepare_batch_test();
+  ASSERT_EQ(batches.size(), 1u);
+  ASSERT_EQ(batches[0].size(), 1u);
+  EXPECT_EQ(batches[0].get_allowed_max_tokens()[0],
+            static_cast<uint32_t>(kMaxChunkTokens - kCpSize + 1));
+}
+
 TEST(SchedulerPolicyTest,
      PrefillPlanningAcceptsPartialAndRedistributedBudgets) {
   ContinuousScheduler::Options options =

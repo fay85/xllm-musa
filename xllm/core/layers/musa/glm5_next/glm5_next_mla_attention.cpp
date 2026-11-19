@@ -1061,6 +1061,13 @@ Glm5NextMLAAttentionImpl::forward_cp(
     latent.copy_(std::get<0>(kv_norm_->forward(c_raw)));
     q = q_b_proj_->forward(q_norm).view({local_count, heads_, 256});
   }
+  // MCCL does not guarantee ordering when an async collective and a second
+  // collective on the same process group are submitted concurrently from
+  // different streams.  Complete the indexer gather before starting the
+  // latent gather so every rank observes the same collective sequence.
+  if (indexer_work.defined()) {
+    indexer_work->wait();
+  }
   auto global_latent =
       parallel_state::gather(latent.contiguous(), cp_group_, layout.counts);
   auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
@@ -1074,9 +1081,6 @@ Glm5NextMLAAttentionImpl::forward_cp(
   }
   km::Glm5NextIndexerSelection selection;
   if (enable_indexer_) {
-    if (indexer_work.defined()) {
-      indexer_work->wait();
-    }
     km::glm5_next_indexer_scatter_cp(layout.indexer_gather.flatten(),
                                      layout.pool_source_offsets,
                                      layout.all_pool_byte_indices,

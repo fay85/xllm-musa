@@ -585,6 +585,18 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
     }
   }
 
+  // CP prefill shards each chunk across all ranks.  A tail smaller than the
+  // CP width would leave some ranks with zero rows, which is unsupported by
+  // models whose CP kernels require every rank to participate.  Shorten the
+  // current chunk so the tail has at least one row per rank.  Consume the
+  // whole tail when it is already no larger than the CP width.
+  const size_t cp_size = static_cast<size_t>(state.options.cp_size());
+  if (cp_size > 1 && remaining_in_seq > cp_size &&
+      remaining_in_seq > num_tokens &&
+      remaining_in_seq - num_tokens < cp_size) {
+    num_tokens = remaining_in_seq - cp_size;
+  }
+
   return num_tokens;
 }
 
