@@ -63,6 +63,7 @@ class RoutedMoeSharedExpertImpl final : public torch::nn::Module {
   int64_t intermediate_size_ = 0;
   int64_t local_intermediate_size_ = 0;
   double swiglu_limit_ = 0.0;
+  bool fused_shared_swiglu_ = false;
   ProcessGroup* process_group_ = nullptr;
   torch::Tensor down_weight_scale_;
   torch::Tensor decode_gate_up_workspace_;
@@ -117,8 +118,7 @@ class RoutedMoeImpl final : public torch::nn::Module {
                              int64_t local_expert_id) const;
   torch::Tensor forward_grouped_fp8(const torch::Tensor& input,
                                     const torch::Tensor& topk_ids,
-                                    const torch::Tensor& topk_weights,
-                                    bool compact_rows = false) const;
+                                    const torch::Tensor& topk_weights) const;
   void ensure_dense_expert_storage();
   void ensure_fp8_expert_storage();
   void ensure_packed_fp4_expert_storage();
@@ -138,6 +138,10 @@ class RoutedMoeImpl final : public torch::nn::Module {
                                   int64_t rank,
                                   int64_t world_size,
                                   bool packed_fp4);
+  torch::Tensor forward_generic_experts(const torch::Tensor& input,
+                                        const torch::Tensor& ids,
+                                        torch::Tensor weights,
+                                        const BatchForwardType& batch_type);
   torch::Tensor forward_fp8_gemv(const torch::Tensor& input,
                                  const torch::Tensor& ids,
                                  const torch::Tensor& weights);
@@ -178,7 +182,6 @@ class RoutedMoeImpl final : public torch::nn::Module {
   ProcessGroup* ep_pg_ = nullptr;
   bool ep_dispatch_enabled_ = false;
   std::shared_ptr<MusaMegaMoe> mega_moe_;
-  std::shared_ptr<MusaMegaMoe> ep_mate_moe_;
 
   RoutedMoeSharedExpert shared_experts_{nullptr};
   torch::nn::Linear shared_expert_gate_{nullptr};

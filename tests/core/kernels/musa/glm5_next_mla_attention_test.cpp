@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache_estimation.h"
 #include "core/framework/kv_cache/kv_cache_shape.h"
 #include "core/framework/kv_cache/kv_cache_utils.h"
+#include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
 #include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
@@ -355,9 +356,9 @@ TEST_F(GlmSparseTest, CpPayloadScatterWritesPoolsAndTail) {
   auto gates = torch::randn({4, 128}, opts) * 0.1;
   auto tail_payload = torch::cat({keys, gates}, 1).contiguous();
   constexpr int64_t kTailBytes = 4 * 512;
-  auto gathered = torch::empty(
-      {kTailBytes + 132},
-      torch::TensorOptions().device(device_).dtype(torch::kUInt8));
+  auto gathered =
+      torch::empty({kTailBytes + 132},
+                   torch::TensorOptions().device(device_).dtype(torch::kUInt8));
   gathered.narrow(0, 0, kTailBytes)
       .copy_(tail_payload.view(torch::kUInt8).flatten());
   auto packet = torch::arange(132, torch::kInt64).to(torch::kUInt8).to(device_);
@@ -374,16 +375,14 @@ TEST_F(GlmSparseTest, CpPayloadScatterWritesPoolsAndTail) {
       torch::TensorOptions().device(device_).dtype(torch::kInt64);
   auto pool_source_offsets = torch::tensor({kTailBytes}, int64_options);
   auto pool_cache_indices = torch::tensor(destinations, int64_options);
-  auto tail_source_offsets =
-      torch::arange(0, kTailBytes, 512, int64_options);
-  auto positions =
-      torch::arange(4, torch::TensorOptions().device(device_).dtype(
-                           torch::kInt64));
+  auto tail_source_offsets = torch::arange(0, kTailBytes, 512, int64_options);
+  auto positions = torch::arange(
+      4, torch::TensorOptions().device(device_).dtype(torch::kInt64));
   auto cu = torch::tensor({0, 4}, torch::kInt32).to(device_);
   auto ids = torch::tensor({1}, torch::kInt32).to(device_);
-  auto cache = torch::zeros(
-      {1, 64, 1, 132},
-      torch::TensorOptions().device(device_).dtype(torch::kUInt8));
+  auto cache =
+      torch::zeros({1, 64, 1, 132},
+                   torch::TensorOptions().device(device_).dtype(torch::kUInt8));
   auto tail = torch::zeros({2, 2, 4, 128}, opts);
 
   kernel::musa::glm5_next_indexer_scatter_cp(gathered,
@@ -1500,7 +1499,7 @@ TEST_F(GlmSparseTest, EngineKVCacheAndSharedSelectionCrossLayerForward) {
   }
 }
 
-TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
+TEST_F(GlmSparseTest, SigmoidRoutingPreservesMixtureAndGraphReplay) {
   auto args = model_args();
   args.hidden_size(288);
   args.n_routed_experts(288);
@@ -1522,9 +1521,16 @@ TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
   gate->verify_loaded_weights();
   kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
       device_, reinterpret_cast<void*>(stream_.stream()));
+  auto reference_gate = [&](const torch::Tensor& logits) {
+    auto scores = torch::sigmoid(logits);
+    auto ids = std::get<1>(torch::topk(
+        scores + gate->named_parameters()["bias"], 8, -1, true, false));
+    auto selected = scores.gather(1, ids);
+    auto scale = selected.sum(-1, true).clamp_min(1e-20).reciprocal();
+    return std::make_tuple(selected * scale * 2.5, ids.to(torch::kInt32));
+  };
   for (int64_t rows : {1, 2, 16, 2048}) {
     auto input = torch::randn({rows, 288}, opts);
-    setenv("XLLM_GLM5_FUSED_GATE", "1", 1);
     gate->forward(input, false);
     stream_.synchronize();
     MusaGraphHandle graph;
@@ -1540,8 +1546,7 @@ TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
       graph.replay();
       auto actual_weights = std::get<0>(captured).cpu();
       auto actual_ids = std::get<1>(captured).cpu().to(torch::kInt64);
-      setenv("XLLM_GLM5_FUSED_GATE", "0", 1);
-      auto reference = gate->forward(input, false);
+      auto reference = reference_gate(input);
       auto expected_weights = std::get<0>(reference).cpu();
       auto expected_ids = std::get<1>(reference).cpu().to(torch::kInt64);
       EXPECT_TRUE(torch::equal(actual_ids, expected_ids));
@@ -1566,10 +1571,8 @@ TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
   edge_bias[7].fill_(-0.4750221371650696);
   edge_bias[8].fill_(-0.3578811287879944);
   gate->named_parameters()["bias"].copy_(edge_bias);
-  setenv("XLLM_GLM5_FUSED_GATE", "0", 1);
-  auto expected = gate->forward(near_tie, false);
+  auto expected = reference_gate(near_tie);
   EXPECT_TRUE(std::get<1>(expected).cpu().eq(7).any().item<bool>());
-  setenv("XLLM_GLM5_FUSED_GATE", "1", 1);
   gate->forward(near_tie, false);
   stream_.synchronize();
   MusaGraphHandle near_tie_graph;
@@ -1592,9 +1595,7 @@ TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
         edge_bias.narrow(0, 7, 2).zero_();
         gate->named_parameters()["bias"].copy_(edge_bias);
       }
-      setenv("XLLM_GLM5_FUSED_GATE", "0", 1);
-      auto reference = gate->forward(tied_input, false);
-      setenv("XLLM_GLM5_FUSED_GATE", "1", 1);
+      auto reference = reference_gate(tied_input);
       gate->forward(tied_input, false);
       stream_.synchronize();
       MusaGraphHandle tied_graph;
@@ -1608,7 +1609,75 @@ TEST_F(GlmSparseTest, FusedSigmoidRoutingPreservesMixtureAndGraphReplay) {
           std::get<0>(result).cpu(), std::get<0>(reference).cpu(), 1e-6, 1e-7));
     }
   }
-  unsetenv("XLLM_GLM5_FUSED_GATE");
+}
+
+TEST_F(GlmSparseTest, SharedSwiGluMatchesClampedBf16Reference) {
+  for (int64_t width : {33, 256, 2048}) {
+    auto host_input =
+        (torch::arange(6 * width, torch::kFloat32).remainder(47) - 23)
+            .reshape({3, 2 * width})
+            .to(torch::kBFloat16);
+    auto input = host_input.to(device_);
+    // Exercise an unaligned but contiguous caller-provided output as well.
+    for (int offset : {0, 1}) {
+      auto output = torch::empty({3 * width + offset}, input.options())
+                        .narrow(0, offset, 3 * width)
+                        .view({3, width});
+      auto actual =
+          kernel::musa::deepseek_v4_shared_swiglu(input, 10.0, output);
+      auto gate =
+          host_input.narrow(1, 0, width).to(torch::kFloat32).clamp_max(10);
+      auto up =
+          host_input.narrow(1, width, width).to(torch::kFloat32).clamp(-10, 10);
+      EXPECT_TRUE(torch::equal(actual.cpu(),
+                               (torch::silu(gate) * up).to(torch::kBFloat16)));
+    }
+  }
+}
+
+TEST_F(GlmSparseTest, GlmFp8RouterAppliesBiasOnlyToSelection) {
+  auto args = model_args();
+  args.hidden_size(4096);
+  args.n_routed_experts(288);
+  args.num_experts_per_tok(8);
+  args.n_activated_experts(8);
+  args.n_group(1);
+  args.topk_group(1);
+  args.scoring_func("sigmoid");
+  args.topk_method("noaux_tc");
+  args.norm_topk_prob(true);
+  args.routed_scaling_factor(2.5);
+  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+  RoutedMoeGate gate(args, QuantArgs(), opts);
+  Weights weights;
+  // Expose the first 288 input coordinates directly as BF16 router logits.
+  auto projection = torch::zeros({288, 4096}, torch::kBFloat16);
+  projection.narrow(1, 0, 288).copy_(torch::eye(288));
+  weights["weight"] = projection;
+  auto bias = torch::arange(288, torch::kFloat32) * 0.00003;
+  weights["e_score_correction_bias"] = bias;
+  gate->load_state_dict(StateDict(weights));
+  kernel::musa::TvmffiStreamOverrideGuard ffi_stream(
+      device_, reinterpret_cast<void*>(stream_.stream()));
+  for (int64_t rows : {1, 2500}) {
+    auto input = torch::zeros({rows, 4096}, opts);
+    auto host_logits =
+        (torch::arange(rows).unsqueeze(1) + torch::arange(288).unsqueeze(0))
+            .remainder(31)
+            .to(torch::kBFloat16) *
+        0.125;
+    input.narrow(1, 0, 288).copy_(host_logits);
+    auto [weights_out, ids] = gate->forward(input, true);
+    auto scores = torch::sigmoid(host_logits.to(torch::kFloat32));
+    auto expected_ids = std::get<1>((scores + bias).topk(8, -1));
+    auto expected = scores.gather(1, expected_ids);
+    expected *= 2.5 / expected.sum(-1, true);
+    auto actual_dense = torch::zeros_like(scores);
+    actual_dense.scatter_(1, ids.cpu().to(torch::kInt64), weights_out.cpu());
+    auto expected_dense = torch::zeros_like(scores);
+    expected_dense.scatter_(1, expected_ids, expected);
+    EXPECT_TRUE(torch::allclose(actual_dense, expected_dense, 1e-5, 1e-6));
+  }
 }
 
 TEST_F(GlmSparseTest, MegaMoeEp8WorkerPreservesClampOwnershipAndReplay) {
@@ -1636,7 +1705,6 @@ TEST_F(GlmSparseTest, MegaMoeEp8WorkerPreservesClampOwnershipAndReplay) {
       device, reinterpret_cast<void*>(stream.stream()));
   auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device);
   {
-    setenv("XLLM_GLM5_MEGA_MOE", "1", 1);
     auto args = model_args(64, 4096, 1536);
     args.model_type("glm5_next");
     args.n_routed_experts(288);
@@ -1655,7 +1723,6 @@ TEST_F(GlmSparseTest, MegaMoeEp8WorkerPreservesClampOwnershipAndReplay) {
     moe->load_state_dict(StateDict(unowned));
     EXPECT_FALSE(moe->named_parameters().contains("w13"));
     EXPECT_FALSE(moe->named_parameters().contains("w2"));
-    unsetenv("XLLM_GLM5_MEGA_MOE");
   }
   // Constant matrices give an independent closed-form reference and force
   // gate>10/up>10, so silently dropping the clamp cannot pass this test.
@@ -1723,6 +1790,25 @@ TEST_F(GlmSparseTest, MegaMoeEp8WorkerPreservesClampOwnershipAndReplay) {
           << " actual=" << combined.cpu()[0][0].item<float>()
           << " expected=" << expected_scalar;
     }
+  }
+  for (int64_t total : {7, 32769}) {
+    const int64_t count = total / 8 + (rank < total % 8);
+    auto input = torch::ones({count, 4096}, opts);
+    auto ids = (torch::arange(8, opts.dtype(torch::kInt32)) * 36)
+                   .unsqueeze(0)
+                   .repeat({count, 1});
+    auto weights =
+        torch::full({count, 8}, 2.5 / 8, opts.dtype(torch::kFloat32));
+    auto actual = workspace->forward_local_shard(
+        input, ids, weights, w13, s13, w2, s2, 10.0, (total + 7) / 8, true, {});
+    stream.synchronize();
+    const double expected =
+        10.0 / (1.0 + std::exp(-10.0)) * 4.0 * 2.5 * 4.5 / 8;
+    EXPECT_TRUE(torch::allclose(actual.cpu().to(torch::kFloat32),
+                                torch::full({count, 4096}, expected),
+                                0.04,
+                                0.02))
+        << "global rows=" << total << " local rows=" << count;
   }
   // Check quantized dispatch and nonuniform block scales against independent
   // BF16 matrix operations. Each rank owns a different nonzero local expert.
@@ -2192,7 +2278,8 @@ TEST(GlmDsaCpTest, McclContextParallelWorker) {
                                      input.narrow(0, begin, count),
                                      sharded,
                                      local_cache);
-        EXPECT_EQ(counted.exchanges, exchanges + 2);  // activation scatter/restore
+        EXPECT_EQ(counted.exchanges,
+                  exchanges + 2);  // activation scatter/restore
         EXPECT_EQ(counted.latent_gathers, gathers + 1);
         EXPECT_EQ(counted.pool_gathers, pool_gathers + 1);
         EXPECT_EQ(counted.halo_gathers, halo_gathers);
@@ -2355,15 +2442,6 @@ TEST(GlmLocalCpDeathTest, RejectsInvalidEpAndMoeTpContracts) {
         RoutedMoe layer(args, QuantArgs(), cp, opts);
       },
       "requires moe_ep_group");
-  cp.ep_size(1);
-  cp.moe_ep_group_ = &one;
-  EXPECT_DEATH(
-      {
-        setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
-        setenv("XLLM_GLM5_MEGA_MOE", "1", 1);
-        RoutedMoe layer(args, QuantArgs(), cp, opts);
-      },
-      "requires XLLM_GLM5_MEGA_MOE=0");
 }
 
 // Mixed-model CP3 integration: all local elementwise/FFN operations are
@@ -2469,7 +2547,6 @@ TEST(GlmEpTest, AllToAllDispatchCombineWorker) {
     weights[prefix + "down_proj.weight"] =
         (torch::randn({128, 128}, torch::kFloat32) * 0.02).to(torch::kBFloat16);
   }
-  setenv("XLLM_GLM5_MEGA_MOE", "0", 1);
   setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
   setenv("XLLM_GLM5_PREFILL_EP", "1", 1);
   RoutedMoe distributed_moe(args, QuantArgs(), distributed, options);
@@ -2578,10 +2655,8 @@ TEST(GlmEpTest, Fp8AllToAllMatchesDenseExpertsWorker) {
           torch::full({128, 128}, scale, torch::kBFloat16);
     }
   }
-  setenv("XLLM_GLM5_MEGA_MOE", "0", 1);
   setenv("XLLM_GLM5_PREFILL_CP", "1", 1);
   setenv("XLLM_GLM5_PREFILL_EP", "1", 1);
-  setenv("XLLM_GLM5_PREFILL_EP_BACKEND", "eager", 1);
   QuantArgs quant;
   quant.quant_method("fp8").weight_block_size({128, 128});
   RoutedMoe distributed_moe(args, quant, distributed, options);

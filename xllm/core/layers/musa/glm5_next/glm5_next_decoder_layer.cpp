@@ -293,7 +293,10 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     RECORD_USER_SCOPE("nn.Module: MoEGate");
     auto [topk_weights, topk_ids] =
         sparse_gate_->forward(ffn_input_2d, is_prefill);
-    ModelInputParams moe_input_params = input_params;
+    ModelInputParams moe_input_params;
+    moe_input_params.attn_metadata = input_params.attn_metadata;
+    moe_input_params.meta.batch_forward_type =
+        input_params.meta.batch_forward_type;
     if (moe_input_params.meta.batch_forward_type.is_empty()) {
       if (attn_metadata.is_chunked_prefill) {
         moe_input_params.meta.batch_forward_type =
@@ -304,20 +307,10 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
         moe_input_params.meta.batch_forward_type = BatchForwardType::DECODE;
       }
     }
-    std::optional<RoutedMoeTokenShard> token_shard;
-    if (use_prefill_cp) {
-      token_shard = make_routed_moe_token_shard(attn_metadata, positions);
-    }
     {
       RECORD_USER_SCOPE("nn.Module: DeepEPMoE");
       ffn_output = sparse_moe_->forward_with_selected_experts(
-          ffn_input_2d,
-          topk_weights,
-          topk_ids,
-          moe_input_params,
-          /*skip_tp_allreduce=*/false,
-          /*output_buffer=*/{},
-          token_shard ? &token_shard.value() : nullptr);
+          ffn_input_2d, topk_weights, topk_ids, moe_input_params);
     }
     ffn_output = ffn_output.reshape(ffn_input.sizes());
   }

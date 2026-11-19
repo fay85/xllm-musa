@@ -49,8 +49,6 @@ namespace {
 
 constexpr int64_t kFp8GemvWorkspaceTokens = 128;
 constexpr int64_t kPrefillCustomAllreduceWorkspaceTokens = 16384;
-constexpr int64_t kCompactPrefillMinRows = 128;
-constexpr int64_t kCompactPrefillMaxRows = 16384;
 
 bool env_flag_enabled(const char* name, bool default_value = false) {
   const char* env = std::getenv(name);
@@ -260,7 +258,7 @@ RoutedMoeTokenShard make_routed_moe_token_shard(
   torch::Tensor rows;
   if (metadata.glm5_prefill_cp_round_robin) {
     rows = metadata.glm5_prefill_local_row_indices.to(positions.device(),
-                                                     torch::kInt64);
+                                                      torch::kInt64);
     CHECK_EQ(rows.numel(), count);
   } else {
     rows = torch::arange(metadata.glm5_prefill_local_row_begin,
@@ -290,6 +288,10 @@ RoutedMoeSharedExpertImpl::RoutedMoeSharedExpertImpl(
     : hidden_size_(hidden_size),
       intermediate_size_(intermediate_size),
       swiglu_limit_(swiglu_limit),
+      fused_shared_swiglu_(hidden_act == "silu" &&
+                           options.dtype() == torch::kBFloat16 &&
+                           options.device().is_privateuseone() &&
+                           quant_args.quant_method() == "fp8"),
       process_group_(process_group) {
   CHECK(process_group_ != nullptr)
       << "RoutedMoeSharedExpert requires a valid TP group.";
@@ -389,7 +391,13 @@ torch::Tensor RoutedMoeSharedExpertImpl::forward(
   torch::Tensor gate_up = gate_up_proj_->forward(input);
   torch::Tensor activated =
       torch::empty({num_tokens, local_intermediate_size_}, gate_up.options());
-  act_->forward(gate_up, activated);
+  if (fused_shared_swiglu_) {
+    CHECK(kernel::musa::deepseek_v4_shared_swiglu(
+              gate_up, swiglu_limit_, activated)
+              .defined());
+  } else {
+    act_->forward(gate_up, activated);
+  }
   return down_proj_->forward(activated).reshape(hidden_states.sizes());
 }
 
@@ -463,8 +471,6 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
                                          "TP AllReduce; moe_tp must be 1";
     CHECK(parallel_args.ep_size() == 1 || ep_pg_ != nullptr)
         << "GLM local-token MoE EP requires moe_ep_group when ep_size > 1";
-    CHECK(!env_flag_enabled("XLLM_GLM5_MEGA_MOE", true))
-        << "Hybrid CP requires XLLM_GLM5_MEGA_MOE=0";
     prefill_cp_rank_ = parallel_args.cp_group_->rank();
     prefill_cp_size_ = parallel_args.cp_group_->world_size();
     shared_single_rank_group_ =
@@ -481,23 +487,6 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
     CHECK_EQ(tp_pg_->world_size(), 1)
         << "RoutedMoe EP1 contract requires moe_tp=1";
     ep_dispatch_enabled_ = true;
-    const char* backend = std::getenv("XLLM_GLM5_PREFILL_EP_BACKEND");
-    const std::string backend_name = backend == nullptr ? "eager" : backend;
-    CHECK(backend_name == "eager" || backend_name == "mate")
-        << "XLLM_GLM5_PREFILL_EP_BACKEND must be eager or mate, got "
-        << backend_name;
-    const bool use_mate = backend_name == "mate";
-    if (use_mate) {
-      CHECK(prefill_cp_enabled_)
-          << "MATE EP2 requires the GLM5 Prefill CP local-token contract";
-      CHECK_EQ(num_total_experts_, 288);
-      CHECK_EQ(topk_, 8);
-      CHECK_EQ(hidden_size_, 4096);
-      CHECK_EQ(intermediate_size_, 2048);
-      ep_mate_moe_ = MusaMegaMoe::acquire(ep_pg_);
-      LOG(INFO) << "GLM5 prefill EP2 backend=MATE normal prefill, ep_rank="
-                << ep_pg_->rank() << "/" << ep_pg_->world_size();
-    }
   } else {
     CHECK(ep_pg_ == nullptr || ep_pg_->world_size() == 1)
         << "RoutedMoe EP0 requires a single-rank moe_ep_group";
@@ -519,19 +508,19 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
         {kPrefillCustomAllreduceWorkspaceTokens, hidden_size_}, options_);
   }
 
+  // The supported checkpoint has one compiled expert layout. The EP case
+  // receives local CP rows. TP8 attention supplies replicated rows instead.
   if (model_args.model_type() == "glm5_next" &&
-      env_flag_enabled("XLLM_GLM5_MEGA_MOE", /*default_value=*/true)) {
-    CHECK_EQ(world_size, 8);
-    CHECK_EQ(ep_size, 1);
-    CHECK_EQ(num_total_experts_, 288);
-    CHECK_EQ(hidden_size_, 4096);
-    CHECK_EQ(intermediate_size_, 2048);
-    CHECK_EQ(topk_, 8);
-    num_experts_per_rank_ = num_total_experts_ / world_size;
-    start_expert_id_ = tp_pg_->rank() * num_experts_per_rank_;
+      quant_args.quant_method() == "fp8" && num_total_experts_ == 288 &&
+      topk_ == 8 && hidden_size_ == 4096 && intermediate_size_ == 2048 &&
+      (ep_size == 8 || (ep_size == 1 && world_size == 8))) {
+    auto* group = ep_size == 8 ? ep_pg_ : tp_pg_;
+    mega_moe_ = MusaMegaMoe::acquire(group);
+    num_experts_per_rank_ = num_total_experts_ / group->world_size();
+    start_expert_id_ = group->rank() * num_experts_per_rank_;
     local_intermediate_size_ = intermediate_size_;
-    mega_moe_ = MusaMegaMoe::acquire(tp_pg_);
   }
+
   if (n_shared_experts_ > 0) {
     shared_experts_ = register_module(
         "shared_experts",
@@ -594,9 +583,8 @@ void RoutedMoeImpl::ensure_fp8_expert_storage() {
     w13_fp8_scale_ = register_parameter(
         "w13_fp8_scale",
         torch::empty({num_experts_per_rank_,
-                      (mega_moe_ || ep_mate_moe_)
-                          ? local_intermediate_size_ / 32
-                          : (local_intermediate_size_ * 2 + 127) / 128,
+                      mega_moe_ ? local_intermediate_size_ / 32
+                                : (local_intermediate_size_ * 2 + 127) / 128,
                       (hidden_size_ + 127) / 128},
                      scale_options),
         /*requires_grad=*/false);
@@ -799,7 +787,7 @@ bool RoutedMoeImpl::try_load_quantized_experts(
       packed_vec.emplace_back(torch::cat({w1_list[idx], w3_list[idx]}, 0));
       scale_vec.emplace_back(torch::cat({s1_list[idx], s3_list[idx]}, 0));
     }
-    if (mega_moe_ || ep_mate_moe_) {
+    if (mega_moe_) {
       CHECK(!packed_fp4);
       // Transform checkpoint tensors before H2D. Concurrent layer loading
       // must not retain both TP-style and interleaved EP GPU weights or
@@ -899,8 +887,7 @@ torch::Tensor RoutedMoeImpl::apply_expert(const torch::Tensor& input,
 torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
     const torch::Tensor& input,
     const torch::Tensor& topk_ids,
-    const torch::Tensor& topk_weights,
-    bool compact_rows) const {
+    const torch::Tensor& topk_weights) const {
   if (!fp8_experts_loaded()) {
     return torch::Tensor();
   }
@@ -927,11 +914,6 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
 
   constexpr int64_t kAlignmentM = 128;
   const int64_t num_assignments = input.size(0) * topk;
-  const int64_t ep_world_size =
-      ep_pg_ == nullptr ? 1 : std::max<int64_t>(ep_pg_->world_size(), 1);
-  CHECK(!compact_rows || (ep_world_size == 1 && start_expert_id_ == 0 &&
-                          num_experts_per_rank_ == num_total_experts_))
-      << "Compact grouped FP8 requires all EP1 routes on this rank";
   // Every assignment can belong to this rank. In particular, EP dispatch
   // has already gathered the owned rows here; dividing by EP again silently
   // truncates concentrated routes in the padded metadata builder.
@@ -939,11 +921,10 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
   const int64_t max_active_experts =
       std::min<int64_t>(num_experts_per_rank_, route_capacity);
   const int64_t max_padded_assignments =
-      compact_rows ? num_assignments
-                   : ((route_capacity + max_active_experts * (kAlignmentM - 1) +
-                       kAlignmentM - 1) /
-                      kAlignmentM) *
-                         kAlignmentM;
+      ((route_capacity + max_active_experts * (kAlignmentM - 1) + kAlignmentM -
+        1) /
+       kAlignmentM) *
+      kAlignmentM;
 
   torch::Tensor sorted_input_fp8;
   torch::Tensor sorted_input_scale;
@@ -955,28 +936,20 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
            padded_assignment,
            padded_expert,
            route_to_padded) =
-      kernel::musa::deepseek_v4_fp8_moe_quant_prepare(
-          input,
-          dst_to_src,
-          expert_counts,
-          topk,
-          compact_rows ? 1 : kAlignmentM,
-          max_padded_assignments);
+      kernel::musa::deepseek_v4_fp8_moe_quant_prepare(input,
+                                                      dst_to_src,
+                                                      expert_counts,
+                                                      topk,
+                                                      kAlignmentM,
+                                                      max_padded_assignments);
 
-  torch::Tensor gate_up =
-      compact_rows ? kernel::musa::contiguous_moe_gemm_fp8(sorted_input_fp8,
-                                                           sorted_input_scale,
-                                                           w13_fp8_,
-                                                           w13_fp8_scale_,
-                                                           expert_counts,
-                                                           input.scalar_type())
-                   : kernel::musa::ragged_moe_gemm_fp8(sorted_input_fp8,
-                                                       sorted_input_scale,
-                                                       w13_fp8_,
-                                                       w13_fp8_scale_,
-                                                       padded_expert,
-                                                       input.scalar_type(),
-                                                       kAlignmentM);
+  torch::Tensor gate_up = kernel::musa::ragged_moe_gemm_fp8(sorted_input_fp8,
+                                                            sorted_input_scale,
+                                                            w13_fp8_,
+                                                            w13_fp8_scale_,
+                                                            padded_expert,
+                                                            input.scalar_type(),
+                                                            kAlignmentM);
   if (!gate_up.defined()) {
     return torch::Tensor();
   }
@@ -987,20 +960,13 @@ torch::Tensor RoutedMoeImpl::forward_grouped_fp8(
   if (!activated_fp8.defined() || !activated_scale.defined()) {
     return torch::Tensor();
   }
-  torch::Tensor down =
-      compact_rows ? kernel::musa::contiguous_moe_gemm_fp8(activated_fp8,
-                                                           activated_scale,
-                                                           w2_fp8_,
-                                                           w2_fp8_scale_,
-                                                           expert_counts,
-                                                           input.scalar_type())
-                   : kernel::musa::ragged_moe_gemm_fp8(activated_fp8,
-                                                       activated_scale,
-                                                       w2_fp8_,
-                                                       w2_fp8_scale_,
-                                                       padded_expert,
-                                                       input.scalar_type(),
-                                                       kAlignmentM);
+  torch::Tensor down = kernel::musa::ragged_moe_gemm_fp8(activated_fp8,
+                                                         activated_scale,
+                                                         w2_fp8_,
+                                                         w2_fp8_scale_,
+                                                         padded_expert,
+                                                         input.scalar_type(),
+                                                         kAlignmentM);
   if (!down.defined()) {
     return torch::Tensor();
   }
@@ -1238,6 +1204,37 @@ torch::Tensor RoutedMoeImpl::forward_ep_all_to_all(
   return output;
 }
 
+torch::Tensor RoutedMoeImpl::forward_generic_experts(
+    const torch::Tensor& input_2d,
+    const torch::Tensor& ids_2d,
+    torch::Tensor weights_2d,
+    const BatchForwardType& batch_type) {
+  const bool use_fp8_gemv =
+      !ep_dispatch_enabled_ && batch_type.is_decode() && input_2d.size(0) > 0 &&
+      input_2d.size(0) <= kFp8GemvWorkspaceTokens && fp8_experts_loaded();
+  if (!use_fp8_gemv && weights_2d.scalar_type() != input_2d.scalar_type()) {
+    weights_2d = weights_2d.to(input_2d.dtype());
+  }
+  torch::Tensor output;
+  if (ep_dispatch_enabled_) {
+    CHECK(!kernel::musa::is_stream_capturing())
+        << "Variable-split EP all-to-all requires eager execution";
+    output = forward_ep_all_to_all(input_2d, ids_2d, weights_2d);
+  } else if (use_fp8_gemv) {
+    output = forward_fp8_gemv(input_2d, ids_2d, weights_2d);
+  }
+
+  if (!output.defined() && !batch_type.is_decode() && fp8_experts_loaded()) {
+    output = forward_grouped_fp8(input_2d.contiguous(), ids_2d, weights_2d);
+  }
+
+  if (!output.defined()) {
+    output = forward_reference_experts(input_2d, ids_2d, weights_2d);
+  }
+
+  return output;
+}
+
 torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     const torch::Tensor& hidden_states,
     const torch::Tensor& topk_weights,
@@ -1248,8 +1245,9 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     const RoutedMoeTokenShard* token_shard) {
   const bool is_prefill = !input_params.meta.batch_forward_type.is_decode();
   const bool use_prefill_cp = prefill_cp_enabled_ && is_prefill;
-  CHECK_EQ(use_prefill_cp, token_shard != nullptr);
+
   if (token_shard != nullptr) {
+    CHECK(use_prefill_cp);
     CHECK(input_params.meta.batch_forward_type.is_prefill() ||
           input_params.meta.batch_forward_type.is_chunked_prefill());
     CHECK_EQ(token_shard->cp_rank, prefill_cp_rank_);
@@ -1276,15 +1274,19 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     }
     return torch::empty_like(hidden_states);
   }
-  // Local shared output joins the local routed result on the same stream.
-  // EP will replace the routed branch; no full-token shared output is needed.
+  // A CP-local shared expert needs no collective. Join it after EP combine.
   const bool use_shared_expert_overlap = is_prefill && shared_experts_ &&
-                                         (ep_mate_moe_ || !use_prefill_cp) &&
+                                         !use_prefill_cp &&
                                          input_2d.device().is_privateuseone() &&
                                          !kernel::musa::is_stream_capturing();
   torch::Tensor shared_output;
   SharedExpertOverlapState* shared_overlap_state = nullptr;
-  if (use_shared_expert_overlap) {
+  if (use_prefill_cp && mega_moe_ && shared_experts_) {
+    shared_output = shared_experts_(input);
+    if (shared_expert_gate_ && shared_expert_gate_is_loaded_) {
+      shared_output.mul_(torch::sigmoid(shared_expert_gate_->forward(input)));
+    }
+  } else if (use_shared_expert_overlap) {
     shared_overlap_state = get_shared_expert_overlap_state(
         static_cast<int32_t>(input_2d.device().index()));
     const c10::musa::MUSAStream current_stream =
@@ -1310,43 +1312,31 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
              musaSuccess);
   }
 
-  const bool disable_fp8_gemv =
-      env_flag_enabled("XLLM_MUSA_MOE_DISABLE_FP8_GEMV", false);
-  const bool use_fp8_gemv =
-      !mega_moe_ && !ep_dispatch_enabled_ && !ep_mate_moe_ &&
-      !disable_fp8_gemv && input_params.meta.batch_forward_type.is_decode() &&
-      input_2d.size(0) > 0 && input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
-      fp8_experts_loaded();
-  if (!mega_moe_ && !ep_mate_moe_ && !use_fp8_gemv &&
-      weights_2d.scalar_type() != input_2d.scalar_type()) {
-    weights_2d = weights_2d.to(input_2d.dtype());
-  }
   CHECK_EQ(weights_2d.size(0), input_2d.size(0))
       << "RoutedMoe topk_weights token count mismatch.";
   CHECK_EQ(ids_2d.size(0), input_2d.size(0))
       << "RoutedMoe topk_ids token count mismatch.";
 
   torch::Tensor output;
-  if (ep_mate_moe_) {
-    CHECK(fp8_experts_loaded())
-        << "RoutedMoe MATE EP2 requires FP8 expert weights.";
-    output = ep_mate_moe_->forward(input_2d,
-                                   ids_2d,
-                                   weights_2d,
-                                   w13_fp8_,
-                                   w13_fp8_scale_,
-                                   w2_fp8_,
-                                   w2_fp8_scale_,
-                                   swiglu_limit_,
-                                   output_buffer,
-                                   /*partition_replicated_input=*/false,
-                                   /*force_prefill=*/is_prefill);
-  } else if (ep_dispatch_enabled_) {
-    CHECK(!kernel::musa::is_stream_capturing())
-        << "RoutedMoe EP1 is not selected for graph capture; use the MATE "
-           "backend for graph-enabled CP prefill.";
-    CHECK(!mega_moe_) << "EP dispatch and MegaMoE are mutually exclusive";
-    output = forward_ep_all_to_all(input_2d, ids_2d, weights_2d);
+  if (mega_moe_ && ep_dispatch_enabled_) {
+    CHECK(fp8_experts_loaded());
+    int64_t max_rows = input_2d.size(0);
+    if (use_prefill_cp && input_params.attn_metadata) {
+      const int64_t total =
+          input_params.attn_metadata->glm5_prefill_global_rows;
+      max_rows = (total + prefill_cp_size_ - 1) / prefill_cp_size_;
+    }
+    output = mega_moe_->forward_local_shard(input_2d,
+                                            ids_2d,
+                                            weights_2d,
+                                            w13_fp8_,
+                                            w13_fp8_scale_,
+                                            w2_fp8_,
+                                            w2_fp8_scale_,
+                                            swiglu_limit_,
+                                            max_rows,
+                                            is_prefill,
+                                            output_buffer);
   } else if (mega_moe_) {
     CHECK(fp8_experts_loaded());
     CHECK(!skip_tp_allreduce);
@@ -1362,26 +1352,9 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
         input_2d.size(0) <= kFp8GemvWorkspaceTokens
             ? fp8_gemv_output_workspace_.narrow(0, 0, input_2d.size(0))
             : torch::Tensor());
-  } else if (use_fp8_gemv) {
-    output = forward_fp8_gemv(input_2d, ids_2d, weights_2d);
-  }
-
-  if (!output.defined() && !input_params.meta.batch_forward_type.is_decode() &&
-      fp8_experts_loaded()) {
-    const bool compact_prefill =
-        env_flag_enabled("XLLM_MUSA_MOE_COMPACT_PREFILL_FP8", false) &&
-        input_2d.size(0) >= kCompactPrefillMinRows &&
-        input_2d.size(0) <= kCompactPrefillMaxRows &&
-        (input_params.meta.batch_forward_type.is_prefill() ||
-         input_params.meta.batch_forward_type.is_chunked_prefill()) &&
-        start_expert_id_ == 0 && num_experts_per_rank_ == num_total_experts_ &&
-        (ep_pg_ == nullptr || ep_pg_->world_size() == 1);
-    output = forward_grouped_fp8(
-        input_2d.contiguous(), ids_2d, weights_2d, compact_prefill);
-  }
-
-  if (!output.defined()) {
-    output = forward_reference_experts(input_2d, ids_2d, weights_2d);
+  } else {
+    output = forward_generic_experts(
+        input_2d, ids_2d, weights_2d, input_params.meta.batch_forward_type);
   }
 
   if (shared_experts_ && !shared_output.defined()) {
@@ -1425,6 +1398,8 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
                                  shared_overlap_state->shared_ready,
                                  /*flags=*/0),
              musaSuccess);
+  }
+  if (shared_output.defined()) {
     output.add_(shared_output.reshape_as(output));
   }
 
@@ -1488,7 +1463,7 @@ void RoutedMoeImpl::load_experts(const StateDict& state_dict) {
     CHECK_EQ(world_size, 1) << "RoutedMoe EP1 expert weights require moe_tp=1";
   }
 
-  if (mega_moe_ || ep_mate_moe_) {
+  if (mega_moe_) {
     // A checkpoint shard can contain only experts owned by another rank.
     // That is not evidence of a dense checkpoint: do not allocate BF16
     // expert storage before this rank's FP8 tensors arrive.
@@ -1642,11 +1617,15 @@ void RoutedMoeImpl::load_state_dict(const StateDict& state_dict) {
   }
 
   load_experts(state_dict.get_dict_with_prefix("experts."));
-  if (fp8_experts_loaded() && !fp8_gemv_activation_workspace_.defined()) {
-    fp8_gemv_activation_workspace_ = torch::empty(
-        {kFp8GemvWorkspaceTokens * topk_, local_intermediate_size_}, options_);
-    fp8_gemv_routed_output_workspace_ =
-        torch::empty({kFp8GemvWorkspaceTokens * topk_, hidden_size_}, options_);
+  if (fp8_experts_loaded() && !ep_dispatch_enabled_ &&
+      !fp8_gemv_output_workspace_.defined()) {
+    if (!mega_moe_) {
+      fp8_gemv_activation_workspace_ = torch::empty(
+          {kFp8GemvWorkspaceTokens * topk_, local_intermediate_size_},
+          options_);
+      fp8_gemv_routed_output_workspace_ = torch::empty(
+          {kFp8GemvWorkspaceTokens * topk_, hidden_size_}, options_);
+    }
     fp8_gemv_output_workspace_ =
         torch::empty({kFp8GemvWorkspaceTokens, hidden_size_}, options_);
   }

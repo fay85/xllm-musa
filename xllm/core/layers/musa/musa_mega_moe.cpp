@@ -29,7 +29,11 @@ namespace {
 namespace km = kernel::musa;
 namespace ffi = tvm::ffi;
 constexpr int64_t kRanks = 8;
-constexpr int64_t kCapacity = 512;
+// CP8 keeps roughly one eighth of a long prefill on each rank.  The previous
+// 512-row schedule forced the EP path to use host-side all-to-all for larger
+// local shards.  The c4096 MATE schedule handles the complete CP-local shard
+// in one dispatch/combine round and keeps routing and grouped GEMM on device.
+constexpr int64_t kCapacity = 4096;
 constexpr int64_t kExperts = 288;
 constexpr int64_t kTopk = 8;
 constexpr int64_t kHidden = 4096;
@@ -136,9 +140,9 @@ MusaMegaMoe::MusaMegaMoe(ProcessGroup* group) : group_(group) {
   auto barrier = torch::zeros({1}, buffer_.options().dtype(torch::kFloat32));
   group_->allreduce(barrier);
   CHECK_EQ(musaDeviceSynchronize(), musaSuccess);
-  LOG(INFO)
-      << "GLM MegaMoE EP8 workspace=" << bytes
-      << " bytes, complete experts per rank=36, token ownership=partitioned";
+  LOG(INFO) << "GLM MegaMoE EP8 workspace=" << bytes
+            << " bytes, capacity=" << kCapacity
+            << ", complete experts per rank=36, token ownership=partitioned";
 }
 
 MusaMegaMoe::~MusaMegaMoe() {
@@ -168,6 +172,44 @@ std::pair<torch::Tensor, torch::Tensor> MusaMegaMoe::transform_gate_up(
   return {interleaved, expanded_scales};
 }
 
+torch::Tensor MusaMegaMoe::forward_local_shard(
+    const torch::Tensor& input,
+    const torch::Tensor& ids,
+    const torch::Tensor& weights,
+    const torch::Tensor& w13,
+    const torch::Tensor& s13,
+    const torch::Tensor& w2,
+    const torch::Tensor& s2,
+    double clamp,
+    int64_t max_rank_rows,
+    bool is_prefill,
+    const torch::Tensor& output_buffer) {
+  const int64_t rows = input.size(0);
+  CHECK_GE(max_rank_rows, rows);
+  auto output = output_buffer.defined() ? output_buffer.narrow(0, 0, rows)
+                                        : torch::empty_like(input);
+  // Every rank must enter the same IPC rounds. Split proportionally so a
+  // one-row CP imbalance also stays balanced at a capacity boundary.
+  const int64_t rounds =
+      std::max<int64_t>(1, (max_rank_rows + kCapacity - 1) / kCapacity);
+  for (int64_t round = 0; round < rounds; ++round) {
+    const int64_t begin = round * rows / rounds;
+    const int64_t count = (round + 1) * rows / rounds - begin;
+    forward(input.narrow(0, begin, count),
+            ids.narrow(0, begin, count),
+            weights.narrow(0, begin, count),
+            w13,
+            s13,
+            w2,
+            s2,
+            clamp,
+            output.narrow(0, begin, count),
+            /*partition_replicated_input=*/false,
+            /*force_prefill=*/is_prefill);
+  }
+  return output;
+}
+
 torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
                                    const torch::Tensor& ids,
                                    const torch::Tensor& weights,
@@ -195,8 +237,10 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
                             : tokens;
   // Invalid rows carry no routes. In particular C1 is owned by rank zero,
   // not dispatched eight times from replicated attention outputs.
-  views_[2].narrow(0, 0, local_rows).fill_(-1);
-  views_[3].narrow(0, 0, local_rows).zero_();
+  if (count < local_rows) {
+    views_[2].narrow(0, count, local_rows - count).fill_(-1);
+    views_[3].narrow(0, count, local_rows - count).zero_();
+  }
   if (count > 0) {
     CHECK(km::deepseek_v4_mega_moe_pre_dispatch(input.narrow(0, start, count),
                                                 ids.narrow(0, start, count),
@@ -211,12 +255,20 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
   // Decode still needs a sentinel row on ranks with no owned tokens.
   const bool use_prefill = force_prefill || local_rows > 128;
   const int64_t execution_rows = use_prefill ? count : local_rows;
-  torch::Tensor local_output = local_output_.narrow(
-      /*dim=*/0, /*start=*/0, /*length=*/execution_rows);
+  auto output =
+      output_buffer.defined() ? output_buffer : torch::empty_like(input);
+  CHECK_EQ(output.sizes(), input.sizes());
+  CHECK_EQ(output.scalar_type(), input.scalar_type());
+  CHECK_EQ(output.device(), input.device());
+  CHECK(output.is_contiguous());
+  torch::Tensor local_output = partition_replicated_input
+                                   ? local_output_.narrow(0, 0, execution_rows)
+                                   : output;
   {
     km::TvmffiStreamGuard stream_guard(input.device());
     if (!use_prefill) {
-      km::get_function("glm53_mega_decode1_v1", "glm53_mega_decode1_v1")(
+      km::get_function("glm53_mega_c4096_v2_decode1",
+                       "glm53_mega_c4096_v2_decode1")(
           km::to_ffi_tensor(views_[4]),
           km::to_ffi_tensor(views_[5]),
           km::to_ffi_tensor(views_[7]),
@@ -229,7 +281,8 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
           clamp,
           1.0,
           -1.0);
-      km::get_function("glm53_mega_decode2_v1", "glm53_mega_decode2_v1")(
+      km::get_function("glm53_mega_c4096_v2_decode2",
+                       "glm53_mega_c4096_v2_decode2")(
           km::to_ffi_tensor(views_[7]),
           km::to_ffi_tensor(views_[8]),
           km::to_ffi_tensor(w2),
@@ -239,7 +292,8 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
           group_->rank(),
           execution_rows);
     } else {
-      km::get_function("glm53_mega_stage1_v1", "glm53_mega_stage1_v1")(
+      km::get_function("glm53_mega_c4096_v2_stage1",
+                       "glm53_mega_c4096_v2_stage1")(
           km::to_ffi_tensor(views_[10]),
           km::to_ffi_tensor(views_[11]),
           km::to_ffi_tensor(views_[12]),
@@ -252,14 +306,16 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
           clamp,
           1.0,
           -1.0);
-      km::get_function("glm53_mega_stage2_v1", "glm53_mega_stage2_v1")(
+      km::get_function("glm53_mega_c4096_v2_stage2",
+                       "glm53_mega_c4096_v2_stage2")(
           km::to_ffi_tensor(views_[12]),
           km::to_ffi_tensor(views_[13]),
           km::to_ffi_tensor(w2),
           km::to_ffi_tensor(s2),
           km::to_ffi_tensor(pointers_),
           group_->rank());
-      km::get_function("glm53_mega_stage3_v1", "glm53_mega_stage3_v1")(
+      km::get_function("glm53_mega_c4096_v2_stage3",
+                       "glm53_mega_c4096_v2_stage3")(
           km::to_ffi_tensor(local_output),
           km::to_ffi_tensor(pointers_),
           group_->rank(),
@@ -268,14 +324,8 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
   }
   // Decode custom all-reduce exports its input through legacy MUSA IPC.
   // Use the caller's persistent allocation, outside the graph VMM pool.
-  auto output =
-      output_buffer.defined() ? output_buffer : torch::empty_like(input);
-  CHECK_EQ(output.sizes(), input.sizes());
-  CHECK_EQ(output.scalar_type(), input.scalar_type());
-  CHECK_EQ(output.device(), input.device());
-  CHECK(output.is_contiguous());
-  output.zero_();
-  if (count > 0) {
+  if (partition_replicated_input) {
+    output.zero_();
     output.narrow(0, start, count).copy_(local_output.narrow(0, 0, count));
   }
   // The caller adds its TP-sharded shared expert, then one TP all-reduce

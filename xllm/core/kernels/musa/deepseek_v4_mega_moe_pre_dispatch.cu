@@ -45,50 +45,44 @@ __global__ void mega_moe_pre_dispatch_kernel(
     int64_t hidden_size,
     int64_t scale_columns,
     int64_t topk) {
-  const int64_t token = blockIdx.x;
-  const int64_t quant_block = blockIdx.y;
-  const int64_t thread = threadIdx.x;
-  const int64_t column = quant_block * kQuantBlock + thread;
-  const int64_t offset = token * hidden_size + column;
-  const float value = static_cast<float>(input[offset]);
-  float max_abs = fabsf(value);
-
-#pragma unroll
-  for (int64_t delta = kWarpSize / 2; delta > 0; delta >>= 1) {
-    max_abs = fmaxf(max_abs, __shfl_down_sync(0xffffffffu, max_abs, delta));
+  const int64_t token = blockIdx.y;
+  const int32_t lane = threadIdx.x % kWarpSize;
+  const int64_t group = (blockIdx.x * blockDim.x + threadIdx.x) / kWarpSize;
+  if (group >= scale_columns) {
+    return;
   }
 
-  __shared__ float warp_max[kThreads / kWarpSize];
-  __shared__ float block_scale;
-  const int64_t lane = thread % kWarpSize;
-  const int64_t warp = thread / kWarpSize;
+  const int64_t begin = token * hidden_size + group * kQuantBlock + lane;
+  constexpr int32_t kElements = kQuantBlock / kWarpSize;
+  float values[kElements];
+  float max_abs = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kElements; ++i) {
+    values[i] = static_cast<float>(input[begin + i * kWarpSize]);
+    max_abs = fmaxf(max_abs, fabsf(values[i]));
+  }
+#pragma unroll
+  for (int32_t delta = kWarpSize / 2; delta > 0; delta /= 2) {
+    max_abs = fmaxf(max_abs, __shfl_xor_sync(0xffffffffu, max_abs, delta));
+  }
+  const float scale = exp2f(ceilf(log2f(fmaxf(max_abs / kFp8Max, 1.0e-4f))));
   if (lane == 0) {
-    warp_max[warp] = max_abs;
+    output_scale[token * scale_columns + group] = scale;
   }
-  __syncthreads();
-
-  if (warp == 0) {
-    max_abs = lane < kThreads / kWarpSize ? warp_max[lane] : 0.0f;
 #pragma unroll
-    for (int64_t delta = kWarpSize / 2; delta > 0; delta >>= 1) {
-      max_abs = fmaxf(max_abs, __shfl_down_sync(0xffffffffu, max_abs, delta));
-    }
-    if (lane == 0) {
-      const float raw_scale = fmaxf(max_abs / kFp8Max, 1.0e-4f);
-      block_scale = exp2f(ceilf(log2f(raw_scale)));
-      output_scale[token * scale_columns + quant_block] = block_scale;
-    }
+  for (int32_t i = 0; i < kElements; ++i) {
+    output[begin + i * kWarpSize] =
+        scaled_fp8_conversion<true, c10::Float8_e4m3fn>(values[i],
+                                                        1.0f / scale);
   }
-  __syncthreads();
 
-  output[offset] = scaled_fp8_conversion<true, c10::Float8_e4m3fn>(
-      value, 1.0f / block_scale);
-
-  if (quant_block == 0 && thread < topk) {
-    const int64_t route_offset = token * topk + thread;
-    output_topk_ids[route_offset] =
-        static_cast<int64_t>(topk_ids[route_offset]);
-    output_topk_weights[route_offset] = topk_weights[route_offset];
+  if (group == 0) {
+    for (int64_t slot = lane; slot < topk; slot += kWarpSize) {
+      const int64_t route_offset = token * topk + slot;
+      output_topk_ids[route_offset] =
+          static_cast<int64_t>(topk_ids[route_offset]);
+      output_topk_weights[route_offset] = topk_weights[route_offset];
+    }
   }
 }
 
@@ -120,7 +114,7 @@ bool deepseek_v4_mega_moe_pre_dispatch(
       topk_ids.dim() == 2 && topk_weights.dim() == 2 && output.dim() == 2 &&
       output_scale.dim() == 2 && output_topk_ids.dim() == 2 &&
       output_topk_weights.dim() == 2 && num_tokens > 0 && hidden_size > 0 &&
-      hidden_size % kQuantBlock == 0 && topk > 0 &&
+      hidden_size % kQuantBlock == 0 && topk > 0 && topk <= kThreads &&
       input.scalar_type() == torch::kBFloat16 &&
       (topk_ids.scalar_type() == torch::kInt32 ||
        topk_ids.scalar_type() == torch::kInt64) &&
@@ -152,8 +146,10 @@ bool deepseek_v4_mega_moe_pre_dispatch(
 
   const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
   const musaStream_t stream = current_musa_stream(input.device());
-  const dim3 grid(static_cast<uint32_t>(num_tokens),
-                  static_cast<uint32_t>(hidden_size / kQuantBlock));
+  constexpr int32_t kGroupsPerBlock = kThreads / kWarpSize;
+  const dim3 grid(
+      (hidden_size / kQuantBlock + kGroupsPerBlock - 1) / kGroupsPerBlock,
+      num_tokens);
   const dim3 block(static_cast<uint32_t>(kThreads));
   if (topk_ids.scalar_type() == torch::kInt32) {
     mega_moe_pre_dispatch_kernel<int32_t>

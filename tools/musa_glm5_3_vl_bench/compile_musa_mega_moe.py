@@ -20,6 +20,7 @@ def main() -> None:
         gen_mega_moe_runtime_utils_spec, MegaMoEKernelConfig,
         gen_fp8_fp8_mega_moe_stage1_spec, gen_fp8_fp8_mega_moe_stage2_spec,
     )
+    from mate.jit.moe_fused_gate import gen_moe_fused_gate_spec
     from mate.jit import env as jit_env
     from mate.jit.mega_moe_prefill import (
         PrefillMegaMoEKernelConfig, gen_prefill_stage1_spec,
@@ -31,7 +32,7 @@ def main() -> None:
 
     props = torch.musa.get_device_properties(0)
     config = PrefillMegaMoEKernelConfig(
-        num_ranks=8, num_experts=288, num_max_tokens_per_rank=512,
+        num_ranks=8, num_experts=288, num_max_tokens_per_rank=4096,
         num_topk=8, hidden=4096, intermediate_hidden=2048,
         num_mps=props.multi_processor_count, fast_math=False,
     )
@@ -66,12 +67,14 @@ def main() -> None:
              gen_prefill_stage1_spec(config), gen_prefill_stage2_spec(config),
              gen_prefill_stage3_spec(replace(config, num_mps=2*config.num_mps)),
              gen_fp8_fp8_mega_moe_stage1_spec(decode),
-             gen_fp8_fp8_mega_moe_stage2_spec(decode)]
+             gen_fp8_fp8_mega_moe_stage2_spec(decode), gen_moe_fused_gate_spec()]
     for index, spec in enumerate(specs):
         entry = 'mega_moe_unified_get_buffer_layout'
-        if index:
-            alias = (f'glm53_mega_stage{index}_v1' if index <= 3 else
-                     f'glm53_mega_decode{index-3}_v1')
+        if spec.name == "moe_fused_gate":
+            entry = "run"
+        elif index:
+            alias = (f'glm53_mega_c4096_v2_stage{index}' if index <= 3 else
+                     f'glm53_mega_c4096_v2_decode{index-3}')
             sources = {path.with_name(alias+'.mu'): source.replace(spec.name, alias)
                        for path, source in spec.generated_sources.items()}
             if index == 4:

@@ -41,6 +41,17 @@ class MusaMegaMoe final {
                         const torch::Tensor& output_buffer = {},
                         bool partition_replicated_input = true,
                         bool force_prefill = false);
+  torch::Tensor forward_local_shard(const torch::Tensor& input,
+                                    const torch::Tensor& ids,
+                                    const torch::Tensor& weights,
+                                    const torch::Tensor& w13,
+                                    const torch::Tensor& s13,
+                                    const torch::Tensor& w2,
+                                    const torch::Tensor& s2,
+                                    double clamp,
+                                    int64_t max_rank_rows,
+                                    bool is_prefill,
+                                    const torch::Tensor& output_buffer);
   static std::pair<torch::Tensor, torch::Tensor> transform_gate_up(
       const torch::Tensor& weight,
       const torch::Tensor& scale);

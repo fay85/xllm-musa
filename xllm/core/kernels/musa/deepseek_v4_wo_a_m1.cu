@@ -21,6 +21,9 @@ limitations under the License.
 #include <ATen/record_function.h>
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <cstdint>
+
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
@@ -196,30 +199,36 @@ __global__ void deepseek_v4_shared_down_m1_kernel(
   }
 }
 
+template <int kWidth>
+struct alignas(kWidth * sizeof(at::BFloat16)) Bf16Vector {
+  at::BFloat16 values[kWidth];
+};
+
+template <int kWidth>
 __global__ void deepseek_v4_shared_swiglu_kernel(
-    const at::BFloat16* __restrict__ input,
-    at::BFloat16* __restrict__ output,
-    int64_t intermediate_size,
-    int64_t total_elements,
+    const Bf16Vector<kWidth>* __restrict__ input,
+    Bf16Vector<kWidth>* __restrict__ output,
+    int64_t vectors_per_row,
     float swiglu_limit) {
-  const int64_t output_index =
-      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (output_index >= total_elements) {
+  const int64_t column =
+      static_cast<int64_t>(blockIdx.y) * blockDim.x + threadIdx.x;
+  if (column >= vectors_per_row) {
     return;
   }
-
-  const int64_t row = output_index / intermediate_size;
-  const int64_t column = output_index - row * intermediate_size;
-  const int64_t input_row_offset = row * 2 * intermediate_size;
-  float gate = static_cast<float>(input[input_row_offset + column]);
-  float up =
-      static_cast<float>(input[input_row_offset + intermediate_size + column]);
-  if (swiglu_limit > 0.0f) {
-    gate = fminf(gate, swiglu_limit);
-    up = fminf(fmaxf(up, -swiglu_limit), swiglu_limit);
+  const int64_t row = blockIdx.x;
+  auto gate = input[2 * row * vectors_per_row + column];
+  const auto up = input[(2 * row + 1) * vectors_per_row + column];
+#pragma unroll
+  for (int i = 0; i < kWidth; ++i) {
+    float g = static_cast<float>(gate.values[i]);
+    float u = static_cast<float>(up.values[i]);
+    if (swiglu_limit > 0.0f) {
+      g = fminf(g, swiglu_limit);
+      u = fminf(fmaxf(u, -swiglu_limit), swiglu_limit);
+    }
+    gate.values[i] = static_cast<at::BFloat16>(g / (1.0f + expf(-g)) * u);
   }
-  output[output_index] =
-      static_cast<at::BFloat16>(gate / (1.0f + expf(-gate)) * up);
+  output[row * vectors_per_row + column] = gate;
 }
 
 bool matches_wo_a_m1_contract(const torch::Tensor& input,
@@ -376,18 +385,26 @@ torch::Tensor deepseek_v4_shared_swiglu(const torch::Tensor& input,
     return torch::Tensor();
   }
 
-  const int64_t total_elements = output.numel();
-  constexpr int64_t kThreads = 256;
   const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
-  deepseek_v4_shared_swiglu_kernel<<<(total_elements + kThreads - 1) / kThreads,
-                                     kThreads,
-                                     0,
-                                     current_musa_stream(input.device())>>>(
-      input.data_ptr<at::BFloat16>(),
-      output.data_ptr<at::BFloat16>(),
-      output.size(1),
-      total_elements,
-      static_cast<float>(swiglu_limit));
+  const auto stream = current_musa_stream(input.device());
+  auto launch = [&]<int kWidth>() {
+    using Vector = Bf16Vector<kWidth>;
+    const int64_t columns = output.size(1) / kWidth;
+    const int threads = std::min<int64_t>(256, columns);
+    const dim3 grid(output.size(0), (columns + threads - 1) / threads);
+    deepseek_v4_shared_swiglu_kernel<kWidth><<<grid, threads, 0, stream>>>(
+        reinterpret_cast<const Vector*>(input.data_ptr<at::BFloat16>()),
+        reinterpret_cast<Vector*>(output.data_ptr<at::BFloat16>()),
+        columns,
+        static_cast<float>(swiglu_limit));
+  };
+  if (output.size(1) % 8 == 0 &&
+      reinterpret_cast<uintptr_t>(input.data_ptr()) % 16 == 0 &&
+      reinterpret_cast<uintptr_t>(output.data_ptr()) % 16 == 0) {
+    launch.template operator()<8>();
+  } else {
+    launch.template operator()<1>();
+  }
   const musaError_t status = musaGetLastError();
   CHECK(status == musaSuccess) << "DeepSeek-V4 shared SwiGLU kernel failed: "
                                << musaGetErrorString(status);

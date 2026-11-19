@@ -21,12 +21,8 @@ MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-32768}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
 ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-false}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-auto}"
-# The default is the GLM5 CP8+EP8 eager Prefill path. Set the corresponding
-# GLM5_* variables explicitly to run a different parallel configuration.
-export XLLM_GLM5_MEGA_MOE="${XLLM_GLM5_MEGA_MOE:-0}"
 export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-1}"
 export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-1}"
-export XLLM_GLM5_PREFILL_EP_BACKEND="${XLLM_GLM5_PREFILL_EP_BACKEND:-eager}"
 PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
 ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-true}"
 MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:-32768}"
@@ -82,11 +78,14 @@ ensure_sparse_ops_cache() {
 
 ensure_ops_cache() {
   ensure_sparse_ops_cache
-  if [[ "${XLLM_GLM5_MEGA_MOE}" != "0" ||
-        "${XLLM_GLM5_PREFILL_EP_BACKEND}" == "mate" ]]; then
-    MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
-      python3 "${SCRIPT_DIR}/compile_musa_mega_moe.py" --ops-path "${FLASHINFER_OPS_PATH}"
-  fi
+  local module
+  for module in moe_fused_gate mate_mega_moe_runtime_utils_layout3 glm53_mega_c4096_v2_{stage{1..3},decode{1..2}}; do
+    if [[ ! -f "${FLASHINFER_OPS_PATH}/${module}/${module}.so" ]]; then
+      MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
+        python3 "${SCRIPT_DIR}/compile_musa_mega_moe.py" --ops-path "${FLASHINFER_OPS_PATH}"
+      break
+    fi
+  done
   # Older cache backups predate the MATE mHC finish modules. Check these even
   # when the sparse operator cache was already complete or restored above.
   local name
@@ -164,21 +163,6 @@ if [[ "${XLLM_GLM5_PREFILL_EP}" != "0" && "${EP_SIZE}" != "8" ]]; then
   echo "Error: XLLM_GLM5_PREFILL_EP requires GLM5_EP_SIZE=8, got ${EP_SIZE}." >&2
   exit 1
 fi
-if [[ "${XLLM_GLM5_PREFILL_EP_BACKEND}" != "eager" &&
-      "${XLLM_GLM5_PREFILL_EP_BACKEND}" != "mate" ]]; then
-  echo "Error: XLLM_GLM5_PREFILL_EP_BACKEND must be eager or mate, got ${XLLM_GLM5_PREFILL_EP_BACKEND}." >&2
-  exit 1
-fi
-if [[ "${XLLM_GLM5_PREFILL_EP_BACKEND}" == "mate" &&
-      "${XLLM_GLM5_PREFILL_EP}" == "0" ]]; then
-  echo "Error: MATE EP2 backend requires XLLM_GLM5_PREFILL_EP=1." >&2
-  exit 1
-fi
-if [[ "${XLLM_GLM5_PREFILL_EP_BACKEND}" == "mate" &&
-      "${XLLM_GLM5_MEGA_MOE}" != "0" ]]; then
-  echo "Error: MATE EP2 backend requires XLLM_GLM5_MEGA_MOE=0." >&2
-  exit 1
-fi
 if [[ "${XLLM_GLM5_PREFILL_CP}" != "0" && "${CP_SIZE}" != "8" ]]; then
   echo "Error: XLLM_GLM5_PREFILL_CP requires GLM5_CP_SIZE=8, got ${CP_SIZE}." >&2
   exit 1
@@ -230,7 +214,7 @@ fi
 
 echo "Binary: ${XLLM_BIN}"
 echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
-echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_ep_backend=${XLLM_GLM5_PREFILL_EP_BACKEND} prefill_cp=${XLLM_GLM5_PREFILL_CP} mega_moe=${XLLM_GLM5_MEGA_MOE} disagg_pd=${ENABLE_DISAGG_PD} instance_role=${INSTANCE_ROLE}"
+echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_cp=${XLLM_GLM5_PREFILL_CP} disagg_pd=${ENABLE_DISAGG_PD} instance_role=${INSTANCE_ROLE}"
 echo "Logs: ${LOG_DIR}/rank_*.log"
 if [[ "${TORCH_PROFILE}" == "1" ]]; then
   echo "Torch profile dir: ${PROFILE_DIR}"
