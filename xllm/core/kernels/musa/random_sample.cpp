@@ -36,7 +36,7 @@ torch::Tensor random_sample(const torch::Tensor& probs) {
 
   if (vocab_size >= 2048) {
     auto exp_noise = torch::empty_like(p).exponential_();
-    exp_noise.clamp_min_(1e-30f);
+    exp_noise.clamp_min_(3e-8f);
     auto samples = (p / exp_noise).argmax(/*dim=*/-1).to(torch::kInt64);
     if (probs.dim() == 3) {
       return samples.reshape({probs.size(0), probs.size(1)});
