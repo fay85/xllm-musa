@@ -117,7 +117,9 @@ export GIT_CONFIG_VALUE_0=*
 
 export MPI_DIR=/usr/local/openmpi
 export MPICC=/usr/local/openmpi/bin/mpicc
-export CPATH=/usr/local/openmpi/include:${CPATH:-}
+# mcc compiles CUDA sources through clang. Keep Python headers in CPATH so
+# stale CMake CUDA flags cannot concatenate the include path with -Od3.
+export CPATH=/usr/include/python3.10:/usr/local/openmpi/include:${CPATH:-}
 export VCPKG_ROOT=/workspace/vcpkg-xllm
 export VCPKG_FORCE_SYSTEM_BINARIES=1
 export VCPKG_MAX_CONCURRENCY=16

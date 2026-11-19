@@ -29,6 +29,11 @@ limitations under the License.
 namespace xllm::kernel::musa {
 namespace {
 constexpr int64_t kPoolPacketBytes = 132;
+constexpr uint32_t kRadix = 256;
+constexpr uint32_t kHistGroups = 4;
+constexpr uint32_t kSglBlockSize = 512;
+constexpr uint32_t kHistGroupThreads = kSglBlockSize / kHistGroups;
+constexpr uint32_t kSglTopK = 512;
 
 // Every thread owns one channel. Each butterfly reads the previous stage
 // before any lane overwrites shared memory.
@@ -461,173 +466,493 @@ __global__ void quantize_query_grouped(const c10::BFloat16* query,
   }
 }
 
-__device__ __forceinline__ uint32_t topk_rank_key(float value) {
-  const uint32_t bits = __float_as_uint(value);
-  return (bits & 0x80000000u) != 0u ? ~bits : (bits | 0x80000000u);
+__device__ __forceinline__ uint8_t convert_to_uint8(float x) {
+  __half h = __float2half_rn(x);
+  uint16_t bits = __half_as_ushort(h);
+  uint16_t key = (bits & 0x8000) ? static_cast<uint16_t>(~bits)
+                                 : static_cast<uint16_t>(bits | 0x8000);
+  return static_cast<uint8_t>(key >> 8);
 }
 
-__device__ __forceinline__ uint32_t topk_rank_key8(float value) {
-  return topk_rank_key(value) >> 24;
+__device__ __forceinline__ uint32_t convert_to_uint32(float x) {
+  uint32_t bits = __float_as_uint(x);
+  return (bits & 0x80000000u) ? ~bits : (bits | 0x80000000u);
 }
 
-// Radix-select the top pool ids for one query.  The ordering matches stable
-// descending top-k: a larger score wins, and the smaller pool id wins a tie.
-// The selected ids are unordered; token expansion below does not depend on
-// their order.
-__device__ int32_t radix_select_pools(const float* scores,
-                                      int32_t pool_length,
-                                      int32_t wanted,
-                                      int32_t* selected) {
-  constexpr int32_t kThreads = 256;
-  constexpr int32_t kRadix = 256;
-  constexpr int32_t kScratch = 4096;
-  __shared__ int32_t histogram[2][kRadix + 32];
-  __shared__ int32_t threshold_bin;
-  __shared__ int32_t scratch_count;
-  __shared__ int32_t selected_count;
-  __shared__ int32_t scratch[kScratch];
-  const int32_t lane = threadIdx.x;
-  if (lane == 0) {
-    selected_count = 0;
-    scratch_count = 0;
-    threshold_bin = 0;
+__device__ __forceinline__ uint32_t warp_inclusive_sum_musa(uint32_t lane_id,
+                                                            uint32_t value) {
+#pragma unroll
+  for (uint32_t offset = 1; offset < 32; offset <<= 1) {
+    const uint32_t other = __shfl_up_sync(0xFFFFFFFF, value, offset);
+    if (lane_id >= offset) value += other;
   }
-  if (lane < kRadix + 1) {
-    histogram[0][lane] = 0;
+  return value;
+}
+
+__device__ __forceinline__ int32_t
+page_to_indices(const int32_t* __restrict__ page_table,
+                int32_t raw_index,
+                uint32_t page_bits) {
+  const uint32_t mask = (1u << page_bits) - 1u;
+  const uint32_t i = static_cast<uint32_t>(raw_index);
+  return (page_table[i >> page_bits] << page_bits) | (i & mask);
+}
+
+__device__ __forceinline__ void naive_transform_musa(
+    const int32_t* __restrict__ page_table,
+    int32_t* __restrict__ indices,
+    int32_t* __restrict__ raw_indices,
+    const uint32_t length,
+    const uint32_t page_bits) {
+  const uint32_t tx = threadIdx.x;
+  if (tx < length) {
+    indices[tx] =
+        page_to_indices(page_table, static_cast<int32_t>(tx), page_bits);
+    if (raw_indices != nullptr) raw_indices[tx] = static_cast<int32_t>(tx);
+  } else if (tx < kSglTopK) {
+    indices[tx] = -1;
+    if (raw_indices != nullptr) raw_indices[tx] = -1;
   }
-  __syncthreads();
-  for (int32_t pool = lane; pool < pool_length; pool += kThreads) {
-    atomicAdd(&histogram[0][topk_rank_key8(scores[pool])], 1);
-  }
-  __syncthreads();
-  // Eight steps end in histogram[0].  Each value is the count of this bin and
-  // every higher bin, which is the descending rank boundary.
-  for (int32_t stride = 1; stride < kRadix; stride *= 2) {
-    const int32_t source = (stride & 1) == 1 ? 1 : 0;
-    if (lane < kRadix) {
-      int32_t value = histogram[source][lane];
-      if (lane + stride < kRadix) {
-        value += histogram[source][lane + stride];
+}
+
+template <bool kRegisterThresholdScan,
+          uint32_t kCandidateSMEM = 12 * 1024 * sizeof(uint32_t),
+          bool kExactOverflow = false>
+__device__ __forceinline__ void radix_topk_musa_split_hist(
+    const float* __restrict__ input,
+    int32_t* __restrict__ output,
+    const uint32_t length) {
+  constexpr uint32_t SMEM_INPUT_SIZE = kCandidateSMEM / (2 * sizeof(int32_t));
+  alignas(128) __shared__ uint32_t _s_histogram_buf[2][kRadix + 32];
+  alignas(128) __shared__ uint32_t s_group_hist[kHistGroups][kRadix + 32];
+  alignas(128) __shared__ uint32_t s_counter;
+  alignas(128) __shared__ uint32_t s_threshold_bin_id;
+  alignas(128) __shared__ uint32_t s_threshold_above_next;
+  alignas(128) __shared__ uint32_t s_num_input[2];
+  alignas(128) __shared__ uint32_t s_sub_bin24_min;
+  alignas(128) __shared__ uint32_t s_sub_bin24_max;
+  alignas(128) __shared__ uint32_t s_threshold_key_min;
+  alignas(128) __shared__ uint32_t s_threshold_key_max;
+  alignas(128)
+      __shared__ uint32_t s_thread_key_min[kExactOverflow ? kSglBlockSize : 1];
+  alignas(128)
+      __shared__ uint32_t s_thread_key_max[kExactOverflow ? kSglBlockSize : 1];
+  alignas(128) __shared__ int32_t s_last_remain;
+  alignas(128) __shared__ uint32_t s_warp_sum[kRadix / 32];
+
+  extern __shared__ uint32_t s_input_idx[];
+  const auto candidate_at = [&](uint32_t buffer, uint32_t index) -> uint32_t& {
+    return s_input_idx[buffer * SMEM_INPUT_SIZE + index];
+  };
+
+  const uint32_t tx = threadIdx.x;
+  uint32_t remain_topk = kSglTopK;
+  auto& s_histogram = _s_histogram_buf[0];
+
+  const auto run_cumsum = [&] {
+    if (tx < kRadix) {
+      const uint32_t lane_id = tx & 31u;
+      const uint32_t warp_id = tx >> 5;
+      const uint32_t value = s_histogram[tx];
+      const uint32_t warp_inc = warp_inclusive_sum_musa(lane_id, value);
+      if (lane_id == 31u) s_warp_sum[warp_id] = warp_inc;
+    }
+    __syncthreads_lm();
+
+    if (tx < kRadix) {
+      const uint32_t lane_id = tx & 31u;
+      const uint32_t warp_id = tx >> 5;
+      uint32_t total = 0;
+      uint32_t inter_prefix = 0;
+#pragma unroll
+      for (uint32_t i = 0; i < kRadix / 32; ++i) {
+        const uint32_t part = s_warp_sum[i];
+        total += part;
+        if (i < warp_id) inter_prefix += part;
       }
-      histogram[source ^ 1][lane] = value;
+      const uint32_t value = s_histogram[tx];
+      const uint32_t warp_inc = warp_inclusive_sum_musa(lane_id, value);
+      s_histogram[tx] = total - (inter_prefix + warp_inc) + value;
+    } else if (tx == kRadix) {
+      s_histogram[kRadix] = 0;
     }
-    __syncthreads();
-  }
-  if (lane < kRadix && histogram[0][lane] >= wanted &&
-      (lane + 1 == kRadix || histogram[0][lane + 1] < wanted)) {
-    threshold_bin = lane;
-  }
-  __syncthreads();
-  const int32_t bin = threshold_bin;
-  const int32_t strict =
-      lane + 1 < kRadix ? histogram[0][lane == bin ? bin + 1 : lane] : 0;
-  int32_t kept_above = 0;
-  if (lane == 0) {
-    kept_above = bin + 1 < kRadix ? histogram[0][bin + 1] : 0;
-  }
-  __shared__ int32_t above_count;
-  if (lane == 0) {
-    above_count = bin + 1 < kRadix ? histogram[0][bin + 1] : 0;
-  }
-  __syncthreads();
-  for (int32_t pool = lane; pool < pool_length; pool += kThreads) {
-    const uint32_t key = topk_rank_key8(scores[pool]);
-    if (static_cast<int32_t>(key) > bin) {
-      const int32_t pos = atomicAdd(&selected_count, 1);
-      if (pos < wanted) {
-        selected[pos] = pool;
+    __syncthreads_lm();
+  };
+
+  const auto find_threshold_from_hist = [&](uint32_t target,
+                                            int32_t reset_slot,
+                                            bool reset_counter,
+                                            bool set_last_remain) {
+    if constexpr (kRegisterThresholdScan) {
+      if (tx < kRadix) {
+        const uint32_t lane_id = tx & 31u;
+        const uint32_t warp_id = tx >> 5;
+        const uint32_t count = s_histogram[tx];
+        const uint32_t warp_inc = warp_inclusive_sum_musa(lane_id, count);
+        if (lane_id == 31u) s_warp_sum[warp_id] = warp_inc;
       }
-    } else if (static_cast<int32_t>(key) == bin) {
-      const int32_t pos = atomicAdd(&scratch_count, 1);
-      if (pos < kScratch) {
-        scratch[pos] = pool;
+      __syncthreads_lm();
+
+      if (tx < kRadix) {
+        const uint32_t lane_id = tx & 31u;
+        const uint32_t warp_id = tx >> 5;
+        uint32_t total = 0;
+        uint32_t inter_prefix = 0;
+#pragma unroll
+        for (uint32_t i = 0; i < kRadix / 32; ++i) {
+          const uint32_t part = s_warp_sum[i];
+          total += part;
+          if (i < warp_id) inter_prefix += part;
+        }
+        const uint32_t count = s_histogram[tx];
+        const uint32_t prefix =
+            inter_prefix + warp_inclusive_sum_musa(lane_id, count);
+        const uint32_t above = total - prefix + count;
+        const uint32_t above_next = above - count;
+        if (above > target && above_next <= target) {
+          s_threshold_bin_id = tx;
+          s_threshold_above_next = above_next;
+          if (reset_slot >= 0) s_num_input[reset_slot] = 0;
+          if (reset_counter) s_counter = 0;
+          if (set_last_remain) s_last_remain = target - above_next;
+        }
+      }
+      __syncthreads_lm();
+    } else {
+      run_cumsum();
+      if (tx < kRadix && s_histogram[tx] > target &&
+          s_histogram[tx + 1] <= target) {
+        s_threshold_bin_id = tx;
+        s_threshold_above_next = s_histogram[tx + 1];
+        if (reset_slot >= 0) s_num_input[reset_slot] = 0;
+        if (reset_counter) s_counter = 0;
+        if (set_last_remain) s_last_remain = target - s_histogram[tx + 1];
+      }
+      __syncthreads_lm();
+    }
+  };
+
+  // Stage 1: split coarse histogram to reduce shared-atomic contention on MUSA.
+  for (uint32_t i = tx; i < kHistGroups * (kRadix + 32); i += kSglBlockSize) {
+    reinterpret_cast<uint32_t*>(s_group_hist)[i] = 0;
+  }
+  __syncthreads_lm();
+
+  const uint32_t hist_group = tx / kHistGroupThreads;
+  uint32_t local_key_min = 0xFFFFFFFFu;
+  uint32_t local_key_max = 0;
+  for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+    const uint32_t bin = convert_to_uint8(input[idx]);
+    ::atomicAdd(&s_group_hist[hist_group][bin], 1);
+  }
+  __syncthreads_lm();
+
+  if (tx < kRadix + 1) {
+    uint32_t sum = 0;
+#pragma unroll
+    for (uint32_t g = 0; g < kHistGroups; ++g) sum += s_group_hist[g][tx];
+    s_histogram[tx] = sum;
+  }
+  __syncthreads_lm();
+
+  find_threshold_from_hist(remain_topk, 0, true, false);
+
+  const auto threshold_bin_0 = s_threshold_bin_id;
+  remain_topk -= s_threshold_above_next;
+  if (remain_topk == 0) {
+    for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+      const uint32_t bin = convert_to_uint8(input[idx]);
+      if (bin > threshold_bin_0) {
+        const auto pos = ::atomicAdd(&s_counter, 1);
+        output[pos] = idx;
+      }
+    }
+    __syncthreads_lm();
+    return;
+  }
+
+  if constexpr (!kExactOverflow) {
+    // The common K-pool path has a very small coarse-bin overflow. Keep the
+    // SGLang radix histogram and emit that boundary bin directly. This avoids
+    // rescanning the full score row for lower radix digits while preserving the
+    // requested pool count.
+    if (tx == 0) s_counter = 0;
+    __syncthreads_lm();
+    for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+      const uint32_t bin = convert_to_uint8(input[idx]);
+      if (bin >= threshold_bin_0) {
+        const auto pos = ::atomicAdd(&s_counter, 1);
+        if (pos < kSglTopK) output[pos] = idx;
+      }
+    }
+    __syncthreads_lm();
+    return;
+  }
+
+  __syncthreads_lm();
+  if (tx < kRadix + 1) s_histogram[tx] = 0;
+  if (tx == 0) {
+    s_num_input[1] = 0;
+    s_sub_bin24_min = 0xFFFFFFFFu;
+    s_sub_bin24_max = 0;
+    s_threshold_key_min = 0xFFFFFFFFu;
+    s_threshold_key_max = 0;
+  }
+  __syncthreads_lm();
+
+  for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+    const float raw_input = input[idx];
+    const uint32_t bin = convert_to_uint8(raw_input);
+    if (bin > threshold_bin_0) {
+      const auto pos = ::atomicAdd(&s_counter, 1);
+      output[pos] = idx;
+    } else if (bin == threshold_bin_0) {
+      const auto pos = ::atomicAdd(&s_num_input[1], 1);
+      const auto key = convert_to_uint32(raw_input);
+      if constexpr (kExactOverflow) {
+        local_key_min = key < local_key_min ? key : local_key_min;
+        local_key_max = key > local_key_max ? key : local_key_max;
+      }
+      if (pos < SMEM_INPUT_SIZE) {
+        candidate_at(1, pos) = idx;
+        const auto sub_bin24 = (key >> 24) & 0xFF;
+        const auto sub_bin16 = (key >> 16) & 0xFF;
+        ::atomicMin(&s_sub_bin24_min, sub_bin24);
+        ::atomicMax(&s_sub_bin24_max, sub_bin24);
+        ::atomicAdd(&s_histogram[sub_bin16], 1);
       }
     }
   }
-  __syncthreads();
-  const int32_t need = wanted - above_count;
-  const int32_t candidates = scratch_count;
-  // Fill the remaining slots from the threshold bin in increasing pool-id
-  // order. Sorting that bin dominated a 20k prefill; sparse attention consumes
-  // the selected set, and the smaller id remains the stable tie break.
-  if (need > 0 && candidates <= kScratch) {
-    const int32_t limit = min(candidates, kScratch);
-    const int32_t emit = min(need, limit);
-    for (int32_t item = lane; item < emit; item += kThreads) {
-      selected[above_count + item] = scratch[item];
+  __syncthreads_lm();
+  if constexpr (kExactOverflow) {
+    if (s_num_input[1] <= remain_topk) {
+      if (tx == 0) s_counter = 0;
+      __syncthreads_lm();
+      for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+        const uint32_t bin = convert_to_uint8(input[idx]);
+        if (bin >= threshold_bin_0) {
+          const auto pos = ::atomicAdd(&s_counter, 1);
+          if (pos < kSglTopK) output[pos] = idx;
+        }
+      }
+      __syncthreads_lm();
+      return;
     }
-    if (lane == 0) {
-      selected_count = above_count + emit;
+  }
+  if constexpr (kExactOverflow) {
+    s_thread_key_min[tx] = local_key_min;
+    s_thread_key_max[tx] = local_key_max;
+    __syncthreads_lm();
+#pragma unroll
+    for (uint32_t offset = kSglBlockSize / 2; offset > 0; offset >>= 1) {
+      if (tx < offset) {
+        const uint32_t other_min = s_thread_key_min[tx + offset];
+        const uint32_t other_max = s_thread_key_max[tx + offset];
+        s_thread_key_min[tx] =
+            other_min < s_thread_key_min[tx] ? other_min : s_thread_key_min[tx];
+        s_thread_key_max[tx] =
+            other_max > s_thread_key_max[tx] ? other_max : s_thread_key_max[tx];
+      }
+      __syncthreads_lm();
     }
-    __syncthreads();
-  } else if (need > 0) {
-    for (int32_t pool = lane; pool < pool_length && need > 0;
-         pool += kThreads) {
-      if (static_cast<int32_t>(topk_rank_key8(scores[pool])) == bin) {
-        const int32_t slot = atomicAdd(&selected_count, 1);
-        if (slot < wanted) {
-          selected[slot] = pool;
+    if (tx == 0) {
+      s_threshold_key_min = s_thread_key_min[0];
+      s_threshold_key_max = s_thread_key_max[0];
+    }
+    __syncthreads_lm();
+
+    if (s_num_input[1] > SMEM_INPUT_SIZE &&
+        s_threshold_key_min != s_threshold_key_max) {
+      uint32_t prefix = 0;
+      uint32_t prefix_mask = 0;
+      uint32_t target = kSglTopK;
+#pragma unroll 4
+      for (int shift = 24; shift >= 0; shift -= 8) {
+        for (uint32_t i = tx; i < kHistGroups * (kRadix + 32);
+             i += kSglBlockSize) {
+          reinterpret_cast<uint32_t*>(s_group_hist)[i] = 0;
+        }
+        __syncthreads_lm();
+        for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+          const uint32_t key = convert_to_uint32(input[idx]);
+          if ((key & prefix_mask) == prefix) {
+            const uint32_t bin = (key >> shift) & 0xFF;
+            ::atomicAdd(&s_group_hist[hist_group][bin], 1);
+          }
+        }
+        __syncthreads_lm();
+        if (tx < kRadix + 1) {
+          uint32_t sum = 0;
+#pragma unroll
+          for (uint32_t group = 0; group < kHistGroups; ++group) {
+            sum += s_group_hist[group][tx];
+          }
+          s_histogram[tx] = sum;
+        }
+        __syncthreads_lm();
+        find_threshold_from_hist(target, -1, false, false);
+        const uint32_t threshold = s_threshold_bin_id;
+        target -= s_threshold_above_next;
+        prefix |= threshold << shift;
+        prefix_mask |= 0xFFu << shift;
+        if (target == 0) {
+          if (shift > 0) prefix |= (1u << shift) - 1u;
+          break;
+        }
+      }
+
+      if (tx == 0) s_counter = 0;
+      __syncthreads_lm();
+      for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+        if (convert_to_uint32(input[idx]) > prefix) {
+          const uint32_t pos = ::atomicAdd(&s_counter, 1);
+          if (pos < kSglTopK) output[pos] = idx;
+        }
+      }
+      __syncthreads_lm();
+      for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
+        if (convert_to_uint32(input[idx]) == prefix) {
+          const uint32_t pos = ::atomicAdd(&s_counter, 1);
+          if (pos < kSglTopK) output[pos] = idx;
+        }
+      }
+      __syncthreads_lm();
+      return;
+    }
+  }
+
+  // Long decode top candidates commonly share the top FP32 byte after the
+  // fp16 coarse threshold; skip that no-op radix round when it is uniform.
+  int start_round = 1;
+  if (s_sub_bin24_min != s_sub_bin24_max) {
+    if (tx < kRadix + 1) s_histogram[tx] = 0;
+    if (tx == 0) s_num_input[0] = 0;
+    __syncthreads_lm();
+    const auto raw_num_input = s_num_input[1];
+    const auto num_input =
+        raw_num_input < SMEM_INPUT_SIZE ? raw_num_input : SMEM_INPUT_SIZE;
+    for (uint32_t i = tx; i < num_input; i += kSglBlockSize) {
+      const auto idx = candidate_at(1, i);
+      const auto key = convert_to_uint32(input[idx]);
+      const auto pos = ::atomicAdd(&s_num_input[0], 1);
+      if (pos < SMEM_INPUT_SIZE) {
+        candidate_at(0, pos) = idx;
+        const auto sub_bin24 = (key >> 24) & 0xFF;
+        ::atomicAdd(&s_histogram[sub_bin24], 1);
+      }
+    }
+    start_round = 0;
+    __syncthreads_lm();
+  }
+
+#pragma unroll 4
+  for (int round = 0; round < 4; ++round) {
+    if (round < start_round) continue;
+    const auto r_idx = round % 2;
+    const auto raw_num_input = s_num_input[r_idx];
+    const auto num_input =
+        raw_num_input < SMEM_INPUT_SIZE ? raw_num_input : SMEM_INPUT_SIZE;
+
+    find_threshold_from_hist(remain_topk, r_idx ^ 1, false, true);
+
+    const auto threshold_bin = s_threshold_bin_id;
+    remain_topk -= s_threshold_above_next;
+
+    if (remain_topk == 0) {
+      for (uint32_t i = tx; i < num_input; i += kSglBlockSize) {
+        const auto idx = candidate_at(r_idx, i);
+        const auto offset = 24 - round * 8;
+        const auto bin = (convert_to_uint32(input[idx]) >> offset) & 0xFF;
+        if (bin > threshold_bin) {
+          const auto pos = ::atomicAdd(&s_counter, 1);
+          output[pos] = idx;
+        }
+      }
+      __syncthreads_lm();
+      break;
+    }
+
+    __syncthreads_lm();
+    if (tx < kRadix + 1) s_histogram[tx] = 0;
+    __syncthreads_lm();
+    for (uint32_t i = tx; i < num_input; i += kSglBlockSize) {
+      const auto idx = candidate_at(r_idx, i);
+      const auto raw_input = input[idx];
+      const auto offset = 24 - round * 8;
+      const auto bin = (convert_to_uint32(raw_input) >> offset) & 0xFF;
+      if (bin > threshold_bin) {
+        const auto pos = ::atomicAdd(&s_counter, 1);
+        output[pos] = idx;
+      } else if (bin == threshold_bin) {
+        if (round == 3) {
+          const auto pos = ::atomicAdd(&s_last_remain, -1);
+          if (pos > 0) output[kSglTopK - pos] = idx;
+        } else {
+          const auto pos = ::atomicAdd(&s_num_input[r_idx ^ 1], 1);
+          if (pos < SMEM_INPUT_SIZE) {
+            candidate_at(r_idx ^ 1, pos) = idx;
+            const auto sub_bin =
+                (convert_to_uint32(raw_input) >> (offset - 8)) & 0xFF;
+            ::atomicAdd(&s_histogram[sub_bin], 1);
+          }
         }
       }
     }
-    __syncthreads();
+    __syncthreads_lm();
   }
-  return selected_count;
 }
 
-// One block owns one query row.  It selects token_topk/4 pools, expands each
-// pool to four logical token ids, and appends the unpadded causal tail.
-__global__ void select_pool_tokens(const float* scores,
-                                   const int32_t* pool_lengths,
-                                   const int64_t* positions,
-                                   const int32_t* rows,
-                                   int32_t* tokens,
-                                   int32_t* lengths,
-                                   int64_t score_width,
-                                   int64_t selected_width,
-                                   int64_t width,
-                                   int64_t token_topk) {
-  constexpr int32_t kThreads = 256;
-  constexpr int32_t kMaxSelected = 512;
-  __shared__ int32_t selected[kMaxSelected];
-  __shared__ int32_t selected_count;
+// The SGLang MUSA transform selects complete rate-4 pools with an exact
+// four-pass radix selector. Keeping this in the same launch as expansion avoids
+// materializing pool ids or sorting a second tensor.
+__global__ void select_pool_tokens_sgl(const float* scores,
+                                       const int32_t* pool_lengths,
+                                       const int64_t* positions,
+                                       const int32_t* rows,
+                                       int32_t* tokens,
+                                       int32_t* lengths,
+                                       int64_t score_width,
+                                       int64_t width,
+                                       int64_t token_topk) {
+  constexpr int32_t kThreads = 512;
+  __shared__ int32_t selected[512];
   const int64_t row = blockIdx.x;
   const int32_t lane = threadIdx.x;
   const int64_t visible = rows[row] >= 0 ? positions[row] + 1 : 0;
   const int64_t tail = visible % 4;
   const int64_t end = visible <= token_topk ? visible : token_topk + tail;
-  const int32_t pool_length = max(pool_lengths[row], 0);
-  const int32_t wanted = static_cast<int32_t>(
-      min(selected_width, static_cast<int64_t>(pool_length)));
+  const uint32_t pool_length = static_cast<uint32_t>(max(pool_lengths[row], 0));
+  const uint32_t wanted = static_cast<uint32_t>(
+      (token_topk / 4 < pool_length) ? token_topk / 4 : pool_length);
   if (lane == 0) {
     lengths[row] = static_cast<int32_t>(end);
-    selected_count = 0;
   }
-  __syncthreads();
   if (visible > token_topk && wanted > 0) {
-    const int32_t found = radix_select_pools(
-        scores + row * score_width, pool_length, wanted, selected);
-    if (lane == 0) {
-      selected_count = min(found, wanted);
+    if (pool_length <= 512) {
+      if (lane < static_cast<int32_t>(pool_length)) {
+        selected[lane] = lane;
+      }
+    } else {
+      radix_topk_musa_split_hist<true, 12 * 1024 * sizeof(uint32_t), true>(
+          scores + row * score_width, selected, pool_length);
     }
   }
-  __syncthreads();
-  for (int64_t col = lane; col < width; col += kThreads) {
+  __syncthreads_lm();
+  for (int64_t column = lane; column < width; column += kThreads) {
     int32_t token = -1;
-    if (col < end && visible <= token_topk) {
-      token = static_cast<int32_t>(col);
-    } else if (visible > token_topk && col < token_topk) {
-      const int64_t pool_slot = col / 4;
-      if (pool_slot < selected_count) {
-        const int32_t pool = selected[pool_slot];
-        if (pool >= 0 && pool < pool_length) {
-          token = pool * 4 + static_cast<int32_t>(col % 4);
-        }
+    if (visible <= token_topk) {
+      if (column < end) {
+        token = static_cast<int32_t>(column);
       }
-    } else if (col >= token_topk && col < end) {
-      token = static_cast<int32_t>((visible / 4) * 4 + col - token_topk);
+    } else if (column < token_topk) {
+      const int64_t pool_slot = column / 4;
+      if (pool_slot < wanted) {
+        token = selected[pool_slot] * 4 + static_cast<int32_t>(column % 4);
+      }
+    } else if (column < end) {
+      token = static_cast<int32_t>((visible / 4) * 4 + column - token_topk);
     }
-    tokens[row * width + col] = token;
+    tokens[row * width + column] = token;
   }
 }
 
@@ -841,7 +1166,6 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
   auto score_fn = get_function("glm_kpool_score_v1", "fp8_paged_mqa_logits");
   const auto stream = current_musa_stream(query.device());
   const int64_t pools = (max_context + 3) / 4;
-  const int64_t count = std::min<int64_t>(token_topk / 4, pools);
   torch::Tensor scores;
   if (max_context > token_topk) {
     auto quant = torch::empty({tokens, 1, 32, 128},
@@ -899,8 +1223,7 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     scores = torch::empty({tokens, std::max<int64_t>(pools, 1)},
                           query.options().dtype(torch::kFloat32));
   }
-  CHECK_LE(count, 512);
-  select_pool_tokens<<<tokens, 256, 0, stream>>>(
+  select_pool_tokens_sgl<<<tokens, 512, 12 * 1024 * sizeof(uint32_t), stream>>>(
       scores.data_ptr<float>(),
       pool_lengths.data_ptr<int32_t>(),
       positions.data_ptr<int64_t>(),
@@ -908,7 +1231,6 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
       result.tokens.data_ptr<int32_t>(),
       result.lengths.data_ptr<int32_t>(),
       scores.size(1),
-      count,
       width,
       token_topk);
   check_musa_kernel_launch("GLM IndexPool fused candidate selection");
