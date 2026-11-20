@@ -1351,6 +1351,7 @@ TEST_F(GlmSparseTest, EngineKVCacheAndSharedSelectionCrossLayerForward) {
     EXPECT_EQ(capacity.num_full_attention_layers(), 2);
     EXPECT_EQ(capacity.slot_size(), fp8_cache ? 528 : 1024);
     EXPECT_EQ(capacity.scale_slot_size(), 0);
+    EXPECT_EQ(capacity.enable_mla_kv_cache_fp8(), fp8_cache);
     EXPECT_EQ(capacity.num_indexer_layers(), 1);
     EXPECT_EQ(capacity.kpool_tail_len(), 4);
     EXPECT_EQ(capacity.index_block_size(), 64 * 132);
@@ -1376,12 +1377,15 @@ TEST_F(GlmSparseTest, EngineKVCacheAndSharedSelectionCrossLayerForward) {
         .layer_types(args.layer_types())
         .model_type(args.model_type())
         .enable_lighting_indexer(true)
+        .enable_mla_kv_cache_fp8(fp8_cache)
         .indexer_cache_enabled_layers(
             resolve_indexer_cache_enabled_layers(args, args.n_layers()));
 
     KVCache cache_layer0(shape, create_options, /*layer_id=*/0);
     KVCache cache_layer1(shape, create_options, /*layer_id=*/1);
     EXPECT_TRUE(cache_layer0.get_k_cache().defined());
+    EXPECT_EQ(cache_layer0.get_k_cache().scalar_type(),
+              fp8_cache ? torch::kUInt8 : torch::kBFloat16);
     EXPECT_TRUE(cache_layer0.get_index_cache().defined());
     EXPECT_EQ(cache_layer0.get_index_cache().scalar_type(), torch::kUInt8);
     EXPECT_TRUE(cache_layer0.get_kpool_tail().defined());

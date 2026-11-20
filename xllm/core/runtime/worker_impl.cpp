@@ -523,6 +523,16 @@ bool WorkerImpl::allocate_kv_cache_storage(
     }
   }
 
+  const bool enable_mla_kv_cache_fp8 = options_.kv_cache_dtype() == "fp8_e4m3";
+  if (enable_mla_kv_cache_fp8) {
+    CHECK(Platform::is_musa())
+        << "fp8_e4m3 KV cache is only supported on MUSA.";
+    CHECK_EQ(args.model_type(), "glm5_next")
+        << "fp8_e4m3 KV cache is only supported for glm5_next.";
+    CHECK(!options_.enable_disagg_pd())
+        << "FP8 KV cache is not supported in PD disaggregation mode.";
+  }
+
   // Parse mamba_ssm_dtype if specified for linear attention layers.
   torch::ScalarType ssm_dtype = dtype_;
   if (enable_linear_attention) {
@@ -545,6 +555,7 @@ bool WorkerImpl::allocate_kv_cache_storage(
       .layer_cache_owned(std::move(layer_cache_owned))
       .indexer_cache_enabled_layers(std::move(indexer_cache_enabled_layers))
       .enable_kv_cache_quant(enable_kv_cache_quant)
+      .enable_mla_kv_cache_fp8(enable_mla_kv_cache_fp8)
       .enable_indexer_cache_quant(enable_indexer_cache_quant)
       .tensor_allocator(std::move(tensor_allocator))
       .block_size(options_.block_size())

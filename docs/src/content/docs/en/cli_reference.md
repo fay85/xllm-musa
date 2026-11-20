@@ -67,7 +67,7 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | `block_size` | `int32` | `128` | Number of slots per KV Cache block. |
 | `max_cache_size` | `int64` | `0` | Maximum GPU memory size for KV Cache. `0` means calculated from available memory. |
 | `max_memory_utilization` | `double` | `0.8` | Fraction of GPU memory used for model inference, including model weights and KV Cache. |
-| `kv_cache_dtype` | `string` | `"auto"` | KV Cache dtype for quantization. `auto` aligns with model dtype and disables quantization. `int8` enables INT8 quantization and is only supported on the MLU backend. |
+| `kv_cache_dtype` | `string` | `"auto"` | KV Cache dtype. `auto` aligns with model dtype. `int8` enables INT8 quantization on MLU. `fp8_e4m3` enables the packed FP8 MLA cache for GLM-5.3 on MUSA. |
 | `indexer_cache_dtype` | `string` | `"auto"` | Indexer cache dtype for models with an indexer cache. Supported values are `auto` and `int8`. `auto` aligns with model dtype and disables indexer cache quantization. `int8` enables INT8 indexer cache quantization. |
 | `enable_prefix_cache` | `bool` | `true` | Whether to enable prefix cache in the block manager. See [Prefix Cache](/en/features/prefix_cache/). |
 | `enable_in_batch_prefix_cache` | `bool` | `false` | Whether to cache admitted prefill full blocks into the prefix cache so that later requests in the same batch can share them. |

@@ -69,6 +69,10 @@ class KVCacheCapacity final {
   // single byte tensor. Consumed by KVCacheShape to switch to the 656B layout.
   PROPERTY(bool, enable_mla_kv_cache_quant) = false;
 
+  // GLM-5.3 MUSA MLA cache is packed as 512 E4M3 values plus four FP32
+  // scales in a 528-byte row.
+  PROPERTY(bool, enable_mla_kv_cache_fp8) = false;
+
   // for kv cache quantization scale cache
   PROPERTY(int64_t, scale_slot_size) = 0;
 

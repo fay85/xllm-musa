@@ -291,7 +291,17 @@ IndexedKVCacheTensors create_indexed_kv_cache_tensors(
 #endif
   }
   const bool mla_packed_c8 = create_options.mla_packed_c8();
-  if (create_options.enable_kv_cache_quant() && !mla_packed_c8) {
+  if (create_options.enable_mla_kv_cache_fp8()) {
+    CHECK_EQ(create_options.model_type(), "glm5_next");
+    CHECK(!create_options.enable_kv_cache_quant());
+    CHECK(!kv_cache_shape.has_value_cache_shape())
+        << "GLM FP8 MLA cache must use one packed key cache.";
+    tensors.kv_cache_tensors.key_cache =
+        alloc_cache_tensor(KVCacheTensorRole::KEY,
+                           kv_cache_shape.key_cache_shape(),
+                           torch::kUInt8,
+                           create_options);
+  } else if (create_options.enable_kv_cache_quant() && !mla_packed_c8) {
     QuantizedKVCacheTensors quantized_tensors =
         create_quantized_kv_cache_tensors(kv_cache_shape, create_options);
     tensors.kv_cache_tensors = quantized_tensors.kv_cache_tensors;

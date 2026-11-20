@@ -1049,6 +1049,13 @@ KVCacheCapacity estimate_kv_cache_capacity(
 
   const int64_t dtype_size = static_cast<int64_t>(
       torch::scalarTypeToTypeMeta(options.dtype).itemsize());
+  const bool enable_mla_fp8 = Platform::is_musa() &&
+                              model_args.model_type() == "glm5_next" &&
+                              options.kv_cache_dtype == "fp8_e4m3";
+  if (options.kv_cache_dtype == "fp8_e4m3") {
+    CHECK(enable_mla_fp8)
+        << "fp8_e4m3 KV cache is only supported for glm5_next on MUSA.";
+  }
   const int64_t cache_dtype_size =
       kv_cache_dtype_size(options.kv_cache_dtype, dtype_size);
   const bool enable_indexer_cache_quantization =
@@ -1078,6 +1085,7 @@ KVCacheCapacity estimate_kv_cache_capacity(
       .kpool_layout(kpool_layout)
       .enable_indexer_cache_quant(enable_indexer_cache_quantization)
       .enable_mla_kv_cache_quant(enable_mla_kv_cache_quantization)
+      .enable_mla_kv_cache_fp8(enable_mla_fp8)
       .scale_slot_size(scale_slot_size(model_args, options))
       .linear_slot_size(linear_slot_size(model_args, options, dtype_size))
       .n_layers(model_args.n_layers())

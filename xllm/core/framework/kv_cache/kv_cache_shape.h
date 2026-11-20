@@ -95,6 +95,8 @@ class KVCacheShape final {
                               const ModelArgs& model_args);
   void init_mla_packed_c8_shape(const KVCacheCapacity& kv_cache_cap,
                                 const ModelArgs& model_args);
+  void init_mla_fp8_cache_shape(const KVCacheCapacity& kv_cache_cap,
+                                const ModelArgs& model_args);
   void init_index_cache_scale_shape();
   void init_conv_cache_shape(const KVCacheCapacity& kv_cache_cap,
                              const ModelArgs& model_args,

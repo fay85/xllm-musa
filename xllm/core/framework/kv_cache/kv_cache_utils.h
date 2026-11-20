@@ -86,6 +86,7 @@ struct KVCacheCreateOptions {
   // whether that layer owns indexer cache tensors.
   PROPERTY(std::vector<bool>, indexer_cache_enabled_layers);
   PROPERTY(bool, enable_kv_cache_quant) = false;
+  PROPERTY(bool, enable_mla_kv_cache_fp8) = false;
   PROPERTY(std::shared_ptr<KVCacheTensorAllocator>, tensor_allocator);
 
   // Convenience: true when this options set drives the SFA C8 packed KV cache

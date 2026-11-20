@@ -39,7 +39,8 @@ DEFINE_string(
     "auto",
     "KV cache data type for quantization. \"auto\" (default): KV "
     "cache dtype aligns with model dtype (no quantization). "
-    "\"int8\": Enables INT8 quantization. Only supported on MLU backend.");
+    "\"int8\": Enables INT8 quantization. Only supported on MLU backend. "
+    "\"fp8_e4m3\": Enables the packed GLM-5.3 MUSA MLA cache.");
 
 DEFINE_string(indexer_cache_dtype,
               "auto",

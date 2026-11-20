@@ -111,12 +111,17 @@ KVCacheShape::KVCacheShape(const KVCacheCapacity& kv_cache_cap,
   // Indexed / base), each reading only its own shape, so coexistence here
   // is harmless. The prior exclusivity CHECK guarded a non-problem.
 
-  // The build gate lives in util::enable_mla_packed_c8(); the packed C8 bit on
-  // KVCacheCapacity is force-false on non-NPU builds, so the shape here stays
-  // in lockstep with the estimator's slot sizing without a second #ifdef.
+  // The packed C8 bit on KVCacheCapacity is gated by the platform utility,
+  // while the GLM FP8 bit is set by the MUSA worker. Both bits are populated
+  // by the estimator, so the shape stays in lockstep with slot sizing.
   const bool mla_packed_c8 = kv_cache_cap.enable_mla_kv_cache_quant();
+  const bool mla_fp8 = kv_cache_cap.enable_mla_kv_cache_fp8();
+  CHECK(!(mla_packed_c8 && mla_fp8))
+      << "MLA packed C8 and GLM FP8 cache layouts are mutually exclusive.";
   if (mla_packed_c8) {
     init_mla_packed_c8_shape(kv_cache_cap, model_args);
+  } else if (mla_fp8) {
+    init_mla_fp8_cache_shape(kv_cache_cap, model_args);
   } else {
     init_key_cache_shape(kv_cache_cap, model_args, world_size);
     init_value_cache_shape(kv_cache_cap, model_args, world_size);
@@ -485,6 +490,16 @@ void KVCacheShape::init_mla_packed_c8_shape(const KVCacheCapacity& kv_cache_cap,
   key_cache_shape_ = std::vector<int64_t>{
       kv_cache_cap.n_blocks(), kv_cache_cap.block_size(), 1, packed_head_dim};
   value_cache_shape_ = *key_cache_shape_;
+}
+
+void KVCacheShape::init_mla_fp8_cache_shape(const KVCacheCapacity& kv_cache_cap,
+                                            const ModelArgs& model_args) {
+  CHECK_EQ(model_args.model_type(), "glm5_next")
+      << "The MUSA inline FP8 MLA cache is only supported by glm5_next.";
+  CHECK_EQ(model_args.kv_lora_rank(), 512);
+  CHECK_EQ(model_args.qk_rope_head_dim(), 0);
+  key_cache_shape_ = std::vector<int64_t>{
+      kv_cache_cap.n_blocks(), kv_cache_cap.block_size(), 1, 528};
 }
 
 void KVCacheShape::init_index_cache_shape(const KVCacheCapacity& kv_cache_cap,

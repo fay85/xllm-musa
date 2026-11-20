@@ -57,6 +57,10 @@ std::unique_ptr<KVCacheImpl> create_kv_cache_impl(
   CHECK_GE(layer_id, 0) << "KV cache layer_id must be non-negative.";
 
   const bool mla_packed_c8 = create_options.mla_packed_c8();
+  if (create_options.enable_mla_kv_cache_fp8()) {
+    CHECK_EQ(create_options.model_type(), "glm5_next");
+    CHECK(!create_options.enable_kv_cache_quant());
+  }
 #if !defined(USE_MLU)
   // NPU SFA C8 (packed int8 nope + bf16 rope + fp32 scale) is currently the
   // only quant path wired on non-MLU. Every other non-MLU quant use is
