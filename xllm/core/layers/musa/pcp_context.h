@@ -60,11 +60,24 @@ struct PendingReceive final {
 struct Context final {
   ProcessGroup* cp_group = nullptr;
   int32_t cp_rank = 0;
-  // Rank r owns rows [row_offsets[r], row_offsets[r + 1]).
+  int32_t batch_size = 1;
+  bool is_batch = false;
+  // Rank r owns packed local rows of count (row_offsets[r + 1] - row_offsets[r]).
+  // For single-sequence (!is_batch), rank r owns contiguous global rows
+  // [row_offsets[r], row_offsets[r + 1]). For multi-sequence (is_batch), rank 0
+  // owns all sequences' front halves [f_0, ..., f_{B-1}] and rank 1 owns all
+  // sequences' back halves [r_0, ..., r_{B-1}].
   std::vector<int32_t> row_offsets;
+  std::vector<int32_t> rank0_seq_ends;
   int32_t max_rows = 0;
   bool replicate_final_state = true;
   torch::Tensor global_slot_mapping;
+  torch::Tensor rank0_row_indices;
+  torch::Tensor rank1_row_indices;
+  torch::Tensor unpermute_indices;
+  torch::Tensor rank0_slot_mapping;
+  torch::Tensor rank1_slot_mapping;
+  torch::Tensor conv_prefix_row_indices;
   AttentionMetadata local_metadata;
   std::vector<DeferredKv> deferred_kv;
   std::vector<DeferredState> deferred_states;
@@ -103,8 +116,19 @@ torch::Tensor gather_rows(const torch::Tensor& local, const Context& context);
 void expect_prefix_rows(torch::IntArrayRef shape,
                         const torch::TensorOptions& options,
                         Context& context);
-// Posts one row of `cache`, the per-sequence state slot.
+// Posts `batch_size` rows of `cache`, the per-sequence state slots.
 void expect_prefix_cache_row(const torch::Tensor& cache, Context& context);
+// Posts the causal-conv1d boundary prefix (`[conv_state_len, qkv_dim]` for a
+// single sequence or `[batch_size, conv_state_len, qkv_dim]` for multi-batch).
+void expect_conv_prefix(int64_t conv_state_len,
+                        int64_t qkv_dim,
+                        const torch::TensorOptions& options,
+                        Context& context);
+// Extracts the trailing `conv_state_len` rows per sequence on rank 0.
+torch::Tensor extract_conv_prefix(const torch::Tensor& local_rows,
+                                  int64_t conv_state_len,
+                                  int64_t qkv_dim,
+                                  const Context& context);
 torch::Tensor take_prefix_rows(Context& context);
 void receive_prefix_cache_row(torch::Tensor& cache,
                               const torch::Tensor& indices,

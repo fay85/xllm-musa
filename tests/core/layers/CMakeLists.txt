@@ -135,4 +135,18 @@ if(USE_MUSA)
       torch
       GTest::gtest_main
   )
+
+  cc_test(
+    NAME
+      musa_pcp_multibatch_test
+    SRCS
+      musa_pcp_multibatch_test.cpp
+    DEPS
+      :musa_layers
+      :kernels
+      :parallel_state
+      glog::glog
+      torch
+      GTest::gtest_main
+  )
 endif()
