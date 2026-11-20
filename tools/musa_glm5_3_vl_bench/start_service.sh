@@ -34,6 +34,12 @@ PREFILL_BATCH_WAIT_MS="${GLM5_PREFILL_BATCH_WAIT_MS:-0}"
 # default eager path.
 MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-4096}"
 ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-false}"
+# Use eager launches so the driver can block at every kernel in every rank.
+export MUSA_LAUNCH_BLOCKING="${MUSA_LAUNCH_BLOCKING:-0}"
+if [[ "${MUSA_LAUNCH_BLOCKING}" == "1" ]]; then
+  ENABLE_GRAPH=false
+  ENABLE_PREFILL_PIECEWISE_GRAPH=false
+fi
 ENABLE_DISAGG_PD="${GLM5_ENABLE_DISAGG_PD:-false}"
 INSTANCE_ROLE="${GLM5_INSTANCE_ROLE:-DEFAULT}"
 KV_CACHE_TRANSFER_MODE="${GLM5_KV_CACHE_TRANSFER_MODE:-PUSH}"
@@ -216,6 +222,7 @@ if [[ "${TORCH_PROFILE}" == "1" ]]; then
 fi
 
 echo "Binary: ${XLLM_BIN}"
+echo "MUSA_LAUNCH_BLOCKING=${MUSA_LAUNCH_BLOCKING} graph=${ENABLE_GRAPH} prefill_piecewise_graph=${ENABLE_PREFILL_PIECEWISE_GRAPH}"
 echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
 echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_cp=${XLLM_GLM5_PREFILL_CP} disagg_pd=${ENABLE_DISAGG_PD} instance_role=${INSTANCE_ROLE}"
 echo "Logs: ${LOG_DIR}/rank_*.log"
