@@ -432,6 +432,9 @@ StreamingParseResult Qwen3CoderDetector::detect_and_parse(
 StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
     const std::string& new_text,
     const std::vector<JsonTool>& tools) {
+  if (tools.empty() && !is_inside_tool_call_ && parsed_pos_ >= buffer_.length()) {
+    return StreamingParseResult(new_text);
+  }
   buffer_ += new_text;
   if (buffer_.empty()) {
     return StreamingParseResult();
@@ -569,19 +572,15 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
     }
 
     if (next_open_angle == 0) {
-      std::vector<std::string_view> possible_tags = {tool_call_start_token_,
-                                                     tool_call_end_token_,
-                                                     tool_call_prefix_,
-                                                     function_end_token_,
-                                                     parameter_prefix_,
-                                                     parameter_end_token_};
-
-      bool is_potential_tag = false;
-      for (const auto& tag : possible_tags) {
-        if (starts_with(tag, current_slice)) {
-          is_potential_tag = true;
-          break;
-        }
+      bool is_potential_tag =
+          starts_with(tool_call_start_token_, current_slice) ||
+          starts_with(tool_call_prefix_, current_slice);
+      if (is_inside_tool_call_ && !is_potential_tag) {
+        is_potential_tag =
+            starts_with(tool_call_end_token_, current_slice) ||
+            starts_with(function_end_token_, current_slice) ||
+            starts_with(parameter_prefix_, current_slice) ||
+            starts_with(parameter_end_token_, current_slice);
       }
 
       if (is_potential_tag) {
