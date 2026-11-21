@@ -37,6 +37,12 @@ namespace {
 // tile costs a full one. That also keeps the 64-row Mate GDN chunk partition
 // of the unsplit prompt.
 constexpr int32_t kRowAlignment = 256;
+// Multi-sequence PCP splits each sequence on a 64-token Mate GDN chunk boundary
+// so the chunked recurrence across rank 0 and rank 1 matches an unsplit prompt.
+constexpr int32_t kBatchRowAlignment = 64;
+constexpr int32_t kMinBatchSeqRows = 128;
+constexpr int32_t kMinBatchTailRows = 32;
+constexpr int32_t kDefaultConvStateLen = 3;
 // Handoffs pair the first rank with the second as broadcasts.
 constexpr int32_t kSupportedCpSize = 2;
 // Prefill cost of a rank relative to its per-row projection and MLP cost:
@@ -49,6 +55,10 @@ constexpr double kOtherRankKvCostPerRow = 0.04;
 bool pcp_enabled() {
   static const bool enabled = util::get_bool_env("XLLM_MUSA_PCP", true);
   return enabled;
+}
+
+bool pcp_multibatch_enabled() {
+  return util::get_bool_env("XLLM_MUSA_PCP_MULTIBATCH", true);
 }
 
 int32_t num_ranks(const Context& context) {
@@ -79,10 +89,13 @@ double rank_cost(int32_t begin,
 // of the second after the layers only when the final state is replicated.
 int32_t balanced_first_rows(int32_t num_rows,
                             int32_t history_rows,
-                            bool replicate_final_state) {
+                            bool replicate_final_state,
+                            int32_t alignment = kRowAlignment,
+                            int32_t min_second_rows = 1) {
   int32_t best_rows = 0;
   double best_gap = std::numeric_limits<double>::max();
-  for (int32_t rows = kRowAlignment; rows < num_rows; rows += kRowAlignment) {
+  for (int32_t rows = alignment; rows + min_second_rows <= num_rows;
+       rows += alignment) {
     const int32_t second_rows = num_rows - rows;
     const double first_cost = rank_cost(
         /*begin=*/0,
@@ -101,6 +114,9 @@ int32_t balanced_first_rows(int32_t num_rows,
 }
 
 torch::Tensor slots_of(const Context& context, int32_t rank) {
+  if (context.is_batch) {
+    return rank == 0 ? context.rank0_slot_mapping : context.rank1_slot_mapping;
+  }
   return context.global_slot_mapping.narrow(
       /*dim=*/0,
       /*start=*/context.row_offsets[rank],
@@ -255,8 +271,221 @@ void build_context(const AttentionMetadata& global_metadata,
   }
   if (global_metadata.is_spec_verify || global_metadata.prefill_without_cache ||
       (!global_metadata.is_prefill && !global_metadata.is_chunked_prefill) ||
-      global_metadata.q_seq_lens_vec.size() != 1 ||
-      global_metadata.kv_seq_lens_vec.size() != 1) {
+      global_metadata.q_seq_lens_vec.empty() ||
+      global_metadata.q_seq_lens_vec.size() !=
+          global_metadata.kv_seq_lens_vec.size()) {
+    return;
+  }
+  const size_t num_seqs = global_metadata.q_seq_lens_vec.size();
+  if (num_seqs > 1) {
+    if (!pcp_multibatch_enabled()) {
+      return;
+    }
+    int64_t total_q_rows = 0;
+    std::vector<int32_t> history_vec(num_seqs, 0);
+    bool any_history = false;
+    for (size_t b = 0; b < num_seqs; ++b) {
+      const int32_t q_b = global_metadata.q_seq_lens_vec[b];
+      const int32_t kv_b = global_metadata.kv_seq_lens_vec[b];
+      const int32_t h_b = kv_b - q_b;
+      if (q_b < kMinBatchSeqRows || h_b < 0) {
+        return;
+      }
+      history_vec[b] = h_b;
+      any_history = any_history || (h_b > 0);
+      total_q_rows += q_b;
+    }
+    if (total_q_rows != static_cast<int64_t>(num_rows)) {
+      return;
+    }
+    const int32_t max_chunk =
+        SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+    bool all_single_chunk = global_metadata.is_prefill && !any_history;
+    if (all_single_chunk && max_chunk > 0) {
+      for (size_t b = 0; b < num_seqs; ++b) {
+        if (global_metadata.q_seq_lens_vec[b] >= max_chunk) {
+          all_single_chunk = false;
+          break;
+        }
+      }
+    }
+    const bool replicate_final_state =
+        InstanceRole(::xllm::DisaggPDConfig::get_instance().instance_role()) !=
+            InstanceRole::PREFILL ||
+        KVCacheConfig::get_instance().enable_prefix_cache() ||
+        !all_single_chunk;
+
+    std::vector<int32_t> front_lens(num_seqs, 0);
+    std::vector<int32_t> back_lens(num_seqs, 0);
+    int32_t total_front_rows = 0;
+    int32_t total_back_rows = 0;
+    for (size_t b = 0; b < num_seqs; ++b) {
+      const int32_t q_b = global_metadata.q_seq_lens_vec[b];
+      const int32_t f_b = balanced_first_rows(q_b,
+                                              history_vec[b],
+                                              replicate_final_state,
+                                              kBatchRowAlignment,
+                                              kMinBatchTailRows);
+      if (f_b < kDefaultConvStateLen ||
+          (q_b - f_b) < kDefaultConvStateLen) {
+        return;
+      }
+      front_lens[b] = f_b;
+      back_lens[b] = q_b - f_b;
+      total_front_rows += f_b;
+      total_back_rows += (q_b - f_b);
+    }
+
+    Context& pcp_context = context->emplace();
+    pcp_context.cp_group = cp_group;
+    pcp_context.cp_rank = cp_group->rank();
+    pcp_context.batch_size = static_cast<int32_t>(num_seqs);
+    pcp_context.is_batch = true;
+    pcp_context.row_offsets = {
+        0, total_front_rows, total_front_rows + total_back_rows};
+    pcp_context.max_rows = std::max(total_front_rows, total_back_rows);
+    pcp_context.replicate_final_state = replicate_final_state;
+    pcp_context.global_slot_mapping = global_metadata.slot_mapping;
+    pcp_context.rank0_seq_ends.reserve(num_seqs);
+
+    // Pack all int64 permutation/index vectors into a single H2D copy.
+    const int64_t total_rows_i64 =
+        static_cast<int64_t>(total_front_rows + total_back_rows);
+    const int64_t conv_idx_count =
+        static_cast<int64_t>(num_seqs) * kDefaultConvStateLen;
+    std::vector<int64_t> idx_bundle;
+    idx_bundle.resize(static_cast<size_t>(2 * total_rows_i64 + conv_idx_count));
+    int64_t* r0_ptr = idx_bundle.data();
+    int64_t* r1_ptr = r0_ptr + total_front_rows;
+    int64_t* unperm_ptr = r1_ptr + total_back_rows;
+    int64_t* conv_ptr = unperm_ptr + total_rows_i64;
+
+    int32_t global_off = 0;
+    int32_t r0_off = 0;
+    int32_t r1_off = 0;
+    for (size_t b = 0; b < num_seqs; ++b) {
+      const int32_t q_b = global_metadata.q_seq_lens_vec[b];
+      const int32_t f_b = front_lens[b];
+      const int32_t r_b = back_lens[b];
+      for (int32_t t = 0; t < f_b; ++t) {
+        r0_ptr[r0_off + t] = global_off + t;
+        unperm_ptr[global_off + t] = r0_off + t;
+      }
+      r0_off += f_b;
+      pcp_context.rank0_seq_ends.push_back(r0_off);
+      for (int32_t c = 0; c < kDefaultConvStateLen; ++c) {
+        conv_ptr[b * kDefaultConvStateLen + c] =
+            r0_off - kDefaultConvStateLen + c;
+      }
+      for (int32_t t = 0; t < r_b; ++t) {
+        r1_ptr[r1_off + t] = global_off + f_b + t;
+        unperm_ptr[global_off + f_b + t] = total_front_rows + r1_off + t;
+      }
+      r1_off += r_b;
+      global_off += q_b;
+    }
+
+    const torch::Device device = global_metadata.q_cu_seq_lens.device();
+    torch::Tensor idx_device =
+        torch::tensor(idx_bundle, torch::TensorOptions().dtype(torch::kLong))
+            .to(device);
+    pcp_context.rank0_row_indices =
+        idx_device.narrow(/*dim=*/0, /*start=*/0, /*length=*/total_front_rows);
+    pcp_context.rank1_row_indices = idx_device.narrow(
+        /*dim=*/0, /*start=*/total_front_rows, /*length=*/total_back_rows);
+    pcp_context.unpermute_indices = idx_device.narrow(
+        /*dim=*/0, /*start=*/total_rows_i64, /*length=*/total_rows_i64);
+    pcp_context.conv_prefix_row_indices =
+        idx_device.narrow(/*dim=*/0,
+                          /*start=*/2 * total_rows_i64,
+                          /*length=*/conv_idx_count);
+
+    if (global_metadata.slot_mapping.defined()) {
+      const torch::Device slot_dev = global_metadata.slot_mapping.device();
+      const torch::Tensor r0_slot_idx =
+          slot_dev == device ? pcp_context.rank0_row_indices
+                             : pcp_context.rank0_row_indices.to(slot_dev);
+      const torch::Tensor r1_slot_idx =
+          slot_dev == device ? pcp_context.rank1_row_indices
+                             : pcp_context.rank1_row_indices.to(slot_dev);
+      pcp_context.rank0_slot_mapping =
+          global_metadata.slot_mapping.index_select(/*dim=*/0, r0_slot_idx);
+      pcp_context.rank1_slot_mapping =
+          global_metadata.slot_mapping.index_select(/*dim=*/0, r1_slot_idx);
+    }
+
+    const bool is_rank0 = (pcp_context.cp_rank == 0);
+    const std::vector<int32_t>& local_q_vec = is_rank0 ? front_lens : back_lens;
+    std::vector<int32_t> local_kv_vec(num_seqs, 0);
+    int32_t max_q_len = 0;
+    int32_t max_kv_len = 0;
+    int64_t total_kv_len = 0;
+
+    // Pack [q_cu (B+1) | kv_cu (B+1) | q_lens (B) | kv_lens (B)] into one H2D.
+    const int64_t b_i64 = static_cast<int64_t>(num_seqs);
+    std::vector<int32_t> meta_i32(static_cast<size_t>(4 * b_i64 + 2), 0);
+    int32_t* q_cu_ptr = meta_i32.data();
+    int32_t* kv_cu_ptr = q_cu_ptr + (b_i64 + 1);
+    int32_t* q_len_ptr = kv_cu_ptr + (b_i64 + 1);
+    int32_t* kv_len_ptr = q_len_ptr + b_i64;
+    for (size_t b = 0; b < num_seqs; ++b) {
+      const int32_t q_b = local_q_vec[b];
+      const int32_t kv_b = is_rank0 ? (history_vec[b] + front_lens[b])
+                                    : global_metadata.kv_seq_lens_vec[b];
+      local_kv_vec[b] = kv_b;
+      q_cu_ptr[b + 1] = q_cu_ptr[b] + q_b;
+      kv_cu_ptr[b + 1] = kv_cu_ptr[b] + kv_b;
+      q_len_ptr[b] = q_b;
+      kv_len_ptr[b] = kv_b;
+      max_q_len = std::max(max_q_len, q_b);
+      max_kv_len = std::max(max_kv_len, kv_b);
+      total_kv_len += kv_b;
+    }
+    torch::Tensor meta_device =
+        torch::tensor(meta_i32, torch::TensorOptions().dtype(torch::kInt32))
+            .to(device);
+
+    AttentionMetadata& local = pcp_context.local_metadata;
+    local = global_metadata;
+    local.q_cu_seq_lens =
+        meta_device.narrow(/*dim=*/0, /*start=*/0, /*length=*/b_i64 + 1);
+    local.kv_cu_seq_lens = meta_device.narrow(
+        /*dim=*/0, /*start=*/b_i64 + 1, /*length=*/b_i64 + 1);
+    if (global_metadata.q_seq_lens.defined()) {
+      local.q_seq_lens = meta_device.narrow(
+          /*dim=*/0, /*start=*/2 * (b_i64 + 1), /*length=*/b_i64);
+    }
+    if (global_metadata.kv_seq_lens.defined()) {
+      local.kv_seq_lens = meta_device.narrow(
+          /*dim=*/0, /*start=*/2 * (b_i64 + 1) + b_i64, /*length=*/b_i64);
+    }
+    local.q_seq_lens_vec = local_q_vec;
+    local.kv_seq_lens_vec = std::move(local_kv_vec);
+    if (global_metadata.slot_mapping.defined()) {
+      local.slot_mapping = slots_of(pcp_context, pcp_context.cp_rank);
+    }
+    if (global_metadata.mrope_cos.defined()) {
+      local.mrope_cos =
+          shard_rows(global_metadata.mrope_cos, pcp_context, /*dim=*/0);
+      local.mrope_sin =
+          shard_rows(global_metadata.mrope_sin, pcp_context, /*dim=*/0);
+    }
+    local.max_query_len = max_q_len;
+    local.max_seq_len = max_kv_len;
+    local.total_kv_len = total_kv_len;
+    const bool continues_rows =
+        !is_rank0 || any_history || global_metadata.is_chunked_prefill;
+    local.is_prefill = !continues_rows;
+    local.is_chunked_prefill = continues_rows;
+    local.has_initial_states =
+        !is_rank0
+            ? torch::full(
+                  {pcp_context.batch_size},
+                  /*fill_value=*/true,
+                  torch::TensorOptions().dtype(torch::kBool).device(device))
+            : global_metadata.has_initial_states;
+    local.fa3_metadata.fa3_scheduler_metadata = torch::Tensor();
+    local.pcp_context = &pcp_context;
     return;
   }
   // Rows already in the cache: a prefix-cache hit or earlier prompt chunks.
@@ -358,6 +587,16 @@ bool receives_prefix_state(const Context& context) {
 torch::Tensor shard_rows(const torch::Tensor& global,
                          const Context& context,
                          int64_t dim) {
+  if (context.is_batch) {
+    const int64_t norm_dim = dim < 0 ? global.dim() + dim : dim;
+    const torch::Tensor& raw_idx =
+        context.cp_rank == 0 ? context.rank0_row_indices
+                             : context.rank1_row_indices;
+    const torch::Tensor idx =
+        raw_idx.device() == global.device() ? raw_idx
+                                            : raw_idx.to(global.device());
+    return global.index_select(norm_dim, idx).contiguous();
+  }
   return global
       .narrow(dim,
               context.row_offsets[context.cp_rank],
@@ -392,16 +631,26 @@ torch::Tensor gather_rows(const torch::Tensor& local, const Context& context) {
     gathered = context.cp_group->allgather_base_sync(send);
   }
   const int32_t cp_size = num_ranks(context);
+  torch::Tensor packed;
   if (context.row_offsets.back() == cp_size * context.max_rows) {
-    return gathered.flatten(/*start_dim=*/0, /*end_dim=*/1);
+    packed = gathered.flatten(/*start_dim=*/0, /*end_dim=*/1);
+  } else {
+    std::vector<torch::Tensor> parts;
+    parts.reserve(cp_size);
+    for (int32_t rank = 0; rank < cp_size; ++rank) {
+      parts.emplace_back(gathered[rank].narrow(
+          /*dim=*/0, /*start=*/0, /*length=*/rows_of(context, rank)));
+    }
+    packed = torch::cat(parts, /*dim=*/0);
   }
-  std::vector<torch::Tensor> parts;
-  parts.reserve(cp_size);
-  for (int32_t rank = 0; rank < cp_size; ++rank) {
-    parts.emplace_back(gathered[rank].narrow(
-        /*dim=*/0, /*start=*/0, /*length=*/rows_of(context, rank)));
+  if (!context.is_batch) {
+    return packed;
   }
-  return torch::cat(parts, /*dim=*/0);
+  const torch::Tensor idx =
+      context.unpermute_indices.device() == packed.device()
+          ? context.unpermute_indices
+          : context.unpermute_indices.to(packed.device());
+  return packed.index_select(/*dim=*/0, idx);
 }
 
 void expect_prefix_rows(torch::IntArrayRef shape,
@@ -424,8 +673,62 @@ void expect_prefix_rows(torch::IntArrayRef shape,
 
 void expect_prefix_cache_row(const torch::Tensor& cache, Context& context) {
   std::vector<int64_t> shape = cache.sizes().vec();
-  shape[0] = 1;
+  shape[0] = context.batch_size;
   expect_prefix_rows(shape, cache.options(), context);
+}
+
+void expect_conv_prefix(int64_t conv_state_len,
+                        int64_t qkv_dim,
+                        const torch::TensorOptions& options,
+                        Context& context) {
+  if (context.is_batch) {
+    expect_prefix_rows(
+        {context.batch_size, conv_state_len, qkv_dim}, options, context);
+  } else {
+    expect_prefix_rows({conv_state_len, qkv_dim}, options, context);
+  }
+}
+
+torch::Tensor extract_conv_prefix(const torch::Tensor& local_rows,
+                                  int64_t conv_state_len,
+                                  int64_t qkv_dim,
+                                  const Context& context) {
+  torch::Tensor cols =
+      local_rows.size(-1) == qkv_dim
+          ? local_rows
+          : local_rows.narrow(/*dim=*/-1, /*start=*/0, /*length=*/qkv_dim);
+  if (!context.is_batch) {
+    CHECK_GE(cols.size(0), conv_state_len);
+    return cols
+        .narrow(/*dim=*/0,
+                /*start=*/cols.size(0) - conv_state_len,
+                /*length=*/conv_state_len)
+        .contiguous();
+  }
+  torch::Tensor row_indices;
+  if (conv_state_len == kDefaultConvStateLen &&
+      context.conv_prefix_row_indices.defined()) {
+    row_indices = context.conv_prefix_row_indices.device() == cols.device()
+                      ? context.conv_prefix_row_indices
+                      : context.conv_prefix_row_indices.to(cols.device());
+  } else {
+    CHECK_EQ(static_cast<int32_t>(context.rank0_seq_ends.size()),
+             context.batch_size);
+    std::vector<int64_t> cpu_idx;
+    cpu_idx.reserve(static_cast<size_t>(context.batch_size * conv_state_len));
+    for (int32_t seq_end : context.rank0_seq_ends) {
+      CHECK_GE(seq_end, conv_state_len);
+      for (int64_t c = 0; c < conv_state_len; ++c) {
+        cpu_idx.push_back(seq_end - conv_state_len + c);
+      }
+    }
+    row_indices =
+        torch::tensor(cpu_idx, torch::TensorOptions().dtype(torch::kLong))
+            .to(cols.device());
+  }
+  return cols.index_select(/*dim=*/0, row_indices)
+      .view({context.batch_size, conv_state_len, qkv_dim})
+      .contiguous();
 }
 
 torch::Tensor take_prefix_rows(Context& context) {

@@ -947,8 +947,11 @@ bool mate_gdn_needs_varlen_packing(
       return true;
     }
     if (num_seqs > 1) {
-      return mate_gdn_padded_waste_ratio(cu, input_seq_len) >
-             kMateGdnPaddedWasteThreshold;
+      const double waste = mate_gdn_padded_waste_ratio(cu, input_seq_len);
+      if (params.initial_state.has_value() && params.initial_state->defined()) {
+        return waste > 0.0;
+      }
+      return waste > kMateGdnPaddedWasteThreshold;
     }
     return false;
   }
@@ -1075,15 +1078,24 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       mate_kkt_module_available(get_mate_kkt_solve_uri(
           num_q_heads, num_v_heads, query.scalar_type()));
 
+  int64_t inferred_num_seqs = input_batch;
+  if (params.cu_seqlens_host.has_value() && !params.cu_seqlens_host->empty()) {
+    inferred_num_seqs =
+        static_cast<int64_t>(params.cu_seqlens_host->size()) - 1;
+  } else if (params.cu_seqlens.has_value() && params.cu_seqlens->defined()) {
+    inferred_num_seqs = params.cu_seqlens->size(0) - 1;
+  }
   const bool use_c1_partial_fixed =
       mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
-      input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
+      inferred_num_seqs == 1 && input_seq_len >= kGdnChunkSize &&
+      input_seq_len % kGdnChunkSize != 0 &&
       (strided_padded_available || legacy_padded_available);
   // Full-varlen kernels accept a partial final chunk.
   const bool use_unpadded_c1_varlen =
       !use_c1_partial_fixed && mate_gdn_unpadded_c1_enabled() &&
-      input_batch == 1 && input_seq_len >= kGdnChunkSize &&
-      input_seq_len % kGdnChunkSize != 0 && varlen_available;
+      input_batch == 1 && inferred_num_seqs == 1 &&
+      input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
+      varlen_available;
   const bool use_full_varlen =
       !use_c1_partial_fixed && varlen_available &&
       ((params.output.has_value() && params.output->defined()) ||
@@ -1695,12 +1707,21 @@ torch::Tensor causal_conv1d_prefill(
   std::optional<torch::Tensor> effective_read_cache_indices =
       read_cache_indices;
   if (prefix_x.has_value() && prefix_x->defined()) {
-    CHECK_EQ(cache_indices.numel(), 1)
-        << "prefix_x fallback requires single-sequence cache_indices";
+    torch::Tensor prefix_state;
+    if (prefix_x->dim() == 2) {
+      CHECK_EQ(cache_indices.numel(), 1)
+          << "2D prefix_x fallback requires single-sequence cache_indices";
+      prefix_state =
+          prefix_x->t().contiguous().unsqueeze(0).to(conv_state.scalar_type());
+    } else {
+      CHECK(prefix_x->dim() == 3 &&
+            prefix_x->size(0) == cache_indices.numel())
+          << "3D prefix_x fallback must match cache_indices batch size";
+      prefix_state =
+          prefix_x->transpose(1, 2).contiguous().to(conv_state.scalar_type());
+    }
     torch::Tensor mutable_conv_state = conv_state;
-    mutable_conv_state.index_put_(
-        {cache_indices},
-        prefix_x->t().contiguous().unsqueeze(0).to(conv_state.scalar_type()));
+    mutable_conv_state.index_put_({cache_indices}, prefix_state);
     effective_read_cache_indices = std::nullopt;
   }
   auto x_t = x.t().contiguous();

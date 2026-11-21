@@ -4020,8 +4020,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
-  if (forward_type.is_chunked_prefill() && num_sequences > 1 &&
-      !params.embedding.linear_state_ids.empty()) {
+  if (num_sequences > 1 &&
+      (options_.cp_size() > 1 || !params.embedding.linear_state_ids.empty())) {
     return false;
   }
   const int64_t bucket_num_tokens =

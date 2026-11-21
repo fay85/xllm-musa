@@ -929,39 +929,56 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const int64_t local_nv = num_v_heads_ / tp_size_;
   const int64_t qkv_dim = 2 * local_nk * head_k_dim_ + local_nv * head_v_dim_;
   const int64_t conv_state_len = conv_kernel_size_ - 1;
+  const bool is_any_prefill =
+      attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
+  const int64_t metadata_num_seqs =
+      is_any_prefill && !use_spec_verify &&
+              !attn_metadata.q_seq_lens_vec.empty()
+          ? static_cast<int64_t>(attn_metadata.q_seq_lens_vec.size())
+          : 0;
+  // Multi-sequence Mate GDN prefill operates directly on packed [1, total_rows]
+  // tokens without padding/unpadding across sequence boundaries.
+  const bool use_packed_multiseq_prefill =
+      kEnableMateGdnPrefill && !use_spec_verify && is_any_prefill &&
+      metadata_num_seqs > 1;
   const torch::Tensor conv_ba_weight =
       conv_fused_ba_weight(hidden_states, attn_metadata, use_spec_verify);
   torch::Tensor qkvz_padded;
   torch::Tensor ba_padded;
   if (conv_ba_weight.defined()) {
     const torch::Tensor qkvz = project_qkvz(hidden_states);
-    if (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
-      qkvz_padded = reshape_qkvz_with_pad(attn_metadata, qkvz);
+    if (is_any_prefill) {
+      qkvz_padded = use_packed_multiseq_prefill
+                        ? qkvz.unsqueeze(0)
+                        : reshape_qkvz_with_pad(attn_metadata, qkvz);
     } else {
       qkvz_padded =
           qkvz.view({hidden_states.values.size(0), -1, qkvz.size(-1)});
     }
-  } else if (pcp_context != nullptr) {
+  } else if (pcp_context != nullptr || use_packed_multiseq_prefill) {
     const torch::Tensor qkvz = project_qkvz(hidden_states);
-    if (musa_pcp::receives_prefix_state(*pcp_context)) {
-      // Post the receive after qkvz_proj_ finishes so the persistent FP8 GEMM
-      // runs uncontested on all SMs, and overlap the transfer with ba_proj_.
-      musa_pcp::expect_prefix_rows(
-          {conv_state_len, qkv_dim}, qkvz.options(), *pcp_context);
-      musa_pcp::expect_prefix_cache_row(kv_cache.get_ssm_cache(), *pcp_context);
-    } else if (uses_contiguous_qkvzba_layout()) {
-      CHECK_GE(qkvz.size(0), conv_state_len);
-      torch::Tensor conv_prefix =
-          qkvz.narrow(/*dim=*/0,
-                      /*start=*/qkvz.size(0) - conv_state_len,
-                      /*length=*/conv_state_len)
-              .narrow(/*dim=*/1, /*start=*/0, /*length=*/qkv_dim)
-              .contiguous();
-      musa_pcp::send_prefix_rows(conv_prefix, *pcp_context);
+    if (pcp_context != nullptr) {
+      if (musa_pcp::receives_prefix_state(*pcp_context)) {
+        // Post the receive after qkvz_proj_ finishes so the persistent FP8 GEMM
+        // runs uncontested on all SMs, and overlap the transfer with ba_proj_.
+        musa_pcp::expect_conv_prefix(
+            conv_state_len, qkv_dim, qkvz.options(), *pcp_context);
+        musa_pcp::expect_prefix_cache_row(kv_cache.get_ssm_cache(),
+                                          *pcp_context);
+      } else if (uses_contiguous_qkvzba_layout()) {
+        torch::Tensor conv_prefix = musa_pcp::extract_conv_prefix(
+            qkvz, conv_state_len, qkv_dim, *pcp_context);
+        musa_pcp::send_prefix_rows(conv_prefix, *pcp_context);
+      }
     }
     const torch::Tensor ba = project_ba(hidden_states);
-    qkvz_padded = reshape_qkvz_with_pad(attn_metadata, qkvz);
-    ba_padded = reshape_qkvz_with_pad(attn_metadata, ba);
+    if (use_packed_multiseq_prefill) {
+      qkvz_padded = qkvz.unsqueeze(0);
+      ba_padded = ba.unsqueeze(0);
+    } else {
+      qkvz_padded = reshape_qkvz_with_pad(attn_metadata, qkvz);
+      ba_padded = reshape_qkvz_with_pad(attn_metadata, ba);
+    }
   } else {
     std::tie(qkvz_padded, ba_padded) =
         project_padded_inputs(hidden_states, attn_metadata);
@@ -977,8 +994,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           ? torch::empty({batch_size * seq_len, conv_ba_weight.size(0)},
                          qkvz_flat.options())
           : ba_padded.view({batch_size * seq_len, ba_padded.size(-1)});
-  const bool is_any_prefill =
-      attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
   torch::Tensor mixed_qkv, z, b, a;
   if ((use_spec_verify || is_any_prefill) && uses_contiguous_qkvzba_layout()) {
     // Each token row already holds [q | k | v | z] and [b | a], and every
@@ -1062,15 +1077,20 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       use_fused_gdn_decode || use_mate_gdn_decode;
 
   if (!use_spec_verify && is_any_prefill) {
-    torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
+    torch::Tensor conv_input =
+        use_packed_multiseq_prefill
+            ? mixed_qkv.squeeze(0)
+            : reshape_qkvz_unpad(attn_metadata, mixed_qkv);
     // Canonical recurrent-state validity from linear_state_validity_mask.
     // Do not derive from kv_cache_tokens_nums: prefix-cached tokens do not
     // imply a valid GDN recurrent state (see AttentionMetadataBuilder tests).
     const torch::Tensor& has_initial_state = attn_metadata.has_initial_states;
+    const int64_t expected_state_batch =
+        use_packed_multiseq_prefill ? metadata_num_seqs : batch_size;
     CHECK(has_initial_state.defined())
         << "has_initial_states must be populated for Qwen3.5 prefill";
     CHECK_EQ(has_initial_state.dim(), 1);
-    CHECK_EQ(has_initial_state.numel(), batch_size);
+    CHECK_EQ(has_initial_state.numel(), expected_state_batch);
     CHECK_EQ(has_initial_state.scalar_type(), torch::kBool);
     CHECK(has_initial_state.device() == mixed_qkv.device())
         << "has_initial_states must be on the same device as mixed_qkv";
@@ -1079,13 +1099,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       if (musa_pcp::receives_prefix_state(*pcp_context)) {
         conv_prefix = musa_pcp::take_prefix_rows(*pcp_context);
       } else if (!uses_contiguous_qkvzba_layout()) {
-        CHECK_GE(conv_input.size(0), conv_state_len);
-        torch::Tensor prefix =
-            conv_input
-                .narrow(/*dim=*/0,
-                        /*start=*/conv_input.size(0) - conv_state_len,
-                        /*length=*/conv_state_len)
-                .contiguous();
+        torch::Tensor prefix = musa_pcp::extract_conv_prefix(
+            conv_input, conv_state_len, qkv_dim, *pcp_context);
         musa_pcp::send_prefix_rows(prefix, *pcp_context);
       }
     }
@@ -1101,7 +1116,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                                   conv_prefix,
                                                   logical_read_state_indices);
 
-    mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
+    mixed_qkv = use_packed_multiseq_prefill
+                    ? mixed_qkv.unsqueeze(0)
+                    : reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
     mixed_qkv = mixed_qkv.transpose(1, 2);
   } else if (use_spec_verify) {
     CHECK(input_params.num_accepted_tokens.defined())
@@ -1229,8 +1246,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     std::tie(processed_q, processed_k, processed_v) =
         process_mixed_qkv(mixed_qkv);
   }
-  if (is_any_prefill && !use_spec_verify && batch_size == 1 &&
-      xllm::kernel::musa::has_padded_piecewise_rows()) {
+  if (is_any_prefill && !use_spec_verify && !use_packed_multiseq_prefill &&
+      batch_size == 1 && xllm::kernel::musa::has_padded_piecewise_rows()) {
     // A bucketed graph replays sequences shorter than its captured rows.
     // Zeroed rows keep the recurrent state unchanged and their output zero.
     const torch::Tensor padded_rows =
@@ -1250,17 +1267,18 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   // The Mate kernel processes padded rows as live tokens, so chunked prefill
   // with an initial state uses it only when no row is padded.
   const bool use_mate_gdn_chunked_prefill =
-      attn_metadata.is_chunked_prefill && batch_size == 1;
+      attn_metadata.is_chunked_prefill &&
+      (batch_size == 1 || use_packed_multiseq_prefill);
   const bool use_mate_gdn_prefill =
       kEnableMateGdnPrefill && !use_spec_verify &&
       (attn_metadata.is_prefill || use_mate_gdn_chunked_prefill);
   CHECK(pcp_context == nullptr || (use_mate_gdn_prefill && batch_size == 1))
-      << "context-parallel prefill requires the single-sequence Mate GDN "
-         "prefill";
+      << "context-parallel prefill requires packed Mate GDN prefill";
   // Apply chunked or recurrent gated-delta attention and update caches.
   if (use_mate_gdn_prefill && batch_size == 1) {
-    // A single sequence launches Mate from device-resident cu_seqlens, so the
-    // recurrence is captured inside the piecewise graph.
+    // Packed [1, total_rows] launches Mate directly without padding/unpadding:
+    // single-sequence uses device-resident cu_seqlens for piecewise graphs, and
+    // multi-sequence builds host cu_seqlens from q_seq_lens_vec without D2H.
     xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
     mate_params.q = processed_q;
     mate_params.k = processed_k;
@@ -1270,8 +1288,19 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.scale =
         1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
     mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens;
-    mate_params.cu_seqlens_host =
-        std::vector<int32_t>{0, static_cast<int32_t>(seq_len)};
+    if (use_packed_multiseq_prefill) {
+      std::vector<int32_t> cu_host(
+          static_cast<size_t>(metadata_num_seqs) + 1, 0);
+      for (int64_t i = 0; i < metadata_num_seqs; ++i) {
+        cu_host[static_cast<size_t>(i) + 1] =
+            cu_host[static_cast<size_t>(i)] +
+            attn_metadata.q_seq_lens_vec[static_cast<size_t>(i)];
+      }
+      mate_params.cu_seqlens_host = std::move(cu_host);
+    } else {
+      mate_params.cu_seqlens_host =
+          std::vector<int32_t>{0, static_cast<int32_t>(seq_len)};
+    }
     if (use_mate_gdn_chunked_prefill) {
       CHECK(attn_metadata.has_initial_states.defined())
           << "has_initial_states must be populated for Qwen3.5 chunked "
@@ -1680,7 +1709,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   // Project the normalized attention output back to hidden size.
   auto rearranged_norm =
       norm_out.reshape({norm_out.size(0), norm_out.size(1) * norm_out.size(2)});
-  rearranged_norm = reshape_qkvz_unpad(attn_metadata, rearranged_norm);
+  if (!use_packed_multiseq_prefill) {
+    rearranged_norm = reshape_qkvz_unpad(attn_metadata, rearranged_norm);
+  }
   // For chunked prefill or spec verify, reshape_qkvz_with_pad may pad each
   // batch to max_len, causing output tokens > original_num_tokens. We need to
   // slice back to original_num_tokens to match residual shape for add_rms_norm.
@@ -1704,13 +1735,10 @@ bool Qwen3GatedDeltaNetBaseImpl::can_fuse_output_norm_quant(
   if (!attn_metadata.is_prefill && !attn_metadata.is_chunked_prefill) {
     return true;
   }
-  // reshape_qkvz_unpad() keeps the padded rows in place only when every
-  // sequence fills max_query_len.
-  const std::vector<int32_t>& q_lens = attn_metadata.q_seq_lens_vec;
-  return !q_lens.empty() &&
-         std::all_of(q_lens.begin(), q_lens.end(), [&](int32_t q_len) {
-           return q_len == attn_metadata.max_query_len;
-         });
+  // Fused norm+quant is valid whenever head_rows contains no padding rows:
+  // either every sequence equals max_query_len or multi-sequence prefill kept
+  // the packed [1, num_tokens] layout.
+  return !attn_metadata.q_seq_lens_vec.empty();
 }
 
 torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(

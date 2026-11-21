@@ -35,6 +35,7 @@ limitations under the License.
 #include "framework/block/block_manager_pool.h"
 #include "framework/model/model_args.h"
 #include "framework/request/priority_comparator.h"
+#include "core/util/env_var.h"
 #include "util/timer.h"
 #include "util/utils.h"
 
@@ -105,14 +106,77 @@ void restore_skipped_requests(
 
 #if defined(USE_MUSA)
 // MUSA piecewise prefill graphs cover one sequence of a model with linear
-// attention: multi-sequence GDN prefill rows keep their exact host layout and
-// run eager. One prefill sequence per batch lets every chunk replay a graph;
-// decode batching is unaffected.
+// attention; when CP=2 PCP multi-batching is enabled, multiple medium/warm
+// prefill sequences can be packed into one eager PCP batch while full-chunk
+// single requests continue to replay piecewise graphs.
 bool limit_prefill_to_one_sequence(const SchedulerState& state) {
   const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   return execution_config.enable_graph() &&
          execution_config.enable_prefill_piecewise_graph() &&
          has_linear_attention_layers(state.model_args);
+}
+
+bool musa_pcp_multibatch_enabled(const SchedulerState& state) {
+  if (state.options.cp_size() != 2 ||
+      !util::get_bool_env("XLLM_MUSA_PCP", true) ||
+      !util::get_bool_env("XLLM_MUSA_PCP_MULTIBATCH", true)) {
+    return false;
+  }
+  return util::get_int_env("XLLM_MUSA_PCP_MAX_BATCH_SEQS", 4) > 1;
+}
+
+size_t musa_prefill_seq_cap_per_dp(const SchedulerState& state) {
+  if (musa_pcp_multibatch_enabled(state)) {
+    return static_cast<size_t>(
+        std::max<int64_t>(1, util::get_int_env("XLLM_MUSA_PCP_MAX_BATCH_SEQS", 4)));
+  }
+  if (limit_prefill_to_one_sequence(state)) {
+    return 1;
+  }
+  return 0;
+}
+
+size_t musa_pcp_min_seq_tokens() {
+  return static_cast<size_t>(
+      std::max<int64_t>(128, util::get_int_env("XLLM_MUSA_PCP_MIN_SEQ_TOKENS", 128)));
+}
+
+size_t musa_pcp_max_batch_tokens(const ContinuousScheduler::Options& options) {
+  const int64_t env_cap = util::get_int_env("XLLM_MUSA_PCP_MAX_BATCH_TOKENS", 0);
+  if (env_cap > 0) {
+    return std::min<size_t>(
+        static_cast<size_t>(env_cap),
+        static_cast<size_t>(options.max_tokens_per_batch()));
+  }
+  return std::min<size_t>(
+      static_cast<size_t>(options.max_tokens_per_chunk_for_prefill()),
+      static_cast<size_t>(options.max_tokens_per_batch()));
+}
+
+size_t sum_prefill_sequence_budgets(const std::vector<Sequence*>& sequences,
+                                    const std::vector<size_t>& budgets) {
+  size_t total = 0;
+  const size_t n = std::min(sequences.size(), budgets.size());
+  for (size_t i = 0; i < n; ++i) {
+    if (sequences[i] != nullptr && sequences[i]->is_prefill_stage()) {
+      total += budgets[i];
+    }
+  }
+  return total;
+}
+
+bool all_scheduled_prefills_meet_min_tokens(
+    const std::vector<Sequence*>& sequences,
+    const std::vector<size_t>& budgets,
+    size_t min_tokens) {
+  const size_t n = std::min(sequences.size(), budgets.size());
+  for (size_t i = 0; i < n; ++i) {
+    if (sequences[i] != nullptr && sequences[i]->is_prefill_stage() &&
+        budgets[i] < min_tokens) {
+      return false;
+    }
+  }
+  return true;
 }
 
 size_t count_prefill_sequences(const std::vector<Sequence*>& sequences) {
@@ -136,7 +200,7 @@ SchedulerPolicy::SchedulerPolicy(const BatchMode& mode,
 bool SchedulerPolicy::should_limit_prefill_requests(
     const SchedulerState& state) const {
 #if defined(USE_MUSA)
-  if (limit_prefill_to_one_sequence(state)) {
+  if (musa_prefill_seq_cap_per_dp(state) > 0) {
     return true;
   }
 #endif
@@ -149,8 +213,9 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
   size_t cap =
       static_cast<size_t>(state.model_args.max_concurrent_prefills_per_dp());
 #if defined(USE_MUSA)
-  if (limit_prefill_to_one_sequence(state)) {
-    cap = cap > 0 ? std::min<size_t>(cap, 1) : 1;
+  const size_t musa_cap = musa_prefill_seq_cap_per_dp(state);
+  if (musa_cap > 0) {
+    cap = cap > 0 ? std::min<size_t>(cap, musa_cap) : musa_cap;
   }
 #endif
   const int32_t dp_size = state.options.dp_size();
@@ -367,15 +432,47 @@ void SchedulerPolicy::schedule_prefill_from_queue(
            "decode sequence budget and KV admission checks remain unchanged";
   }
 
+#if defined(USE_MUSA)
+  const bool pcp_multibatch = musa_pcp_multibatch_enabled(state);
+  const size_t pcp_min_tokens = musa_pcp_min_seq_tokens();
+  const size_t pcp_max_tokens = musa_pcp_max_batch_tokens(options_);
+  const bool pcp_allow_partial_join =
+      util::get_bool_env("XLLM_MUSA_PCP_ALLOW_PARTIAL_JOIN", false);
+  const auto* pcp_probe_pool =
+      state.enable_prefix_cache
+          ? dynamic_cast<const BlockManagerPool*>(state.kv_cache_manager)
+          : nullptr;
+  constexpr size_t kMaxPcpJoinScan = 8;
+  size_t pcp_join_skipped = 0;
+#endif
   while (!queue->empty() && budget.remaining_seq_budget > 0 &&
          budget.remaining_token_budget > 0 &&
          budget.latency_budget > budget.estimate_latency) {
 #if defined(USE_MUSA)
-    if (limit_prefill_to_one_sequence(state) &&
-        count_prefill_sequences(state.running_sequences) >=
-            static_cast<size_t>(
-                std::max<int32_t>(state.options.dp_size(), 1))) {
+    const size_t musa_cap_per_dp = musa_prefill_seq_cap_per_dp(state);
+    const size_t scheduled_prefills =
+        count_prefill_sequences(state.running_sequences);
+    if (musa_cap_per_dp > 0 &&
+        scheduled_prefills >=
+            musa_cap_per_dp *
+                static_cast<size_t>(
+                    std::max<int32_t>(state.options.dp_size(), 1))) {
       break;
+    }
+    size_t pcp_remaining_tokens = pcp_max_tokens;
+    if (pcp_multibatch && scheduled_prefills > 0) {
+      if (!all_scheduled_prefills_meet_min_tokens(
+              state.running_sequences,
+              state.running_sequences_budgets,
+              pcp_min_tokens)) {
+        break;
+      }
+      const size_t used_pcp_tokens = sum_prefill_sequence_budgets(
+          state.running_sequences, state.running_sequences_budgets);
+      if (used_pcp_tokens + pcp_min_tokens > pcp_max_tokens) {
+        break;
+      }
+      pcp_remaining_tokens = pcp_max_tokens - used_pcp_tokens;
     }
 #endif
     // Keep the validated single-sequence SP prefill route while diagnosing
@@ -408,6 +505,75 @@ void SchedulerPolicy::schedule_prefill_from_queue(
           << "Waiting request should have either 1 or best_of("
           << request->best_of() << ") sequences, got " << num_sequences;
     }
+#if defined(USE_MUSA)
+    if (pcp_multibatch && scheduled_prefills > 0) {
+      if (num_sequences != 1 || request->check_beam_search()) {
+        break;
+      }
+      Sequence* cand_seq = request->sequences()[0].get();
+      int32_t probe_dp = cand_seq->dp_rank();
+      if (probe_dp < 0) {
+        probe_dp = should_limit_prefill_requests(state)
+                       ? select_prefill_dp_rank(cand_seq, state)
+                       : 0;
+      }
+      if (probe_dp < 0) {
+        break;
+      }
+      size_t cached = cand_seq->kv_state().kv_cache_tokens_num();
+      if (cached == 0 && pcp_probe_pool != nullptr &&
+          state.enable_prefix_cache) {
+        cached = pcp_probe_pool->probe_prefix_hit_tokens(cand_seq, probe_dp);
+      }
+      const size_t total_toks = cand_seq->num_tokens();
+      const size_t rem_toks = total_toks > cached ? total_toks - cached : 0;
+      const int32_t kv_split =
+          ::xllm::ParallelConfig::get_instance().kv_split_size_effective();
+      size_t natural_chunk =
+          batch_mode_.enable_chunked_prefill
+              ? maybe_align_cp_chunk_tokens(
+                    std::min<size_t>(rem_toks,
+                                     options_.max_tokens_per_chunk_for_prefill()),
+                    kv_split,
+                    state.kv_cache_manager->block_size(),
+                    rem_toks)
+              : rem_toks;
+      if (batch_mode_.enable_chunked_prefill &&
+          has_linear_attention_layers(state.model_args) &&
+          state.enable_prefix_cache && rem_toks > 0 && total_toks > 0) {
+        const size_t block_size = static_cast<size_t>(
+            std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+        const size_t cp_align =
+            static_cast<size_t>(std::max<int32_t>(1, kv_split)) * block_size;
+        const size_t fine_stride = std::max<size_t>(
+            cp_align,
+            std::min<size_t>(options_.max_tokens_per_chunk_for_prefill(),
+                             2048));
+        const size_t target_ckpt =
+            ((total_toks - 1) / fine_stride) * fine_stride;
+        if (cached < target_ckpt && cached + natural_chunk > target_ckpt) {
+          natural_chunk = target_ckpt - cached;
+        }
+      }
+      const size_t effective_budget =
+          std::min(budget.remaining_token_budget, pcp_remaining_tokens);
+      const size_t planned_toks = std::min(natural_chunk, effective_budget);
+      const bool fits_pcp_batch =
+          planned_toks >= pcp_min_tokens &&
+          (planned_toks == natural_chunk ||
+           (pcp_allow_partial_join &&
+            planned_toks >= std::max<size_t>(1024, pcp_min_tokens)));
+      if (!fits_pcp_batch) {
+        if (pcp_join_skipped < kMaxPcpJoinScan) {
+          ++pcp_join_skipped;
+          skipped.emplace_back(request);
+          queue->pop_top();
+          continue;
+        }
+        break;
+      }
+    }
+#endif
 
     // Full-footprint admission (fresh requests only): check that the system
     // has enough capacity for this request's full KV plus all already-reserved
@@ -494,10 +660,14 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       if (!prefill_sequence->kv_state().has_any_blocks()) {
         allocate_shared_blocks_for(prefill_sequence.get(), state);
       }
-      size_t num_tokens = compute_prefill_tokens(
-          prefill_sequence.get(),
-          budget.remaining_token_budget - allocated_tokens,
-          state);
+      size_t token_cap = budget.remaining_token_budget - allocated_tokens;
+#if defined(USE_MUSA)
+      if (pcp_multibatch && scheduled_prefills > 0) {
+        token_cap = std::min(token_cap, pcp_remaining_tokens);
+      }
+#endif
+      size_t num_tokens =
+          compute_prefill_tokens(prefill_sequence.get(), token_cap, state);
       if (!budget.dp_group_token_caps.empty()) {
         const int32_t dp_rank = prefill_sequence->dp_rank();
         CHECK(dp_rank >= 0 &&
@@ -1340,7 +1510,7 @@ void SchedulerPolicy::cache_in_batch_prefix(
   }
   bool enable_in_batch =
       ::xllm::KVCacheConfig::get_instance().enable_in_batch_prefix_cache();
-  if (!enable_in_batch) {
+  if (!enable_in_batch || has_linear_attention_layers(state.model_args)) {
     return;
   }
   CHECK_EQ(sequences.size(), token_budgets.size());

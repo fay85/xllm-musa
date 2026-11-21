@@ -401,6 +401,7 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
   } else if (attn_metadata.is_prefill || (attn_metadata.is_chunked_prefill &&
                                           !spec_verify_expanded_decode)) {
     AttentionMetadata attn_metadata_copy = attn_metadata;
+    attn_metadata_copy.pcp_context = nullptr;
     torch::Tensor query_saved =
         xllm::kernel::musa::piecewise_runner_tensor(query);
     torch::Tensor key_saved = xllm::kernel::musa::piecewise_runner_tensor(key);

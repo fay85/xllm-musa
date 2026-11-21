@@ -81,6 +81,7 @@ struct ConvParamsBase {
   void* __restrict__ seq_idx_ptr;
 
   void* __restrict__ prefix_x_ptr;
+  index_t prefix_x_batch_stride;
   index_t prefix_x_l_stride;
   index_t prefix_x_c_stride;
 };
@@ -583,7 +584,8 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
     if (load_initial_state) {
       if (params.prefix_x_ptr != nullptr) {
         const input_t* prefix_x =
-            reinterpret_cast<const input_t*>(params.prefix_x_ptr);
+            reinterpret_cast<const input_t*>(params.prefix_x_ptr) +
+            static_cast<size_t>(seq_idx) * params.prefix_x_batch_stride;
         const input_t init0 = prefix_x[0 * params.prefix_x_l_stride +
                                        feature * params.prefix_x_c_stride];
         init1 = prefix_x[1 * params.prefix_x_l_stride +
@@ -854,18 +856,27 @@ void causal_conv1d_fwd_token_major(
   params.conv_state_c_stride = conv_states.stride(-2);
   params.conv_state_l_stride = conv_states.stride(-1);
   if (prefix_x.has_value() && prefix_x->defined()) {
-    CHECK(params.batch == 1)
-        << "prefix_x is only supported for single-sequence prefill";
-    CHECK(prefix_x->dim() == 2 && prefix_x->size(0) == 3 &&
-          prefix_x->size(1) == x.size(1))
-        << "prefix_x must have shape [3, dim]";
     CHECK(prefix_x->scalar_type() == x.scalar_type())
         << "prefix_x dtype must match x";
     CHECK(is_accel_device_tensor(*prefix_x))
         << "prefix_x must be a device tensor";
+    if (prefix_x->dim() == 2) {
+      CHECK(params.batch == 1)
+          << "2D prefix_x is only supported for single-sequence prefill";
+      CHECK(prefix_x->size(0) == 3 && prefix_x->size(1) == x.size(1))
+          << "2D prefix_x must have shape [3, dim]";
+      params.prefix_x_batch_stride = 0;
+      params.prefix_x_l_stride = prefix_x->stride(0);
+      params.prefix_x_c_stride = prefix_x->stride(1);
+    } else {
+      CHECK(prefix_x->dim() == 3 && prefix_x->size(0) == params.batch &&
+            prefix_x->size(1) == 3 && prefix_x->size(2) == x.size(1))
+          << "3D prefix_x must have shape [batch, 3, dim]";
+      params.prefix_x_batch_stride = prefix_x->stride(0);
+      params.prefix_x_l_stride = prefix_x->stride(1);
+      params.prefix_x_c_stride = prefix_x->stride(2);
+    }
     params.prefix_x_ptr = prefix_x->data_ptr();
-    params.prefix_x_l_stride = prefix_x->stride(0);
-    params.prefix_x_c_stride = prefix_x->stride(1);
   }
 
   at::cuda::CUDAGuard device_guard{static_cast<char>(x.get_device())};
