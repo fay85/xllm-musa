@@ -17,9 +17,13 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <iterator>
+#include <list>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -30,6 +34,7 @@ limitations under the License.
 #include "core/framework/config/multimodal_config.h"
 #include "core/framework/multimodal/mm_data.h"
 #include "core/framework/multimodal/mm_input.h"
+#include "core/util/hash_util.h"
 #include "framework/tokenizer/tokenizer.h"
 #include "util/scope_guard.h"
 #include "util/timer.h"
@@ -88,6 +93,57 @@ std::optional<std::string> join_message_texts(
       std::to_string(messages.size()) + " messages [" + roles +
       "]; apply the chat template for multi-turn conversations");
 }
+
+class CompactPromptTokenCache final {
+ public:
+  static CompactPromptTokenCache& instance() {
+    static CompactPromptTokenCache cache(/*max_entries=*/1024);
+    return cache;
+  }
+
+  std::optional<std::vector<int32_t>> lookup(const XXH3Key& key) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = entries_.find(key);
+    if (it == entries_.end()) {
+      return std::nullopt;
+    }
+    lru_.splice(lru_.end(), lru_, it->second.lru_it);
+    return it->second.tokens;
+  }
+
+  void insert(const XXH3Key& key, std::vector<int32_t> tokens) {
+    if (tokens.empty()) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = entries_.find(key);
+    if (it != entries_.end()) {
+      lru_.splice(lru_.end(), lru_, it->second.lru_it);
+      return;
+    }
+    while (entries_.size() >= max_entries_ && !lru_.empty()) {
+      entries_.erase(lru_.front());
+      lru_.pop_front();
+    }
+    lru_.push_back(key);
+    entries_.emplace(key, Entry{std::move(tokens), std::prev(lru_.end())});
+  }
+
+ private:
+  explicit CompactPromptTokenCache(size_t max_entries)
+      : max_entries_(max_entries) {}
+
+  struct Entry {
+    std::vector<int32_t> tokens;
+    std::list<XXH3Key>::iterator lru_it;
+  };
+
+  size_t max_entries_;
+  std::mutex mutex_;
+  std::list<XXH3Key> lru_;
+  std::unordered_map<XXH3Key, Entry, FixedStringKeyHash, FixedStringKeyEqual>
+      entries_;
+};
 
 }  // namespace
 
@@ -320,7 +376,7 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     }
   }
 
-  if (!use_prompt_as_is && pretokenized_ids.has_value() &&
+  if (!use_prompt_as_is && sp.tools.empty() && pretokenized_ids.has_value() &&
       !pretokenized_ids->empty() && model_args_->audio_token_id() == 0) {
     std::vector<int32_t> prompt_tokens;
     if (processor_->process_pretokenized_prompt(
@@ -366,6 +422,34 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     return nullptr;
   }
   COUNTER_ADD(chat_template_latency_seconds, timer.elapsed_seconds());
+
+  // Fastpath for image/text VLM requests: tokenize the compact prompt (single
+  // <|image_pad|> per image) with LRU caching and expand visual token spans in
+  // vector memory instead of duplicating thousands of "<|image_pad|>" strings.
+  if (model_args_->audio_token_id() == 0 && !prompt->empty()) {
+    const XXH3Key prompt_key = hash_string(*prompt);
+    std::optional<std::vector<int32_t>> base_tokens =
+        CompactPromptTokenCache::instance().lookup(prompt_key);
+    if (!base_tokens.has_value()) {
+      std::vector<int32_t> encoded;
+      if (tokenizer_->encode(*prompt, &encoded) && !encoded.empty()) {
+        CompactPromptTokenCache::instance().insert(prompt_key, encoded);
+        base_tokens = std::move(encoded);
+      }
+    }
+    if (base_tokens.has_value()) {
+      std::vector<int32_t> prompt_tokens;
+      if (processor_->process_pretokenized_prompt(
+              *base_tokens, mm_data, prompt_tokens)) {
+        rate_limit_guard.dismiss();
+        return build_request(std::move(prompt.value()),
+                             std::move(prompt_tokens),
+                             std::move(mm_data),
+                             sp,
+                             std::move(callback));
+      }
+    }
+  }
 
   rate_limit_guard.dismiss();
   return create(

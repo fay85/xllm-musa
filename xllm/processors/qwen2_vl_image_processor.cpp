@@ -283,88 +283,155 @@ bool Qwen2VLImageProcessor::process_image(
     const std::vector<torch::Tensor>& images,
     std::vector<torch::Tensor>& pixel_values,
     std::vector<torch::Tensor>& thw) const {
-  torch::Tensor batch_images = torch::stack(images);
-  const auto shape = batch_images.sizes();
-  const int64_t batch_size = shape[0];
-  int64_t resized_height = shape[2];
-  int64_t resized_width = shape[3];
-
-  std::optional<Size> target_size;
-  if (do_resize_) {
-    if (min_tokens_ > 0 && max_tokens_ > 0) {
-      target_size = smart_resize_tokens(temporal_patch_size_,
-                                        static_cast<int32_t>(resized_height),
-                                        static_cast<int32_t>(resized_width),
-                                        temporal_patch_size_,
-                                        patch_size_ * merge_size_,
-                                        min_tokens_,
-                                        max_tokens_);
-    } else {
-      target_size = smart_resize(static_cast<int32_t>(resized_height),
-                                 static_cast<int32_t>(resized_width),
-                                 patch_size_ * merge_size_,
-                                 min_pixels_,
-                                 max_pixels_);
-    }
-    if (!target_size) {
-      return false;
-    }
-    std::tie(resized_height, resized_width) = *target_size;
+  pixel_values.clear();
+  thw.clear();
+  if (images.empty()) {
+    return true;
   }
+  pixel_values.resize(images.size());
+  thw.resize(images.size());
 
-  auto run_pipeline = [&](torch::Tensor work_images) {
+  auto process_same_shape_group =
+      [&](torch::Tensor batch_images,
+          const std::vector<size_t>& out_indices) -> bool {
+    const void* orig_ptr = batch_images.data_ptr();
+    const auto shape = batch_images.sizes();
+    const int64_t batch_size = shape[0];
+    int64_t resized_height = shape[2];
+    int64_t resized_width = shape[3];
+
+    std::optional<Size> target_size;
+    if (do_resize_) {
+      if (min_tokens_ > 0 && max_tokens_ > 0) {
+        target_size = smart_resize_tokens(temporal_patch_size_,
+                                          static_cast<int32_t>(resized_height),
+                                          static_cast<int32_t>(resized_width),
+                                          temporal_patch_size_,
+                                          patch_size_ * merge_size_,
+                                          min_tokens_,
+                                          max_tokens_);
+      } else {
+        target_size = smart_resize(static_cast<int32_t>(resized_height),
+                                   static_cast<int32_t>(resized_width),
+                                   patch_size_ * merge_size_,
+                                   min_pixels_,
+                                   max_pixels_);
+      }
+      if (!target_size) {
+        return false;
+      }
+      std::tie(resized_height, resized_width) = *target_size;
+    }
+
+    torch::Tensor work_images = batch_images;
     if (do_resize_) {
       work_images = transforms::resize(
           work_images, {resized_height, resized_width}, resample_, true);
     }
-    if (do_normalize_) {
-      work_images =
-          transforms::normalize(work_images, image_mean_, image_std_);
-    }
-    if (do_rescale_) {
-      work_images = transforms::rescale(work_images, rescale_factor_);
+    if (do_normalize_ || do_rescale_) {
+      if (!work_images.is_floating_point() ||
+          work_images.scalar_type() != torch::kFloat32) {
+        work_images = work_images.to(torch::kFloat32);
+      } else if (work_images.data_ptr() == orig_ptr) {
+        work_images = work_images.clone();
+      }
+      if (do_normalize_) {
+        const torch::Tensor mean_v =
+            image_mean_.to(work_images.options()).view({1, -1, 1, 1});
+        const torch::Tensor std_v =
+            image_std_.to(work_images.options()).view({1, -1, 1, 1});
+        work_images.sub_(mean_v);
+        work_images.div_(std_v);
+      }
+      if (do_rescale_) {
+        work_images.mul_(rescale_factor_);
+      }
     }
 
-    torch::Tensor patches = work_images.unsqueeze(1);
-    if (temporal_patch_size_ > 1) {
-      patches = patches.repeat({1, temporal_patch_size_, 1, 1, 1});
-    }
-
-    const auto patch_shape = patches.sizes();
-    const int64_t channel = patch_shape[2];
-    const int64_t grid_t = patch_shape[1] / temporal_patch_size_;
+    const int64_t channel = work_images.size(1);
+    const int64_t grid_t = 1;
     const int64_t grid_h = resized_height / patch_size_;
     const int64_t grid_w = resized_width / patch_size_;
 
-    patches = patches.view({batch_size,
-                            grid_t,
-                            temporal_patch_size_,
-                            channel,
-                            grid_h / merge_size_,
-                            merge_size_,
-                            patch_size_,
-                            grid_w / merge_size_,
-                            merge_size_,
-                            patch_size_});
+    if (!work_images.is_contiguous()) {
+      work_images = work_images.contiguous();
+    }
+    torch::Tensor patches = work_images.view({batch_size,
+                                              grid_t,
+                                              1,
+                                              channel,
+                                              grid_h / merge_size_,
+                                              merge_size_,
+                                              patch_size_,
+                                              grid_w / merge_size_,
+                                              merge_size_,
+                                              patch_size_});
+    if (temporal_patch_size_ > 1) {
+      patches = patches.expand({batch_size,
+                                grid_t,
+                                temporal_patch_size_,
+                                channel,
+                                grid_h / merge_size_,
+                                merge_size_,
+                                patch_size_,
+                                grid_w / merge_size_,
+                                merge_size_,
+                                patch_size_});
+    }
+    torch::Tensor batch_pixel_values =
+        patches.permute({0, 1, 4, 7, 5, 8, 3, 2, 6, 9})
+            .contiguous()
+            .view({batch_size,
+                   grid_t * grid_h * grid_w,
+                   channel * temporal_patch_size_ * patch_size_ * patch_size_});
 
-    patches = patches.permute({0, 1, 4, 7, 5, 8, 3, 2, 6, 9});
-    return patches.reshape(
-        {batch_size,
-         grid_t * grid_h * grid_w,
-         channel * temporal_patch_size_ * patch_size_ * patch_size_});
+    const torch::Tensor single_thw =
+        torch::tensor({grid_t, grid_h, grid_w},
+                      torch::TensorOptions().dtype(torch::kInt64))
+            .reshape({1, 3});
+    if (batch_size == 1) {
+      pixel_values[out_indices[0]] = batch_pixel_values.squeeze(0);
+      thw[out_indices[0]] = single_thw;
+    } else {
+      auto unbound = batch_pixel_values.unbind(0);
+      for (int64_t b = 0; b < batch_size; ++b) {
+        const size_t dst_idx = out_indices[static_cast<size_t>(b)];
+        pixel_values[dst_idx] = std::move(unbound[static_cast<size_t>(b)]);
+        thw[dst_idx] = single_thw.clone();
+      }
+    }
+    return true;
   };
 
-  torch::Tensor batch_pixel_values = run_pipeline(batch_images);
+  if (images.size() == 1) {
+    return process_same_shape_group(images[0].unsqueeze(0), {0});
+  }
 
-  const int64_t grid_t = 1;
-  const int64_t grid_h = resized_height / patch_size_;
-  const int64_t grid_w = resized_width / patch_size_;
-  torch::Tensor batch_thw = torch::tensor({grid_t, grid_h, grid_w})
-                                .repeat({batch_size, 1})
-                                .reshape({batch_size, 1, 3});
-
-  pixel_values = batch_pixel_values.unbind(0);
-  thw = batch_thw.unbind(0);
+  std::vector<bool> done(images.size(), false);
+  for (size_t i = 0; i < images.size(); ++i) {
+    if (done[i]) {
+      continue;
+    }
+    std::vector<torch::Tensor> group_tensors;
+    std::vector<size_t> group_indices;
+    group_tensors.push_back(images[i]);
+    group_indices.push_back(i);
+    done[i] = true;
+    for (size_t j = i + 1; j < images.size(); ++j) {
+      if (!done[j] && images[j].sizes() == images[i].sizes() &&
+          images[j].scalar_type() == images[i].scalar_type()) {
+        group_tensors.push_back(images[j]);
+        group_indices.push_back(j);
+        done[j] = true;
+      }
+    }
+    torch::Tensor stacked = (group_tensors.size() == 1)
+                                ? group_tensors[0].unsqueeze(0)
+                                : torch::stack(group_tensors);
+    if (!process_same_shape_group(std::move(stacked), group_indices)) {
+      return false;
+    }
+  }
   return true;
 }
 

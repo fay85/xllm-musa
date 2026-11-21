@@ -117,19 +117,104 @@ MMInputTransfer::~MMInputTransfer() {}
 MMErrCode MMInputTransfer::trans(const std::vector<Message>& messages,
                                  MMInput& inputs) {
   inputs.clear();
-  std::vector<MMInputItem> ins;
+  size_t total_mm_count = 0;
+  for (const auto& message : messages) {
+    if (const auto* mmc = std::get_if<MMContentVec>(&message.content)) {
+      for (const MMContent& item : *mmc) {
+        if (item.type != "text") {
+          ++total_mm_count;
+        }
+      }
+    }
+  }
+  if (total_mm_count == 0) {
+    return MMErrCode::SUCCESS;
+  }
 
-  for (size_t idx = 0; idx < messages.size(); ++idx) {
-    const auto& message = messages[idx];
-    const auto& mmc = std::get<MMContentVec>(message.content);
+  struct FlatTask {
+    const MMContent* content = nullptr;
+    size_t input_index = 0;
+    MMPayload payload;
+  };
 
-    MMErrCode code = this->trans_parallel(mmc, ins, inputs.payload());
+  std::vector<MMInputItem> all_items(total_mm_count);
+  std::vector<FlatTask> url_tasks;
+  url_tasks.reserve(total_mm_count);
+
+  size_t out_idx = 0;
+  for (const auto& message : messages) {
+    const auto* mmc = std::get_if<MMContentVec>(&message.content);
+    if (mmc == nullptr) {
+      continue;
+    }
+    for (const MMContent& item : *mmc) {
+      if (item.type == "text") {
+        continue;
+      }
+      if (is_url_type(item.type)) {
+        url_tasks.push_back(FlatTask{
+            .content = &item,
+            .input_index = out_idx,
+            .payload = slice_payload(item, inputs.payload()),
+        });
+      } else {
+        MMErrCode code = mm_handlers_->process(
+            item.type, item, all_items[out_idx], inputs.payload());
+        if (code != MMErrCode::SUCCESS) {
+          return code;
+        }
+      }
+      ++out_idx;
+    }
+  }
+
+  if (url_tasks.size() == 1) {
+    FlatTask& t = url_tasks[0];
+    MMErrCode code = mm_handlers_->process(
+        t.content->type, *t.content, all_items[t.input_index], t.payload);
     if (code != MMErrCode::SUCCESS) {
+      LOG(ERROR) << "process failed at input index " << t.input_index
+                 << ", type=" << t.content->type;
       return code;
     }
-
-    inputs.insert(ins);
+  } else if (url_tasks.size() > 1) {
+    std::atomic<MMErrCode> error{MMErrCode::SUCCESS};
+    BlockingCounter counter(static_cast<int32_t>(url_tasks.size() - 1));
+    for (size_t i = 1; i < url_tasks.size(); ++i) {
+      threadpool_->schedule([&, i]() {
+        if (error.load(std::memory_order_relaxed) == MMErrCode::SUCCESS) {
+          FlatTask& t = url_tasks[i];
+          MMErrCode code = mm_handlers_->process(
+              t.content->type, *t.content, all_items[t.input_index], t.payload);
+          if (code != MMErrCode::SUCCESS) {
+            LOG(ERROR) << "process failed at input index " << t.input_index
+                       << ", type=" << t.content->type;
+            MMErrCode expected = MMErrCode::SUCCESS;
+            error.compare_exchange_strong(expected, code);
+          }
+        }
+        counter.decrement_count();
+      });
+    }
+    // Execute task 0 inline on caller thread while worker threads fetch tasks 1..N-1.
+    {
+      FlatTask& t0 = url_tasks[0];
+      MMErrCode code0 = mm_handlers_->process(
+          t0.content->type, *t0.content, all_items[t0.input_index], t0.payload);
+      if (code0 != MMErrCode::SUCCESS) {
+        LOG(ERROR) << "process failed at input index " << t0.input_index
+                   << ", type=" << t0.content->type;
+        MMErrCode expected = MMErrCode::SUCCESS;
+        error.compare_exchange_strong(expected, code0);
+      }
+    }
+    counter.wait();
+    if (error.load() != MMErrCode::SUCCESS) {
+      return error.load();
+    }
   }
+
+  inputs.insert(all_items);
   return MMErrCode::SUCCESS;
 }
 
