@@ -1212,7 +1212,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   // both from A_log, a, dt_bias and b itself.
   const bool needs_explicit_gating =
       (use_spec_verify && !use_mate_mtp) ||
-      (!use_spec_verify && checkpoint_stride > 1);
+      (!use_spec_verify && !is_any_prefill && checkpoint_stride > 1);
   if (needs_explicit_gating) {
     beta = torch::sigmoid(b);
     torch::Tensor A_log_exp = A_log_.exp();

@@ -1825,6 +1825,113 @@ TEST(ReshardPlannerTest, MusaPullCopiesCommittedHybridAndDraftState) {
 }
 #endif
 
+
+TEST(ReshardPlannerTest, RepeatedAndExpandedSpansPreserveEveryByte) {
+  auto make_worker = [](const std::string& addr,
+                        uint64_t buffer_id,
+                        bool expanded) {
+    WorkerCacheLayoutManifest manifest;
+    manifest.incarnation_id = addr + "-inc";
+    manifest.layout_generation = 1;
+    manifest.fingerprint = "b01-repeated-vs-expanded";
+    manifest.backend = "cpu";
+    manifest.layout_family = "token_head_dim";
+    manifest.cluster_id = buffer_id;
+    manifest.addr = addr;
+    manifest.listen_port = static_cast<uint16_t>(21000 + buffer_id);
+    manifest.coordinates.tp_rank = 0;
+    manifest.coordinates.tp_size = 1;
+
+    CacheTensorManifest tensor;
+    tensor.cache_namespace = CacheNamespace::MAIN;
+    tensor.layer_id = 0;
+    tensor.role = 0;
+    tensor.group_id = 7;
+    tensor.mooncake_buffer_id = static_cast<int64_t>(buffer_id);
+    tensor.scalar_type = 0;
+    tensor.element_bytes = 1;
+    tensor.shape = {2, 3, 1, 2};
+    tensor.stride = {6, 2, 2, 1};
+    tensor.contiguous = true;
+    tensor.resource_count = 2;
+    tensor.resource_stride_bytes = 6;
+    tensor.buffer_bytes = 12;
+    tensor.block_token_capacity = 3;
+    tensor.shard.kind = LogicalShardKind::SHARDED;
+    tensor.shard.resource_scope = CacheResourceScope::BLOCK;
+    if (!expanded) {
+      LogicalSpan span;
+      span.logical_tensor = "kv_head_0";
+      span.logical_offset_bytes = 0;
+      span.bytes_per_region = 2;
+      span.repeat_count = 3;
+      span.logical_stride_bytes = 4;
+      span.physical_offset_bytes = 0;
+      span.physical_stride_bytes = 2;
+      tensor.shard.spans.push_back(span);
+    } else {
+      for (uint64_t r = 0; r < 3; ++r) {
+        LogicalSpan span;
+        span.logical_tensor = "kv_head_0";
+        span.logical_offset_bytes = r * 4;
+        span.bytes_per_region = 2;
+        span.repeat_count = 1;
+        span.logical_stride_bytes = 0;
+        span.physical_offset_bytes = r * 2;
+        span.physical_stride_bytes = 0;
+        tensor.shard.spans.push_back(span);
+      }
+    }
+    manifest.tensors.push_back(std::move(tensor));
+    return manifest;
+  };
+
+  for (bool repeated_to_expanded : {true, false}) {
+    const WorkerCacheLayoutManifest src =
+        make_worker("src", 1, /*expanded=*/!repeated_to_expanded);
+    const WorkerCacheLayoutManifest dst =
+        make_worker("dst", 2, /*expanded=*/repeated_to_expanded);
+
+    std::vector<size_t> selected;
+    std::vector<ReshardPlanTemplate> plans;
+    const Status plan_status =
+        ReshardPlanner().build_incoming_plans({src}, dst, &selected, &plans);
+    ASSERT_TRUE(plan_status.ok()) << plan_status.message();
+    ASSERT_EQ(selected.size(), 1U);
+    ASSERT_EQ(plans.size(), 1U);
+
+    KVTransferMapping mapping;
+    mapping.group_id = 7;
+    mapping.local_ids = {1};
+    mapping.remote_ids = {0};
+
+    std::vector<ByteRegion> regions;
+    const Status bind_status = RequestRegionBinder().bind_pull(
+        plans[0], {mapping}, CacheNamespace::MAIN, /*layer_id=*/0, &regions);
+    ASSERT_TRUE(bind_status.ok()) << bind_status.message();
+
+    std::vector<uint8_t> src_buf(12, 0);
+    for (size_t i = 0; i < src_buf.size(); ++i) {
+      src_buf[i] = static_cast<uint8_t>(100 + i);
+    }
+    std::vector<uint8_t> dst_buf(12, 0xEE);
+    uint64_t copied_bytes = 0;
+    for (const ByteRegion& region : regions) {
+      ASSERT_LE(region.local_offset + region.length, dst_buf.size());
+      ASSERT_LE(region.remote_offset + region.length, src_buf.size());
+      std::memcpy(dst_buf.data() + region.local_offset,
+                  src_buf.data() + region.remote_offset,
+                  static_cast<size_t>(region.length));
+      copied_bytes += region.length;
+    }
+    EXPECT_EQ(copied_bytes, 6U);
+    for (uint64_t i = 0; i < 6; ++i) {
+      EXPECT_EQ(dst_buf[i], 0xEE);
+      EXPECT_EQ(dst_buf[6 + i], src_buf[i]);
+    }
+  }
+}
+
 }  // namespace
 
 }  // namespace xllm

@@ -299,6 +299,7 @@ SpanWriters source_writers(const ParallelCoordinates& coordinates) {
 
 void expand_manifest(const WorkerCacheLayoutManifest& manifest,
                      const SpanWriters& writers,
+                     bool compact_uniform_series,
                      std::vector<AtomicLogicalRegion>* regions) {
   for (const CacheTensorManifest& tensor : manifest.tensors) {
     for (const LogicalSpan& span : tensor.shard.spans) {
@@ -316,7 +317,8 @@ void expand_manifest(const WorkerCacheLayoutManifest& manifest,
         physical_stride = span.bytes_per_region;
       }
       const bool uniform_series =
-          span.repeat_count > 1 && logical_stride >= span.bytes_per_region &&
+          compact_uniform_series && span.repeat_count > 1 &&
+          logical_stride >= span.bytes_per_region &&
           physical_stride >= span.bytes_per_region;
       const uint64_t expand_count = uniform_series ? 1 : span.repeat_count;
       for (uint64_t repeat = 0; repeat < expand_count; ++repeat) {
@@ -648,7 +650,8 @@ bool has_logical_overlap(const WorkerCacheLayoutManifest& source,
                          const RegionGroups& destination_groups,
                          const SpanWriters& writers) {
   std::vector<AtomicLogicalRegion> source_regions;
-  expand_manifest(source, writers, &source_regions);
+  expand_manifest(
+      source, writers, /*compact_uniform_series=*/false, &source_regions);
   const RegionGroups source_groups = group_regions(source_regions);
   for (const auto& [key, sources] : source_groups) {
     const auto destination_it = destination_groups.find(key);
@@ -1281,7 +1284,10 @@ Status select_source_writers(
   }
 
   std::vector<AtomicLogicalRegion> destination_regions;
-  expand_manifest(destination, SpanWriters::everything(), &destination_regions);
+  expand_manifest(destination,
+                  SpanWriters::everything(),
+                  /*compact_uniform_series=*/false,
+                  &destination_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);
   const char* pcp_setting = std::getenv("XLLM_DSV4_PCP");
   const bool pcp_enabled =
@@ -1337,6 +1343,7 @@ Status select_source_writers(
         source,
         collapse_partitions ? source_writers(source.coordinates)
                             : homogeneous_writers,
+        /*compact_uniform_series=*/false,
         &writer_regions[{source.coordinates.dp_rank, kv_partition}]);
   }
 
@@ -1554,6 +1561,107 @@ bool append_identical_span_regions(const WorkerCacheLayoutManifest& source,
   return true;
 }
 
+bool can_compact_tensor_uniform_series(const CacheTensorManifest& tensor) {
+  bool any_repeated = false;
+  uint64_t common_repeat = 0;
+  uint64_t common_logical_stride = 0;
+  std::map<std::string, std::vector<std::pair<uint64_t, uint64_t>>> slices;
+  for (const LogicalSpan& span : tensor.shard.spans) {
+    if (span.repeat_count == 0 || span.bytes_per_region == 0) {
+      continue;
+    }
+    uint64_t logical_stride = span.logical_stride_bytes;
+    uint64_t physical_stride = span.physical_stride_bytes;
+    if (span.repeat_count > 1 && logical_stride == 0 && physical_stride == 0) {
+      logical_stride = span.bytes_per_region;
+      physical_stride = span.bytes_per_region;
+    }
+    if (span.repeat_count > 1) {
+      if (logical_stride < span.bytes_per_region ||
+          physical_stride < span.bytes_per_region) {
+        return false;
+      }
+      if (!any_repeated) {
+        any_repeated = true;
+        common_repeat = span.repeat_count;
+        common_logical_stride = logical_stride;
+      } else if (span.repeat_count != common_repeat ||
+                 logical_stride != common_logical_stride) {
+        return false;
+      }
+      if (span.logical_offset_bytes + span.bytes_per_region > logical_stride) {
+        return false;
+      }
+      slices[span.logical_tensor].emplace_back(
+          span.logical_offset_bytes,
+          span.logical_offset_bytes + span.bytes_per_region);
+    } else if (any_repeated) {
+      return false;
+    }
+  }
+  if (!any_repeated) {
+    return true;
+  }
+  if (tensor.shard.spans.size() > 1) {
+    for (const LogicalSpan& span : tensor.shard.spans) {
+      if (span.repeat_count == 1 && span.bytes_per_region > 0) {
+        return false;
+      }
+    }
+  }
+  for (auto& [name, ranges] : slices) {
+    (void)name;
+    std::sort(ranges.begin(), ranges.end());
+    for (size_t i = 1; i < ranges.size(); ++i) {
+      if (ranges[i].first < ranges[i - 1].second) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool have_matching_logical_span_geometry(
+    const WorkerCacheLayoutManifest& source,
+    const WorkerCacheLayoutManifest& destination) {
+  if (source.tensors.size() != destination.tensors.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < source.tensors.size(); ++i) {
+    const CacheTensorManifest& src = source.tensors[i];
+    const CacheTensorManifest& dst = destination.tensors[i];
+    if (src.cache_namespace != dst.cache_namespace ||
+        src.layer_id != dst.layer_id || src.role != dst.role ||
+        src.group_id != dst.group_id ||
+        src.shard.spans.size() != dst.shard.spans.size()) {
+      return false;
+    }
+    if (!can_compact_tensor_uniform_series(src) ||
+        !can_compact_tensor_uniform_series(dst)) {
+      return false;
+    }
+    for (size_t j = 0; j < src.shard.spans.size(); ++j) {
+      const LogicalSpan& s = src.shard.spans[j];
+      const LogicalSpan& d = dst.shard.spans[j];
+      uint64_t s_lstride = s.logical_stride_bytes;
+      uint64_t d_lstride = d.logical_stride_bytes;
+      if (s.repeat_count > 1 && s_lstride == 0 && s.physical_stride_bytes == 0) {
+        s_lstride = s.bytes_per_region;
+      }
+      if (d.repeat_count > 1 && d_lstride == 0 && d.physical_stride_bytes == 0) {
+        d_lstride = d.bytes_per_region;
+      }
+      if (s.logical_tensor != d.logical_tensor ||
+          s.logical_offset_bytes != d.logical_offset_bytes ||
+          s.bytes_per_region != d.bytes_per_region ||
+          s.repeat_count != d.repeat_count || s_lstride != d_lstride) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
                                 const WorkerCacheLayoutManifest& destination,
                                 ReshardPlanTemplate* plan,
@@ -1581,10 +1689,15 @@ Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
         source, source_cp_index_write_mode, plan);
   }
 
+  const bool compact_uniform_series =
+      have_matching_logical_span_geometry(source, destination);
   std::vector<AtomicLogicalRegion> source_regions;
   std::vector<AtomicLogicalRegion> destination_regions;
-  expand_manifest(source, writers, &source_regions);
-  expand_manifest(destination, SpanWriters::everything(), &destination_regions);
+  expand_manifest(source, writers, compact_uniform_series, &source_regions);
+  expand_manifest(destination,
+                  SpanWriters::everything(),
+                  compact_uniform_series,
+                  &destination_regions);
   const RegionGroups source_groups = group_regions(source_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);
   // Compact each logical tensor before the next one is expanded into

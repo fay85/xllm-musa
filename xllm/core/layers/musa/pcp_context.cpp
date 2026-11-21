@@ -580,6 +580,15 @@ void build_context(const AttentionMetadata& global_metadata,
   local.pcp_context = &pcp_context;
 }
 
+void join_pending_sends(Context& context) {
+  for (auto& work : context.in_flight_send_works) {
+    if (work.defined()) {
+      work->wait();
+    }
+  }
+  context.in_flight_send_works.clear();
+}
+
 bool receives_prefix_state(const Context& context) {
   return context.cp_rank > 0;
 }
@@ -874,12 +883,7 @@ torch::Tensor finish_state_only(const torch::Tensor& local_hidden_states,
   complete_deferred_transfers(context);
   // Join async MCCL sends onto the active compute/capture stream before
   // exiting the forward pass, since gather_rows is skipped here.
-  for (auto& work : context.in_flight_send_works) {
-    if (work.defined()) {
-      work->wait();
-    }
-  }
-  context.in_flight_send_works.clear();
+  join_pending_sends(context);
   context.in_flight_sends.clear();
   return local_hidden_states;
 }
@@ -887,8 +891,8 @@ torch::Tensor finish_state_only(const torch::Tensor& local_hidden_states,
 torch::Tensor finish(const torch::Tensor& local_hidden_states,
                      Context& context) {
   complete_deferred_transfers(context);
+  join_pending_sends(context);
   torch::Tensor hidden_states = gather_rows(local_hidden_states, context);
-  context.in_flight_send_works.clear();
   context.in_flight_sends.clear();
   return hidden_states;
 }

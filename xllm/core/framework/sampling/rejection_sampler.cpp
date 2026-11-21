@@ -29,7 +29,8 @@ limitations under the License.
 #if defined(USE_MUSA)
 namespace xllm::kernel::musa {
 torch::Tensor lookup_device_compact_vocab_column_ids(int32_t device_index,
-                                                     int64_t compact_cols);
+                                                     int64_t compact_cols,
+                                                     int64_t full_vocab_size);
 }  // namespace xllm::kernel::musa
 #endif
 
@@ -68,7 +69,7 @@ torch::Tensor lookup_compact_draft_column_ids(const torch::Tensor& draft_probs,
       draft_probs.dim() == 3 && draft_probs.size(-1) > 2049 &&
       draft_probs.size(-1) < vocab_size) {
     return xllm::kernel::musa::lookup_device_compact_vocab_column_ids(
-        draft_probs.device().index(), draft_probs.size(-1) - 1);
+        draft_probs.device().index(), draft_probs.size(-1) - 1, vocab_size);
   }
 #else
   (void)draft_probs;

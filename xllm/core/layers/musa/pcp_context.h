@@ -97,6 +97,10 @@ void build_context(const AttentionMetadata& global_metadata,
                    int32_t num_rows,
                    std::optional<Context>* context);
 
+// Joins pending async MCCL send works onto the active compute/capture stream
+// while keeping `in_flight_sends` buffers alive until the PCP scope finishes.
+void join_pending_sends(Context& context);
+
 // Whether this rank continues rows of a preceding rank and therefore takes its
 // recurrent state from the preceding rank rather than from the cache.
 bool receives_prefix_state(const Context& context);

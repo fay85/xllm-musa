@@ -192,8 +192,7 @@ void register_compact_vocab_metadata(const torch::Tensor& compact_logits,
   s_last_compact_vocab.full_vocab_size = full_vocab_size;
   if (!column_ids.is_cpu()) {
     const int32_t dev = column_ids.device().index();
-    if (dev >= 0 && dev < 16 &&
-        g_device_compact_vocab[dev].cols != column_ids.size(0)) {
+    if (dev >= 0 && dev < 16) {
       std::lock_guard<std::mutex> lock(g_device_compact_vocab_mu);
       g_device_compact_vocab[dev].cols = column_ids.size(0);
       g_device_compact_vocab[dev].full_vocab_size = full_vocab_size;
@@ -227,16 +226,25 @@ std::pair<torch::Tensor, int64_t> lookup_compact_vocab_metadata(
 }
 
 torch::Tensor lookup_device_compact_vocab_column_ids(int32_t device_index,
-                                                     int64_t compact_cols) {
+                                                     int64_t compact_cols,
+                                                     int64_t full_vocab_size) {
   if (device_index < 0 || device_index >= 16 || compact_cols <= 0) {
     return torch::Tensor();
   }
   std::lock_guard<std::mutex> lock(g_device_compact_vocab_mu);
   const DeviceCompactVocabEntry& entry = g_device_compact_vocab[device_index];
-  if (entry.column_ids.defined() && entry.cols == compact_cols) {
+  if (entry.column_ids.defined() && entry.cols == compact_cols &&
+      (full_vocab_size <= 0 || entry.full_vocab_size <= 0 ||
+       entry.full_vocab_size == full_vocab_size)) {
     return entry.column_ids;
   }
   return torch::Tensor();
+}
+
+torch::Tensor lookup_device_compact_vocab_column_ids(int32_t device_index,
+                                                     int64_t compact_cols) {
+  return lookup_device_compact_vocab_column_ids(
+      device_index, compact_cols, /*full_vocab_size=*/0);
 }
 
 bool row_argmax_supported(const torch::Tensor& input) {

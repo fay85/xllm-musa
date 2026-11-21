@@ -18,6 +18,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <map>
@@ -492,9 +493,18 @@ Status MooncakeTransferEngineCore::set_cache_peer(
     local_manifest = local_cache_layout_;
   }
   if (!local_manifest.has_value()) {
+    fprintf(stderr, "LINK_STAGE no_local_layout\n");
+    fflush(stderr);
     return Status(StatusCode::UNAVAILABLE,
                   "local cache layout is not registered");
   }
+  fprintf(stderr,
+          "LINK_STAGE set_cache_peer mode=%d local_cp=%d peer_cp=%d peer=%s\n",
+          static_cast<int>(mode),
+          local_manifest->coordinates.cp_size,
+          peer_manifest.coordinates.cp_size,
+          peer_manifest.addr.c_str());
+  fflush(stderr);
 
   std::optional<ReshardPlanTemplate> plan;
   if (mode == CachePeerMode::ACTIVE) {
@@ -901,6 +911,8 @@ bool MooncakeTransferEngine::link_sessions(
     return false;
   }
 
+  fprintf(stderr, "LINK_STAGE enter n=%zu\n", cluster_ids.size());
+  fflush(stderr);
   const std::optional<WorkerCacheLayoutManifest> local_manifest =
       core_.local_cache_layout();
   if (!local_manifest.has_value()) {
@@ -917,6 +929,11 @@ bool MooncakeTransferEngine::link_sessions(
       return false;
     }
     remote_manifests.emplace_back(std::move(remote_manifest));
+    fprintf(stderr,
+            "LINK_STAGE fetch_ok i=%zu addr=%s\n",
+            index,
+            remote_addrs[index].c_str());
+    fflush(stderr);
   }
 
   ReshardPlanner planner;
@@ -930,10 +947,14 @@ bool MooncakeTransferEngine::link_sessions(
       remote_manifests, *local_manifest, &selected_indices);
 #endif
   if (!selection.ok()) {
+    fprintf(stderr, "LINK_STAGE plan_fail %s\n", selection.message().c_str());
+    fflush(stderr);
     LOG(ERROR) << "Remote cache layouts cannot cover local destination: "
                << selection.message();
     return false;
   }
+  fprintf(stderr, "LINK_STAGE plan_ok selected=%zu\n", selected_indices.size());
+  fflush(stderr);
 
   const std::unordered_set<size_t> selected_set(selected_indices.begin(),
                                                 selected_indices.end());
@@ -956,9 +977,13 @@ bool MooncakeTransferEngine::link_sessions(
       break;
     }
     if (!set_local_peer(remote_manifests[index], mode)) {
+      fprintf(stderr, "LINK_STAGE local_peer_fail i=%zu\n", index);
+      fflush(stderr);
       linked = false;
       break;
     }
+    fprintf(stderr, "LINK_STAGE peer_ok i=%zu active=%d\n", index, active ? 1 : 0);
+    fflush(stderr);
   }
 
   if (!linked) {
@@ -978,6 +1003,8 @@ bool MooncakeTransferEngine::link_sessions(
     return false;
   }
 
+  fprintf(stderr, "LINK_STAGE commit\n");
+  fflush(stderr);
   std::lock_guard<std::mutex> lock(session_mutex_);
   for (size_t index = 0; index < remote_manifests.size(); ++index) {
     LocalCachePeer cache_peer;
@@ -991,6 +1018,8 @@ bool MooncakeTransferEngine::link_sessions(
 #endif
     cache_peers_[remote_addrs[index]] = std::move(cache_peer);
   }
+  fprintf(stderr, "LINK_STAGE done\n");
+  fflush(stderr);
   return true;
 }
 

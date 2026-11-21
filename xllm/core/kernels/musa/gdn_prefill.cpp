@@ -1715,8 +1715,9 @@ torch::Tensor causal_conv1d_prefill(
           prefix_x->t().contiguous().unsqueeze(0).to(conv_state.scalar_type());
     } else {
       CHECK(prefix_x->dim() == 3 &&
-            prefix_x->size(0) == cache_indices.numel())
-          << "3D prefix_x fallback must match cache_indices batch size";
+            prefix_x->size(0) == cache_indices.numel() &&
+            prefix_x->size(1) == 3)
+          << "3D prefix_x fallback must have shape [batch, 3, dim]";
       prefix_state =
           prefix_x->transpose(1, 2).contiguous().to(conv_state.scalar_type());
     }

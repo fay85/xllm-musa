@@ -27,6 +27,7 @@ limitations under the License.
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 #include "layers/cuda/flashinfer_workspace.h"
+#include "core/layers/musa/pcp_context.h"
 #include "layers/musa/flashinfer_planinfo.h"
 
 namespace xllm {
@@ -254,6 +255,9 @@ void run_dflash2_band_attention(const AttentionMetadata& attn_metadata,
   const torch::Tensor safe_blocks = blocks.clamp_min(0);
   const torch::Tensor flat_slots =
       (safe_blocks * block_size + offsets).reshape({-1});
+  const torch::Tensor valid_kv =
+      (k_pos_2d < kv_lens_1d.unsqueeze(1)) & blocks.ge(0);
+  const torch::Tensor invalid_kv = ~valid_kv.view({batch, gather_len, 1, 1});
   const auto q_dtype = query.scalar_type();
   auto gather_kv_to_qdtype = [&](const torch::Tensor& cache) {
     torch::Tensor gathered;
@@ -268,8 +272,10 @@ void run_dflash2_band_attention(const AttentionMetadata& attn_metadata,
                      .index_select(/*dim=*/0, flat_slots)
                      .to(q_dtype);
     }
-    return gathered.view({batch, gather_len, num_kv_heads, head_size})
-        .permute({0, 2, 1, 3});
+    torch::Tensor shaped =
+        gathered.view({batch, gather_len, num_kv_heads, head_size});
+    shaped.masked_fill_(invalid_kv, 0.0f);
+    return shaped.permute({0, 2, 1, 3});
   };
   torch::Tensor keys = gather_kv_to_qdtype(k_cache);
   torch::Tensor values = gather_kv_to_qdtype(v_cache);
@@ -290,7 +296,7 @@ void run_dflash2_band_attention(const AttentionMetadata& attn_metadata,
       kv_lens - query_len +
       torch::arange(query_len, index_options).view({1, 1, 1, query_len, 1});
   const torch::Tensor k_pos = k_pos_2d.view({batch, 1, 1, 1, gather_len});
-  torch::Tensor visible = k_pos < kv_lens;
+  torch::Tensor visible = valid_kv.view({batch, 1, 1, 1, gather_len});
   if (window_left >= 0) {
     visible = visible & (k_pos >= q_pos - window_left);
   }
@@ -400,8 +406,12 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
         attn_metadata, query, key, output, chunk_lse, k_cache, v_cache);
   } else if (attn_metadata.is_prefill || (attn_metadata.is_chunked_prefill &&
                                           !spec_verify_expanded_decode)) {
+    const bool use_pcp_metadata = attn_metadata.pcp_context != nullptr;
     AttentionMetadata attn_metadata_copy = attn_metadata;
-    attn_metadata_copy.pcp_context = nullptr;
+    if (use_pcp_metadata) {
+      musa_pcp::join_pending_sends(*attn_metadata.pcp_context);
+      attn_metadata_copy.pcp_context = nullptr;
+    }
     torch::Tensor query_saved =
         xllm::kernel::musa::piecewise_runner_tensor(query);
     torch::Tensor key_saved = xllm::kernel::musa::piecewise_runner_tensor(key);
@@ -412,6 +422,7 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     std::tie(std::ignore, output_lse) =
         xllm::kernel::musa::prefill_with_optional_piecewise_capture(
             [this,
+             use_pcp_metadata,
              attn_metadata_copy,
              query_saved,
              key_saved,
@@ -421,8 +432,9 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
              v_cache](const xllm::kernel::musa::AttentionReplayParams&
                           params) mutable {
               const AttentionMetadata& replay_metadata =
-                  params.attn_metadata ? *params.attn_metadata
-                                       : attn_metadata_copy;
+                  !use_pcp_metadata && params.attn_metadata
+                      ? *params.attn_metadata
+                      : attn_metadata_copy;
               std::optional<torch::Tensor> replay_lse = std::nullopt;
               if (replay_metadata.is_prefill) {
                 prefill_forward(replay_metadata,
