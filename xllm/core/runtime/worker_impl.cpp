@@ -947,6 +947,14 @@ void WorkerImpl::prepare_linear_state_cache(ModelInputParams& params) {
     for (const BlockTransferInfo& transfer : params.block_copy.swap_blocks) {
       const musa::DeepseekV4PrefixTransfer decoded =
           musa::decode_deepseek_v4_prefix_transfer(transfer);
+      if (decoded.kind == musa::DeepseekV4PrefixTransferKind::GDN_HOST_DEMOTE) {
+        xllm::kernel::musa::demote_gdn_int8_checkpoint_to_host(
+            kv_caches_, decoded.src_block_id, decoded.dst_block_id);
+      }
+    }
+    for (const BlockTransferInfo& transfer : params.block_copy.swap_blocks) {
+      const musa::DeepseekV4PrefixTransfer decoded =
+          musa::decode_deepseek_v4_prefix_transfer(transfer);
       if (decoded.kind == musa::DeepseekV4PrefixTransferKind::BLOCK_COPY &&
           decoded.block_type == BlockType::LINEAR) {
         xllm::kernel::musa::store_gdn_int8_checkpoint(

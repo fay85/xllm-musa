@@ -30,6 +30,7 @@ limitations under the License.
 #include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/model/model_input_params.h"
+#include "core/framework/prefix_cache/linear_state_prefix_cache.h"
 #include "core/framework/request/sequence.h"
 
 namespace xllm {
@@ -294,7 +295,11 @@ LinearStateBlockManager::LinearStateBlockManager(
                                                  num_speculative_tokens)),
       preserve_decode_checkpoint_(preserve_decode_checkpoint),
       num_active_slots_(num_slots),
-      num_ckpt_slots_(enable_prefix_cache ? num_ckpt_slots : 0) {
+      num_ckpt_slots_(enable_prefix_cache ? num_ckpt_slots : 0),
+      num_host_ckpt_slots_(
+          (enable_prefix_cache && !instance_is_decode && num_ckpt_slots > 0)
+              ? musa::resolve_gdn_host_ckpt_slots(num_ckpt_slots)
+              : 0u) {
   CHECK_GT(num_slots, 1u)
       << "linear-state leaf needs at least one usable slot (plus padding)";
   CHECK_GT(chunk_stride, 0)
@@ -305,7 +310,50 @@ LinearStateBlockManager::LinearStateBlockManager(
       ckpt_free_ids_.push_back(
           static_cast<int32_t>(num_active_slots_ + i - 1));
     }
+    hbm_ckpt_keys_.resize(num_ckpt_slots_);
+    hbm_ckpt_has_key_.assign(num_ckpt_slots_, 0);
   }
+  if (num_host_ckpt_slots_ > 0) {
+    host_ckpt_prefix_cache_ = std::make_unique<LinearStatePrefixCache>(
+        static_cast<uint32_t>(chunk_stride), options_.hasher_type());
+    host_ckpt_free_ids_.reserve(num_host_ckpt_slots_);
+    const uint32_t host_base = num_active_slots_ + num_ckpt_slots_;
+    for (uint32_t i = num_host_ckpt_slots_; i > 0; --i) {
+      host_ckpt_free_ids_.push_back(static_cast<int32_t>(host_base + i - 1));
+    }
+  }
+}
+
+LinearStateBlockManager::~LinearStateBlockManager() {
+  musa::flush_pending_gdn_singlepass_checkpoints();
+  host_ckpt_prefix_cache_.reset();
+  prefix_cache_.reset();
+}
+
+void LinearStateBlockManager::reset_prefix_cache() {
+  if (host_ckpt_prefix_cache_ != nullptr) {
+    host_ckpt_prefix_cache_->evict(host_ckpt_prefix_cache_->num_blocks());
+  }
+  BlockManagerImpl::reset_prefix_cache();
+}
+
+bool LinearStateBlockManager::has_checkpoint_for_sequence_tokens(
+    Sequence& seq,
+    size_t tokens) {
+  if (ckpt_backing_manager_ != nullptr) {
+    return ckpt_backing_manager_->has_checkpoint_for_sequence_tokens(
+        seq, tokens);
+  }
+  if (tokens == 0 || block_size() == 0 || (tokens % block_size()) != 0) {
+    return false;
+  }
+  const size_t ckpt_idx = tokens / block_size() - 1;
+  seq.update_linear_state_hashes(static_cast<uint32_t>(block_size()));
+  const Slice<XXH3Key> hashes = seq.linear_state_hashes();
+  if (ckpt_idx >= hashes.size()) {
+    return false;
+  }
+  return find_any_checkpoint(hashes[ckpt_idx]).is_valid();
 }
 
 std::optional<std::vector<Block>>
@@ -535,6 +583,37 @@ std::optional<std::vector<Block>> LinearStateBlockManager::allocate_prefill(
   // [restore, live] window. The rule applies identically to HBM and Host
   // states; the caller identifies the tier by the KVCacheState reference.
   if (seq->kv_cache_tokens_num() > kv_state.kv_cache_tokens_num()) {
+    if (num_ckpt_slots_ > 0 && ckpt_backing_manager_ == nullptr) {
+      const size_t target_tokens = seq->kv_cache_tokens_num();
+      if (target_tokens > 0 && block_size() > 0 &&
+          (target_tokens % block_size()) == 0) {
+        const size_t checkpoint_index = target_tokens / block_size() - 1;
+        seq->update_linear_state_hashes(static_cast<uint32_t>(block_size()));
+        const Slice<XXH3Key> hashes = seq->linear_state_hashes();
+        if (checkpoint_index < hashes.size()) {
+          Block ckpt_src = find_any_checkpoint(hashes[checkpoint_index]);
+          if (ckpt_src.is_valid()) {
+            std::vector<Block> old_blocks =
+                kv_state.take_blocks(BlockType::LINEAR);
+            deallocate(std::move(old_blocks));
+            std::vector<Block> live = BlockManagerImpl::allocate(1);
+            if (live.empty()) {
+              return std::nullopt;
+            }
+            std::vector<Block> shared_src;
+            shared_src.emplace_back(std::move(ckpt_src));
+            kv_state.replace_composite_blocks(
+                BlockType::LINEAR,
+                std::move(shared_src),
+                /*num_shared_blocks=*/1,
+                /*cache_publish_cursor=*/1);
+            kv_state.set_num_cached_blocks(BlockType::LINEAR,
+                                           checkpoint_index + 1);
+            return live;
+          }
+        }
+      }
+    }
     std::vector<Block> old_blocks = kv_state.take_blocks(BlockType::LINEAR);
     deallocate(std::move(old_blocks));
     std::vector<Block> allocated = BlockManagerImpl::allocate(2);
@@ -545,7 +624,7 @@ std::optional<std::vector<Block>> LinearStateBlockManager::allocate_prefill(
     return allocated;
   }
 
-  if (num_ckpt_slots_ == 0) {
+  if (num_ckpt_slots_ == 0 && ckpt_backing_manager_ == nullptr) {
     cache_read_source(seq, kv_state);
   }
   retain_read_source(kv_state);
@@ -656,17 +735,27 @@ Block LinearStateBlockManager::allocate() {
 }
 
 void LinearStateBlockManager::free(int32_t block_id) {
+  if (ckpt_backing_wrapper_ != nullptr &&
+      block_id >= static_cast<int32_t>(num_active_slots_)) {
+    ckpt_backing_wrapper_->free(block_id);
+    return;
+  }
   if (num_ckpt_slots_ > 0 &&
       block_id >= static_cast<int32_t>(num_active_slots_)) {
     std::lock_guard<std::mutex> lock(ckpt_mutex_);
-    ckpt_free_ids_.push_back(block_id);
+    if (block_id <
+        static_cast<int32_t>(num_active_slots_ + num_ckpt_slots_)) {
+      ckpt_free_ids_.push_back(block_id);
+    } else {
+      host_ckpt_free_ids_.push_back(block_id);
+    }
     return;
   }
   BlockManagerImpl::free(block_id);
 }
 
 void LinearStateBlockManager::deallocate(std::vector<Block>&& blocks) {
-  if (num_ckpt_slots_ == 0) {
+  if (num_ckpt_slots_ == 0 && ckpt_backing_manager_ == nullptr) {
     BlockManagerImpl::deallocate(std::move(blocks));
     return;
   }
@@ -694,6 +783,105 @@ int32_t LinearStateBlockManager::alloc_ckpt_slot_locked() {
   const int32_t id = ckpt_free_ids_.back();
   ckpt_free_ids_.pop_back();
   return id;
+}
+
+int32_t LinearStateBlockManager::alloc_host_ckpt_slot_locked() {
+  std::lock_guard<std::mutex> lock(ckpt_mutex_);
+  if (host_ckpt_free_ids_.empty()) {
+    return -1;
+  }
+  const int32_t id = host_ckpt_free_ids_.back();
+  host_ckpt_free_ids_.pop_back();
+  return id;
+}
+
+void LinearStateBlockManager::record_hbm_ckpt_key(int32_t hbm_ckpt_id,
+                                                  const XXH3Key& key) {
+  const int32_t idx = hbm_ckpt_id - static_cast<int32_t>(num_active_slots_);
+  if (idx >= 0 && static_cast<size_t>(idx) < hbm_ckpt_keys_.size()) {
+    hbm_ckpt_keys_[static_cast<size_t>(idx)] = key;
+    hbm_ckpt_has_key_[static_cast<size_t>(idx)] = 1;
+  }
+}
+
+Block LinearStateBlockManager::find_any_checkpoint(const XXH3Key& key) {
+  if (prefix_cache_ != nullptr) {
+    Block b = prefix_cache_->find(key);
+    if (b.is_valid()) {
+      return b;
+    }
+  }
+  if (host_ckpt_prefix_cache_ != nullptr) {
+    Block b = host_ckpt_prefix_cache_->find(key);
+    if (b.is_valid()) {
+      return b;
+    }
+  }
+  return Block();
+}
+
+bool LinearStateBlockManager::has_any_checkpoint_or_pending(
+    const XXH3Key& key) {
+  if (find_any_checkpoint(key).is_valid()) {
+    return true;
+  }
+  if (prefix_cache_ != nullptr &&
+      has_pending_singlepass_key(prefix_cache_.get(), key)) {
+    return true;
+  }
+  if (host_ckpt_prefix_cache_ != nullptr &&
+      has_pending_singlepass_key(host_ckpt_prefix_cache_.get(), key)) {
+    return true;
+  }
+  return false;
+}
+
+int32_t LinearStateBlockManager::acquire_hbm_ckpt_slot_with_demote(
+    std::vector<BlockTransferInfo>* swap_transfers) {
+  int32_t ckpt_id = alloc_ckpt_slot_locked();
+  if (ckpt_id >= 0) {
+    return ckpt_id;
+  }
+  if (prefix_cache_ == nullptr || prefix_cache_->evict(1) == 0) {
+    return -1;
+  }
+  ckpt_id = alloc_ckpt_slot_locked();
+  if (ckpt_id < 0) {
+    return -1;
+  }
+  const int32_t hbm_idx =
+      ckpt_id - static_cast<int32_t>(num_active_slots_);
+  if (swap_transfers != nullptr && num_host_ckpt_slots_ > 0 &&
+      host_ckpt_prefix_cache_ != nullptr && hbm_idx >= 0 &&
+      static_cast<size_t>(hbm_idx) < hbm_ckpt_has_key_.size() &&
+      hbm_ckpt_has_key_[static_cast<size_t>(hbm_idx)] != 0) {
+    const XXH3Key victim_key = hbm_ckpt_keys_[static_cast<size_t>(hbm_idx)];
+    if (!host_ckpt_prefix_cache_->contains(victim_key) &&
+        !has_pending_singlepass_key(host_ckpt_prefix_cache_.get(),
+                                    victim_key)) {
+      int32_t host_id = alloc_host_ckpt_slot_locked();
+      if (host_id < 0) {
+        host_ckpt_prefix_cache_->evict(1);
+        host_id = alloc_host_ckpt_slot_locked();
+      }
+      if (host_id >= 0) {
+        BlockTransferInfo demote_tx(-1, -1);
+        if (musa::encode_deepseek_v4_gdn_host_demote(
+                ckpt_id, host_id, &demote_tx)) {
+          swap_transfers->emplace_back(std::move(demote_tx));
+          Block host_block(host_id, this);
+          host_block.set_hash_value(victim_key.data);
+          enqueue_pending_singlepass_entry(
+              host_ckpt_prefix_cache_.get(),
+              victim_key,
+              std::move(host_block));
+        } else {
+          free(host_id);
+        }
+      }
+    }
+  }
+  return ckpt_id;
 }
 
 void LinearStateBlockManager::publish_linear_checkpoint(
@@ -851,20 +1039,14 @@ void LinearStateBlockManager::publish_linear_checkpoint(
         continue;
       }
       const XXH3Key& hash_key = hashes[checkpoint_index - 1];
-      if (prefix_cache_->find(hash_key).is_valid() ||
-          has_pending_singlepass_key(prefix_cache_.get(), hash_key)) {
+      if (has_any_checkpoint_or_pending(hash_key)) {
         kv_state.set_num_cached_blocks(
             BlockType::LINEAR,
             std::max(kv_state.num_cached_blocks(BlockType::LINEAR),
                      checkpoint_index));
         continue;
       }
-      int32_t ckpt_id = alloc_ckpt_slot_locked();
-      if (ckpt_id < 0) {
-        musa::flush_pending_gdn_singlepass_checkpoints();
-        prefix_cache_->evict(1);
-        ckpt_id = alloc_ckpt_slot_locked();
-      }
+      int32_t ckpt_id = acquire_hbm_ckpt_slot_with_demote(swap_transfers);
       if (ckpt_id < 0) {
         break;
       }
@@ -881,6 +1063,7 @@ void LinearStateBlockManager::publish_linear_checkpoint(
         free(ckpt_id);
         continue;
       }
+      record_hbm_ckpt_key(ckpt_id, hash_key);
       Block ckpt_block(ckpt_id, this);
       ckpt_block.set_hash_value(hash_key.data);
       enqueue_pending_singlepass_entry(
@@ -918,18 +1101,15 @@ void LinearStateBlockManager::publish_linear_checkpoint(
   CHECK_GE(hashes.size(), checkpoint_index);
   const XXH3Key& hash_key = hashes[checkpoint_index - 1];
   src_block.set_hash_value(hash_key.data);
-  if (prefix_cache_->find(hash_key).is_valid()) {
+  if (has_any_checkpoint_or_pending(hash_key)) {
     kv_state.set_num_cached_blocks(BlockType::LINEAR, checkpoint_index);
     return;
   }
-  int32_t ckpt_id = alloc_ckpt_slot_locked();
-  if (ckpt_id < 0) {
-    prefix_cache_->evict(1);
-    ckpt_id = alloc_ckpt_slot_locked();
-  }
+  int32_t ckpt_id = acquire_hbm_ckpt_slot_with_demote(swap_transfers);
   if (ckpt_id < 0) {
     return;
   }
+  record_hbm_ckpt_key(ckpt_id, hash_key);
   Block ckpt_block(ckpt_id, this);
   ckpt_block.set_hash_value(hash_key.data);
   std::vector<Block> to_insert;
@@ -945,14 +1125,40 @@ void LinearStateBlockManager::publish_linear_checkpoint(
 
 std::vector<Block> LinearStateBlockManager::allocate_shared(
     const Slice<int32_t>& token_ids,
-    const Slice<Block>& /*existed_shared_blocks*/,
-    const MMData& /*mm_data*/,
+    const Slice<Block>& existed_shared_blocks,
+    const MMData& mm_data,
     const Slice<XXH3Key>& block_hashes) {
+  if (ckpt_backing_wrapper_ != nullptr) {
+    return ckpt_backing_wrapper_->allocate_shared(
+        token_ids, existed_shared_blocks, mm_data, block_hashes);
+  }
   if (token_ids.size() == 0 || prefix_cache_ == nullptr) {
     return {};
   }
-  std::vector<Block> blocks = prefix_cache_->match(
-      token_ids.slice(0, token_ids.size() - 1), {}, MMData(), block_hashes);
+  const Slice<int32_t> prefix_slice = token_ids.slice(0, token_ids.size() - 1);
+  std::vector<Block> blocks =
+      prefix_cache_->match(prefix_slice, {}, MMData(), block_hashes);
+  if (host_ckpt_prefix_cache_ != nullptr) {
+    std::vector<Block> l2_blocks = host_ckpt_prefix_cache_->match(
+        prefix_slice, {}, MMData(), block_hashes);
+    if (l2_blocks.size() > blocks.size()) {
+      blocks.resize(l2_blocks.size());
+    }
+    std::vector<Block> dup_drop;
+    for (size_t i = 0; i < l2_blocks.size(); ++i) {
+      if (!l2_blocks[i].is_valid()) {
+        continue;
+      }
+      if (!blocks[i].is_valid()) {
+        blocks[i] = std::move(l2_blocks[i]);
+      } else {
+        dup_drop.emplace_back(std::move(l2_blocks[i]));
+      }
+    }
+    if (!dup_drop.empty()) {
+      deallocate(std::move(dup_drop));
+    }
+  }
   VLOG(1) << "[HostCache][LinearMatch] manager=" << this
           << " decode=" << options_.instance_is_decode()
           << " blocks=" << blocks.size();

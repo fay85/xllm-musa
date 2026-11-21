@@ -31,6 +31,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
 
@@ -188,23 +189,174 @@ __global__ void copy_conv_slot_kernel(const uint64_t* __restrict__ conv_ptrs,
   }
 }
 
+constexpr int64_t kGdnHostSlabSlots = 64;
+
+__global__ void pack_gdn_ckpt_slot_to_staging_kernel(
+    const uint8_t* __restrict__ qdata,
+    const uint8_t* __restrict__ scales,
+    const uint8_t* __restrict__ conv_ckpt,
+    uint8_t* __restrict__ staging,
+    int64_t num_ckpt_slots,
+    int64_t ckpt_slot,
+    int64_t q_layer_bytes,
+    int64_t s_layer_bytes,
+    int64_t c_layer_bytes,
+    int64_t q_total_bytes,
+    int64_t s_total_bytes) {
+  const int64_t layer = static_cast<int64_t>(blockIdx.y);
+  const int64_t tid =
+      static_cast<int64_t>(blockIdx.x) * static_cast<int64_t>(blockDim.x) +
+      static_cast<int64_t>(threadIdx.x);
+  const int64_t stride =
+      static_cast<int64_t>(gridDim.x) * static_cast<int64_t>(blockDim.x);
+
+  const uint8_t* src_q =
+      qdata + (layer * num_ckpt_slots + ckpt_slot) * q_layer_bytes;
+  uint8_t* dst_q = staging + layer * q_layer_bytes;
+  const int64_t q_vec = q_layer_bytes / 16;
+  for (int64_t i = tid; i < q_vec; i += stride) {
+    reinterpret_cast<uint4*>(dst_q)[i] =
+        reinterpret_cast<const uint4*>(src_q)[i];
+  }
+  for (int64_t b = q_vec * 16 + tid; b < q_layer_bytes; b += stride) {
+    dst_q[b] = src_q[b];
+  }
+
+  const uint8_t* src_s =
+      scales + (layer * num_ckpt_slots + ckpt_slot) * s_layer_bytes;
+  uint8_t* dst_s = staging + q_total_bytes + layer * s_layer_bytes;
+  const int64_t s_vec = s_layer_bytes / 16;
+  for (int64_t i = tid; i < s_vec; i += stride) {
+    reinterpret_cast<uint4*>(dst_s)[i] =
+        reinterpret_cast<const uint4*>(src_s)[i];
+  }
+  for (int64_t b = s_vec * 16 + tid; b < s_layer_bytes; b += stride) {
+    dst_s[b] = src_s[b];
+  }
+
+  const uint8_t* src_c =
+      conv_ckpt + (layer * num_ckpt_slots + ckpt_slot) * c_layer_bytes;
+  uint8_t* dst_c =
+      staging + q_total_bytes + s_total_bytes + layer * c_layer_bytes;
+  const int64_t c_vec = c_layer_bytes / 16;
+  for (int64_t i = tid; i < c_vec; i += stride) {
+    reinterpret_cast<uint4*>(dst_c)[i] =
+        reinterpret_cast<const uint4*>(src_c)[i];
+  }
+  for (int64_t b = c_vec * 16 + tid; b < c_layer_bytes; b += stride) {
+    dst_c[b] = src_c[b];
+  }
+}
+
+struct GdnHostSlab {
+  uint8_t* ptr = nullptr;
+  bool is_pinned = false;
+};
+
 struct GdnInt8CheckpointPool {
   c10::Device device = c10::Device(c10::kPrivateUse1, 0);
   int64_t num_active_slots = 0;
   int64_t num_ckpt_slots = 0;
+  int64_t num_host_ckpt_slots = 0;
   int64_t num_layers = 0;
   int64_t num_heads = 0;
   int64_t head_v_dim = 0;
   int64_t head_k_dim = 0;
   int64_t conv_elems_per_slot = 0;
+  int64_t q_layer_bytes = 0;
+  int64_t s_layer_bytes = 0;
+  int64_t c_layer_bytes = 0;
+  int64_t q_slot_bytes = 0;
+  int64_t s_slot_bytes = 0;
+  int64_t c_slot_bytes = 0;
+  int64_t total_slot_bytes = 0;
   torch::ScalarType ssm_dtype = torch::kFloat32;
   torch::ScalarType conv_dtype = torch::kBFloat16;
   torch::Tensor qdata;
   torch::Tensor scale;
   torch::Tensor conv_ckpt;
+  torch::Tensor staging_buf;
   torch::Tensor d_ssm_ptrs;
   torch::Tensor d_conv_ptrs;
+  std::mutex host_slab_mutex;
+  std::vector<GdnHostSlab> host_slabs;
+
+  ~GdnInt8CheckpointPool() {
+    for (auto& slab : host_slabs) {
+      if (slab.ptr != nullptr) {
+        if (slab.is_pinned) {
+          musaFreeHost(slab.ptr);
+        } else {
+          std::free(slab.ptr);
+        }
+        slab.ptr = nullptr;
+      }
+    }
+  }
 };
+
+uint8_t* ensure_host_ckpt_slot_ptr(GdnInt8CheckpointPool* pool,
+                                   int64_t host_slot,
+                                   bool* out_is_pinned) {
+  CHECK(pool != nullptr);
+  CHECK_GE(host_slot, 0);
+  CHECK_LT(host_slot, pool->num_host_ckpt_slots);
+  const size_t slab_idx = static_cast<size_t>(host_slot / kGdnHostSlabSlots);
+  const int64_t in_slab = host_slot % kGdnHostSlabSlots;
+  CHECK_LT(slab_idx, pool->host_slabs.size());
+
+  std::lock_guard<std::mutex> lock(pool->host_slab_mutex);
+  GdnHostSlab& slab = pool->host_slabs[slab_idx];
+  if (slab.ptr == nullptr) {
+    const int64_t slots_in_slab = std::min<int64_t>(
+        kGdnHostSlabSlots,
+        pool->num_host_ckpt_slots -
+            static_cast<int64_t>(slab_idx) * kGdnHostSlabSlots);
+    const size_t bytes =
+        static_cast<size_t>(slots_in_slab * pool->total_slot_bytes);
+    const XLLMOptionalDeviceGuard device_guard(pool->device);
+    void* raw = nullptr;
+    musaError_t err = musaHostAlloc(&raw, bytes, musaHostAllocDefault);
+    if (err == musaSuccess && raw != nullptr) {
+      slab.ptr = static_cast<uint8_t*>(raw);
+      slab.is_pinned = true;
+    } else {
+      musaGetLastError();
+      void* fallback = nullptr;
+      CHECK_EQ(posix_memalign(&fallback, 4096, bytes), 0)
+          << "Failed to allocate host DRAM slab for GDN Int8 L2 pool";
+      slab.ptr = static_cast<uint8_t*>(fallback);
+      slab.is_pinned = false;
+    }
+    LOG(INFO) << "Allocated MUSA GDN Int8 Host L2 Slab #" << slab_idx
+              << ": slots=" << slots_in_slab
+              << ", bytes=" << (bytes / (1024.0 * 1024.0)) << " MB"
+              << ", pinned=" << slab.is_pinned;
+  }
+  if (out_is_pinned != nullptr) {
+    *out_is_pinned = slab.is_pinned;
+  }
+  return slab.ptr + in_slab * pool->total_slot_bytes;
+}
+
+const uint8_t* lookup_host_ckpt_slot_ptr(GdnInt8CheckpointPool* pool,
+                                         int64_t host_slot,
+                                         bool* out_is_pinned) {
+  CHECK(pool != nullptr);
+  CHECK_GE(host_slot, 0);
+  CHECK_LT(host_slot, pool->num_host_ckpt_slots);
+  const size_t slab_idx = static_cast<size_t>(host_slot / kGdnHostSlabSlots);
+  const int64_t in_slab = host_slot % kGdnHostSlabSlots;
+  std::lock_guard<std::mutex> lock(pool->host_slab_mutex);
+  CHECK_LT(slab_idx, pool->host_slabs.size());
+  const GdnHostSlab& slab = pool->host_slabs[slab_idx];
+  CHECK(slab.ptr != nullptr)
+      << "GDN Host L2 slot " << host_slot << " restored before slab allocation";
+  if (out_is_pinned != nullptr) {
+    *out_is_pinned = slab.is_pinned;
+  }
+  return slab.ptr + in_slab * pool->total_slot_bytes;
+}
 
 std::mutex& pool_mutex() {
   static std::mutex m;
@@ -397,8 +549,25 @@ void init_gdn_int8_checkpoint_pool(
   pool->head_v_dim = head_v_dim;
   pool->head_k_dim = head_k_dim;
   pool->conv_elems_per_slot = conv_elems;
+  pool->num_host_ckpt_slots = static_cast<int64_t>(
+      ::xllm::musa::resolve_gdn_host_ckpt_slots(
+          static_cast<uint32_t>(num_ckpt_slots)));
+  pool->q_layer_bytes = num_heads * head_v_dim * head_k_dim;
+  pool->s_layer_bytes = num_heads * head_k_dim * 2;
+  pool->c_layer_bytes = conv_elems * 2;
+  pool->q_slot_bytes = pool->num_layers * pool->q_layer_bytes;
+  pool->s_slot_bytes = pool->num_layers * pool->s_layer_bytes;
+  pool->c_slot_bytes = pool->num_layers * pool->c_layer_bytes;
+  pool->total_slot_bytes =
+      pool->q_slot_bytes + pool->s_slot_bytes + pool->c_slot_bytes;
   pool->ssm_dtype = ssm_dtype;
   pool->conv_dtype = conv_dtype;
+  if (pool->num_host_ckpt_slots > 0) {
+    const size_t num_slabs = static_cast<size_t>(
+        (pool->num_host_ckpt_slots + kGdnHostSlabSlots - 1) /
+        kGdnHostSlabSlots);
+    pool->host_slabs.resize(num_slabs);
+  }
 
   const XLLMOptionalDeviceGuard device_guard(*dev);
   pool->qdata = torch::empty(
@@ -410,6 +579,11 @@ void init_gdn_int8_checkpoint_pool(
   pool->conv_ckpt = torch::empty(
       {pool->num_layers, num_ckpt_slots, conv_elems},
       torch::TensorOptions().dtype(conv_dtype).device(*dev));
+  if (pool->num_host_ckpt_slots > 0) {
+    pool->staging_buf = torch::empty(
+        {pool->total_slot_bytes},
+        torch::TensorOptions().dtype(torch::kUInt8).device(*dev));
+  }
 
   torch::Tensor h_ssm_ptrs =
       torch::from_blob(ssm_ptrs.data(),
@@ -440,8 +614,10 @@ void init_gdn_int8_checkpoint_pool(
                               pool->conv_ckpt.nbytes();
   LOG(INFO) << "Initialized MUSA GDN Int8 Checkpoint Pool: layers="
             << pool->num_layers << ", active_slots=" << pool->num_active_slots
-            << ", ckpt_slots=" << pool->num_ckpt_slots
-            << ", total_bytes=" << (total_bytes / (1024.0 * 1024.0)) << " MB";
+            << ", hbm_ckpt_slots=" << pool->num_ckpt_slots
+            << ", host_l2_ckpt_slots=" << pool->num_host_ckpt_slots
+            << " (lazy " << kGdnHostSlabSlots << "-slot pinned slabs)"
+            << ", hbm_bytes=" << (total_bytes / (1024.0 * 1024.0)) << " MB";
 }
 
 int64_t get_gdn_int8_checkpoint_slots(
@@ -758,6 +934,62 @@ void unpack_gdn_int8_checkpoint_slot(
           .view(c_dst.sizes()));
 }
 
+void demote_gdn_int8_checkpoint_to_host(
+    const std::vector<::xllm::KVCache>& kv_caches,
+    int32_t src_hbm_logical_id,
+    int32_t dst_host_logical_id) {
+  auto pool = lookup_pool(kv_caches);
+  CHECK(pool != nullptr) << "GDN Int8 Checkpoint Pool is not initialized";
+  if (pool->num_host_ckpt_slots <= 0) {
+    return;
+  }
+  const int64_t hbm_slot =
+      static_cast<int64_t>(src_hbm_logical_id) - pool->num_active_slots;
+  const int64_t host_slot = static_cast<int64_t>(dst_host_logical_id) -
+                            (pool->num_active_slots + pool->num_ckpt_slots);
+  CHECK_GE(hbm_slot, 0);
+  CHECK_LT(hbm_slot, pool->num_ckpt_slots);
+  CHECK_GE(host_slot, 0);
+  CHECK_LT(host_slot, pool->num_host_ckpt_slots);
+
+  bool is_pinned = false;
+  uint8_t* dst_host =
+      ensure_host_ckpt_slot_ptr(pool.get(), host_slot, &is_pinned);
+
+  const XLLMOptionalDeviceGuard device_guard(pool->device);
+  musaStream_t stream = current_musa_stream(pool->device);
+
+  const dim3 pack_grid(64u, static_cast<uint32_t>(pool->num_layers));
+  pack_gdn_ckpt_slot_to_staging_kernel<<<pack_grid, 256, 0, stream>>>(
+      reinterpret_cast<const uint8_t*>(pool->qdata.data_ptr()),
+      reinterpret_cast<const uint8_t*>(pool->scale.data_ptr()),
+      reinterpret_cast<const uint8_t*>(pool->conv_ckpt.data_ptr()),
+      pool->staging_buf.data_ptr<uint8_t>(),
+      pool->num_ckpt_slots,
+      hbm_slot,
+      pool->q_layer_bytes,
+      pool->s_layer_bytes,
+      pool->c_layer_bytes,
+      pool->q_slot_bytes,
+      pool->s_slot_bytes);
+  check_musa_kernel_launch("pack_gdn_ckpt_slot_to_staging_kernel");
+
+  CHECK_EQ(musaMemcpyAsync(dst_host,
+                           pool->staging_buf.data_ptr(),
+                           static_cast<size_t>(pool->total_slot_bytes),
+                           musaMemcpyDeviceToHost,
+                           stream),
+           musaSuccess)
+      << "Failed D2H demote of GDN Int8 checkpoint to Host L2";
+  if (!is_pinned) {
+    musaStreamSynchronize(stream);
+  }
+  LOG_FIRST_N(INFO, 6)
+      << "MUSA GDN Int8 Checkpoint L1->Host L2 demote: hbm_slot=" << hbm_slot
+      << " (id=" << src_hbm_logical_id << ") -> host_slot=" << host_slot
+      << " (id=" << dst_host_logical_id << ")";
+}
+
 void restore_gdn_int8_checkpoint(std::vector<::xllm::KVCache>& kv_caches,
                                  int32_t active_write_id,
                                  int32_t ckpt_logical_id) {
@@ -765,21 +997,54 @@ void restore_gdn_int8_checkpoint(std::vector<::xllm::KVCache>& kv_caches,
   CHECK(pool != nullptr) << "GDN Int8 Checkpoint Pool is not initialized";
   CHECK_GT(active_write_id, 0);
   CHECK_LT(active_write_id, pool->num_active_slots);
-  const int64_t ckpt_slot =
+  const int64_t ckpt_offset =
       static_cast<int64_t>(ckpt_logical_id) - pool->num_active_slots;
-  CHECK_GE(ckpt_slot, 0);
-  CHECK_LT(ckpt_slot, pool->num_ckpt_slots);
+  CHECK_GE(ckpt_offset, 0);
+  CHECK_LT(ckpt_offset, pool->num_ckpt_slots + pool->num_host_ckpt_slots);
 
   const XLLMOptionalDeviceGuard device_guard(pool->device);
   musaStream_t stream = current_musa_stream(pool->device);
+
+  const int8_t* qdata = nullptr;
+  const __mt_bfloat16* scales = nullptr;
+  uint16_t* conv_src = nullptr;
+  int64_t effective_num_slots = pool->num_ckpt_slots;
+  int64_t effective_slot = ckpt_offset;
+
+  if (ckpt_offset < pool->num_ckpt_slots) {
+    qdata = pool->qdata.data_ptr<int8_t>();
+    scales = reinterpret_cast<const __mt_bfloat16*>(pool->scale.data_ptr());
+    conv_src = reinterpret_cast<uint16_t*>(pool->conv_ckpt.data_ptr());
+  } else {
+    const int64_t host_slot = ckpt_offset - pool->num_ckpt_slots;
+    bool is_pinned = false;
+    const uint8_t* src_host =
+        lookup_host_ckpt_slot_ptr(pool.get(), host_slot, &is_pinned);
+    uint8_t* stage_ptr = pool->staging_buf.data_ptr<uint8_t>();
+    CHECK_EQ(musaMemcpyAsync(stage_ptr,
+                             src_host,
+                             static_cast<size_t>(pool->total_slot_bytes),
+                             musaMemcpyHostToDevice,
+                             stream),
+             musaSuccess)
+        << "Failed H2D restore of GDN Int8 checkpoint from Host L2";
+    qdata = reinterpret_cast<const int8_t*>(stage_ptr);
+    scales =
+        reinterpret_cast<const __mt_bfloat16*>(stage_ptr + pool->q_slot_bytes);
+    conv_src = reinterpret_cast<uint16_t*>(
+        stage_ptr + pool->q_slot_bytes + pool->s_slot_bytes);
+    effective_num_slots = 1;
+    effective_slot = 0;
+    LOG_FIRST_N(INFO, 6)
+        << "MUSA GDN Int8 Host L2 Checkpoint restore: host_slot=" << host_slot
+        << " (logical_id=" << ckpt_logical_id
+        << ") -> active_slot=" << active_write_id;
+  }
 
   const dim3 quant_grid(static_cast<uint32_t>(pool->num_heads),
                         static_cast<uint32_t>(pool->num_layers));
   const uint64_t* ssm_ptrs =
       reinterpret_cast<const uint64_t*>(pool->d_ssm_ptrs.data_ptr<int64_t>());
-  const int8_t* qdata = pool->qdata.data_ptr<int8_t>();
-  const __mt_bfloat16* scales =
-      reinterpret_cast<const __mt_bfloat16*>(pool->scale.data_ptr());
 
   if (pool->ssm_dtype == torch::kFloat32) {
     dequantize_ssm_from_int8_kernel<float>
@@ -787,36 +1052,36 @@ void restore_gdn_int8_checkpoint(std::vector<::xllm::KVCache>& kv_caches,
             ssm_ptrs,
             qdata,
             scales,
-            pool->num_ckpt_slots,
+            effective_num_slots,
             pool->num_heads,
             pool->head_v_dim,
             pool->head_k_dim,
             active_write_id,
-            ckpt_slot);
+            effective_slot);
   } else if (pool->ssm_dtype == torch::kBFloat16) {
     dequantize_ssm_from_int8_kernel<__mt_bfloat16>
         <<<quant_grid, kQuantThreads, 0, stream>>>(
             ssm_ptrs,
             qdata,
             scales,
-            pool->num_ckpt_slots,
+            effective_num_slots,
             pool->num_heads,
             pool->head_v_dim,
             pool->head_k_dim,
             active_write_id,
-            ckpt_slot);
+            effective_slot);
   } else if (pool->ssm_dtype == torch::kFloat16) {
     dequantize_ssm_from_int8_kernel<__half>
         <<<quant_grid, kQuantThreads, 0, stream>>>(
             ssm_ptrs,
             qdata,
             scales,
-            pool->num_ckpt_slots,
+            effective_num_slots,
             pool->num_heads,
             pool->head_v_dim,
             pool->head_k_dim,
             active_write_id,
-            ckpt_slot);
+            effective_slot);
   } else {
     LOG(FATAL) << "Unsupported GDN SSM dtype for Int8 checkpoint: "
                << pool->ssm_dtype;
@@ -829,16 +1094,18 @@ void restore_gdn_int8_checkpoint(std::vector<::xllm::KVCache>& kv_caches,
                        static_cast<uint32_t>(pool->num_layers));
   copy_conv_slot_kernel<<<conv_grid, kConvCopyThreads, 0, stream>>>(
       reinterpret_cast<const uint64_t*>(pool->d_conv_ptrs.data_ptr<int64_t>()),
-      reinterpret_cast<uint16_t*>(pool->conv_ckpt.data_ptr()),
-      pool->num_ckpt_slots,
+      conv_src,
+      effective_num_slots,
       pool->conv_elems_per_slot,
       active_write_id,
-      ckpt_slot,
+      effective_slot,
       /*to_ckpt=*/false);
   check_musa_kernel_launch("copy_conv_slot_kernel(restore)");
-  LOG_FIRST_N(INFO, 3) << "MUSA GDN Int8 Checkpoint restore: ckpt_slot="
-                       << ckpt_slot << " (logical_id=" << ckpt_logical_id
-                       << ") -> active_slot=" << active_write_id;
+  if (ckpt_offset < pool->num_ckpt_slots) {
+    LOG_FIRST_N(INFO, 3) << "MUSA GDN Int8 Checkpoint restore: ckpt_slot="
+                         << ckpt_offset << " (logical_id=" << ckpt_logical_id
+                         << ") -> active_slot=" << active_write_id;
+  }
 }
 
 }  // namespace xllm::kernel::musa

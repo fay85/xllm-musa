@@ -45,7 +45,17 @@ class LinearStateBlockManager final : public BlockManagerImpl {
                                    uint32_t num_speculative_tokens = 0,
                                    bool preserve_decode_checkpoint = false,
                                    uint32_t num_ckpt_slots = 0);
-  ~LinearStateBlockManager() override = default;
+  ~LinearStateBlockManager() override;
+
+  uint32_t num_active_slots() const { return num_active_slots_; }
+  uint32_t num_ckpt_slots() const { return num_ckpt_slots_; }
+  uint32_t num_host_ckpt_slots() const { return num_host_ckpt_slots_; }
+  void set_checkpoint_backing_manager(LinearStateBlockManager* backing,
+                                      BlockManager* backing_wrapper = nullptr) {
+    ckpt_backing_manager_ = backing;
+    ckpt_backing_wrapper_ = backing_wrapper != nullptr ? backing_wrapper : backing;
+  }
+  bool has_checkpoint_for_sequence_tokens(Sequence& seq, size_t tokens);
 
   std::optional<std::vector<Block>> allocate_for_sequence(
       Sequence* seq,
@@ -74,6 +84,7 @@ class LinearStateBlockManager final : public BlockManagerImpl {
              const MMData& mm_data = MMData(),
              const Slice<XXH3Key>& block_hashes = {}) override;
   using BlockManagerImpl::cache;
+  void reset_prefix_cache() override;
 
  private:
   void cache_read_source(Sequence* seq, KVCacheState& kv_state);
@@ -87,12 +98,25 @@ class LinearStateBlockManager final : public BlockManagerImpl {
   // and Host leaves finish allocation. Keep the source in the rolling vector
   // until HierarchyBlockManagerPool moves it into an OffloadBlockPair.
   int32_t alloc_ckpt_slot_locked();
+  int32_t alloc_host_ckpt_slot_locked();
+  int32_t acquire_hbm_ckpt_slot_with_demote(
+      std::vector<BlockTransferInfo>* swap_transfers);
+  void record_hbm_ckpt_key(int32_t hbm_ckpt_id, const XXH3Key& key);
+  Block find_any_checkpoint(const XXH3Key& key);
+  bool has_any_checkpoint_or_pending(const XXH3Key& key);
 
   bool preserve_decode_checkpoint_ = false;
   uint32_t num_active_slots_ = 0;
   uint32_t num_ckpt_slots_ = 0;
+  uint32_t num_host_ckpt_slots_ = 0;
+  LinearStateBlockManager* ckpt_backing_manager_ = nullptr;
+  BlockManager* ckpt_backing_wrapper_ = nullptr;
+  std::unique_ptr<PrefixCache> host_ckpt_prefix_cache_;
   std::mutex ckpt_mutex_;
   std::vector<int32_t> ckpt_free_ids_;
+  std::vector<int32_t> host_ckpt_free_ids_;
+  std::vector<XXH3Key> hbm_ckpt_keys_;
+  std::vector<uint8_t> hbm_ckpt_has_key_;
 
   friend class BlockManagerPoolTestPeer;
 };

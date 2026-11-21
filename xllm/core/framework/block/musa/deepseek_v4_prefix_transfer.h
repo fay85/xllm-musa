@@ -33,6 +33,7 @@ enum class DeepseekV4PrefixTransferKind : int8_t {
   BLOCK_COPY = 1,
   STATE_SNAPSHOT = 2,
   GDN_SINGLEPASS_CHECKPOINT = 3,
+  GDN_HOST_DEMOTE = 4,
 };
 
 struct DeepseekV4PrefixTransfer {
@@ -59,6 +60,12 @@ bool encode_deepseek_v4_gdn_singlepass_checkpoint(int32_t live_slot_id,
                                                   int32_t offset_tokens,
                                                   bool is_end_of_step,
                                                   BlockTransferInfo* transfer);
+
+bool encode_deepseek_v4_gdn_host_demote(int32_t src_hbm_ckpt_id,
+                                        int32_t dst_host_ckpt_id,
+                                        BlockTransferInfo* transfer);
+
+uint32_t resolve_gdn_host_ckpt_slots(uint32_t num_hbm_ckpt_slots);
 
 void flush_pending_gdn_singlepass_checkpoints();
 

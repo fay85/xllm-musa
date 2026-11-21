@@ -77,6 +77,9 @@ class ConcurrentBlockManagerImpl : public BlockManager {
   size_t num_total_blocks() const override;
   double kv_cache_utilization() const override;
 
+  BlockManager* inner_manager() { return inner_.get(); }
+  const BlockManager* inner_manager() const { return inner_.get(); }
+
  private:
   std::unique_ptr<BlockManager> inner_;  // always a leaf, never a composite
   // Recursive: Block dtors call free() through this wrapper (we rewrite each

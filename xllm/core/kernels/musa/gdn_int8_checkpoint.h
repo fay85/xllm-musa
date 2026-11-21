@@ -93,6 +93,11 @@ void unpack_gdn_int8_checkpoint_slot(
     int32_t ckpt_logical_id,
     const torch::Tensor& packet);
 
+void demote_gdn_int8_checkpoint_to_host(
+    const std::vector<::xllm::KVCache>& kv_caches,
+    int32_t src_hbm_logical_id,
+    int32_t dst_host_logical_id);
+
 void restore_gdn_int8_checkpoint(std::vector<::xllm::KVCache>& kv_caches,
                                  int32_t active_write_id,
                                  int32_t ckpt_logical_id);

@@ -59,6 +59,29 @@ void finalize_host_blocks(bool publish,
   }
 }
 
+LinearStateBlockManager* unwrap_linear_state_manager(BlockManager* mgr) {
+  if (mgr == nullptr) {
+    return nullptr;
+  }
+  if (auto* concurrent = dynamic_cast<ConcurrentBlockManagerImpl*>(mgr)) {
+    return dynamic_cast<LinearStateBlockManager*>(concurrent->inner_manager());
+  }
+  return dynamic_cast<LinearStateBlockManager*>(mgr);
+}
+
+const LinearStateBlockManager* unwrap_linear_state_manager(
+    const BlockManager* mgr) {
+  if (mgr == nullptr) {
+    return nullptr;
+  }
+  if (const auto* concurrent =
+          dynamic_cast<const ConcurrentBlockManagerImpl*>(mgr)) {
+    return dynamic_cast<const LinearStateBlockManager*>(
+        concurrent->inner_manager());
+  }
+  return dynamic_cast<const LinearStateBlockManager*>(mgr);
+}
+
 // Wrap a leaf in the concurrency adapter when the D2H offload callback frees
 // blocks off-thread. Host-offload leaves always need this wrap.
 std::unique_ptr<BlockManager> wrap_for_offload(std::unique_ptr<BlockManager> l,
@@ -463,14 +486,26 @@ HierarchyBlockManagerPool::HierarchyBlockManagerPool(
       if (type == BlockType::SWA) {
         leaf = std::make_unique<SlidingWindowBlockManager>(host_options);
       } else if (type == BlockType::LINEAR) {
-        leaf = std::make_unique<LinearStateBlockManager>(
-            num_blocks,
+        LinearStateBlockManager* hbm_linear =
+            unwrap_linear_state_manager(device_leaf_it->second.leaf.get());
+        const bool share_gdn_int8_ckpts =
+            !host_options.instance_is_decode() && hbm_linear != nullptr &&
+            hbm_linear->num_ckpt_slots() > 0;
+        const uint32_t effective_host_linear_slots =
+            share_gdn_int8_ckpts ? hbm_linear->num_active_slots() : num_blocks;
+        auto host_linear = std::make_unique<LinearStateBlockManager>(
+            effective_host_linear_slots,
             host_options.block_size(),
             host_options.enable_prefix_cache(),
             host_options.instance_is_decode(),
             host_options.num_speculative_tokens(),
             host_options.instance_is_decode() &&
                 options_.enable_host_offload());
+        if (share_gdn_int8_ckpts) {
+          host_linear->set_checkpoint_backing_manager(
+              hbm_linear, device_leaf_it->second.leaf.get());
+        }
+        leaf = std::move(host_linear);
       } else {
         leaf = std::make_unique<BlockManagerImpl>(host_options);
       }
@@ -647,10 +682,15 @@ void HierarchyBlockManagerPool::collect_offload_pairs(Sequence* sequence) {
           static_cast<const CompositeBlockManager*>(block_managers_[dp_rank].get());
       const auto hbm_linear_it =
           hbm_composite->leaf_entries().find(BlockType::LINEAR);
-      if (hbm_linear_it != hbm_composite->leaf_entries().end() &&
-          hbm_block.id() >=
-              static_cast<int32_t>(
-                  hbm_linear_it->second.leaf->num_total_blocks())) {
+      const LinearStateBlockManager* hbm_linear =
+          hbm_linear_it != hbm_composite->leaf_entries().end()
+              ? unwrap_linear_state_manager(hbm_linear_it->second.leaf.get())
+              : nullptr;
+      if ((hbm_linear != nullptr && hbm_linear->num_ckpt_slots() > 0) ||
+          (hbm_linear_it != hbm_composite->leaf_entries().end() &&
+           hbm_block.id() >=
+               static_cast<int32_t>(
+                   hbm_linear_it->second.leaf->num_total_blocks()))) {
         VLOG(1) << "[HostCache][LinearOffloadSkip] seq=" << sequence->seq_id()
                 << " ckpt_block_id=" << hbm_block.id()
                 << " active_slots="
@@ -865,8 +905,23 @@ void HierarchyBlockManagerPool::collect_load_block_transfer_infos(
   std::vector<BlockTransferInfo>& load_infos =
       load_block_transfer_infos_[dp_rank];
   const size_t load_info_begin = load_infos.size();
+  const auto* hbm_composite =
+      static_cast<const CompositeBlockManager*>(block_managers_[dp_rank].get());
+  const auto hbm_linear_it =
+      hbm_composite->leaf_entries().find(BlockType::LINEAR);
+  const LinearStateBlockManager* hbm_linear =
+      hbm_linear_it != hbm_composite->leaf_entries().end()
+          ? unwrap_linear_state_manager(hbm_linear_it->second.leaf.get())
+          : nullptr;
   for (const auto& [type, entry] : host_manager->leaf_entries()) {
     if (type == BlockType::LINEAR) {
+      if (!options_.instance_is_decode() && hbm_linear != nullptr &&
+          hbm_linear->num_ckpt_slots() > 0) {
+        // Prefill GDN Int8 checkpoints (HBM L1 + Pinned Host L2) are already
+        // mounted in hbm_state[0] by allocate_prefill() and restored directly
+        // by restore_gdn_int8_checkpoint().
+        continue;
+      }
       std::vector<Block>* host_blocks = host_state.mutable_blocks(type);
       std::vector<Block>* hbm_blocks = hbm_state.mutable_blocks(type);
       if (hbm_blocks->size() < 2 || host_blocks->size() < 2) {
@@ -1009,6 +1064,24 @@ HostCacheRestorePoint HierarchyBlockManagerPool::select_host_cache_restore(
       (hbm_cached_units + selected_copy_units) * copy_unit_tokens;
 
   if (!is_swa_compressed) {
+    if (composite->leaf_combination() ==
+            CompositeBlockManager::LeafCombination::FLAT_KV_LINEAR &&
+        selected_tokens < restore_tokens) {
+      const auto hbm_lin_it = composite->leaf_entries().find(BlockType::LINEAR);
+      LinearStateBlockManager* hbm_lin =
+          hbm_lin_it != composite->leaf_entries().end()
+              ? const_cast<LinearStateBlockManager*>(
+                    unwrap_linear_state_manager(hbm_lin_it->second.leaf.get()))
+              : nullptr;
+      if (hbm_lin != nullptr && hbm_lin->num_ckpt_slots() > 0) {
+        while (selected_copy_units > 0 &&
+               !hbm_lin->has_checkpoint_for_sequence_tokens(*sequence,
+                                                            selected_tokens)) {
+          --selected_copy_units;
+          selected_tokens -= copy_unit_tokens;
+        }
+      }
+    }
     return HostCacheRestorePoint{/*restore_target_tokens=*/selected_tokens,
                                  /*copy_units=*/selected_copy_units};
   }
