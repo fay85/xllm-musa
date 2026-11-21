@@ -27,7 +27,12 @@ namespace {
 constexpr uint32_t kPrivateTransferMarker = 0x40000000u;
 constexpr uint32_t kPrivateTransferTagShift = 27u;
 constexpr uint32_t kPrivateTransferIdMask = 0x07ffffffu;
+constexpr uint32_t kGdnSinglepassCkptTag = 6u;
 constexpr uint32_t kStateSnapshotTag = 7u;
+constexpr uint32_t kGdnSinglepassSlotMask = 0xffu;
+constexpr uint32_t kGdnSinglepassEndFlagBit = (1u << 8);
+constexpr uint32_t kGdnSinglepassOffsetShift = 9u;
+constexpr uint32_t kGdnSinglepassMaxOffsetBlocks = 0x3ffffu;
 
 bool encode_source(uint32_t tag, int32_t block_id, int32_t* encoded_source) {
   if (encoded_source == nullptr || tag > kStateSnapshotTag || block_id < 0 ||
@@ -96,12 +101,56 @@ bool encode_deepseek_v4_prefix_state_snapshot(int32_t state_block_id,
   return true;
 }
 
+bool encode_deepseek_v4_gdn_singlepass_checkpoint(int32_t live_slot_id,
+                                                  int32_t ckpt_block_id,
+                                                  int32_t offset_tokens,
+                                                  bool is_end_of_step,
+                                                  BlockTransferInfo* transfer) {
+  if (transfer == nullptr || live_slot_id <= 0 ||
+      static_cast<uint32_t>(live_slot_id) > kGdnSinglepassSlotMask ||
+      ckpt_block_id < 0 || offset_tokens <= 0 || (offset_tokens % 64) != 0) {
+    return false;
+  }
+  const uint32_t offset_blocks = static_cast<uint32_t>(offset_tokens / 64);
+  if (offset_blocks == 0u || offset_blocks > kGdnSinglepassMaxOffsetBlocks) {
+    return false;
+  }
+  const uint32_t packed =
+      (offset_blocks << kGdnSinglepassOffsetShift) |
+      (is_end_of_step ? kGdnSinglepassEndFlagBit : 0u) |
+      (static_cast<uint32_t>(live_slot_id) & kGdnSinglepassSlotMask);
+  int32_t encoded_source = -1;
+  if (!encode_source(
+          kGdnSinglepassCkptTag, static_cast<int32_t>(packed), &encoded_source)) {
+    return false;
+  }
+  *transfer = BlockTransferInfo(encoded_source, ckpt_block_id);
+  return true;
+}
+
 DeepseekV4PrefixTransfer decode_deepseek_v4_prefix_transfer(
     const BlockTransferInfo& transfer) {
   DeepseekV4PrefixTransfer decoded;
   uint32_t tag = 0;
   int32_t block_id = -1;
   if (!decode_source(transfer.src_block_id, &tag, &block_id)) {
+    return decoded;
+  }
+  if (tag == kGdnSinglepassCkptTag && transfer.dst_block_id >= 0) {
+    const uint32_t packed = static_cast<uint32_t>(block_id);
+    const uint32_t offset_blocks = packed >> kGdnSinglepassOffsetShift;
+    const int32_t live_slot_id =
+        static_cast<int32_t>(packed & kGdnSinglepassSlotMask);
+    if (offset_blocks > 0u && live_slot_id > 0) {
+      decoded.kind = DeepseekV4PrefixTransferKind::GDN_SINGLEPASS_CHECKPOINT;
+      decoded.block_type = BlockType::LINEAR;
+      decoded.src_block_id = live_slot_id;
+      decoded.dst_block_id = transfer.dst_block_id;
+      decoded.gdn_ckpt_offset_tokens = static_cast<int32_t>(offset_blocks * 64u);
+      decoded.gdn_ckpt_is_end_of_step =
+          (packed & kGdnSinglepassEndFlagBit) != 0u;
+      return decoded;
+    }
     return decoded;
   }
   if (tag == kStateSnapshotTag && transfer.dst_block_id < 0 &&

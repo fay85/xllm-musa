@@ -211,9 +211,94 @@ std::mutex& pool_mutex() {
   return m;
 }
 
+template <typename SsmT>
+__global__ void quantize_single_layer_ssm_to_int8_kernel(
+    const SsmT* __restrict__ src_layer_ssm,
+    int8_t* __restrict__ qdata,
+    __mt_bfloat16* __restrict__ scales,
+    int64_t layer,
+    int64_t num_ckpt_slots,
+    int64_t num_heads,
+    int64_t head_v_dim,
+    int64_t head_k_dim,
+    int64_t ckpt_slot) {
+  const int64_t head = static_cast<int64_t>(blockIdx.x);
+  const int64_t head_elems = head_v_dim * head_k_dim;
+  const SsmT* __restrict__ src = src_layer_ssm + head * head_elems;
+  int8_t* __restrict__ dst_q =
+      qdata + ((layer * num_ckpt_slots + ckpt_slot) * num_heads + head) *
+                  head_elems;
+  __mt_bfloat16* __restrict__ dst_scale =
+      scales +
+      ((layer * num_ckpt_slots + ckpt_slot) * num_heads + head) * head_k_dim;
+
+  for (int64_t k = static_cast<int64_t>(threadIdx.x); k < head_k_dim;
+       k += static_cast<int64_t>(blockDim.x)) {
+    float amax = 0.0f;
+    for (int64_t v = 0; v < head_v_dim; ++v) {
+      const float val = fabsf(ssm_to_float(src[v * head_k_dim + k]));
+      amax = fmaxf(amax, val);
+    }
+    const float raw_scale = fmaxf(amax, 1e-8f) / 127.0f;
+    const __mt_bfloat16 scale_bf16 = __float2bfloat16_rn(raw_scale);
+    float q_scale = __bfloat162float(scale_bf16);
+    if (q_scale < 1e-12f) {
+      q_scale = 1e-12f;
+    }
+    const float inv_scale = 1.0f / q_scale;
+    dst_scale[k] = scale_bf16;
+
+    for (int64_t v = 0; v < head_v_dim; ++v) {
+      const float val = ssm_to_float(src[v * head_k_dim + k]);
+      float qf = nearbyintf(val * inv_scale);
+      qf = fminf(fmaxf(qf, -127.0f), 127.0f);
+      dst_q[v * head_k_dim + k] = static_cast<int8_t>(qf);
+    }
+  }
+}
+
+__global__ void copy_single_layer_conv_to_ckpt_kernel(
+    const uint16_t* __restrict__ src_conv,
+    uint16_t* __restrict__ conv_ckpt,
+    int64_t layer,
+    int64_t num_ckpt_slots,
+    int64_t conv_elems_per_slot,
+    int64_t src_cols,
+    int64_t dst_cols,
+    int64_t ckpt_slot) {
+  const int64_t idx =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (idx >= conv_elems_per_slot) {
+    return;
+  }
+  uint16_t* __restrict__ ckpt_ptr =
+      conv_ckpt + (layer * num_ckpt_slots + ckpt_slot) * conv_elems_per_slot;
+  if (src_cols == dst_cols) {
+    ckpt_ptr[idx] = src_conv[idx];
+  } else {
+    const int64_t row = idx / dst_cols;
+    const int64_t col = idx % dst_cols;
+    ckpt_ptr[idx] =
+        (col < src_cols) ? src_conv[row * src_cols + col] : uint16_t{0};
+  }
+}
+
+thread_local ScopedGdnSinglepassCheckpointPlan* tls_active_singlepass_plan =
+    nullptr;
+
 std::unordered_map<const void*, std::shared_ptr<GdnInt8CheckpointPool>>&
 pool_registry() {
   static std::unordered_map<const void*, std::shared_ptr<GdnInt8CheckpointPool>>
+      reg;
+  return reg;
+}
+
+std::unordered_map<const void*,
+                   std::pair<std::shared_ptr<GdnInt8CheckpointPool>, int64_t>>&
+layer_pool_registry() {
+  static std::unordered_map<
+      const void*,
+      std::pair<std::shared_ptr<GdnInt8CheckpointPool>, int64_t>>
       reg;
   return reg;
 }
@@ -344,6 +429,11 @@ void init_gdn_int8_checkpoint_pool(
   {
     std::lock_guard<std::mutex> lock(pool_mutex());
     pool_registry()[key] = pool;
+    auto& layer_reg = layer_pool_registry();
+    for (size_t layer_i = 0; layer_i < ssm_ptrs.size(); ++layer_i) {
+      layer_reg[reinterpret_cast<const void*>(ssm_ptrs[layer_i])] =
+          std::make_pair(pool, static_cast<int64_t>(layer_i));
+    }
   }
 
   const int64_t total_bytes = pool->qdata.nbytes() + pool->scale.nbytes() +
@@ -441,6 +531,231 @@ void store_gdn_int8_checkpoint(const std::vector<::xllm::KVCache>& kv_caches,
   LOG_FIRST_N(INFO, 3) << "MUSA GDN Int8 Checkpoint store: active_slot="
                        << active_slot_id << " -> ckpt_slot=" << ckpt_slot
                        << " (logical_id=" << ckpt_logical_id << ")";
+}
+
+ScopedGdnSinglepassCheckpointPlan::ScopedGdnSinglepassCheckpointPlan(
+    std::vector<GdnSinglepassInteriorTarget> targets)
+    : targets_(std::move(targets)), prev_(tls_active_singlepass_plan) {
+  tls_active_singlepass_plan = this;
+}
+
+ScopedGdnSinglepassCheckpointPlan::~ScopedGdnSinglepassCheckpointPlan() {
+  tls_active_singlepass_plan = prev_;
+}
+
+bool has_active_gdn_singlepass_checkpoints() {
+  return tls_active_singlepass_plan != nullptr &&
+         !tls_active_singlepass_plan->targets().empty();
+}
+
+std::vector<GdnSinglepassInteriorTarget>
+get_active_gdn_singlepass_checkpoints_for_slot(int32_t live_slot_id) {
+  std::vector<GdnSinglepassInteriorTarget> out;
+  if (tls_active_singlepass_plan == nullptr || live_slot_id <= 0) {
+    return out;
+  }
+  for (const auto& t : tls_active_singlepass_plan->targets()) {
+    if (t.live_slot_id == live_slot_id) {
+      out.push_back(t);
+    }
+  }
+  std::sort(out.begin(),
+            out.end(),
+            [](const GdnSinglepassInteriorTarget& a,
+               const GdnSinglepassInteriorTarget& b) {
+              return a.offset_tokens < b.offset_tokens;
+            });
+  return out;
+}
+
+void store_gdn_int8_checkpoint_from_tensors(
+    const torch::Tensor& layer_ssm_cache,
+    const torch::Tensor& layer_ssm_state,
+    const torch::Tensor& layer_conv_state,
+    int32_t ckpt_logical_id) {
+  CHECK(layer_ssm_cache.defined()) << "layer_ssm_cache must be defined";
+  std::shared_ptr<GdnInt8CheckpointPool> pool;
+  int64_t layer_idx = -1;
+  {
+    std::lock_guard<std::mutex> lock(pool_mutex());
+    auto& layer_reg = layer_pool_registry();
+    auto it = layer_reg.find(layer_ssm_cache.data_ptr());
+    if (it != layer_reg.end()) {
+      pool = it->second.first;
+      layer_idx = it->second.second;
+    }
+  }
+  CHECK(pool != nullptr && layer_idx >= 0)
+      << "GDN Int8 Checkpoint layer pool not found for layer_ssm_cache";
+  const int64_t ckpt_slot =
+      static_cast<int64_t>(ckpt_logical_id) - pool->num_active_slots;
+  CHECK_GE(ckpt_slot, 0);
+  CHECK_LT(ckpt_slot, pool->num_ckpt_slots);
+
+  const XLLMOptionalDeviceGuard device_guard(pool->device);
+  musaStream_t stream = current_musa_stream(pool->device);
+
+  torch::Tensor ssm_contig = layer_ssm_state;
+  if (ssm_contig.scalar_type() != pool->ssm_dtype) {
+    ssm_contig = ssm_contig.to(pool->ssm_dtype);
+  }
+  if (!ssm_contig.is_contiguous()) {
+    ssm_contig = ssm_contig.contiguous();
+  }
+  CHECK_EQ(ssm_contig.dim(), 3);
+  CHECK_EQ(ssm_contig.size(0), pool->num_heads);
+  CHECK_EQ(ssm_contig.size(1), pool->head_v_dim);
+  CHECK_EQ(ssm_contig.size(2), pool->head_k_dim);
+
+  torch::Tensor conv_contig = layer_conv_state;
+  if (conv_contig.scalar_type() != pool->conv_dtype) {
+    conv_contig = conv_contig.to(pool->conv_dtype);
+  }
+  if (!conv_contig.is_contiguous()) {
+    conv_contig = conv_contig.contiguous();
+  }
+  CHECK_EQ(conv_contig.dim(), 2);
+  CHECK_GT(conv_contig.size(0), 0);
+  CHECK_EQ(pool->conv_elems_per_slot % conv_contig.size(0), 0);
+  const int64_t src_conv_cols = conv_contig.size(1);
+  const int64_t dst_conv_cols = pool->conv_elems_per_slot / conv_contig.size(0);
+  CHECK_GT(src_conv_cols, 0);
+  CHECK_LE(src_conv_cols, dst_conv_cols);
+
+  const dim3 quant_grid(static_cast<uint32_t>(pool->num_heads), 1u);
+  int8_t* qdata = pool->qdata.data_ptr<int8_t>();
+  __mt_bfloat16* scales =
+      reinterpret_cast<__mt_bfloat16*>(pool->scale.data_ptr());
+
+  if (pool->ssm_dtype == torch::kFloat32) {
+    quantize_single_layer_ssm_to_int8_kernel<float>
+        <<<quant_grid, kQuantThreads, 0, stream>>>(
+            ssm_contig.data_ptr<float>(),
+            qdata,
+            scales,
+            layer_idx,
+            pool->num_ckpt_slots,
+            pool->num_heads,
+            pool->head_v_dim,
+            pool->head_k_dim,
+            ckpt_slot);
+  } else if (pool->ssm_dtype == torch::kBFloat16) {
+    quantize_single_layer_ssm_to_int8_kernel<__mt_bfloat16>
+        <<<quant_grid, kQuantThreads, 0, stream>>>(
+            reinterpret_cast<const __mt_bfloat16*>(ssm_contig.data_ptr()),
+            qdata,
+            scales,
+            layer_idx,
+            pool->num_ckpt_slots,
+            pool->num_heads,
+            pool->head_v_dim,
+            pool->head_k_dim,
+            ckpt_slot);
+  } else if (pool->ssm_dtype == torch::kFloat16) {
+    quantize_single_layer_ssm_to_int8_kernel<__half>
+        <<<quant_grid, kQuantThreads, 0, stream>>>(
+            reinterpret_cast<const __half*>(ssm_contig.data_ptr()),
+            qdata,
+            scales,
+            layer_idx,
+            pool->num_ckpt_slots,
+            pool->num_heads,
+            pool->head_v_dim,
+            pool->head_k_dim,
+            ckpt_slot);
+  } else {
+    LOG(FATAL) << "Unsupported GDN SSM dtype for Int8 checkpoint: "
+               << pool->ssm_dtype;
+  }
+  check_musa_kernel_launch("quantize_single_layer_ssm_to_int8_kernel");
+
+  const int64_t conv_blocks_x =
+      (pool->conv_elems_per_slot + kConvCopyThreads - 1) / kConvCopyThreads;
+  const dim3 conv_grid(static_cast<uint32_t>(conv_blocks_x), 1u);
+  copy_single_layer_conv_to_ckpt_kernel<<<conv_grid, kConvCopyThreads, 0, stream>>>(
+      reinterpret_cast<const uint16_t*>(conv_contig.data_ptr()),
+      reinterpret_cast<uint16_t*>(pool->conv_ckpt.data_ptr()),
+      layer_idx,
+      pool->num_ckpt_slots,
+      pool->conv_elems_per_slot,
+      src_conv_cols,
+      dst_conv_cols,
+      ckpt_slot);
+  check_musa_kernel_launch("copy_single_layer_conv_to_ckpt_kernel");
+
+  if (layer_idx == 0 && tls_active_singlepass_plan != nullptr) {
+    tls_active_singlepass_plan->mark_written(ckpt_logical_id);
+  }
+  LOG_FIRST_N(INFO, 6)
+      << "MUSA GDN Single-Pass Interior Checkpoint store: ckpt_slot="
+      << ckpt_slot << " (logical_id=" << ckpt_logical_id << ")";
+}
+
+torch::Tensor allocate_gdn_int8_checkpoint_packet(
+    const std::vector<::xllm::KVCache>& kv_caches) {
+  auto pool = lookup_pool(kv_caches);
+  CHECK(pool != nullptr) << "GDN Int8 Checkpoint Pool is not initialized";
+  const XLLMOptionalDeviceGuard device_guard(pool->device);
+  const int64_t q_bytes =
+      pool->num_layers * pool->num_heads * pool->head_v_dim * pool->head_k_dim;
+  const int64_t s_bytes =
+      pool->num_layers * pool->num_heads * pool->head_k_dim * 2;
+  const int64_t c_bytes = pool->num_layers * pool->conv_elems_per_slot * 2;
+  return torch::empty(
+      {q_bytes + s_bytes + c_bytes},
+      torch::TensorOptions().dtype(torch::kUInt8).device(pool->device));
+}
+
+torch::Tensor pack_gdn_int8_checkpoint_slot(
+    const std::vector<::xllm::KVCache>& kv_caches,
+    int32_t ckpt_logical_id) {
+  auto pool = lookup_pool(kv_caches);
+  CHECK(pool != nullptr) << "GDN Int8 Checkpoint Pool is not initialized";
+  const int64_t ckpt_slot =
+      static_cast<int64_t>(ckpt_logical_id) - pool->num_active_slots;
+  CHECK_GE(ckpt_slot, 0);
+  CHECK_LT(ckpt_slot, pool->num_ckpt_slots);
+  const XLLMOptionalDeviceGuard device_guard(pool->device);
+  torch::Tensor q_part =
+      pool->qdata.select(1, ckpt_slot).contiguous().view(torch::kUInt8).view({-1});
+  torch::Tensor s_part =
+      pool->scale.select(1, ckpt_slot).contiguous().view(torch::kUInt8).view({-1});
+  torch::Tensor c_part =
+      pool->conv_ckpt.select(1, ckpt_slot).contiguous().view(torch::kUInt8).view({-1});
+  return torch::cat({q_part, s_part, c_part}, /*dim=*/0);
+}
+
+void unpack_gdn_int8_checkpoint_slot(
+    const std::vector<::xllm::KVCache>& kv_caches,
+    int32_t ckpt_logical_id,
+    const torch::Tensor& packet) {
+  auto pool = lookup_pool(kv_caches);
+  CHECK(pool != nullptr) << "GDN Int8 Checkpoint Pool is not initialized";
+  const int64_t ckpt_slot =
+      static_cast<int64_t>(ckpt_logical_id) - pool->num_active_slots;
+  CHECK_GE(ckpt_slot, 0);
+  CHECK_LT(ckpt_slot, pool->num_ckpt_slots);
+  const XLLMOptionalDeviceGuard device_guard(pool->device);
+  const int64_t q_bytes =
+      pool->num_layers * pool->num_heads * pool->head_v_dim * pool->head_k_dim;
+  const int64_t s_bytes =
+      pool->num_layers * pool->num_heads * pool->head_k_dim * 2;
+  const int64_t c_bytes = pool->num_layers * pool->conv_elems_per_slot * 2;
+  CHECK_EQ(packet.numel(), q_bytes + s_bytes + c_bytes);
+
+  torch::Tensor q_dst = pool->qdata.select(1, ckpt_slot);
+  torch::Tensor s_dst = pool->scale.select(1, ckpt_slot);
+  torch::Tensor c_dst = pool->conv_ckpt.select(1, ckpt_slot);
+  q_dst.copy_(
+      packet.narrow(0, 0, q_bytes).view(torch::kInt8).view(q_dst.sizes()));
+  s_dst.copy_(
+      packet.narrow(0, q_bytes, s_bytes)
+          .view(pool->scale.scalar_type())
+          .view(s_dst.sizes()));
+  c_dst.copy_(
+      packet.narrow(0, q_bytes + s_bytes, c_bytes)
+          .view(pool->conv_dtype)
+          .view(c_dst.sizes()));
 }
 
 void restore_gdn_int8_checkpoint(std::vector<::xllm::KVCache>& kv_caches,

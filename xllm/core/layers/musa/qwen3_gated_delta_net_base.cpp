@@ -25,6 +25,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "core/kernels/musa/gdn_int8_checkpoint.h"
 #include "core/layers/musa/pcp_context.h"
 #include "kernels/musa/attention_runner.h"
 #include "kernels/musa/gdn_ops.h"
@@ -1076,11 +1077,15 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_flat_mixed_qkv_decode =
       use_fused_gdn_decode || use_mate_gdn_decode;
 
+  torch::Tensor pre_conv_rows;
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input =
         use_packed_multiseq_prefill
             ? mixed_qkv.squeeze(0)
             : reshape_qkvz_unpad(attn_metadata, mixed_qkv);
+    if (xllm::kernel::musa::has_active_gdn_singlepass_checkpoints()) {
+      pre_conv_rows = conv_input;
+    }
     // Canonical recurrent-state validity from linear_state_validity_mask.
     // Do not derive from kv_cache_tokens_nums: prefix-cached tokens do not
     // imply a valid GDN recurrent state (see AttentionMetadataBuilder tests).
@@ -1317,10 +1322,176 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       }
       mate_params.initial_state = initial_state;
     }
-    torch::Tensor mate_final_state;
-    std::tie(core_attn_out, mate_final_state) =
-        xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
-    const torch::Tensor final_state = mate_final_state.to(ssm_cache.dtype());
+    auto get_cached_single_seq_cu_seqlens =
+        [](int32_t seg_len, const torch::Device& dev) -> torch::Tensor {
+      thread_local std::unordered_map<uint64_t, torch::Tensor> tls_cu_cache;
+      const uint64_t cache_key =
+          (static_cast<uint64_t>(static_cast<uint32_t>(dev.index())) << 32) |
+          static_cast<uint32_t>(seg_len);
+      auto it = tls_cu_cache.find(cache_key);
+      if (it != tls_cu_cache.end()) {
+        return it->second;
+      }
+      if (tls_cu_cache.size() >= 128) {
+        tls_cu_cache.clear();
+      }
+      torch::Tensor t =
+          torch::tensor({int32_t{0}, seg_len},
+                        torch::TensorOptions().dtype(torch::kInt32))
+              .to(dev);
+      tls_cu_cache.emplace(cache_key, t);
+      return t;
+    };
+
+    const int64_t num_seqs_in_pack =
+        use_packed_multiseq_prefill ? metadata_num_seqs : int64_t{1};
+    bool has_local_singlepass_ckpt = false;
+    std::vector<std::vector<xllm::kernel::musa::GdnSinglepassInteriorTarget>>
+        local_seq_targets;
+    if (pre_conv_rows.defined() &&
+        xllm::kernel::musa::has_active_gdn_singlepass_checkpoints() &&
+        !input_params.embedding.linear_state_ids.empty()) {
+      local_seq_targets.resize(static_cast<size_t>(num_seqs_in_pack));
+      for (int64_t s = 0; s < num_seqs_in_pack; ++s) {
+        const size_t su = static_cast<size_t>(s);
+        if (su >= input_params.embedding.linear_state_ids.size()) {
+          continue;
+        }
+        const int32_t live_slot_s =
+            input_params.embedding.linear_state_ids[su];
+        auto slot_targets = xllm::kernel::musa::
+            get_active_gdn_singlepass_checkpoints_for_slot(live_slot_s);
+        if (slot_targets.empty()) {
+          continue;
+        }
+        const int64_t local_start = (*mate_params.cu_seqlens_host)[su];
+        const int64_t local_len =
+            (*mate_params.cu_seqlens_host)[su + 1] - local_start;
+        const int64_t valid_local_len =
+            (!attn_metadata.q_seq_lens_vec.empty() &&
+             su < attn_metadata.q_seq_lens_vec.size())
+                ? std::min<int64_t>(local_len, attn_metadata.q_seq_lens_vec[su])
+                : local_len;
+        int64_t seq_global_offset = 0;
+        if (pcp_context != nullptr && pcp_context->cp_rank == 1) {
+          if (!pcp_context->is_batch) {
+            seq_global_offset = pcp_context->row_offsets[1];
+          } else if (su < pcp_context->rank0_seq_ends.size()) {
+            const int32_t prev_end =
+                (su == 0) ? 0 : pcp_context->rank0_seq_ends[su - 1];
+            seq_global_offset = pcp_context->rank0_seq_ends[su] - prev_end;
+          }
+        }
+        for (const auto& t : slot_targets) {
+          const int64_t rel_c =
+              static_cast<int64_t>(t.offset_tokens) - seq_global_offset;
+          if (rel_c >= conv_state_len && rel_c <= valid_local_len) {
+            local_seq_targets[su].push_back(t);
+            has_local_singlepass_ckpt = true;
+          }
+        }
+      }
+    }
+
+    torch::Tensor final_state;
+    if (!has_local_singlepass_ckpt) {
+      torch::Tensor mate_final_state;
+      std::tie(core_attn_out, mate_final_state) =
+          xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
+      final_state = mate_final_state.to(ssm_cache.dtype());
+    } else {
+      core_attn_out = torch::empty_like(processed_v);
+      std::vector<torch::Tensor> seq_final_states;
+      seq_final_states.reserve(static_cast<size_t>(num_seqs_in_pack));
+      for (int64_t s = 0; s < num_seqs_in_pack; ++s) {
+        const size_t su = static_cast<size_t>(s);
+        const int64_t local_start = (*mate_params.cu_seqlens_host)[su];
+        const int64_t local_len =
+            (*mate_params.cu_seqlens_host)[su + 1] - local_start;
+        int64_t seq_global_offset = 0;
+        if (pcp_context != nullptr && pcp_context->cp_rank == 1) {
+          if (!pcp_context->is_batch) {
+            seq_global_offset = pcp_context->row_offsets[1];
+          } else if (su < pcp_context->rank0_seq_ends.size()) {
+            const int32_t prev_end =
+                (su == 0) ? 0 : pcp_context->rank0_seq_ends[su - 1];
+            seq_global_offset = pcp_context->rank0_seq_ends[su] - prev_end;
+          }
+        }
+        std::optional<torch::Tensor> cur_state =
+            mate_params.initial_state.has_value()
+                ? std::optional<torch::Tensor>(
+                      mate_params.initial_state->narrow(0, s, 1).contiguous())
+                : std::nullopt;
+
+        const auto& targets_s = local_seq_targets[su];
+        std::vector<int64_t> cut_points;
+        cut_points.reserve(targets_s.size() + 1);
+        for (const auto& t : targets_s) {
+          const int64_t rel_c =
+              static_cast<int64_t>(t.offset_tokens) - seq_global_offset;
+          if (cut_points.empty() || cut_points.back() != rel_c) {
+            cut_points.push_back(rel_c);
+          }
+        }
+        if (cut_points.empty() || cut_points.back() < local_len) {
+          cut_points.push_back(local_len);
+        }
+
+        int64_t prev_c = 0;
+        size_t target_cursor = 0;
+        for (int64_t next_c : cut_points) {
+          const int64_t seg_len = next_c - prev_c;
+          CHECK_GT(seg_len, 0);
+          xllm::kernel::musa::MateGatedDeltaRulePrefillParams seg_params;
+          seg_params.q = processed_q.narrow(1, local_start + prev_c, seg_len);
+          seg_params.k = processed_k.narrow(1, local_start + prev_c, seg_len);
+          seg_params.v = processed_v.narrow(1, local_start + prev_c, seg_len);
+          seg_params.g = g.narrow(1, local_start + prev_c, seg_len);
+          seg_params.beta = beta.narrow(1, local_start + prev_c, seg_len);
+          seg_params.scale = mate_params.scale;
+          seg_params.cu_seqlens = get_cached_single_seq_cu_seqlens(
+              static_cast<int32_t>(seg_len), device);
+          seg_params.cu_seqlens_host = {
+              int32_t{0}, static_cast<int32_t>(seg_len)};
+          seg_params.initial_state = cur_state;
+
+          torch::Tensor seg_out;
+          torch::Tensor seg_final;
+          std::tie(seg_out, seg_final) =
+              xllm::kernel::musa::mate_gated_delta_rule_prefill(seg_params);
+          core_attn_out.narrow(1, local_start + prev_c, seg_len).copy_(seg_out);
+          cur_state = seg_final.to(ssm_cache.dtype());
+
+          while (target_cursor < targets_s.size()) {
+            const int64_t rel_t =
+                static_cast<int64_t>(targets_s[target_cursor].offset_tokens) -
+                seq_global_offset;
+            if (rel_t != next_c) {
+              break;
+            }
+            torch::Tensor conv_3 =
+                pre_conv_rows
+                    .narrow(0,
+                            local_start + next_c - conv_state_len,
+                            conv_state_len)
+                    .t()
+                    .contiguous();
+            xllm::kernel::musa::store_gdn_int8_checkpoint_from_tensors(
+                ssm_cache,
+                cur_state->squeeze(0),
+                conv_3,
+                targets_s[target_cursor].ckpt_logical_id);
+            ++target_cursor;
+          }
+          prev_c = next_c;
+        }
+        seq_final_states.push_back(*cur_state);
+      }
+      final_state = (seq_final_states.size() == 1)
+                        ? seq_final_states[0]
+                        : torch::cat(seq_final_states, /*dim=*/0);
+    }
     ssm_cache.index_put_({linear_state_base_indices}, final_state);
     if (pcp_context != nullptr) {
       musa_pcp::send_prefix_rows(final_state, *pcp_context);

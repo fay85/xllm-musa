@@ -32,6 +32,7 @@ enum class DeepseekV4PrefixTransferKind : int8_t {
   NONE = 0,
   BLOCK_COPY = 1,
   STATE_SNAPSHOT = 2,
+  GDN_SINGLEPASS_CHECKPOINT = 3,
 };
 
 struct DeepseekV4PrefixTransfer {
@@ -40,6 +41,8 @@ struct DeepseekV4PrefixTransfer {
   int32_t src_block_id = -1;
   int32_t dst_block_id = -1;
   int32_t prefix_tokens = 0;
+  int32_t gdn_ckpt_offset_tokens = 0;
+  bool gdn_ckpt_is_end_of_step = false;
 };
 
 bool encode_deepseek_v4_prefix_block_copy(BlockType block_type,
@@ -50,6 +53,14 @@ bool encode_deepseek_v4_prefix_block_copy(BlockType block_type,
 bool encode_deepseek_v4_prefix_state_snapshot(int32_t state_block_id,
                                               int32_t prefix_tokens,
                                               BlockTransferInfo* transfer);
+
+bool encode_deepseek_v4_gdn_singlepass_checkpoint(int32_t live_slot_id,
+                                                  int32_t ckpt_block_id,
+                                                  int32_t offset_tokens,
+                                                  bool is_end_of_step,
+                                                  BlockTransferInfo* transfer);
+
+void flush_pending_gdn_singlepass_checkpoints();
 
 DeepseekV4PrefixTransfer decode_deepseek_v4_prefix_transfer(
     const BlockTransferInfo& transfer);

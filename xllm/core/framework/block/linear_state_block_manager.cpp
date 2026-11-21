@@ -22,6 +22,11 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include <cstdlib>
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
+
 #include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/model/model_input_params.h"
@@ -48,7 +53,78 @@ BlockManager::Options make_linear_state_options(
   return options;
 }
 
-bool should_publish_linear_checkpoint(size_t cached_tokens,
+inline bool is_chat_im_start_token(int32_t token_id) {
+  // Qwen3.5 / Qwen3.8 (<|im_start|>=248045) and Qwen2.5 / Qwen3 (151644).
+  return token_id == 248045 || token_id == 151644;
+}
+
+inline bool is_chat_im_end_token(int32_t token_id) {
+  // Qwen3.5 / Qwen3.8 (<|im_end|>=248046) and Qwen2.5 / Qwen3 (151645).
+  return token_id == 248046 || token_id == 151645;
+}
+
+struct ChatLinearCheckpointBounds {
+  bool has_chat_boundaries = false;
+  size_t hist_ckpt = 0;
+  size_t end_ckpt = 0;
+};
+
+ChatLinearCheckpointBounds find_chat_linear_checkpoint_bounds(
+    const Slice<int32_t>& tokens,
+    size_t total_tokens,
+    size_t align_stride) {
+  ChatLinearCheckpointBounds out;
+  if (align_stride == 0 || total_tokens <= align_stride ||
+      tokens.size() < total_tokens) {
+    return out;
+  }
+  const size_t scan_limit = std::min<size_t>(total_tokens, 8192);
+  const size_t min_idx = total_tokens - scan_limit;
+  constexpr size_t kNpos = std::numeric_limits<size_t>::max();
+
+  size_t last_im_end = kNpos;
+  for (size_t i = total_tokens; i > min_idx; --i) {
+    if (is_chat_im_end_token(tokens[i - 1])) {
+      last_im_end = i - 1;
+      break;
+    }
+  }
+  if (last_im_end == kNpos) {
+    return out;
+  }
+  out.has_chat_boundaries = true;
+  const size_t safe_end_limit =
+      std::min<size_t>(total_tokens - 1, last_im_end + 3);
+  if (safe_end_limit >= align_stride) {
+    out.end_ckpt = (safe_end_limit / align_stride) * align_stride;
+  }
+
+  // Locate the <|im_start|> opening the final message (preceded by <|im_end|>).
+  for (size_t i = last_im_end; i > min_idx; --i) {
+    const size_t idx = i - 1;
+    if (!is_chat_im_start_token(tokens[idx])) {
+      continue;
+    }
+    bool preceded_by_im_end = false;
+    const size_t lookback = std::min<size_t>(idx, 4);
+    for (size_t d = 1; d <= lookback; ++d) {
+      if (is_chat_im_end_token(tokens[idx - d])) {
+        preceded_by_im_end = true;
+        break;
+      }
+    }
+    if (preceded_by_im_end) {
+      if (idx >= align_stride) {
+        out.hist_ckpt = (idx / align_stride) * align_stride;
+      }
+      break;
+    }
+  }
+  return out;
+}
+
+bool should_publish_linear_checkpoint(const Sequence& seq,
+                                      size_t cached_tokens,
                                       size_t total_tokens,
                                       size_t chunk_stride) {
   if (cached_tokens == 0 || chunk_stride == 0 ||
@@ -63,11 +139,24 @@ bool should_publish_linear_checkpoint(size_t cached_tokens,
   const size_t major_stride = std::max<size_t>(
       chunk_stride,
       configured_chunk > 0 ? static_cast<size_t>(configured_chunk) : 8192);
+  if (cached_tokens % major_stride == 0) {
+    return true;
+  }
   const size_t fine_stride =
       std::max<size_t>(chunk_stride, std::min<size_t>(major_stride, 2048));
-  const size_t target_ckpt =
+  const size_t fallback_ckpt =
       ((total_tokens - 1) / fine_stride) * fine_stride;
-  return cached_tokens == target_ckpt || cached_tokens % major_stride == 0;
+  if (cached_tokens == fallback_ckpt) {
+    return true;
+  }
+  const ChatLinearCheckpointBounds bounds =
+      find_chat_linear_checkpoint_bounds(
+          seq.tokens(), total_tokens, chunk_stride);
+  if (bounds.has_chat_boundaries &&
+      (cached_tokens == bounds.hist_ckpt || cached_tokens == bounds.end_ckpt)) {
+    return true;
+  }
+  return false;
 }
 
 bool crosses_checkpoint(size_t begin, size_t end, size_t checkpoint_stride) {
@@ -76,7 +165,90 @@ bool crosses_checkpoint(size_t begin, size_t end, size_t checkpoint_stride) {
   return begin / checkpoint_stride != end / checkpoint_stride;
 }
 
+bool singlepass_gdn_ckpt_enabled() {
+  const char* env = std::getenv("XLLM_GDN_SINGLEPASS_CKPT");
+  if (env == nullptr || env[0] == '\0') {
+    return true;
+  }
+  return std::string(env) != "0" && std::string(env) != "false" &&
+         std::string(env) != "FALSE";
+}
+
+size_t read_env_size_t(const char* name, size_t default_val) {
+  const char* env = std::getenv(name);
+  if (env == nullptr || env[0] == '\0') {
+    return default_val;
+  }
+  char* endptr = nullptr;
+  const unsigned long long parsed = std::strtoull(env, &endptr, 10);
+  if (endptr == env) {
+    return default_val;
+  }
+  return static_cast<size_t>(parsed);
+}
+
+struct PendingSinglepassGdnEntry {
+  PrefixCache* prefix_cache = nullptr;
+  XXH3Key key;
+  Block ckpt_block;
+};
+
+std::mutex& pending_singlepass_mutex() {
+  static std::mutex m;
+  return m;
+}
+
+std::vector<PendingSinglepassGdnEntry>& pending_singlepass_entries() {
+  static std::vector<PendingSinglepassGdnEntry> entries;
+  return entries;
+}
+
+bool has_pending_singlepass_key(const PrefixCache* cache, const XXH3Key& key) {
+  std::lock_guard<std::mutex> lock(pending_singlepass_mutex());
+  FixedStringKeyEqual eq;
+  for (const auto& entry : pending_singlepass_entries()) {
+    if (entry.prefix_cache == cache && eq(entry.key, key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void enqueue_pending_singlepass_entry(PrefixCache* cache,
+                                      const XXH3Key& key,
+                                      Block&& ckpt_block) {
+  std::lock_guard<std::mutex> lock(pending_singlepass_mutex());
+  pending_singlepass_entries().push_back(
+      PendingSinglepassGdnEntry{cache, key, std::move(ckpt_block)});
+}
+
 }  // namespace
+
+namespace musa {
+
+void flush_pending_gdn_singlepass_checkpoints() {
+  std::vector<PendingSinglepassGdnEntry> to_flush;
+  {
+    std::lock_guard<std::mutex> lock(pending_singlepass_mutex());
+    if (pending_singlepass_entries().empty()) {
+      return;
+    }
+    to_flush.swap(pending_singlepass_entries());
+  }
+  for (auto& entry : to_flush) {
+    if (entry.prefix_cache == nullptr || !entry.ckpt_block.is_valid()) {
+      continue;
+    }
+    if (entry.prefix_cache->find(entry.key).is_valid()) {
+      continue;
+    }
+    std::vector<Block> single;
+    single.emplace_back(std::move(entry.ckpt_block));
+    entry.prefix_cache->insert(single);
+  }
+}
+
+}  // namespace musa
 
 bool last_decode_step_crosses_checkpoint(const Sequence& sequence,
                                          size_t checkpoint_stride) {
@@ -336,7 +508,7 @@ void LinearStateBlockManager::cache_read_source(Sequence* seq,
   const size_t cached_tokens = seq->kv_cache_tokens_num();
   const size_t total_tokens = seq->num_tokens();
   if (!should_publish_linear_checkpoint(
-          cached_tokens, total_tokens, chunk_stride)) {
+          *seq, cached_tokens, total_tokens, chunk_stride)) {
     return;
   }
   const size_t checkpoint_index = cached_tokens / chunk_stride;
@@ -529,11 +701,200 @@ void LinearStateBlockManager::publish_linear_checkpoint(
     KVCacheState& kv_state,
     std::vector<BlockTransferInfo>* swap_transfers) {
   if (num_ckpt_slots_ == 0 || seq == nullptr || seq->is_graph_warmup() ||
-      prefix_cache_ == nullptr || swap_transfers == nullptr) {
+      prefix_cache_ == nullptr || swap_transfers == nullptr ||
+      options_.instance_is_decode()) {
     return;
   }
   std::vector<Block>* blocks = kv_state.mutable_blocks(BlockType::LINEAR);
-  if (blocks == nullptr || blocks->size() < 2) {
+  if (blocks == nullptr || blocks->empty()) {
+    return;
+  }
+  if (singlepass_gdn_ckpt_enabled()) {
+    Block& live_block = blocks->back();
+    if (!live_block.is_valid() || live_block.id() <= 0 ||
+        live_block.id() >= static_cast<int32_t>(num_active_slots_)) {
+      return;
+    }
+    const size_t chunk_stride = block_size();
+    const size_t start_pos = seq->kv_cache_tokens_num();
+    const size_t total_tokens = seq->num_tokens();
+    if (chunk_stride == 0 || total_tokens <= chunk_stride ||
+        start_pos >= total_tokens - 1) {
+      return;
+    }
+    const size_t step_end_tokens =
+        std::min<size_t>(total_tokens, kv_state.current_max_tokens_capacity());
+    const size_t max_ckpt_pos =
+        std::min<size_t>(step_end_tokens, total_tokens - 1);
+    if (max_ckpt_pos <= start_pos || max_ckpt_pos < chunk_stride) {
+      return;
+    }
+
+    const size_t initial_hit = seq->num_prefix_cache_tokens();
+    const bool started_cold = (initial_hit == 0);
+    const size_t warm_min_advance = std::max<size_t>(
+        chunk_stride,
+        read_env_size_t("XLLM_GDN_SINGLEPASS_WARM_MIN_ADVANCE", 1472));
+    const size_t cold_stride_raw =
+        read_env_size_t("XLLM_GDN_SINGLEPASS_COLD_STRIDE", 2048);
+    const size_t cold_stride =
+        cold_stride_raw > 0
+            ? ((cold_stride_raw + chunk_stride - 1) / chunk_stride) *
+                  chunk_stride
+            : 0;
+
+    const ChatLinearCheckpointBounds bounds =
+        find_chat_linear_checkpoint_bounds(
+            seq->tokens(), total_tokens, chunk_stride);
+
+    std::vector<size_t> candidate_positions;
+    candidate_positions.reserve(8);
+
+    auto near_chat_boundary = [&](size_t pos) -> bool {
+      if (!bounds.has_chat_boundaries) {
+        return false;
+      }
+      if (bounds.hist_ckpt > 0) {
+        const size_t diff =
+            pos > bounds.hist_ckpt ? pos - bounds.hist_ckpt
+                                   : bounds.hist_ckpt - pos;
+        if (diff < 256) {
+          return true;
+        }
+      }
+      if (bounds.end_ckpt > 0) {
+        const size_t diff =
+            pos > bounds.end_ckpt ? pos - bounds.end_ckpt
+                                  : bounds.end_ckpt - pos;
+        if (diff < 256) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (cold_stride > 0 &&
+        (started_cold || (step_end_tokens - start_pos) >= 4096)) {
+      const size_t first_mult =
+          ((start_pos / cold_stride) + 1) * cold_stride;
+      for (size_t p = first_mult; p <= max_ckpt_pos; p += cold_stride) {
+        if (p == step_end_tokens || !near_chat_boundary(p)) {
+          candidate_positions.push_back(p);
+        }
+      }
+    }
+
+    if (step_end_tokens <= max_ckpt_pos &&
+        (step_end_tokens % chunk_stride) == 0 &&
+        step_end_tokens >= start_pos + 256) {
+      candidate_positions.push_back(step_end_tokens);
+    }
+
+    if (bounds.has_chat_boundaries) {
+      if (bounds.hist_ckpt > start_pos && bounds.hist_ckpt <= max_ckpt_pos) {
+        const size_t req_adv =
+            (started_cold || bounds.hist_ckpt == step_end_tokens)
+                ? std::max<size_t>(chunk_stride * 4, 256)
+                : warm_min_advance;
+        if (bounds.hist_ckpt >= start_pos + req_adv) {
+          candidate_positions.push_back(bounds.hist_ckpt);
+        }
+      }
+      if (bounds.end_ckpt > start_pos && bounds.end_ckpt <= max_ckpt_pos) {
+        if (started_cold) {
+          const size_t base_pos = std::max<size_t>(start_pos, bounds.hist_ckpt);
+          if (bounds.end_ckpt >= base_pos + 512) {
+            candidate_positions.push_back(bounds.end_ckpt);
+          }
+        } else if (bounds.hist_ckpt <= initial_hit + 192) {
+          const size_t req_adv =
+              (bounds.end_ckpt == step_end_tokens)
+                  ? std::max<size_t>(chunk_stride * 4, 256)
+                  : warm_min_advance;
+          if (bounds.end_ckpt >= start_pos + req_adv) {
+            candidate_positions.push_back(bounds.end_ckpt);
+          }
+        }
+      }
+    } else {
+      const size_t fallback_stride = std::max<size_t>(chunk_stride, 2048);
+      const size_t fallback_ckpt =
+          ((total_tokens - 1) / fallback_stride) * fallback_stride;
+      const size_t req_adv =
+          (started_cold || fallback_ckpt == step_end_tokens)
+              ? std::max<size_t>(chunk_stride * 4, 256)
+              : warm_min_advance;
+      if (fallback_ckpt > start_pos && fallback_ckpt <= max_ckpt_pos &&
+          fallback_ckpt >= start_pos + req_adv) {
+        candidate_positions.push_back(fallback_ckpt);
+      }
+    }
+
+    if (candidate_positions.empty()) {
+      return;
+    }
+    std::sort(candidate_positions.begin(), candidate_positions.end());
+    candidate_positions.erase(
+        std::unique(candidate_positions.begin(), candidate_positions.end()),
+        candidate_positions.end());
+
+    seq->update_linear_state_hashes(static_cast<uint32_t>(chunk_stride));
+    const Slice<XXH3Key> hashes = seq->linear_state_hashes();
+
+    for (size_t target_pos : candidate_positions) {
+      if (target_pos <= start_pos || target_pos > max_ckpt_pos ||
+          (target_pos % chunk_stride) != 0) {
+        continue;
+      }
+      const size_t checkpoint_index = target_pos / chunk_stride;
+      if (checkpoint_index == 0 || checkpoint_index > hashes.size()) {
+        continue;
+      }
+      const XXH3Key& hash_key = hashes[checkpoint_index - 1];
+      if (prefix_cache_->find(hash_key).is_valid() ||
+          has_pending_singlepass_key(prefix_cache_.get(), hash_key)) {
+        kv_state.set_num_cached_blocks(
+            BlockType::LINEAR,
+            std::max(kv_state.num_cached_blocks(BlockType::LINEAR),
+                     checkpoint_index));
+        continue;
+      }
+      int32_t ckpt_id = alloc_ckpt_slot_locked();
+      if (ckpt_id < 0) {
+        musa::flush_pending_gdn_singlepass_checkpoints();
+        prefix_cache_->evict(1);
+        ckpt_id = alloc_ckpt_slot_locked();
+      }
+      if (ckpt_id < 0) {
+        break;
+      }
+      const int32_t offset_tokens =
+          static_cast<int32_t>(target_pos - start_pos);
+      const bool is_end_of_step = (target_pos == step_end_tokens);
+      BlockTransferInfo transfer(-1, -1);
+      if (!musa::encode_deepseek_v4_gdn_singlepass_checkpoint(
+              live_block.id(),
+              ckpt_id,
+              offset_tokens,
+              is_end_of_step,
+              &transfer)) {
+        free(ckpt_id);
+        continue;
+      }
+      Block ckpt_block(ckpt_id, this);
+      ckpt_block.set_hash_value(hash_key.data);
+      enqueue_pending_singlepass_entry(
+          prefix_cache_.get(), hash_key, std::move(ckpt_block));
+      kv_state.set_num_cached_blocks(
+          BlockType::LINEAR,
+          std::max(kv_state.num_cached_blocks(BlockType::LINEAR),
+                   checkpoint_index));
+      swap_transfers->emplace_back(std::move(transfer));
+    }
+    return;
+  }
+
+  if (blocks->size() < 2) {
     return;
   }
   Block& src_block = (*blocks)[blocks->size() - 2];
@@ -545,7 +906,7 @@ void LinearStateBlockManager::publish_linear_checkpoint(
   const size_t cached_tokens = seq->kv_cache_tokens_num();
   const size_t total_tokens = seq->num_tokens();
   if (!should_publish_linear_checkpoint(
-          cached_tokens, total_tokens, chunk_stride)) {
+          *seq, cached_tokens, total_tokens, chunk_stride)) {
     return;
   }
   const size_t checkpoint_index = cached_tokens / chunk_stride;

@@ -15,6 +15,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "core/runtime/musa_graph_executor_impl.h"
+#include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
+#include "core/kernels/musa/gdn_int8_checkpoint.h"
 
 #include <c10/core/Device.h>
 #include <c10/core/StreamGuard.h>
@@ -3470,6 +3472,103 @@ ModelInputParams MusaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
   return new_params;
 }
 
+namespace {
+
+void parse_gdn_singlepass_checkpoints(
+    const ModelInputParams& params,
+    std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget>* interior,
+    std::vector<std::pair<int32_t, int32_t>>* end_of_step) {
+  for (const auto& transfer : params.block_copy.swap_blocks) {
+    const auto decoded =
+        ::xllm::musa::decode_deepseek_v4_prefix_transfer(transfer);
+    if (decoded.kind !=
+        ::xllm::musa::DeepseekV4PrefixTransferKind::GDN_SINGLEPASS_CHECKPOINT) {
+      continue;
+    }
+    if (decoded.gdn_ckpt_is_end_of_step) {
+      if (end_of_step != nullptr) {
+        end_of_step->emplace_back(decoded.src_block_id, decoded.dst_block_id);
+      }
+    } else if (interior != nullptr) {
+      interior->push_back(::xllm::kernel::musa::GdnSinglepassInteriorTarget{
+          decoded.src_block_id,
+          decoded.dst_block_id,
+          decoded.gdn_ckpt_offset_tokens});
+    }
+  }
+}
+
+bool has_interior_gdn_singlepass_checkpoints(const ModelInputParams& params) {
+  for (const auto& transfer : params.block_copy.swap_blocks) {
+    const auto decoded =
+        ::xllm::musa::decode_deepseek_v4_prefix_transfer(transfer);
+    if (decoded.kind ==
+            ::xllm::musa::DeepseekV4PrefixTransferKind::
+                GDN_SINGLEPASS_CHECKPOINT &&
+        !decoded.gdn_ckpt_is_end_of_step) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void finalize_gdn_singlepass_checkpoints(
+    const std::vector<KVCache>& kv_caches,
+    ProcessGroup* cp_group,
+    const torch::Device& device,
+    const ::xllm::kernel::musa::ScopedGdnSinglepassCheckpointPlan* interior_plan,
+    const std::vector<std::pair<int32_t, int32_t>>& end_of_step) {
+  if (::xllm::kernel::musa::get_gdn_int8_checkpoint_slots(kv_caches) <= 0) {
+    return;
+  }
+  if (interior_plan != nullptr && !interior_plan->targets().empty() &&
+      cp_group != nullptr && cp_group->world_size() == 2) {
+    const auto& targets = interior_plan->targets();
+    const int64_t m = static_cast<int64_t>(targets.size());
+    std::vector<int32_t> wrote_host(static_cast<size_t>(m), 0);
+    for (int64_t i = 0; i < m; ++i) {
+      wrote_host[static_cast<size_t>(i)] =
+          interior_plan->was_written_locally(
+              targets[static_cast<size_t>(i)].ckpt_logical_id)
+              ? 1
+              : 0;
+    }
+    torch::Tensor local_flags =
+        torch::tensor(wrote_host, torch::TensorOptions().dtype(torch::kInt32))
+            .to(device);
+    torch::Tensor gathered =
+        cp_group->allgather_base_sync(local_flags).to(torch::kCPU).contiguous();
+    const int32_t* gptr = gathered.data_ptr<int32_t>();
+    const int32_t my_rank = cp_group->rank();
+    for (int64_t i = 0; i < m; ++i) {
+      const int32_t w0 = gptr[i];
+      const int32_t w1 = gptr[m + i];
+      if (w0 == w1) {
+        continue;
+      }
+      const int32_t owner_rank = (w0 != 0) ? 0 : 1;
+      const int32_t ckpt_id = targets[static_cast<size_t>(i)].ckpt_logical_id;
+      torch::Tensor packet =
+          (my_rank == owner_rank)
+              ? ::xllm::kernel::musa::pack_gdn_int8_checkpoint_slot(
+                    kv_caches, ckpt_id)
+              : ::xllm::kernel::musa::allocate_gdn_int8_checkpoint_packet(
+                    kv_caches);
+      cp_group->broadcast(packet, owner_rank);
+      if (my_rank != owner_rank) {
+        ::xllm::kernel::musa::unpack_gdn_int8_checkpoint_slot(
+            kv_caches, ckpt_id, packet);
+      }
+    }
+  }
+  for (const auto& [live_slot_id, ckpt_id] : end_of_step) {
+    ::xllm::kernel::musa::store_gdn_int8_checkpoint(
+        kv_caches, live_slot_id, ckpt_id);
+  }
+}
+
+}  // namespace
+
 ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                        const torch::Tensor& positions,
                                        std::vector<KVCache>& kv_caches,
@@ -3512,9 +3611,15 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                               : params.meta.num_sequences;
   const bool multi_sequence_prefill = is_prefill && effective_num_sequences > 1;
 
+  const bool has_gdn_ckpt_pool =
+      ::xllm::kernel::musa::get_gdn_int8_checkpoint_slots(kv_caches) > 0;
+  const bool force_eager_for_gdn_singlepass =
+      has_gdn_ckpt_pool && has_interior_gdn_singlepass_checkpoints(params);
+
   // Prefill and chunked prefill replay piecewise graphs; launches that need
   // host-side batch layout run as runners between the captured segments.
-  if (use_prefill_piecewise_graph(n_tokens, params)) {
+  if (!force_eager_for_gdn_singlepass &&
+      use_prefill_piecewise_graph(n_tokens, params)) {
     const uint32_t graph_num_tokens =
         get_prefill_graph_num_tokens(n_tokens, params);
     const std::vector<int32_t> graph_key =
@@ -3525,6 +3630,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           maybe_precompute_embedding_for_graph(tokens, params);
       auto result =
           it->second->replay(tokens, positions, kv_caches, graph_params);
+      if (has_gdn_ckpt_pool) {
+        std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
+        parse_gdn_singlepass_checkpoints(params, nullptr, &end_of_step_ckpts);
+        if (!end_of_step_ckpts.empty()) {
+          finalize_gdn_singlepass_checkpoints(
+              kv_caches, cp_group_, device_, nullptr, end_of_step_ckpts);
+        }
+      }
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
     std::unique_ptr<MusaGraph> graph;
@@ -3578,6 +3691,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       stored = std::move(graph);
       auto result =
           stored->replay(tokens, positions, kv_caches, *graph_params_opt);
+      if (has_gdn_ckpt_pool) {
+        std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
+        parse_gdn_singlepass_checkpoints(params, nullptr, &end_of_step_ckpts);
+        if (!end_of_step_ckpts.empty()) {
+          finalize_gdn_singlepass_checkpoints(
+              kv_caches, cp_group_, device_, nullptr, end_of_step_ckpts);
+        }
+      }
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
     graph.reset();
@@ -3597,11 +3718,30 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   if (is_prefill || (params.meta.batch_forward_type.is_chunked_prefill() &&
                      !params.is_spec_verify)) {
     COUNTER_INC(num_model_execution_total_eager);
+    std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget> interior_ckpts;
+    std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
+    if (has_gdn_ckpt_pool) {
+      parse_gdn_singlepass_checkpoints(
+          params, &interior_ckpts, &end_of_step_ckpts);
+    }
+    std::optional<::xllm::kernel::musa::ScopedGdnSinglepassCheckpointPlan>
+        ckpt_scope;
+    if (!interior_ckpts.empty()) {
+      ckpt_scope.emplace(std::move(interior_ckpts));
+    }
     const bool time_fwd = s_enable_prefill_fwd_timing();
     if (time_fwd) {
       c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
       const auto t0 = std::chrono::steady_clock::now();
       auto result = model_->forward(tokens, positions, kv_caches, params);
+      if (ckpt_scope.has_value() || !end_of_step_ckpts.empty()) {
+        finalize_gdn_singlepass_checkpoints(
+            kv_caches,
+            cp_group_,
+            device_,
+            ckpt_scope.has_value() ? &(*ckpt_scope) : nullptr,
+            end_of_step_ckpts);
+      }
       c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
       const auto t1 = std::chrono::steady_clock::now();
       const double ms =
@@ -3617,6 +3757,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       return result;
     }
     auto result = model_->forward(tokens, positions, kv_caches, params);
+    if (ckpt_scope.has_value() || !end_of_step_ckpts.empty()) {
+      finalize_gdn_singlepass_checkpoints(
+          kv_caches,
+          cp_group_,
+          device_,
+          ckpt_scope.has_value() ? &(*ckpt_scope) : nullptr,
+          end_of_step_ckpts);
+    }
     maybe_empty_prefill_cache();
     return result;
   }

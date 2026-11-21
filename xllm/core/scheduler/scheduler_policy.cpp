@@ -538,22 +538,123 @@ void SchedulerPolicy::schedule_prefill_from_queue(
                     state.kv_cache_manager->block_size(),
                     rem_toks)
               : rem_toks;
-      if (batch_mode_.enable_chunked_prefill &&
+      auto select_linear_ckpt_cut = [](const Sequence* s,
+                                       size_t cur_cached,
+                                       size_t cur_chunk,
+                                       size_t align_stride,
+                                       size_t max_chunk) -> size_t {
+        if (s == nullptr || align_stride == 0 || cur_chunk == 0) {
+          return cur_chunk;
+        }
+        const size_t total = s->num_tokens();
+        if (total <= align_stride || cur_cached >= total) {
+          return cur_chunk;
+        }
+        const Slice<int32_t> toks = s->tokens();
+        const size_t scan_limit = std::min<size_t>(total, 8192);
+        const size_t min_idx = total - scan_limit;
+        constexpr size_t kNpos = std::numeric_limits<size_t>::max();
+        auto is_im_start = [](int32_t t) { return t == 248045 || t == 151644; };
+        auto is_im_end = [](int32_t t) { return t == 248046 || t == 151645; };
+
+        size_t last_im_end = kNpos;
+        for (size_t i = total; i > min_idx; --i) {
+          if (is_im_end(toks[i - 1])) {
+            last_im_end = i - 1;
+            break;
+          }
+        }
+        const size_t fine_stride =
+            std::max<size_t>(align_stride, std::min<size_t>(max_chunk, 2048));
+        if (last_im_end == kNpos) {
+          const size_t target_ckpt = ((total - 1) / fine_stride) * fine_stride;
+          if (cur_cached < target_ckpt && cur_cached + cur_chunk > target_ckpt) {
+            return target_ckpt - cur_cached;
+          }
+          return cur_chunk;
+        }
+
+        const size_t safe_end_limit =
+            std::min<size_t>(total - 1, last_im_end + 3);
+        const size_t end_ckpt =
+            safe_end_limit >= align_stride
+                ? (safe_end_limit / align_stride) * align_stride
+                : 0;
+        size_t hist_ckpt = 0;
+        for (size_t i = last_im_end; i > min_idx; --i) {
+          const size_t idx = i - 1;
+          if (!is_im_start(toks[idx])) {
+            continue;
+          }
+          bool preceded_by_im_end = false;
+          const size_t lookback = std::min<size_t>(idx, 4);
+          for (size_t d = 1; d <= lookback; ++d) {
+            if (is_im_end(toks[idx - d])) {
+              preceded_by_im_end = true;
+              break;
+            }
+          }
+          if (preceded_by_im_end) {
+            if (idx >= align_stride) {
+              hist_ckpt = (idx / align_stride) * align_stride;
+            }
+            break;
+          }
+        }
+
+        const size_t initial_hit = s->num_prefix_cache_tokens();
+        const bool started_cold = (initial_hit == 0);
+        const size_t min_hist_advance =
+            started_cold ? std::max<size_t>(align_stride * 8, 512)
+                         : std::max<size_t>(align_stride * 24, 1536);
+        const size_t min_end_advance =
+            started_cold ? std::max<size_t>(align_stride * 16, 1024)
+                         : std::max<size_t>(align_stride * 24, 1536);
+
+        // 1. Prioritize message-history boundary (messages[:-1]) whenever
+        //    advancing to hist_ckpt amortizes the extra chunk launch cost.
+        if (hist_ckpt >= cur_cached + min_hist_advance &&
+            cur_cached + cur_chunk > hist_ckpt) {
+          return hist_ckpt - cur_cached;
+        }
+
+        // 2. Publish prompt-end boundary (messages[:]) on cold start (when
+        //    final message adds >= 1024 tokens) or on confirmed append-only
+        //    warm turns (once >= 1536 uncached tokens accumulate).
+        if (end_ckpt >= cur_cached + min_end_advance && end_ckpt < total &&
+            cur_cached + cur_chunk > end_ckpt) {
+          const bool already_split_this_warm_turn =
+              !started_cold && cur_cached > initial_hit;
+          const bool confirmed_append_only =
+              !started_cold && (hist_ckpt <= initial_hit + 192);
+          if (started_cold ||
+              (!already_split_this_warm_turn && confirmed_append_only)) {
+            return end_ckpt - cur_cached;
+          }
+        }
+        return cur_chunk;
+      };
+      const bool singlepass_gdn_ckpt = [] {
+        const char* env = std::getenv("XLLM_GDN_SINGLEPASS_CKPT");
+        if (env == nullptr || env[0] == '\0') {
+          return true;
+        }
+        return std::string(env) != "0" && std::string(env) != "false" &&
+               std::string(env) != "FALSE";
+      }();
+      if (!singlepass_gdn_ckpt && batch_mode_.enable_chunked_prefill &&
           has_linear_attention_layers(state.model_args) &&
           state.enable_prefix_cache && rem_toks > 0 && total_toks > 0) {
         const size_t block_size = static_cast<size_t>(
             std::max<int32_t>(1, state.kv_cache_manager->block_size()));
         const size_t cp_align =
             static_cast<size_t>(std::max<int32_t>(1, kv_split)) * block_size;
-        const size_t fine_stride = std::max<size_t>(
+        natural_chunk = select_linear_ckpt_cut(
+            cand_seq,
+            cached,
+            natural_chunk,
             cp_align,
-            std::min<size_t>(options_.max_tokens_per_chunk_for_prefill(),
-                             2048));
-        const size_t target_ckpt =
-            ((total_toks - 1) / fine_stride) * fine_stride;
-        if (cached < target_ckpt && cached + natural_chunk > target_ckpt) {
-          natural_chunk = target_ckpt - cached;
-        }
+            options_.max_tokens_per_chunk_for_prefill());
       }
       const size_t effective_budget =
           std::min(budget.remaining_token_budget, pcp_remaining_tokens);
@@ -816,23 +917,102 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                            state.kv_cache_manager->block_size(),
                                            remaining_in_seq);
 
-  // Land on the deepest fine-grained checkpoint boundary (< num_tokens) so
-  // prompts in ranges like (32768, 34816) or 22k never overshoot their final
-  // reusable LINEAR checkpoint without splitting earlier chunks unnecessarily.
-  if (has_linear_attention_layers(state.model_args) &&
+  const bool singlepass_gdn_ckpt = [] {
+    const char* env = std::getenv("XLLM_GDN_SINGLEPASS_CKPT");
+    if (env == nullptr || env[0] == '\0') {
+      return true;
+    }
+    return std::string(env) != "0" && std::string(env) != "false" &&
+           std::string(env) != "FALSE";
+  }();
+  // Land on 64-aligned ChatML message boundaries (<|im_end|>) only when
+  // single-pass GDN checkpointing is disabled; otherwise single-pass forward
+  // exports intermediate and end-of-step GDN checkpoints without chunk cuts.
+  if (!singlepass_gdn_ckpt && has_linear_attention_layers(state.model_args) &&
       state.enable_prefix_cache && remaining_in_seq > 0) {
     const size_t block_size = static_cast<size_t>(
         std::max<int32_t>(1, state.kv_cache_manager->block_size()));
     const size_t cp_align =
         static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) *
         block_size;
-    const size_t fine_stride = std::max<size_t>(
-        cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
-    const size_t target_ckpt =
-        ((seq->num_tokens() - 1) / fine_stride) * fine_stride;
-    if (kv_cache_tokens_num < target_ckpt &&
-        kv_cache_tokens_num + num_tokens > target_ckpt) {
-      num_tokens = target_ckpt - kv_cache_tokens_num;
+    const size_t total = seq->num_tokens();
+    if (total > cp_align && kv_cache_tokens_num < total) {
+      const Slice<int32_t> toks = seq->tokens();
+      const size_t scan_limit = std::min<size_t>(total, 8192);
+      const size_t min_idx = total - scan_limit;
+      constexpr size_t kNpos = std::numeric_limits<size_t>::max();
+      auto is_im_start = [](int32_t t) { return t == 248045 || t == 151644; };
+      auto is_im_end = [](int32_t t) { return t == 248046 || t == 151645; };
+
+      size_t last_im_end = kNpos;
+      for (size_t i = total; i > min_idx; --i) {
+        if (is_im_end(toks[i - 1])) {
+          last_im_end = i - 1;
+          break;
+        }
+      }
+      const size_t fine_stride =
+          std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
+      if (last_im_end == kNpos) {
+        const size_t target_ckpt = ((total - 1) / fine_stride) * fine_stride;
+        if (kv_cache_tokens_num < target_ckpt &&
+            kv_cache_tokens_num + num_tokens > target_ckpt) {
+          num_tokens = target_ckpt - kv_cache_tokens_num;
+        }
+      } else {
+        const size_t safe_end_limit =
+            std::min<size_t>(total - 1, last_im_end + 3);
+        const size_t end_ckpt =
+            safe_end_limit >= cp_align
+                ? (safe_end_limit / cp_align) * cp_align
+                : 0;
+        size_t hist_ckpt = 0;
+        for (size_t i = last_im_end; i > min_idx; --i) {
+          const size_t idx = i - 1;
+          if (!is_im_start(toks[idx])) {
+            continue;
+          }
+          bool preceded_by_im_end = false;
+          const size_t lookback = std::min<size_t>(idx, 4);
+          for (size_t d = 1; d <= lookback; ++d) {
+            if (is_im_end(toks[idx - d])) {
+              preceded_by_im_end = true;
+              break;
+            }
+          }
+          if (preceded_by_im_end) {
+            if (idx >= cp_align) {
+              hist_ckpt = (idx / cp_align) * cp_align;
+            }
+            break;
+          }
+        }
+
+        const size_t initial_hit = seq->num_prefix_cache_tokens();
+        const bool started_cold = (initial_hit == 0);
+        const size_t min_hist_advance =
+            started_cold ? std::max<size_t>(cp_align * 8, 512)
+                         : std::max<size_t>(cp_align * 24, 1536);
+        const size_t min_end_advance =
+            started_cold ? std::max<size_t>(cp_align * 16, 1024)
+                         : std::max<size_t>(cp_align * 24, 1536);
+
+        if (hist_ckpt >= kv_cache_tokens_num + min_hist_advance &&
+            kv_cache_tokens_num + num_tokens > hist_ckpt) {
+          num_tokens = hist_ckpt - kv_cache_tokens_num;
+        } else if (end_ckpt >= kv_cache_tokens_num + min_end_advance &&
+                   end_ckpt < total &&
+                   kv_cache_tokens_num + num_tokens > end_ckpt) {
+          const bool already_split_this_warm_turn =
+              !started_cold && kv_cache_tokens_num > initial_hit;
+          const bool confirmed_append_only =
+              !started_cold && (hist_ckpt <= initial_hit + 192);
+          if (started_cold ||
+              (!already_split_this_warm_turn && confirmed_append_only)) {
+            num_tokens = end_ckpt - kv_cache_tokens_num;
+          }
+        }
+      }
     }
   }
 

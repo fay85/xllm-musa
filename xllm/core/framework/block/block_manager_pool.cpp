@@ -30,6 +30,7 @@ limitations under the License.
 #include "linear_state_block_manager.h"
 #if defined(USE_MUSA)
 #include "framework/block/musa/deepseek_v4_prefix_cache_policy.h"
+#include "framework/block/musa/deepseek_v4_prefix_transfer.h"
 #endif
 
 namespace xllm {
@@ -203,6 +204,9 @@ void BlockManagerPool::deallocate(Sequence* sequence) {
 
 std::vector<std::vector<BlockTransferInfo>>*
 BlockManagerPool::get_swap_block_transfer_infos() {
+#if defined(USE_MUSA)
+  musa::flush_pending_gdn_singlepass_checkpoints();
+#endif
   return &swap_block_transfer_infos_;
 }
 
