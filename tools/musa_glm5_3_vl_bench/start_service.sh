@@ -87,6 +87,12 @@ ensure_sparse_ops_cache() {
 
 ensure_ops_cache() {
   ensure_sparse_ops_cache
+  # The original v1 ABI was exported with a batch-128 specialization.
+  local metadata="${FLASHINFER_OPS_PATH}/glm_kpool_metadata_v1/glm_kpool_metadata_v1"
+  if [[ ! -f "${metadata}.so" ]] || ! grep -Fq '"glm_paged_mqa_metadata_dynamic_v1"' "${metadata}.json" 2>/dev/null; then
+    MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
+      python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --indexer-only --ops-path "${FLASHINFER_OPS_PATH}"
+  fi
   local module
   for module in moe_fused_gate mate_mega_moe_runtime_utils_layout3 glm53_mega_c4096_v2_{stage{1..3},decode{1..2}}; do
     if [[ ! -f "${FLASHINFER_OPS_PATH}/${module}/${module}.so" ]]; then

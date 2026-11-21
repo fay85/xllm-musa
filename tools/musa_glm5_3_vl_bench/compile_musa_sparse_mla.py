@@ -12,7 +12,8 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 from scripts.logger import logger
 
 if TYPE_CHECKING:
@@ -31,16 +32,21 @@ def _export(kernel: "JITKernel", output: Path) -> None:
 def _export_indexer(ops_path: Path) -> None:
     import torch
     import tvm_ffi
+    from mate.jit import env as jit_env
+    from mate.jit.core import gen_jit_spec
     from mate.jit.gemm.deep_gemm.paged_mqa_logits import (
         PagedMqaLogitsJitConfig,
-        gen_paged_mqa_logits_metadata_spec,
         gen_paged_mqa_logits_spec,
     )
 
     config = PagedMqaLogitsJitConfig(1, 32, 128, 64, False, torch.float32)
     for name, function, spec in (
         ("glm_kpool_metadata_v1", "get_paged_mqa_logits_metadata",
-         gen_paged_mqa_logits_metadata_spec(128)),
+         gen_jit_spec(
+             "glm_paged_mqa_metadata_dynamic_v1",
+             [REPO_ROOT / "xllm/core/kernels/musa/paged_mqa_metadata.mu"],
+             extra_include_paths=[jit_env.MATE_CSRC_DIR, jit_env.MUTLASS_INCLUDE_DIR],
+         )),
         ("glm_kpool_score_v1", "fp8_paged_mqa_logits",
          gen_paged_mqa_logits_spec(config)),
     ):

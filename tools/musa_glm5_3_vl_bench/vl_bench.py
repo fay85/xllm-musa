@@ -239,10 +239,27 @@ class PromptBuilder:
         for i in range(num_prompts):
             question = QUESTION % (i + 1)
             body = f"Additional document {i + 1}:\n\n"
-            cursor = i * stride
-            while self.count(shared + body + pool[cursor % len(pool)] + "\n\n" + question) <= isl - 8:
-                body += pool[cursor % len(pool)] + "\n\n"
-                cursor += 1
+            start = (i * stride) % len(pool)
+            ordered = pool[start:] + pool[:start]
+            cycle = "".join(para + "\n\n" for para in ordered)
+
+            def paragraphs(count: int) -> str:
+                cycles, remainder = divmod(count, len(ordered))
+                return cycle * cycles + "".join(para + "\n\n" for para in ordered[:remainder])
+
+            # Bracket the last whole paragraph that fits. Re-encoding the
+            # growing prompt after every paragraph is quadratic for long ISLs.
+            lo, hi = 0, 1
+            while self.count(shared + body + paragraphs(hi) + question) <= isl - 8:
+                lo, hi = hi, 2 * hi
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if self.count(shared + body + paragraphs(mid) + question) <= isl - 8:
+                    lo = mid
+                else:
+                    hi = mid
+            body += paragraphs(lo)
+            cursor = start + lo
             rem_words = pool[cursor % len(pool)].split()
             lo, hi = 0, len(rem_words)
             while lo < hi:
@@ -282,6 +299,7 @@ def load_prompts(
             return cached
         logger.warning(f"{path} does not hold {num_prompts} prompts of {isl} tokens, rebuilding it")
 
+    logger.info(f"Building {num_prompts} prompts of {isl} tokens for {path} before sending requests")
     articles_path = os.path.join(data_dir, "articles.json")
     if os.path.isfile(articles_path):
         with open(articles_path) as f:

@@ -3,7 +3,9 @@
 """Run sparse-attention C++ tests and a real two-device MCCL layer comparison."""
 
 import argparse
+from bisect import bisect_right
 from contextlib import ExitStack
+from itertools import accumulate
 import os
 from pathlib import Path
 import socket
@@ -14,6 +16,39 @@ import time
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 from scripts.logger import logger
+
+
+def _check_paged_metadata(ops_path: Path) -> None:
+    import torch
+    import torch_musa
+    import tvm_ffi
+
+    module = tvm_ffi.load_module(str(
+        ops_path / "glm_kpool_metadata_v1" / "glm_kpool_metadata_v1.so"
+    ))
+    metadata = module.get_function("get_paged_mqa_logits_metadata")
+    device = torch.device("musa", torch_musa.current_device())
+    num_mps = torch.musa.get_device_properties(device).multi_processor_count
+    for rows in (0, 1, 31, 128, 129, 4096, 32769):
+        for next_n in (1, 2, 4):
+            lengths = torch.arange(rows * next_n, dtype=torch.int64).reshape(rows, next_n)
+            # Include zero-cost rows, uneven lengths, and a total above 2**32.
+            lengths = ((lengths * 65537) % (2**31)).int()
+            lengths[::7] = 0
+            ends = list(accumulate((v + 255) // 256 for v in lengths[:, -1].tolist()))
+            total = ends[-1] if ends else 0
+            quotient, remainder = divmod(total, num_mps)
+            expected = []
+            for mp in range(num_mps + 1):
+                start = mp * quotient + min(mp, remainder)
+                row = bisect_right(ends, start)
+                expected.append([row, start - (ends[row - 1] if row else 0)])
+            values = lengths.flatten() if next_n == 1 else lengths
+            out = torch.empty((num_mps + 1, 2), dtype=torch.int32, device=device)
+            metadata(values.to(device), 64, out)
+            if out.cpu().tolist() != expected:
+                raise AssertionError(f"Invalid paged MQA schedule for {rows=} {next_n=}")
+    logger.info("Paged MQA metadata matches CPU segment boundaries")
 
 
 def _single(binary: Path, arguments: list[str], log: Path,
@@ -75,6 +110,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ, FLASHINFER_OPS_PATH=str(args.ops_path.resolve()))
     if not args.tp_only:
+        _check_paged_metadata(args.ops_path.resolve())
         _single(args.bin_dir.resolve() / "flash_mla_sparse_test", [],
                 args.output_dir / "xllm_cpp_flash_mla_sparse_test.log", environment)
         _single(binary, ["--gtest_filter=-GlmSparseTest.McclTensorParallelWorker"],
