@@ -15,14 +15,13 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
-#include <cstdint>
-#include <memory>
-#include <vector>
-
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <memory>
 #include <thread>
+#include <vector>
 
 #include "core/kernels/musa/gdn_ops.h"
 #include "core/layers/musa/flashinfer_attention.h"
@@ -56,6 +55,94 @@ void ensure_musa_backend() {
     c10::register_privateuse1_backend("musa");
   }
   (void)at::detail::getMUSAHooks();
+}
+
+void expect_prefix_conv_matches_reference(int64_t state_len,
+                                          const std::vector<int32_t>& lengths,
+                                          bool rank_two_prefix,
+                                          bool strided_input,
+                                          int64_t dim,
+                                          bool silu_activation) {
+  ensure_musa_backend();
+  const torch::Device device(c10::DeviceType::PrivateUse1, 0);
+  const auto options =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  const int64_t batch_size = static_cast<int64_t>(lengths.size());
+  std::vector<int32_t> starts;
+  std::vector<int32_t> slots;
+  std::vector<int32_t> read_slots;
+  starts.reserve(lengths.size() + 1);
+  slots.reserve(lengths.size());
+  read_slots.reserve(lengths.size());
+  starts.emplace_back(0);
+  for (int64_t index = 0; index < batch_size; ++index) {
+    starts.emplace_back(starts.back() + lengths[index]);
+    slots.emplace_back(static_cast<int32_t>(2 * index + 1));
+    read_slots.emplace_back(static_cast<int32_t>(2 * index + 2));
+  }
+  const int64_t input_step = strided_input ? 2 : 1;
+  const torch::Tensor input_storage =
+      torch::randn({starts.back(), dim * input_step}, options) * 0.2f;
+  const torch::Tensor input = input_storage.slice(
+      /*dim=*/1, /*start=*/0, /*end=*/dim * input_step, input_step);
+  const torch::Tensor weight = torch::randn({dim, 4}, options) * 0.2f;
+  const torch::Tensor bias = torch::randn({dim}, options) * 0.1f;
+  const torch::Tensor prefix =
+      torch::randn({batch_size, 3, dim}, options) * 0.2f;
+  const torch::Tensor conv_state =
+      torch::full({2 * batch_size + 2, dim, state_len}, -5.0f, options);
+  const torch::Tensor query_starts =
+      torch::tensor(starts, options.dtype(torch::kInt32));
+  const torch::Tensor cache_indices =
+      torch::tensor(slots, options.dtype(torch::kInt32));
+  const torch::Tensor read_cache_indices =
+      torch::tensor(read_slots, options.dtype(torch::kInt32));
+  const torch::Tensor has_initial_state =
+      torch::ones({batch_size}, options.dtype(torch::kBool));
+
+  const torch::Tensor input_cpu = input.cpu().to(torch::kFloat32);
+  const torch::Tensor prefix_cpu = prefix.cpu().to(torch::kFloat32);
+  const torch::Tensor weight_cpu = weight.cpu().to(torch::kFloat32);
+  const torch::Tensor bias_cpu = bias.cpu().to(torch::kFloat32);
+  torch::Tensor expected_state = conv_state.cpu().clone();
+  std::vector<torch::Tensor> expected_sequences;
+  expected_sequences.reserve(lengths.size());
+  for (int64_t index = 0; index < batch_size; ++index) {
+    const int64_t length = lengths[index];
+    const torch::Tensor sequence = torch::cat(
+        {prefix_cpu[index], input_cpu.narrow(0, starts[index], length)},
+        /*dim=*/0);
+    torch::Tensor expected = torch::zeros({length, dim}, input_cpu.options());
+    for (int64_t tap = 0; tap < 4; ++tap) {
+      expected += sequence.narrow(0, tap, length) * weight_cpu.select(1, tap);
+    }
+    expected += bias_cpu;
+    if (silu_activation) {
+      expected *= torch::sigmoid(expected);
+    }
+    expected_sequences.emplace_back(expected.to(torch::kBFloat16));
+    expected_state[slots[index]]
+        .narrow(/*dim=*/1, /*start=*/0, /*length=*/3)
+        .copy_(sequence.narrow(0, length, 3).t().to(torch::kBFloat16));
+  }
+  const torch::Tensor output = kernel::musa::causal_conv1d_prefill(
+      input,
+      weight,
+      conv_state,
+      bias,
+      query_starts,
+      cache_indices,
+      has_initial_state,
+      silu_activation,
+      rank_two_prefix ? prefix.select(0, 0) : prefix,
+      read_cache_indices);
+  EXPECT_TRUE(torch::allclose(output.cpu(),
+                              torch::cat(expected_sequences, /*dim=*/0),
+                              /*rtol=*/1e-2,
+                              /*atol=*/1e-3));
+  // Compare every row and column: committed history is updated, while the
+  // MTP-only tail, independent read slots and unrelated rows stay untouched.
+  EXPECT_TRUE(torch::equal(conv_state.cpu(), expected_state));
 }
 
 class CompletedWork final : public c10d::Work {
@@ -135,9 +222,8 @@ AttentionMetadata make_global_metadata(const std::vector<int32_t>& q_lens,
       torch::tensor(kv_lens, torch::TensorOptions().dtype(torch::kInt32));
   meta.slot_mapping = torch::arange(
       1000, 1000 + total_q, torch::TensorOptions().dtype(torch::kInt32));
-  meta.block_table = torch::zeros(
-      {static_cast<int64_t>(b), 32},
-      torch::TensorOptions().dtype(torch::kInt32));
+  meta.block_table = torch::zeros({static_cast<int64_t>(b), 32},
+                                  torch::TensorOptions().dtype(torch::kInt32));
   std::vector<uint8_t> init_u8(b, 0);
   for (size_t i = 0; i < b; ++i) {
     init_u8[i] = init_states[i] ? 1 : 0;
@@ -201,10 +287,10 @@ TEST(MusaPcpMultiBatchTest, BuildsVariableLengthColdAndWarmContext) {
   EXPECT_TRUE(ctx1->local_metadata.is_chunked_prefill);
   EXPECT_TRUE(torch::equal(ctx0->local_metadata.has_initial_states,
                            global_meta.has_initial_states));
-  EXPECT_TRUE(torch::equal(
-      ctx1->local_metadata.has_initial_states,
-      torch::tensor({true, true, true},
-                    torch::TensorOptions().dtype(torch::kBool))));
+  EXPECT_TRUE(
+      torch::equal(ctx1->local_metadata.has_initial_states,
+                   torch::tensor({true, true, true},
+                                 torch::TensorOptions().dtype(torch::kBool))));
 }
 
 TEST(MusaPcpMultiBatchTest, ShardAndGatherRoundTripRestoresSequenceMajorOrder) {
@@ -258,10 +344,9 @@ TEST(MusaPcpMultiBatchTest, ShardAndGatherRoundTripRestoresSequenceMajorOrder) {
   EXPECT_EQ(mrope0.size(1) + mrope1.size(1), total_rows);
 
   // Slot mapping union covers exact original slots via unpermute_indices.
-  const torch::Tensor cat_slots =
-      torch::cat({ctx0->local_metadata.slot_mapping,
-                  ctx1->local_metadata.slot_mapping},
-                 /*dim=*/0);
+  const torch::Tensor cat_slots = torch::cat(
+      {ctx0->local_metadata.slot_mapping, ctx1->local_metadata.slot_mapping},
+      /*dim=*/0);
   const torch::Tensor restored_slots =
       cat_slots.index_select(/*dim=*/0, ctx0->unpermute_indices);
   EXPECT_TRUE(torch::equal(restored_slots, global_meta.slot_mapping));
@@ -307,7 +392,8 @@ TEST(MusaPcpMultiBatchTest, ExtractsAndReceivesMultiBatchConvAndSsmPrefixes) {
 
   const torch::Tensor ssm_cache = torch::zeros(
       {16, 4, 8, 8}, torch::TensorOptions().dtype(torch::kBFloat16));
-  expect_conv_prefix(/*conv_state_len=*/3, qkv_dim, local_qkvz.options(), *ctx1);
+  expect_conv_prefix(
+      /*conv_state_len=*/3, qkv_dim, local_qkvz.options(), *ctx1);
   expect_prefix_cache_row(ssm_cache, *ctx1);
   ASSERT_EQ(group1.broadcast_shapes.size(), 2u);
   EXPECT_EQ(group1.broadcast_shapes[0], std::vector<int64_t>({2, 3, qkv_dim}));
@@ -330,6 +416,41 @@ TEST(MusaPcpMultiBatchTest, RejectsSubMinimumSequenceCleanly) {
   EXPECT_FALSE(ctx0.has_value());
 }
 
+TEST(MusaPcpMultiBatchGpuTest, PrefixPreservesExpandedMtpStateAndReadSlots) {
+  torch::manual_seed(20261121);
+  for (const int64_t state_len : {3, 6, 10}) {
+    SCOPED_TRACE(state_len);
+    for (const bool strided_input : {false, true}) {
+      SCOPED_TRACE(strided_input);
+      for (const bool silu_activation : {false, true}) {
+        SCOPED_TRACE(silu_activation);
+        expect_prefix_conv_matches_reference(state_len,
+                                             /*lengths=*/{1, 2, 7},
+                                             /*rank_two_prefix=*/false,
+                                             strided_input,
+                                             /*dim=*/256,
+                                             silu_activation);
+      }
+    }
+  }
+}
+
+TEST(MusaPcpMultiBatchGpuTest, SingleSequencePrefixMatchesGpqaCrashShape) {
+  torch::manual_seed(20261122);
+  for (const bool rank_two_prefix : {false, true}) {
+    SCOPED_TRACE(rank_two_prefix);
+    for (const bool strided_input : {false, true}) {
+      SCOPED_TRACE(strided_input);
+      expect_prefix_conv_matches_reference(/*state_len=*/6,
+                                           /*lengths=*/{5},
+                                           rank_two_prefix,
+                                           strided_input,
+                                           /*dim=*/10240,
+                                           /*silu_activation=*/true);
+    }
+  }
+}
+
 TEST(MusaPcpMultiBatchGpuTest, CausalConv1dAndMateGdnSplitMatchUnsplitBatch) {
   ensure_musa_backend();
   const torch::Device dev(c10::DeviceType::PrivateUse1, 0);
@@ -346,91 +467,84 @@ TEST(MusaPcpMultiBatchGpuTest, CausalConv1dAndMateGdnSplitMatchUnsplitBatch) {
   const int64_t dim = 256;
   const auto bf16_opts =
       torch::TensorOptions().dtype(torch::kBFloat16).device(dev);
-  const auto i32_opts =
-      torch::TensorOptions().dtype(torch::kInt32).device(dev);
-  const auto bool_opts =
-      torch::TensorOptions().dtype(torch::kBool).device(dev);
+  const auto i32_opts = torch::TensorOptions().dtype(torch::kInt32).device(dev);
+  const auto bool_opts = torch::TensorOptions().dtype(torch::kBool).device(dev);
 
-  const torch::Tensor x_full = torch::randn({total_full, dim}, bf16_opts) * 0.2f;
+  const torch::Tensor x_full =
+      torch::randn({total_full, dim}, bf16_opts) * 0.2f;
   const torch::Tensor weight = torch::randn({dim, 4}, bf16_opts) * 0.2f;
   const torch::Tensor init_conv = torch::randn({8, dim, 3}, bf16_opts) * 0.2f;
   torch::Tensor conv_ref = init_conv.clone();
   torch::Tensor conv_r0 = init_conv.clone();
   torch::Tensor conv_r1 = init_conv.clone();
 
-  const torch::Tensor cu_full =
-      torch::tensor({0, 192, 448, 598}, i32_opts);
-  const torch::Tensor cu_f =
-      torch::tensor({0, 128, 256, 320}, i32_opts);
-  const torch::Tensor cu_r =
-      torch::tensor({0, 64, 192, 278}, i32_opts);
+  const torch::Tensor cu_full = torch::tensor({0, 192, 448, 598}, i32_opts);
+  const torch::Tensor cu_f = torch::tensor({0, 128, 256, 320}, i32_opts);
+  const torch::Tensor cu_r = torch::tensor({0, 64, 192, 278}, i32_opts);
   const torch::Tensor cache_idx = torch::tensor({1, 3, 5}, i32_opts);
   const torch::Tensor has_init_r0 =
       torch::tensor({false, true, false}, bool_opts);
   const torch::Tensor has_init_r1 =
       torch::tensor({true, true, true}, bool_opts);
 
-  const torch::Tensor out_ref = xllm::kernel::musa::causal_conv1d_prefill(
-      x_full,
-      weight,
-      conv_ref,
-      std::nullopt,
-      cu_full,
-      cache_idx,
-      has_init_r0,
-      /*silu_activation=*/true,
-      std::nullopt,
-      cache_idx);
+  const torch::Tensor out_ref =
+      xllm::kernel::musa::causal_conv1d_prefill(x_full,
+                                                weight,
+                                                conv_ref,
+                                                std::nullopt,
+                                                cu_full,
+                                                cache_idx,
+                                                has_init_r0,
+                                                /*silu_activation=*/true,
+                                                std::nullopt,
+                                                cache_idx);
 
-  const torch::Tensor x_f = torch::cat(
-      {x_full.narrow(0, 0, 128),
-       x_full.narrow(0, 192, 128),
-       x_full.narrow(0, 448, 64)},
-      /*dim=*/0);
-  const torch::Tensor x_r = torch::cat(
-      {x_full.narrow(0, 128, 64),
-       x_full.narrow(0, 320, 128),
-       x_full.narrow(0, 512, 86)},
-      /*dim=*/0);
-  const torch::Tensor prefix_x = torch::stack(
-      {x_f.narrow(0, 128 - 3, 3),
-       x_f.narrow(0, 256 - 3, 3),
-       x_f.narrow(0, 320 - 3, 3)},
-      /*dim=*/0);
+  const torch::Tensor x_f = torch::cat({x_full.narrow(0, 0, 128),
+                                        x_full.narrow(0, 192, 128),
+                                        x_full.narrow(0, 448, 64)},
+                                       /*dim=*/0);
+  const torch::Tensor x_r = torch::cat({x_full.narrow(0, 128, 64),
+                                        x_full.narrow(0, 320, 128),
+                                        x_full.narrow(0, 512, 86)},
+                                       /*dim=*/0);
+  const torch::Tensor prefix_x = torch::stack({x_f.narrow(0, 128 - 3, 3),
+                                               x_f.narrow(0, 256 - 3, 3),
+                                               x_f.narrow(0, 320 - 3, 3)},
+                                              /*dim=*/0);
 
-  const torch::Tensor out_f = xllm::kernel::musa::causal_conv1d_prefill(
-      x_f,
-      weight,
-      conv_r0,
-      std::nullopt,
-      cu_f,
-      cache_idx,
-      has_init_r0,
-      /*silu_activation=*/true,
-      std::nullopt,
-      cache_idx);
-  const torch::Tensor out_r = xllm::kernel::musa::causal_conv1d_prefill(
-      x_r,
-      weight,
-      conv_r1,
-      std::nullopt,
-      cu_r,
-      cache_idx,
-      has_init_r1,
-      /*silu_activation=*/true,
-      prefix_x,
-      cache_idx);
+  const torch::Tensor out_f =
+      xllm::kernel::musa::causal_conv1d_prefill(x_f,
+                                                weight,
+                                                conv_r0,
+                                                std::nullopt,
+                                                cu_f,
+                                                cache_idx,
+                                                has_init_r0,
+                                                /*silu_activation=*/true,
+                                                std::nullopt,
+                                                cache_idx);
+  const torch::Tensor out_r =
+      xllm::kernel::musa::causal_conv1d_prefill(x_r,
+                                                weight,
+                                                conv_r1,
+                                                std::nullopt,
+                                                cu_r,
+                                                cache_idx,
+                                                has_init_r1,
+                                                /*silu_activation=*/true,
+                                                prefix_x,
+                                                cache_idx);
 
-  const torch::Tensor out_reconstructed = torch::cat(
-      {out_f.narrow(0, 0, 128),
-       out_r.narrow(0, 0, 64),
-       out_f.narrow(0, 128, 128),
-       out_r.narrow(0, 64, 128),
-       out_f.narrow(0, 256, 64),
-       out_r.narrow(0, 192, 86)},
-      /*dim=*/0);
+  const torch::Tensor out_reconstructed = torch::cat({out_f.narrow(0, 0, 128),
+                                                      out_r.narrow(0, 0, 64),
+                                                      out_f.narrow(0, 128, 128),
+                                                      out_r.narrow(0, 64, 128),
+                                                      out_f.narrow(0, 256, 64),
+                                                      out_r.narrow(0, 192, 86)},
+                                                     /*dim=*/0);
 
-  EXPECT_TRUE(torch::allclose(out_reconstructed, out_ref, /*rtol=*/1e-3, /*atol=*/1e-3));
+  EXPECT_TRUE(torch::allclose(
+      out_reconstructed, out_ref, /*rtol=*/1e-3, /*atol=*/1e-3));
   EXPECT_TRUE(torch::allclose(conv_r1.index_select(0, cache_idx),
                               conv_ref.index_select(0, cache_idx),
                               /*rtol=*/0.0,
@@ -523,14 +637,14 @@ TEST(MusaPcpMultiBatchGpuTest, MateGdnPackedMultiSeqSplitMatchesUnsplitBatch) {
   auto [out_r1, state_r1] =
       xllm::kernel::musa::mate_gated_delta_rule_prefill(r1_params);
 
-  const torch::Tensor out_reconstructed = torch::cat(
-      {out_r0.narrow(1, 0, 128),
-       out_r1.narrow(1, 0, 64),
-       out_r0.narrow(1, 128, 128),
-       out_r1.narrow(1, 64, 128),
-       out_r0.narrow(1, 256, 64),
-       out_r1.narrow(1, 192, 86)},
-      /*dim=*/1);
+  const torch::Tensor out_reconstructed =
+      torch::cat({out_r0.narrow(1, 0, 128),
+                  out_r1.narrow(1, 0, 64),
+                  out_r0.narrow(1, 128, 128),
+                  out_r1.narrow(1, 64, 128),
+                  out_r0.narrow(1, 256, 64),
+                  out_r1.narrow(1, 192, 86)},
+                 /*dim=*/1);
 
   const double max_out_diff =
       (out_reconstructed.to(torch::kFloat32) - out_ref.to(torch::kFloat32))
@@ -545,7 +659,6 @@ TEST(MusaPcpMultiBatchGpuTest, MateGdnPackedMultiSeqSplitMatchesUnsplitBatch) {
   EXPECT_LT(max_out_diff, 2e-2);
   EXPECT_LT(max_state_diff, 2e-2);
 }
-
 
 class CountingAsyncWork final : public c10d::Work {
  public:
@@ -570,8 +683,7 @@ TEST(MusaReviewBugfixGpuTest,
   const torch::Device dev(c10::DeviceType::PrivateUse1, 0);
   const auto bf16_opts =
       torch::TensorOptions().dtype(torch::kBFloat16).device(dev);
-  const auto i32_opts =
-      torch::TensorOptions().dtype(torch::kInt32).device(dev);
+  const auto i32_opts = torch::TensorOptions().dtype(torch::kInt32).device(dev);
 
   const int64_t cols = 4096;
   torch::Tensor logits_a = torch::zeros({2, cols}, bf16_opts);
@@ -644,8 +756,10 @@ TEST(MusaReviewBugfixGpuTest,
 
   torch::Tensor send_buf_0 = torch::ones(
       {64, 16}, torch::TensorOptions().dtype(torch::kBFloat16).device(dev));
-  torch::Tensor send_buf_1 = torch::full(
-      {64, 16}, 2.0f, torch::TensorOptions().dtype(torch::kBFloat16).device(dev));
+  torch::Tensor send_buf_1 =
+      torch::full({64, 16},
+                  2.0f,
+                  torch::TensorOptions().dtype(torch::kBFloat16).device(dev));
   std::atomic<int> wait_calls{0};
   ctx.in_flight_sends.push_back(send_buf_0);
   ctx.in_flight_sends.push_back(send_buf_1);
@@ -672,7 +786,8 @@ TEST(MusaReviewBugfixGpuTest,
 
 // B04 verification: FlashInferAttentionImpl band-attention path must produce
 // finite, exact outputs even when unwritten KV slots, unused block 0, and
-// negative (-1) padding block entries contain NaNs (plus a 0-length padded row).
+// negative (-1) padding block entries contain NaNs (plus a 0-length padded
+// row).
 TEST(MusaReviewBugfixGpuTest,
      FlashInferBandAttentionMasksNanInvalidKvAndNegativeBlocks) {
   ensure_musa_backend();
@@ -688,8 +803,7 @@ TEST(MusaReviewBugfixGpuTest,
 
   const auto bf16_opts =
       torch::TensorOptions().dtype(torch::kBFloat16).device(dev);
-  const auto i32_opts =
-      torch::TensorOptions().dtype(torch::kInt32).device(dev);
+  const auto i32_opts = torch::TensorOptions().dtype(torch::kInt32).device(dev);
 
   // Batch = 2, query_len = 2 -> total query rows = 4.
   // Seq 0: kv_len = 5 (occupies block 2 slots [0..4]; slots [5..15] unwritten,
@@ -697,15 +811,15 @@ TEST(MusaReviewBugfixGpuTest,
   // Seq 1: kv_len = 0 (graph-padded empty sequence, block table [-1, -1]).
   const int64_t batch = 2;
   const int64_t query_len = 2;
-  torch::Tensor query =
-      torch::randn({batch * query_len, num_heads, head_size}).to(dev, torch::kBFloat16);
+  torch::Tensor query = torch::randn({batch * query_len, num_heads, head_size})
+                            .to(dev, torch::kBFloat16);
   torch::Tensor dummy_kv =
       torch::zeros({batch * query_len, num_kv_heads, head_size}, bf16_opts);
 
-  torch::Tensor clean_k =
-      torch::zeros({num_blocks, block_size, num_kv_heads, head_size}, bf16_opts);
-  torch::Tensor clean_v =
-      torch::zeros({num_blocks, block_size, num_kv_heads, head_size}, bf16_opts);
+  torch::Tensor clean_k = torch::zeros(
+      {num_blocks, block_size, num_kv_heads, head_size}, bf16_opts);
+  torch::Tensor clean_v = torch::zeros(
+      {num_blocks, block_size, num_kv_heads, head_size}, bf16_opts);
   const torch::Tensor valid_k_rows =
       torch::randn({5, num_kv_heads, head_size}).to(dev, torch::kBFloat16);
   const torch::Tensor valid_v_rows =
@@ -714,14 +828,10 @@ TEST(MusaReviewBugfixGpuTest,
   clean_v[2].narrow(0, 0, 5).copy_(valid_v_rows);
 
   const float nan_val = std::numeric_limits<float>::quiet_NaN();
-  torch::Tensor nan_k =
-      torch::full({num_blocks, block_size, num_kv_heads, head_size},
-                  nan_val,
-                  bf16_opts);
-  torch::Tensor nan_v =
-      torch::full({num_blocks, block_size, num_kv_heads, head_size},
-                  nan_val,
-                  bf16_opts);
+  torch::Tensor nan_k = torch::full(
+      {num_blocks, block_size, num_kv_heads, head_size}, nan_val, bf16_opts);
+  torch::Tensor nan_v = torch::full(
+      {num_blocks, block_size, num_kv_heads, head_size}, nan_val, bf16_opts);
   // Only the 5 live tokens of seq 0 in block 2 are written; block 0 (where -1
   // clamps) and slots [5..15] of block 2 remain poisoned with NaNs!
   nan_k[2].narrow(0, 0, 5).copy_(valid_k_rows);
@@ -764,7 +874,8 @@ TEST(MusaReviewBugfixGpuTest,
 class SingleRankGroup final : public ProcessGroup {
  public:
   SingleRankGroup()
-      : ProcessGroup(/*rank=*/0, /*world_size=*/1, torch::Device(torch::kCPU)) {}
+      : ProcessGroup(/*rank=*/0, /*world_size=*/1, torch::Device(torch::kCPU)) {
+  }
 };
 
 class SyntheticGdnLayer final : public Qwen3GatedDeltaNetBaseImpl {
@@ -825,8 +936,7 @@ TEST(MusaReviewBugfixGpuTest,
       torch::TensorOptions().dtype(torch::kBFloat16).device(dev);
   const auto f32_opts =
       torch::TensorOptions().dtype(torch::kFloat32).device(dev);
-  const auto i32_opts =
-      torch::TensorOptions().dtype(torch::kInt32).device(dev);
+  const auto i32_opts = torch::TensorOptions().dtype(torch::kInt32).device(dev);
 
   ModelArgs args;
   args.hidden_size() = hidden;
@@ -851,8 +961,7 @@ TEST(MusaReviewBugfixGpuTest,
       args, quant_args, parallel_args, bf16_opts, qkvz_flat, ba_flat);
   StateDict sd({
       {"conv1d.weight", torch::randn({qkv_dim, 1, conv_k}, bf16_opts) * 0.05f},
-      {"out_proj.weight",
-       torch::randn({hidden, nv * dk}, bf16_opts) * 0.02f},
+      {"out_proj.weight", torch::randn({hidden, nv * dk}, bf16_opts) * 0.02f},
       {"norm.weight", torch::ones({dk}, bf16_opts)},
       {"dt_bias", torch::randn({nv}, f32_opts) * 0.3f},
       {"A_log", torch::randn({nv}, f32_opts) * 0.2f},
@@ -867,7 +976,8 @@ TEST(MusaReviewBugfixGpuTest,
   meta.is_prefill = true;
   meta.is_chunked_prefill = false;
   meta.max_query_len = seq_len;
-  meta.q_cu_seq_lens = torch::tensor({0, static_cast<int32_t>(seq_len)}, i32_opts);
+  meta.q_cu_seq_lens =
+      torch::tensor({0, static_cast<int32_t>(seq_len)}, i32_opts);
   meta.kv_cu_seq_lens = meta.q_cu_seq_lens;
   meta.q_seq_lens_vec = {static_cast<int32_t>(seq_len)};
   meta.kv_seq_lens_vec = {static_cast<int32_t>(seq_len)};

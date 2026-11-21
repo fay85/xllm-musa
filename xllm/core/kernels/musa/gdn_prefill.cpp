@@ -1707,22 +1707,34 @@ torch::Tensor causal_conv1d_prefill(
   std::optional<torch::Tensor> effective_read_cache_indices =
       read_cache_indices;
   if (prefix_x.has_value() && prefix_x->defined()) {
-    torch::Tensor prefix_state;
+    CHECK_EQ(weight.dim(), 2);
+    CHECK_EQ(conv_state.dim(), 3);
+    const int64_t history_len = weight.size(1) - 1;
+    CHECK_GE(conv_state.size(2), history_len);
+    CHECK_EQ(conv_state.size(1), x.size(1));
+    torch::Tensor state_rows;
     if (prefix_x->dim() == 2) {
       CHECK_EQ(cache_indices.numel(), 1)
-          << "2D prefix_x fallback requires single-sequence cache_indices";
-      prefix_state =
+          << "prefix_x rank 2 requires one cache index";
+      CHECK_EQ(prefix_x->size(0), history_len);
+      CHECK_EQ(prefix_x->size(1), conv_state.size(1));
+      state_rows =
           prefix_x->t().contiguous().unsqueeze(0).to(conv_state.scalar_type());
     } else {
       CHECK(prefix_x->dim() == 3 &&
             prefix_x->size(0) == cache_indices.numel() &&
-            prefix_x->size(1) == 3)
-          << "3D prefix_x fallback must have shape [batch, 3, dim]";
-      prefix_state =
+            prefix_x->size(1) == history_len &&
+            prefix_x->size(2) == conv_state.size(1))
+          << "prefix_x must have shape [batch, kernel_width - 1, dim]";
+      state_rows =
           prefix_x->transpose(1, 2).contiguous().to(conv_state.scalar_type());
     }
-    torch::Tensor mutable_conv_state = conv_state;
-    mutable_conv_state.index_put_({cache_indices}, prefix_state);
+    // MTP appends speculative slots to each channel's committed history. Write
+    // through a view so those slots and the physical cache strides are
+    // preserved.
+    torch::Tensor committed_conv_state =
+        conv_state.narrow(/*dim=*/2, /*start=*/0, history_len);
+    committed_conv_state.index_put_({cache_indices}, state_rows);
     effective_read_cache_indices = std::nullopt;
   }
   auto x_t = x.t().contiguous();
