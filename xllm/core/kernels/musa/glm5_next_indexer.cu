@@ -18,6 +18,7 @@ limitations under the License.
 #include <musa_runtime_api.h>
 
 #include <algorithm>
+#include <cub/block/block_radix_sort.cuh>
 #include <limits>
 #include <vector>
 
@@ -33,7 +34,6 @@ constexpr uint32_t kRadix = 256;
 constexpr uint32_t kHistGroups = 4;
 constexpr uint32_t kSglBlockSize = 512;
 constexpr uint32_t kHistGroupThreads = kSglBlockSize / kHistGroups;
-constexpr uint32_t kSglTopK = 512;
 constexpr int64_t kMqaLogitsSkipChunkElements = 8'000'000;
 constexpr int64_t kMqaLogitsFreeMemNumerator = 1;
 constexpr int64_t kMqaLogitsFreeMemDenominator = 5;
@@ -494,39 +494,14 @@ __device__ __forceinline__ uint32_t warp_inclusive_sum_musa(uint32_t lane_id,
   return value;
 }
 
-__device__ __forceinline__ int32_t
-page_to_indices(const int32_t* __restrict__ page_table,
-                int32_t raw_index,
-                uint32_t page_bits) {
-  const uint32_t mask = (1u << page_bits) - 1u;
-  const uint32_t i = static_cast<uint32_t>(raw_index);
-  return (page_table[i >> page_bits] << page_bits) | (i & mask);
-}
-
-__device__ __forceinline__ void naive_transform_musa(
-    const int32_t* __restrict__ page_table,
-    int32_t* __restrict__ indices,
-    int32_t* __restrict__ raw_indices,
-    const uint32_t length,
-    const uint32_t page_bits) {
-  const uint32_t tx = threadIdx.x;
-  if (tx < length) {
-    indices[tx] =
-        page_to_indices(page_table, static_cast<int32_t>(tx), page_bits);
-    if (raw_indices != nullptr) raw_indices[tx] = static_cast<int32_t>(tx);
-  } else if (tx < kSglTopK) {
-    indices[tx] = -1;
-    if (raw_indices != nullptr) raw_indices[tx] = -1;
-  }
-}
-
 template <bool kRegisterThresholdScan,
           uint32_t kCandidateSMEM = 12 * 1024 * sizeof(uint32_t),
           bool kExactOverflow = false>
 __device__ __forceinline__ void radix_topk_musa_split_hist(
     const float* __restrict__ input,
     int32_t* __restrict__ output,
-    const uint32_t length) {
+    const uint32_t length,
+    const uint32_t wanted) {
   constexpr uint32_t SMEM_INPUT_SIZE = kCandidateSMEM / (2 * sizeof(int32_t));
   alignas(128) __shared__ uint32_t _s_histogram_buf[2][kRadix + 32];
   alignas(128) __shared__ uint32_t s_group_hist[kHistGroups][kRadix + 32];
@@ -551,7 +526,7 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
   };
 
   const uint32_t tx = threadIdx.x;
-  uint32_t remain_topk = kSglTopK;
+  uint32_t remain_topk = wanted;
   auto& s_histogram = _s_histogram_buf[0];
 
   const auto run_cumsum = [&] {
@@ -687,7 +662,7 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
       const uint32_t bin = convert_to_uint8(input[idx]);
       if (bin >= threshold_bin_0) {
         const auto pos = ::atomicAdd(&s_counter, 1);
-        if (pos < kSglTopK) output[pos] = idx;
+        if (pos < wanted) output[pos] = idx;
       }
     }
     __syncthreads_lm();
@@ -737,7 +712,7 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
         const uint32_t bin = convert_to_uint8(input[idx]);
         if (bin >= threshold_bin_0) {
           const auto pos = ::atomicAdd(&s_counter, 1);
-          if (pos < kSglTopK) output[pos] = idx;
+          if (pos < wanted) output[pos] = idx;
         }
       }
       __syncthreads_lm();
@@ -770,7 +745,7 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
         s_threshold_key_min != s_threshold_key_max) {
       uint32_t prefix = 0;
       uint32_t prefix_mask = 0;
-      uint32_t target = kSglTopK;
+      uint32_t target = wanted;
 #pragma unroll 4
       for (int shift = 24; shift >= 0; shift -= 8) {
         for (uint32_t i = tx; i < kHistGroups * (kRadix + 32);
@@ -811,14 +786,14 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
       for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
         if (convert_to_uint32(input[idx]) > prefix) {
           const uint32_t pos = ::atomicAdd(&s_counter, 1);
-          if (pos < kSglTopK) output[pos] = idx;
+          if (pos < wanted) output[pos] = idx;
         }
       }
       __syncthreads_lm();
       for (uint32_t idx = tx; idx < length; idx += kSglBlockSize) {
         if (convert_to_uint32(input[idx]) == prefix) {
           const uint32_t pos = ::atomicAdd(&s_counter, 1);
-          if (pos < kSglTopK) output[pos] = idx;
+          if (pos < wanted) output[pos] = idx;
         }
       }
       __syncthreads_lm();
@@ -891,7 +866,7 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
       } else if (bin == threshold_bin) {
         if (round == 3) {
           const auto pos = ::atomicAdd(&s_last_remain, -1);
-          if (pos > 0) output[kSglTopK - pos] = idx;
+          if (pos > 0) output[wanted - pos] = idx;
         } else {
           const auto pos = ::atomicAdd(&s_num_input[r_idx ^ 1], 1);
           if (pos < SMEM_INPUT_SIZE) {
@@ -916,13 +891,20 @@ __global__ void select_pool_tokens_sgl(const float* scores,
                                        const int32_t* rows,
                                        int32_t* tokens,
                                        int32_t* lengths,
-                                       int64_t score_width,
+                                       int64_t score_stride,
+                                       int64_t pools,
+                                       int64_t first_request,
+                                       int64_t request_end,
                                        int64_t width,
                                        int64_t token_topk) {
   constexpr int32_t kThreads = 512;
   __shared__ int32_t selected[512];
   const int64_t row = blockIdx.x;
   const int32_t lane = threadIdx.x;
+  const int64_t request = max(rows[row], 0);
+  if (request < first_request || request >= request_end) {
+    return;
+  }
   const int64_t visible = rows[row] >= 0 ? positions[row] + 1 : 0;
   const int64_t tail = visible % 4;
   const int64_t end = visible <= token_topk ? visible : token_topk + tail;
@@ -933,13 +915,30 @@ __global__ void select_pool_tokens_sgl(const float* scores,
     lengths[row] = static_cast<int32_t>(end);
   }
   if (visible > token_topk && wanted > 0) {
-    if (pool_length <= 512) {
+    if (pool_length == wanted) {
       if (lane < static_cast<int32_t>(pool_length)) {
         selected[lane] = lane;
       }
     } else {
       radix_topk_musa_split_hist<true, 12 * 1024 * sizeof(uint32_t), true>(
-          scores + row * score_width, selected, pool_length);
+          scores + row * score_stride + (request - first_request) * pools,
+          selected,
+          pool_length,
+          wanted);
+      // Radix selection appends pool IDs with atomics. Use logical pool order
+      // so sparse attention reduces the same values in eager and graph replay.
+      using BlockSort = cub::BlockRadixSort<uint32_t, kThreads, 1>;
+      static_assert(sizeof(BlockSort::TempStorage) <=
+                    12 * 1024 * sizeof(uint32_t));
+      extern __shared__ uint32_t sort_scratch[];
+      __syncthreads_lm();
+      uint32_t pool_id[1] = {static_cast<uint32_t>(lane) < wanted
+                                 ? static_cast<uint32_t>(selected[lane])
+                                 : UINT32_MAX};
+      auto& sort_storage =
+          *reinterpret_cast<BlockSort::TempStorage*>(sort_scratch);
+      BlockSort(sort_storage).Sort(pool_id, 0, 32 - __clz(pool_length));
+      selected[lane] = static_cast<int32_t>(pool_id[0]);
     }
   }
   __syncthreads_lm();
@@ -958,6 +957,33 @@ __global__ void select_pool_tokens_sgl(const float* scores,
       token = static_cast<int32_t>((visible / 4) * 4 + column - token_topk);
     }
     tokens[row * width + column] = token;
+  }
+}
+
+// A physical page stores 64 FP8 keys followed by 64 FP32 scales.
+__global__ void gather_pool_prefix(const uint8_t* cache,
+                                   const int32_t* table,
+                                   uint8_t* keys,
+                                   float* scales,
+                                   int64_t pools,
+                                   int64_t table_stride,
+                                   int64_t physical_pages) {
+  const int64_t page = blockIdx.x;
+  const int64_t request = blockIdx.y;
+  const int64_t count = min(int64_t{64}, pools - page * 64);
+  const int32_t physical = table[request * table_stride + page];
+  const int64_t offset = request * pools + page * 64;
+  // Shorter requests and graph padding can have unmapped trailing pages.
+  if (physical < 0 || physical >= physical_pages) {
+    return;
+  }
+  const uint8_t* source = cache + static_cast<int64_t>(physical) * 64 * 132;
+  for (int64_t i = threadIdx.x; i < count * 128; i += blockDim.x) {
+    keys[offset * 128 + i] = source[i];
+  }
+  if (threadIdx.x < count) {
+    scales[offset + threadIdx.x] =
+        reinterpret_cast<const float*>(source + 64 * 128)[threadIdx.x];
   }
 }
 
@@ -1057,10 +1083,9 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
   CHECK_EQ(musaGetDeviceProperties(&properties, query.device().index()),
            musaSuccess);
   CHECK_EQ(properties.major * 10 + properties.minor, 31);
-  // Resolve both scoring functions before any persistent state is mutated.
-  auto metadata_fn =
-      get_function("glm_kpool_metadata_v1", "get_paged_mqa_logits_metadata");
-  auto score_fn = get_function("glm_kpool_score_v1", "fp8_paged_mqa_logits");
+  if (max_context > token_topk) {
+    get_function("glm_kpool_nonpaged_v1", "fp8_mqa_logits");
+  }
   const auto stream = current_musa_stream(query.device());
   auto pool_lengths = torch::empty({tokens}, ints);
   auto snapshot =
@@ -1166,91 +1191,121 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
   CHECK_EQ(musaGetDeviceProperties(&properties, query.device().index()),
            musaSuccess);
   CHECK_EQ(properties.major * 10 + properties.minor, 31);
-  auto metadata_fn =
-      get_function("glm_kpool_metadata_v1", "get_paged_mqa_logits_metadata");
-  auto score_fn = get_function("glm_kpool_score_v1", "fp8_paged_mqa_logits");
   const auto stream = current_musa_stream(query.device());
-  const int64_t pools = (max_context + 3) / 4;
-  torch::Tensor scores;
-  if (max_context > token_topk) {
-    auto quant = torch::empty({tokens, 1, 32, 128},
-                              query.options().dtype(torch::kFloat8_e4m3fn));
-    auto scaled_weights = torch::empty_like(weights);
-    const int64_t query_rows = tokens * 32;
-    quantize_query_grouped<4>
-        <<<static_cast<int32_t>((query_rows + 3) / 4), 128, 0, stream>>>(
-            query.data_ptr<c10::BFloat16>(),
-            weights.data_ptr<float>(),
-            quant.data_ptr<c10::Float8_e4m3fn>(),
-            scaled_weights.data_ptr<float>(),
-            query_rows);
-    check_musa_kernel_launch("GLM IndexPool query quantization");
-    // Match sglang's policy. Keep the full logits matrix for normal batches,
-    // and only query the memory budget for workloads large enough to need it.
-    const int64_t logits_elements = tokens * pools;
-    int64_t chunk = tokens;
-    if (logits_elements >= kMqaLogitsSkipChunkElements) {
+  const int64_t pools = max_context / 4;
+  const int64_t batch = block_table.size(0);
+  CHECK_GT(batch, 0);
+  const auto select_rows = [&](const float* scores,
+                               int64_t stride,
+                               int64_t first,
+                               int64_t size,
+                               int64_t first_request,
+                               int64_t request_end) {
+    select_pool_tokens_sgl<<<size, 512, 12 * 1024 * sizeof(uint32_t), stream>>>(
+        scores,
+        pool_lengths.data_ptr<int32_t>() + first,
+        positions.data_ptr<int64_t>() + first,
+        rows.data_ptr<int32_t>() + first,
+        result.tokens.data_ptr<int32_t>() + first * width,
+        result.lengths.data_ptr<int32_t>() + first,
+        stride,
+        pools,
+        first_request,
+        request_end,
+        width,
+        token_topk);
+    check_musa_kernel_launch("GLM IndexPool fused candidate selection");
+  };
+  if (max_context <= token_topk) {
+    select_rows(nullptr, 0, 0, tokens, 0, batch);
+    return result;
+  }
+
+  auto quant = torch::empty({tokens, 32, 128},
+                            query.options().dtype(torch::kFloat8_e4m3fn));
+  // MATE checks the row stride even for single-token decode.
+  auto scaled_weights = torch::empty({tokens, 32}, weights.options());
+  const int64_t query_rows = tokens * 32;
+  quantize_query_grouped<4><<<(query_rows + 3) / 4, 128, 0, stream>>>(
+      query.data_ptr<c10::BFloat16>(),
+      weights.data_ptr<float>(),
+      quant.data_ptr<c10::Float8_e4m3fn>(),
+      scaled_weights.data_ptr<float>(),
+      query_rows);
+  check_musa_kernel_launch("GLM IndexPool query quantization");
+
+  // Pack consecutive requests so every Q has a contiguous logical K range.
+  // Bound the replicated prefix storage for batches with widely varying
+  // lengths.
+  constexpr int64_t kGatherBudget = 64 * 1024 * 1024;
+  const int64_t group_size =
+      std::clamp<int64_t>(kGatherBudget / (pools * kPoolPacketBytes),
+                          1,
+                          std::min<int64_t>(batch, 65535));
+  const int64_t max_keys = group_size * pools;
+  int64_t chunk = tokens;
+  if (tokens * max_keys >= kMqaLogitsSkipChunkElements) {
+    int64_t budget = kMqaLogitsSkipChunkElements * sizeof(float);
+    // Allocation recording and graph capture must agree on Q chunk shapes.
+    if (get_ffi_alloc_mode() == FfiAllocMode::kPassthrough &&
+        !is_stream_capturing()) {
       size_t free_memory = 0;
       size_t total_memory = 0;
       CHECK_EQ(musaMemGetInfo(&free_memory, &total_memory), musaSuccess);
-      const size_t free_memory_budget = free_memory *
-                                        kMqaLogitsFreeMemNumerator /
-                                        kMqaLogitsFreeMemDenominator;
-      const size_t total_memory_budget = total_memory *
-                                         kMqaLogitsTotalMemNumerator /
-                                         kMqaLogitsTotalMemDenominator;
-      const size_t logits_budget =
-          std::min(free_memory_budget, total_memory_budget);
-      const int64_t rows_per_chunk = static_cast<int64_t>(
-          logits_budget / (static_cast<size_t>(pools) * sizeof(float)));
-      chunk = std::max<int64_t>(1, std::min(tokens, rows_per_chunk));
+      budget = std::min(free_memory * kMqaLogitsFreeMemNumerator /
+                            kMqaLogitsFreeMemDenominator,
+                        total_memory * kMqaLogitsTotalMemNumerator /
+                            kMqaLogitsTotalMemDenominator);
     }
-    scores =
-        torch::empty({tokens, pools}, query.options().dtype(torch::kFloat32));
+    chunk = std::clamp<int64_t>(
+        budget / ((max_keys + 128) * sizeof(float)), 1, tokens);
+  }
+  auto score_fn = get_function("glm_kpool_nonpaged_v1", "fp8_mqa_logits");
+  for (int64_t request = 0; request < batch; request += group_size) {
+    const int64_t count = std::min(group_size, batch - request);
+    auto keys = torch::empty({count * pools, 128}, quant.options());
+    auto scales = torch::empty({count * pools}, weights.options());
+    gather_pool_prefix<<<dim3((pools + 63) / 64, count), 256, 0, stream>>>(
+        cache.data_ptr<uint8_t>(),
+        block_table.data_ptr<int32_t>() + request * block_table.size(1),
+        static_cast<uint8_t*>(keys.data_ptr()),
+        scales.data_ptr<float>(),
+        pools,
+        block_table.size(1),
+        cache.size(0));
+    check_musa_kernel_launch("GLM IndexPool prefix gather");
+    auto starts = torch::zeros_like(pool_lengths);
+    auto ends = pool_lengths;
+    if (batch > 1) {
+      starts = (rows - request).clamp(0, count - 1) * pools;
+      ends = starts + torch::where(rows.ge(request) & rows.lt(request + count),
+                                   pool_lengths,
+                                   0);
+    }
     for (int64_t first = 0; first < tokens; first += chunk) {
-      const int64_t size = std::min<int64_t>(chunk, tokens - first);
-      auto lens = pool_lengths.narrow(0, first, size);
-      auto table_rows =
-          result.rows.narrow(0, first, size).clamp_min(0).to(torch::kInt64);
-      auto table = block_table.index_select(0, table_rows).contiguous();
-      auto scheduling =
-          torch::empty({properties.multiProcessorCount + 1, 2}, ints);
-      ffi::Tensor ffi_logits;
+      const int64_t size = std::min(chunk, tokens - first);
+      ffi::Tensor logits;
       {
         TvmffiStreamGuard guard(query.device());
-        metadata_fn(
-            to_ffi_tensor(lens), int64_t{64}, to_ffi_tensor(scheduling));
-        ffi_logits =
-            score_fn(to_ffi_tensor(quant.narrow(0, first, size)),
-                     to_ffi_tensor(cache),
-                     to_ffi_tensor(scaled_weights.narrow(0, first, size)),
-                     to_ffi_tensor(lens),
-                     to_ffi_tensor(table),
-                     to_ffi_tensor(scheduling),
-                     pools,
-                     false)
-                .cast<ffi::Tensor>();
+        logits = score_fn(to_ffi_tensor(quant.narrow(0, first, size)),
+                          to_ffi_tensor(keys),
+                          to_ffi_tensor(scaled_weights.narrow(0, first, size)),
+                          to_ffi_tensor(starts.narrow(0, first, size)),
+                          to_ffi_tensor(ends.narrow(0, first, size)),
+                          to_ffi_tensor(scales),
+                          false,
+                          int64_t{0})
+                     .cast<ffi::Tensor>();
       }
-      auto chunk_scores = own_logits(std::move(ffi_logits), query.options())
-                              .narrow(1, 0, pools);
-      scores.narrow(0, first, size).copy_(chunk_scores);
+      auto scores = own_logits(std::move(logits), query.options());
+      select_rows(scores.data_ptr<float>(),
+                  scores.stride(0),
+                  first,
+                  size,
+                  request,
+                  request + count);
     }
   }
-  if (!scores.defined()) {
-    scores = torch::empty({tokens, std::max<int64_t>(pools, 1)},
-                          query.options().dtype(torch::kFloat32));
-  }
-  select_pool_tokens_sgl<<<tokens, 512, 12 * 1024 * sizeof(uint32_t), stream>>>(
-      scores.data_ptr<float>(),
-      pool_lengths.data_ptr<int32_t>(),
-      positions.data_ptr<int64_t>(),
-      result.rows.data_ptr<int32_t>(),
-      result.tokens.data_ptr<int32_t>(),
-      result.lengths.data_ptr<int32_t>(),
-      scores.size(1),
-      width,
-      token_topk);
-  check_musa_kernel_launch("GLM IndexPool fused candidate selection");
   return result;
 }
 // CP owns a contiguous range of pool-ending rows. Only the preceding three

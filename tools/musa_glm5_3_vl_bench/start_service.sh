@@ -59,7 +59,6 @@ ensure_sparse_ops_cache() {
     "prepare_kda_dtype_bf16_gate_1_varlen_1_normqk_1_seqlens_i64_arch_mp31/prepare_kda_dtype_bf16_gate_1_varlen_1_normqk_1_seqlens_i64_arch_mp31.so"
     "sparse_mla_bf16_v1_mp31_h8/sparse_mla_bf16_v1_mp31_h8.so"
     "sparse_mla_nope_fp8_v1_mp31_h8_splits64/sparse_mla_nope_fp8_v1_mp31_h8_splits64.so"
-    "glm_kpool_score_v1/glm_kpool_score_v1.so"
     "gemm_ops/gemm_ops.so"
   )
   local missing=0
@@ -87,9 +86,7 @@ ensure_sparse_ops_cache() {
 
 ensure_ops_cache() {
   ensure_sparse_ops_cache
-  # The original v1 ABI was exported with a batch-128 specialization.
-  local metadata="${FLASHINFER_OPS_PATH}/glm_kpool_metadata_v1/glm_kpool_metadata_v1"
-  if [[ ! -f "${metadata}.so" ]] || ! grep -Fq '"glm_paged_mqa_metadata_dynamic_v1"' "${metadata}.json" 2>/dev/null; then
+  if [[ ! -f "${FLASHINFER_OPS_PATH}/glm_kpool_nonpaged_v1/glm_kpool_nonpaged_v1.so" ]]; then
     MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
       python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --indexer-only --ops-path "${FLASHINFER_OPS_PATH}"
   fi

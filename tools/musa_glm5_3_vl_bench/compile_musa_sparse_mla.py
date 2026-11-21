@@ -30,40 +30,29 @@ def _export(kernel: "JITKernel", output: Path) -> None:
 
 
 def _export_indexer(ops_path: Path) -> None:
-    import torch
     import tvm_ffi
-    from mate.jit import env as jit_env
-    from mate.jit.core import gen_jit_spec
-    from mate.jit.gemm.deep_gemm.paged_mqa_logits import (
-        PagedMqaLogitsJitConfig,
-        gen_paged_mqa_logits_spec,
+    from mate.jit.gemm.deep_gemm.mqa_logits import (
+        MqaLogitsJitConfig,
+        gen_mqa_logits_spec,
     )
 
-    config = PagedMqaLogitsJitConfig(1, 32, 128, 64, False, torch.float32)
-    for name, function, spec in (
-        ("glm_kpool_metadata_v1", "get_paged_mqa_logits_metadata",
-         gen_jit_spec(
-             "glm_paged_mqa_metadata_dynamic_v1",
-             [REPO_ROOT / "xllm/core/kernels/musa/paged_mqa_metadata.mu"],
-             extra_include_paths=[jit_env.MATE_CSRC_DIR, jit_env.MUTLASS_INCLUDE_DIR],
-         )),
-        ("glm_kpool_score_v1", "fp8_paged_mqa_logits",
-         gen_paged_mqa_logits_spec(config)),
-    ):
-        library = spec.build()
-        tvm_ffi.load_module(str(library)).get_function(function)
-        directory = ops_path / name
-        directory.mkdir(parents=True, exist_ok=True)
-        target = directory / f"{name}.so"
-        temporary = target.with_suffix(f".{os.getpid()}.tmp.so")
-        shutil.copy2(library, temporary)
-        temporary.replace(target)
-        target.with_suffix(".json").write_text(json.dumps({
-            "abi": 1, "mate": importlib.metadata.version("mate"),
-            "spec": spec.name, "function": function,
-            "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
-        }, indent=2) + "\n")
-        logger.info("Exported %s", target)
+    name = "glm_kpool_nonpaged_v1"
+    function = "fp8_mqa_logits"
+    spec = gen_mqa_logits_spec(MqaLogitsJitConfig(2, 128, 32, 128, False))
+    library = spec.build()
+    tvm_ffi.load_module(str(library)).get_function(function)
+    directory = ops_path / name
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / f"{name}.so"
+    temporary = target.with_suffix(f".{os.getpid()}.tmp.so")
+    shutil.copy2(library, temporary)
+    temporary.replace(target)
+    target.with_suffix(".json").write_text(json.dumps({
+        "abi": 1, "mate": importlib.metadata.version("mate"),
+        "spec": spec.name, "function": function,
+        "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+    }, indent=2) + "\n")
+    logger.info("Exported %s", target)
 
 
 def main() -> None:

@@ -349,6 +349,61 @@ TEST_F(GlmSparseTest, ProductionTop512PoolsExpands2048TokensAndThreeTokenTail) {
   }
 }
 
+TEST_F(GlmSparseTest, NonpagedSelectionRespectsRequestAndCausalEnd) {
+  // The first request has increasing key scales, the second decreasing ones.
+  // Their Q rows alternate so a single MQA tile spans both logical prefixes.
+  constexpr int64_t kPages = 12;
+  const auto opts = torch::TensorOptions().device(device_);
+  auto pages = torch::arange(kPages, torch::kInt32).flip({0});
+  auto table = torch::stack({pages, pages + kPages});
+  table[1][11] = -1;
+  auto bytes = torch::full({2 * kPages, 64 * 132}, 0x38, torch::kUInt8);
+  auto scales = torch::arange(1, kPages * 64 + 1, torch::kFloat32);
+  scales = torch::cat({scales.view({kPages, 64}).flip({0}),
+                       scales.flip({0}).view({kPages, 64}).flip({0})});
+  bytes.narrow(1, 64 * 128, 64 * 4).copy_(scales.view(torch::kUInt8));
+  auto cache = bytes.view({2 * kPages, 64, 1, 132}).to(device_);
+  auto positions =
+      torch::tensor({0, 2047, 2048, 2303, 2306, 2702, 2998, -1}, torch::kInt64);
+  auto rows = torch::tensor({0, 1, 0, 1, 0, 1, 0, -1}, torch::kInt32);
+  const int64_t count = positions.numel();
+  auto q = torch::zeros({count, 32, 128}, opts.dtype(torch::kBFloat16));
+  q.select(2, 0).fill_(1);
+  auto weights = torch::ones({count, 32}, opts.dtype(torch::kFloat32));
+  // The longer graph capacity forces two gather groups. Only the leading
+  // pages are mapped, and both runs must select the same logical tokens.
+  for (const int64_t capacity : {2999, 1048576}) {
+    SCOPED_TRACE(capacity);
+    auto padded_table =
+        torch::full({2, (capacity + 255) / 256}, -1, torch::kInt32);
+    padded_table.narrow(1, 0, kPages).copy_(table);
+    auto selection =
+        kernel::musa::glm5_next_indexer_select(q,
+                                               weights,
+                                               positions.to(device_),
+                                               rows.to(device_),
+                                               padded_table.to(device_),
+                                               cache,
+                                               capacity,
+                                               /*token_topk=*/2048);
+    for (int64_t row = 0; row < count; ++row) {
+      const int64_t end = positions[row].item<int64_t>() + 1;
+      const int64_t pooled = end / 4 * 4;
+      const int64_t wanted = std::min<int64_t>(pooled, 2048);
+      const int64_t start =
+          rows[row].item<int32_t>() == 0 ? pooled - wanted : 0;
+      std::vector<int64_t> expected(wanted);
+      std::iota(expected.begin(), expected.end(), start);
+      for (int64_t token = pooled; token < end; ++token) {
+        expected.emplace_back(token);
+      }
+      SCOPED_TRACE(row);
+      EXPECT_EQ(selection.lengths[row].cpu().item<int32_t>(), expected.size());
+      EXPECT_EQ(selected_tokens(selection, row), expected);
+    }
+  }
+}
+
 TEST_F(GlmSparseTest, CpPayloadScatterWritesPoolsAndTail) {
   const auto opts =
       torch::TensorOptions().device(device_).dtype(torch::kBFloat16);
@@ -581,6 +636,8 @@ TEST_F(GlmSparseTest,
               << start << ":" << step;
           EXPECT_TRUE(torch::equal(output.second.tokens.cpu(),
                                    expected_selection.cpu()));
+          EXPECT_TRUE(torch::equal(output.second.lengths.cpu(),
+                                   expected.second.lengths.cpu()));
           EXPECT_TRUE(torch::equal(cache.get_kpool_tail().cpu(),
                                    reference.get_kpool_tail().cpu()));
           EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
@@ -668,8 +725,10 @@ TEST_F(GlmSparseTest, PrefillGraphPreservesPackedSequencesAndCacheWrites) {
                                   expected.first.cpu().to(torch::kFloat32),
                                   0.002,
                                   0.0002));
-      EXPECT_TRUE(torch::equal(output.second.tokens.cpu(),
-                               expected.second.tokens.cpu()));
+      EXPECT_TRUE(
+          torch::equal(replayed_selection.cpu(), expected.second.tokens.cpu()));
+      EXPECT_TRUE(torch::equal(output.second.lengths.cpu(),
+                               expected.second.lengths.cpu()));
       EXPECT_TRUE(torch::equal(cache.get_k_cache().cpu(),
                                reference.get_k_cache().cpu()));
       EXPECT_TRUE(torch::equal(cache.get_index_cache().cpu(),
