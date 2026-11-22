@@ -316,6 +316,18 @@ void deepseek_v41_scatter_small_cache_native(const torch::Tensor& cache,
                                              const torch::Tensor& slots,
                                              const torch::Tensor& values);
 
+// Up to 512 BF16 rows with parallel duplicate detection on the native stream.
+// Invalid destinations are ignored; the last row for each valid slot wins.
+void deepseek_v41_scatter_wide_prefill_cache_native(
+    const torch::Tensor& cache,
+    const torch::Tensor& table,
+    int64_t start_position,
+    const torch::Tensor& values);
+
+void deepseek_v41_scatter_prefill_cache_native(const torch::Tensor& cache,
+                                               const torch::Tensor& slots,
+                                               const torch::Tensor& values);
+
 void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                 torch::Tensor slot_ids,
                                 torch::Tensor values);
@@ -338,6 +350,11 @@ torch::Tensor deepseek_v4_indexer_cache_gather(
     int64_t kv_len,
     torch::ScalarType output_dtype,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+torch::Tensor deepseek_v41_indexer_filter_selected(
+    const torch::Tensor& scores,
+    const torch::Tensor& indices,
+    const torch::Tensor& visible);
 
 torch::Tensor deepseek_v4_indexer_topk(
     const torch::Tensor& query,

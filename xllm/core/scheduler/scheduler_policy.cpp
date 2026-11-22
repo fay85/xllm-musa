@@ -36,6 +36,11 @@ limitations under the License.
 #include "framework/block/block_manager_pool.h"
 #include "framework/model/model_args.h"
 #include "framework/request/priority_comparator.h"
+#if defined(USE_MUSA)
+#include "core/framework/config/disagg_pd_config.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
+#include "core/util/env_var.h"
+#endif
 #include "util/timer.h"
 #include "util/utils.h"
 
@@ -712,6 +717,17 @@ bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
     token_budget = maybe_cap_linear_state_prefill_chunk(
         cached_tokens, token_budget, state, seq->num_prompt_tokens());
     target_tokens = std::min(cached_tokens + token_budget, seq->num_tokens());
+#if defined(USE_MUSA)
+    if (util::get_bool_env("XLLM_DSV41_SKIP_INTERMEDIATE_CED", false) &&
+        state.model_args.model_type() == "deepseek_v41" &&
+        DisaggPDConfig::get_instance().instance_role() == "PREFILL") {
+      target_tokens = layer::deepseek_v41_rebalance_final_prefill_tail(
+          cached_tokens,
+          target_tokens,
+          seq->num_tokens(),
+          static_cast<size_t>(state.model_args.window_size()));
+    }
+#endif
     CHECK_GT(target_tokens, cached_tokens);
     *actual_tokens = target_tokens - cached_tokens;
   }

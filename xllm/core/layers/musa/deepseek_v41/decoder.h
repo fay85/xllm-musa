@@ -32,6 +32,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/layers/musa/deepseek_v41/engram_injection.h"
 #include "core/layers/musa/deepseek_v41/hyper_connection.h"
 #include "core/layers/musa/deepseek_v41/moe.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 #include "core/layers/musa/deepseek_v41/rms_norm.h"
 #include "core/platform/musa_graph_handle.h"
@@ -47,7 +48,10 @@ struct DeepseekV41DecoderConfig {
   std::string mhc_dot_sinkhorn_directory;
   bool decode_tp_custom_allreduce = false;
   bool verify_custom_allreduce = false;
+  bool prefill_custom_allreduce = false;
   bool decode_mhc_fused_reduce = false;
+  bool prefill_mhc_fused_reduce = false;
+  bool prefill_query_partition = false;
   bool decode_ffn_tail_graph = false;
   bool decode_ffn_graph_fused_inputs = false;
 };
@@ -71,7 +75,8 @@ class DeepseekV41Decoder final {
   DeepseekV41Decoder(DeepseekV41DecoderConfig config,
                      DeepseekV41DecoderWeights weights,
                      ProcessGroup* attention_group = nullptr,
-                     ProcessGroup* expert_group = nullptr)
+                     ProcessGroup* expert_group = nullptr,
+                     ProcessGroup* prefill_query_group = nullptr)
       : config_(std::move(config)),
         weights_(std::move(weights)),
         attention_(config_.attention, weights_.attention),
@@ -84,7 +89,8 @@ class DeepseekV41Decoder final {
                       config_.hc_epsilon,
                       config_.mhc_prenorm_directory,
                       config_.decode_mhc_fused_reduce,
-                      config_.mhc_dot_sinkhorn_directory),
+                      config_.mhc_dot_sinkhorn_directory,
+                      config_.prefill_mhc_fused_reduce),
         ffn_hc_(weights_.hyper_connection[3],
                 weights_.hyper_connection[4],
                 weights_.hyper_connection[5],
@@ -93,8 +99,14 @@ class DeepseekV41Decoder final {
                 config_.hc_epsilon,
                 config_.mhc_prenorm_directory,
                 config_.decode_mhc_fused_reduce,
-                config_.mhc_dot_sinkhorn_directory),
-        attention_group_(attention_group) {
+                config_.mhc_dot_sinkhorn_directory,
+                config_.prefill_mhc_fused_reduce),
+        attention_group_(attention_group),
+        prefill_query_group_(prefill_query_group) {
+    CHECK(!config_.prefill_query_partition ||
+          (attention_group_ == nullptr && prefill_query_group_ != nullptr &&
+           prefill_query_group_->world_size() == 8 &&
+           config_.attention.heads == 64));
     check_norm(weights_.input_norm);
     check_norm(weights_.post_attention_norm);
     CHECK_EQ(weights_.input_norm.sizes(), weights_.post_attention_norm.sizes());
@@ -122,26 +134,107 @@ class DeepseekV41Decoder final {
       const std::optional<torch::Tensor>& input_ids,
       const std::optional<torch::Tensor>& engram_embedding,
       const std::optional<torch::Tensor>& engram_mask) {
-    CHECK_EQ(engram_embedding.has_value(), engram_ != nullptr);
-    torch::Tensor residual = hidden;
-    if (engram_) {
-      residual =
-          engram_->forward(hidden, engram_embedding.value(), engram_mask);
-    }
+    torch::Tensor residual = inject_engram(
+        hidden, engram_embedding, engram_mask, shared.decode_capacity == 0);
     auto [attn_input, attn_pre, attn_post, attn_comb] =
         attention_hc_.prepare(residual, carried_pre);
-    torch::Tensor attn_output =
-        attention_.forward(norm(attn_input, weights_.input_norm),
-                           positions,
-                           rope_table,
-                           cache,
-                           swa_table,
-                           key_table,
-                           index_table,
-                           context_length,
-                           shared);
+    const torch::Tensor normalized = norm(attn_input, weights_.input_norm);
+    torch::Tensor attn_output;
+    if (config_.prefill_query_partition && normalized.size(0) > 6 &&
+        shared.decode_capacity == 0) {
+      CHECK_EQ(normalized.size(0) % prefill_query_group_->world_size(), 0);
+      torch::Tensor local = attention_.forward_query_partition(
+          normalized,
+          positions,
+          rope_table,
+          cache,
+          swa_table,
+          key_table,
+          index_table,
+          context_length,
+          shared,
+          prefill_query_group_->rank(),
+          prefill_query_group_->world_size());
+      const DeepseekV41ProfileRange gather_range(
+          "V41/Attention/query_allgather");
+      attn_output =
+          prefill_query_group_->allgather_base_sync(local.contiguous())
+              .reshape({normalized.size(0), normalized.size(1)});
+    } else {
+      attn_output = attention_.forward(normalized,
+                                       positions,
+                                       rope_table,
+                                       cache,
+                                       swa_table,
+                                       key_table,
+                                       index_table,
+                                       context_length,
+                                       shared);
+    }
     return forward_tail(
         attn_output, residual, attn_pre, attn_post, attn_comb, input_ids);
+  }
+
+  std::tuple<torch::Tensor, torch::Tensor> forward_partitioned_prefill(
+      const torch::Tensor& hidden,
+      const torch::Tensor& carried_pre,
+      const torch::Tensor& positions,
+      const torch::Tensor& rope_table,
+      const DeepseekV41AttentionCache& cache,
+      const torch::Tensor& swa_table,
+      const torch::Tensor& key_table,
+      const torch::Tensor& index_table,
+      int64_t context_length,
+      DeepseekV41AttentionRuntime& shared,
+      const torch::Tensor& input_ids,
+      const std::optional<torch::Tensor>& engram_embedding,
+      const std::optional<torch::Tensor>& engram_mask) {
+    CHECK(config_.prefill_query_partition && attention_group_ == nullptr);
+    CHECK_EQ(shared.decode_capacity, 0);
+    ProcessGroup& group = *prefill_query_group_;
+    const int64_t rows = hidden.size(0);
+    const int64_t start = group.rank() * rows;
+    CHECK_EQ(rows * group.world_size(), positions.numel());
+    CHECK_EQ(input_ids.numel(), positions.numel());
+    torch::Tensor residual = hidden;
+    if (engram_embedding.has_value()) {
+      std::optional<torch::Tensor> mask;
+      if (engram_mask.has_value()) {
+        mask = engram_mask->narrow(0, start, rows);
+      }
+      residual = inject_engram(
+          hidden, engram_embedding->narrow(0, start, rows), mask, true);
+    }
+    CHECK_EQ(engram_embedding.has_value(), engram_ != nullptr);
+    auto [attn_input, attn_pre, attn_post, attn_comb] =
+        attention_hc_.prepare(residual, carried_pre);
+    const torch::Tensor local = norm(attn_input, weights_.input_norm);
+    torch::Tensor normalized;
+    {
+      const DeepseekV41ProfileRange range("V41/Attention/normalized_allgather");
+      normalized =
+          group.allgather_base_sync(local).reshape({-1, local.size(1)});
+    }
+    const torch::Tensor attn_output =
+        attention_.forward_query_partition(normalized,
+                                           positions,
+                                           rope_table,
+                                           cache,
+                                           swa_table,
+                                           key_table,
+                                           index_table,
+                                           context_length,
+                                           shared,
+                                           group.rank(),
+                                           group.world_size(),
+                                           &group);
+    residual =
+        attention_hc_.combine(attn_output, residual, attn_post, attn_comb);
+    auto [ffn_input, ffn_pre, ffn_post, ffn_comb] =
+        ffn_hc_.prepare(residual, attn_pre);
+    const auto ffn_output = moe_.forward_partitioned_prefill(
+        norm(ffn_input, weights_.post_attention_norm), input_ids);
+    return {ffn_hc_.combine(ffn_output, residual, ffn_post, ffn_comb), ffn_pre};
   }
 
   std::tuple<torch::Tensor, torch::Tensor> forward_batched_decode(
@@ -274,6 +367,40 @@ class DeepseekV41Decoder final {
   }
 
  private:
+  torch::Tensor inject_engram(
+      const torch::Tensor& hidden,
+      const std::optional<torch::Tensor>& engram_embedding,
+      const std::optional<torch::Tensor>& engram_mask,
+      bool prefill) const {
+    CHECK_EQ(engram_embedding.has_value(), engram_ != nullptr);
+    torch::Tensor residual = hidden;
+    if (engram_) {
+      if (hidden.size(0) <= kDeepseekV41PrefillTileRows) {
+        residual =
+            engram_->forward(hidden, engram_embedding.value(), engram_mask);
+      } else {
+        CHECK(config_.prefill_query_partition && prefill);
+        CHECK_LE(hidden.size(0), kDeepseekV41PrefillMaxRows);
+        const auto inject = [&](int64_t start, int64_t count) {
+          const auto mask =
+              engram_mask.has_value()
+                  ? std::make_optional(engram_mask->narrow(0, start, count))
+                  : std::nullopt;
+          return engram_->forward(hidden.narrow(0, start, count),
+                                  engram_embedding->narrow(0, start, count),
+                                  mask);
+        };
+        std::vector<torch::Tensor> injected;
+        deepseek_v41_for_each_prefill_tile(
+            hidden.size(0), [&](int64_t start, int64_t count) {
+              injected.emplace_back(inject(start, count));
+            });
+        residual = torch::cat(injected, 0);
+      }
+    }
+    return residual;
+  }
+
   void capture_tail(const std::array<torch::Tensor, 6>& inputs) {
     const DeepseekV41ProfileRange range("V41/Decoder/FFN_tail_graph_capture");
     const int32_t device_index = inputs[0].get_device();
@@ -339,12 +466,14 @@ class DeepseekV41Decoder final {
           /*payload_bytes=*/static_cast<int64_t>(attn_output.nbytes()),
           /*group_size=*/attention_group_->world_size());
       const int64_t custom_rows = config_.verify_custom_allreduce ? 6 : 1;
-      if (config_.decode_tp_custom_allreduce && attn_output.size(0) > 0 &&
-          attn_output.size(0) <= custom_rows) {
+      if ((config_.decode_tp_custom_allreduce && attn_output.size(0) > 0 &&
+           attn_output.size(0) <= custom_rows) ||
+          (config_.prefill_custom_allreduce && attn_output.size(0) > 6 &&
+           attn_output.size(0) <= 512)) {
         // Selection follows the existing all-rank TP policy. The native
         // custom collective returns separate storage; consume that result.
-        // Multirow verification is separately voted across ranks. Larger
-        // Prefill batches retain their established MCCL path.
+        // Prefill has a separate all-rank opt-in. The generic TP implementation
+        // slices payloads above its IPC capacity without changing rank order.
         std::optional<torch::Tensor> reduced =
             musa_allreduce_tp_custom(attention_group_, attn_output);
         CHECK(reduced.has_value())
@@ -390,6 +519,7 @@ class DeepseekV41Decoder final {
   DeepseekV41HyperConnection ffn_hc_;
   std::unique_ptr<DeepseekV41EngramInjection> engram_;
   ProcessGroup* attention_group_;
+  ProcessGroup* prefill_query_group_ = nullptr;
   std::array<torch::Tensor, 6> tail_inputs_;
   std::tuple<torch::Tensor, torch::Tensor> tail_outputs_;
   // Graph lifetime ends before its persistent inputs/output and model weights.

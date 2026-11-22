@@ -24,6 +24,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/layers/musa/deepseek_v41/decoder.h"
 #include "core/layers/musa/deepseek_v41/gather_bits.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 
 namespace xllm::layer {
@@ -46,7 +47,8 @@ class DeepseekV41TextModel final {
                        bool bounded_replay = false,
                        bool replicated_attention = false,
                        bool owner_attention = false,
-                       bool gather_bf16_bits = false)
+                       bool gather_bf16_bits = false,
+                       bool prefill_residual_partition = false)
       : embedding_(std::move(embedding)),
         norm_(std::move(norm)),
         head_(std::move(head)),
@@ -74,7 +76,14 @@ class DeepseekV41TextModel final {
     CHECK_EQ(head_.size(1), norm_.numel());
     CHECK_EQ(head_.size(0) * tp, embedding_.size(0));
     norm_epsilon_ = configs[0].attention.epsilon;
+    prefill_query_partition_ = configs[0].prefill_query_partition;
     bounded_replay_ = bounded_replay;
+    prefill_residual_partition_ = prefill_residual_partition;
+    CHECK(!prefill_residual_partition_ ||
+          (bounded_replay_ && prefill_query_partition_ &&
+           replicated_attention && !owner_attention_ && attention_group_ &&
+           attention_group_ == expert_group &&
+           attention_group_->world_size() == 8));
     replay_window_ = configs[0].attention.window;
     for (const auto& config : configs) {
       late_layer_start_ =
@@ -101,7 +110,8 @@ class DeepseekV41TextModel final {
           std::move(configs[index]),
           std::move(weights[index]),
           replicated_attention ? nullptr : attention_group_,
-          expert_group));
+          expert_group,
+          attention_group_));
     }
   }
 
@@ -151,7 +161,8 @@ class DeepseekV41TextModel final {
       const std::optional<torch::Tensor>& engram_mask,
       AuxHiddenCapture* auxiliary,
       int64_t decode_capacity = 0,
-      const std::optional<torch::Tensor>& prepared_embedding = std::nullopt) {
+      const std::optional<torch::Tensor>& prepared_embedding = std::nullopt,
+      bool cache_only = false) {
     CHECK(input_ids.defined() && positions.defined());
     CHECK_EQ(input_ids.device(), embedding_.device());
     CHECK_EQ(positions.device(), embedding_.device());
@@ -165,6 +176,9 @@ class DeepseekV41TextModel final {
     CHECK_EQ(caches.size(), layers_.size());
     CHECK_EQ(engram_rows.size(), layers_.size());
     CHECK_GE(context_length, input_ids.size(0));
+    CHECK(!cache_only ||
+          (bounded_replay_ && decode_capacity == 0 && !owner_attention_ &&
+           input_ids.size(0) > replay_window_));
     if (prepared_embedding.has_value()) {
       CHECK(owner_attention_);
       CHECK_EQ(prepared_embedding->device(), embedding_.device());
@@ -197,9 +211,18 @@ class DeepseekV41TextModel final {
     torch::Tensor hidden = prepared_embedding.has_value()
                                ? prepared_embedding.value()
                                : prepare_embeddings(input_ids);
+    // The final rank must own all rows needed when entering bounded replay.
+    const bool partition_early =
+        prefill_residual_partition_ && decode_capacity == 0 &&
+        input_ids.numel() % attention_group_->world_size() == 0 &&
+        input_ids.numel() / attention_group_->world_size() >= replay_window_;
+    if (partition_early) {
+      const int64_t rows = input_ids.numel() / attention_group_->world_size();
+      hidden = hidden.narrow(0, attention_group_->rank() * rows, rows);
+    }
     hidden = hidden.unsqueeze(1).expand({-1, 4, -1}).contiguous();
     torch::Tensor pre_mix = torch::zeros(
-        {input_ids.size(0), 4}, hidden.options().dtype(torch::kFloat32));
+        {hidden.size(0), 4}, hidden.options().dtype(torch::kFloat32));
     pre_mix.select(1, 0).fill_(1.0);
     DeepseekV41AttentionRuntime shared;
     shared.decode_capacity = decode_capacity;
@@ -215,9 +238,39 @@ class DeepseekV41TextModel final {
     for (size_t index = 0; index < layers_.size(); ++index) {
       if (bounded_replay_ && index == static_cast<size_t>(late_layer_start_) &&
           input_ids.size(0) > replay_window_) {
+        if (cache_only) {
+          const DeepseekV41ProfileRange cache_only_range(
+              "V41/CED/cache_only_intermediate");
+          if (diagnostic_progress) {
+            LOG(INFO) << "V41_DIAGNOSTIC cache-only q=" << input_ids.size(0)
+                      << " kv=" << context_length
+                      << " completed_layers=" << index;
+          }
+          LOG_FIRST_N(INFO, 1)
+              << "V4.1 intermediate Prefill cache-only execution, rows="
+              << input_ids.size(0) << ", completed_layers=" << index;
+          return torch::empty({0, norm_.numel()}, hidden.options());
+        }
         last_output_row_offset_ = input_ids.size(0) - replay_window_;
-        hidden = hidden.narrow(0, last_output_row_offset_, replay_window_);
-        pre_mix = pre_mix.narrow(0, last_output_row_offset_, replay_window_);
+        if (partition_early) {
+          const DeepseekV41ProfileRange range(
+              "V41/CED/residual_tail_broadcast");
+          const int64_t owner = attention_group_->world_size() - 1;
+          if (attention_group_->rank() == owner) {
+            const int64_t start = hidden.size(0) - replay_window_;
+            hidden = hidden.narrow(0, start, replay_window_).contiguous();
+            pre_mix = pre_mix.narrow(0, start, replay_window_).contiguous();
+          } else {
+            hidden = torch::empty({replay_window_, 4, hidden.size(2)},
+                                  hidden.options());
+            pre_mix = torch::empty({replay_window_, 4}, pre_mix.options());
+          }
+          attention_group_->broadcast(hidden, owner);
+          attention_group_->broadcast(pre_mix, owner);
+        } else {
+          hidden = hidden.narrow(0, last_output_row_offset_, replay_window_);
+          pre_mix = pre_mix.narrow(0, last_output_row_offset_, replay_window_);
+        }
         active_ids =
             input_ids.narrow(0, last_output_row_offset_, replay_window_);
         active_positions =
@@ -225,11 +278,11 @@ class DeepseekV41TextModel final {
         shared.swa_replay_start = context_length - replay_window_;
         if (shared.topk.defined()) {
           shared.topk =
-              shared.topk.narrow(0, last_output_row_offset_, replay_window_);
+              repartition_tail_metadata(shared.topk, input_ids.size(0));
         }
         if (shared.candidates.has_value()) {
-          shared.candidates = shared.candidates->narrow(
-              0, last_output_row_offset_, replay_window_);
+          shared.candidates = repartition_tail_metadata(
+              shared.candidates.value(), input_ids.size(0));
         }
         if (active_engram_mask.has_value()) {
           active_engram_mask = active_engram_mask->narrow(
@@ -250,26 +303,46 @@ class DeepseekV41TextModel final {
                                                 static_cast<int64_t>(index));
       const torch::Tensor& table =
           source_ratios_[index] == 1 ? ratio1_table : ratio2_table;
-      if (auxiliary != nullptr &&
-          auxiliary->should_capture(static_cast<int32_t>(index))) {
-        // V4.1 names the residual ENTERING the layer, unlike V4 post-layer ids.
-        auxiliary->capture_layer(
-            static_cast<int32_t>(index), hidden.mean(1), std::nullopt);
+      if (partition_early && index < static_cast<size_t>(late_layer_start_)) {
+        CHECK(auxiliary == nullptr ||
+              !auxiliary->should_capture(static_cast<int32_t>(index)));
+        std::tie(hidden, pre_mix) = layers_[index]->forward_partitioned_prefill(
+            hidden,
+            pre_mix,
+            positions,
+            compressed_layers_[index] ? compressed_rope_ : plain_rope_,
+            caches[index],
+            swa_table,
+            table,
+            table,
+            context_length,
+            shared,
+            input_ids,
+            active_engram,
+            active_engram_mask);
+      } else {
+        if (auxiliary != nullptr &&
+            auxiliary->should_capture(static_cast<int32_t>(index))) {
+          // V4.1 names the residual ENTERING the layer, unlike V4 post-layer
+          // ids.
+          auxiliary->capture_layer(
+              static_cast<int32_t>(index), hidden.mean(1), std::nullopt);
+        }
+        std::tie(hidden, pre_mix) = layers_[index]->forward(
+            hidden,
+            pre_mix,
+            active_positions,
+            compressed_layers_[index] ? compressed_rope_ : plain_rope_,
+            caches[index],
+            swa_table,
+            table,
+            table,
+            context_length,
+            shared,
+            active_ids,
+            active_engram,
+            active_engram_mask);
       }
-      std::tie(hidden, pre_mix) = layers_[index]->forward(
-          hidden,
-          pre_mix,
-          active_positions,
-          compressed_layers_[index] ? compressed_rope_ : plain_rope_,
-          caches[index],
-          swa_table,
-          table,
-          table,
-          context_length,
-          shared,
-          active_ids,
-          active_engram,
-          active_engram_mask);
       if (diagnostic_progress) {
         LOG(INFO) << "V41_DIAGNOSTIC layer enqueued index=" << index
                   << " q=" << hidden.size(0) << " kv=" << context_length;
@@ -362,6 +435,8 @@ class DeepseekV41TextModel final {
     return project_logits(select_hidden(hidden, selected));
   }
 
+  int64_t output_row_offset() const { return last_output_row_offset_; }
+
   torch::Tensor select_hidden(
       const torch::Tensor& hidden,
       const std::optional<torch::Tensor>& selected) const {
@@ -394,6 +469,27 @@ class DeepseekV41TextModel final {
   }
 
  private:
+  torch::Tensor repartition_tail_metadata(const torch::Tensor& rows,
+                                          int64_t original_rows) const {
+    CHECK_EQ(rows.dim(), 2);
+    if (!prefill_query_partition_) {
+      CHECK_EQ(rows.size(0), original_rows);
+      return deepseek_v41_partition_prefill_tail(
+          rows, replay_window_, /*rank=*/0, /*world=*/1);
+    }
+    CHECK(attention_group_ != nullptr);
+    const int64_t world = attention_group_->world_size();
+    CHECK_EQ(rows.size(0) * world, original_rows);
+    const DeepseekV41ProfileRange range("V41/CED/metadata_redistribution");
+    const torch::Tensor full =
+        attention_group_
+            ->allgather_base_sync(deepseek_v41_tail_collective_input(rows))
+            .view(rows.scalar_type())
+            .reshape({original_rows, rows.size(1)});
+    return deepseek_v41_partition_prefill_tail(
+        full, replay_window_, attention_group_->rank(), world);
+  }
+
   torch::Tensor embedding_;
   torch::Tensor norm_;
   torch::Tensor head_;
@@ -403,6 +499,8 @@ class DeepseekV41TextModel final {
   bool owner_attention_ = false;
   bool gather_bf16_bits_ = false;
   bool bounded_replay_ = false;
+  bool prefill_query_partition_ = false;
+  bool prefill_residual_partition_ = false;
   int64_t replay_window_ = 0;
   int64_t late_layer_start_ = 0;
   int64_t last_output_row_offset_ = 0;

@@ -27,6 +27,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
 #include "core/layers/musa/deepseek_v41/rms_norm.h"
+#include "core/util/env_var.h"
 
 namespace xllm::layer {
 
@@ -41,13 +42,17 @@ class DeepseekV41Indexer final {
                      int64_t head_dim,
                      double epsilon,
                      bool original_fp8_activation,
-                     std::string score_aot_directory = {})
+                     std::string score_aot_directory = {},
+                     int64_t max_select_width = 8192)
       : weights_(check_weights(std::move(weights))),
         query_(weights_[0], original_fp8_activation),
         heads_(heads),
         head_dim_(head_dim),
         epsilon_(epsilon),
-        score_aot_directory_(std::move(score_aot_directory)) {
+        score_aot_directory_(std::move(score_aot_directory)),
+        max_select_width_(max_select_width) {
+    CHECK(max_select_width_ == 8192 || max_select_width_ == 16384 ||
+          max_select_width_ == 32768);
     CHECK_GT(heads_, 0);
     CHECK_GT(head_dim_, 0);
     CHECK_EQ(head_dim_ % 32, 0);
@@ -192,7 +197,7 @@ class DeepseekV41Indexer final {
     CHECK_GT(topk, 0);
     torch::DeviceGuard guard(scores.device());
     if (!score_aot_directory_.empty() && scores.size(1) > 0 &&
-        scores.size(1) <= 8192) {
+        scores.size(1) <= max_select_width_) {
       return kernel::musa::deepseek_v41_indexer_select(
           scores, visible, topk, candidates, score_aot_directory_);
     }
@@ -213,10 +218,26 @@ class DeepseekV41Indexer final {
     const torch::Tensor ordered =
         torch::argsort(masked, /*stable=*/true, /*dim=*/-1, /*descending=*/true)
             .narrow(-1, 0, count);
+    if (scores.size(0) > 1 && scores.size(0) <= 6 &&
+        scores.size(1) > max_select_width_ && scores.size(1) <= 65536 &&
+        count == 512 &&
+        util::get_bool_env("XLLM_DSV41_VERIFY_FUSED_INDEX_FILTER", false)) {
+      LOG_FIRST_N(INFO, 1) << "Native V4.1 fuses verify indexer selection "
+                              "filter: queries="
+                           << scores.size(0) << ", columns=" << scores.size(1);
+      return kernel::musa::deepseek_v41_indexer_filter_selected(
+          masked, ordered, visible);
+    }
     const torch::Tensor indices = std::get<0>(ordered.sort(-1));
+    const torch::Tensor selected = masked.gather(-1, indices);
+    // TorchMUSA's composite isfinite materializes a host scalar in MulTensor,
+    // which is forbidden during Graph capture. Comparisons retain the same
+    // finite/NaN/Inf contract without that host-to-device copy.
+    const torch::Tensor finite =
+        selected.gt(-std::numeric_limits<float>::infinity())
+            .logical_and(selected.lt(std::numeric_limits<float>::infinity()));
     const torch::Tensor valid =
-        indices.lt(visible.unsqueeze(-1))
-            .logical_and(torch::isfinite(masked.gather(-1, indices)));
+        indices.lt(visible.unsqueeze(-1)).logical_and(finite);
     return torch::where(valid, indices, -1).to(torch::kInt32);
   }
 
@@ -324,6 +345,7 @@ class DeepseekV41Indexer final {
   int64_t head_dim_;
   double epsilon_;
   std::string score_aot_directory_;
+  int64_t max_select_width_ = 8192;
 };
 
 }  // namespace xllm::layer

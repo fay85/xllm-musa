@@ -31,7 +31,9 @@ class DeepseekV41W4A8Experts final {
                          std::string library_path,
                          double gate_up_input_scale = 0.0,
                          double down_input_scale = 0.0,
-                         bool valid_prefix_swiglu = false)
+                         bool valid_prefix_swiglu = false,
+                         bool prefill_valid_prefix_swiglu = false,
+                         bool prefill_parallel_swiglu = false)
       : gate_up_(std::move(gate_up)),
         gate_up_scale_(std::move(gate_up_scale)),
         down_(std::move(down)),
@@ -41,7 +43,9 @@ class DeepseekV41W4A8Experts final {
         library_path_(std::move(library_path)),
         gate_up_input_scale_(gate_up_input_scale),
         down_input_scale_(down_input_scale),
-        valid_prefix_swiglu_(valid_prefix_swiglu) {
+        valid_prefix_swiglu_(valid_prefix_swiglu),
+        prefill_valid_prefix_swiglu_(prefill_valid_prefix_swiglu),
+        prefill_parallel_swiglu_(prefill_parallel_swiglu) {
     CHECK_EQ(gate_up_input_scale_ > 0.0, down_input_scale_ > 0.0);
     CHECK_EQ(gate_up_.dim(), 3);
     CHECK_EQ(down_.dim(), 3);
@@ -57,22 +61,46 @@ class DeepseekV41W4A8Experts final {
                         const torch::Tensor& ids,
                         const torch::Tensor& route_weights) const {
     const DeepseekV41ProfileRange range("V41/MoE/W4A8_routed");
-    auto [dispatched, input_scale, counts, route_rows] =
+    auto dispatched =
         kernel::musa::deepseek_v41_w4a8_dispatch(input.contiguous(),
                                                  ids.contiguous(),
                                                  first_expert_,
                                                  gate_up_.size(0),
                                                  gate_up_input_scale_);
-    const torch::Tensor down =
-        project_dispatched(dispatched,
-                           input_scale,
-                           counts,
-                           valid_prefix_swiglu_ && input.size(0) <= 8);
-    return kernel::musa::deepseek_v41_w4a8_combine(down,
-                                                   ids.contiguous(),
-                                                   route_rows,
-                                                   route_weights.contiguous(),
-                                                   first_expert_);
+    return combine(dispatched,
+                   ids,
+                   route_weights,
+                   (valid_prefix_swiglu_ && input.size(0) <= 8) ||
+                       (prefill_valid_prefix_swiglu_ && input.size(0) > 8),
+                   prefill_parallel_swiglu_ && input.size(0) > 8);
+  }
+
+  torch::Tensor forward_compact(const torch::Tensor& input,
+                                const torch::Tensor& ids,
+                                const torch::Tensor& route_weights) const {
+    const DeepseekV41ProfileRange range("V41/MoE/W4A8_compact");
+    CHECK_GT(input.size(0), 512);
+    auto dispatched =
+        kernel::musa::deepseek_v41_w4a8_dispatch_compact(input.contiguous(),
+                                                         ids.contiguous(),
+                                                         first_expert_,
+                                                         gate_up_.size(0),
+                                                         gate_up_input_scale_);
+    if (!dispatched.has_value()) {
+      LOG_FIRST_N(INFO, 1)
+          << "V4.1 wide P expert occupancy exceeds 512 rows for "
+          << input.size(0) << " input rows; using the original dispatch tiles";
+      return {};
+    }
+    LOG_FIRST_N(INFO, 1) << "V4.1 compact wide P dispatch: input rows="
+                         << input.size(0) << ", expert capacity="
+                         << std::get<0>(*dispatched).size(1);
+    const DeepseekV41ProfileRange compact("V41/MoE/W4A8_compact_active");
+    return combine(dispatched.value(),
+                   ids,
+                   route_weights,
+                   prefill_valid_prefix_swiglu_,
+                   prefill_parallel_swiglu_);
   }
 
   // BF16 [local_experts, padded_capacity, hidden] from DeepEP dispatch.
@@ -90,10 +118,26 @@ class DeepseekV41W4A8Experts final {
   }
 
  private:
+  torch::Tensor combine(const kernel::musa::DeepseekV41W4A8Dispatch& routes,
+                        const torch::Tensor& ids,
+                        const torch::Tensor& route_weights,
+                        bool valid_prefix,
+                        bool parallel_prefill) const {
+    const auto& [dispatched, input_scale, counts, route_rows] = routes;
+    const torch::Tensor down = project_dispatched(
+        dispatched, input_scale, counts, valid_prefix, parallel_prefill);
+    return kernel::musa::deepseek_v41_w4a8_combine(down,
+                                                   ids.contiguous(),
+                                                   route_rows,
+                                                   route_weights.contiguous(),
+                                                   first_expert_);
+  }
+
   torch::Tensor project_dispatched(const torch::Tensor& dispatched,
                                    const torch::Tensor& input_scale,
                                    const torch::Tensor& counts,
-                                   bool valid_prefix) const {
+                                   bool valid_prefix,
+                                   bool parallel_prefill = false) const {
     const torch::Tensor gate_up =
         kernel::musa::deepseek_v41_w4a8_masked_gemm(dispatched,
                                                     input_scale,
@@ -103,8 +147,11 @@ class DeepseekV41W4A8Experts final {
                                                     library_path_,
                                                     gate_up_input_scale_ > 0.0);
     auto [activation, activation_scale] =
-        kernel::musa::deepseek_v41_w4a8_swiglu_quant(
-            gate_up, counts, limit_, down_input_scale_, valid_prefix);
+        parallel_prefill
+            ? kernel::musa::deepseek_v41_w4a8_swiglu_quant_prefill_parallel(
+                  gate_up, counts, limit_, down_input_scale_)
+            : kernel::musa::deepseek_v41_w4a8_swiglu_quant(
+                  gate_up, counts, limit_, down_input_scale_, valid_prefix);
     return kernel::musa::deepseek_v41_w4a8_masked_gemm(activation,
                                                        activation_scale,
                                                        down_,
@@ -124,6 +171,10 @@ class DeepseekV41W4A8Experts final {
   double gate_up_input_scale_ = 0.0;
   double down_input_scale_ = 0.0;
   bool valid_prefix_swiglu_ = false;
+  // Only launch valid expert rows; keep the physical GEMM padding and counts.
+  // The dispatcher enforces input <= 512 before selecting this kernel.
+  bool prefill_valid_prefix_swiglu_ = false;
+  bool prefill_parallel_swiglu_ = false;
 };
 
 }  // namespace xllm::layer

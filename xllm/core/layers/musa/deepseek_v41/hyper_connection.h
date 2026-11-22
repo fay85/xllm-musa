@@ -21,6 +21,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 #include "core/kernels/musa/deepseek_v41_mhc_prenorm.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 #include "core/util/env_var.h"
 
@@ -39,7 +40,8 @@ class DeepseekV41HyperConnection final {
                              double eps,
                              std::string mate_prenorm_directory = {},
                              bool decode_fused_prenorm_reduce = false,
-                             std::string dot_sinkhorn_directory = {})
+                             std::string dot_sinkhorn_directory = {},
+                             bool prefill_fused_prenorm_reduce = false)
       : fn_(std::move(fn)),
         scale_(std::move(scale)),
         base_(std::move(base)),
@@ -48,7 +50,8 @@ class DeepseekV41HyperConnection final {
         eps_(eps),
         mate_prenorm_directory_(std::move(mate_prenorm_directory)),
         decode_fused_prenorm_reduce_(decode_fused_prenorm_reduce),
-        dot_sinkhorn_directory_(std::move(dot_sinkhorn_directory)) {
+        dot_sinkhorn_directory_(std::move(dot_sinkhorn_directory)),
+        prefill_fused_prenorm_reduce_(prefill_fused_prenorm_reduce) {
     CHECK(fn_.defined() && scale_.defined() && base_.defined());
     CHECK(fn_.device().type() == torch::kPrivateUse1);
     CHECK_EQ(fn_.scalar_type(), torch::kFloat32);
@@ -113,7 +116,25 @@ class DeepseekV41HyperConnection final {
       const int64_t rows = packed.size(0);
       const bool fuse_rows =
           rows == 1 || (small_batch_fusion && rows > 1 && rows <= 8);
-      if (decode_fused_prenorm_reduce_ && fuse_rows) {
+      if (rows > kDeepseekV41PrefillTileRows) {
+        CHECK_LE(rows, kDeepseekV41PrefillMaxRows);
+        const torch::Tensor flat = packed.flatten(1);
+        const auto prenorm = [&](int64_t start, int64_t count) {
+          const torch::Tensor tile = flat.narrow(0, start, count);
+          return prefill_fused_prenorm_reduce_ && count > 8
+                     ? kernel::musa::deepseek_v41_mhc_prenorm_fused(
+                           tile, fn_, mate_prenorm_directory_, norm_eps_)
+                     : kernel::musa::deepseek_v41_mhc_prenorm(
+                           tile, fn_, mate_prenorm_directory_, norm_eps_);
+        };
+        std::vector<torch::Tensor> normalized;
+        deepseek_v41_for_each_prefill_tile(
+            rows, [&](int64_t start, int64_t count) {
+              normalized.emplace_back(prenorm(start, count));
+            });
+        mixes = torch::cat(normalized, 0);
+      } else if ((decode_fused_prenorm_reduce_ && fuse_rows) ||
+                 (prefill_fused_prenorm_reduce_ && rows > 8 && rows <= 512)) {
         const DeepseekV41ProfileRange reduce_range("V41/mHC/fused_prenorm");
         mixes = kernel::musa::deepseek_v41_mhc_prenorm_fused(
             packed.flatten(1), fn_, mate_prenorm_directory_, norm_eps_);
@@ -193,6 +214,7 @@ class DeepseekV41HyperConnection final {
   std::string mate_prenorm_directory_;
   bool decode_fused_prenorm_reduce_ = false;
   std::string dot_sinkhorn_directory_;
+  bool prefill_fused_prenorm_reduce_ = false;
 };
 
 }  // namespace xllm::layer

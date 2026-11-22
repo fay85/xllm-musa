@@ -8,9 +8,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ==============================================================================*/
 #pragma once
 
+#include <c10/core/Event.h>
+#include <c10/core/StreamGuard.h>
+#include <c10/core/impl/VirtualGuardImpl.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
 #include <torch/utils.h>
+#include <torch_musa/csrc/core/MUSAStream.h>
 
 #include <algorithm>
 #include <array>
@@ -29,6 +33,52 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::layer {
+
+// The main stream supplies immutable inputs before the fork and waits for the
+// side result before consumption. Retain storage on cross-stream uses.
+class DeepseekV41VerifyOverlap final {
+ public:
+  explicit DeepseekV41VerifyOverlap(const torch::Device& device)
+      : side_(c10::musa::getStreamFromPool(/*isHighPriority=*/false,
+                                           device.index())
+                  .unwrap()),
+        input_ready_(device.type()),
+        side_ready_(device.type()) {
+    CHECK(device.is_privateuseone());
+  }
+
+  bool can_fork() const { return main_stream() != side_; }
+
+  template <typename Forward>
+  torch::Tensor launch(const torch::Tensor& input, Forward&& forward) {
+    const c10::Stream main = main_stream();
+    CHECK(main != side_);
+    input_ready_.record(main);
+    input_ready_.block(side_);
+    const c10::impl::VirtualGuardImpl impl(side_.device_type());
+    impl.recordDataPtrOnStream(input.storage().data_ptr(), side_);
+    c10::StreamGuard guard(side_);
+    torch::Tensor value = std::forward<Forward>(forward)();
+    side_ready_.record(side_);
+    return value;
+  }
+
+  void join(const torch::Tensor& value) {
+    const c10::Stream main = main_stream();
+    side_ready_.block(main);
+    const c10::impl::VirtualGuardImpl impl(main.device_type());
+    impl.recordDataPtrOnStream(value.storage().data_ptr(), main);
+  }
+
+ private:
+  c10::Stream main_stream() const {
+    return c10::musa::getCurrentMUSAStream(side_.device_index()).unwrap();
+  }
+
+  c10::Stream side_;
+  c10::Event input_ready_;
+  c10::Event side_ready_;
+};
 
 // Native dense projection: the default uses an exact BF16 weight carrier and
 // activation QDQ. Explicit FP8 weights/scales select offline-compiled kernels.
@@ -463,7 +513,8 @@ class DeepseekV41Gate final {
                   double scale,
                   bool cache_fp32_weight = false,
                   bool use_bf16_fp32_projection = false,
-                  bool use_simt_projection = false)
+                  bool use_simt_projection = false,
+                  bool prefill_bf16_fp32_projection = false)
       : weight_(std::move(weight)),
         bias_(std::move(bias)),
         vision_bias_(vision_bias.value_or(torch::Tensor{})),
@@ -471,7 +522,9 @@ class DeepseekV41Gate final {
         topk_(topk),
         normalize_(normalize),
         scale_(scale),
-        use_simt_projection_(use_simt_projection) {
+        use_bf16_fp32_projection_(use_bf16_fp32_projection),
+        use_simt_projection_(use_simt_projection),
+        prefill_bf16_fp32_projection_(prefill_bf16_fp32_projection) {
     CHECK(weight_.defined() && bias_.defined());
     CHECK(weight_.device().type() == torch::kPrivateUse1);
     CHECK(weight_.scalar_type() == torch::kBFloat16 ||
@@ -488,7 +541,8 @@ class DeepseekV41Gate final {
     CHECK(std::isfinite(scale_));
     CHECK(!(use_bf16_fp32_projection && use_simt_projection_))
         << "Select at most one optional V4.1 Gate projection backend";
-    if ((use_bf16_fp32_projection || use_simt_projection_) &&
+    if ((use_bf16_fp32_projection || use_simt_projection_ ||
+         prefill_bf16_fp32_projection_) &&
         weight_.scalar_type() == torch::kBFloat16) {
       // Retain the original BF16 operand before optional FP32 caching. Never
       // round a genuinely FP32 checkpoint merely to select this backend.
@@ -533,8 +587,11 @@ class DeepseekV41Gate final {
       // accumulation/output. It uses the current stream, including capture.
       logits = kernel::musa::deepseek_v4_gate_gemv(
           input, weight_bf16_, /*output=*/std::nullopt);
-    } else if (!use_simt_projection_ && weight_bf16_.defined() &&
-               input.scalar_type() == torch::kBFloat16 && input.size(0) <= 6) {
+    } else if (weight_bf16_.defined() &&
+               input.scalar_type() == torch::kBFloat16 &&
+               ((use_bf16_fp32_projection_ && input.size(0) <= 6) ||
+                (prefill_bf16_fp32_projection_ && input.size(0) > 6 &&
+                 input.size(0) <= 512))) {
       // Reuse the V4 MATE BF16-input / FP32-output projection. The guard
       // orders eager pool-stream producers/consumers and preserves capture.
       {
@@ -562,6 +619,8 @@ class DeepseekV41Gate final {
   int64_t topk_;
   bool normalize_;
   double scale_;
+  bool use_bf16_fp32_projection_;
   bool use_simt_projection_;
+  bool prefill_bf16_fp32_projection_;
 };
 }  // namespace xllm::layer

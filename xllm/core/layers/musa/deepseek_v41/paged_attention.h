@@ -21,6 +21,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/deepseek_v41_swa_decode_read.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/csa2_attention.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 
 namespace xllm::layer {
@@ -37,12 +38,16 @@ class DeepseekV41PagedAttention final {
                             std::string sparse_library_path = {},
                             bool single_token_scatter = true,
                             bool fused_decode_read = false,
-                            bool fused_verify_read = false)
+                            bool fused_verify_read = false,
+                            bool fused_prefill_commit = false,
+                            bool wide_prefill_commit = false)
       : cache_(std::move(cache)),
         window_(window),
         single_token_scatter_(single_token_scatter),
         fused_decode_read_(fused_decode_read),
         fused_verify_read_(fused_verify_read),
+        fused_prefill_commit_(fused_prefill_commit),
+        wide_prefill_commit_(wide_prefill_commit),
         attention_(scale, 32 * 1024 * 1024, std::move(sparse_library_path)) {
     CHECK(cache_.defined());
     CHECK(cache_.device().type() == torch::kPrivateUse1);
@@ -104,7 +109,8 @@ class DeepseekV41PagedAttention final {
       const std::optional<torch::Tensor>& compressed_picks,
       const torch::Tensor& query_positions,
       int64_t window_floor,
-      bool static_verify = false) {
+      bool static_verify = false,
+      int64_t prefill_query_offset = -1) {
     const DeepseekV41ProfileRange range("V41/Attention/SWA_sparse_and_commit");
     CHECK(query.defined() && current_kv.defined() && block_table.defined());
     CHECK_EQ(query.device(), cache_.device());
@@ -114,17 +120,29 @@ class DeepseekV41PagedAttention final {
     CHECK_EQ(current_kv.scalar_type(), torch::kBFloat16);
     CHECK_EQ(query.dim(), 3);
     CHECK_EQ(query.size(2), cache_.size(2));
-    CHECK_EQ(current_kv.sizes(),
-             torch::IntArrayRef({query.size(0), cache_.size(2)}));
+    const bool partitioned = prefill_query_offset >= 0;
+    if (partitioned) {
+      CHECK(!static_verify);
+      CHECK_EQ(current_kv.dim(), 2);
+      CHECK_EQ(current_kv.size(1), cache_.size(2));
+      CHECK_LE(prefill_query_offset + query.size(0), current_kv.size(0));
+      CHECK_LE(current_kv.size(0), kDeepseekV41PrefillMaxRows);
+      CHECK_EQ(query_positions.numel(), query.size(0));
+      CHECK_EQ(query_positions.device(), query.device());
+      CHECK_EQ(query_positions.scalar_type(), torch::kInt64);
+    } else {
+      CHECK_EQ(current_kv.sizes(),
+               torch::IntArrayRef({query.size(0), cache_.size(2)}));
+    }
     CHECK_EQ(block_table.dim(), 2);
     CHECK_EQ(block_table.size(0), 1) << "Native paged attention currently C1";
     CHECK_GT(block_table.size(1), 0);
     CHECK(block_table.scalar_type() == torch::kInt32 ||
           block_table.scalar_type() == torch::kInt64);
     CHECK_GE(block_table.size(1) * cache_.size(1), window_);
-    CHECK_GE(context_length, query.size(0));
+    CHECK_GE(context_length, current_kv.size(0));
     CHECK_GE(window_floor, 0);
-    CHECK_LE(window_floor, context_length - query.size(0));
+    CHECK_LE(window_floor, context_length - current_kv.size(0));
     CHECK_EQ(compressed_kv.has_value(), compressed_picks.has_value());
     torch::DeviceGuard guard(cache_.device());
     if (query.size(0) == 0) {
@@ -140,11 +158,14 @@ class DeepseekV41PagedAttention final {
                                                      window_,
                                                      compressed_kv,
                                                      compressed_picks);
-      const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+      const torch::Tensor result =
+          picks.scalar_type() == torch::kInt32
+              ? attention_.forward_prepared(query, rows, picks, sink)
+              : attention_.forward(query, rows, picks, sink);
       kernel::musa::deepseek_v4_scatter_cache(cache_, slots, current_kv);
       return result;
     }
-    if (fused_decode_read_ && query.size(0) == 1) {
+    if (fused_decode_read_ && query.size(0) == 1 && !partitioned) {
       CHECK_EQ(window_floor, 0) << "Bounded replay is a prefill-only path";
       auto [rows, picks, slot] = prepare_decode_read(current_kv,
                                                      block_table,
@@ -155,7 +176,7 @@ class DeepseekV41PagedAttention final {
       commit(slot, current_kv);
       return result;
     }
-    const int64_t previous = context_length - query.size(0);
+    const int64_t previous = context_length - current_kv.size(0);
     const auto indices_options =
         torch::TensorOptions().device(cache_.device()).dtype(torch::kInt64);
     if (static_verify) {
@@ -184,7 +205,7 @@ class DeepseekV41PagedAttention final {
         torch::where(ring_positions.ge(0).unsqueeze(-1), gathered, 0);
     torch::Tensor rows = torch::cat({ring, current_kv}, 0);
     const torch::Tensor positions =
-        static_verify
+        (static_verify || partitioned)
             ? query_positions
             : torch::arange(query.size(0), indices_options) + previous;
     const torch::Tensor desired = positions.unsqueeze(-1) - window_ + 1 +
@@ -215,7 +236,23 @@ class DeepseekV41PagedAttention final {
     }
     // Always read before committing this chunk, including M=1. The oldest
     // ring candidate overwritten by a decode token is outside its window.
-    const torch::Tensor result = attention_.forward(query, rows, picks, sink);
+    torch::Tensor result;
+    if (query.size(0) <= kDeepseekV41PrefillTileRows) {
+      result = attention_.forward(query, rows, picks, sink);
+    } else {
+      CHECK(partitioned);
+      // All slices read the same pre-commit SWA and compressed rows. The
+      // original single cache commit remains below every attention launch.
+      result = torch::empty_like(query);
+      deepseek_v41_for_each_prefill_tile(
+          query.size(0), [&](int64_t start, int64_t count) {
+            result.narrow(0, start, count)
+                .copy_(attention_.forward(query.narrow(0, start, count),
+                                          rows,
+                                          picks.narrow(0, start, count),
+                                          sink));
+          });
+    }
     if (static_verify) {
       // Consecutive <=6 rows cannot wrap a physical block twice. Reuse V4's
       // production scatter, which masks invalid slots, without dynamic
@@ -226,8 +263,20 @@ class DeepseekV41PagedAttention final {
           current_kv);
       return result;
     }
-    commit(physical_slots(block_table, positions, /*padding_read=*/false),
-           current_kv);
+    if (partitioned && wide_prefill_commit_ &&
+        current_kv.size(0) > kDeepseekV41PrefillTileRows) {
+      const DeepseekV41ProfileRange commit_range("V41/Attention/SWA_commit");
+      kernel::musa::deepseek_v41_scatter_wide_prefill_cache_native(
+          cache_, block_table.contiguous(), previous, current_kv.contiguous());
+      return result;
+    }
+    const torch::Tensor commit_positions =
+        partitioned
+            ? torch::arange(current_kv.size(0), indices_options) + previous
+            : positions;
+    commit(
+        physical_slots(block_table, commit_positions, /*padding_read=*/false),
+        current_kv);
     return result;
   }
 
@@ -355,6 +404,11 @@ class DeepseekV41PagedAttention final {
           cache_, slots, values);
       return;
     }
+    if (fused_prefill_commit_ && slots.numel() > 6 && slots.numel() <= 512) {
+      kernel::musa::deepseek_v41_scatter_prefill_cache_native(
+          cache_, slots, values);
+      return;
+    }
     const torch::Tensor order =
         torch::argsort(slots, /*stable=*/true, /*dim=*/0, /*descending=*/false);
     const torch::Tensor sorted = slots.index_select(0, order);
@@ -376,6 +430,8 @@ class DeepseekV41PagedAttention final {
   bool single_token_scatter_;
   bool fused_decode_read_ = false;
   bool fused_verify_read_ = false;
+  bool fused_prefill_commit_ = false;
+  bool wide_prefill_commit_ = false;
   DeepseekV41SparseAttention attention_;
 };
 

@@ -20,4 +20,14 @@ torch::Tensor deepseek_v41_mate_sparse_attention(
     double scale,
     const std::string& library_path);
 
+// For the fused verify reader: contiguous int32 picks, padded to 64 columns,
+// with every value in range or exactly -1.
+torch::Tensor deepseek_v41_mate_sparse_attention_prepared(
+    const torch::Tensor& query,
+    const torch::Tensor& kv,
+    const torch::Tensor& indices,
+    const torch::Tensor& sink,
+    double scale,
+    const std::string& library_path);
+
 }  // namespace xllm::kernel::musa

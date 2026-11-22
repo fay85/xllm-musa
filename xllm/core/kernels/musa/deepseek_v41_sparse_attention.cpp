@@ -14,14 +14,15 @@ SPDX-License-Identifier: Apache-2.0
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::musa {
+namespace {
 
-torch::Tensor deepseek_v41_mate_sparse_attention(
-    const torch::Tensor& query,
-    const torch::Tensor& kv,
-    const torch::Tensor& indices,
-    const torch::Tensor& sink,
-    double scale,
-    const std::string& library_path) {
+torch::Tensor run_mate_sparse_attention(const torch::Tensor& query,
+                                        const torch::Tensor& kv,
+                                        const torch::Tensor& indices,
+                                        const torch::Tensor& sink,
+                                        double scale,
+                                        const std::string& library_path,
+                                        bool prepared) {
   CHECK(query.defined() && kv.defined() && indices.defined() && sink.defined());
   CHECK(query.device().type() == torch::kPrivateUse1);
   for (const torch::Tensor& value : {kv, indices, sink}) {
@@ -54,15 +55,22 @@ torch::Tensor deepseek_v41_mate_sparse_attention(
   if (query.size(0) == 0) {
     return output;
   }
-  // Normalize all invalid picks before narrowing to int32, including large
-  // int64 sentinels. MATE consumes -1 entries; they never read padding NaNs.
-  const torch::Tensor valid = indices.ge(0).logical_and(indices.lt(kv.size(0)));
-  torch::Tensor picks = torch::where(valid, indices, -1).to(torch::kInt32);
-  const int64_t padding = (64 - indices.size(1) % 64) % 64;
-  if (padding != 0) {
-    picks = torch::cat(
-        {picks, torch::full({query.size(0), padding}, -1, picks.options())},
-        -1);
+  torch::Tensor picks = indices;
+  if (prepared) {
+    CHECK_EQ(indices.scalar_type(), torch::kInt32);
+    CHECK(indices.is_contiguous());
+    CHECK_EQ(indices.size(1) % 64, 0);
+  } else {
+    // MATE consumes -1 entries, which never read padding NaNs.
+    const torch::Tensor valid =
+        indices.ge(0).logical_and(indices.lt(kv.size(0)));
+    picks = torch::where(valid, indices, -1).to(torch::kInt32);
+    const int64_t padding = (64 - indices.size(1) % 64) % 64;
+    if (padding != 0) {
+      picks = torch::cat(
+          {picks, torch::full({query.size(0), padding}, -1, picks.options())},
+          -1);
+    }
   }
   const torch::Tensor q = query.contiguous();
   const torch::Tensor keys = kv.contiguous().unsqueeze(1);
@@ -86,6 +94,40 @@ torch::Tensor deepseek_v41_mate_sparse_attention(
       scale * kLog2E,
       /*persistent_blocks=*/int64_t{0});
   return output;
+}
+
+}  // namespace
+
+torch::Tensor deepseek_v41_mate_sparse_attention(
+    const torch::Tensor& query,
+    const torch::Tensor& kv,
+    const torch::Tensor& indices,
+    const torch::Tensor& sink,
+    double scale,
+    const std::string& library_path) {
+  return run_mate_sparse_attention(query,
+                                   kv,
+                                   indices,
+                                   sink,
+                                   scale,
+                                   library_path,
+                                   /*prepared=*/false);
+}
+
+torch::Tensor deepseek_v41_mate_sparse_attention_prepared(
+    const torch::Tensor& query,
+    const torch::Tensor& kv,
+    const torch::Tensor& indices,
+    const torch::Tensor& sink,
+    double scale,
+    const std::string& library_path) {
+  return run_mate_sparse_attention(query,
+                                   kv,
+                                   indices,
+                                   sink,
+                                   scale,
+                                   library_path,
+                                   /*prepared=*/true);
 }
 
 }  // namespace xllm::kernel::musa

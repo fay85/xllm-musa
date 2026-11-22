@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <c10/cuda/CUDAStream.h>
 #include <c10/util/Float8_e4m3fn.h>
+#include <cub/block/block_radix_sort.cuh>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
 #include <torch_musa/csrc/core/MUSAStream.h>
@@ -120,6 +121,47 @@ constexpr int32_t kScatterCacheBlockSize = 256;
 constexpr int32_t kModel1PackBlockSize = 256;
 constexpr int32_t kIndexerCacheBlockSize = 256;
 constexpr int32_t kIndexerRadixTopk = 512;
+constexpr int32_t kVerifyIndexThreads = 128;
+constexpr int32_t kVerifyIndicesPerThread = 4;
+constexpr int32_t kVerifyIndexCount =
+    kVerifyIndexThreads * kVerifyIndicesPerThread;
+
+template <typename Visible>
+__global__ void dsv41_indexer_filter_selected_kernel(
+    const float* __restrict__ scores,
+    const int64_t* __restrict__ indices,
+    const Visible* __restrict__ visible,
+    int32_t* __restrict__ output,
+    int32_t width,
+    int64_t index_stride) {
+  using BlockSort = cub::
+      BlockRadixSort<uint32_t, kVerifyIndexThreads, kVerifyIndicesPerThread>;
+  __shared__ typename BlockSort::TempStorage sort_storage;
+  const int32_t row = blockIdx.x;
+  const int64_t limit = visible[row];
+  const int32_t start = threadIdx.x * kVerifyIndicesPerThread;
+  uint32_t keys[kVerifyIndicesPerThread];
+#pragma unroll
+  for (int32_t i = 0; i < kVerifyIndicesPerThread; ++i) {
+    keys[i] = static_cast<uint32_t>(
+        indices[static_cast<int64_t>(row) * index_stride + start + i]);
+  }
+  // The upstream selector returns valid columns in the 16-bit score row.
+  BlockSort(sort_storage).Sort(keys, /*begin_bit=*/0, /*end_bit=*/16);
+#pragma unroll
+  for (int32_t i = 0; i < kVerifyIndicesPerThread; ++i) {
+    const int32_t slot = row * kVerifyIndexCount + start + i;
+    const uint32_t ix = keys[i];
+    if (ix >= static_cast<uint32_t>(width) || ix >= limit) {
+      output[slot] = -1;
+      continue;
+    }
+    const float score = scores[static_cast<int64_t>(row) * width + ix];
+    output[slot] =
+        score > -INFINITY && score < INFINITY ? static_cast<int32_t>(ix) : -1;
+  }
+}
+
 constexpr int32_t kIndexerRadixThreads = 1024;
 constexpr int32_t kIndexerRadixBins = 256;
 constexpr int32_t kIndexerRadixSmemBytes = 32 * 1024;
@@ -640,6 +682,136 @@ __global__ void __launch_bounds__(kScatterCacheBlockSize, 1)
   for (int64_t column = threadIdx.x; column < width; column += blockDim.x) {
     cache[slot * width + column] = values[row * width + column];
   }
+}
+
+// Resolve at most 512 destinations entirely on-device. One CTA owns an
+// input row; parallel duplicate detection preserves stable last-write wins.
+template <typename Index>
+__global__ void __launch_bounds__(kScatterCacheBlockSize, 1)
+    dsv41_scatter_prefill_cache_kernel(const uint16_t* __restrict__ values,
+                                       uint16_t* __restrict__ cache,
+                                       const Index* __restrict__ slots,
+                                       int64_t rows,
+                                       int64_t cache_rows,
+                                       int64_t width) {
+  const int64_t row = static_cast<int64_t>(blockIdx.x);
+  const int64_t slot = static_cast<int64_t>(slots[row]);
+  if (slot < 0 || slot >= cache_rows) {
+    return;  // Uniform for the whole CTA, before either barrier.
+  }
+  __shared__ int has_later;
+  if (threadIdx.x == 0) {
+    has_later = 0;
+  }
+  __syncthreads();
+  for (int64_t later = row + 1 + threadIdx.x; later < rows;
+       later += blockDim.x) {
+    if (static_cast<int64_t>(slots[later]) == slot) {
+      atomicExch(&has_later, 1);
+    }
+  }
+  __syncthreads();
+  if (has_later != 0) {
+    return;
+  }
+  for (int64_t column = threadIdx.x; column < width; column += blockDim.x) {
+    cache[slot * width + column] = values[row * width + column];
+  }
+}
+
+template <typename Index>
+void launch_dsv41_scatter_prefill_cache(const torch::Tensor& cache,
+                                        const torch::Tensor& slots,
+                                        const torch::Tensor& values) {
+  const int64_t width = cache.size(-1);
+  dsv41_scatter_prefill_cache_kernel<Index>
+      <<<static_cast<uint32_t>(slots.numel()),
+         kScatterCacheBlockSize,
+         0,
+         c10::musa::getCurrentMUSAStream().stream()>>>(
+          reinterpret_cast<const uint16_t*>(values.data_ptr()),
+          reinterpret_cast<uint16_t*>(cache.data_ptr()),
+          slots.data_ptr<Index>(),
+          slots.numel(),
+          cache.numel() / width,
+          width);
+}
+
+// Claim each physical slot before copying any payload. The greatest row
+// preserves latest-wins semantics even when the table reuses physical blocks.
+template <typename Index, bool Claim>
+__global__ void dsv41_scatter_wide_prefill_cache_kernel(
+    const Index* __restrict__ table,
+    const uint16_t* __restrict__ values,
+    uint16_t* __restrict__ cache,
+    int32_t* __restrict__ owners,
+    int64_t start_position,
+    int32_t rows,
+    int64_t table_blocks,
+    int64_t cache_blocks,
+    int64_t block_rows,
+    int64_t width) {
+  const int32_t row = static_cast<int32_t>(
+      Claim ? blockIdx.x * blockDim.x + threadIdx.x : blockIdx.x);
+  if (row >= rows) {
+    return;
+  }
+  const int64_t position = start_position + row;
+  const int64_t block = table[(position / block_rows) % table_blocks];
+  if (block < 0 || block >= cache_blocks) {
+    return;
+  }
+  const int64_t slot = block * block_rows + position % block_rows;
+  if constexpr (Claim) {
+    atomicMax(owners + slot, row + 1);
+  } else if (owners[slot] == row + 1) {
+    for (int64_t column = threadIdx.x; column < width; column += blockDim.x) {
+      cache[slot * width + column] = values[row * width + column];
+    }
+  }
+}
+
+template <typename Index>
+void launch_dsv41_scatter_wide_prefill_cache(const torch::Tensor& cache,
+                                             const torch::Tensor& table,
+                                             int64_t start_position,
+                                             const torch::Tensor& values) {
+  torch::Tensor owners = torch::zeros({cache.size(0) * cache.size(1)},
+                                      table.options().dtype(torch::kInt32));
+  const auto stream = c10::musa::getCurrentMUSAStream().stream();
+  const int32_t rows = static_cast<int32_t>(values.size(0));
+  constexpr int32_t kOwnerThreads = 128;
+  const Index* blocks = table.data_ptr<Index>();
+  const auto* input = reinterpret_cast<const uint16_t*>(values.data_ptr());
+  auto* output = reinterpret_cast<uint16_t*>(cache.data_ptr());
+  int32_t* owner = owners.data_ptr<int32_t>();
+  dsv41_scatter_wide_prefill_cache_kernel<Index, true>
+      <<<(rows + kOwnerThreads - 1) / kOwnerThreads,
+         kOwnerThreads,
+         0,
+         stream>>>(blocks,
+                   input,
+                   output,
+                   owner,
+                   start_position,
+                   rows,
+                   table.size(1),
+                   cache.size(0),
+                   cache.size(1),
+                   cache.size(2));
+  check_musa_kernel_launch("dsv41 wide prefill cache ownership");
+  dsv41_scatter_wide_prefill_cache_kernel<Index, false>
+      <<<rows, kScatterCacheBlockSize, 0, stream>>>(blocks,
+                                                    input,
+                                                    output,
+                                                    owner,
+                                                    start_position,
+                                                    rows,
+                                                    table.size(1),
+                                                    cache.size(0),
+                                                    cache.size(1),
+                                                    cache.size(2));
+  check_musa_kernel_launch("dsv41 wide prefill cache commit");
 }
 
 template <typename Index>
@@ -2927,6 +3099,76 @@ void deepseek_v41_scatter_small_cache_native(const torch::Tensor& cache,
   check_musa_kernel_launch("dsv41 native small-row latest-wins cache scatter");
 }
 
+void deepseek_v41_scatter_prefill_cache_native(const torch::Tensor& cache,
+                                               const torch::Tensor& slots,
+                                               const torch::Tensor& values) {
+  CHECK(cache.defined() && slots.defined() && values.defined());
+  CHECK(cache.device().type() == torch::kPrivateUse1);
+  CHECK_EQ(cache.device(), values.device());
+  CHECK_EQ(cache.device(), slots.device());
+  CHECK_EQ(cache.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(values.scalar_type(), cache.scalar_type());
+  CHECK(slots.scalar_type() == torch::kInt32 ||
+        slots.scalar_type() == torch::kInt64);
+  CHECK(cache.is_contiguous() && slots.is_contiguous() &&
+        values.is_contiguous());
+  CHECK(!cache.is_alias_of(values) && !cache.is_alias_of(slots));
+  CHECK_GE(cache.dim(), 2);
+  CHECK_EQ(slots.dim(), 1);
+  CHECK_EQ(values.dim(), 2);
+  CHECK_EQ(values.size(0), slots.numel());
+  CHECK_LE(slots.numel(), 512);
+  const int64_t width = cache.size(-1);
+  CHECK_GT(width, 0);
+  CHECK_EQ(values.size(1), width);
+  if (slots.numel() == 0) {
+    return;
+  }
+  torch::DeviceGuard guard(cache.device());
+  if (slots.scalar_type() == torch::kInt32) {
+    launch_dsv41_scatter_prefill_cache<int32_t>(cache, slots, values);
+  } else {
+    launch_dsv41_scatter_prefill_cache<int64_t>(cache, slots, values);
+  }
+  check_musa_kernel_launch(
+      "dsv41 native prefill-row latest-wins cache scatter");
+}
+
+void deepseek_v41_scatter_wide_prefill_cache_native(
+    const torch::Tensor& cache,
+    const torch::Tensor& table,
+    int64_t start_position,
+    const torch::Tensor& values) {
+  CHECK(cache.defined() && table.defined() && values.defined());
+  CHECK(cache.device().type() == torch::kPrivateUse1);
+  CHECK_EQ(cache.device(), values.device());
+  CHECK_EQ(cache.device(), table.device());
+  CHECK_EQ(cache.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(values.scalar_type(), cache.scalar_type());
+  CHECK(table.scalar_type() == torch::kInt32 ||
+        table.scalar_type() == torch::kInt64);
+  CHECK(cache.is_contiguous() && table.is_contiguous() &&
+        values.is_contiguous());
+  CHECK(!cache.is_alias_of(values) && !cache.is_alias_of(table));
+  CHECK_EQ(cache.dim(), 3);
+  CHECK_EQ(table.dim(), 2);
+  CHECK_EQ(table.size(0), 1);
+  CHECK_GT(table.size(1), 0);
+  CHECK_EQ(values.dim(), 2);
+  CHECK_EQ(values.size(1), cache.size(2));
+  CHECK_GT(values.size(0), 512);
+  CHECK_LE(values.size(0), 8192);
+  CHECK_GE(start_position, 0);
+  torch::DeviceGuard guard(cache.device());
+  if (table.scalar_type() == torch::kInt32) {
+    launch_dsv41_scatter_wide_prefill_cache<int32_t>(
+        cache, table, start_position, values);
+  } else {
+    launch_dsv41_scatter_wide_prefill_cache<int64_t>(
+        cache, table, start_position, values);
+  }
+}
+
 void deepseek_v4_scatter_cache(torch::Tensor cache,
                                torch::Tensor slot_ids,
                                torch::Tensor values) {
@@ -3486,6 +3728,64 @@ static torch::Tensor deepseek_v4_indexer_topk_impl(
       .copy_(std::get<1>(topk_result).to(torch::kInt32));
   prepare_mate_mapping(/*mapping_already_fused=*/false);
   return indices;
+}
+
+torch::Tensor deepseek_v41_indexer_filter_selected(
+    const torch::Tensor& scores,
+    const torch::Tensor& indices,
+    const torch::Tensor& visible) {
+  CHECK(scores.defined() && scores.device().is_privateuseone());
+  CHECK(indices.defined() && visible.defined());
+  CHECK_EQ(indices.device(), scores.device());
+  CHECK_EQ(visible.device(), scores.device());
+  CHECK_EQ(scores.scalar_type(), torch::kFloat32);
+  CHECK_EQ(indices.scalar_type(), torch::kInt64);
+  CHECK(visible.scalar_type() == torch::kInt64 ||
+        visible.scalar_type() == torch::kInt32);
+  CHECK_EQ(scores.dim(), 2);
+  CHECK_EQ(indices.dim(), 2);
+  CHECK_EQ(visible.dim(), 1);
+  CHECK_EQ(scores.size(0), indices.size(0));
+  CHECK_EQ(visible.size(0), indices.size(0));
+  CHECK_GT(indices.size(0), 0);
+  CHECK_LE(indices.size(0), 6);
+  CHECK_EQ(indices.size(1), kVerifyIndexCount);
+  CHECK_GE(scores.size(1), indices.size(1));
+  CHECK_LE(scores.size(1), 65536);
+  torch::DeviceGuard guard(scores.device());
+  const torch::Tensor contiguous_scores = scores.contiguous();
+  const torch::Tensor row_indices =
+      indices.stride(1) == 1 ? indices : indices.contiguous();
+  const torch::Tensor contiguous_visible = visible.contiguous();
+  torch::Tensor result =
+      torch::empty(indices.sizes(), indices.options().dtype(torch::kInt32));
+  const auto rows = static_cast<uint32_t>(indices.size(0));
+  const auto stream = current_dsv4_cache_stream();
+  if (visible.scalar_type() == torch::kInt64) {
+    dsv41_indexer_filter_selected_kernel<<<rows,
+                                           kVerifyIndexThreads,
+                                           0,
+                                           stream>>>(
+        contiguous_scores.data_ptr<float>(),
+        row_indices.data_ptr<int64_t>(),
+        contiguous_visible.data_ptr<int64_t>(),
+        result.data_ptr<int32_t>(),
+        scores.size(1),
+        row_indices.stride(0));
+  } else {
+    dsv41_indexer_filter_selected_kernel<<<rows,
+                                           kVerifyIndexThreads,
+                                           0,
+                                           stream>>>(
+        contiguous_scores.data_ptr<float>(),
+        row_indices.data_ptr<int64_t>(),
+        contiguous_visible.data_ptr<int32_t>(),
+        result.data_ptr<int32_t>(),
+        scores.size(1),
+        row_indices.stride(0));
+  }
+  check_musa_kernel_launch("V4.1 stable indexer verify filter");
+  return result;
 }
 
 torch::Tensor deepseek_v4_indexer_topk(

@@ -174,7 +174,16 @@ class ProcessGroupImpl : public ProcessGroup {
                                const std::string& group_name,
                                const torch::Device& device,
                                const c10::intrusive_ptr<c10d::Store>& store) {
-    if (util::get_bool_env("XLLM_MUSA_NATIVE_SYNC_COLLECTIVES", false)) {
+    const bool enabled =
+        util::get_bool_env("XLLM_MUSA_NATIVE_SYNC_COLLECTIVES", false);
+    const bool tp_only =
+        util::get_bool_env("XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY", false);
+    CHECK(!tp_only || enabled)
+        << "TP-only native collectives require native collectives enabled";
+    // C1 V4.1 reuses its full-world TP communicator for routed EP reductions.
+    // Avoid initializing unused duplicate native world/EP communicators;
+    // those groups retain their explicitly selected ProcessGroupMCCL path.
+    if (enabled && (!tp_only || group_name == "tp_group")) {
       CHECK(!sync_collective_stream_)
           << "Native graph collectives cannot use host stream synchronization";
       native_collectives_ = std::make_unique<MusaNativeCollectives>(

@@ -19,8 +19,10 @@ limitations under the License.
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 #include <glog/logging.h>
+#include <openssl/sha.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -40,6 +42,76 @@ limitations under the License.
 
 namespace xllm {
 namespace {
+
+// Produce a reproducible digest from the IDs actually used by the engine.
+// Only the explicitly selected 20k benchmark deployment needs this proof.
+std::string ttft20_terminal_proof(const Sequence& sequence, size_t generated) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_TTFT20_NATIVE_TERMINAL", false);
+  constexpr size_t kPromptTokens = 20000;
+  constexpr size_t kGeneratedTokens = 1024;
+  if (!enabled || sequence.num_prompt_tokens() != kPromptTokens ||
+      generated != kGeneratedTokens ||
+      sequence.finish_reason().to_string().value_or("") != "length") {
+    return {};
+  }
+
+  constexpr int32_t kThinkOpen = 128821;
+  constexpr int32_t kThinkClose = 128822;
+  const Slice<int32_t> ids = sequence.tokens();
+  CHECK_GE(ids.size(), kPromptTokens + kGeneratedTokens);
+  std::string encoded = "[";
+  encoded.reserve(kPromptTokens * 8);
+  int32_t last_prompt_marker = -1;
+  for (size_t i = 0; i < kPromptTokens; ++i) {
+    if (i != 0) {
+      encoded += ',';
+    }
+    char digits[12];
+    const int32_t id = ids[i];
+    const std::to_chars_result result =
+        std::to_chars(digits, digits + sizeof(digits), id);
+    CHECK(result.ec == std::errc{});
+    encoded.append(digits, result.ptr);
+    if (id == kThinkOpen || id == kThinkClose) {
+      last_prompt_marker = id;
+    }
+  }
+  encoded += "]\n";
+  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA256(reinterpret_cast<const unsigned char*>(encoded.data()),
+         encoded.size(),
+         hash);
+  constexpr char kHex[] = "0123456789abcdef";
+  std::string digest;
+  digest.reserve(2 * SHA256_DIGEST_LENGTH);
+  for (const unsigned char byte : hash) {
+    digest += kHex[byte >> 4];
+    digest += kHex[byte & 0x0f];
+  }
+
+  bool thinking = last_prompt_marker == kThinkOpen;
+  size_t opening = 0;
+  size_t closing = 0;
+  size_t reasoning = 0;
+  for (size_t i = kPromptTokens; i < kPromptTokens + kGeneratedTokens; ++i) {
+    if (ids[i] == kThinkOpen) {
+      ++opening;
+      thinking = true;
+    } else if (ids[i] == kThinkClose) {
+      ++closing;
+      thinking = false;
+    } else if (thinking) {
+      ++reasoning;
+    }
+  }
+  return ", ttft20_prompt_ids_sha256: " + digest +
+         ", ttft20_prompt_last_thinking_marker: " +
+         std::to_string(last_prompt_marker) +
+         ", ttft20_output_open_thinking_markers: " + std::to_string(opening) +
+         ", ttft20_output_close_thinking_markers: " + std::to_string(closing) +
+         ", ttft20_reasoning_tokens: " + std::to_string(reasoning);
+}
 
 // Write optional fields directly into the log stream without allocating a
 // concatenated string. The label includes its separator.
@@ -603,6 +675,7 @@ void Request::log_statistic(double total_latency, bool prefill_stage) {
               << seq->sampling_param()->temperature
               << ", num_prefix_cache_tokens: " << num_prefix_cache_tokens_
               << speculative_stats_log << store_prefetch_log
+              << (prefill_stage ? "" : ttft20_terminal_proof(*seq, gen_tokens))
               << optional_field(", x-request-time: ", request_time);
     // only log once when beam search is enabled
     if (check_beam_search()) {

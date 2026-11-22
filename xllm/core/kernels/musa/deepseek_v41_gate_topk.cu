@@ -217,6 +217,99 @@ __global__ void v41_gate_block_kernel(const float* logits,
   }
 }
 
+// Canonicalize numeric ties before packing the score and its stable ID.
+__device__ __forceinline__ uint64_t route_key(float score, int32_t expert) {
+  constexpr uint32_t kSign = 0x80000000u;
+  constexpr uint32_t kMaxExpert = 511u;
+  uint32_t encoded;
+  if (isnan(score)) {
+    encoded = UINT32_MAX;
+  } else {
+    const uint32_t bits = score == 0.0f ? 0u : __float_as_uint(score);
+    encoded = (bits & kSign) ? ~bits : (bits ^ kSign);
+  }
+  return (static_cast<uint64_t>(encoded) << 9) | (kMaxExpert - expert);
+}
+
+__device__ __forceinline__ uint64_t route_shuffle_xor(uint64_t value,
+                                                      int32_t offset) {
+  const uint32_t lo =
+      __shfl_xor_sync(0xffffffffu, static_cast<uint32_t>(value), offset, 32);
+  const uint32_t hi = __shfl_xor_sync(
+      0xffffffffu, static_cast<uint32_t>(value >> 32), offset, 32);
+  return (static_cast<uint64_t>(hi) << 32) | lo;
+}
+
+// First keep six sorted candidates per warp. One warp then merges those
+// sorted lists. A single CTA barrier publishes the candidates and their
+// unbiased scores.
+__global__ void v41_gate_merge_six_kernel(const float* logits,
+                                          const float* bias,
+                                          float* weights,
+                                          int64_t* indices,
+                                          bool per_token_bias,
+                                          bool normalize,
+                                          float scale) {
+  constexpr int32_t kExperts = 384;
+  constexpr int32_t kWarps = kExperts / 32;
+  constexpr int32_t kRoutes = 6;
+  const int32_t expert = threadIdx.x;
+  const int32_t lane = expert % 32;
+  const int32_t warp = expert / 32;
+  const int64_t token = blockIdx.x;
+  const float original = v41_score(logits[token * kExperts + expert]);
+  const float* row_bias = bias + (per_token_bias ? token * kExperts : 0);
+  uint64_t key = route_key(original + row_bias[expert], expert);
+  __shared__ uint64_t warp_keys[kRoutes][kWarps];
+  __shared__ float original_scores[kExperts];
+  original_scores[expert] = original;
+#pragma unroll
+  for (int32_t width = 2; width <= 32; width *= 2) {
+#pragma unroll
+    for (int32_t offset = width / 2; offset != 0; offset /= 2) {
+      const uint64_t peer = route_shuffle_xor(key, offset);
+      const bool keep_max = ((lane & width) == 0) == ((lane & offset) == 0);
+      key = keep_max == (key > peer) ? key : peer;
+    }
+  }
+  if (lane < kRoutes) {
+    warp_keys[lane][warp] = key;
+  }
+  __syncthreads();
+  if (warp != 0) {
+    return;
+  }
+  int32_t used = 0;
+  float total = 0.0f;
+  float selected_scores[kRoutes];
+#pragma unroll
+  for (int32_t rank = 0; rank < kRoutes; ++rank) {
+    uint64_t best = lane < kWarps ? warp_keys[used][lane] : 0;
+#pragma unroll
+    for (int32_t offset = 16; offset > 0; offset /= 2) {
+      const uint64_t peer = route_shuffle_xor(best, offset);
+      best = best > peer ? best : peer;
+    }
+    const int32_t id = 511 - static_cast<int32_t>(best & 511u);
+    if (lane == 0) {
+      indices[token * kRoutes + rank] = id;
+      selected_scores[rank] = original_scores[id];
+      total += selected_scores[rank];
+    }
+    used += static_cast<int32_t>(id / 32 == lane);
+  }
+  if (lane == 0) {
+#pragma unroll
+    for (int32_t rank = 0; rank < kRoutes; ++rank) {
+      float weight = selected_scores[rank];
+      if (normalize) {
+        weight /= total + 1.0e-20f;
+      }
+      weights[token * kRoutes + rank] = weight * scale;
+    }
+  }
+}
+
 template <int32_t Slots>
 void launch_gate(const torch::Tensor& logits,
                  const torch::Tensor& bias,
@@ -276,7 +369,25 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v41_gate_topk(
   }
   const bool block_gate =
       util::get_bool_env("XLLM_DSV41_PARALLEL_GATE_TOPK", false);
-  if (block_gate && logits.size(0) <= 6 && logits.size(1) <= 512) {
+  const bool merge_routes =
+      block_gate && logits.size(0) > 1 && logits.size(0) <= 6 &&
+      logits.size(1) == 384 && topk == 6 &&
+      util::get_bool_env("XLLM_DSV41_VERIFY_MERGE_GATE_ROUTES", false);
+  if (merge_routes) {
+    v41_gate_merge_six_kernel<<<dim3(static_cast<uint32_t>(logits.size(0))),
+                                dim3(384),
+                                0,
+                                current_musa_stream(logits.device())>>>(
+        logits.data_ptr<float>(),
+        bias.data_ptr<float>(),
+        weights.data_ptr<float>(),
+        ids.data_ptr<int64_t>(),
+        bias.dim() == 2,
+        normalize,
+        static_cast<float>(scale));
+    LOG_FIRST_N(INFO, 1) << "Native V4.1 merges six verify gate routes: rows="
+                         << logits.size(0);
+  } else if (block_gate && logits.size(0) <= 6 && logits.size(1) <= 512) {
     v41_gate_block_kernel<512><<<dim3(static_cast<uint32_t>(logits.size(0))),
                                  dim3(512),
                                  0,

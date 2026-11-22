@@ -44,7 +44,6 @@ torch::Tensor deepseek_v41_indexer_score(const torch::Tensor& query,
   CHECK_GE(committed, 0);
   CHECK_LE(committed, keys.size(0));
   CHECK_LE(keys.size(0), std::numeric_limits<int32_t>::max());
-  CHECK_LE(query.size(0), 512);
   CHECK(ratio == 1 || ratio == 2);
   CHECK(!aot_directory.empty());
   torch::DeviceGuard guard(query.device());
@@ -62,28 +61,34 @@ torch::Tensor deepseek_v41_indexer_score(const torch::Tensor& query,
                                     .to(torch::kInt32)
                                     .contiguous();
   int32_t number_keys = static_cast<int32_t>(keys.size(0));
-  int32_t number_queries = static_cast<int32_t>(query.size(0));
   int32_t committed_rows = static_cast<int32_t>(committed);
-  void* query_pointer = query.data_ptr();
   void* keys_pointer = keys.data_ptr();
-  void* weights_pointer = weights.data_ptr();
-  void* output_pointer = output.data_ptr();
-  void* visible_pointer = visible.data_ptr();
-  std::array<void*, 8> arguments = {&query_pointer,
-                                    &keys_pointer,
-                                    &weights_pointer,
-                                    &output_pointer,
-                                    &visible_pointer,
-                                    &number_keys,
-                                    &number_queries,
-                                    &committed_rows};
-  launch_musa_aot_kernel(query.device(),
-                         aot_directory,
-                         "indexer_score",
-                         {static_cast<uint32_t>((number_queries + 1) / 2),
-                          static_cast<uint32_t>((number_keys + 127) / 128),
-                          1},
-                         arguments.data());
+  // Preserve the original kernel's query tile. Each launch reads the same
+  // committed keys and writes only its contiguous range of output rows.
+  constexpr int64_t kRowsPerScoreLaunch = 512;
+  for (int64_t start = 0; start < query.size(0); start += kRowsPerScoreLaunch) {
+    const int64_t rows = std::min(kRowsPerScoreLaunch, query.size(0) - start);
+    int32_t number_queries = static_cast<int32_t>(rows);
+    void* query_pointer = query.narrow(0, start, rows).data_ptr();
+    void* weights_pointer = weights.narrow(0, start, rows).data_ptr();
+    void* output_pointer = output.narrow(0, start, rows).data_ptr();
+    void* visible_pointer = visible.narrow(0, start, rows).data_ptr();
+    std::array<void*, 8> arguments = {&query_pointer,
+                                      &keys_pointer,
+                                      &weights_pointer,
+                                      &output_pointer,
+                                      &visible_pointer,
+                                      &number_keys,
+                                      &number_queries,
+                                      &committed_rows};
+    launch_musa_aot_kernel(query.device(),
+                           aot_directory,
+                           "indexer_score",
+                           {static_cast<uint32_t>((number_queries + 1) / 2),
+                            static_cast<uint32_t>((number_keys + 127) / 128),
+                            1},
+                           arguments.data());
+  }
   return output;
 }
 
@@ -102,7 +107,7 @@ torch::Tensor deepseek_v41_indexer_select(
   CHECK(visible.scalar_type() == torch::kInt64 ||
         visible.scalar_type() == torch::kInt32);
   CHECK_GT(scores.size(1), 0);
-  CHECK_LE(scores.size(1), 8192);
+  CHECK_LE(scores.size(1), 32768);
   CHECK_GT(topk, 0);
   CHECK(!aot_directory.empty());
   torch::DeviceGuard guard(scores.device());

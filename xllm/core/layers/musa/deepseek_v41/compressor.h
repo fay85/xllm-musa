@@ -85,6 +85,38 @@ class DeepseekV41Compressor final {
     return forward_impl(input, start_position, swa_block_table, std::nullopt);
   }
 
+  std::pair<torch::Tensor, torch::Tensor> project_prefill(
+      const torch::Tensor& input) const {
+    if (ratio_ == 1) {
+      return {torch::linear(input, kv_weight_), torch::Tensor{}};
+    }
+    return {torch::linear(input.to(torch::kFloat32), kv_weight_),
+            torch::linear(input.to(torch::kFloat32), gate_weight_.value())};
+  }
+
+  std::tuple<torch::Tensor, torch::Tensor> forward_projected(
+      const torch::Tensor& input,
+      const torch::Tensor& values,
+      const torch::Tensor& scores,
+      int64_t start_position,
+      const torch::Tensor& swa_block_table) {
+    CHECK_EQ(values.sizes(),
+             torch::IntArrayRef({input.size(0), kv_weight_.size(0)}));
+    CHECK_EQ(values.device(), input.device());
+    CHECK_EQ(values.scalar_type(), kv_weight_.scalar_type());
+    CHECK_EQ(scores.defined(), ratio_ == 2);
+    if (scores.defined()) {
+      CHECK_EQ(scores.sizes(), values.sizes());
+      CHECK_EQ(scores.device(), values.device());
+      CHECK_EQ(scores.scalar_type(), torch::kFloat32);
+    }
+    return forward_impl(input,
+                        start_position,
+                        swa_block_table,
+                        std::nullopt,
+                        std::make_pair(values, scores));
+  }
+
   std::tuple<torch::Tensor, torch::Tensor> forward_decode(
       const torch::Tensor& input,
       const torch::Tensor& position,
@@ -113,7 +145,9 @@ class DeepseekV41Compressor final {
       const torch::Tensor& input,
       int64_t start_position,
       const torch::Tensor& swa_block_table,
-      const std::optional<torch::Tensor>& decode_position) {
+      const std::optional<torch::Tensor>& decode_position,
+      const std::optional<std::pair<torch::Tensor, torch::Tensor>>& projected =
+          std::nullopt) {
     const DeepseekV41ProfileRange range("V41/Attention/compressor");
     CHECK(input.defined() && swa_block_table.defined());
     CHECK_EQ(input.device(), kv_weight_.device());
@@ -135,16 +169,17 @@ class DeepseekV41Compressor final {
               torch::empty({0}, index_options)};
     }
     if (ratio_ == 1) {
+      const auto values = projected.has_value()
+                              ? projected->first
+                              : torch::linear(input, kv_weight_);
       return {
-          norm(torch::linear(input, kv_weight_)),
+          norm(values),
           decode_position.has_value()
               ? decode_position.value()
               : torch::arange(input.size(0), index_options) + start_position};
     }
-    const torch::Tensor values =
-        torch::linear(input.to(torch::kFloat32), kv_weight_);
-    const torch::Tensor scores =
-        torch::linear(input.to(torch::kFloat32), gate_weight_.value());
+    const auto [values, scores] =
+        projected.has_value() ? projected.value() : project_prefill(input);
     if (decode_position.has_value()) {
       CHECK(fused_pair_pool_);
       auto [pooled, starts] =

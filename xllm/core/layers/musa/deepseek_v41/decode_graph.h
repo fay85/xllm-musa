@@ -27,6 +27,7 @@ BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/layers/musa/deepseek_v41/attention.h"
 #include "core/layers/musa/deepseek_v41/decode_capacity.h"
+#include "core/layers/musa/deepseek_v41/graph_ring_table.h"
 #include "core/layers/musa/deepseek_v41/state_checkpoint.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/musa_graph_handle.h"
@@ -57,11 +58,18 @@ class DeepseekV41DecodeGraph final {
   explicit DeepseekV41DecodeGraph(
       std::vector<int64_t> ratios,
       std::function<void()> communication_capture_boundary = {},
-      bool enable_3072_bucket = false)
+      bool enable_3072_bucket = false,
+      bool enable_21504_bucket = false)
       : communication_capture_boundary_(
             std::move(communication_capture_boundary)),
         ratios_(std::move(ratios)),
-        enable_3072_bucket_(enable_3072_bucket) {}
+        enable_3072_bucket_(enable_3072_bucket),
+        enable_21504_bucket_(enable_21504_bucket) {}
+
+  bool supports_length(int64_t length) const {
+    return deepseek_v41_decode_capacity(
+               length, enable_3072_bucket_, enable_21504_bucket_) > 0;
+  }
 
   torch::Tensor run(const DeepseekV41DecodeInputs& input,
                     bool replay_graph,
@@ -71,13 +79,19 @@ class DeepseekV41DecodeGraph final {
     CHECK_EQ(input.positions.numel(), input.tokens.numel());
     CHECK_GE(input.context_length, input.tokens.numel());
     CHECK_GT(input.context_length, 0);
-    CHECK_LE(input.context_length, 4096);
+    CHECK(supports_length(input.context_length));
     CHECK_EQ(input.caches.size(), ratios_.size());
     const int64_t capacity = deepseek_v41_decode_capacity(
-        input.context_length, enable_3072_bucket_);
+        input.context_length, enable_3072_bucket_, enable_21504_bucket_);
+    CHECK(!input.caches.empty());
+    const int64_t swa_block_size = input.caches.front().swa.size(1);
+    CHECK_GT(swa_block_size, 0);
+    const int64_t swa_columns =
+        capacity > 4096 ? (capacity + swa_block_size - 1) / swa_block_size
+                        : input.swa_table.size(1);
     const Key key{capacity,
                   (input.context_length - input.tokens.numel()) % 2,
-                  input.swa_table.size(1),
+                  swa_columns,
                   input.tokens.numel()};
     auto it = entries_.find(key);
     if (it == entries_.end()) {
@@ -126,7 +140,11 @@ class DeepseekV41DecodeGraph final {
         torch::empty({input.positions.numel()},
                      input.positions.options().dtype(torch::kInt64));
     buffers.caches = input.caches;
-    buffers.swa_table = torch::empty_like(input.swa_table);
+    buffers.swa_table =
+        capacity > 4096
+            ? allocate_table(
+                  input.swa_table, capacity, input.caches.front().swa.size(1))
+            : torch::empty_like(input.swa_table);
     // Use each group's actual compressed block size, not the SWA block size.
     for (size_t index = 0; index < input.caches.size(); ++index) {
       const auto& cache = input.caches[index];
@@ -211,7 +229,7 @@ class DeepseekV41DecodeGraph final {
     }
     target.tokens.copy_(source.tokens);
     target.positions.copy_(source.positions);
-    target.swa_table.copy_(source.swa_table);
+    deepseek_v41_copy_graph_ring_table(target.swa_table, source.swa_table);
     copy_table(target.ratio1_table, source.ratio1_table);
     copy_table(target.ratio2_table, source.ratio2_table);
     target.context_length = source.context_length;
@@ -307,6 +325,7 @@ class DeepseekV41DecodeGraph final {
   std::function<void()> communication_capture_boundary_;
   std::vector<int64_t> ratios_;
   const bool enable_3072_bucket_;
+  const bool enable_21504_bucket_;
   std::optional<c10::musa::MempoolId_t> pool_;
   std::map<Key, std::unique_ptr<Entry>> entries_;
 };

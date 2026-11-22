@@ -12,10 +12,10 @@ import sqlite3
 import statistics
 from pathlib import Path
 
-from audit_long_c1 import PlainData, require
+from audit_long_c1 import PlainData, content_only, require
 
 
-def inspect(directory, decode_log, length, count):
+def inspect(directory, decode_log, length, count, *, strict_streaming=False):
     identity = json.loads((directory / "identity.json").read_text())
     pre = json.loads((directory / "tokenization_preflight.json").read_text())
     ids = pre["response"]["tokens"]
@@ -30,7 +30,8 @@ def inspect(directory, decode_log, length, count):
                 continue
             record = json.loads(line[line.index("{"):])
             m = record["out"]["meta_info"]
-            if not record["obj"]["stream"]:  # server /generate warmers are non-streaming
+            if not record["obj"]["stream"]:
+                require(not strict_streaming, "unplanned Decode startup generation")
                 continue
             rid = record["rid"]
             require(record["obj"]["rid"] == m["id"] == rid and rid not in terminals, "bad terminal ID")
@@ -59,10 +60,7 @@ def inspect(directory, decode_log, length, count):
             accepted, proposed, verify = (m[k] for k in
                                          ("spec_num_correct_drafts", "spec_num_proposed_drafts", "spec_verify_ct"))
             require(0 <= accepted <= proposed and proposed > 0 and verify > 0, "missing speculative work")
-            choices = [c for e in events for c in e.get("choices", [])]
-            require({c["finish_reason"] for c in choices if c.get("finish_reason")} == {"length"},
-                    "missing length finish")
-            text = "".join(c.get("delta", {}).get("content") or "" for c in choices)
+            text = content_only(events, rid)
             ttft, e2e = row["first_chunk_latency"], row["latency"]
             require(text and 0 < ttft < e2e, "missing text or invalid timing")
             samples.append(dict(phase=phase, id=rid, accepted=accepted, proposed=proposed,

@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 #include <torch/torch.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -14,12 +15,24 @@ namespace xllm::kernel::musa {
 
 // FP8 expert-major activations, FP32 group128 scales, valid-row counts and
 // the original-route -> expert-row map. Only valid prefixes are initialized.
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
-                           const torch::Tensor& expert_ids,
-                           int64_t first_expert,
-                           int64_t local_experts,
-                           double static_scale = 0.0);
+using DeepseekV41W4A8Dispatch =
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>;
+
+DeepseekV41W4A8Dispatch deepseek_v41_w4a8_dispatch(
+    const torch::Tensor& input,
+    const torch::Tensor& expert_ids,
+    int64_t first_expert,
+    int64_t local_experts,
+    double static_scale = 0.0);
+
+// Wide prefill only. Measure the exact expert occupancy before allocating
+// the padded buffers. An expert above 512 rows requires the existing tiles.
+std::optional<DeepseekV41W4A8Dispatch> deepseek_v41_w4a8_dispatch_compact(
+    const torch::Tensor& input,
+    const torch::Tensor& expert_ids,
+    int64_t first_expert,
+    int64_t local_experts,
+    double static_scale);
 
 // Quantize the valid expert-major BF16 prefixes already dispatched by DeepEP.
 // Preserve expert/slot order and ignore uninitialized padding. No route weight
@@ -36,6 +49,12 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
     double limit,
     double static_scale = 0.0,
     bool valid_prefix = false);
+
+std::pair<torch::Tensor, torch::Tensor>
+deepseek_v41_w4a8_swiglu_quant_prefill_parallel(const torch::Tensor& gate_up,
+                                                const torch::Tensor& counts,
+                                                double limit,
+                                                double static_scale);
 
 torch::Tensor deepseek_v41_w4a8_combine(const torch::Tensor& expert_output,
                                         const torch::Tensor& expert_ids,

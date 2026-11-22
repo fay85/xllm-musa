@@ -42,6 +42,17 @@ class DeepseekV41SparseAttention final {
     CHECK_GT(max_gather_bytes_, 0);
   }
 
+  torch::Tensor forward_prepared(const torch::Tensor& query,
+                                 const torch::Tensor& kv,
+                                 const torch::Tensor& indices,
+                                 const torch::Tensor& sink) const {
+    if (library_path_.empty()) {
+      return forward(query, kv, indices, sink);
+    }
+    return kernel::musa::deepseek_v41_mate_sparse_attention_prepared(
+        query, kv, indices, sink, scale_, library_path_);
+  }
+
   torch::Tensor forward(const torch::Tensor& query,
                         const torch::Tensor& kv,
                         const torch::Tensor& indices,

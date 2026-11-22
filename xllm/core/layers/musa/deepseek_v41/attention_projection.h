@@ -24,6 +24,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
 #include "core/layers/musa/deepseek_v41/rms_norm.h"
+#include "core/util/env_var.h"
 
 namespace xllm::layer {
 
@@ -44,7 +45,9 @@ class DeepseekV41AttentionProjection final {
       bool verify_skinny_projection = false,
       const std::vector<torch::Tensor>& fp8_scales = {},
       const std::string& prequant_directory = {},
-      bool direct_rope_table = false)
+      bool direct_rope_table = false,
+      bool prefill_direct_rope_table = false,
+      bool prefill_sliced_rope = false)
       : weights_(check_weights(std::move(weights), fp8_scales)),
         q_a_(weights_[0],
              original_fp8_activation,
@@ -71,7 +74,9 @@ class DeepseekV41AttentionProjection final {
         output_rank_(output_rank),
         epsilon_(epsilon),
         original_fp8_activation_(original_fp8_activation),
-        direct_rope_table_(direct_rope_table) {
+        direct_rope_table_(direct_rope_table),
+        prefill_direct_rope_table_(prefill_direct_rope_table),
+        prefill_sliced_rope_(prefill_sliced_rope) {
     CHECK_GT(heads_, 0);
     CHECK_GT(groups_, 0);
     CHECK_EQ(heads_ % groups_, 0);
@@ -102,15 +107,33 @@ class DeepseekV41AttentionProjection final {
           torch::cat({weights_[0], weights_[3]}, 0).contiguous(),
           original_fp8_activation_);
     }
+    if (verify_skinny_projection && fp8_scales.empty() && !decode_packed_qkv &&
+        util::get_bool_env("XLLM_DSV41_VERIFY_QKV_PROJECTION_OVERLAP", false)) {
+      verify_kv_overlap_ =
+          std::make_unique<DeepseekV41VerifyOverlap>(weights_[0].device());
+    }
   }
 
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> prepare(
       const torch::Tensor& hidden,
       const torch::Tensor& positions,
-      const torch::Tensor& table) const {
+      const torch::Tensor& table,
+      bool static_verify = false) const {
     check_hidden(hidden);
     check_rotary(positions, table, hidden.size(0));
     torch::DeviceGuard guard(hidden.device());
+    if (static_verify && verify_kv_overlap_ != nullptr && hidden.size(0) > 1 &&
+        hidden.size(0) <= 6 && verify_kv_overlap_->can_fork()) {
+      torch::Tensor key = verify_kv_overlap_->launch(hidden, [&]() {
+        return prepare_context_kv(hidden, positions, table);
+      });
+      auto [query, qr] = prepare_query(hidden, positions, table);
+      verify_kv_overlap_->join(key);
+      LOG_FIRST_N(INFO, 1)
+          << "Native V4.1 overlaps query and KV verify projection: rows="
+          << hidden.size(0);
+      return {query, key, qr};
+    }
     torch::Tensor qr;
     torch::Tensor key;
     if (packed_qkv_ != nullptr && hidden.size(0) == 1) {
@@ -121,11 +144,26 @@ class DeepseekV41AttentionProjection final {
       qr = norm(q_a_.forward(hidden), weights_[1]);
       key = norm(kv_.forward(hidden), weights_[4]);
     }
-    const torch::Tensor query =
-        q_b_.forward(qr).view({hidden.size(0), heads_, head_dim_});
-    return {rope(query, positions, table, /*inverse=*/false),
+    return {project_query(qr, positions, table),
             quantize(rope(key, positions, table, /*inverse=*/false)),
             qr};
+  }
+
+  std::pair<torch::Tensor, torch::Tensor> prepare_query(
+      const torch::Tensor& hidden,
+      const torch::Tensor& positions,
+      const torch::Tensor& table) const {
+    check_hidden(hidden);
+    check_rotary(positions, table, hidden.size(0));
+    torch::DeviceGuard guard(hidden.device());
+    torch::Tensor qr;
+    if (packed_qkv_ != nullptr && hidden.size(0) == 1) {
+      const torch::Tensor packed = packed_qkv_->forward(hidden);
+      qr = norm(packed.narrow(1, 0, weights_[0].size(0)), weights_[1]);
+    } else {
+      qr = norm(q_a_.forward(hidden), weights_[1]);
+    }
+    return {project_query(qr, positions, table), qr};
   }
 
   torch::Tensor prepare_context_kv(const torch::Tensor& hidden,
@@ -173,6 +211,14 @@ class DeepseekV41AttentionProjection final {
   }
 
  private:
+  torch::Tensor project_query(const torch::Tensor& qr,
+                              const torch::Tensor& positions,
+                              const torch::Tensor& table) const {
+    const torch::Tensor query =
+        q_b_.forward(qr).view({qr.size(0), heads_, head_dim_});
+    return rope(query, positions, table, /*inverse=*/false);
+  }
+
   static std::vector<torch::Tensor> check_weights(
       std::vector<torch::Tensor> weights,
       const std::vector<torch::Tensor>& fp8_scales) {
@@ -247,10 +293,13 @@ class DeepseekV41AttentionProjection final {
     if (input.size(0) == 0) {
       return input.clone();
     }
-    // Select before execution. Larger/strided inputs retain the defined
-    // reference path; a selected device kernel failure is never swallowed.
-    if (direct_rope_table_ && input.size(0) <= 6 && input.is_contiguous() &&
-        positions.is_contiguous() && table.is_contiguous()) {
+    // Experimental Prefill opt-in is bounded to 512 rows and remains OFF
+    // after its local numerical check failed. Larger/strided inputs use
+    // the defined reference path; decode policy is independent.
+    const bool direct = (direct_rope_table_ && input.size(0) <= 6) ||
+                        (prefill_direct_rope_table_ && input.size(0) <= 512);
+    if (direct && input.is_contiguous() && positions.is_contiguous() &&
+        table.is_contiguous()) {
       return kernel::musa::deepseek_v41_rope_table(
           input, positions, table, inverse);
     }
@@ -262,18 +311,29 @@ class DeepseekV41AttentionProjection final {
     const torch::Tensor sine = rows.narrow(1, width / 2, width / 2)
                                    .repeat_interleave(2, -1)
                                    .contiguous();
+    const int64_t start = head_dim_ - width;
+    const bool sliced = prefill_sliced_rope_ && input.size(0) > 6 && start > 0;
+    // The reference kernel takes FP32 input. Convert only the rotated tail
+    // so the unmodified prefix stays in its original BF16 carrier.
+    const torch::Tensor rotary_input =
+        sliced ? input.narrow(-1, start, width) : input;
     const torch::Tensor value =
-        input.to(torch::kFloat32)
-            .reshape({input.size(0), -1, input.size(-1)})
+        rotary_input.to(torch::kFloat32)
+            .reshape({input.size(0), -1, rotary_input.size(-1)})
             .contiguous();
     torch::Tensor output;
     CHECK(kernel::musa::deepseek_v4_partial_rope(
-        value, cosine, sine, head_dim_ - width, width, inverse, output));
-    return output.reshape(input.sizes()).to(input.scalar_type());
+        value, cosine, sine, sliced ? 0 : start, width, inverse, output));
+    auto rotated = output.reshape(rotary_input.sizes()).to(input.scalar_type());
+    if (sliced) {
+      return torch::cat({input.narrow(-1, 0, start), rotated}, /*dim=*/-1);
+    }
+    return rotated;
   }
 
   std::vector<torch::Tensor> weights_;
   std::unique_ptr<DeepseekV41Dense> packed_qkv_;
+  std::unique_ptr<DeepseekV41VerifyOverlap> verify_kv_overlap_;
   DeepseekV41Dense q_a_;
   DeepseekV41Dense q_b_;
   DeepseekV41Dense kv_;
@@ -285,6 +345,8 @@ class DeepseekV41AttentionProjection final {
   double epsilon_;
   bool original_fp8_activation_;
   bool direct_rope_table_ = false;
+  bool prefill_direct_rope_table_ = false;
+  bool prefill_sliced_rope_ = false;
 };
 
 }  // namespace xllm::layer

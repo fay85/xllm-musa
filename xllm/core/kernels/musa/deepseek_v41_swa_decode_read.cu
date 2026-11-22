@@ -13,6 +13,9 @@ limitations under the License.
 #include <torch/utils.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <limits>
+#include <type_traits>
 
 #include "core/kernels/musa/deepseek_v41_swa_decode_read.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
@@ -58,6 +61,38 @@ __global__ void swa_draft_read_kernel(const c10::BFloat16* cache,
   }
 }
 
+template <bool PackSelected>
+__device__ int64_t verify_pick(const int64_t* extra,
+                               int64_t position,
+                               int64_t window,
+                               int64_t compressed_start,
+                               int64_t compressed_rows,
+                               int64_t extra_columns,
+                               int64_t query,
+                               int64_t column) {
+  if (column < window) {
+    return position + query - window + 1 + column >= 0 ? query + column + 1
+                                                       : -1;
+  }
+  const int64_t offset = query * extra_columns + column - window;
+  const int64_t selected = extra[offset];
+  return selected >= 0 && selected < compressed_rows
+             ? compressed_start + (PackSelected ? offset : selected)
+             : -1;
+}
+
+__device__ int64_t verify_write_slot(const int64_t* table,
+                                     int64_t position,
+                                     int64_t physical_blocks,
+                                     int64_t block_size,
+                                     int64_t table_columns) {
+  const int64_t block = table[(position / block_size) % table_columns];
+  CUDA_KERNEL_ASSERT(block < physical_blocks);
+  // The existing scatter filters the negative slots.
+  return block * block_size + position % block_size;
+}
+
+template <bool PackSelected, typename Pick>
 __global__ void swa_verify_read_kernel(const c10::BFloat16* cache,
                                        const c10::BFloat16* current,
                                        const int64_t* table,
@@ -65,7 +100,7 @@ __global__ void swa_verify_read_kernel(const c10::BFloat16* cache,
                                        const c10::BFloat16* compressed,
                                        const int64_t* extra,
                                        c10::BFloat16* rows,
-                                       int64_t* picks,
+                                       Pick* picks,
                                        int64_t* slot,
                                        int64_t physical_blocks,
                                        int64_t block_size,
@@ -87,46 +122,73 @@ __global__ void swa_verify_read_kernel(const c10::BFloat16* cache,
     CUDA_KERNEL_ASSERT(read_block < physical_blocks);
     physical = read_block * block_size + history_position % block_size;
   }
+  const int64_t compressed_start = window + queries;
+  const c10::BFloat16* source = nullptr;
+  if (row < window) {
+    if (history_position >= 0) {
+      source = cache + physical * width;
+    }
+  } else if (row < compressed_start) {
+    source = current + (row - window) * width;
+  } else {
+    const int64_t offset = row - compressed_start;
+    const int64_t selected = PackSelected ? extra[offset] : offset;
+    if (selected >= 0 && selected < compressed_rows) {
+      source = compressed + selected * width;
+    }
+  }
   for (int64_t column = threadIdx.x; column < width; column += blockDim.x) {
-    c10::BFloat16 value = static_cast<c10::BFloat16>(0.0f);
-    if (row < window) {
-      if (history_position >= 0) {
-        value = cache[physical * width + column];
-      }
-    } else if (row < window + queries) {
-      value = current[(row - window) * width + column];
-    } else {
-      value = compressed[(row - window - queries) * width + column];
+    rows[row * width + column] =
+        source == nullptr ? static_cast<c10::BFloat16>(0.0f) : source[column];
+  }
+  const int64_t stride = window + extra_columns;
+  if constexpr (std::is_same_v<Pick, int32_t>) {
+    // Assign one query's contiguous picks to each of the first query CTAs.
+    if (row >= queries) {
+      return;
     }
-    rows[row * width + column] = value;
-  }
-  if (row != 0) {
-    return;
-  }
-  for (int64_t index = threadIdx.x; index < queries * (window + extra_columns);
-       index += blockDim.x) {
-    const int64_t query = index / (window + extra_columns);
-    const int64_t column = index % (window + extra_columns);
-    CUDA_KERNEL_ASSERT(positions[query] == position + query);
-    int64_t pick = -1;
-    if (column < window) {
-      pick =
-          position + query - window + 1 + column >= 0 ? query + column + 1 : -1;
-    } else {
-      const int64_t selected = extra[query * extra_columns + column - window];
-      pick = selected >= 0 && selected < compressed_rows
-                 ? selected + window + queries
-                 : -1;
+    for (int64_t column = threadIdx.x; column < stride; column += blockDim.x) {
+      picks[row * stride + column] =
+          static_cast<int32_t>(verify_pick<PackSelected>(extra,
+                                                         position,
+                                                         window,
+                                                         compressed_start,
+                                                         compressed_rows,
+                                                         extra_columns,
+                                                         row,
+                                                         column));
     }
-    picks[index] = pick;
-  }
-  if (threadIdx.x < queries) {
-    const int64_t current_position = positions[threadIdx.x];
-    const int64_t block =
-        table[(current_position / block_size) % table_columns];
-    CUDA_KERNEL_ASSERT(block < physical_blocks);
-    // Preserve invalid-write sign; the existing scatter filters invalid slots.
-    slot[threadIdx.x] = block * block_size + current_position % block_size;
+    if (threadIdx.x == 0) {
+      const int64_t current = positions[row];
+      CUDA_KERNEL_ASSERT(current == position + row);
+      slot[row] = verify_write_slot(
+          table, current, physical_blocks, block_size, table_columns);
+    }
+  } else {
+    if (row != 0) {
+      return;
+    }
+    for (int64_t index = threadIdx.x; index < queries * stride;
+         index += blockDim.x) {
+      const int64_t query = index / stride;
+      const int64_t column = index % stride;
+      CUDA_KERNEL_ASSERT(positions[query] == position + query);
+      picks[index] = verify_pick<PackSelected>(extra,
+                                               position,
+                                               window,
+                                               compressed_start,
+                                               compressed_rows,
+                                               extra_columns,
+                                               query,
+                                               column);
+    }
+    if (threadIdx.x < queries) {
+      slot[threadIdx.x] = verify_write_slot(table,
+                                            positions[threadIdx.x],
+                                            physical_blocks,
+                                            block_size,
+                                            table_columns);
+    }
   }
 }
 
@@ -252,33 +314,71 @@ deepseek_v41_swa_verify_read(const torch::Tensor& cache,
     extra_columns = extra->size(1);
   }
   const int64_t queries = current_kv.size(0);
-  const int64_t rows_count = window + queries + compressed_rows;
+  const char* packing = std::getenv("XLLM_DSV41_VERIFY_PACKED_COMPRESSED_READ");
+  // Keep the sparse pick order unchanged. Each query gets a private copy of
+  // its selected compressed rows, so no device-wide deduplication is needed.
+  const int64_t selected_rows = queries * extra_columns;
+  const bool pack_selected =
+      packing != nullptr && packing[0] == '1' && packing[1] == '\0' &&
+      queries > 1 && selected_rows > 0 && selected_rows < compressed_rows;
+  const int64_t rows_count =
+      window + queries + (pack_selected ? selected_rows : compressed_rows);
+  if (pack_selected) {
+    LOG_FIRST_N(INFO, 1)
+        << "Native V4.1 verify packs selected compressed KV rows: source="
+        << compressed_rows << ", packed=" << selected_rows
+        << ", queries=" << queries;
+  }
+  const char* normalized = std::getenv("XLLM_DSV41_VERIFY_NORMALIZED_PICKS");
+  const int64_t stride = window + extra_columns;
+  const bool prepare_picks = pack_selected && normalized != nullptr &&
+                             normalized[0] == '1' && normalized[1] == '\0' &&
+                             stride % 64 == 0 &&
+                             rows_count <= std::numeric_limits<int32_t>::max();
+  if (prepare_picks) {
+    LOG_FIRST_N(INFO, 1)
+        << "Native V4.1 verify writes normalized int32 sparse picks: columns="
+        << stride << ", queries=" << queries;
+  }
   torch::Tensor rows =
       torch::empty({rows_count, cache.size(2)}, cache.options());
-  torch::Tensor picks =
-      torch::empty({queries, window + extra_columns}, pages.options());
+  torch::Tensor picks = torch::empty(
+      {queries, stride},
+      pages.options().dtype(prepare_picks ? torch::kInt32 : torch::kInt64));
   torch::Tensor slot = torch::empty({queries}, pages.options());
-  swa_verify_read_kernel<<<static_cast<uint32_t>(rows_count),
-                           128,
-                           0,
-                           current_musa_stream(cache.device())>>>(
-      cache.data_ptr<c10::BFloat16>(),
-      current_kv.data_ptr<c10::BFloat16>(),
-      pages.data_ptr<int64_t>(),
-      pos.data_ptr<int64_t>(),
-      compressed.has_value() ? compressed->data_ptr<c10::BFloat16>() : nullptr,
-      extra.has_value() ? extra_long.data_ptr<int64_t>() : nullptr,
-      rows.data_ptr<c10::BFloat16>(),
-      picks.data_ptr<int64_t>(),
-      slot.data_ptr<int64_t>(),
-      cache.size(0),
-      cache.size(1),
-      table.size(1),
-      cache.size(2),
-      window,
-      compressed_rows,
-      extra_columns,
-      queries);
+  const auto launch = [&](auto mode, auto pick_type) {
+    using Pick = decltype(pick_type);
+    swa_verify_read_kernel<decltype(mode)::value, Pick>
+        <<<static_cast<uint32_t>(rows_count),
+           128,
+           0,
+           current_musa_stream(cache.device())>>>(
+            cache.data_ptr<c10::BFloat16>(),
+            current_kv.data_ptr<c10::BFloat16>(),
+            pages.data_ptr<int64_t>(),
+            pos.data_ptr<int64_t>(),
+            compressed.has_value() ? compressed->data_ptr<c10::BFloat16>()
+                                   : nullptr,
+            extra.has_value() ? extra_long.data_ptr<int64_t>() : nullptr,
+            rows.data_ptr<c10::BFloat16>(),
+            picks.data_ptr<Pick>(),
+            slot.data_ptr<int64_t>(),
+            cache.size(0),
+            cache.size(1),
+            table.size(1),
+            cache.size(2),
+            window,
+            compressed_rows,
+            extra_columns,
+            queries);
+  };
+  if (prepare_picks) {
+    launch(std::true_type{}, int32_t{});
+  } else if (pack_selected) {
+    launch(std::true_type{}, int64_t{});
+  } else {
+    launch(std::false_type{}, int64_t{});
+  }
   check_musa_kernel_launch("V4.1 causal verify fused SWA read and picks");
   return {rows, picks, slot};
 }

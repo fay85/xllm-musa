@@ -25,8 +25,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include "core/framework/parallel_state/process_group.h"
 #include "core/layers/musa/deepseek_v41/deep_ep_ll_runtime.h"
 #include "core/layers/musa/deepseek_v41/feed_forward.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 #include "core/layers/musa/deepseek_v41/w4a8_experts.h"
+#include "core/util/env_var.h"
 
 namespace xllm::layer {
 
@@ -37,16 +39,23 @@ struct DeepseekV41MoeConfig {
   DeepseekV41ExpertFormat expert_format = DeepseekV41ExpertFormat::ORIGINAL_FP4;
   bool dense = false;
   bool gate_cache_fp32_weight = false;
+  bool prefill_gate_row_partition = false;
+  bool prefill_compact_experts = false;
   bool gate_bf16_fp32_projection = false;
   bool gate_simt_projection = false;
+  bool prefill_gate_bf16_fp32_projection = false;
   bool original_fp8_activation = true;
   bool decode_ep_custom_allreduce = false;
   bool verify_custom_allreduce = false;
+  bool prefill_custom_allreduce = false;
   bool shared_expert_tp_reduce = false;
   bool decode_packed_shared_gate_up = false;
   bool verify_skinny_projection = false;
   bool w4a8_static_activation = false;
   bool w4a8_valid_prefix_swiglu = false;
+  bool prefill_valid_prefix_swiglu = false;
+  bool prefill_parallel_swiglu = false;
+  bool prefill_shared_row_partition = false;
   int64_t first_expert = 0;
   int64_t topk = 6;
   int64_t image_token_id = 129264;
@@ -96,9 +105,21 @@ class DeepseekV41Moe final {
     if (config_.dense) {
       return;
     }
+    CHECK(!config_.prefill_shared_row_partition ||
+          (ep_group_ != nullptr && ep_group_->world_size() == 8 &&
+           !config_.shared_expert_tp_reduce && !config_.deep_ep_ll));
+    CHECK(!config_.prefill_gate_row_partition ||
+          (ep_group_ != nullptr && ep_group_->world_size() == 8 &&
+           !config_.deep_ep_ll && !config_.prefill_gate_bf16_fp32_projection));
     CHECK_GE(config_.first_expert, 0);
     CHECK(weights_.gate.defined());
     CHECK_EQ(weights_.gate.dim(), 2);
+    if (config_.shared_expert_tp_reduce && config_.verify_custom_allreduce &&
+        config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT &&
+        util::get_bool_env("XLLM_DSV41_VERIFY_SHARED_EXPERT_OVERLAP", false)) {
+      verify_shared_overlap_ =
+          std::make_unique<DeepseekV41VerifyOverlap>(weights_.gate.device());
+    }
     CHECK_EQ(weights_.expert[0].dim(), 3);
     const int64_t count = weights_.expert[0].size(0);
     CHECK_GT(count, 0);
@@ -123,16 +144,18 @@ class DeepseekV41Moe final {
       CHECK_EQ(weights_.expert[index].size(0), count);
       CHECK_EQ(weights_.scale[index].size(0), count);
     }
-    gate_ = std::make_unique<DeepseekV41Gate>(weights_.gate,
-                                              weights_.bias,
-                                              weights_.vision_bias,
-                                              config_.image_token_id,
-                                              config_.topk,
-                                              config_.normalize,
-                                              config_.scale,
-                                              config_.gate_cache_fp32_weight,
-                                              config_.gate_bf16_fp32_projection,
-                                              config_.gate_simt_projection);
+    gate_ = std::make_unique<DeepseekV41Gate>(
+        weights_.gate,
+        weights_.bias,
+        weights_.vision_bias,
+        config_.image_token_id,
+        config_.topk,
+        config_.normalize,
+        config_.scale,
+        config_.gate_cache_fp32_weight,
+        config_.gate_bf16_fp32_projection,
+        config_.gate_simt_projection,
+        config_.prefill_gate_bf16_fp32_projection);
     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
       w4a8_ = std::make_unique<DeepseekV41W4A8Experts>(
           weights_.expert[0],
@@ -144,7 +167,9 @@ class DeepseekV41Moe final {
           config_.w4a8_so_path,
           weights_.expert_input_scale[0],
           weights_.expert_input_scale[1],
-          config_.w4a8_valid_prefix_swiglu);
+          config_.w4a8_valid_prefix_swiglu,
+          config_.prefill_valid_prefix_swiglu,
+          config_.prefill_parallel_swiglu);
       return;
     }
     CHECK(!config_.bmm_so_path.empty());
@@ -178,7 +203,21 @@ class DeepseekV41Moe final {
     if (config_.dense) {
       return shared_.forward(input);
     }
-    auto [route_weights, indices] = gate_->forward(input, input_ids);
+    torch::Tensor shared_local;
+    if (verify_shared_overlap_ && input.size(0) > 1 && input.size(0) <= 6 &&
+        verify_shared_overlap_->can_fork()) {
+      shared_local = verify_shared_overlap_->launch(
+          input, [&]() { return shared_.forward(input).to(torch::kFloat32); });
+      LOG_FIRST_N(INFO, 1)
+          << "Native V4.1 overlaps shared and routed verify experts: rows="
+          << input.size(0);
+    }
+    torch::Tensor route_weights;
+    torch::Tensor indices;
+    {
+      const DeepseekV41ProfileRange gate_range("V41/MoE/gate");
+      std::tie(route_weights, indices) = gate_->forward(input, input_ids);
+    }
     if (config_.deep_ep_ll) {
       CHECK(!config_.shared_expert_tp_reduce);
       CHECK(w4a8_ != nullptr);
@@ -203,7 +242,7 @@ class DeepseekV41Moe final {
     }
     torch::Tensor routed;
     if (config_.expert_format == DeepseekV41ExpertFormat::W4AFP8_MT) {
-      routed = w4a8_->forward(input, indices, route_weights);
+      routed = forward_w4a8(input, indices, route_weights);
     } else if (input.size(0) <= 8) {
       routed = decode_->forward(input, indices, route_weights);
     } else {
@@ -213,7 +252,12 @@ class DeepseekV41Moe final {
       CHECK(ep_group_ != nullptr && ep_group_->world_size() > 1);
       // Local shared slices must join the routed FP32 sum exactly once.
       // The same reduction now combines both sources, with no extra collective.
-      routed.add_(shared_.forward(input).to(torch::kFloat32));
+      if (shared_local.defined()) {
+        verify_shared_overlap_->join(shared_local);
+      } else {
+        shared_local = shared_.forward(input).to(torch::kFloat32);
+      }
+      routed.add_(shared_local);
     }
     if (ep_group_ != nullptr && ep_group_->world_size() > 1) {
       const DeepseekV41ProfileRange reduction_range(
@@ -224,8 +268,10 @@ class DeepseekV41Moe final {
           /*payload_bytes=*/static_cast<int64_t>(routed.nbytes()),
           /*group_size=*/ep_group_->world_size());
       const int64_t custom_rows = config_.verify_custom_allreduce ? 6 : 1;
-      if (config_.decode_ep_custom_allreduce && input.size(0) > 0 &&
-          input.size(0) <= custom_rows) {
+      if ((config_.decode_ep_custom_allreduce && input.size(0) > 0 &&
+           input.size(0) <= custom_rows) ||
+          (config_.prefill_custom_allreduce && input.size(0) > 6 &&
+           input.size(0) <= 512)) {
         CHECK_EQ(routed.scalar_type(), torch::kFloat32);
         std::optional<torch::Tensor> reduced =
             musa_allreduce_tp_custom(ep_group_, routed);
@@ -241,9 +287,52 @@ class DeepseekV41Moe final {
     }
     if (!config_.shared_expert_tp_reduce) {
       // The original shared output is replicated and joins after the EP sum.
-      routed.add_(shared_.forward(input).to(torch::kFloat32));
+      routed.add_(forward_shared(input).to(torch::kFloat32));
     }
     return routed.to(input.scalar_type());
+  }
+
+  torch::Tensor forward_partitioned_prefill(
+      const torch::Tensor& local,
+      const std::optional<torch::Tensor>& input_ids) {
+    const DeepseekV41ProfileRange range("V41/MoE/partitioned");
+    if (config_.dense) {
+      return shared_.forward(local);
+    }
+    CHECK(w4a8_ != nullptr && ep_group_ != nullptr);
+    CHECK(!config_.deep_ep_ll && !config_.shared_expert_tp_reduce &&
+          !config_.prefill_custom_allreduce);
+    torch::Tensor input =
+        ep_group_->allgather_base_sync(local).reshape({-1, local.size(1)});
+    torch::Tensor weights;
+    torch::Tensor indices;
+    {
+      const DeepseekV41ProfileRange gate_range("V41/MoE/gate");
+      std::tie(weights, indices) =
+          config_.prefill_gate_row_partition
+              ? forward_gate_partition(local, input_ids)
+              : gate_->forward(input, input_ids);
+    }
+    torch::Tensor routed;
+    if (config_.prefill_compact_experts &&
+        input.size(0) > kDeepseekV41PrefillTileRows) {
+      routed = w4a8_->forward_compact(input, indices, weights);
+    }
+    if (!routed.defined()) {
+      routed = forward_w4a8(input, indices, weights);
+    }
+    CHECK_EQ(routed.scalar_type(), torch::kFloat32);
+    torch::Tensor output = torch::empty(local.sizes(), routed.options());
+    {
+      const DeepseekV41ProfileRange reduction_range(
+          "V41/MoE/EP_reduce_scatter");
+      ep_group_->reduce_scatter(routed, output);
+    }
+    {
+      const DeepseekV41ProfileRange shared_range("V41/MoE/shared");
+      output.add_(shared_.forward(local).to(torch::kFloat32));
+    }
+    return output.to(local.scalar_type());
   }
 
   void forward_empty(int64_t owner_rows, const torch::TensorOptions& options) {
@@ -262,6 +351,68 @@ class DeepseekV41Moe final {
   }
 
  private:
+  std::tuple<torch::Tensor, torch::Tensor> forward_gate_partition(
+      const torch::Tensor& local,
+      const std::optional<torch::Tensor>& input_ids) const {
+    const int64_t rows = local.size(0);
+    const int64_t total = rows * ep_group_->world_size();
+    std::optional<torch::Tensor> local_ids;
+    if (input_ids.has_value() && input_ids->defined()) {
+      CHECK_EQ(input_ids->numel(), total);
+      local_ids =
+          input_ids->reshape({-1}).narrow(0, ep_group_->rank() * rows, rows);
+    }
+    const auto [weights, indices] = gate_->forward(local, local_ids);
+    CHECK_EQ(weights.scalar_type(), torch::kFloat32);
+    CHECK_EQ(indices.scalar_type(), torch::kInt64);
+    const int64_t topk = weights.size(1);
+    // Keep FP32 route weights bitwise and carry the bounded expert IDs as i32.
+    const torch::Tensor packed =
+        torch::cat({weights.view(torch::kInt32), indices.to(torch::kInt32)}, 1);
+    const DeepseekV41ProfileRange range("V41/MoE/gate_rows_allgather");
+    const torch::Tensor all =
+        ep_group_->allgather_base_sync(packed).reshape({total, 2 * topk});
+    return {all.narrow(1, 0, topk).contiguous().view(torch::kFloat32),
+            all.narrow(1, topk, topk).to(torch::kInt64).contiguous()};
+  }
+
+  torch::Tensor forward_w4a8(const torch::Tensor& input,
+                             const torch::Tensor& indices,
+                             const torch::Tensor& weights) const {
+    if (input.size(0) <= kDeepseekV41PrefillTileRows) {
+      return w4a8_->forward(input, indices, weights);
+    }
+    CHECK_LE(input.size(0), kDeepseekV41PrefillMaxRows);
+    std::vector<torch::Tensor> expert_tiles;
+    deepseek_v41_for_each_prefill_tile(
+        input.size(0), [&](int64_t start, int64_t count) {
+          expert_tiles.emplace_back(
+              w4a8_->forward(input.narrow(0, start, count),
+                             indices.narrow(0, start, count),
+                             weights.narrow(0, start, count)));
+        });
+    return torch::cat(expert_tiles, 0);
+  }
+
+  torch::Tensor forward_shared(const torch::Tensor& input) {
+    const DeepseekV41ProfileRange range("V41/MoE/shared");
+    if (!config_.prefill_shared_row_partition || input.size(0) <= 8) {
+      return shared_.forward(input);
+    }
+    CHECK(ep_group_ != nullptr);
+    CHECK_LE(input.size(0), 512);
+    const int64_t world = ep_group_->world_size();
+    CHECK_EQ(input.size(0) % world, 0);
+    const int64_t count = input.size(0) / world;
+    // Full shared weights stay replicated. Only independent token rows are
+    // partitioned, so there is no partial-output sum or duplicate EP reduce.
+    const torch::Tensor local =
+        shared_.forward(input.narrow(0, ep_group_->rank() * count, count));
+    const DeepseekV41ProfileRange gather_range("V41/MoE/shared_allgather");
+    return ep_group_->allgather_base_sync(local.contiguous())
+        .reshape(input.sizes());
+  }
+
   torch::Tensor forward_dispatched(const torch::Tensor& input,
                                    const torch::Tensor& ids,
                                    const torch::Tensor& weights) {
@@ -331,6 +482,7 @@ class DeepseekV41Moe final {
   DeepseekV41SharedMlp shared_;
   std::unique_ptr<DeepseekV41Gate> gate_;
   std::unique_ptr<DeepseekV41PackedRoutedExperts> decode_;
+  std::unique_ptr<DeepseekV41VerifyOverlap> verify_shared_overlap_;
   std::unique_ptr<DeepseekV41W4A8Experts> w4a8_;
   std::vector<DeepseekV41PartitionRoutedMlp> experts_;
   ProcessGroup* ep_group_;

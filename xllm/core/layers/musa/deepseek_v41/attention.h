@@ -12,18 +12,22 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <torch/torch.h>
 #include <torch/utils.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "core/framework/parallel_state/process_group.h"
 #include "core/kernels/musa/deepseek_v41_attention_quant.h"
 #include "core/layers/musa/deepseek_v41/attention_projection.h"
 #include "core/layers/musa/deepseek_v41/compressor.h"
 #include "core/layers/musa/deepseek_v41/indexer.h"
 #include "core/layers/musa/deepseek_v41/paged_attention.h"
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
 #include "core/layers/musa/deepseek_v41/profile_range.h"
 #include "core/layers/musa/deepseek_v41/token_cache.h"
 
@@ -50,15 +54,24 @@ struct DeepseekV41AttentionConfig {
   double scale = 1.0;
   bool original_fp8_activation = true;
   bool decode_cache_read_reuse = false;
+  bool prefill_cache_read_reuse = false;
+  bool prefill_fused_swa_commit = false;
+  bool prefill_wide_swa_commit = false;
   bool short_context_indexer = false;
   bool decode_fused_swa_read = false;
   bool verify_fused_swa_read = false;
   bool decode_packed_qkv = false;
   bool direct_rope_table = false;
+  bool prefill_direct_rope_table = false;
+  bool prefill_sliced_rope = false;
+  bool prefill_query_only = false;
+  bool prefill_context_kv_partition = false;
+  bool prefill_compressor_projection_partition = false;
   bool verify_skinny_projection = false;
   bool draft_small_commit = false;
   std::string sparse_library_path;
   std::string indexer_score_directory;
+  int64_t indexer_max_select_width = 8192;
   std::string dense_prequant_directory;
 };
 
@@ -122,7 +135,9 @@ class DeepseekV41Attention final {
                     config_.verify_skinny_projection,
                     weights_.projection_fp8_scales,
                     config_.dense_prequant_directory,
-                    config_.direct_rope_table) {
+                    config_.direct_rope_table,
+                    config_.prefill_direct_rope_table,
+                    config_.prefill_sliced_rope) {
     CHECK_GE(config_.layer, 0);
     CHECK_GT(config_.window, 0);
     CHECK(weights_.sink.defined());
@@ -148,13 +163,14 @@ class DeepseekV41Attention final {
       CHECK_LT(config_.source_layer, config_.layer);
     }
     if (config_.mode != DeepseekV41AttentionMode::REUSE) {
-      indexer_ =
-          std::make_unique<DeepseekV41Indexer>(weights_.indexer,
-                                               config_.index_heads,
-                                               config_.index_dim,
-                                               config_.epsilon,
-                                               config_.original_fp8_activation,
-                                               config_.indexer_score_directory);
+      indexer_ = std::make_unique<DeepseekV41Indexer>(
+          weights_.indexer,
+          config_.index_heads,
+          config_.index_dim,
+          config_.epsilon,
+          config_.original_fp8_activation,
+          config_.indexer_score_directory,
+          config_.indexer_max_select_width);
     } else {
       CHECK(weights_.indexer.empty());
     }
@@ -172,7 +188,10 @@ class DeepseekV41Attention final {
     const DeepseekV41ProfileRange range("V41/Attention");
     CHECK_GE(context_length, hidden.size(0));
     auto [query, current_kv, qr] =
-        projection_.prepare(hidden, positions, rope_table);
+        projection_.prepare(hidden,
+                            positions,
+                            rope_table,
+                            /*static_verify=*/shared.decode_capacity > 0);
     return projection_.project_output(attend_prepared(hidden,
                                                       positions,
                                                       rope_table,
@@ -187,6 +206,133 @@ class DeepseekV41Attention final {
                                                       qr),
                                       positions,
                                       rope_table);
+  }
+
+  // Query-only Prefill partition: each rank retains complete scheduler-owned
+  // KV/compressor state but evaluates a disjoint query slice with H64 weights.
+  // The decoder gathers completed output rows before mHC and MoE. This is not
+  // a replacement for distributed KV ownership or a change to PD cache layout.
+  torch::Tensor forward_query_partition(const torch::Tensor& hidden,
+                                        const torch::Tensor& positions,
+                                        const torch::Tensor& rope_table,
+                                        const DeepseekV41AttentionCache& cache,
+                                        const torch::Tensor& swa_table,
+                                        const torch::Tensor& key_table,
+                                        const torch::Tensor& index_table,
+                                        int64_t context_length,
+                                        DeepseekV41AttentionRuntime& shared,
+                                        int64_t rank,
+                                        int64_t world,
+                                        ProcessGroup* context_group = nullptr) {
+    const DeepseekV41ProfileRange range("V41/Attention/query_partition");
+    CHECK_GT(world, 1);
+    CHECK_GE(rank, 0);
+    CHECK_LT(rank, world);
+    CHECK_GT(hidden.size(0), 6);
+    CHECK_LE(hidden.size(0), kDeepseekV41PrefillMaxRows);
+    CHECK_EQ(hidden.size(0) % world, 0);
+    CHECK_EQ(shared.decode_capacity, 0);
+    const int64_t count = hidden.size(0) / world;
+    const int64_t offset = rank * count;
+    const torch::Tensor local_hidden = hidden.narrow(0, offset, count);
+    const torch::Tensor local_positions = positions.narrow(0, offset, count);
+    torch::Tensor query;
+    torch::Tensor qr;
+    torch::Tensor unused_kv;
+    {
+      const DeepseekV41ProfileRange query_range(
+          "V41/Attention/local_projection");
+      if (config_.prefill_query_only) {
+        std::tie(query, qr) = projection_.prepare_query(
+            local_hidden, local_positions, rope_table);
+      } else {
+        std::tie(query, unused_kv, qr) =
+            projection_.prepare(local_hidden, local_positions, rope_table);
+      }
+    }
+    torch::Tensor full_kv;
+    {
+      const DeepseekV41ProfileRange context_range("V41/Attention/context_kv");
+      if (config_.prefill_context_kv_partition && context_group != nullptr &&
+          hidden.size(0) > (world - 1) * kDeepseekV41PrefillTileRows) {
+        CHECK_EQ(context_group->rank(), rank);
+        CHECK_EQ(context_group->world_size(), world);
+        full_kv = prepare_partitioned_context_kv(
+            hidden, positions, rope_table, unused_kv, *context_group);
+      } else if (hidden.size(0) <= kDeepseekV41PrefillTileRows) {
+        full_kv = projection_.prepare_context_kv(hidden, positions, rope_table);
+      } else {
+        // Preserve the projection shapes of the original SWA writes.
+        std::vector<torch::Tensor> values;
+        deepseek_v41_for_each_prefill_tile(
+            hidden.size(0), [&](int64_t start, int64_t count) {
+              values.emplace_back(projection_.prepare_context_kv(
+                  hidden.narrow(0, start, count),
+                  positions.narrow(0, start, count),
+                  rope_table));
+            });
+        full_kv = torch::cat(values, 0);
+      }
+    }
+    if (config_.mode == DeepseekV41AttentionMode::FULL) {
+      const int64_t previous = context_length - hidden.size(0);
+      if (config_.prefill_compressor_projection_partition &&
+          context_group != nullptr &&
+          hidden.size(0) > (world - 1) * kDeepseekV41PrefillTileRows) {
+        CHECK_EQ(context_group->rank(), rank);
+        CHECK_EQ(context_group->world_size(), world);
+        publish_partitioned_compressor(hidden,
+                                       rope_table,
+                                       cache,
+                                       swa_table,
+                                       key_table,
+                                       index_table,
+                                       previous,
+                                       shared,
+                                       *context_group);
+      } else if (hidden.size(0) <= kDeepseekV41PrefillTileRows) {
+        publish(hidden,
+                positions,
+                rope_table,
+                cache,
+                swa_table,
+                key_table,
+                index_table,
+                previous,
+                shared);
+      } else {
+        // Pair pooling stores only its current tail. Keep all original
+        // write boundaries before evaluating attention over the wide chunk.
+        deepseek_v41_for_each_prefill_tile(
+            hidden.size(0), [&](int64_t start, int64_t count) {
+              publish(hidden.narrow(0, start, count),
+                      positions.narrow(0, start, count),
+                      rope_table,
+                      cache,
+                      swa_table,
+                      key_table,
+                      index_table,
+                      previous + start,
+                      shared);
+            });
+      }
+    }
+    const torch::Tensor attended = attend_prepared(local_hidden,
+                                                   local_positions,
+                                                   rope_table,
+                                                   cache,
+                                                   swa_table,
+                                                   key_table,
+                                                   index_table,
+                                                   context_length,
+                                                   shared,
+                                                   query,
+                                                   full_kv,
+                                                   qr,
+                                                   offset);
+    const DeepseekV41ProfileRange output_range(
+        "V41/Attention/output_projection");
+    return projection_.project_output(attended, local_positions, rope_table);
   }
 
   // Only true multi-request q1 decode. Projection GEMMs run once over B;
@@ -309,8 +455,10 @@ class DeepseekV41Attention final {
                                 DeepseekV41AttentionRuntime& shared,
                                 const torch::Tensor& query,
                                 const torch::Tensor& current_kv,
-                                const torch::Tensor& qr) {
-    if (config_.mode == DeepseekV41AttentionMode::FULL) {
+                                const torch::Tensor& qr,
+                                int64_t prefill_query_offset = -1) {
+    if (config_.mode == DeepseekV41AttentionMode::FULL &&
+        prefill_query_offset < 0) {
       publish(hidden,
               positions,
               rope_table,
@@ -336,8 +484,10 @@ class DeepseekV41Attention final {
                               positions.narrow(0, positions.numel() - 1, 1) + 1,
                               config_.ratio))
                         : std::nullopt;
-      const bool reuse_read = config_.decode_cache_read_reuse &&
-                              (hidden.size(0) == 1 || static_decode);
+      const bool reuse_read = (config_.decode_cache_read_reuse &&
+                               (hidden.size(0) == 1 || static_decode)) ||
+                              (config_.prefill_cache_read_reuse &&
+                               !static_decode && hidden.size(0) > 1);
       CHECK(!static_decode || reuse_read);
       if (reuse_read) {
         if (!shared.key_read.has_value()) {
@@ -441,7 +591,9 @@ class DeepseekV41Attention final {
                                   config_.sparse_library_path,
                                   /*single_token_scatter=*/true,
                                   config_.decode_fused_swa_read,
-                                  config_.verify_fused_swa_read)
+                                  config_.verify_fused_swa_read,
+                                  config_.prefill_fused_swa_commit,
+                                  config_.prefill_wide_swa_commit)
             .forward_with_window_floor(
                 query,
                 current_kv,
@@ -452,8 +604,157 @@ class DeepseekV41Attention final {
                 picks,
                 positions,
                 shared.swa_replay_start,
-                /*static_verify=*/shared.decode_capacity > 0);
+                /*static_verify=*/shared.decode_capacity > 0,
+                prefill_query_offset);
     return attention;
+  }
+
+  static int64_t prefill_projection_rank_rows(int64_t rows, int64_t world) {
+    constexpr int64_t tile = kDeepseekV41PrefillTileRows;
+    return ((rows + world * tile - 1) / (world * tile)) * tile;
+  }
+
+  torch::Tensor prepare_partitioned_context_kv(const torch::Tensor& hidden,
+                                               const torch::Tensor& positions,
+                                               const torch::Tensor& rope_table,
+                                               const torch::Tensor& query_kv,
+                                               ProcessGroup& group) const {
+    const DeepseekV41ProfileRange range("V41/Attention/context_kv_partitioned");
+    constexpr int64_t tile = kDeepseekV41PrefillTileRows;
+    const int64_t world = group.world_size();
+    const int64_t sequence_rows = hidden.size(0);
+    const int64_t rank_rows =
+        prefill_projection_rank_rows(sequence_rows, world);
+    const int64_t start = group.rank() * rank_rows;
+    const int64_t rows =
+        std::clamp<int64_t>(sequence_rows - start, 0, rank_rows);
+    torch::Tensor local;
+    // With one full tile per rank, the query path already computed this
+    // rank's context KV with the identical 512-row projection.
+    if (sequence_rows == world * tile && query_kv.defined()) {
+      local = query_kv;
+    } else {
+      std::vector<torch::Tensor> values;
+      deepseek_v41_for_each_prefill_tile(
+          rows, [&](int64_t offset, int64_t count) {
+            values.emplace_back(projection_.prepare_context_kv(
+                hidden.narrow(0, start + offset, count),
+                positions.narrow(0, start + offset, count),
+                rope_table));
+          });
+      if (!values.empty()) {
+        local = values.size() == 1 ? values.front() : torch::cat(values, 0);
+      }
+    }
+    const int64_t channels = weights_.projection[3].size(0);
+    if (rows < rank_rows) {
+      torch::Tensor padded =
+          torch::zeros({rank_rows, channels}, hidden.options());
+      if (rows != 0) {
+        padded.narrow(0, 0, rows).copy_(local);
+      }
+      local = std::move(padded);
+    }
+    CHECK_EQ(local.sizes(), torch::IntArrayRef({rank_rows, channels}));
+    const DeepseekV41ProfileRange gather("V41/Attention/context_kv_allgather");
+    return group.allgather_base_sync(local.contiguous())
+        .reshape({world * rank_rows, channels})
+        .narrow(0, 0, sequence_rows);
+  }
+
+  DeepseekV41Compressor make_compressor(
+      const DeepseekV41AttentionCache& cache) {
+    return DeepseekV41Compressor(weights_.compressor_kv,
+                                 weights_.compressor_norm,
+                                 weights_.compressor_gate,
+                                 cache.compressor_kv_state,
+                                 cache.compressor_score_state,
+                                 config_.ratio,
+                                 cache.swa.size(1),
+                                 config_.epsilon,
+                                 /*fused_pair_pool=*/true);
+  }
+
+  void publish_partitioned_compressor(const torch::Tensor& hidden,
+                                      const torch::Tensor& rope_table,
+                                      const DeepseekV41AttentionCache& cache,
+                                      const torch::Tensor& swa_table,
+                                      const torch::Tensor& key_table,
+                                      const torch::Tensor& index_table,
+                                      int64_t start_position,
+                                      DeepseekV41AttentionRuntime& shared,
+                                      ProcessGroup& group) {
+    const DeepseekV41ProfileRange range(
+        "V41/Attention/compressor_partitioned_publish");
+    CHECK(indexer_ != nullptr);
+    CHECK_EQ(shared.decode_capacity, 0);
+    auto compressor = make_compressor(cache);
+    const int64_t world = group.world_size();
+    const int64_t total = hidden.size(0);
+    const int64_t rank_rows = prefill_projection_rank_rows(total, world);
+    const int64_t start = group.rank() * rank_rows;
+    const int64_t rows = std::clamp<int64_t>(total - start, 0, rank_rows);
+    const int64_t channels = weights_.compressor_kv.size(0);
+    const bool paired = config_.ratio == 2;
+    const int64_t width = channels * (paired ? 2 : 1);
+    torch::Tensor local;
+    {
+      const DeepseekV41ProfileRange projection_range(
+          "V41/Attention/compressor_local_projection");
+      std::vector<torch::Tensor> tiles;
+      deepseek_v41_for_each_prefill_tile(
+          rows, [&](int64_t offset, int64_t count) {
+            auto [values, scores] = compressor.project_prefill(
+                hidden.narrow(0, start + offset, count));
+            tiles.emplace_back(paired ? torch::cat({values, scores}, 1)
+                                      : std::move(values));
+          });
+      if (!tiles.empty()) {
+        local =
+            tiles.size() == 1 ? std::move(tiles.front()) : torch::cat(tiles, 0);
+      }
+      if (rows < rank_rows) {
+        const auto options =
+            hidden.options().dtype(paired ? torch::kFloat32 : torch::kBFloat16);
+        auto padded = torch::zeros({rank_rows, width}, options);
+        if (rows != 0) {
+          padded.narrow(0, 0, rows).copy_(local);
+        }
+        local = std::move(padded);
+      }
+    }
+    CHECK_EQ(local.sizes(), torch::IntArrayRef({rank_rows, width}));
+    torch::Tensor projected;
+    {
+      const DeepseekV41ProfileRange gather(
+          "V41/Attention/compressor_projection_allgather");
+      projected = group.allgather_base_sync(local.contiguous())
+                      .reshape({world * rank_rows, width})
+                      .narrow(0, 0, total);
+    }
+    // Projection is row independent. Run the original stateful pool and
+    // cache commits in the original tile order using exactly the same rows.
+    deepseek_v41_for_each_prefill_tile(
+        total, [&](int64_t offset, int64_t count) {
+          const auto tile = projected.narrow(0, offset, count);
+          const auto values = tile.narrow(1, 0, channels).contiguous();
+          const auto scores =
+              paired ? tile.narrow(1, channels, channels).contiguous()
+                     : torch::Tensor{};
+          auto [latent, starts] =
+              compressor.forward_projected(hidden.narrow(0, offset, count),
+                                           values,
+                                           scores,
+                                           start_position + offset,
+                                           swa_table);
+          publish_compressed(latent,
+                             starts,
+                             rope_table,
+                             cache,
+                             key_table,
+                             index_table,
+                             shared);
+        });
   }
 
   void publish(const torch::Tensor& hidden,
@@ -466,20 +767,23 @@ class DeepseekV41Attention final {
                int64_t start_position,
                DeepseekV41AttentionRuntime& shared) {
     CHECK(indexer_ != nullptr);
-    DeepseekV41Compressor compressor(weights_.compressor_kv,
-                                     weights_.compressor_norm,
-                                     weights_.compressor_gate,
-                                     cache.compressor_kv_state,
-                                     cache.compressor_score_state,
-                                     config_.ratio,
-                                     cache.swa.size(1),
-                                     config_.epsilon,
-                                     /*fused_pair_pool=*/true);
+    auto compressor = make_compressor(cache);
     auto [latent, starts] =
         shared.decode_capacity > 0
             ? compressor.forward_static(
                   hidden, positions, start_position % 2 == 1, swa_table)
             : compressor.forward(hidden, start_position, swa_table);
+    publish_compressed(
+        latent, starts, rope_table, cache, key_table, index_table, shared);
+  }
+
+  void publish_compressed(const torch::Tensor& latent,
+                          const torch::Tensor& starts,
+                          const torch::Tensor& rope_table,
+                          const DeepseekV41AttentionCache& cache,
+                          const torch::Tensor& key_table,
+                          const torch::Tensor& index_table,
+                          DeepseekV41AttentionRuntime& shared) {
     const torch::Tensor index_values =
         indexer_->prepare_key(latent, starts, rope_table);
     DeepseekV41TokenCache(cache.index)

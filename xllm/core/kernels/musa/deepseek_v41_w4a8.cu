@@ -5,6 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 #include <glog/logging.h>
 #include <torch/utils.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -23,6 +24,20 @@ __device__ __forceinline__ float warp_max(float value) {
     value = fmaxf(value, __shfl_xor_sync(0xffffffffu, value, delta));
   }
   return value;
+}
+
+__global__ void count_local_routes(const int64_t* expert_ids,
+                                   int32_t* counts,
+                                   int32_t routes,
+                                   int32_t first_expert,
+                                   int32_t experts) {
+  const int32_t route = blockIdx.x * blockDim.x + threadIdx.x;
+  if (route < routes) {
+    const int64_t expert = expert_ids[route] - first_expert;
+    if (expert >= 0 && expert < experts) {
+      atomicAdd(counts + expert, 1);
+    }
+  }
 }
 
 // The caller has replicated token activations across EP ranks, so this
@@ -141,11 +156,12 @@ __global__ void swiglu_quant_kernel(const c10::BFloat16* gate_up,
   }
   const int32_t group = blockIdx.x;
   const int32_t lane = threadIdx.x;
-  // Keep the GEMM's padded physical layout. For small decode batches only,
-  // one CTA per expert/group walks valid rows instead of launching padded CTAs.
-  // All lanes of a warp follow the same count, including the empty-expert case.
+  // Keep the GEMM's padded layout. The prefix path walks only rows owned
+  // by this CTA. Extra row CTAs keep busy experts from serializing wide P.
   const int32_t row_end = ValidPrefix ? count : first_row + 1;
-  for (int32_t row = first_row; row < row_end; row += 4) {
+  const int32_t row_step =
+      ValidPrefix ? 4 * static_cast<int32_t>(gridDim.y) : 4;
+  for (int32_t row = first_row; row < row_end; row += row_step) {
     const int64_t offset = static_cast<int64_t>(expert) * capacity + row;
     float values[4];
     float maximum = 0.0f;
@@ -222,14 +238,12 @@ void check_gpu_contiguous(const torch::Tensor& tensor,
   CHECK(tensor.is_contiguous());
 }
 
-}  // namespace
-
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
-                           const torch::Tensor& expert_ids,
-                           int64_t first_expert,
-                           int64_t local_experts,
-                           double static_scale) {
+std::optional<DeepseekV41W4A8Dispatch> dispatch(const torch::Tensor& input,
+                                                const torch::Tensor& expert_ids,
+                                                int64_t first_expert,
+                                                int64_t local_experts,
+                                                double static_scale,
+                                                bool compact) {
   CHECK(std::isfinite(static_scale) && static_scale >= 0.0);
   CHECK(input.defined() && input.device().type() == torch::kPrivateUse1);
   check_gpu_contiguous(input, input.device(), torch::kBFloat16);
@@ -238,7 +252,7 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
   CHECK_EQ(expert_ids.dim(), 2);
   CHECK_EQ(input.size(0), expert_ids.size(0));
   CHECK_GT(input.size(0), 0);
-  CHECK_LE(input.size(0), 512);
+  CHECK_LE(input.size(0), compact ? 8192 : 512);
   CHECK_GT(input.size(1), 0);
   CHECK_EQ(input.size(1) % kGroupSize, 0);
   CHECK_GT(expert_ids.size(1), 0);
@@ -247,7 +261,31 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
   CHECK_GT(local_experts, 0);
   CHECK_LE(first_expert + local_experts, 1024);
   torch::DeviceGuard guard(input.device());
-  const int64_t capacity = (input.size(0) + 127) / 128 * 128;
+  torch::Tensor counts;
+  int64_t rows_per_expert = input.size(0);
+  if (compact) {
+    counts =
+        torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
+    constexpr int32_t threads = 256;
+    const int32_t routes = expert_ids.numel();
+    count_local_routes<<<(routes + threads - 1) / threads,
+                         threads,
+                         0,
+                         current_musa_stream(input.device())>>>(
+        expert_ids.data_ptr<int64_t>(),
+        counts.data_ptr<int32_t>(),
+        routes,
+        first_expert,
+        local_experts);
+    check_musa_kernel_launch("V4.1 W4A8 compact route counts");
+    rows_per_expert = counts.max().item<int32_t>();
+    if (rows_per_expert > 512) {
+      return std::nullopt;
+    }
+    rows_per_expert = std::max<int64_t>(rows_per_expert, 1);
+    counts.zero_();
+  }
+  const int64_t capacity = (rows_per_expert + 127) / 128 * 128;
   torch::Tensor output =
       torch::empty({local_experts, capacity, input.size(1)},
                    input.options().dtype(torch::kFloat8_e4m3fn));
@@ -256,8 +294,10 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
                     capacity,
                     static_scale > 0.0 ? 1 : input.size(1) / kGroupSize},
                    input.options().dtype(torch::kFloat32));
-  torch::Tensor counts =
-      torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
+  if (!compact) {
+    counts =
+        torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
+  }
   torch::Tensor rows =
       torch::empty(expert_ids.sizes(), input.options().dtype(torch::kInt32));
   dispatch_quant_kernel<<<expert_ids.numel(),
@@ -277,7 +317,34 @@ deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
       static_cast<int32_t>(capacity),
       static_cast<float>(static_scale));
   check_musa_kernel_launch("V4.1 W4A8 group128 dispatch");
-  return {output, scales, counts, rows};
+  return DeepseekV41W4A8Dispatch{output, scales, counts, rows};
+}
+
+}  // namespace
+
+DeepseekV41W4A8Dispatch deepseek_v41_w4a8_dispatch(
+    const torch::Tensor& input,
+    const torch::Tensor& expert_ids,
+    int64_t first_expert,
+    int64_t local_experts,
+    double static_scale) {
+  return dispatch(input,
+                  expert_ids,
+                  first_expert,
+                  local_experts,
+                  static_scale,
+                  false)
+      .value();
+}
+
+std::optional<DeepseekV41W4A8Dispatch> deepseek_v41_w4a8_dispatch_compact(
+    const torch::Tensor& input,
+    const torch::Tensor& expert_ids,
+    int64_t first_expert,
+    int64_t local_experts,
+    double static_scale) {
+  return dispatch(
+      input, expert_ids, first_expert, local_experts, static_scale, true);
 }
 
 std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_quant_dispatched(
@@ -325,12 +392,14 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_quant_dispatched(
   return {output, scales};
 }
 
-std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
+namespace {
+
+std::pair<torch::Tensor, torch::Tensor> swiglu_quant(
     const torch::Tensor& gate_up,
     const torch::Tensor& counts,
     double limit,
     double static_scale,
-    bool valid_prefix) {
+    int32_t prefix_row_groups) {
   CHECK(std::isfinite(static_scale) && static_scale >= 0.0);
   CHECK(gate_up.defined() && gate_up.device().type() == torch::kPrivateUse1);
   check_gpu_contiguous(gate_up, gate_up.device(), torch::kBFloat16);
@@ -352,9 +421,13 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
                     gate_up.size(1),
                     static_scale > 0.0 ? 1 : intermediate / kGroupSize},
                    gate_up.options().dtype(torch::kFloat32));
+  const int64_t row_groups = (gate_up.size(1) + 3) / 4;
+  const bool valid_prefix = prefix_row_groups > 0;
   const dim3 grid(
       static_cast<uint32_t>(intermediate / kGroupSize),
-      static_cast<uint32_t>(valid_prefix ? 1 : (gate_up.size(1) + 3) / 4),
+      static_cast<uint32_t>(
+          valid_prefix ? std::min<int64_t>(row_groups, prefix_row_groups)
+                       : row_groups),
       static_cast<uint32_t>(gate_up.size(0)));
   if (valid_prefix) {
     swiglu_quant_kernel<true>
@@ -381,6 +454,33 @@ std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
   }
   check_musa_kernel_launch("V4.1 W4A8 SwiGLU group128 quantization");
   return {output, scales};
+}
+
+}  // namespace
+
+std::pair<torch::Tensor, torch::Tensor> deepseek_v41_w4a8_swiglu_quant(
+    const torch::Tensor& gate_up,
+    const torch::Tensor& counts,
+    double limit,
+    double static_scale,
+    bool valid_prefix) {
+  return swiglu_quant(gate_up,
+                      counts,
+                      limit,
+                      static_scale,
+                      /*prefix_row_groups=*/valid_prefix ? 1 : 0);
+}
+
+std::pair<torch::Tensor, torch::Tensor>
+deepseek_v41_w4a8_swiglu_quant_prefill_parallel(const torch::Tensor& gate_up,
+                                                const torch::Tensor& counts,
+                                                double limit,
+                                                double static_scale) {
+  return swiglu_quant(gate_up,
+                      counts,
+                      limit,
+                      static_scale,
+                      /*prefix_row_groups=*/8);
 }
 
 torch::Tensor deepseek_v41_w4a8_combine(const torch::Tensor& expert_output,

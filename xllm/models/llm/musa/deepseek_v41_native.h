@@ -29,7 +29,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #include <utility>
 #include <vector>
 
+#include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/execution_config.h"
+#include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/parallel_config.h"
+#include "core/framework/config/profile_config.h"
+#include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model_context.h"
@@ -116,6 +121,9 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     decode_3072_bucket_ =
         util::get_bool_env("XLLM_DSV41_DECODE_3072_BUCKET", false);
     CHECK(!decode_3072_bucket_ || full_decode_graph_);
+    decode_21504_bucket_ =
+        util::get_bool_env("XLLM_DSV41_DECODE_21504_BUCKET", false);
+    CHECK(!decode_21504_bucket_ || full_decode_graph_);
     if (static_decode_) {
       CHECK(!native_dspark_ ||
             (selective_spec_commit_ && verify_custom_allreduce_))
@@ -180,7 +188,13 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     // library unchanged when the target uses replicated H64 attention.
     const char* target_sparse_library =
         std::getenv("XLLM_DSV41_TARGET_MATE_SPARSE_SO");
-    CHECK(!replicated_attention_ || !native_dspark_ ||
+    const bool query_partition =
+        util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false);
+    CHECK(!query_partition || (is_pd_prefill_mode() && replicated_attention_ &&
+                               target_sparse_library != nullptr))
+        << "Query partition requires an exclusively PD Prefill role and H64 "
+           "target library; draft H8 and auxiliary-state capture are unchanged";
+    CHECK(!replicated_attention_ || !native_dspark_ || query_partition ||
           (selective_spec_commit_ && verify_custom_allreduce_ &&
            target_sparse_library != nullptr))
         << "Replicated speculative target requires selective cache commit, "
@@ -257,6 +271,23 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     initialize_decode_batch_policy();
     initialize_bounded_replay_policy();
     initialize_owner_deepep_policy();
+    const bool allow_2048 =
+        util::get_bool_env("XLLM_DSV41_PREFILL_ALLOW_2048", false);
+    const bool allow_4096 =
+        util::get_bool_env("XLLM_DSV41_PREFILL_ALLOW_4096", false);
+    const bool allow_8192 =
+        util::get_bool_env("XLLM_DSV41_PREFILL_ALLOW_8192", false);
+    CHECK_LE(allow_2048 + allow_4096 + allow_8192, 1)
+        << "Select one opt-in prefill capacity";
+    const int64_t selected_rows =
+        2048 * allow_2048 + 4096 * allow_4096 + 8192 * allow_8192;
+    prefill_row_limit_ =
+        std::max(selected_rows, layer::kDeepseekV41PrefillTileRows);
+    CHECK(prefill_row_limit_ == layer::kDeepseekV41PrefillTileRows ||
+          (is_pd_prefill_mode() && bounded_replay_ && native_dspark_ &&
+           util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false) &&
+           !owner_attention_ && !deep_ep_ll_))
+        << "Wide prefill requires the C1 PD P query-partition replay path";
     DeepseekV41Checkpoint checkpoint(
         loader->get_state_dicts(),
         options_,
@@ -309,7 +340,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         bounded_replay_,
         replicated_attention_,
         owner_attention_,
-        gather_bf16_bits_);
+        gather_bf16_bits_,
+        util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false));
     if (static_decode_) {
       std::vector<int64_t> ratios;
       ratios.reserve(args_.n_layers());
@@ -321,12 +353,13 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
           owner_attention_ ? std::function<void()>(
                                  [this]() { deep_ep_ll_->reset_for_capture(); })
                            : std::function<void()>{},
-          decode_3072_bucket_);
+          decode_3072_bucket_,
+          decode_21504_bucket_);
       CHECK(native_dspark_ || args_.layers_to_capture().empty());
       LOG(INFO) << "Native V4.1 fixed-capacity C1 Decode/verify enabled, graph="
-                << full_decode_graph_
-                << ", rows=1..6, capacities="
+                << full_decode_graph_ << ", rows=1..6, capacities="
                 << (decode_3072_bucket_ ? "512/3072/4096" : "512/4096")
+                << (decode_21504_bucket_ ? "/21504" : "")
                 << "; Prefill stays eager";
     }
     if (!args_.layers_to_capture().empty()) {
@@ -450,8 +483,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     if (engram_hash_) {
       const layer::DeepseekV41ProfileRange engram_range(
           "V41/Engram/hash_lookup");
-      CHECK_LE(tokens.numel(), 512)
-          << "Native Engram gate supports at most 512 rows";
+      const int64_t tile_rows = layer::kDeepseekV41PrefillTileRows;
+      const bool tiled_hash = tokens.numel() > tile_rows;
+      CHECK(!tiled_hash ||
+            (requests == 1 && !batched && !params.is_spec_verify &&
+             tokens.numel() <= prefill_row_limit_))
+          << "Oversized input outside the opt-in C1 P prefill path";
       const torch::Tensor& swa = caches[0].swa;
       CHECK_EQ(swa.dim(), 3);
       if (!history_swa_.defined() ||
@@ -498,6 +535,34 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         }
         hashes = torch::cat(per_request_hashes, 0);
         mask = torch::cat(per_request_mask, 0);
+      } else if (tiled_hash) {
+        const int64_t prior = context_length - tokens.numel();
+        const int64_t depth = args_.engram_max_ngram_size() - 1;
+        CHECK_GT(depth, 0);
+        CHECK_LT(depth, tile_rows);
+        // Select predecessors before the tile touches a wrapping SWA table.
+        std::vector<torch::Tensor> hash_tiles;
+        std::vector<torch::Tensor> mask_tiles;
+        layer::deepseek_v41_for_each_prefill_tile(
+            tokens.numel(), [&](int64_t start, int64_t count) {
+              const std::optional<torch::Tensor> input_lookback =
+                  start == 0 ? lookback_tensor
+                             : std::make_optional(
+                                   tokens.narrow(0, start - depth, depth)
+                                       .flip({0})
+                                       .unsqueeze(0));
+              auto [tile_hashes, tile_mask] =
+                  engram_hash_->forward(tokens.narrow(0, start, count),
+                                        positions.narrow(0, start, count),
+                                        swa_table,
+                                        swa.size(1),
+                                        prior + start,
+                                        input_lookback);
+              hash_tiles.emplace_back(std::move(tile_hashes));
+              mask_tiles.emplace_back(std::move(tile_mask));
+            });
+        hashes = torch::cat(hash_tiles, 0);
+        mask = torch::cat(mask_tiles, 0);
       } else {
         auto [single_hashes, gate_mask] =
             engram_hash_->forward(tokens,
@@ -521,6 +586,22 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
       prepared_embedding = model_->prepare_embeddings(tokens);
     }
     torch::Tensor hidden;
+    using CacheOnly = layer::DeepseekV41CacheOnlyPrefillGuard;
+    if (skip_intermediate_ced_) {
+      const auto local =
+          torch::tensor({static_cast<int32_t>(CacheOnly::active())},
+                        options_.dtype(torch::kInt32));
+      const auto peers = tp_group_->allgather_base_sync(local).to(torch::kCPU);
+      CHECK_EQ(peers.numel(), tp_size());
+      const int32_t* decisions = peers.data_ptr<int32_t>();
+      CacheOnly::retain_if(
+          std::all_of(decisions, decisions + tp_size(), [](int32_t value) {
+            return value == 1;
+          }));
+    }
+    const bool cache_only = CacheOnly::active();
+    CHECK(!cache_only ||
+          (skip_intermediate_ced_ && !batched && !params.is_spec_verify));
     if (batched) {
       CHECK(!auxiliary_) << "DSpark capture currently requires one request";
       hidden = model_->forward_batched_decode(tokens,
@@ -532,7 +613,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                               context_lengths.value(),
                                               engram_rows,
                                               mask);
-    } else if (decode_graph_ && context_length <= 4096 &&
+    } else if (decode_graph_ &&
+               decode_graph_->supports_length(context_length) &&
                (tokens.numel() == 1 ||
                 (params.is_spec_verify && tokens.numel() <= 6))) {
       layer::DeepseekV41DecodeInputs input{tokens,
@@ -575,10 +657,30 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                                             mask,
                                             auxiliary_.get(),
                                             /*decode_capacity=*/0,
-                                            prepared_embedding);
+                                            prepared_embedding,
+                                            cache_only);
+    }
+    if (cache_only) {
+      CHECK(hidden.defined() && hidden.size(0) == 0);
+      if (model_stream.has_value()) {
+        model_stream->finish();
+      }
+      return ModelOutput(hidden);
     }
     ModelOutput output =
         auxiliary_ ? auxiliary_->finalize(hidden) : ModelOutput(hidden);
+    if (bounded_replay_ && native_dspark_ && model_->output_row_offset() > 0) {
+      CHECK(is_pd_prefill_mode() && !batched && !params.is_spec_verify);
+      CHECK_EQ(hidden.size(0) + model_->output_row_offset(), tokens.numel());
+      CHECK(output.aux_hidden_states.defined());
+      CHECK_EQ(output.aux_hidden_states.size(0), hidden.size(0));
+      // Preserve scheduler/bootstrap row indices. Only the tail contains
+      // model values; step_prefill slices before projecting draft context KV.
+      hidden = layer::deepseek_v41_pad_prefill_tail(hidden, tokens.numel());
+      output.hidden_states = hidden;
+      output.aux_hidden_states = layer::deepseek_v41_pad_prefill_tail(
+          output.aux_hidden_states, tokens.numel());
+    }
     if (owner_attention_) {
       // Target head and draft are still TP8. Only owner computed these values;
       // broadcast once at the model boundary, never sum an LL-combined output.
@@ -600,6 +702,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   torch::Tensor logits(const torch::Tensor& hidden,
                        const torch::Tensor& selected) override {
     CHECK(model_);
+    const int64_t offset = model_->output_row_offset();
+    if (bounded_replay_ && native_dspark_ && offset > 0) {
+      CHECK_GT(hidden.size(0), offset);
+      return model_->logits(hidden.narrow(0, offset, hidden.size(0) - offset),
+                            defined(selected));
+    }
     return model_->logits(hidden, defined(selected));
   }
 
@@ -607,7 +715,13 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
                        const torch::Tensor& selected,
                        torch::Tensor& out_hidden) override {
     CHECK(model_);
-    out_hidden = model_->select_hidden(hidden, defined(selected));
+    const int64_t offset = model_->output_row_offset();
+    const bool padded_tail = bounded_replay_ && native_dspark_ && offset > 0;
+    CHECK(!padded_tail || hidden.size(0) > offset);
+    const torch::Tensor computed =
+        padded_tail ? hidden.narrow(0, offset, hidden.size(0) - offset)
+                    : hidden;
+    out_hidden = model_->select_hidden(computed, defined(selected));
     return model_->project_logits(out_hidden);
   }
 
@@ -627,6 +741,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   }
 
  private:
+  static bool is_pd_prefill_mode() {
+    const auto& config = DisaggPDConfig::get_instance();
+    return config.enable_disagg_pd() && !config.enable_pd_ooc() &&
+           config.instance_role() == "PREFILL";
+  }
+
   struct PendingVerification {
     std::unique_ptr<layer::DeepseekV41StateCheckpoint> checkpoint;
     std::unique_ptr<layer::DeepseekV41PrefixCheckpoint> prefix_checkpoint;
@@ -825,7 +945,130 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         (static_cast<int32_t>(fused_spec_snapshot_) << 3) |
         (static_cast<int32_t>(gather_bf16_bits_) << 4) |
         (static_cast<int32_t>(direct_rope_table_) << 5) |
-        (static_cast<int32_t>(decode_3072_bucket_) << 6);
+        (static_cast<int32_t>(decode_3072_bucket_) << 6) |
+        (static_cast<int32_t>(decode_21504_bucket_) << 7) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE", false))
+         << 8) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_CACHE_READ_REUSE", false))
+         << 9) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_INDEXER_LONG_RADIX", false))
+         << 10) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_FUSED_SWA_COMMIT", false))
+         << 11) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_MHC_FUSED_REDUCE", false))
+         << 12) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false))
+         << 13) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE", false))
+         << 14) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY", false))
+         << 15) |
+        (static_cast<int32_t>(util::get_bool_env(
+             "XLLM_DSV41_PREFILL_VALID_PREFIX_SWIGLU", false))
+         << 16) |
+        (static_cast<int32_t>(util::get_bool_env(
+             "XLLM_DSV41_PREFILL_SHARED_ROW_PARTITION", false))
+         << 17) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_GATE_BF16_FP32", false))
+         << 18) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false))
+         << 19) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_GATE_ROW_PARTITION", false))
+         << 20) |
+        (static_cast<int32_t>(util::get_bool_env(
+             "XLLM_DSV41_PREFILL_CONTEXT_KV_PARTITION", false))
+         << 21) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_COMPACT_EXPERTS", false))
+         << 24) |
+        (static_cast<int32_t>(util::get_bool_env(
+             "XLLM_DSV41_PREFILL_COMPRESSOR_PROJECTION_PARTITION", false))
+         << 25) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_SKIP_INTERMEDIATE_CED", false))
+         << 27) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_SLICED_ROPE", false))
+         << 28) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_PARALLEL_SWIGLU", false))
+         << 29) |
+        (static_cast<int32_t>(
+             util::get_bool_env("XLLM_DSV41_PREFILL_WIDE_SWA_COMMIT", false))
+         << 26);
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_SLICED_ROPE", false) ||
+          (is_pd_prefill_mode() &&
+           !util::get_bool_env("XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE", false)));
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_PARALLEL_SWIGLU", false) ||
+          is_pd_prefill_mode());
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_WIDE_SWA_COMMIT", false) ||
+          (is_pd_prefill_mode() &&
+           util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false)));
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_GATE_BF16_FP32", false) ||
+          is_pd_prefill_mode())
+        << "Prefill gate projection is an independent P-only policy";
+    CHECK(
+        !util::get_bool_env("XLLM_DSV41_PREFILL_SHARED_ROW_PARTITION", false) ||
+        (is_pd_prefill_mode() && tp_size() == 8 && ep_size() == 8 &&
+         !owner_attention_ &&
+         !util::get_bool_env("XLLM_DSV41_SHARED_EXPERT_TP", false)))
+        << "Shared token partition requires P TP8/EP8 with full shared weights";
+    CHECK(
+        !util::get_bool_env("XLLM_DSV41_PREFILL_VALID_PREFIX_SWIGLU", false) ||
+        is_pd_prefill_mode())
+        << "Prefill valid-prefix SwiGLU is an independent P-only policy";
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false) ||
+          (is_pd_prefill_mode() && tp_size() == 8 && ep_size() == 8 &&
+           expert_format_ == layer::DeepseekV41ExpertFormat::W4AFP8_MT &&
+           util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false) &&
+           util::get_bool_env("XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY", false) &&
+           !util::get_bool_env("XLLM_DSV41_SHARED_EXPERT_TP", false) &&
+           !util::get_bool_env("XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE", false)))
+        << "Prefill residual partition requires native TP8 query partition "
+           "with FP32 EP sum";
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_GATE_ROW_PARTITION", false) ||
+          util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false))
+        << "P gate row partition requires partitioned prefill residuals";
+    CHECK(
+        !util::get_bool_env("XLLM_DSV41_PREFILL_CONTEXT_KV_PARTITION", false) ||
+        util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false))
+        << "P context KV partition requires partitioned prefill residuals";
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_COMPACT_EXPERTS", false) ||
+          (is_pd_prefill_mode() &&
+           util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false)))
+        << "P compact expert dispatch requires partitioned prefill residuals";
+    CHECK(!util::get_bool_env(
+              "XLLM_DSV41_PREFILL_COMPRESSOR_PROJECTION_PARTITION", false) ||
+          (is_pd_prefill_mode() &&
+           util::get_bool_env("XLLM_DSV41_PREFILL_RESIDUAL_PARTITION", false)))
+        << "P compressor projection partition requires partitioned residuals";
+    CHECK(!util::get_bool_env("XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY", false) ||
+          (is_pd_prefill_mode() && tp_size() == 8 && ep_size() == 8))
+        << "TP-only native communicator candidate requires P TP8/EP8";
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE", false) ||
+          is_pd_prefill_mode())
+        << "Prefill RoPE table kernel is an independent P-only policy";
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false) ||
+          (replicated_attention_ && tp_size() == 8 && ep_size() == 8 &&
+           !owner_attention_ && !full_decode_graph_ && is_pd_prefill_mode()))
+        << "Query partition is Prefill-only, replicated H64, TP8/EP8; "
+           "D target/draft and KV ownership remain unchanged";
+    CHECK(!util::get_bool_env("XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE", false) ||
+          (tp_size() == ep_size() && tp_size() > 1 &&
+           util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true)))
+        << "Prefill custom reduction requires the common full-world TP/EP "
+           "communicator and enabled TP custom all-reduce";
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local =
           torch::tensor({policy}, options_.dtype(torch::kInt32));
@@ -970,6 +1213,30 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   void initialize_bounded_replay_policy() {
     const bool enabled =
         util::get_bool_env("XLLM_DSV41_BOUNDED_PREFILL_REPLAY", false);
+    skip_intermediate_ced_ =
+        util::get_bool_env("XLLM_DSV41_SKIP_INTERMEDIATE_CED", false);
+    if (skip_intermediate_ced_) {
+      const auto& pd = DisaggPDConfig::get_instance();
+      const auto& sched = SchedulerConfig::get_instance();
+      const auto& cache = KVCacheConfig::get_instance();
+      CHECK(enabled && is_pd_prefill_mode() && native_dspark_ &&
+            !owner_attention_ && !full_decode_graph_ && tp_group_ != nullptr &&
+            tp_size() == 8 && pd.kv_cache_transfer_mode() == "PULL");
+      CHECK(sched.enable_chunked_prefill() &&
+            !sched.enable_schedule_overlap() &&
+            sched.max_seqs_per_batch() == 1 &&
+            !ProfileConfig::get_instance().enable_profile_token_budget());
+      CHECK(!cache.enable_prefix_cache() &&
+            !cache.enable_in_batch_prefix_cache());
+      CHECK_LE(ParallelConfig::get_instance().kv_split_size_effective(), 1);
+      CHECK_EQ(args_.window_size(), 128);
+      CHECK_GT(sched.max_tokens_per_chunk_for_prefill(),
+               2 * args_.window_size());
+      CHECK_EQ(sched.max_tokens_per_chunk_for_prefill() % args_.window_size(),
+               0);
+      CHECK_GE(sched.max_tokens_per_batch(),
+               sched.max_tokens_per_chunk_for_prefill());
+    }
     if (tp_group_ != nullptr && tp_size() > 1) {
       const torch::Tensor local = torch::tensor({static_cast<int32_t>(enabled)},
                                                 options_.dtype(torch::kInt32));
@@ -982,10 +1249,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
             << "Bounded prefill replay policy differs across TP ranks";
       }
     }
-    if (enabled) {
-      CHECK(args_.layers_to_capture().empty())
-          << "Bounded prefill replay does not expose uncaptured prompt aux "
-             "rows";
+    if (enabled && !args_.layers_to_capture().empty()) {
+      CHECK(is_pd_prefill_mode() && native_dspark_ && !owner_attention_ &&
+            !full_decode_graph_);
+      CHECK_EQ(args_.window_size(), 128);
+      CHECK(args_.layers_to_capture() == std::vector<int32_t>({37, 38, 39}))
+          << "CED DSpark requires all auxiliary captures inside the late tail";
     }
     bounded_replay_ = enabled;
   }
@@ -1100,6 +1369,17 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     attention.scale = std::pow(static_cast<double>(args_.head_dim()), -0.5);
     attention.dense_prequant_directory = dense_prequant_path_;
     attention.direct_rope_table = direct_rope_table_;
+    attention.prefill_direct_rope_table =
+        util::get_bool_env("XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE", false);
+    attention.prefill_sliced_rope =
+        util::get_bool_env("XLLM_DSV41_PREFILL_SLICED_ROPE", false);
+    attention.prefill_query_only =
+        is_pd_prefill_mode() &&
+        util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_ONLY", false);
+    attention.prefill_context_kv_partition =
+        util::get_bool_env("XLLM_DSV41_PREFILL_CONTEXT_KV_PARTITION", false);
+    attention.prefill_compressor_projection_partition = util::get_bool_env(
+        "XLLM_DSV41_PREFILL_COMPRESSOR_PROJECTION_PARTITION", false);
     attention.verify_skinny_projection =
         util::get_bool_env("XLLM_DSV41_VERIFY_SKINNY_PROJECTION", false);
     attention.decode_packed_qkv =
@@ -1110,6 +1390,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_VERIFY_FUSED_SWA_READ", false);
     attention.decode_cache_read_reuse =
         util::get_bool_env("XLLM_DSV41_DECODE_CACHE_READ_REUSE", false);
+    attention.prefill_cache_read_reuse =
+        util::get_bool_env("XLLM_DSV41_PREFILL_CACHE_READ_REUSE", false);
+    attention.prefill_fused_swa_commit =
+        util::get_bool_env("XLLM_DSV41_PREFILL_FUSED_SWA_COMMIT", false);
+    attention.prefill_wide_swa_commit =
+        util::get_bool_env("XLLM_DSV41_PREFILL_WIDE_SWA_COMMIT", false);
     attention.short_context_indexer =
         util::get_bool_env("XLLM_DSV41_SHORT_CONTEXT_INDEXER", false);
     config.sinkhorn_iterations = args_.hc_sinkhorn_iters();
@@ -1118,6 +1404,10 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     config.mhc_dot_sinkhorn_directory = mhc_dot_sinkhorn_path_;
     config.decode_mhc_fused_reduce =
         util::get_bool_env("XLLM_DSV41_DECODE_MHC_FUSED_REDUCE", false);
+    config.prefill_query_partition =
+        util::get_bool_env("XLLM_DSV41_PREFILL_QUERY_PARTITION", false);
+    config.prefill_mhc_fused_reduce =
+        util::get_bool_env("XLLM_DSV41_PREFILL_MHC_FUSED_REDUCE", false);
     config.decode_ffn_tail_graph = decode_ffn_tail_graph_;
     config.decode_ffn_graph_fused_inputs = decode_ffn_graph_fused_inputs_;
     // MusaCustomAllReduce checks this policy across all TP ranks during
@@ -1126,11 +1416,17 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
     config.decode_tp_custom_allreduce =
         util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true);
     config.verify_custom_allreduce = verify_custom_allreduce_;
+    config.prefill_custom_allreduce =
+        util::get_bool_env("XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE", false);
     config.attention.sparse_library_path = sparse_path_;
     config.attention.indexer_score_directory = indexer_aot_path_;
+    config.attention.indexer_max_select_width =
+        util::get_bool_env("XLLM_DSV41_INDEXER_LONG_RADIX", false) ? 16384
+                                                                   : 8192;
     auto& moe = config.moe;
     moe.decode_ep_custom_allreduce = decode_ep_custom_allreduce_;
     moe.verify_custom_allreduce = verify_custom_allreduce_;
+    moe.prefill_custom_allreduce = config.prefill_custom_allreduce;
     moe.expert_format = expert_format_;
     moe.w4a8_so_path = w4a8_path_;
     moe.dense_prequant_directory = dense_prequant_path_;
@@ -1139,6 +1435,12 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         util::get_bool_env("XLLM_DSV41_W4A8_STATIC_ACTIVATION", false);
     moe.w4a8_valid_prefix_swiglu =
         util::get_bool_env("XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU", false);
+    moe.prefill_valid_prefix_swiglu =
+        util::get_bool_env("XLLM_DSV41_PREFILL_VALID_PREFIX_SWIGLU", false);
+    moe.prefill_parallel_swiglu =
+        util::get_bool_env("XLLM_DSV41_PREFILL_PARALLEL_SWIGLU", false);
+    moe.prefill_shared_row_partition =
+        util::get_bool_env("XLLM_DSV41_PREFILL_SHARED_ROW_PARTITION", false);
     moe.verify_skinny_projection = attention.verify_skinny_projection;
     moe.decode_packed_shared_gate_up =
         util::get_bool_env("XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP", false);
@@ -1151,6 +1453,15 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
         !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_BF16_FP32", false);
     moe.gate_simt_projection =
         !moe.dense && util::get_bool_env("XLLM_DSV41_GATE_SIMT", false);
+    moe.prefill_gate_bf16_fp32_projection =
+        !moe.dense &&
+        util::get_bool_env("XLLM_DSV41_PREFILL_GATE_BF16_FP32", false);
+    moe.prefill_gate_row_partition =
+        !moe.dense &&
+        util::get_bool_env("XLLM_DSV41_PREFILL_GATE_ROW_PARTITION", false);
+    moe.prefill_compact_experts =
+        !moe.dense &&
+        util::get_bool_env("XLLM_DSV41_PREFILL_COMPACT_EXPERTS", false);
     moe.first_expert = (ep_group_ == nullptr ? 0 : ep_group_->rank()) *
                        (args_.n_routed_experts() / ep_size());
     moe.topk = args_.num_experts_per_tok();
@@ -1445,6 +1756,8 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   bool decode_ffn_graph_fused_inputs_ = false;
   bool shared_expert_tp_reduce_ = false;
   bool bounded_replay_ = false;
+  bool skip_intermediate_ced_ = false;
+  int64_t prefill_row_limit_ = layer::kDeepseekV41PrefillTileRows;
   bool gate_cache_fp32_weight_ = false;
   bool batched_decode_ = false;
   std::string bmm_path_;
@@ -1474,6 +1787,7 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
   std::unique_ptr<layer::DeepseekV41TextModel> model_;
   bool static_decode_ = false;
   bool decode_3072_bucket_ = false;
+  bool decode_21504_bucket_ = false;
   bool full_decode_graph_ = false;
   bool replicated_attention_ = false;
   bool owner_attention_ = false;

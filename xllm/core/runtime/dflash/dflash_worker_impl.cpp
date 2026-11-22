@@ -57,6 +57,10 @@ limitations under the License.
 #include "runtime/llm_worker_impl.h"
 #include "runtime/musa_spec_step_timing.h"
 #include "runtime/speculative_worker_utils.h"
+
+#if defined(USE_MUSA)
+#include "core/layers/musa/deepseek_v41/prefill_tail.h"
+#endif
 #include "util/json_reader.h"
 #include "util/model_config_utils.h"
 #include "util/timer.h"
@@ -683,18 +687,50 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
   discard_draft_prelaunch();
   Timer timer;
   ForwardInput processed_target_input;
-  ForwardOutput output =
-      speculative_worker::run_worker_no_sync(*impl_,
-                                             input,
-                                             *prepare_stream_,
-                                             *compute_stream_,
-                                             &processed_target_input)
-          .value();
+  bool cache_only = false;
+  ForwardOutput output;
+  {
+#if defined(USE_MUSA)
+    const bool enabled =
+        util::get_bool_env("XLLM_DSV41_SKIP_INTERMEDIATE_CED", false);
+    const auto& input_params = input.input_params;
+    const auto& next = input_params.embedding.extra_token_ids;
+    const bool has_next = next.size() == 1 && next.front() >= 0;
+    const bool samples = input.sampling_params.selected_token_idxes.defined();
+    const bool eligible =
+        enabled &&
+        impl_->context_.get_model_args().model_type() == "deepseek_v41" &&
+        input_params.execution_batch.num_reqs == 1 && has_next && !samples;
+    const layer::DeepseekV41CacheOnlyPrefillGuard guard(eligible);
+#endif
+    output = speculative_worker::run_worker_no_sync(*impl_,
+                                                    input,
+                                                    *prepare_stream_,
+                                                    *compute_stream_,
+                                                    &processed_target_input)
+                 .value();
+#if defined(USE_MUSA)
+    cache_only = layer::DeepseekV41CacheOnlyPrefillGuard::active();
+    if (enabled &&
+        util::get_bool_env("XLLM_DSV41_DIAGNOSTIC_PROGRESS", false)) {
+      LOG(INFO) << "V41_DIAGNOSTIC DFlash prefill cache-only decision"
+                << " requests=" << input_params.execution_batch.num_reqs
+                << " extra_ids=" << next.size() << " has_next=" << has_next
+                << " samples=" << samples << " active=" << cache_only;
+    }
+#endif
+  }
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
 
   const torch::Tensor& embeddings = output.sample_output.embeddings;
-  if (embeddings.defined()) {
+  if (cache_only) {
+    CHECK(embeddings.defined() && embeddings.size(0) == 0);
+    CHECK(!output.sample_output.next_tokens.defined());
+    // Cache-only forward still enqueues target cache writes. Complete them
+    // before the scheduler advances the sequence to the next prefill chunk.
+    compute_stream_->synchronize();
+  } else if (embeddings.defined()) {
     CHECK(processed_target_input.positions_host.defined())
         << "DFlash prefill requires processed positions_host.";
     Slice<int32_t> positions = {
