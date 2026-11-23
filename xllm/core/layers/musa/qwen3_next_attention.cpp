@@ -257,7 +257,8 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
     // (1D positions). Writes norm+rope results back into qkv in-place.
     if (fused_qk_norm_rope_enabled() && positions.dim() == 1 &&
-        positions.scalar_type() == torch::kInt32 &&
+        (positions.scalar_type() == torch::kInt32 ||
+         positions.scalar_type() == torch::kInt64) &&
         (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;

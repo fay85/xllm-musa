@@ -138,7 +138,7 @@ size_t musa_prefill_seq_cap_per_dp(const SchedulerState& state) {
 
 size_t musa_pcp_min_seq_tokens() {
   return static_cast<size_t>(
-      std::max<int64_t>(128, util::get_int_env("XLLM_MUSA_PCP_MIN_SEQ_TOKENS", 128)));
+      std::max<int64_t>(128, util::get_int_env("XLLM_MUSA_PCP_MIN_SEQ_TOKENS", 768)));
 }
 
 size_t musa_pcp_max_batch_tokens(const ContinuousScheduler::Options& options) {
@@ -663,7 +663,7 @@ void SchedulerPolicy::schedule_prefill_from_queue(
           planned_toks >= pcp_min_tokens &&
           (planned_toks == natural_chunk ||
            (pcp_allow_partial_join &&
-            planned_toks >= std::max<size_t>(1024, pcp_min_tokens)));
+            planned_toks >= std::max<size_t>(512, pcp_min_tokens)));
       if (!fits_pcp_batch) {
         if (pcp_join_skipped < kMaxPcpJoinScan) {
           ++pcp_join_skipped;

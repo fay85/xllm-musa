@@ -169,6 +169,12 @@ void SharedVMMAllocator::switch_to_new_virtual_space() {
     return;
   }
 
+  // init() already created space 0. The first capture has not allocated yet,
+  // so reuse that space instead of reserving another full virtual range.
+  if (high_water_mark_ == 0 && current_offset_ == 0) {
+    return;
+  }
+
   size_t prev_offset = current_offset_;
   size_t prev_space_index = current_space_index_;
 

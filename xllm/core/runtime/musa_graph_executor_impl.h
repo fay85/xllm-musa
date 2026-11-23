@@ -49,6 +49,10 @@ limitations under the License.
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
 
+namespace xllm::layer::musa_pcp {
+struct BucketInputs;
+}
+
 namespace xllm::runtime::musa {
 
 using MusaMemPool = c10::musa::MemPool;
@@ -88,7 +92,8 @@ class MusaGraphPersistentParam final {
       const torch::Tensor& positions,
       const ModelInputParams& params,
       uint32_t padded_num_tokens,
-      bool return_capture_params = false);
+      bool return_capture_params = false,
+      bool allow_pcp_bucket = true);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -247,6 +252,11 @@ class MusaGraphPersistentParam final {
   }
 
  private:
+  friend class MusaGraphExecutorImpl;
+
+  absl::flat_hash_map<std::vector<int32_t>, int64_t>
+      prefill_bucket_observations_;
+
   // Copies `mask` into the leading rows of persistent_linear_state_validity_
   // through pinned memory and returns those rows.
   torch::Tensor refresh_linear_state_validity(
@@ -323,6 +333,8 @@ class MusaGraphPersistentParam final {
 // MUSA graph executor using torch_musa MUSAGraph for memory management.
 class MusaGraph final {
  public:
+  ~MusaGraph();
+
   // capture_stream: the stream to use for MUSA graph capture.
   explicit MusaGraph(MusaGraphPersistentParam& persistent_param,
                      at::DeviceIndex device_index,
@@ -363,6 +375,10 @@ class MusaGraph final {
   }
 
  private:
+  friend class MusaGraphExecutorImpl;
+
+  bool gdn_checkpoint_bucket_runner_ = false;
+
   void prepare_model_graph_metadata(CausalLM* model,
                                     const torch::Tensor& positions,
                                     ModelInputParams& params);
@@ -401,6 +417,7 @@ class MusaGraph final {
   at::DeviceIndex device_index_;
   // Native MUSA capture stream owned by MusaGraphExecutorImpl.
   c10::musa::MUSAStream capture_stream_;
+  std::vector<c10::musa::MUSAStream> replay_streams_;
 
   // Prefill graphs are captured as segments separated by attention runners.
   bool is_piecewise_ = false;
@@ -479,6 +496,7 @@ class MusaGraph final {
   // Declare graph holders last so they are destroyed before the tensors and
   // host buffers whose addresses were retained during capture.
   std::unique_ptr<PiecewiseGraphs> piecewise_graph_;
+  std::shared_ptr<layer::musa_pcp::BucketInputs> pcp_bucket_inputs_;
   ::xllm::MusaGraphHandle graph_;
 };
 
@@ -548,17 +566,18 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   uint32_t get_bucket_num_tokens(uint32_t num_tokens) const;
 
   bool use_prefill_piecewise_graph(uint32_t num_tokens,
-                                   const ModelInputParams& params) const;
+                                   const ModelInputParams& params,
+                                   bool has_interior_checkpoints,
+                                   int64_t bucket_capture_min_hits);
 
-  // Prefill graphs use their own coarse token buckets. Multi-sequence
-  // GDN batches keep their exact token count, because their runners read the
-  // padded per-sequence layout recorded from host lengths.
   uint32_t get_prefill_graph_num_tokens(uint32_t num_tokens,
-                                        const ModelInputParams& params) const;
+                                        const ModelInputParams& params,
+                                        bool has_interior_checkpoints) const;
 
   std::vector<int32_t> get_prefill_graph_key(
       uint32_t num_tokens,
-      const ModelInputParams& params) const;
+      const ModelInputParams& params,
+      bool has_interior_checkpoints) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

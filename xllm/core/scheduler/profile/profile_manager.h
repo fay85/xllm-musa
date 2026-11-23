@@ -149,9 +149,11 @@ class ProfileManager {
           time_profiling_data,
       bool is_prefill);
 
-  std::shared_ptr<Request> generate_single_request(int32_t token_length,
-                                                   int32_t prefix_length,
-                                                   bool is_graph_warmup = true);
+  std::shared_ptr<Request> generate_single_request(
+      int32_t token_length,
+      int32_t prefix_length,
+      bool is_graph_warmup = true,
+      bool tolerate_allocation_failure = false);
   std::shared_ptr<Request> generate_single_decode_request(
       int32_t total_length,
       std::optional<int32_t> dp_rank = std::nullopt,

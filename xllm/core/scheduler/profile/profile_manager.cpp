@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "profile_manager.h"
 
+#include <absl/strings/numbers.h>
+#include <absl/strings/str_split.h>
 #include <absl/time/time.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -43,6 +45,11 @@ limitations under the License.
 #include "runtime/acl_graph_bucket_policy.h"
 #include "scheduler/profile/graph_warmup.h"
 #include "framework/config/parallel_config.h"
+#if defined(USE_MUSA)
+#include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
+#include "layers/musa/pcp_context.h"
+#endif
+#include "util/env_var.h"
 #include "util/rec_model_utils.h"
 #include "util/utils.h"
 
@@ -173,10 +180,20 @@ ProfileManager::ProfileManager(Engine* engine, const Options& options)
   if (!is_rec_multi_round_mode()) {
     const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
     if (execution_config.enable_graph() &&
-        execution_config.enable_prefill_piecewise_graph() &&
-        !execution_config.disable_graph_warmup() &&
-        options_.instance_role() == InstanceRole::PREFILL) {
-      warmup_prefill_for_graph();
+        !execution_config.disable_graph_warmup()) {
+      const GraphWarmupPlan plan = graph_warmup_plan(options_.instance_role());
+      if (plan == GraphWarmupPlan::PREFILL_ONLY) {
+        if (execution_config.enable_prefill_piecewise_graph()) {
+          warmup_prefill_for_graph();
+        }
+      } else if (plan == GraphWarmupPlan::DECODE_ONLY) {
+        warmup_decode_for_graph();
+      } else {
+        if (execution_config.enable_prefill_piecewise_graph()) {
+          warmup_prefill_for_graph();
+        }
+        warmup_decode_for_graph();
+      }
     }
   }
 #endif
@@ -846,7 +863,8 @@ double ProfileManager::predict_copy_blocks_time(
 std::shared_ptr<Request> ProfileManager::generate_single_request(
     int32_t token_length,
     int32_t prefix_length,
-    bool is_graph_warmup) {
+    bool is_graph_warmup,
+    bool tolerate_allocation_failure) {
   auto& model_args = engine_->model_args();
   int32_t vocab_size = model_args.vocab_size();
   int32_t eos_token_id = model_args.eos_token_id();
@@ -882,6 +900,11 @@ std::shared_ptr<Request> ProfileManager::generate_single_request(
   if (prefix_length > 0) {
     if (!block_manager_pool_->BlockManagerPool::allocate(
             request->sequences()[0].get(), prefix_length)) {
+      if (tolerate_allocation_failure) {
+        block_manager_pool_->deallocate_without_cache(
+            request->sequences()[0].get());
+        return nullptr;
+      }
       LOG(FATAL) << "Profiling time failed! Not enough blocks, prefix length : "
                  << prefix_length;
     }
@@ -890,6 +913,11 @@ std::shared_ptr<Request> ProfileManager::generate_single_request(
 
   if (!block_manager_pool_->BlockManagerPool::allocate(
           request->sequences()[0].get(), token_length)) {
+    if (tolerate_allocation_failure) {
+      block_manager_pool_->deallocate_without_cache(
+          request->sequences()[0].get());
+      return nullptr;
+    }
     LOG(FATAL) << "Profiling time failed! Not enough blocks, token length : "
                << token_length;
   }
@@ -1407,6 +1435,142 @@ void ProfileManager::warmup_prefill_for_graph() {
               << "buckets=" << chunk_buckets.size()
               << ", stride=" << stride
               << ", total_latency=" << chunk_warmup_ms << " ms";
+
+    if (options_.instance_role() == InstanceRole::PREFILL &&
+        ::xllm::ParallelConfig::get_instance().cp_size() == 2 &&
+        util::get_bool_env("XLLM_MUSA_GDN_CHECKPOINT_BUCKET_RUNNER", false) &&
+        block_manager_pool_->options().enable_linear_state() &&
+        block_manager_pool_->options().linear_state_ckpt_slots() > 0) {
+      auto run_single_ckpt_warmup = [&](int32_t b, int32_t prefix_len) -> double {
+        std::shared_ptr<Request> request = generate_single_request(
+            prefix_len + b,
+            prefix_len,
+            /*is_graph_warmup=*/true,
+            /*tolerate_allocation_failure=*/true);
+        if (!request) {
+          return 0.0;
+        }
+        Sequence* seq = request->sequences()[0].get();
+        const auto linear_blocks = seq->kv_state().blocks(BlockType::LINEAR);
+        std::vector<std::vector<BlockTransferInfo>> swap_infos(
+            options_.dp_size());
+        if (!linear_blocks.empty()) {
+          const int32_t live_slot_id = linear_blocks.back().id();
+          const int32_t ckpt_block_id =
+              block_manager_pool_->options().linear_state_num_slots();
+          BlockTransferInfo transfer(-1, -1);
+          if (::xllm::musa::encode_deepseek_v4_gdn_singlepass_checkpoint(
+                  live_slot_id,
+                  ckpt_block_id,
+                  /*offset_tokens=*/64,
+                  /*is_end_of_step=*/false,
+                  &transfer)) {
+            swap_infos[seq->dp_rank()].emplace_back(std::move(transfer));
+          }
+        }
+        std::vector<std::shared_ptr<Request>> requests{request};
+        std::vector<Sequence*> sequences{seq};
+        std::vector<size_t> budgets{static_cast<size_t>(b)};
+        auto batches =
+            BatchFactory::get_instance(options_.dp_size())
+                ->create_batches(requests, sequences, budgets, &swap_infos);
+        absl::Time t0 = absl::Now();
+        engine_->step(batches);
+        if (options_.enable_schedule_overlap()) {
+          engine_->update_last_step_result(batches);
+        }
+        const double ms = absl::ToDoubleMilliseconds(absl::Now() - t0);
+        block_manager_pool_->deallocate_without_cache(seq);
+        return ms;
+      };
+      double ckpt_runner_warmup_ms = 0.0;
+      int32_t ckpt_runner_buckets = 0;
+      for (int32_t b : {1024, 2048, 3072, 4096, 6144}) {
+        if (b < prefill_tokens) {
+          ckpt_runner_warmup_ms +=
+              run_single_ckpt_warmup(b, /*prefix_len=*/prefix_step);
+          ckpt_runner_buckets += 1;
+        }
+      }
+      LOG(INFO) << "MUSA B=1 GDN checkpoint-runner bucket warmup completed: "
+                << "profiles=" << ckpt_runner_buckets
+                << ", total_latency=" << ckpt_runner_warmup_ms << " ms";
+    }
+
+    const std::string profiles =
+        util::get_string_env("XLLM_MUSA_PCP_PREFILL_WARMUP_BATCHES");
+    if (profiles.empty() ||
+        options_.instance_role() != InstanceRole::PREFILL ||
+        ::xllm::ParallelConfig::get_instance().cp_size() != 2 ||
+        !util::get_bool_env("XLLM_MUSA_PCP_MULTIBATCH_GRAPH", false) ||
+        !util::get_bool_env("XLLM_MUSA_PCP_LOCAL_TOKEN_BUCKET", false)) {
+      return;
+    }
+
+    const int32_t batch_budget = max_graph_tokens > 0
+                                     ? std::min(options_.max_tokens_per_batch(),
+                                                max_graph_tokens)
+                                     : options_.max_tokens_per_batch();
+    for (absl::string_view profile : absl::StrSplit(profiles, ';')) {
+      if (profile.empty()) {
+        continue;
+      }
+      std::vector<std::pair<int32_t, int32_t>> chunks;
+      int64_t query_budget = 0;
+      for (absl::string_view chunk : absl::StrSplit(profile, ',')) {
+        const std::vector<absl::string_view> lengths = absl::StrSplit(chunk, '/');
+        int32_t history = 0;
+        int32_t query = 0;
+        if (lengths.size() != 2 || !absl::SimpleAtoi(lengths[0], &history) ||
+            !absl::SimpleAtoi(lengths[1], &query) || history < 0 || query <= 0 ||
+            query > prefill_tokens || history > max_context_len - query) {
+          chunks.clear();
+          break;
+        }
+        chunks.emplace_back(history, query);
+        query_budget += query;
+      }
+      if (chunks.size() < 2 ||
+          chunks.size() > static_cast<size_t>(options_.max_seqs_per_batch()) ||
+          query_budget > batch_budget) {
+        LOG(WARNING) << "Skipping invalid CP2 Prefill startup profile: "
+                     << profile;
+        continue;
+      }
+
+      std::vector<std::shared_ptr<Request>> requests;
+      std::vector<Sequence*> sequences;
+      std::vector<size_t> budgets;
+      for (const auto& [history, query] : chunks) {
+        auto request = generate_single_request(
+            history + query, history, /*is_graph_warmup=*/true,
+            /*tolerate_allocation_failure=*/true);
+        if (!request) {
+          break;
+        }
+        sequences.emplace_back(request->sequences()[0].get());
+        budgets.emplace_back(query);
+        requests.emplace_back(std::move(request));
+      }
+
+      if (requests.size() == chunks.size()) {
+        auto batches = BatchFactory::get_instance(options_.dp_size())
+                           ->create_batches(requests, sequences, budgets);
+        absl::Time started = absl::Now();
+        engine_->step(batches);
+        if (options_.enable_schedule_overlap()) {
+          engine_->update_last_step_result(batches);
+        }
+        LOG(INFO) << "CP2 Prefill startup profile executed: " << profile
+                  << ", ms=" << absl::ToDoubleMilliseconds(absl::Now() - started);
+      } else {
+        LOG(WARNING) << "Skipping CP2 Prefill startup profile: " << profile
+                     << "; unable to allocate synthetic sequence blocks";
+      }
+      for (Sequence* sequence : sequences) {
+        block_manager_pool_->deallocate_without_cache(sequence);
+      }
+    }
   }
 #endif
 }
@@ -1441,6 +1605,30 @@ void ProfileManager::warmup_decode_for_graph() {
           ::xllm::ExecutionConfig::get_instance().enable_fia_decode(),
       max_context_len);
 
+#if defined(USE_MUSA)
+  const int32_t dp_size = std::max<int32_t>(1, options_.dp_size());
+  const int32_t musa_probe_global_seqs = max_decode_batch_size * dp_size;
+  const int32_t allocatable_sequences =
+      measure_graph_decode_capacity(musa_probe_global_seqs, decode_seq_len);
+  const int32_t max_local_seqs =
+      std::min(max_decode_batch_size, allocatable_sequences / dp_size);
+  decode_graph_warmup_plan_ =
+      build_decode_graph_warmup_plan(engine_->decode_graph_warmup_config(),
+                                     max_local_seqs * dp_size,
+                                     dp_size);
+  // On MUSA, spec_verify_graphs_ is keyed by exact (n_tokens, q_len) where
+  // n_tokens = local_seqs * num_decoding_tokens, and no-padding decode graphs
+  // use fine-grained local token buckets (1*local_seqs and 2*local_seqs on
+  // MTP bootstrap). Sweep every DP-local sequence count 1..max_local_seqs so
+  // all DP ranks pre-capture draft, bootstrap, and spec-verify graphs at
+  // startup before serving live traffic.
+  decode_graph_warmup_plan_.batch_sizes.clear();
+  decode_graph_warmup_plan_.batch_sizes.reserve(
+      static_cast<size_t>(std::max<int32_t>(0, max_local_seqs)));
+  for (int32_t local_seqs = 1; local_seqs <= max_local_seqs; ++local_seqs) {
+    decode_graph_warmup_plan_.batch_sizes.push_back(local_seqs * dp_size);
+  }
+#else
   const int32_t allocatable_sequences =
       measure_graph_decode_capacity(max_decode_batch_size, decode_seq_len);
   const int32_t warmup_capacity =
@@ -1449,6 +1637,7 @@ void ProfileManager::warmup_decode_for_graph() {
       build_decode_graph_warmup_plan(engine_->decode_graph_warmup_config(),
                                      warmup_capacity,
                                      options_.dp_size());
+#endif
   const std::vector<int32_t>& decode_batch_sizes =
       decode_graph_warmup_plan_.batch_sizes;
   const int32_t decode_bucket_count =

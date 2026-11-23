@@ -149,4 +149,17 @@ if(USE_MUSA)
       torch
       GTest::gtest_main
   )
+  cc_test(
+    NAME
+      musa_qwen3_gdn_reshape_test
+    SRCS
+      musa_qwen3_gdn_reshape_test.cpp
+    DEPS
+      :musa_layers
+      :kernels
+      glog::glog
+      torch
+      GTest::gtest_main
+  )
 endif()
+

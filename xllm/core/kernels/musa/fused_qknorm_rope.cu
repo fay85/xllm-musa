@@ -60,10 +60,18 @@ inline __device__ __host__ T div_up(T m, T n) {
   return (m + n - 1) / n;
 }
 
+__device__ __forceinline__ float fast_rsqrt(float x) {
+#if defined(__MUSA_ARCH__)
+  return __frsqrt_rn(x);
+#else
+  return rsqrtf(x);
+#endif
+}
+
 // With k_cache_void set, every token also gets num_heads_v warps that copy its
 // value heads to v_cache, and the key warps store their result to k_cache,
 // both at the token's slot like reshape_paged_cache.
-template <typename scalar_t, int head_dim, bool interleave>
+template <typename scalar_t, typename Position, int head_dim, bool interleave>
 __global__ void fused_qknorm_rope_kernel(void* qkv_void,
                                          int const num_heads_q,
                                          int const num_heads_k,
@@ -74,7 +82,7 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
                                          void const* q_weight_void,
                                          void const* k_weight_void,
                                          void const* cos_sin_cache_void,
-                                         int32_t const* position_ids,
+                                         Position const* position_ids,
                                          int const num_tokens,
                                          int const rotary_dim,
                                          void* k_cache_void,
@@ -163,7 +171,8 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
 
   sum_of_squares = warp_reduce_sum(sum_of_squares);
 
-  float rms_rcp = rsqrtf(sum_of_squares / static_cast<float>(head_dim) + eps);
+  float rms_rcp =
+      fast_rsqrt(sum_of_squares / static_cast<float>(head_dim) + eps);
 
 #pragma unroll
   for (int i = 0; i < kNumElemsPerThread; i++) {
@@ -171,7 +180,10 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
     float weight = is_q ? static_cast<float>(q_weight[dim])
                         : static_cast<float>(k_weight[dim]);
     weight += weight_offset;
-    elements[i] *= rms_rcp * weight;
+    // Match standalone RMSNorm -> RoPE, which materializes a scalar_t tensor
+    // between the two kernels.
+    elements[i] =
+        static_cast<float>(static_cast<scalar_t>(elements[i] * rms_rcp * weight));
   }
 
   float elements2[kNumElemsPerThread];
@@ -252,7 +264,7 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
     __VA_ARGS__                                          \
   }
 
-template <typename scalar_t>
+template <typename scalar_t, typename Position>
 void launch_fused_qknorm_rope(void* qkv,
                               int const num_tokens,
                               int const num_heads_q,
@@ -267,7 +279,7 @@ void launch_fused_qknorm_rope(void* qkv,
                               void const* k_weight,
                               void const* cos_sin_cache,
                               bool const interleave,
-                              int32_t const* position_ids,
+                              Position const* position_ids,
                               void* k_cache,
                               void* v_cache,
                               int32_t const* slot_ids,
@@ -288,7 +300,7 @@ void launch_fused_qknorm_rope(void* qkv,
   switch (head_dim) {
     case 64:
       DISPATCH_INTERLEAVE(interleave, INTERLEAVE, {
-        fused_qknorm_rope_kernel<scalar_t, 64, INTERLEAVE>
+        fused_qknorm_rope_kernel<scalar_t, Position, 64, INTERLEAVE>
             <<<gridDim, blockDim, 0, stream>>>(qkv,
                                                num_heads_q,
                                                num_heads_k,
@@ -310,7 +322,7 @@ void launch_fused_qknorm_rope(void* qkv,
       break;
     case 128:
       DISPATCH_INTERLEAVE(interleave, INTERLEAVE, {
-        fused_qknorm_rope_kernel<scalar_t, 128, INTERLEAVE>
+        fused_qknorm_rope_kernel<scalar_t, Position, 128, INTERLEAVE>
             <<<gridDim, blockDim, 0, stream>>>(qkv,
                                                num_heads_q,
                                                num_heads_k,
@@ -332,7 +344,7 @@ void launch_fused_qknorm_rope(void* qkv,
       break;
     case 256:
       DISPATCH_INTERLEAVE(interleave, INTERLEAVE, {
-        fused_qknorm_rope_kernel<scalar_t, 256, INTERLEAVE>
+        fused_qknorm_rope_kernel<scalar_t, Position, 256, INTERLEAVE>
             <<<gridDim, blockDim, 0, stream>>>(qkv,
                                                num_heads_q,
                                                num_heads_k,
@@ -385,9 +397,10 @@ void run_fused_qk_norm_rope(torch::Tensor& qkv,
                             int32_t const* slot_ids) {
   CHECK(qkv.is_contiguous()) << "qkv must be contiguous";
   CHECK(position_ids.is_contiguous()) << "position_ids must be contiguous";
-  CHECK(position_ids.scalar_type() == torch::kInt32)
+  CHECK(position_ids.scalar_type() == torch::kInt32 ||
+        position_ids.scalar_type() == torch::kInt64)
       << "position_ids dtype is " << position_ids.scalar_type()
-      << ", while Int32 is expected";
+      << ", while Int32 or Int64 is expected";
   CHECK(q_weight.is_contiguous()) << "q_weight must be contiguous";
   CHECK(k_weight.is_contiguous()) << "k_weight must be contiguous";
   CHECK(cos_sin_cache.is_contiguous()) << "cos_sin_cache must be contiguous";
@@ -413,50 +426,58 @@ void run_fused_qk_norm_rope(torch::Tensor& qkv,
   // Standard Qwen2 attention passes offset zero and keeps regular RMSNorm.
   const float weight_offset = k_head_offset > 0 ? 1.0f : 0.0f;
 
+  auto launch_for_position = [&]<typename scalar_t>() {
+    if (position_ids.scalar_type() == torch::kInt32) {
+      launch_fused_qknorm_rope<scalar_t, int32_t>(
+          qkv.data_ptr(),
+          static_cast<int>(num_tokens),
+          static_cast<int>(num_heads_q),
+          static_cast<int>(num_heads_k),
+          static_cast<int>(total_heads_per_token),
+          static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
+          static_cast<int>(head_dim),
+          static_cast<int>(cos_sin_cache.size(1)),
+          static_cast<float>(eps),
+          weight_offset,
+          q_weight.data_ptr(),
+          k_weight.data_ptr(),
+          cos_sin_cache.data_ptr(),
+          interleaved,
+          position_ids.data_ptr<int32_t>(),
+          k_cache,
+          v_cache,
+          slot_ids,
+          static_cast<int>(num_heads_v),
+          stream);
+    } else {
+      launch_fused_qknorm_rope<scalar_t, int64_t>(
+          qkv.data_ptr(),
+          static_cast<int>(num_tokens),
+          static_cast<int>(num_heads_q),
+          static_cast<int>(num_heads_k),
+          static_cast<int>(total_heads_per_token),
+          static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
+          static_cast<int>(head_dim),
+          static_cast<int>(cos_sin_cache.size(1)),
+          static_cast<float>(eps),
+          weight_offset,
+          q_weight.data_ptr(),
+          k_weight.data_ptr(),
+          cos_sin_cache.data_ptr(),
+          interleaved,
+          position_ids.data_ptr<int64_t>(),
+          k_cache,
+          v_cache,
+          slot_ids,
+          static_cast<int>(num_heads_v),
+          stream);
+    }
+  };
+
   if (qkv.scalar_type() == at::ScalarType::BFloat16) {
-    launch_fused_qknorm_rope<__nv_bfloat16>(
-        qkv.data_ptr(),
-        static_cast<int>(num_tokens),
-        static_cast<int>(num_heads_q),
-        static_cast<int>(num_heads_k),
-        static_cast<int>(total_heads_per_token),
-        static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
-        static_cast<int>(head_dim),
-        static_cast<int>(cos_sin_cache.size(1)),
-        static_cast<float>(eps),
-        weight_offset,
-        q_weight.data_ptr(),
-        k_weight.data_ptr(),
-        cos_sin_cache.data_ptr(),
-        interleaved,
-        reinterpret_cast<int32_t const*>(position_ids.data_ptr()),
-        k_cache,
-        v_cache,
-        slot_ids,
-        static_cast<int>(num_heads_v),
-        stream);
+    launch_for_position.operator()<__nv_bfloat16>();
   } else if (qkv.scalar_type() == at::ScalarType::Half) {
-    launch_fused_qknorm_rope<__half>(
-        qkv.data_ptr(),
-        static_cast<int>(num_tokens),
-        static_cast<int>(num_heads_q),
-        static_cast<int>(num_heads_k),
-        static_cast<int>(total_heads_per_token),
-        static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
-        static_cast<int>(head_dim),
-        static_cast<int>(cos_sin_cache.size(1)),
-        static_cast<float>(eps),
-        weight_offset,
-        q_weight.data_ptr(),
-        k_weight.data_ptr(),
-        cos_sin_cache.data_ptr(),
-        interleaved,
-        reinterpret_cast<int32_t const*>(position_ids.data_ptr()),
-        k_cache,
-        v_cache,
-        slot_ids,
-        static_cast<int>(num_heads_v),
-        stream);
+    launch_for_position.operator()<__half>();
   } else {
     CHECK(false) << "Unsupported dtype for fused_qk_norm_rope: "
                  << qkv.scalar_type();

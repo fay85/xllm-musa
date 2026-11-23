@@ -2152,6 +2152,7 @@ __global__ void fused_gdn_decode_kernel(
     const float* __restrict__ dt_bias_f32,
     const scalar_t* __restrict__ b,
     const int32_t* __restrict__ state_indices,
+    int64_t num_state_slots,
     scalar_t* __restrict__ output,
     int64_t num_k_heads,
     int64_t num_v_heads,
@@ -2179,6 +2180,10 @@ __global__ void fused_gdn_decode_kernel(
     }
     return;
   }
+  if (slot >= num_state_slots) {
+    __trap();
+    return;
+  }
 
   const int group = static_cast<int>(num_v_heads / num_k_heads);
   const int hk = hv / group;
@@ -2189,7 +2194,6 @@ __global__ void fused_gdn_decode_kernel(
   __shared__ float reduce_buf[kFusedGdnDecodeMaxKV];
   __shared__ float g_exp_sh;
   __shared__ float beta_sh;
-  __shared__ float dot_qk_sh;
 
   const scalar_t* qkv_row =
       mixed_qkv + static_cast<int64_t>(batch) * mixed_qkv_row_stride;
@@ -2253,26 +2257,8 @@ __global__ void fused_gdn_decode_kernel(
   }
   __syncthreads();
 
-  float local_qk = 0.f;
-  for (int k = tid; k < K; k += block_threads) {
-    local_qk += q_sh[k] * k_sh[k];
-  }
-  reduce_buf[tid] = local_qk;
-  __syncthreads();
-  for (int s = block_threads >> 1; s > 0; s >>= 1) {
-    if (tid < s) {
-      reduce_buf[tid] += reduce_buf[tid + s];
-    }
-    __syncthreads();
-  }
-  if (tid == 0) {
-    dot_qk_sh = reduce_buf[0];
-  }
-  __syncthreads();
-
   const float g_exp = g_exp_sh;
   const float beta_val = beta_sh;
-  const float dot_qk = dot_qk_sh;
 
   if (tid < V) {
     const int64_t state_base =
@@ -2281,26 +2267,25 @@ __global__ void fused_gdn_decode_kernel(
         static_cast<int64_t>(K);
 
     float kv = 0.f;
-    float dot_qH_v = 0.f;
     for (int k = 0; k < K; ++k) {
-      const float s = state[state_base + static_cast<int64_t>(k)];
+      const float s = g_exp * state[state_base + static_cast<int64_t>(k)];
       kv += s * k_sh[k];
-      dot_qH_v += s * q_sh[k];
     }
 
-    const float delta = (v_sh[tid] - g_exp * kv) * beta_val;
-    const float o_v = g_exp * dot_qH_v + delta * dot_qk;
+    const float delta = (v_sh[tid] - kv) * beta_val;
+    float o_v = 0.f;
+    for (int k = 0; k < K; ++k) {
+      const int64_t off = state_base + static_cast<int64_t>(k);
+      const float decayed = g_exp * state[off];
+      const float updated = decayed + k_sh[k] * delta;
+      state[off] = updated;
+      o_v += updated * q_sh[k];
+    }
 
     const int64_t out_off =
         (static_cast<int64_t>(batch) * num_v_heads + hv) * V +
         static_cast<int64_t>(tid);
     output[out_off] = static_cast<scalar_t>(o_v);
-
-    for (int k = 0; k < K; ++k) {
-      const int64_t off = state_base + static_cast<int64_t>(k);
-      const float s_old = state[off];
-      state[off] = g_exp * s_old + k_sh[k] * delta;
-    }
   }
 }
 
@@ -2323,6 +2308,7 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
         const float* __restrict__ dt_bias_f32,
         const scalar_t* __restrict__ b,
         const int32_t* __restrict__ state_indices,
+        int64_t num_state_slots,
         scalar_t* __restrict__ output,
         int64_t num_k_heads,
         int64_t num_v_heads,
@@ -2353,6 +2339,10 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
         output[out_offset] = static_cast<scalar_t>(0);
       }
     }
+    return;
+  }
+  if (slot >= num_state_slots) {
+    __trap();
     return;
   }
 
@@ -2488,6 +2478,7 @@ void launch_fused_gdn_h128_tiled(const torch::Tensor& mixed_qkv,
           dt_bias_f32.data_ptr<float>(),
           b.data_ptr<scalar_t>(),
           state_indices_i32.data_ptr<int32_t>(),
+          state.size(0),
           output.data_ptr<scalar_t>(),
           num_k_heads,
           num_v_heads,
@@ -2518,8 +2509,8 @@ void launch(const torch::Tensor& mixed_qkv,
             float softplus_beta,
             float softplus_threshold,
             cudaStream_t stream) {
-  if (num_k_heads == 16 && num_v_heads == 32 && head_k_dim == 128 &&
-      head_v_dim == 128) {
+  if (head_k_dim == 128 && head_v_dim == 128 && num_k_heads > 0 &&
+      num_v_heads > 0 && num_v_heads % num_k_heads == 0) {
     launch_fused_gdn_h128_tiled<scalar_t>(mixed_qkv,
                                           state,
                                           A_log_f32,
@@ -2556,6 +2547,7 @@ void launch(const torch::Tensor& mixed_qkv,
       dt_bias_f32.data_ptr<float>(),
       b.data_ptr<scalar_t>(),
       state_indices_i32.data_ptr<int32_t>(),
+      state.size(0),
       output.data_ptr<scalar_t>(),
       num_k_heads,
       num_v_heads,

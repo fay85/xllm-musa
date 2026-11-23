@@ -22,10 +22,15 @@ limitations under the License.
 namespace xllm::runtime::musa {
 
 // Minimum physical free memory floor (1.5 GiB) required before starting a new
-// MUSA prefill graph capture, even if musa_prefill_warmup_reserve_mb is set
-// lower.
+// MUSA prefill graph capture when growing or creating the capture pool.
 inline constexpr std::size_t kMinPrefillCaptureFreeBytes =
     1536ULL * 1024ULL * 1024ULL;
+
+// Minimum physical free memory floor (768 MiB) when capturing into an
+// already-mapped Shared VMM prefill pool whose high-water bucket already
+// covers bucket_num_tokens (skip_piecewise_warmup=true, ~0 MiB new VMM pages).
+inline constexpr std::size_t kMinVmmPoolReuseCaptureFreeBytes =
+    768ULL * 1024ULL * 1024ULL;
 
 // Padding is for a single sequence only. Multi-sequence GDN capture must keep
 // the exact host layout in both its key and metadata.
@@ -44,7 +49,12 @@ inline bool can_admit_prefill_graph(std::size_t cached_entries,
   return cache_hit || cached_entries < static_cast<std::size_t>(max_entries);
 }
 
-inline std::size_t prefill_capture_required_free_bytes(int32_t reserve_mb) {
+inline std::size_t prefill_capture_required_free_bytes(
+    int32_t reserve_mb,
+    bool vmm_pool_reusable = false) {
+  if (vmm_pool_reusable) {
+    return kMinVmmPoolReuseCaptureFreeBytes;
+  }
   const std::size_t configured_bytes =
       static_cast<std::size_t>(std::max<int32_t>(reserve_mb, 0)) * 1024ULL *
       1024ULL;
@@ -59,7 +69,8 @@ inline bool can_admit_prefill_graph_with_memory(std::size_t cached_entries,
                                                 bool cache_hit,
                                                 bool oom_latched,
                                                 std::size_t physical_free_bytes,
-                                                int32_t reserve_mb) {
+                                                int32_t reserve_mb,
+                                                bool vmm_pool_reusable = false) {
   if (cache_hit) {
     return true;
   }
@@ -67,7 +78,8 @@ inline bool can_admit_prefill_graph_with_memory(std::size_t cached_entries,
       !can_admit_prefill_graph(cached_entries, max_entries, cache_hit)) {
     return false;
   }
-  return physical_free_bytes >= prefill_capture_required_free_bytes(reserve_mb);
+  return physical_free_bytes >=
+         prefill_capture_required_free_bytes(reserve_mb, vmm_pool_reusable);
 }
 
 inline int64_t prefill_warmup_reserve_bytes(int32_t reserve_mb,

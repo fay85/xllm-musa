@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -28,6 +29,36 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 
 namespace xllm::layer::musa_pcp {
+
+int32_t single_prefill_front_rows(int32_t query_rows, int32_t history_rows);
+
+class SingleCheckpointSlotsScope {
+ public:
+  explicit SingleCheckpointSlotsScope(const std::vector<int32_t>* slots);
+  ~SingleCheckpointSlotsScope();
+
+  SingleCheckpointSlotsScope(const SingleCheckpointSlotsScope&) = delete;
+  SingleCheckpointSlotsScope& operator=(const SingleCheckpointSlotsScope&) = delete;
+
+ private:
+  const std::vector<int32_t>* previous_;
+};
+
+const std::vector<int32_t>* single_checkpoint_slots();
+
+class SingleCheckpointWarmupScope {
+ public:
+  SingleCheckpointWarmupScope();
+  ~SingleCheckpointWarmupScope();
+
+  SingleCheckpointWarmupScope(const SingleCheckpointWarmupScope&) = delete;
+  SingleCheckpointWarmupScope& operator=(const SingleCheckpointWarmupScope&) = delete;
+
+ private:
+  bool previous_;
+};
+
+bool in_single_checkpoint_warmup();
 
 // Rows owned by the last rank that earlier ranks write into their KV cache
 // after the layers.
@@ -88,6 +119,61 @@ struct Context final {
   std::vector<torch::Tensor> in_flight_sends;
   std::vector<c10::intrusive_ptr<c10d::Work>> in_flight_send_works;
 };
+
+std::vector<int32_t> multibatch_front_lens(
+    const std::vector<int32_t>& q_seq_lens,
+    const std::vector<int32_t>& kv_seq_lens,
+    bool is_prefill,
+    bool lengths_are_cumulative = false);
+
+struct BucketInputs final {
+  int32_t batch_size = 0;
+  int32_t rank0_capacity = 0;
+  int32_t rank1_capacity = 0;
+  std::vector<int32_t> front_lens;
+  std::vector<int32_t> back_lens;
+  std::vector<int32_t> kv_lens;
+  bool any_history = false;
+  torch::Tensor indices;
+  torch::Tensor metadata;
+  bool gdn_checkpoint_runner = false;
+  std::vector<int32_t> linear_state_ids;
+};
+
+std::vector<int32_t> multibatch_bucket_capacities(
+    const std::vector<int32_t>& q_seq_lens,
+    const std::vector<int32_t>& kv_seq_lens,
+    bool is_prefill,
+    int32_t stride,
+    int64_t max_tokens,
+    bool lengths_are_cumulative = false);
+
+std::shared_ptr<BucketInputs> make_bucket_inputs(
+    const std::vector<int32_t>& q_seq_lens,
+    const std::vector<int32_t>& kv_seq_lens,
+    bool is_prefill,
+    const std::vector<int32_t>& capacities,
+    const torch::Device& device);
+
+void update_bucket_inputs(BucketInputs& inputs,
+                          const std::vector<int32_t>& q_seq_lens,
+                          const std::vector<int32_t>& kv_seq_lens,
+                          bool is_prefill);
+
+class BucketInputsScope final {
+ public:
+  explicit BucketInputsScope(BucketInputs* inputs);
+  ~BucketInputsScope();
+  BucketInputsScope(const BucketInputsScope&) = delete;
+  BucketInputsScope& operator=(const BucketInputsScope&) = delete;
+
+ private:
+  BucketInputs* previous_ = nullptr;
+};
+
+bool has_bucket_inputs();
+
+const BucketInputs* get_bucket_inputs();
 
 // Emplaces a context when the batch is one fresh prefill long enough to split
 // across the CP group, and leaves `context` empty otherwise. `num_rows` is the

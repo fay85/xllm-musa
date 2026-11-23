@@ -56,6 +56,9 @@ class __align__(16) Vec8 final {
   static __device__ __forceinline__ Vec8 load_byp_slc(const T* ptr,
                                                       Offset idx) {
 #if defined(__MUSA_ARCH__) && (__MUSA_ARCH__ == 310)
+    if constexpr (sizeof(T) != 2) {
+      return load(ptr, idx);
+    }
     uint4 raw;
     const T* addr = ptr + idx;
     asm volatile(
@@ -520,6 +523,12 @@ inline int cached_vec8_shared_bytes(int hidden,
   return (cached_floats + reduce_floats) * static_cast<int>(sizeof(float));
 }
 
+template <typename T>
+bool vec8_aligned(const T* pointer, int64_t row_stride) {
+  return reinterpret_cast<uintptr_t>(pointer) % 16 == 0 &&
+         (row_stride * sizeof(T)) % 16 == 0;
+}
+
 template <typename T, bool IsGemma>
 void launch_rmsnorm(const T* input_ptr,
                           const T* weight_ptr,
@@ -533,7 +542,11 @@ void launch_rmsnorm(const T* input_ptr,
                           float inv_hidden,
                           float eps,
                           cudaStream_t stream) {
-  if ((hidden % 8) == 0 && hidden <= 32768) {
+  const bool aligned = vec8_aligned(input_ptr, input_row_stride) &&
+                       vec8_aligned(input_ptr, input_outer_stride) &&
+                       vec8_aligned(weight_ptr, 0) &&
+                       vec8_aligned(out_ptr, out_row_stride);
+  if (aligned && (hidden % 8) == 0 && hidden <= 32768) {
     if (rows <= 16 && hidden == 1024) {
       constexpr int threads = 128;
       constexpr int smem_bytes = 4 * static_cast<int>(sizeof(float));
@@ -634,7 +647,10 @@ void launch_fused_add_rmsnorm(T* input_ptr,
                                     float inv_hidden,
                                     float eps,
                                     cudaStream_t stream) {
-  if ((hidden % 8) == 0 && hidden <= 32768) {
+  const bool aligned = vec8_aligned(input_ptr, input_row_stride) &&
+                       vec8_aligned(residual_ptr, residual_row_stride) &&
+                       vec8_aligned(weight_ptr, 0);
+  if (aligned && (hidden % 8) == 0 && hidden <= 32768) {
     const int threads = fused_block_threads(hidden);
     const int smem = cached_vec8_shared_bytes(hidden, threads, 32768);
     fused_add_rmsnorm_vec8_kernel<T, IsGemma, /*CACHE=*/true>
@@ -686,6 +702,11 @@ void rms_norm_entry(torch::Tensor output,
       << "gemma_rms_norm supports 2D [rows, hidden] or 3D [outer, mid, "
          "hidden] inputs only. Got sizes="
       << input.sizes();
+  CHECK(output.sizes() == input.sizes());
+  CHECK(output.stride(-2) >= output.size(-1));
+  if (output.dim() == 3) {
+    CHECK(output.stride(-3) == output.size(-2) * output.stride(-2));
+  }
 
   const int hidden = input.size(-1);
   const int rows = input.numel() / hidden;
@@ -756,12 +777,31 @@ void fused_add_rms_norm_entry(torch::Tensor& input,
                               double epsilon) {
   CHECK(input.scalar_type() == residual.scalar_type());
   CHECK(input.scalar_type() == weight.scalar_type());
-  CHECK(residual.is_contiguous());
   CHECK(weight.is_contiguous());
-  CHECK(input.is_contiguous())
-      << "fused_add_gemma_rms_norm requires a contiguous `input` (in-place "
-         "write back). Got strides="
-      << input.strides() << ", sizes=" << input.sizes();
+  if constexpr (IsGemma) {
+    CHECK(residual.is_contiguous());
+    CHECK(input.is_contiguous())
+        << "fused_add_gemma_rms_norm requires a contiguous `input` (in-place "
+           "write back). Got strides="
+        << input.strides() << ", sizes=" << input.sizes();
+  } else {
+    CHECK(input.sizes() == residual.sizes());
+    CHECK(input.dim() >= 2);
+    CHECK(input.stride(-1) == 1);
+    CHECK(residual.stride(-1) == 1);
+    auto check_packed_rows = [](const torch::Tensor& tensor) {
+      int64_t expected_stride = tensor.stride(-2);
+      for (int dim = tensor.dim() - 2; dim > 0; --dim) {
+        expected_stride *= tensor.size(dim);
+        CHECK(tensor.stride(dim - 1) == expected_stride)
+            << "fused_add_rms_norm requires outer dimensions to have uniform "
+               "row strides. Got strides="
+            << tensor.strides() << ", sizes=" << tensor.sizes();
+      }
+    };
+    check_packed_rows(input);
+    check_packed_rows(residual);
+  }
 
   const int hidden = input.size(-1);
   const int64_t input_row_stride = input.stride(-2);
@@ -827,6 +867,13 @@ void rms_norm(torch::Tensor output,
               torch::Tensor input,
               torch::Tensor weight,
               double eps) {
+  if (input.dim() > 3) {
+    CHECK(output.sizes() == input.sizes());
+    CHECK(output.is_contiguous());
+    CHECK(input.is_contiguous());
+    output = output.flatten(0, -2);
+    input = input.flatten(0, -2);
+  }
   rms_norm_entry</*IsGemma=*/false>(output, input, weight, eps);
 }
 

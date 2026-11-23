@@ -27,6 +27,36 @@ class Qwen3_5MtpModelImpl final : public Qwen3_5MtpModelImplBase {
  public:
   explicit Qwen3_5MtpModelImpl(const ModelContext& context)
       : Qwen3_5MtpModelImplBase(context) {}
+
+#if defined(USE_MUSA)
+  ModelOutput forward(torch::Tensor tokens,
+                      torch::Tensor positions,
+                      std::vector<KVCache>& kv_caches,
+                      const ModelInputParams& input_params) override {
+    if (input_params.meta.batch_forward_type.is_decode() ||
+        input_params.is_spec_verify) {
+      if (!input_params.embedding.mtp_token_embedding.defined() &&
+          tokens.defined() && tokens.numel() > 0 &&
+          this->embed_tokens_ && this->embed_tokens_->weight().defined()) {
+        const int64_t vocab_size = this->embed_tokens_->weight().size(0);
+        if (vocab_size > 0) {
+          tokens = tokens.clamp(/*min=*/0, /*max=*/vocab_size - 1);
+        }
+      }
+      return Qwen3_5MtpModelImplBase::forward(
+          tokens, positions, kv_caches, input_params);
+    }
+
+    if (!input_params.enable_graph && input_params.attn_metadata != nullptr) {
+      ModelInputParams params = input_params;
+      params.attn_metadata.reset();
+      return Qwen3_5MtpModelImplBase::forward(
+          tokens, positions, kv_caches, params);
+    }
+    return Qwen3_5MtpModelImplBase::forward(
+        tokens, positions, kv_caches, input_params);
+  }
+#endif
 };
 
 class Qwen3_5MtpForCausalLMImpl final : public Qwen3_5MtpForCausalLMImplBase {

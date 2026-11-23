@@ -52,6 +52,13 @@ void MMBatchData::get(const MMKey& key, std::vector<torch::Tensor>& vec) const {
 namespace {
 void move_dict_to_device(MMDict& dict, const torch::Device& device) {
   for (auto& [key, value] : dict) {
+#if defined(USE_MUSA)
+    // Keep small grid-shape metadata on CPU to avoid async H2D -> synchronous
+    // D2H (muMemcpyDtoHAsync_v2) stream sync stalls inside ViT encoders.
+    if (key == "image_grid_thw" || key == "video_grid_thw") {
+      continue;
+    }
+#endif
     if (std::holds_alternative<torch::Tensor>(value)) {
       value = safe_to(std::get<torch::Tensor>(value), device, true);
     } else if (std::holds_alternative<std::vector<torch::Tensor>>(value)) {

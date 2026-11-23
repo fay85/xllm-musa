@@ -366,13 +366,15 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
   }
 
   torch::Tensor rot_pos_emb(torch::Tensor grid_thw) {
-    auto grid_thw_cpu = grid_thw.cpu().to(torch::kLong);
+    const auto device = options_.device();
+    auto grid_thw_cpu =
+        (grid_thw.is_cpu() ? grid_thw : grid_thw.to(torch::kCPU))
+            .to(torch::kLong);
     auto count = grid_thw_cpu.size(0);
     std::vector<torch::Tensor> pos_ids_vec;
     pos_ids_vec.reserve(count);
 
-    auto options =
-        torch::TensorOptions().dtype(torch::kLong).device(grid_thw.device());
+    auto options = torch::TensorOptions().dtype(torch::kLong).device(device);
     int64_t max_grid = 0;
 
     for (int64_t idx = 0; idx < count; ++idx) {
@@ -385,8 +387,7 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
       {
         std::lock_guard<std::mutex> lock(pos_cache_mutex_);
         auto it = rot_pos_id_cache_.find(key);
-        if (it != rot_pos_id_cache_.end() &&
-            it->second.device() == grid_thw.device()) {
+        if (it != rot_pos_id_cache_.end() && it->second.device() == device) {
           pos_ids_vec.push_back(it->second);
           continue;
         }
@@ -429,11 +430,13 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
   }
 
   torch::Tensor fast_pos_embed_interpolate(const torch::Tensor& grid_thw) {
-    auto device = grid_thw.device();
+    const auto device = options_.device();
     int64_t hidden_dim = hidden_size_;
     int64_t m_size = spatial_merge_size_;
 
-    auto grid_cpu = grid_thw.to(torch::kCPU).to(torch::kLong);
+    auto grid_cpu =
+        (grid_thw.is_cpu() ? grid_thw : grid_thw.to(torch::kCPU))
+            .to(torch::kLong);
     int64_t count = grid_cpu.size(0);
 
     std::vector<torch::Tensor> outputs;
@@ -525,13 +528,16 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
 
   torch::Tensor forward(torch::Tensor hidden_states,
                         torch::Tensor grid_thw) {  // [batch,thw]
+    auto grid_cpu =
+        (grid_thw.is_cpu() ? grid_thw : grid_thw.to(torch::kCPU))
+            .contiguous()
+            .to(torch::kLong);
     hidden_states = patch_embed_(hidden_states);
-    auto pos_embeds = fast_pos_embed_interpolate(grid_thw);
+    auto pos_embeds = fast_pos_embed_interpolate(grid_cpu);
     hidden_states = hidden_states + pos_embeds;
     //   compute position embedding
-    auto rotary_pos_emb = rot_pos_emb(grid_thw);
+    auto rotary_pos_emb = rot_pos_emb(grid_cpu);
     // compute cu_seqlens on CPU to avoid GPU sync + repeat_interleave overhead
-    auto grid_cpu = grid_thw.to(torch::kCPU).to(torch::kLong);
     const int64_t grid_count = grid_cpu.size(0);
     std::vector<int32_t> cu_seqlens_vec;
     cu_seqlens_vec.reserve(grid_count + 1);

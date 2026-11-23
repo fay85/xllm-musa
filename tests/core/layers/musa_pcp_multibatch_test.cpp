@@ -837,7 +837,8 @@ TEST(MusaReviewBugfixGpuTest,
   nan_k[2].narrow(0, 0, 5).copy_(valid_k_rows);
   nan_v[2].narrow(0, 0, 5).copy_(valid_v_rows);
 
-  AttentionMetadata meta;
+  AttentionMetadata meta{};
+  meta.is_dummy = false;
   meta.max_seq_len = 5;
   meta.kv_seq_lens = torch::tensor({5, 0}, i32_opts);
   meta.block_table = torch::tensor({{2, -1}, {-1, -1}}, i32_opts);

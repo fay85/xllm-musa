@@ -1,4 +1,5 @@
 #include <absl/container/flat_hash_set.h>
+#include <absl/strings/str_join.h>
 /* Copyright 2026 The xLLM Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +35,7 @@ limitations under the License.
 
 #include "core/common/metrics.h"
 #include "core/framework/config/execution_config.h"
+#include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/rec_config.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/process_group.h"
@@ -48,6 +50,7 @@ limitations under the License.
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_policy.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
+#include "core/layers/musa/pcp_context.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/platform/musa_vmm_capture_pool.h"
@@ -62,6 +65,126 @@ limitations under the License.
 namespace xllm::runtime::musa {
 
 namespace {
+
+DEFINE_COUNTER(musa_pcp_bucket_capture_deferred_total,
+               "CP2 Prefill bucket observations below the capture threshold");
+DEFINE_COUNTER(musa_pcp_bucket_capture_admitted_total,
+               "CP2 Prefill buckets admitted to capture");
+DEFINE_COUNTER(musa_pcp_exact_prefill_capture_skipped_total,
+               "CP2 Prefill calls kept eager because no supported bucket fits");
+DEFINE_COUNTER(musa_gdn_checkpoint_bucket_captures_total,
+               "Captured target Prefill graphs with a bucketed GDN runner");
+DEFINE_COUNTER(musa_gdn_checkpoint_bucket_replays_total,
+               "Target Prefill replays with a bucketed GDN runner");
+DEFINE_COUNTER(musa_gdn_checkpoint_bucket_interior_replays_total,
+               "Bucketed GDN runner replays with interior checkpoints");
+DEFINE_COUNTER(musa_gdn_checkpoint_bucket_targets_total,
+               "Interior targets written by the bucketed GDN runner");
+DEFINE_COUNTER(musa_gdn_checkpoint_eager_forwards_total,
+               "Eager Prefill target forwards with interior checkpoints");
+
+bool has_interior_gdn_singlepass_checkpoints(const ModelInputParams& params);
+void parse_gdn_singlepass_checkpoints(
+    const ModelInputParams& params,
+    std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget>*
+        out_interior,
+    std::vector<std::pair<int32_t, int32_t>>* out_end_of_step);
+std::vector<int32_t> pcp_bucket_capacities(const ModelInputParams& params,
+                                           const runtime::Options& options);
+
+int32_t single_checkpoint_runner_bucket_tokens(
+    uint32_t num_tokens,
+    const ModelInputParams& params,
+    const runtime::Options& options,
+    bool has_interior_checkpoints) {
+  const auto& host = params.attention.host;
+  const auto& type = params.meta.batch_forward_type;
+  if (options.is_draft_engine() || options.cp_size() != 2 ||
+      params.is_spec_verify ||
+      (!type.is_prefill() && !type.is_chunked_prefill()) ||
+      params.embedding.linear_state_ids.size() != 1 ||
+      host.q_seq_lens.size() != 2 || host.kv_seq_lens.size() != 2 ||
+      !util::get_bool_env("XLLM_MUSA_GDN_CHECKPOINT_BUCKET_RUNNER", false) ||
+      !util::get_bool_env("XLLM_MUSA_PCP", true)) {
+    return 0;
+  }
+  const int32_t max_chunk =
+      ::xllm::SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  const int32_t stride = std::max<int32_t>(
+      1,
+      ::xllm::ExecutionConfig::get_instance().musa_prefill_graph_token_stride());
+  if (max_chunk <= 0 || static_cast<int32_t>(num_tokens) > max_chunk) {
+    return 0;
+  }
+  const bool in_top_chunk_bucket =
+      static_cast<int32_t>(num_tokens) > (max_chunk - stride);
+  const bool force_warmup = layer::musa_pcp::in_single_checkpoint_warmup();
+  if (!in_top_chunk_bucket && !has_interior_checkpoints && !force_warmup) {
+    return 0;
+  }
+  if (num_tokens <= 256) {
+    return 0;
+  }
+  int32_t bucket_tokens = 0;
+  if (in_top_chunk_bucket || num_tokens > 6144) {
+    bucket_tokens = max_chunk;
+  } else if (num_tokens <= 1024) {
+    bucket_tokens = 1024;
+  } else if (num_tokens <= 2048) {
+    bucket_tokens = 2048;
+  } else if (num_tokens <= 3072) {
+    bucket_tokens = 3072;
+  } else if (num_tokens <= 4096) {
+    bucket_tokens = 4096;
+  } else {
+    bucket_tokens = 6144;
+  }
+  const int32_t effective_history_rows =
+      (host.kv_seq_lens.back() > host.q_seq_lens.back()) ? 64 : 0;
+  const int32_t front_rows =
+      bucket_tokens == 256
+          ? 256
+          : layer::musa_pcp::single_prefill_front_rows(
+                bucket_tokens, effective_history_rows);
+  if (front_rows <= 0 ||
+      (bucket_tokens > 256 && static_cast<int32_t>(num_tokens) <= front_rows)) {
+    return 0;
+  }
+  if (has_interior_checkpoints) {
+    constexpr int32_t kConvStateLen = 3;
+    std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget> targets;
+    parse_gdn_singlepass_checkpoints(params, &targets, nullptr);
+    for (const auto& t : targets) {
+      if (t.offset_tokens < kConvStateLen ||
+          t.offset_tokens > static_cast<int32_t>(num_tokens) ||
+          (t.offset_tokens > front_rows &&
+           (t.offset_tokens - front_rows) < kConvStateLen)) {
+        return 0;
+      }
+    }
+  }
+  return bucket_tokens;
+}
+
+int32_t single_checkpoint_runner_front_rows(
+    uint32_t num_tokens,
+    const ModelInputParams& params,
+    const runtime::Options& options,
+    bool has_interior_checkpoints) {
+  const int32_t bucket_tokens = single_checkpoint_runner_bucket_tokens(
+      num_tokens, params, options, has_interior_checkpoints);
+  if (bucket_tokens <= 0) {
+    return 0;
+  }
+  if (bucket_tokens == 256) {
+    return 256;
+  }
+  const auto& host = params.attention.host;
+  const int32_t effective_history_rows =
+      (host.kv_seq_lens.back() > host.q_seq_lens.back()) ? 64 : 0;
+  return layer::musa_pcp::single_prefill_front_rows(
+      bucket_tokens, effective_history_rows);
+}
 
 std::atomic<uint32_t> s_completed_musa_graph_captures{0};
 
@@ -110,6 +233,26 @@ bool s_enable_prefill_fwd_timing() {
     return env != nullptr && std::string(env) == "1";
   }();
   return val;
+}
+
+constexpr size_t kDecodeCaptureMinFreeBytes = 1024ULL * 1024ULL * 1024ULL;
+
+void maybe_empty_cache_if_low_physical_memory(int device_index,
+                                              size_t min_free_bytes) {
+  static const bool force_empty_cache = [] {
+    const char* env = std::getenv("XLLM_MUSA_CAPTURE_FORCE_EMPTY_CACHE");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  if (force_empty_cache) {
+    Device::empty_cache(device_index);
+    return;
+  }
+  size_t free_bytes = 0;
+  size_t total_bytes = 0;
+  if (musaMemGetInfo(&free_bytes, &total_bytes) != musaSuccess ||
+      free_bytes < min_free_bytes) {
+    Device::empty_cache(device_index);
+  }
 }
 
 bool s_enable_prefill_empty_cache() {
@@ -583,9 +726,9 @@ std::vector<IndexedTensorSnapshot> snapshot_linear_attention_state(
           ssm_indices});
     }
   }
-  if (indices.defined() && !indices.is_cpu()) {
-    Device::empty_cache(indices.device().index());
-  }
+  // Keep the released index_select scratch in the caching allocator. A
+  // synchronous device free here can stall lazy capture while another model
+  // rank is still submitting work. Each saved snapshot already lives on CPU.
   return snapshots;
 }
 
@@ -771,7 +914,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
     const torch::Tensor& positions,
     const ModelInputParams& params,
     uint32_t padded_num_tokens,
-    bool return_capture_params) {
+    bool return_capture_params,
+    bool allow_pcp_bucket) {
   const uint32_t actual_num_tokens = tokens.size(/*dim=*/0);
   const int64_t actual_batch_size = params.meta.actual_num_sequences > 0
                                         ? params.meta.actual_num_sequences
@@ -1005,9 +1149,15 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
             /*dim=*/0, /*start=*/0, /*end=*/validity_rows);
   }
   if (embedding.defined()) {
-    const uint32_t emb_rows = params.pcp_input_is_sharded
-                                  ? static_cast<uint32_t>(embedding.size(0))
-                                  : padded_num_tokens;
+    const std::vector<int32_t> pcp_capacities =
+        allow_pcp_bucket ? pcp_bucket_capacities(params, options_)
+                         : std::vector<int32_t>{};
+    const uint32_t emb_rows =
+        params.pcp_input_is_sharded
+            ? (pcp_capacities.empty()
+                   ? static_cast<uint32_t>(embedding.size(0))
+                   : static_cast<uint32_t>(pcp_capacities[0]))
+            : padded_num_tokens;
     params_for_capture.embedding.input_embedding =
         persistent_embedding(emb_rows);
   }
@@ -1298,10 +1448,18 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   metadata_build_options.materialize_linear_state_validity =
       !linear_state_validity.defined();
   // Build attn_metadata with original model_input_params. So we can set actual
-  // batch size in plan_info.
+  // batch size in plan_info. Upstream executors may cache an AttentionMetadata
+  // built before graph padding or with stale capture flags; rebuild cleanly.
+  std::optional<ModelInputParams> fresh_metadata_params;
+  const ModelInputParams* metadata_params = &params;
+  if (params.attn_metadata && params.attn_metadata->enable_cuda_graph) {
+    fresh_metadata_params.emplace(params);
+    fresh_metadata_params->attn_metadata.reset();
+    metadata_params = &fresh_metadata_params.value();
+  }
   std::shared_ptr<layer::AttentionMetadata> attn_metadata =
       std::make_shared<layer::AttentionMetadata>(
-          layer::AttentionMetadataBuilder::build(params,
+          layer::AttentionMetadataBuilder::build(*metadata_params,
                                                  args_.enable_mla(),
                                                  /*attn_mask=*/std::nullopt,
                                                  /*device=*/device_,
@@ -1823,6 +1981,20 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   }
 
   if (params.num_accepted_tokens.defined()) {
+    if (params.is_spec_verify && !params.embedding.linear_state_ids.empty() &&
+        !params.num_accepted_tokens_host.empty()) {
+      CHECK_EQ(static_cast<int64_t>(params.num_accepted_tokens_host.size()),
+               params.num_accepted_tokens.numel())
+          << "speculative GDN graph requires matching host/device accepted "
+             "counts";
+      for (int32_t accepted : params.num_accepted_tokens_host) {
+        CHECK_GE(accepted, 1) << "accepted speculative tokens must be >= 1";
+        if (params.meta.q_max_seq_len > 0) {
+          CHECK_LE(accepted, params.meta.q_max_seq_len)
+              << "accepted speculative tokens exceed verify width";
+        }
+      }
+    }
     persistent_num_accepted_tokens_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/accepted_batch_size)
         .copy_(params.num_accepted_tokens.slice(
@@ -1842,6 +2014,14 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     const int64_t actual_block_table_batch =
         is_rec_multi_round_mode() ? params.attention.device.block_tables.size(0)
                                   : actual_batch_size;
+    CHECK_LE(actual_block_table_batch, persistent_block_tables_.size(0))
+        << "block_tables exceeds the persistent graph row capacity";
+    if (params.meta.batch_forward_type.is_decode() &&
+        !compact_dsv4_mtp_decode) {
+      CHECK_LE(static_cast<int64_t>(padded_num_tokens),
+               persistent_block_tables_.size(0))
+          << "padded block-table rows exceed the persistent capacity";
+    }
     CHECK_GE(params.attention.device.block_tables.size(0),
              actual_block_table_batch)
         << "block_tables has fewer rows than the logical graph batch";
@@ -1955,6 +2135,16 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         << persistent_embedding_
                .slice(/*dim=*/0, /*start=*/0, /*end=*/embedding_tokens)
                .sizes();
+    const int64_t padded_rows = std::min<int64_t>(
+        static_cast<int64_t>(padded_num_tokens), persistent_embedding_.size(0));
+    if (padded_rows > embedding_tokens) {
+      persistent_embedding_
+          .narrow(
+              /*dim=*/0,
+              /*start=*/embedding_tokens,
+              /*length=*/padded_rows - embedding_tokens)
+          .zero_();
+    }
     persistent_embedding_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/embedding_tokens)
         .copy_(embedding, /*non_blocking=*/true);
@@ -1973,6 +2163,17 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       persistent_mtp_token_embedding_ =
           torch::zeros({max_tokens_per_batch, mtp_token_embedding.size(1)},
                        mtp_token_embedding.options().device(device_));
+    }
+    const int64_t padded_mtp_rows =
+        std::min<int64_t>(static_cast<int64_t>(padded_num_tokens),
+                          persistent_mtp_token_embedding_.size(0));
+    if (padded_mtp_rows > mtp_embedding_tokens) {
+      persistent_mtp_token_embedding_
+          .narrow(
+              /*dim=*/0,
+              /*start=*/mtp_embedding_tokens,
+              /*length=*/padded_mtp_rows - mtp_embedding_tokens)
+          .zero_();
     }
     persistent_mtp_token_embedding_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/mtp_embedding_tokens)
@@ -2420,6 +2621,14 @@ void MusaGraph::prepare_model_graph_metadata(CausalLM* model,
       << "MUSA graph metadata preparation did not populate attn_metadata";
 }
 
+MusaGraph::~MusaGraph() {
+  at::musa::OptionalMUSAGuard device_guard(device_index_);
+  capture_stream_.synchronize();
+  for (const auto& stream : replay_streams_) {
+    stream.synchronize();
+  }
+}
+
 bool MusaGraph::capture(CausalLM* model,
                         const ModelArgs& args,
                         const runtime::Options& options,
@@ -2555,7 +2764,8 @@ bool MusaGraph::capture(CausalLM* model,
                                                positions,
                                                params,
                                                padded_num_tokens_,
-                                               /*return_capture_params=*/true)
+                                               /*return_capture_params=*/true,
+                                               /*allow_pcp_bucket=*/true)
             : persistent_param_.update(
                   tokens,
                   k_cache,
@@ -2570,6 +2780,32 @@ bool MusaGraph::capture(CausalLM* model,
     CHECK(graph_params_opt.has_value())
         << "update() should return ModelInputParams when "
            "return_capture_params=true";
+
+    layer::musa_pcp::SingleCheckpointSlotsScope single_checkpoint_scope(
+        gdn_checkpoint_bucket_runner_ && params.meta.num_sequences == 1
+            ? &params.embedding.linear_state_ids
+            : nullptr);
+    std::optional<layer::musa_pcp::BucketInputsScope> pcp_bucket_scope;
+    const std::vector<int32_t> pcp_capacities =
+        is_piecewise_ ? pcp_bucket_capacities(params, options)
+                      : std::vector<int32_t>{};
+    if (!pcp_capacities.empty()) {
+      const layer::AttentionMetadata& metadata =
+          *graph_params_opt->attn_metadata;
+      pcp_bucket_inputs_ = layer::musa_pcp::make_bucket_inputs(
+          metadata.q_seq_lens_vec,
+          metadata.kv_seq_lens_vec,
+          params.meta.batch_forward_type.is_prefill(),
+          pcp_capacities,
+          persistent_param_.device());
+      pcp_bucket_inputs_->gdn_checkpoint_runner = gdn_checkpoint_bucket_runner_;
+      pcp_bucket_inputs_->linear_state_ids = params.embedding.linear_state_ids;
+      pcp_bucket_scope.emplace(pcp_bucket_inputs_.get());
+      LOG(INFO) << "[PCP_LOCAL_BUCKET_CAPTURE] sequences="
+                << pcp_bucket_inputs_->batch_size
+                << " front_capacity=" << pcp_capacities[0]
+                << " back_capacity=" << pcp_capacities[1];
+    }
 
     prepare_model_graph_metadata(
         model,
@@ -2622,12 +2858,12 @@ bool MusaGraph::capture(CausalLM* model,
     if (is_piecewise_) {
       CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
                musaSuccess);
-      if (!skip_piecewise_warmup_ ||
-          physical_free_before_warmup < required_prefill_free_bytes) {
-        // Release idle cached blocks on other streams (e.g. ViT or prior eager
-        // forwards) before warmup on capture_stream so warmup does not allocate
-        // duplicate physical segments from the driver.
-        Device::empty_cache(device_index_);
+      if (physical_free_before_warmup < required_prefill_free_bytes) {
+        // Release idle cached blocks only when physical HBM headroom is low;
+        // unconditional muMemFree_v2 during online PD serving can contend with
+        // concurrent RDMA/event-poller threads in libmusa.so.1.
+        maybe_empty_cache_if_low_physical_memory(device_index_,
+                                                 required_prefill_free_bytes);
         CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
                  musaSuccess);
       }
@@ -2746,20 +2982,13 @@ bool MusaGraph::capture(CausalLM* model,
       // and the caching allocator cannot release default-pool blocks until
       // capture ends. Return them to the device before a lazy capture when
       // warmup ran or when no VMM pool is used.
-      if (!is_piecewise_ || num_warmup_iters > 0 || pool_ptr == nullptr ||
-          physical_free_before_warmup < required_prefill_free_bytes) {
-        Device::empty_cache(/*device_index=*/-1);
-      }
+      maybe_empty_cache_if_low_physical_memory(
+          device_index_,
+          is_piecewise_ ? required_prefill_free_bytes
+                        : kDecodeCaptureMinFreeBytes);
 
-      // MemPoolContext has been deprecated in torch >= 2.8
-#if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
-      // Activate VMM mempool only for the actual capture to keep plan_info
-      // allocations out of the shared physical memory pool.
-      std::optional<c10::musa::MemPoolContext> mempool_ctx;
-      if (pool_ptr != nullptr) {
-        mempool_ctx.emplace(pool_ptr);
-      }
-#endif
+      // torch_musa's MUSAGraph::capture_begin(pool) already activates the
+      // graph capture pool directly via MUSACachingAllocator::beginAllocateToPool.
 
       // Begin graph capture (capture_mode defaults to
       // musaStreamCaptureModeGlobal)
@@ -2901,6 +3130,16 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     replay_lock_guard.emplace(replay_lock);
   }
 
+  const auto current_replay_stream =
+      c10::musa::getCurrentMUSAStream(device_index_);
+  const bool stream_seen =
+      std::find(replay_streams_.begin(),
+                replay_streams_.end(),
+                current_replay_stream) != replay_streams_.end();
+  if (!stream_seen) {
+    replay_streams_.push_back(current_replay_stream);
+  }
+
   // Update persistent parameters with new input data
   const bool needs_model_graph_metadata =
       model_ != nullptr && model_->requires_graph_forward_metadata();
@@ -2920,18 +3159,38 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                                          positions,
                                          params,
                                          padded_num_tokens_,
-                                         /*return_capture_params=*/true);
+                                         /*return_capture_params=*/true,
+                                         /*allow_pcp_bucket=*/true);
     CHECK(replay_params_opt.has_value())
         << "update_prefill() should return ModelInputParams for replay";
     CHECK(piecewise_graph_ != nullptr)
         << "piecewise prefill replay requires a captured graph";
+    if (pcp_bucket_inputs_ != nullptr) {
+      const layer::AttentionMetadata& metadata =
+          *replay_params_opt->attn_metadata;
+      layer::musa_pcp::update_bucket_inputs(
+          *pcp_bucket_inputs_,
+          metadata.q_seq_lens_vec,
+          metadata.kv_seq_lens_vec,
+          params.meta.batch_forward_type.is_prefill());
+      if (gdn_checkpoint_bucket_runner_) {
+        pcp_bucket_inputs_->linear_state_ids =
+            params.embedding.linear_state_ids;
+      }
+    }
     ::xllm::kernel::musa::AttentionReplayParams runner_params;
     runner_params.actual_num_tokens = actual_num_tokens;
     runner_params.attn_metadata = replay_params_opt->attn_metadata;
+    layer::musa_pcp::SingleCheckpointSlotsScope single_checkpoint_scope(
+        gdn_checkpoint_bucket_runner_ && params.meta.num_sequences == 1
+            ? &params.embedding.linear_state_ids
+            : nullptr);
     piecewise_graph_->replay(runner_params);
     const uint32_t output_tokens =
-        (captured_result_tokens_ > 0 &&
-         captured_result_tokens_ < captured_actual_tokens_)
+        (pcp_bucket_inputs_ != nullptr && params.skip_pcp_gather)
+            ? captured_result_tokens_
+        : (captured_result_tokens_ > 0 &&
+           captured_result_tokens_ < captured_actual_tokens_)
             ? captured_result_tokens_
             : actual_num_tokens;
     return ModelOutput(get_hidden_states(output_tokens));
@@ -3517,7 +3776,8 @@ void finalize_gdn_singlepass_checkpoints(
     ProcessGroup* cp_group,
     const torch::Device& device,
     const ::xllm::kernel::musa::ScopedGdnSinglepassCheckpointPlan* interior_plan,
-    const std::vector<std::pair<int32_t, int32_t>>& end_of_step) {
+    const std::vector<std::pair<int32_t, int32_t>>& end_of_step,
+    bool require_written = false) {
   if (::xllm::kernel::musa::get_gdn_int8_checkpoint_slots(kv_caches) <= 0) {
     return;
   }
@@ -3543,6 +3803,9 @@ void finalize_gdn_singlepass_checkpoints(
     for (int64_t i = 0; i < m; ++i) {
       const int32_t w0 = gptr[i];
       const int32_t w1 = gptr[m + i];
+      if (require_written) {
+        CHECK(w0 != 0 || w1 != 0) << "GDN checkpoint graph missed a cut";
+      }
       if (w0 == w1) {
         continue;
       }
@@ -3613,32 +3876,74 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   const bool has_gdn_ckpt_pool =
       ::xllm::kernel::musa::get_gdn_int8_checkpoint_slots(kv_caches) > 0;
-  const bool force_eager_for_gdn_singlepass =
+  const bool has_interior_checkpoints =
       has_gdn_ckpt_pool && has_interior_gdn_singlepass_checkpoints(params);
+  static const bool enable_checkpoint_bucket_runner =
+      util::get_bool_env("XLLM_MUSA_GDN_CHECKPOINT_BUCKET_RUNNER", false);
+  const bool checkpoint_bucket_runner =
+      enable_checkpoint_bucket_runner && has_gdn_ckpt_pool &&
+      !params.is_spec_verify &&
+      ((effective_num_sequences == 1 &&
+        single_checkpoint_runner_front_rows(
+            n_tokens, params, options_, has_interior_checkpoints) > 0) ||
+       (effective_num_sequences >= 2 && effective_num_sequences <= 4 &&
+        !pcp_bucket_capacities(params, options_).empty()));
+  static const int64_t configured_min_hits =
+      util::get_int_env("XLLM_MUSA_PCP_BUCKET_CAPTURE_MIN_HITS", 0);
+  const int64_t bucket_capture_min_hits =
+      options_.cp_size() == 2 ? configured_min_hits : 0;
 
   // Prefill and chunked prefill replay piecewise graphs; launches that need
   // host-side batch layout run as runners between the captured segments.
-  if (!force_eager_for_gdn_singlepass &&
-      use_prefill_piecewise_graph(n_tokens, params)) {
-    const uint32_t graph_num_tokens =
-        get_prefill_graph_num_tokens(n_tokens, params);
-    const std::vector<int32_t> graph_key =
-        get_prefill_graph_key(n_tokens, params);
-    auto it = prefill_graphs_.find(graph_key);
-    if (it != prefill_graphs_.end()) {
-      const ModelInputParams graph_params =
-          maybe_precompute_embedding_for_graph(tokens, params);
-      auto result =
-          it->second->replay(tokens, positions, kv_caches, graph_params);
-      if (has_gdn_ckpt_pool) {
-        std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
-        parse_gdn_singlepass_checkpoints(params, nullptr, &end_of_step_ckpts);
-        if (!end_of_step_ckpts.empty()) {
-          finalize_gdn_singlepass_checkpoints(
-              kv_caches, cp_group_, device_, nullptr, end_of_step_ckpts);
+  if ((!has_interior_checkpoints || checkpoint_bucket_runner) &&
+      use_prefill_piecewise_graph(n_tokens,
+                                  params,
+                                  has_interior_checkpoints,
+                                  bucket_capture_min_hits)) {
+    using ::xllm::kernel::musa::GdnSinglepassInteriorTarget;
+    using ::xllm::kernel::musa::ScopedGdnSinglepassCheckpointPlan;
+    std::vector<GdnSinglepassInteriorTarget> interior_ckpts;
+    std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
+    if (has_gdn_ckpt_pool) {
+      parse_gdn_singlepass_checkpoints(
+          params, &interior_ckpts, &end_of_step_ckpts);
+    }
+    const auto replay = [&](MusaGraph& graph,
+                            const ModelInputParams& graph_params) {
+      CHECK_EQ(graph.gdn_checkpoint_bucket_runner_, checkpoint_bucket_runner);
+      std::optional<ScopedGdnSinglepassCheckpointPlan> completed_plan;
+      if (checkpoint_bucket_runner && !interior_ckpts.empty()) {
+        completed_plan.emplace(interior_ckpts);
+      }
+      const ModelOutput result =
+          graph.replay(tokens, positions, kv_caches, graph_params);
+      if (checkpoint_bucket_runner) {
+        COUNTER_INC(musa_gdn_checkpoint_bucket_replays_total);
+        if (!interior_ckpts.empty()) {
+          COUNTER_INC(musa_gdn_checkpoint_bucket_interior_replays_total);
+          COUNTER_ADD(musa_gdn_checkpoint_bucket_targets_total,
+                      interior_ckpts.size());
         }
       }
+      if (completed_plan.has_value() || !end_of_step_ckpts.empty()) {
+        finalize_gdn_singlepass_checkpoints(
+            kv_caches,
+            cp_group_,
+            device_,
+            completed_plan.has_value() ? &*completed_plan : nullptr,
+            end_of_step_ckpts,
+            checkpoint_bucket_runner);
+      }
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    };
+    const uint32_t graph_num_tokens = get_prefill_graph_num_tokens(
+        n_tokens, params, has_interior_checkpoints);
+    const std::vector<int32_t> graph_key =
+        get_prefill_graph_key(n_tokens, params, has_interior_checkpoints);
+    auto it = prefill_graphs_.find(graph_key);
+    if (it != prefill_graphs_.end()) {
+      return replay(*it->second,
+                    maybe_precompute_embedding_for_graph(tokens, params));
     }
     std::unique_ptr<MusaGraph> graph;
     std::unique_ptr<MusaMemPool> pool_owner;
@@ -3653,6 +3958,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           get_capture_stream(device_.index()),
           /*is_piecewise=*/true,
           /*skip_piecewise_warmup=*/!prefill_graphs_.empty());
+      graph->gdn_checkpoint_bucket_runner_ = checkpoint_bucket_runner;
       pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
       const c10::musa::MempoolId_t mem_pool =
           pool_owner != nullptr ? pool_owner->id() : graph_pool_;
@@ -3689,17 +3995,18 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       log_graph_memory_after_capture();
       auto& stored = prefill_graphs_[graph_key];
       stored = std::move(graph);
-      auto result =
-          stored->replay(tokens, positions, kv_caches, *graph_params_opt);
-      if (has_gdn_ckpt_pool) {
-        std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
-        parse_gdn_singlepass_checkpoints(params, nullptr, &end_of_step_ckpts);
-        if (!end_of_step_ckpts.empty()) {
-          finalize_gdn_singlepass_checkpoints(
-              kv_caches, cp_group_, device_, nullptr, end_of_step_ckpts);
-        }
+      if (bucket_capture_min_hits > 0) {
+        persistent_param_->prefill_bucket_observations_.erase(graph_key);
       }
-      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+      if (checkpoint_bucket_runner) {
+        COUNTER_INC(musa_gdn_checkpoint_bucket_captures_total);
+        LOG(INFO) << "[GDN_CHECKPOINT_BUCKET_CAPTURE] graph=" << stored.get()
+                  << " bucket=" << graph_num_tokens
+                  << " rows=" << n_tokens
+                  << " batch=" << effective_num_sequences
+                  << " targets=" << interior_ckpts.size();
+      }
+      return replay(*stored, *graph_params_opt);
     }
     graph.reset();
     pool_owner.reset();
@@ -3718,6 +4025,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   if (is_prefill || (params.meta.batch_forward_type.is_chunked_prefill() &&
                      !params.is_spec_verify)) {
     COUNTER_INC(num_model_execution_total_eager);
+    if (has_interior_checkpoints) {
+      COUNTER_INC(musa_gdn_checkpoint_eager_forwards_total);
+    }
     std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget> interior_ckpts;
     std::vector<std::pair<int32_t, int32_t>> end_of_step_ckpts;
     if (has_gdn_ckpt_pool) {
@@ -3822,7 +4132,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       COUNTER_INC(num_model_execution_total_eager);
       return model_->forward(tokens, positions, kv_caches, eager_params);
     }
-    Device::empty_cache(device_.index());
+    maybe_empty_cache_if_low_physical_memory(device_.index(),
+                                             kDecodeCaptureMinFreeBytes);
     std::unique_ptr<MusaGraph> graph;
     std::unique_ptr<MusaMemPool> pool_owner;
     bool ok = false;
@@ -3982,13 +4293,49 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     // Check if conditions are suitable for graph execution (replay or capture)
     const auto max_seq_len = args_.max_position_embeddings();
     const bool seq_len_supported = params.meta.kv_max_seq_len <= max_seq_len;
+    const bool is_compact_dsv4_decode =
+        (args_.model_type() == "deepseek_v4" &&
+         options_.enable_speculative_decode() && !options_.is_draft_engine() &&
+         params.meta.q_max_seq_len > 1) ||
+        (args_.model_type() == "deepseek_v4_mtp" && options_.is_draft_engine() &&
+         !params.embedding.linear_state_ids.empty() &&
+         static_cast<size_t>(n_tokens) >
+             params.embedding.linear_state_ids.size());
+    int64_t graph_batch_size = params.meta.num_sequences;
+    if (params.meta.actual_num_sequences > 0) {
+      graph_batch_size = params.meta.actual_num_sequences;
+    } else if (!params.has_llmrec_params()) {
+      graph_batch_size = static_cast<int64_t>(n_tokens);
+    }
+    if (params.has_llmrec_params() &&
+        params.attention.device.block_tables.defined()) {
+      graph_batch_size = params.attention.device.block_tables.size(0);
+    }
+    const int64_t graph_row_capacity =
+        persistent_param_->persistent_block_tables(0).size(0);
+    const uint32_t graph_token_capacity =
+        static_cast<uint32_t>(persistent_param_->persistent_tokens(0).size(0));
+    const bool graph_capacity_supported =
+        graph_batch_size <= graph_row_capacity &&
+        (is_compact_dsv4_decode ||
+         static_cast<int64_t>(bucket_num_tokens) <= graph_row_capacity) &&
+        bucket_num_tokens <= graph_token_capacity;
 
     // Early return if conditions are not suitable for graph operations
-    if (!seq_len_supported) {
-      LOG(WARNING) << "Not suitable for MUSA graph operations, falling back to "
-                      "eager mode.";
+    if (!seq_len_supported || !graph_capacity_supported) {
+      LOG(WARNING)
+          << "Not suitable for MUSA graph operations (kv_max_seq_len="
+          << params.meta.kv_max_seq_len << ", max_seq_len=" << max_seq_len
+          << ", graph_batch_size=" << graph_batch_size
+          << ", bucket_num_tokens=" << bucket_num_tokens
+          << ", graph_row_capacity=" << graph_row_capacity
+          << ", graph_token_capacity=" << graph_token_capacity
+          << "), falling back to eager mode.";
+      ModelInputParams eager_params = params;
+      eager_params.enable_graph = false;
+      eager_params.attn_metadata.reset();
       COUNTER_INC(num_model_execution_total_eager);
-      return model_->forward(tokens, positions, kv_caches, params);
+      return model_->forward(tokens, positions, kv_caches, eager_params);
     }
 
     // On MUSA the in-graph IndexSelect (embedding lookup) is the only known
@@ -4053,7 +4400,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       COUNTER_INC(num_model_execution_total_eager);
       return model_->forward(tokens, positions, kv_caches, eager_params);
     }
-    Device::empty_cache(device_.index());
+    maybe_empty_cache_if_low_physical_memory(device_.index(),
+                                             kDecodeCaptureMinFreeBytes);
     // Graph doesn't exist for this bucket num_tokens, try to create it lazily
     std::unique_ptr<MusaGraph> graph;
     std::unique_ptr<MusaMemPool> pool_owner;
@@ -4146,7 +4494,9 @@ uint32_t MusaGraphExecutorImpl::get_bucket_num_tokens(
 
 bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
     uint32_t num_tokens,
-    const ModelInputParams& params) const {
+    const ModelInputParams& params,
+    bool has_interior_checkpoints,
+    int64_t bucket_capture_min_hits) {
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
   if (!execution_config.enable_graph() ||
       !execution_config.enable_prefill_piecewise_graph()) {
@@ -4163,24 +4513,36 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   if (params.is_spec_verify || params.has_llmrec_params()) {
     return false;
   }
-  // Multi-sequence GDN chunked prefill runs its recurrence inside the forward
-  // rather than in a Mate runner.
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
-  if (num_sequences > 1 &&
-      (options_.cp_size() > 1 || !params.embedding.linear_state_ids.empty())) {
+  if (num_sequences > 1) {
+    const bool cp_multibatch_graph =
+        options_.cp_size() == 2 &&
+        util::get_bool_env("XLLM_MUSA_PCP_MULTIBATCH_GRAPH", false);
+    if (!cp_multibatch_graph && (options_.cp_size() > 1 ||
+                                 !params.embedding.linear_state_ids.empty())) {
+      return false;
+    }
+  }
+  if (bucket_capture_min_hits > 0 &&
+      ((num_sequences > 1 && pcp_bucket_capacities(params, options_).empty()) ||
+       (num_sequences == 1 &&
+        execution_config.musa_prefill_graph_token_stride() <= 1))) {
+    COUNTER_INC(musa_pcp_exact_prefill_capture_skipped_total);
     return false;
   }
-  const int64_t bucket_num_tokens =
-      get_prefill_graph_num_tokens(num_tokens, params);
+  const int64_t bucket_num_tokens = get_prefill_graph_num_tokens(
+      num_tokens, params, has_interior_checkpoints);
   if (bucket_num_tokens <= 0 ||
       bucket_num_tokens > max_tokens_for_graph_mode_ ||
       bucket_num_tokens > options_.max_tokens_per_batch()) {
     return false;
   }
-  const bool cache_hit = prefill_graphs_.find(get_prefill_graph_key(
-                             num_tokens, params)) != prefill_graphs_.end();
+  const std::vector<int32_t> graph_key =
+      get_prefill_graph_key(num_tokens, params, has_interior_checkpoints);
+  const bool cache_hit =
+      prefill_graphs_.find(graph_key) != prefill_graphs_.end();
   if (cache_hit) {
     return true;
   }
@@ -4204,9 +4566,38 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
         << "; execute unseen shape eager";
     return false;
   }
+  if (bucket_capture_min_hits > 0) {
+    int64_t& observations =
+        persistent_param_->prefill_bucket_observations_[graph_key];
+    if (observations < bucket_capture_min_hits) {
+      ++observations;
+    }
+    if (observations < bucket_capture_min_hits) {
+      COUNTER_INC(musa_pcp_bucket_capture_deferred_total);
+      return false;
+    }
+  }
+  bool vmm_pool_reusable = false;
+  if (!prefill_graphs_.empty() && supports_graph_vmm_pool() &&
+      execution_config.enable_graph_vmm_pool()) {
+    bool has_covering_bucket = false;
+    for (const auto& entry : prefill_graphs_) {
+      if (!entry.first.empty() && entry.first[0] >= bucket_num_tokens) {
+        has_covering_bucket = true;
+        break;
+      }
+    }
+    if (has_covering_bucket) {
+      std::lock_guard<std::mutex> lock(vmm_mutex_);
+      const auto pool_it = vmm_pools_.find(kPhysicalPoolIdPrefill);
+      vmm_pool_reusable = pool_it != vmm_pools_.end() && pool_it->second &&
+                          pool_it->second->capture_pool != nullptr &&
+                          pool_it->second->capture_pool->mapped_size() > 0;
+    }
+  }
   const int32_t reserve_mb = execution_config.musa_prefill_warmup_reserve_mb();
   const std::size_t required_free_bytes =
-      prefill_capture_required_free_bytes(reserve_mb);
+      prefill_capture_required_free_bytes(reserve_mb, vmm_pool_reusable);
   c10::musa::MUSAGuard device_guard(device_.index());
   std::size_t physical_free_bytes = 0;
   std::size_t physical_total_bytes = 0;
@@ -4218,7 +4609,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
                     /*cache_hit=*/false,
                     prefill_graphs_oom_latched_,
                     physical_free_bytes,
-                    reserve_mb);
+                    reserve_mb,
+                    vmm_pool_reusable);
   if (!mem_ok) {
     // Release any idle blocks cached by MUSACachingAllocator on other streams
     // before concluding that physical memory is exhausted.
@@ -4231,7 +4623,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
                  /*cache_hit=*/false,
                  prefill_graphs_oom_latched_,
                  physical_free_bytes,
-                 reserve_mb);
+                 reserve_mb,
+                 vmm_pool_reusable);
   }
   const bool agreed_admit = agree_bool_across_model_group(mem_ok);
   if (!agreed_admit) {
@@ -4240,22 +4633,65 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
                  << "free memory: free_mb="
                  << (physical_free_bytes / (1024 * 1024))
                  << " required_mb=" << (required_free_bytes / (1024 * 1024))
+                 << " vmm_pool_reusable=" << vmm_pool_reusable
                  << " retained_entries=" << prefill_graphs_.size()
                  << " bucket_num_tokens=" << bucket_num_tokens
                  << "; latching prefill graph cache and falling back to eager "
                     "mode.";
     return false;
   }
+  if (bucket_capture_min_hits > 0) {
+    COUNTER_INC(musa_pcp_bucket_capture_admitted_total);
+  }
   return true;
 }
 
+namespace {
+
+std::vector<int32_t> pcp_bucket_capacities(const ModelInputParams& params,
+                                           const runtime::Options& options) {
+  if (options.cp_size() != 2 || !util::get_bool_env("XLLM_MUSA_PCP", true) ||
+      !util::get_bool_env("XLLM_MUSA_PCP_LOCAL_TOKEN_BUCKET", false) ||
+      !util::get_bool_env("XLLM_MUSA_PCP_MULTIBATCH_GRAPH", false) ||
+      (!params.embedding.linear_state_ids.empty() &&
+       !util::get_bool_env("XLLM_MUSA_PCP_GDN_GRAPH", false))) {
+    return {};
+  }
+  return layer::musa_pcp::multibatch_bucket_capacities(
+      params.attention.host.q_seq_lens,
+      params.attention.host.kv_seq_lens,
+      params.meta.batch_forward_type.is_prefill(),
+      static_cast<int32_t>(
+          util::get_int_env("XLLM_MUSA_PCP_LOCAL_TOKEN_STRIDE", 1024)),
+      options.max_tokens_per_batch(),
+      /*lengths_are_cumulative=*/true);
+}
+
+}  // namespace
+
 uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
     uint32_t num_tokens,
-    const ModelInputParams& params) const {
+    const ModelInputParams& params,
+    bool has_interior_checkpoints) const {
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
-  if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
+  if (num_sequences == 1) {
+    const int32_t ckpt_bucket = single_checkpoint_runner_bucket_tokens(
+        num_tokens, params, options_, has_interior_checkpoints);
+    if (ckpt_bucket > 0) {
+      return ckpt_bucket <= options_.max_tokens_per_batch()
+                 ? static_cast<uint32_t>(ckpt_bucket)
+                 : 0;
+    }
+  }
+  const std::vector<int32_t> capacities =
+      pcp_bucket_capacities(params, options_);
+  if (!capacities.empty()) {
+    return static_cast<uint32_t>(capacities[0] + capacities[1]);
+  }
+  if (num_sequences > 1 &&
+      (options_.cp_size() > 1 || !params.embedding.linear_state_ids.empty())) {
     return num_tokens;
   }
   const int64_t bucket_num_tokens =
@@ -4269,27 +4705,71 @@ uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
 
 std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
     uint32_t num_tokens,
-    const ModelInputParams& params) const {
+    const ModelInputParams& params,
+    bool has_interior_checkpoints) const {
   const std::vector<int32_t>& q_seq_lens = params.attention.host.q_seq_lens;
+  const std::vector<int32_t> capacities =
+      pcp_bucket_capacities(params, options_);
+  if (!capacities.empty()) {
+    const bool any_history =
+        params.attention.host.kv_seq_lens.back() > q_seq_lens.back();
+    const bool continues =
+        params.meta.batch_forward_type.is_chunked_prefill() || any_history;
+    return {capacities[0] + capacities[1],
+            continues ? 1 : 0,
+            2,
+            static_cast<int32_t>(q_seq_lens.size() - 1),
+            capacities[0],
+            capacities[1],
+            continues ? 1 : 0,
+            params.skip_pcp_gather ? 1 : 0,
+            params.pcp_input_is_sharded ? 1 : 0};
+  }
   std::vector<int32_t> key;
-  key.reserve(q_seq_lens.size() + 3);
-  key.emplace_back(
-      static_cast<int32_t>(get_prefill_graph_num_tokens(num_tokens, params)));
+  key.reserve(2 * q_seq_lens.size() + params.attention.host.kv_seq_lens.size() +
+              6);
+  key.emplace_back(static_cast<int32_t>(get_prefill_graph_num_tokens(
+      num_tokens, params, has_interior_checkpoints)));
   key.emplace_back(params.meta.batch_forward_type.is_chunked_prefill() ? 1 : 0);
-  // A single sequence captures attention and GDN inside the graph, while a
-  // multi-sequence batch runs them between the captured segments.
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
   key.emplace_back(num_sequences == 1 ? 1 : 0);
-  // Multi-sequence Qwen3.5 GDN lays out its padded per-sequence inputs from
-  // the host query lengths, so each length layout is captured separately.
-  if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
+  if (num_sequences > 1 && !params.embedding.linear_state_ids.empty() &&
+      options_.cp_size() <= 1) {
     key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
   }
   if (options_.cp_size() > 1) {
+    if (num_sequences > 1) {
+      key.emplace_back(static_cast<int32_t>(num_sequences));
+      key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
+      const std::vector<int32_t>& kv_seq_lens =
+          params.attention.host.kv_seq_lens;
+      const std::vector<int32_t> front_lens =
+          layer::musa_pcp::multibatch_front_lens(
+              q_seq_lens,
+              kv_seq_lens,
+              params.meta.batch_forward_type.is_prefill(),
+              /*lengths_are_cumulative=*/true);
+      key.emplace_back(front_lens.empty() ? 0 : 1);
+      if (front_lens.empty()) {
+        key.insert(key.end(), kv_seq_lens.begin(), kv_seq_lens.end());
+      } else {
+        key.insert(key.end(), front_lens.begin(), front_lens.end());
+        bool any_history = false;
+        for (size_t b = 0; b < q_seq_lens.size(); ++b) {
+          any_history = any_history || kv_seq_lens[b] > q_seq_lens[b];
+        }
+        key.emplace_back(any_history ? 1 : 0);
+      }
+    }
     key.emplace_back(params.skip_pcp_gather ? 1 : 0);
     key.emplace_back(params.pcp_input_is_sharded ? 1 : 0);
+    const int32_t single_ckpt_front = single_checkpoint_runner_front_rows(
+        num_tokens, params, options_, has_interior_checkpoints);
+    if (single_ckpt_front > 0) {
+      key.emplace_back(single_ckpt_front);
+    }
   }
   return key;
 }

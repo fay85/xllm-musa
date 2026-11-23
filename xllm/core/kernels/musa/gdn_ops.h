@@ -54,6 +54,9 @@ struct MateGatedDeltaRulePrefillParams {
   std::optional<torch::Tensor> kkt_output = std::nullopt;
   bool use_qk_l2norm_in_kernel = true;
   bool allow_inplace_qk_l2norm = false;
+  // Packed token storage is a capacity; live device cu_seqlens may be shorter
+  // and change between graph replays. Keep padding outside recurrent state.
+  bool use_fixed_token_capacity = false;
 };
 
 struct MateGatedDeltaRuleDecodeParams {

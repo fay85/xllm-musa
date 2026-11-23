@@ -81,6 +81,24 @@ class Qwen3VLForConditionalGenerationBase : public torch::nn::Module {
     MMDict multimodal_embeds;
     auto merge_size = model_args_.mm_image_merge_size();
     if (image_input) {
+#if defined(USE_MUSA)
+      auto grid_cpu = (image_input->image_grid_thw.is_cpu()
+                           ? image_input->image_grid_thw
+                           : image_input->image_grid_thw.to(torch::kCPU))
+                          .contiguous()
+                          .to(torch::kLong);
+      auto image_embeds =
+          visual_(image_input->pixel_values.to(options_), grid_cpu);
+      const int64_t merge_area =
+          static_cast<int64_t>(merge_size) * static_cast<int64_t>(merge_size);
+      const int64_t* grid_ptr = grid_cpu.data_ptr<int64_t>();
+      std::vector<int64_t> image_tokens_vec(grid_cpu.size(0));
+      for (int64_t i = 0; i < grid_cpu.size(0); ++i) {
+        image_tokens_vec[i] =
+            (grid_ptr[i * 3 + 0] * grid_ptr[i * 3 + 1] * grid_ptr[i * 3 + 2]) /
+            merge_area;
+      }
+#else
       auto image_embeds =
           visual_(image_input->pixel_values.to(options_),
                   image_input->image_grid_thw.to(options_.device()));
@@ -94,10 +112,29 @@ class Qwen3VLForConditionalGenerationBase : public torch::nn::Module {
       std::vector<int64_t> image_tokens_vec(
           image_tokens.data_ptr<int64_t>(),
           image_tokens.data_ptr<int64_t>() + image_tokens.numel());
+#endif
       multimodal_embeds["image|embedding"] =
           image_embeds.split(image_tokens_vec, /*dim=*/0);
     }
     if (video_input) {
+#if defined(USE_MUSA)
+      auto grid_cpu = (video_input->video_grid_thw.is_cpu()
+                           ? video_input->video_grid_thw
+                           : video_input->video_grid_thw.to(torch::kCPU))
+                          .contiguous()
+                          .to(torch::kLong);
+      auto video_embeds =
+          visual_(video_input->pixel_values_videos.to(options_), grid_cpu);
+      const int64_t merge_area =
+          static_cast<int64_t>(merge_size) * static_cast<int64_t>(merge_size);
+      const int64_t* grid_ptr = grid_cpu.data_ptr<int64_t>();
+      std::vector<int64_t> video_tokens_vec(grid_cpu.size(0));
+      for (int64_t i = 0; i < grid_cpu.size(0); ++i) {
+        video_tokens_vec[i] =
+            (grid_ptr[i * 3 + 0] * grid_ptr[i * 3 + 1] * grid_ptr[i * 3 + 2]) /
+            merge_area;
+      }
+#else
       auto video_embeds =
           visual_(video_input->pixel_values_videos.to(options_),
                   video_input->video_grid_thw.to(options_.device()));
@@ -111,6 +148,7 @@ class Qwen3VLForConditionalGenerationBase : public torch::nn::Module {
       std::vector<int64_t> video_tokens_vec(
           video_tokens.data_ptr<int64_t>(),
           video_tokens.data_ptr<int64_t>() + video_tokens.numel());
+#endif
       multimodal_embeds["video|embedding"] =
           video_embeds.split(video_tokens_vec, /*dim=*/0);
     }

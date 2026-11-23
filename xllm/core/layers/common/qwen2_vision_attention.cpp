@@ -77,9 +77,8 @@ Qwen2VisionAttentionImpl::Qwen2VisionAttentionImpl(const ModelContext& context,
 std::vector<torch::Tensor> Qwen2VisionAttentionImpl::split_qkv(
     const torch::Tensor& qkv) {
   // [s, b, 3 * head * head_dim]
-  auto sizes = qkv.sizes();
-  int64_t seq_len = qkv.size(0);
-  int64_t bs = qkv.sizes() == 3 ? qkv.size(1) : 1;
+  const int64_t seq_len = qkv.size(0);
+  const int64_t bs = qkv.dim() == 3 ? qkv.size(1) : 1;
   torch::Tensor qkv_gathered =
       xllm::parallel_state::all_gather_interleaved(qkv, tp_group_);
 

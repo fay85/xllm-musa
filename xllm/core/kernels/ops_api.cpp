@@ -424,17 +424,43 @@ void fused_layernorm(FusedLayerNormParams& params) {
     if (params.output.defined()) {
       CHECK(params.output.sizes() == norm_output.sizes())
           << "LayerNorm output size mismatch";
+      if (params.residual_out.has_value() && params.residual_out->defined()) {
+        CHECK(!params.output.is_alias_of(params.residual_out.value()))
+            << "LayerNorm output must not alias residual_out";
+      }
       params.output.copy_(norm_output);
     } else {
       params.output = norm_output;
     }
   } else if (params.residual.has_value()) {
+#if defined(USE_MUSA)
+    if (params.add_gamma_offset) {
+      musa::fused_add_gemma_rms_norm(
+          params.input, params.residual.value(), params.weight, params.eps);
+    } else {
+      musa::fused_add_rms_norm(
+          params.input, params.residual.value(), params.weight, params.eps);
+    }
+#else
     cuda::fused_add_rms_norm(
         params.input, params.residual.value(), params.weight, params.eps);
+#endif
     params.output = params.input;
     params.residual_out = params.residual;
   } else {
+#if defined(USE_MUSA)
+    if (!params.output.defined()) {
+      params.output = torch::empty_like(params.input);
+    }
+    if (params.add_gamma_offset) {
+      musa::gemma_rms_norm(
+          params.output, params.input, params.weight, params.eps);
+    } else {
+      musa::rms_norm(params.output, params.input, params.weight, params.eps);
+    }
+#else
     cuda::rms_norm(params.output, params.input, params.weight, params.eps);
+#endif
   }
 #elif defined(USE_ILU)
   if (params.residual.has_value()) {

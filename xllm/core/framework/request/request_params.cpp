@@ -497,6 +497,9 @@ RequestParams::RequestParams(const proto::ChatRequest& request,
 RequestParams::RequestParams(const proto::MMChatRequest& request,
                              const std::string& x_rid,
                              const std::string& x_rtime) {
+  if (request.has_routing()) {
+    decode_address = request.routing().decode_name();
+  }
   request_id = generate_chat_request_id();
   x_request_id = x_rid;
   x_request_time = x_rtime;

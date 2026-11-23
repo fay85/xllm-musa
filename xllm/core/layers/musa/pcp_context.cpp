@@ -18,8 +18,11 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <utility>
 
 #include "core/common/types.h"
@@ -27,11 +30,16 @@ limitations under the License.
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/ops_api.h"
 #include "core/util/env_var.h"
 
 namespace xllm::layer::musa_pcp {
 namespace {
+
+thread_local BucketInputs* active_bucket_inputs = nullptr;
+thread_local const std::vector<int32_t>* active_single_checkpoint_slots = nullptr;
+std::atomic<bool> active_single_checkpoint_warmup{false};
 
 // Splits land on the 256-row tile of the FP8 prefill GEMMs, where a partial
 // tile costs a full one. That also keeps the 64-row Mate GDN chunk partition
@@ -49,8 +57,23 @@ constexpr int32_t kSupportedCpSize = 2;
 // causal attention over (query, key) pairs, whose keys include the rows
 // already in the cache, and writing the K/V rows of the other rank into its
 // cache. Measured for Qwen3.8 FP8 on MTT S5000.
-constexpr double kAttentionCostPerPair = 9.4e-6;
+constexpr double kDefaultAttentionCostPerPair = 4.8e-6;
 constexpr double kOtherRankKvCostPerRow = 0.04;
+
+double attention_cost_per_pair() {
+  static const double cost = []() {
+    const char* env = std::getenv("XLLM_MUSA_PCP_ATTN_COST_PER_PAIR");
+    if (env != nullptr && env[0] != '\0') {
+      char* end = nullptr;
+      const double parsed = std::strtod(env, &end);
+      if (end != env && parsed > 0.0) {
+        return parsed;
+      }
+    }
+    return kDefaultAttentionCostPerPair;
+  }();
+  return cost;
+}
 
 bool pcp_enabled() {
   static const bool enabled = util::get_bool_env("XLLM_MUSA_PCP", true);
@@ -79,7 +102,7 @@ double rank_cost(int32_t begin,
   const double first_keys = static_cast<double>(history_rows) + begin;
   const double last_keys = static_cast<double>(history_rows) + end;
   const double pairs = 0.5 * (last_keys * last_keys - first_keys * first_keys);
-  return rows + kAttentionCostPerPair * pairs +
+  return rows + attention_cost_per_pair() * pairs +
          kOtherRankKvCostPerRow * other_rank_kv_rows;
 }
 
@@ -259,6 +282,352 @@ void write_kv_rows(const torch::Tensor& kv_rows,
 
 }  // namespace
 
+std::vector<int32_t> multibatch_front_lens(
+    const std::vector<int32_t>& q_seq_lens,
+    const std::vector<int32_t>& kv_seq_lens,
+    bool is_prefill,
+    bool lengths_are_cumulative) {
+  if (lengths_are_cumulative) {
+    if (q_seq_lens.size() < 3 || q_seq_lens.size() != kv_seq_lens.size() ||
+        q_seq_lens.front() != 0 || kv_seq_lens.front() != 0) {
+      return {};
+    }
+    std::vector<int32_t> queries;
+    std::vector<int32_t> keys;
+    queries.reserve(q_seq_lens.size() - 1);
+    keys.reserve(kv_seq_lens.size() - 1);
+    for (size_t b = 1; b < q_seq_lens.size(); ++b) {
+      queries.emplace_back(q_seq_lens[b] - q_seq_lens[b - 1]);
+      keys.emplace_back(kv_seq_lens[b] - kv_seq_lens[b - 1]);
+    }
+    return multibatch_front_lens(queries, keys, is_prefill);
+  }
+  if (!pcp_multibatch_enabled() || q_seq_lens.size() < 2 ||
+      q_seq_lens.size() != kv_seq_lens.size()) {
+    return {};
+  }
+  const int32_t max_chunk =
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  bool all_single_chunk = is_prefill;
+  for (size_t b = 0; b < q_seq_lens.size(); ++b) {
+    if (q_seq_lens[b] < kMinBatchSeqRows || kv_seq_lens[b] < q_seq_lens[b]) {
+      return {};
+    }
+    all_single_chunk = all_single_chunk && kv_seq_lens[b] == q_seq_lens[b] &&
+                       (max_chunk <= 0 || q_seq_lens[b] < max_chunk);
+  }
+  const bool replicate_final_state =
+      InstanceRole(::xllm::DisaggPDConfig::get_instance().instance_role()) !=
+          InstanceRole::PREFILL ||
+      KVCacheConfig::get_instance().enable_prefix_cache() || !all_single_chunk;
+  std::vector<int32_t> front_lens;
+  front_lens.reserve(q_seq_lens.size());
+  for (size_t b = 0; b < q_seq_lens.size(); ++b) {
+    const int32_t front = balanced_first_rows(q_seq_lens[b],
+                                              kv_seq_lens[b] - q_seq_lens[b],
+                                              replicate_final_state,
+                                              kBatchRowAlignment,
+                                              kMinBatchTailRows);
+    if (front < kDefaultConvStateLen ||
+        q_seq_lens[b] - front < kDefaultConvStateLen) {
+      return {};
+    }
+    front_lens.emplace_back(front);
+  }
+  if (util::get_bool_env("XLLM_MUSA_PCP_LOCAL_TOKEN_BUCKET", false)) {
+    const int32_t stride = static_cast<int32_t>(
+        util::get_int_env("XLLM_MUSA_PCP_LOCAL_TOKEN_STRIDE", 1024));
+    if (stride > 0 && stride % kBatchRowAlignment == 0) {
+      const int64_t total = std::accumulate(
+          q_seq_lens.begin(), q_seq_lens.end(), int64_t{0});
+      int64_t first = std::accumulate(
+          front_lens.begin(), front_lens.end(), int64_t{0});
+      const int64_t min_local_cap =
+          ((total + 2 * static_cast<int64_t>(stride) - 1) /
+           (2 * static_cast<int64_t>(stride))) *
+          static_cast<int64_t>(stride);
+      const int32_t min_front =
+          std::max(kBatchRowAlignment, kDefaultConvStateLen);
+      const int32_t min_back =
+          std::max(kMinBatchTailRows, kDefaultConvStateLen);
+      while (first > min_local_cap) {
+        size_t best_idx = front_lens.size();
+        int32_t best_slack = 0;
+        for (size_t b = 0; b < front_lens.size(); ++b) {
+          const int32_t slack = front_lens[b] - min_front;
+          if (slack >= kBatchRowAlignment && slack > best_slack) {
+            best_slack = slack;
+            best_idx = b;
+          }
+        }
+        if (best_idx == front_lens.size()) {
+          break;
+        }
+        front_lens[best_idx] -= kBatchRowAlignment;
+        first -= kBatchRowAlignment;
+      }
+      while (total - first > min_local_cap) {
+        size_t best_idx = front_lens.size();
+        int32_t best_slack = 0;
+        for (size_t b = 0; b < front_lens.size(); ++b) {
+          const int32_t back = q_seq_lens[b] - front_lens[b];
+          const int32_t slack = back - min_back;
+          if (slack >= kBatchRowAlignment && slack > best_slack) {
+            best_slack = slack;
+            best_idx = b;
+          }
+        }
+        if (best_idx == front_lens.size()) {
+          break;
+        }
+        front_lens[best_idx] += kBatchRowAlignment;
+        first += kBatchRowAlignment;
+      }
+    }
+  }
+  return front_lens;
+}
+
+std::vector<int32_t> multibatch_bucket_capacities(
+    const std::vector<int32_t>& q_seq_lens,
+    const std::vector<int32_t>& kv_seq_lens,
+    bool is_prefill,
+    int32_t stride,
+    int64_t max_tokens,
+    bool lengths_are_cumulative) {
+  if (stride <= 0 || stride % kBatchRowAlignment != 0) {
+    return {};
+  }
+  const std::vector<int32_t> front = multibatch_front_lens(
+      q_seq_lens, kv_seq_lens, is_prefill, lengths_are_cumulative);
+  if (front.empty()) {
+    return {};
+  }
+  const int64_t total =
+      lengths_are_cumulative
+          ? q_seq_lens.back()
+          : std::accumulate(q_seq_lens.begin(), q_seq_lens.end(), int64_t{0});
+  const int64_t first = std::accumulate(front.begin(), front.end(), int64_t{0});
+  const int64_t first_capacity = (first + stride - 1) / stride * stride;
+  const int64_t second_capacity =
+      (total - first + stride - 1) / stride * stride;
+  const int64_t local_capacity = std::max(first_capacity, second_capacity);
+  if (2 * local_capacity > max_tokens ||
+      2 * local_capacity > std::numeric_limits<int32_t>::max()) {
+    return {};
+  }
+  return {static_cast<int32_t>(local_capacity),
+          static_cast<int32_t>(local_capacity)};
+}
+
+void update_bucket_inputs(BucketInputs& inputs,
+                          const std::vector<int32_t>& queries,
+                          const std::vector<int32_t>& keys,
+                          bool is_prefill) {
+  CHECK_EQ(queries.size(), static_cast<size_t>(inputs.batch_size));
+  const std::vector<int32_t> front =
+      multibatch_front_lens(queries, keys, is_prefill);
+  CHECK_EQ(front.size(), queries.size());
+  inputs.front_lens = front;
+  inputs.back_lens.resize(queries.size());
+  inputs.kv_lens = keys;
+  inputs.any_history = false;
+  const int64_t capacity = inputs.rank0_capacity + inputs.rank1_capacity;
+  const int64_t total =
+      std::accumulate(queries.begin(), queries.end(), int64_t{0});
+  const int64_t count = inputs.batch_size;
+  std::vector<int64_t> indices(static_cast<size_t>(2 * capacity + 3 * count),
+                               0);
+  int64_t* rank0 = indices.data();
+  int64_t* rank1 = rank0 + inputs.rank0_capacity;
+  int64_t* unpermute = rank1 + inputs.rank1_capacity;
+  int64_t* conv = unpermute + capacity;
+  std::fill(rank0, rank0 + capacity, total < capacity ? total : 0);
+  const int64_t metadata_width = 4 * count + 2;
+  std::vector<int32_t> metadata(static_cast<size_t>(2 * metadata_width), 0);
+  int32_t global_offset = 0;
+  int32_t first_offset = 0;
+  int32_t second_offset = 0;
+  for (int32_t b = 0; b < inputs.batch_size; ++b) {
+    const int32_t first = front[b];
+    const int32_t second = queries[b] - first;
+    inputs.back_lens[b] = second;
+    inputs.any_history = inputs.any_history || keys[b] > queries[b];
+    CHECK_LE(first_offset + first, inputs.rank0_capacity);
+    CHECK_LE(second_offset + second, inputs.rank1_capacity);
+    for (int32_t t = 0; t < first; ++t) {
+      rank0[first_offset + t] = global_offset + t;
+      unpermute[global_offset + t] = first_offset + t;
+    }
+    for (int32_t t = 0; t < second; ++t) {
+      rank1[second_offset + t] = global_offset + first + t;
+      unpermute[global_offset + first + t] =
+          inputs.rank0_capacity + second_offset + t;
+    }
+    first_offset += first;
+    second_offset += second;
+    for (int32_t c = 0; c < kDefaultConvStateLen; ++c) {
+      conv[b * kDefaultConvStateLen + c] =
+          first_offset - kDefaultConvStateLen + c;
+    }
+    for (int32_t rank = 0; rank < kSupportedCpSize; ++rank) {
+      int32_t* data = metadata.data() + rank * metadata_width;
+      const int32_t query = rank == 0 ? first : second;
+      const int32_t key = rank == 0 ? keys[b] - queries[b] + first : keys[b];
+      data[b + 1] = data[b] + query;
+      data[count + 1 + b + 1] = data[count + 1 + b] + key;
+      data[2 * (count + 1) + b] = query;
+      data[2 * (count + 1) + count + b] = key;
+    }
+    global_offset += queries[b];
+  }
+  inputs.indices.copy_(torch::tensor(indices, torch::kLong));
+  inputs.metadata.copy_(torch::tensor(metadata, torch::kInt32));
+}
+
+std::shared_ptr<BucketInputs> make_bucket_inputs(
+    const std::vector<int32_t>& queries,
+    const std::vector<int32_t>& keys,
+    bool is_prefill,
+    const std::vector<int32_t>& capacities,
+    const torch::Device& device) {
+  CHECK_EQ(capacities.size(), 2u);
+  auto inputs = std::make_shared<BucketInputs>();
+  inputs->batch_size = static_cast<int32_t>(queries.size());
+  inputs->rank0_capacity = capacities[0];
+  inputs->rank1_capacity = capacities[1];
+  const int64_t capacity = capacities[0] + capacities[1];
+  const auto options =
+      torch::TensorOptions().dtype(torch::kLong).device(device);
+  inputs->indices =
+      torch::empty({2 * capacity + 3 * inputs->batch_size}, options);
+  inputs->metadata = torch::empty({2 * (4 * inputs->batch_size + 2)},
+                                  options.dtype(torch::kInt32));
+  update_bucket_inputs(*inputs, queries, keys, is_prefill);
+  return inputs;
+}
+
+BucketInputsScope::BucketInputsScope(BucketInputs* inputs)
+    : previous_(active_bucket_inputs) {
+  active_bucket_inputs = inputs;
+}
+
+BucketInputsScope::~BucketInputsScope() { active_bucket_inputs = previous_; }
+
+bool has_bucket_inputs() { return active_bucket_inputs != nullptr; }
+
+const BucketInputs* get_bucket_inputs() { return active_bucket_inputs; }
+
+namespace {
+
+void build_bucket_context(const AttentionMetadata& global,
+                          ProcessGroup* group,
+                          const BucketInputs& inputs,
+                          std::optional<Context>* context) {
+  Context& result = context->emplace();
+  result.cp_group = group;
+  result.cp_rank = group->rank();
+  result.batch_size = inputs.batch_size;
+  result.is_batch = true;
+  result.row_offsets = {
+      0, inputs.rank0_capacity, inputs.rank0_capacity + inputs.rank1_capacity};
+  result.max_rows = std::max(inputs.rank0_capacity, inputs.rank1_capacity);
+  result.replicate_final_state = true;
+  result.global_slot_mapping = global.slot_mapping;
+  const int64_t capacity = result.row_offsets.back();
+  result.rank0_row_indices = inputs.indices.narrow(0, 0, inputs.rank0_capacity);
+  result.rank1_row_indices =
+      inputs.indices.narrow(0, inputs.rank0_capacity, inputs.rank1_capacity);
+  result.unpermute_indices = inputs.indices.narrow(0, capacity, capacity);
+  result.conv_prefix_row_indices =
+      inputs.indices.narrow(0, 2 * capacity, 3 * inputs.batch_size);
+  int32_t end = 0;
+  result.rank0_seq_ends.reserve(inputs.front_lens.size());
+  for (const int32_t length : inputs.front_lens) {
+    end += length;
+    result.rank0_seq_ends.emplace_back(end);
+  }
+  result.rank0_slot_mapping =
+      global.slot_mapping.index_select(0, result.rank0_row_indices);
+  result.rank1_slot_mapping =
+      global.slot_mapping.index_select(0, result.rank1_row_indices);
+  AttentionMetadata& local = result.local_metadata;
+  local = global;
+  const int64_t count = inputs.batch_size;
+  const int64_t offset = result.cp_rank * (4 * count + 2);
+  local.q_cu_seq_lens = inputs.metadata.narrow(0, offset, count + 1);
+  local.kv_cu_seq_lens =
+      inputs.metadata.narrow(0, offset + count + 1, count + 1);
+  local.q_seq_lens = inputs.metadata.narrow(0, offset + 2 * (count + 1), count);
+  local.kv_seq_lens =
+      inputs.metadata.narrow(0, offset + 2 * (count + 1) + count, count);
+  local.q_seq_lens_vec =
+      result.cp_rank == 0 ? inputs.front_lens : inputs.back_lens;
+  local.kv_seq_lens_vec = inputs.kv_lens;
+  if (result.cp_rank == 0) {
+    for (int32_t b = 0; b < inputs.batch_size; ++b) {
+      local.kv_seq_lens_vec[b] -= inputs.back_lens[b];
+    }
+  }
+  local.slot_mapping = slots_of(result, result.cp_rank);
+  if (global.mrope_cos.defined()) {
+    local.mrope_cos = shard_rows(global.mrope_cos, result, 0);
+    local.mrope_sin = shard_rows(global.mrope_sin, result, 0);
+  }
+  local.max_query_len =
+      result.cp_rank == 0 ? inputs.rank0_capacity : inputs.rank1_capacity;
+  local.max_seq_len = global.block_table.defined()
+                          ? global.block_table.size(1) *
+                                KVCacheConfig::get_instance().block_size()
+                          : global.max_seq_len;
+  local.total_kv_len = std::accumulate(
+      local.kv_seq_lens_vec.begin(), local.kv_seq_lens_vec.end(), int64_t{0});
+  const bool continues =
+      result.cp_rank != 0 || inputs.any_history || global.is_chunked_prefill;
+  local.is_prefill = !continues;
+  local.is_chunked_prefill = continues;
+  local.has_initial_states =
+      result.cp_rank == 0
+          ? global.has_initial_states
+          : torch::ones({count},
+                        global.q_cu_seq_lens.options().dtype(torch::kBool));
+  local.fa3_metadata.fa3_scheduler_metadata = torch::Tensor();
+  local.pcp_context = &result;
+}
+
+}  // namespace
+
+int32_t single_prefill_front_rows(int32_t query_rows, int32_t history_rows) {
+  return balanced_first_rows(query_rows, history_rows,
+                             /*replicate_final_state=*/true);
+}
+
+SingleCheckpointSlotsScope::SingleCheckpointSlotsScope(
+    const std::vector<int32_t>* slots)
+    : previous_(active_single_checkpoint_slots) {
+  active_single_checkpoint_slots = slots;
+}
+
+SingleCheckpointSlotsScope::~SingleCheckpointSlotsScope() {
+  active_single_checkpoint_slots = previous_;
+}
+
+const std::vector<int32_t>* single_checkpoint_slots() {
+  return active_single_checkpoint_slots;
+}
+
+SingleCheckpointWarmupScope::SingleCheckpointWarmupScope()
+    : previous_(active_single_checkpoint_warmup.exchange(
+          true, std::memory_order_acq_rel)) {}
+
+SingleCheckpointWarmupScope::~SingleCheckpointWarmupScope() {
+  active_single_checkpoint_warmup.store(previous_, std::memory_order_release);
+}
+
+bool in_single_checkpoint_warmup() {
+  return active_single_checkpoint_warmup.load(std::memory_order_acquire);
+}
+
 void build_context(const AttentionMetadata& global_metadata,
                    const ParallelArgs& parallel_args,
                    int32_t num_rows,
@@ -274,6 +643,14 @@ void build_context(const AttentionMetadata& global_metadata,
       global_metadata.q_seq_lens_vec.empty() ||
       global_metadata.q_seq_lens_vec.size() !=
           global_metadata.kv_seq_lens_vec.size()) {
+    return;
+  }
+  if (active_bucket_inputs != nullptr) {
+    CHECK_EQ(num_rows,
+             active_bucket_inputs->rank0_capacity +
+                 active_bucket_inputs->rank1_capacity);
+    build_bucket_context(
+        global_metadata, cp_group, *active_bucket_inputs, context);
     return;
   }
   const size_t num_seqs = global_metadata.q_seq_lens_vec.size();
@@ -315,22 +692,19 @@ void build_context(const AttentionMetadata& global_metadata,
         KVCacheConfig::get_instance().enable_prefix_cache() ||
         !all_single_chunk;
 
-    std::vector<int32_t> front_lens(num_seqs, 0);
+    const std::vector<int32_t> front_lens =
+        multibatch_front_lens(global_metadata.q_seq_lens_vec,
+                              global_metadata.kv_seq_lens_vec,
+                              global_metadata.is_prefill);
+    if (front_lens.empty()) {
+      return;
+    }
     std::vector<int32_t> back_lens(num_seqs, 0);
     int32_t total_front_rows = 0;
     int32_t total_back_rows = 0;
     for (size_t b = 0; b < num_seqs; ++b) {
       const int32_t q_b = global_metadata.q_seq_lens_vec[b];
-      const int32_t f_b = balanced_first_rows(q_b,
-                                              history_vec[b],
-                                              replicate_final_state,
-                                              kBatchRowAlignment,
-                                              kMinBatchTailRows);
-      if (f_b < kDefaultConvStateLen ||
-          (q_b - f_b) < kDefaultConvStateLen) {
-        return;
-      }
-      front_lens[b] = f_b;
+      const int32_t f_b = front_lens[b];
       back_lens[b] = q_b - f_b;
       total_front_rows += f_b;
       total_back_rows += (q_b - f_b);
@@ -459,6 +833,23 @@ void build_context(const AttentionMetadata& global_metadata,
       local.kv_seq_lens = meta_device.narrow(
           /*dim=*/0, /*start=*/2 * (b_i64 + 1) + b_i64, /*length=*/b_i64);
     }
+    const bool capturing =
+        xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
+    if (capturing) {
+      if (is_rank0) {
+        local.kv_cu_seq_lens = global_metadata.kv_cu_seq_lens -
+                               global_metadata.q_cu_seq_lens +
+                               local.q_cu_seq_lens;
+        if (global_metadata.kv_seq_lens.defined() &&
+            global_metadata.q_seq_lens.defined()) {
+          local.kv_seq_lens = global_metadata.kv_seq_lens -
+                              global_metadata.q_seq_lens + local.q_seq_lens;
+        }
+      } else {
+        local.kv_cu_seq_lens = global_metadata.kv_cu_seq_lens;
+        local.kv_seq_lens = global_metadata.kv_seq_lens;
+      }
+    }
     local.q_seq_lens_vec = local_q_vec;
     local.kv_seq_lens_vec = std::move(local_kv_vec);
     if (global_metadata.slot_mapping.defined()) {
@@ -471,7 +862,12 @@ void build_context(const AttentionMetadata& global_metadata,
           shard_rows(global_metadata.mrope_sin, pcp_context, /*dim=*/0);
     }
     local.max_query_len = max_q_len;
-    local.max_seq_len = max_kv_len;
+    local.max_seq_len =
+        capturing && global_metadata.block_table.defined()
+            ? global_metadata.block_table.size(/*dim=*/1) *
+                  static_cast<int64_t>(
+                      KVCacheConfig::get_instance().block_size())
+            : max_kv_len;
     local.total_kv_len = total_kv_len;
     const bool continues_rows =
         !is_rank0 || any_history || global_metadata.is_chunked_prefill;
@@ -506,8 +902,12 @@ void build_context(const AttentionMetadata& global_metadata,
           InstanceRole::PREFILL ||
       KVCacheConfig::get_instance().enable_prefix_cache() ||
       !single_chunk_prompt;
-  const int32_t first_rows =
-      balanced_first_rows(num_rows, history_rows, replicate_final_state);
+  const int32_t effective_history_rows =
+      active_single_checkpoint_slots != nullptr
+          ? (history_rows > 0 ? 64 : 0)
+          : history_rows;
+  const int32_t first_rows = balanced_first_rows(
+      num_rows, effective_history_rows, replicate_final_state);
   if (first_rows == 0) {
     return;
   }

@@ -1207,8 +1207,19 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       // because host-to-device tensor creation is not graph safe.
       const bool has_device_cu =
           params.cu_seqlens.has_value() && params.cu_seqlens->defined();
-      if (has_device_cu && !need_unpack && pad_size == 0) {
-        return params.cu_seqlens->to(torch::kInt32).contiguous();
+      if (has_device_cu && !need_unpack) {
+        torch::Tensor device_cu =
+            params.cu_seqlens->to(torch::kInt32).contiguous();
+        if (params.use_fixed_token_capacity) {
+          device_cu = device_cu.clone();
+          device_cu.select(/*dim=*/0, /*index=*/num_seqs)
+              .fill_(static_cast<int32_t>(num_tokens));
+        } else if (pad_size > 0) {
+          device_cu = device_cu.clone();
+          device_cu.select(/*dim=*/0, /*index=*/num_seqs)
+              .add_(static_cast<int32_t>(pad_size));
+        }
+        return device_cu;
       }
       return torch::tensor(
           cu_host,
@@ -1216,7 +1227,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     }();
 
     torch::Tensor kkt_cu_seqlens;
-    if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack && pad_size == 0) {
+    if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack && pad_size == 0 &&
+        !params.use_fixed_token_capacity) {
       // With no pack/pad mutation, live cu_seqlens already ends at
       // num_tokens. KKT only reads the tensor, so alias it instead of doing a
       // redundant device clone and endpoint fill on every GDN layer.
@@ -1274,6 +1286,9 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       } else {
         output = torch::empty({1, num_tokens, num_v_heads, head_v_dim},
                               value.options());
+      }
+      if (params.use_fixed_token_capacity) {
+        output.zero_();
       }
       if (params.final_state.has_value() && params.final_state->defined()) {
         final_state = *params.final_state;
