@@ -18,11 +18,13 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <map>
 #include <numeric>
+#include <thread>
 #include <tuple>
 #include <unordered_set>
 
@@ -31,9 +33,6 @@ limitations under the License.
 #include "util/env_var.h"
 #include "util/timer.h"
 #if defined(USE_MUSA)
-#include <chrono>
-#include <thread>
-
 #include "core/framework/kv_cache_transfer/mooncake_open_session_retry.h"
 #include "core/framework/kv_cache_transfer/mooncake_segment_reopen.h"
 #endif
@@ -121,6 +120,7 @@ bool multiply_overflows(uint64_t lhs, uint64_t rhs) {
 }
 
 bool wait_batch(TransferEngine* engine, BatchID batch_id) {
+  uint32_t polls = 0;
   while (true) {
     TransferStatus status;
     mooncake::Status result = engine->getBatchTransferStatus(batch_id, status);
@@ -138,6 +138,13 @@ bool wait_batch(TransferEngine* engine, BatchID batch_id) {
     if (status.s == TransferStatusEnum::TIMEOUT) {
       LOG(ERROR) << "Sync data transfer timeout";
       return false;
+    }
+    if (++polls <= 64) {
+#if defined(__x86_64__) || defined(_M_X64)
+      __builtin_ia32_pause();
+#endif
+    } else {
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
   }
 }
@@ -1242,6 +1249,19 @@ bool MooncakeTransferEngine::move_memory_regions(
     const std::string& remote_addr,
     const std::vector<ByteRegion>& regions,
     MoveOpcode move_opcode) {
+  return move_memory_regions(remote_addr, regions, move_opcode, nullptr);
+}
+
+bool MooncakeTransferEngine::move_memory_regions(
+    const std::string& remote_addr,
+    const std::vector<ByteRegion>& regions,
+    MoveOpcode move_opcode,
+    MoveRegionStats* stats) {
+  if (stats != nullptr) {
+    *stats = MoveRegionStats{};
+    stats->input_regions = regions.size();
+    stats->staged = false;
+  }
   if (regions.empty()) {
     return true;
   }
@@ -1273,25 +1293,107 @@ bool MooncakeTransferEngine::move_memory_regions(
 
   std::vector<ByteRegion> flat_regions;
   const std::vector<ByteRegion>* transfer_regions = &regions;
-  for (const ByteRegion& region : regions) {
-    if (byte_region_repeats(region) > 1) {
+  bool needs_coalesce = false;
+  for (size_t i = 0; i < regions.size(); ++i) {
+    if (byte_region_repeats(regions[i]) > 1) {
       transfer_regions = &flat_regions;
       break;
     }
-  }
-  if (transfer_regions == &flat_regions) {
-    for (const ByteRegion& region : regions) {
-      const uint64_t repeats = byte_region_repeats(region);
-      for (uint64_t piece = 0; piece < repeats; ++piece) {
-        ByteRegion flat = region;
-        flat.local_offset += piece * region.local_stride;
-        flat.remote_offset += piece * region.remote_stride;
-        flat.repeat_count = 1;
-        flat.local_stride = 0;
-        flat.remote_stride = 0;
-        flat_regions.emplace_back(flat);
+    if (i > 0 && !needs_coalesce) {
+      const ByteRegion& prev = regions[i - 1];
+      const ByteRegion& cur = regions[i];
+      const auto prev_key = std::tie(prev.remote_buffer_id,
+                                     prev.local_buffer_id,
+                                     prev.remote_offset,
+                                     prev.local_offset);
+      const auto cur_key = std::tie(cur.remote_buffer_id,
+                                    cur.local_buffer_id,
+                                    cur.remote_offset,
+                                    cur.local_offset);
+      if (prev_key >= cur_key ||
+          (prev.remote_buffer_id == cur.remote_buffer_id &&
+           prev.local_buffer_id == cur.local_buffer_id &&
+           prev.local_offset <=
+               std::numeric_limits<uint64_t>::max() - prev.length &&
+           prev.remote_offset <=
+               std::numeric_limits<uint64_t>::max() - prev.length &&
+           prev.local_offset + prev.length == cur.local_offset &&
+           prev.remote_offset + prev.length == cur.remote_offset)) {
+        needs_coalesce = true;
       }
     }
+  }
+  if (transfer_regions == &flat_regions || needs_coalesce) {
+    std::vector<ByteRegion> expanded;
+    expanded.reserve(regions.size());
+    for (const ByteRegion& region : regions) {
+      const uint64_t repeats = byte_region_repeats(region);
+      const uint64_t max_offset = std::numeric_limits<uint64_t>::max();
+      if (region.length == 0 ||
+          (region.local_stride != 0 &&
+           repeats - 1 >
+               (max_offset - region.local_offset) / region.local_stride) ||
+          (region.remote_stride != 0 &&
+           repeats - 1 >
+               (max_offset - region.remote_offset) / region.remote_stride)) {
+        LOG(ERROR) << "Invalid repeated MoonCake byte-region extent";
+        return false;
+      }
+      if (repeats <= 1) {
+        expanded.emplace_back(region);
+      } else if (region.local_stride == region.length &&
+                 region.remote_stride == region.length &&
+                 !multiply_overflows(region.length, repeats)) {
+        ByteRegion dense = region;
+        dense.length *= repeats;
+        dense.repeat_count = 1;
+        dense.local_stride = 0;
+        dense.remote_stride = 0;
+        expanded.emplace_back(dense);
+      } else {
+        for (uint64_t piece = 0; piece < repeats; ++piece) {
+          ByteRegion flat = region;
+          flat.local_offset += piece * region.local_stride;
+          flat.remote_offset += piece * region.remote_stride;
+          flat.repeat_count = 1;
+          flat.local_stride = 0;
+          flat.remote_stride = 0;
+          expanded.emplace_back(flat);
+        }
+      }
+    }
+    std::sort(expanded.begin(),
+              expanded.end(),
+              [](const ByteRegion& lhs, const ByteRegion& rhs) {
+                return std::tie(lhs.remote_buffer_id,
+                                lhs.local_buffer_id,
+                                lhs.remote_offset,
+                                lhs.local_offset) <
+                       std::tie(rhs.remote_buffer_id,
+                                rhs.local_buffer_id,
+                                rhs.remote_offset,
+                                rhs.local_offset);
+              });
+    flat_regions.reserve(expanded.size());
+    for (const ByteRegion& cur : expanded) {
+      if (!flat_regions.empty()) {
+        ByteRegion& prev = flat_regions.back();
+        if (prev.remote_buffer_id == cur.remote_buffer_id &&
+            prev.local_buffer_id == cur.local_buffer_id &&
+            prev.length <= std::numeric_limits<uint64_t>::max() - cur.length &&
+            prev.local_offset <=
+                std::numeric_limits<uint64_t>::max() - prev.length &&
+            prev.remote_offset <=
+                std::numeric_limits<uint64_t>::max() - prev.length &&
+            prev.local_offset + prev.length == cur.local_offset &&
+            prev.remote_offset + prev.length == cur.remote_offset) {
+          prev.length += cur.length;
+          continue;
+        }
+      }
+      flat_regions.emplace_back(cur);
+    }
+    transfer_regions = &flat_regions;
   }
 
   std::vector<TransferRequest> entries;
@@ -1346,8 +1448,10 @@ bool MooncakeTransferEngine::move_memory_regions(
   }
 
   constexpr size_t kMaxRegionsPerBatch = 4096;
+  size_t submitted_batches = 0;
   Timer transfer_timer;
   for (size_t begin = 0; begin < entries.size(); begin += kMaxRegionsPerBatch) {
+    ++submitted_batches;
     const size_t end = std::min(begin + kMaxRegionsPerBatch, entries.size());
     std::vector<TransferRequest> batch_entries(entries.begin() + begin,
                                                entries.begin() + end);
@@ -1381,6 +1485,11 @@ bool MooncakeTransferEngine::move_memory_regions(
     COUNTER_ADD(mooncake_transfer_bytes_total_write, total_bytes);
     HISTOGRAM_OBSERVE(mooncake_transfer_latency_microseconds_write,
                       latency_microseconds);
+  }
+  if (stats != nullptr) {
+    stats->packed_regions = entries.size();
+    stats->batches = submitted_batches;
+    stats->total_bytes = total_bytes;
   }
   return true;
 }
@@ -1487,7 +1596,13 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
     const std::string& remote_addr,
     const std::vector<ByteRegion>& regions,
     double* read_ms,
-    double* scatter_ms) {
+    double* scatter_ms,
+    MoveRegionStats* stats) {
+  if (stats != nullptr) {
+    *stats = MoveRegionStats{};
+    stats->input_regions = regions.size();
+    stats->staged = true;
+  }
   if (regions.empty()) {
     return true;
   }
@@ -1602,8 +1717,15 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
       return false;
     }
     Timer read_timer;
-    if (!move_memory_regions(remote_addr, reads, MoveOpcode::READ)) {
+    MoveRegionStats chunk_stats;
+    if (!move_memory_regions(
+            remote_addr, reads, MoveOpcode::READ, &chunk_stats)) {
       return false;
+    }
+    if (stats != nullptr) {
+      stats->packed_regions += chunk_stats.packed_regions;
+      stats->batches += chunk_stats.batches;
+      stats->total_bytes += chunk_stats.total_bytes;
     }
     total_read_ms += read_timer.elapsed_seconds() * 1000.0;
 

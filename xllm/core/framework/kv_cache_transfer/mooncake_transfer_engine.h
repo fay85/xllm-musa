@@ -175,9 +175,21 @@ class MooncakeTransferEngine {
       const std::vector<BufferTransferMapping>& mappings,
       MoveOpcode move_opcode);
 
+  struct MoveRegionStats {
+    size_t input_regions = 0;
+    size_t packed_regions = 0;
+    size_t batches = 0;
+    uint64_t total_bytes = 0;
+    bool staged = false;
+  };
+
   virtual bool move_memory_regions(const std::string& remote_addr,
                                    const std::vector<ByteRegion>& regions,
                                    MoveOpcode move_opcode);
+  bool move_memory_regions(const std::string& remote_addr,
+                           const std::vector<ByteRegion>& regions,
+                           MoveOpcode move_opcode,
+                           MoveRegionStats* stats);
 
   // Heterogeneous-TP PULL produces many small, destination-strided regions
   // whose source bytes are contiguous (one source block holds its whole head
@@ -186,7 +198,8 @@ class MooncakeTransferEngine {
   bool move_memory_regions_staged(const std::string& remote_addr,
                                   const std::vector<ByteRegion>& regions,
                                   double* read_ms,
-                                  double* scatter_ms);
+                                  double* scatter_ms,
+                                  MoveRegionStats* stats = nullptr);
   static size_t count_remote_runs(const std::vector<ByteRegion>& regions);
 
   bool link_sessions(const std::vector<uint64_t>& cluster_ids,

@@ -79,22 +79,15 @@ class Qwen3_VLMoeForConditionalGenerationImpl : public torch::nn::Module {
     auto merge_size = model_args_.mm_image_merge_size();
     if (image_input) {
 #if defined(USE_MUSA)
-      auto grid_cpu = (image_input->image_grid_thw.is_cpu()
-                           ? image_input->image_grid_thw
-                           : image_input->image_grid_thw.to(torch::kCPU))
-                          .contiguous()
-                          .to(torch::kLong);
+      auto grid_cpu = image_input->image_grid_thw.to(torch::kCPU, torch::kLong)
+                          .contiguous();
+      const auto image_tokens_vec =
+          qwen3_vision_token_counts(grid_cpu, merge_size);
       auto image_embeds =
           visual_(image_input->pixel_values.to(options_), grid_cpu);
-      const int64_t merge_area =
-          static_cast<int64_t>(merge_size) * static_cast<int64_t>(merge_size);
-      const int64_t* grid_ptr = grid_cpu.data_ptr<int64_t>();
-      std::vector<int64_t> image_tokens_vec(grid_cpu.size(0));
-      for (int64_t i = 0; i < grid_cpu.size(0); ++i) {
-        image_tokens_vec[i] =
-            (grid_ptr[i * 3 + 0] * grid_ptr[i * 3 + 1] * grid_ptr[i * 3 + 2]) /
-            merge_area;
-      }
+      const int64_t expected_image_rows = std::accumulate(
+          image_tokens_vec.begin(), image_tokens_vec.end(), int64_t{0});
+      CHECK_EQ(image_embeds.size(0), expected_image_rows);
 #else
       auto image_embeds =
           visual_(image_input->pixel_values.to(options_),
@@ -115,22 +108,15 @@ class Qwen3_VLMoeForConditionalGenerationImpl : public torch::nn::Module {
     }
     if (video_input) {
 #if defined(USE_MUSA)
-      auto grid_cpu = (video_input->video_grid_thw.is_cpu()
-                           ? video_input->video_grid_thw
-                           : video_input->video_grid_thw.to(torch::kCPU))
-                          .contiguous()
-                          .to(torch::kLong);
+      auto grid_cpu = video_input->video_grid_thw.to(torch::kCPU, torch::kLong)
+                          .contiguous();
+      const auto video_tokens_vec =
+          qwen3_vision_token_counts(grid_cpu, merge_size);
       auto video_embeds =
           visual_(video_input->pixel_values_videos.to(options_), grid_cpu);
-      const int64_t merge_area =
-          static_cast<int64_t>(merge_size) * static_cast<int64_t>(merge_size);
-      const int64_t* grid_ptr = grid_cpu.data_ptr<int64_t>();
-      std::vector<int64_t> video_tokens_vec(grid_cpu.size(0));
-      for (int64_t i = 0; i < grid_cpu.size(0); ++i) {
-        video_tokens_vec[i] =
-            (grid_ptr[i * 3 + 0] * grid_ptr[i * 3 + 1] * grid_ptr[i * 3 + 2]) /
-            merge_area;
-      }
+      const int64_t expected_video_rows = std::accumulate(
+          video_tokens_vec.begin(), video_tokens_vec.end(), int64_t{0});
+      CHECK_EQ(video_embeds.size(0), expected_video_rows);
 #else
       auto video_embeds =
           visual_(video_input->pixel_values_videos.to(options_),

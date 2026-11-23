@@ -215,6 +215,7 @@ class WorkerService : public proto::DistributeWorker {
       /*num_threads=*/5,
       /*cpu_binding=*/false,
       /*pool_name=*/"WorkerService.copy");
+  std::unique_ptr<ThreadPool> pull_threadpool_;
   std::unique_ptr<ThreadPool> threadpool_;
 };
 

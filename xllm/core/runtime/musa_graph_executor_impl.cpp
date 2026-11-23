@@ -139,13 +139,15 @@ int32_t single_checkpoint_runner_bucket_tokens(
   } else {
     bucket_tokens = 6144;
   }
-  const int32_t effective_history_rows =
-      (host.kv_seq_lens.back() > host.q_seq_lens.back()) ? 64 : 0;
+  if (params.pcp_input_is_sharded &&
+      bucket_tokens != static_cast<int32_t>(num_tokens)) {
+    return 0;
+  }
+  const int32_t history = host.kv_seq_lens.back() - host.q_seq_lens.back();
   const int32_t front_rows =
       bucket_tokens == 256
           ? 256
-          : layer::musa_pcp::single_prefill_front_rows(
-                bucket_tokens, effective_history_rows);
+          : layer::musa_pcp::single_prefill_front_rows(bucket_tokens, history);
   if (front_rows <= 0 ||
       (bucket_tokens > 256 && static_cast<int32_t>(num_tokens) <= front_rows)) {
     return 0;
@@ -180,10 +182,8 @@ int32_t single_checkpoint_runner_front_rows(
     return 256;
   }
   const auto& host = params.attention.host;
-  const int32_t effective_history_rows =
-      (host.kv_seq_lens.back() > host.q_seq_lens.back()) ? 64 : 0;
-  return layer::musa_pcp::single_prefill_front_rows(
-      bucket_tokens, effective_history_rows);
+  const int32_t history = host.kv_seq_lens.back() - host.q_seq_lens.back();
+  return layer::musa_pcp::single_prefill_front_rows(bucket_tokens, history);
 }
 
 std::atomic<uint32_t> s_completed_musa_graph_captures{0};
@@ -2638,7 +2638,8 @@ bool MusaGraph::capture(CausalLM* model,
                         std::vector<KVCache>& kv_cache,
                         uint32_t bucket_num_tokens,
                         const c10::musa::MempoolId_t& pool,
-                        std::unique_ptr<MusaMemPool> pool_owner) {
+                        std::unique_ptr<MusaMemPool> pool_owner,
+                        std::size_t required_prefill_free_bytes) {
   model_ = model;
   CHECK(pool_owner_ == nullptr);
   pool_owner_ = std::move(pool_owner);
@@ -2851,10 +2852,11 @@ bool MusaGraph::capture(CausalLM* model,
               << ", actual_num_tokens: " << actual_num_tokens;
     size_t physical_free_before_warmup = 0;
     size_t physical_total = 0;
-    const size_t required_prefill_free_bytes =
-        prefill_capture_required_free_bytes(
-            ::xllm::ExecutionConfig::get_instance()
-                .musa_prefill_warmup_reserve_mb());
+    if (is_piecewise_ && required_prefill_free_bytes == 0) {
+      required_prefill_free_bytes = prefill_capture_required_free_bytes(
+          ::xllm::ExecutionConfig::get_instance()
+              .musa_prefill_warmup_reserve_mb());
+    }
     if (is_piecewise_) {
       CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
                musaSuccess);
@@ -2894,10 +2896,9 @@ bool MusaGraph::capture(CausalLM* model,
       // captured bucket on an executor needs 1 eager warmup pass; subsequent
       // buckets reuse already-initialized handles and persistent buffers.
       xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
-      const int num_warmup_iters =
-          skip_graph_warmup
-              ? 0
-              : (is_piecewise_ ? (skip_piecewise_warmup_ ? 0 : 1) : 1);
+      // Piecewise prefill must warm up before capture so every new shape
+      // initializes handles and workspaces outside stream capture.
+      const int num_warmup_iters = skip_graph_warmup ? 0 : 1;
       for (int warmup_iter = 0; warmup_iter < num_warmup_iters; ++warmup_iter) {
         capture_stream.synchronize();
         {
@@ -3895,11 +3896,13 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // Prefill and chunked prefill replay piecewise graphs; launches that need
   // host-side batch layout run as runners between the captured segments.
+  std::size_t required_prefill_free_bytes = 0;
   if ((!has_interior_checkpoints || checkpoint_bucket_runner) &&
       use_prefill_piecewise_graph(n_tokens,
                                   params,
                                   has_interior_checkpoints,
-                                  bucket_capture_min_hits)) {
+                                  bucket_capture_min_hits,
+                                  required_prefill_free_bytes)) {
     using ::xllm::kernel::musa::GdnSinglepassInteriorTarget;
     using ::xllm::kernel::musa::ScopedGdnSinglepassCheckpointPlan;
     std::vector<GdnSinglepassInteriorTarget> interior_ckpts;
@@ -3957,7 +3960,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           device_.index(),
           get_capture_stream(device_.index()),
           /*is_piecewise=*/true,
-          /*skip_piecewise_warmup=*/!prefill_graphs_.empty());
+          /*skip_piecewise_warmup=*/false);
       graph->gdn_checkpoint_bucket_runner_ = checkpoint_bucket_runner;
       pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
       const c10::musa::MempoolId_t mem_pool =
@@ -3971,7 +3974,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                        kv_caches,
                                        graph_num_tokens,
                                        mem_pool,
-                                       std::move(pool_owner));
+                                       std::move(pool_owner),
+                                       required_prefill_free_bytes);
     } catch (const std::exception& e) {
       LOG(ERROR) << "Exception while preparing MUSA piecewise prefill graph "
                  << "for num_tokens=" << graph_num_tokens << ": " << e.what();
@@ -4496,7 +4500,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
     uint32_t num_tokens,
     const ModelInputParams& params,
     bool has_interior_checkpoints,
-    int64_t bucket_capture_min_hits) {
+    int64_t bucket_capture_min_hits,
+    std::size_t& required_free_bytes) {
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
   if (!execution_config.enable_graph() ||
       !execution_config.enable_prefill_piecewise_graph()) {
@@ -4578,7 +4583,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
     }
   }
   bool vmm_pool_reusable = false;
-  if (!prefill_graphs_.empty() && supports_graph_vmm_pool() &&
+  if (util::get_bool_env("XLLM_MUSA_PREFILL_VMM_REUSE_ADMISSION", false) &&
+      !prefill_graphs_.empty() && supports_graph_vmm_pool() &&
       execution_config.enable_graph_vmm_pool()) {
     bool has_covering_bucket = false;
     for (const auto& entry : prefill_graphs_) {
@@ -4596,7 +4602,7 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
     }
   }
   const int32_t reserve_mb = execution_config.musa_prefill_warmup_reserve_mb();
-  const std::size_t required_free_bytes =
+  required_free_bytes =
       prefill_capture_required_free_bytes(reserve_mb, vmm_pool_reusable);
   c10::musa::MUSAGuard device_guard(device_.index());
   std::size_t physical_free_bytes = 0;
@@ -4676,6 +4682,10 @@ uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
+  if (num_sequences == 1 &&
+      (params.skip_pcp_gather || params.pcp_input_is_sharded)) {
+    return num_tokens;
+  }
   if (num_sequences == 1) {
     const int32_t ckpt_bucket = single_checkpoint_runner_bucket_tokens(
         num_tokens, params, options_, has_interior_checkpoints);
@@ -4713,15 +4723,13 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
   if (!capacities.empty()) {
     const bool any_history =
         params.attention.host.kv_seq_lens.back() > q_seq_lens.back();
-    const bool continues =
-        params.meta.batch_forward_type.is_chunked_prefill() || any_history;
     return {capacities[0] + capacities[1],
-            continues ? 1 : 0,
+            params.meta.batch_forward_type.is_chunked_prefill() ? 1 : 0,
             2,
             static_cast<int32_t>(q_seq_lens.size() - 1),
             capacities[0],
             capacities[1],
-            continues ? 1 : 0,
+            any_history ? 1 : 0,
             params.skip_pcp_gather ? 1 : 0,
             params.pcp_input_is_sharded ? 1 : 0};
   }
@@ -4735,8 +4743,7 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
   key.emplace_back(num_sequences == 1 ? 1 : 0);
-  if (num_sequences > 1 && !params.embedding.linear_state_ids.empty() &&
-      options_.cp_size() <= 1) {
+  if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
     key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
   }
   if (options_.cp_size() > 1) {
@@ -4765,10 +4772,22 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
     }
     key.emplace_back(params.skip_pcp_gather ? 1 : 0);
     key.emplace_back(params.pcp_input_is_sharded ? 1 : 0);
-    const int32_t single_ckpt_front = single_checkpoint_runner_front_rows(
-        num_tokens, params, options_, has_interior_checkpoints);
-    if (single_ckpt_front > 0) {
-      key.emplace_back(single_ckpt_front);
+    const int32_t single_ckpt_bucket =
+        num_sequences == 1
+            ? single_checkpoint_runner_bucket_tokens(
+                  num_tokens, params, options_, has_interior_checkpoints)
+            : 0;
+    if (single_ckpt_bucket > 0 ||
+        (num_sequences == 1 &&
+         (params.skip_pcp_gather || params.pcp_input_is_sharded))) {
+      const int32_t history =
+          params.attention.host.kv_seq_lens.back() - q_seq_lens.back();
+      const int32_t capacity = single_ckpt_bucket > 0
+                                   ? single_ckpt_bucket
+                                   : static_cast<int32_t>(num_tokens);
+      key.emplace_back(
+          layer::musa_pcp::single_prefill_front_rows(capacity, history));
+      key.emplace_back(history > 0 ? 1 : 0);
     }
   }
   return key;

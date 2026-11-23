@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "core/distributed_runtime/disagg_pd_service_impl.h"
 
+#include <brpc/closure_guard.h>
+
 #include <glog/logging.h>
 
 #include <chrono>
@@ -272,6 +274,27 @@ void DisaggPDServiceImpl::release_reservation(
                            : proto::ReleaseReservationResponse::NOT_WAITING);
 }
 
+void DisaggPDServiceImpl::release_reservation_async(
+    const proto::ReleaseReservationRequest* request,
+    proto::ReleaseReservationResponse* response,
+    ::google::protobuf::Closure* done) {
+  auto done_guard = std::make_shared<brpc::ClosureGuard>(done);
+  if (request == nullptr || response == nullptr) {
+    if (response != nullptr) {
+      response->set_result(proto::ReleaseReservationResponse::NOT_WAITING);
+    }
+    return;
+  }
+  scheduler_->release_reservation_async(
+      request->req_id(),
+      request->reservation_id(),
+      [response, done_guard](bool released) {
+        response->set_result(
+            released ? proto::ReleaseReservationResponse::RELEASED
+                     : proto::ReleaseReservationResponse::NOT_WAITING);
+      });
+}
+
 void DisaggPDServiceImpl::decode_recv_new_requests(
     const proto::DisaggRequests* request,
     proto::DisaggResponses* response) {
@@ -408,9 +431,8 @@ void DisaggPDServiceImpl::decode_recv_new_requests(
 void DisaggPDServiceImpl::decode_recv_first_generation(
     const proto::DisaggGenerationsRequests* request,
     proto::Status* response) {
-  // TODO: we only support one request generation currently
+  // Synchronous wrapper used by unit tests and multi-request fallback
   for (auto& gen : request->multi_gens()) {
-    // Process the first token from the tokens array
     if (gen.tokens().empty()) {
       response->set_ok(false);
       return;
@@ -429,6 +451,7 @@ void DisaggPDServiceImpl::decode_recv_first_generation(
     for (const proto::KVTransferGroup& proto_group : gen.source_groups()) {
       KVTransferMapping mapping;
       mapping.group_id = proto_group.group_id();
+      mapping.remote_shared_num = proto_group.remote_shared_num();
       mapping.remote_ids.assign(proto_group.ids().begin(),
                                 proto_group.ids().end());
       source_mappings.emplace_back(std::move(mapping));
@@ -464,6 +487,67 @@ void DisaggPDServiceImpl::decode_recv_first_generation(
   }
 
   response->set_ok(true);
+}
+
+void DisaggPDServiceImpl::decode_recv_first_generation_async(
+    const proto::DisaggGenerationsRequests* request,
+    proto::Status* response,
+    ::google::protobuf::Closure* done) {
+  auto done_guard = std::make_shared<brpc::ClosureGuard>(done);
+  if (request->multi_gens_size() != 1) {
+    decode_recv_first_generation(request, response);
+    return;
+  }
+
+  const auto& gen = request->multi_gens(0);
+  if (gen.tokens().empty()) {
+    response->set_ok(false);
+    return;
+  }
+
+  const auto& first_token = gen.tokens(0);
+  std::vector<int64_t> top_tokens(first_token.top_tokens().begin(),
+                                  first_token.top_tokens().end());
+  std::vector<float> top_logprobs(first_token.top_logprobs().begin(),
+                                  first_token.top_logprobs().end());
+  std::vector<uint64_t> cluster_ids(gen.cluster_ids().begin(),
+                                    gen.cluster_ids().end());
+  std::vector<std::string> addrs(gen.addrs().begin(), gen.addrs().end());
+  std::vector<KVTransferMapping> source_mappings;
+  source_mappings.reserve(gen.source_groups_size());
+  for (const proto::KVTransferGroup& proto_group : gen.source_groups()) {
+    KVTransferMapping mapping;
+    mapping.group_id = proto_group.group_id();
+    mapping.remote_shared_num = proto_group.remote_shared_num();
+    mapping.remote_ids.assign(proto_group.ids().begin(),
+                              proto_group.ids().end());
+    source_mappings.emplace_back(std::move(mapping));
+  }
+  torch::Tensor mtp_bootstrap_embedding;
+  if (gen.has_mtp_bootstrap_embedding()) {
+    mtp_bootstrap_embedding =
+        util::proto_to_torch(gen.mtp_bootstrap_embedding());
+  }
+
+  scheduler_->decode_recv_first_generation_async(
+      gen.req_id(),
+      first_token.token_id(),
+      first_token.has_logprob(),
+      first_token.logprob(),
+      first_token.time_to_first_token_latency_seconds(),
+      gen.upstream_elapsed_seconds(),
+      std::move(top_tokens),
+      std::move(top_logprobs),
+      gen.kv_cache_transfer_mode(),
+      std::move(cluster_ids),
+      std::move(addrs),
+      std::move(source_mappings),
+      gen.dp_size(),
+      gen.dp_rank(),
+      std::move(mtp_bootstrap_embedding),
+      gen.num_cached_tokens(),
+      gen.mrope_position_delta(),
+      [response, done_guard](bool ok) { response->set_ok(ok); });
 }
 
 void DisaggPDServiceImpl::link_instance(

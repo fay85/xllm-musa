@@ -44,6 +44,11 @@ class DisaggPDServiceImpl {
       const proto::DisaggGenerationsRequests* request,
       proto::Status* response);
 
+  void decode_recv_first_generation_async(
+      const proto::DisaggGenerationsRequests* request,
+      proto::Status* response,
+      ::google::protobuf::Closure* done);
+
   virtual void link_instance(const proto::InstanceClusterInfo* request,
                              proto::Status* response);
 
@@ -64,6 +69,10 @@ class DisaggPDServiceImpl {
 
   void release_reservation(const proto::ReleaseReservationRequest* request,
                            proto::ReleaseReservationResponse* response);
+  void release_reservation_async(
+      const proto::ReleaseReservationRequest* request,
+      proto::ReleaseReservationResponse* response,
+      ::google::protobuf::Closure* done);
 
  protected:
   std::shared_ptr<Request> generate_request(const proto::DisaggRequest& req);

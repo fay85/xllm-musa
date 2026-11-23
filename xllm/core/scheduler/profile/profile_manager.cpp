@@ -1487,9 +1487,12 @@ void ProfileManager::warmup_prefill_for_graph() {
       int32_t ckpt_runner_buckets = 0;
       for (int32_t b : {1024, 2048, 3072, 4096, 6144}) {
         if (b < prefill_tokens) {
-          ckpt_runner_warmup_ms +=
+          const double latency_ms =
               run_single_ckpt_warmup(b, /*prefix_len=*/prefix_step);
-          ckpt_runner_buckets += 1;
+          if (latency_ms > 0.0) {
+            ckpt_runner_warmup_ms += latency_ms;
+            ++ckpt_runner_buckets;
+          }
         }
       }
       LOG(INFO) << "MUSA B=1 GDN checkpoint-runner bucket warmup completed: "

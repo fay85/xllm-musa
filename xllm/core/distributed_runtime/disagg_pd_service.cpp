@@ -30,8 +30,7 @@ void DisaggPDService::ReleaseReservation(
     const proto::ReleaseReservationRequest* request,
     proto::ReleaseReservationResponse* response,
     ::google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  disagg_pd_service_impl_->release_reservation(request, response);
+  disagg_pd_service_impl_->release_reservation_async(request, response, done);
 }
 
 void DisaggPDService::AddNewRequests(
@@ -50,25 +49,36 @@ void DisaggPDService::FirstGeneration(
     const proto::DisaggGenerationsRequests* request,
     proto::Status* response,
     ::google::protobuf::Closure* done) {
-  // Receive first token from Prefill, schedule the request to running queue
-  brpc::ClosureGuard done_guard(done);
-  disagg_pd_service_impl_->decode_recv_first_generation(request, response);
+  // Receive first token from Prefill asynchronously on multi-lane Decode pull pool
+  disagg_pd_service_impl_->decode_recv_first_generation_async(
+      request, response, done);
 }
 
 void DisaggPDService::MultiGenerations(
-    ::google::protobuf::RpcController* controller,
+    ::google::protobuf::RpcController* /*controller*/,
     const proto::DisaggGenerationsRequests* request,
     proto::Status* response,
     ::google::protobuf::Closure* done) {
-  LOG(FATAL) << "MultiGenerations is not supported in DisaggPDService";
+  brpc::ClosureGuard done_guard(done);
+  const int gens_count = request != nullptr ? request->multi_gens_size() : 0;
+  LOG(WARNING) << "Rejecting unsupported legacy MultiGenerations RPC in "
+               << "DisaggPDService, multi_gens_size=" << gens_count;
+  if (response != nullptr) {
+    response->set_ok(false);
+  }
 }
 
 void DisaggPDService::SendPullSignal(
-    ::google::protobuf::RpcController* controller,
-    const proto::PullSignal* request,
+    ::google::protobuf::RpcController* /*controller*/,
+    const proto::PullSignal* /*request*/,
     proto::Status* response,
     ::google::protobuf::Closure* done) {
-  LOG(FATAL) << "SendPullSignal is not supported in DisaggPDService";
+  brpc::ClosureGuard done_guard(done);
+  LOG(WARNING)
+      << "Rejecting unsupported legacy SendPullSignal RPC in DisaggPDService";
+  if (response != nullptr) {
+    response->set_ok(false);
+  }
 }
 
 void DisaggPDService::LinkInstance(

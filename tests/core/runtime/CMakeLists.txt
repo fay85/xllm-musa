@@ -10,6 +10,13 @@ if(USE_MUSA)
   )
   target_link_libraries(vlm_executor_eager_draft_test PRIVATE
     musa_python torch_python Python::Python tvm_ffi)
+
+  cc_test(
+    NAME musa_prefill_graph_policy_test
+    CPU_ONLY
+    SRCS musa_prefill_graph_policy_test.cpp
+    DEPS GTest::gtest_main
+  )
 endif()
 
 cc_test(

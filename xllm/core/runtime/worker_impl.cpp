@@ -1431,7 +1431,17 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
       << "failed to wait input metadata ready event on worker prepare stream";
 
   auto prepare_device_on_stream = [&]() {
-    processed_input = input.to(device_, dtype_);
+    bool keep_vision_grid_on_host = false;
+#if defined(USE_MUSA)
+    if ((input.input_host_buffer_has_layout ||
+         input.input_params.multimodal.mm_data.valid()) &&
+        !ModelConfig::is_python_model_impl(context_.get_model_impl())) {
+      const std::string& type = context_.get_model_args().model_type();
+      keep_vision_grid_on_host = type == "qwen3_vl" || type == "qwen3_vl_moe" ||
+                                 type == "qwen3_5" || type == "qwen3_5_moe";
+    }
+#endif
+    processed_input = input.to(device_, dtype_, keep_vision_grid_on_host);
     // Packed RPC/SHM inputs deserialize JSON snapshots inside ForwardInput::to.
     // Restore them before speculative dispatch so MTP sees the grammar rows.
     if (processed_input.json_object_states.empty() &&

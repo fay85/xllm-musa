@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "core/distributed_runtime/disagg_pd_service.h"
 #include "scheduler/disagg_pd_scheduler.h"
 
 #include <brpc/closure_guard.h>
@@ -43,6 +44,14 @@ limitations under the License.
 #include "framework/request/request.h"
 #include "framework/request/request_state.h"
 #include "framework/tokenizer/tokenizer.h"
+#if defined(USE_MUSA)
+namespace at {
+struct MUSAHooksInterface;
+namespace detail {
+const MUSAHooksInterface& getMUSAHooks();
+}  // namespace detail
+}  // namespace at
+#endif
 
 namespace xllm {
 namespace {
@@ -57,7 +66,7 @@ class FakeTokenizer final : public Tokenizer {
 
   std::string decode(const Slice<int32_t>& /*ids*/,
                      bool /*skip_special_tokens*/) const override {
-    NOT_IMPLEMENTED();
+    return "";
   }
 
   std::optional<int32_t> token_to_id(
@@ -67,7 +76,7 @@ class FakeTokenizer final : public Tokenizer {
 
   std::string id_to_token(int32_t /*id*/) const override { NOT_IMPLEMENTED(); }
 
-  size_t vocab_size() const override { NOT_IMPLEMENTED(); }
+  size_t vocab_size() const override { return 0; }
 
   std::unique_ptr<Tokenizer> clone() const override {
     return std::make_unique<FakeTokenizer>();
@@ -143,10 +152,14 @@ class FakeEngine final : public Engine {
                       int32_t /*dst_dp_rank*/,
                       const std::vector<KVTransferMapping>& mappings) override {
     pulled_mappings = mappings;
+    if (pull_hook) {
+      return pull_hook(mappings);
+    }
     return true;
   }
 
   std::vector<KVTransferMapping> pulled_mappings;
+  std::function<bool(const std::vector<KVTransferMapping>&)> pull_hook;
 
  private:
   std::unique_ptr<Tokenizer> tokenizer_;
@@ -168,6 +181,12 @@ class TestDisaggPDScheduler final : public DisaggPDScheduler {
     request_queue_.write(std::move(request));
   }
 
+  void set_request_channel(const std::string& req_id,
+                           proto::DisaggPDService_Stub* stub) {
+    std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
+    req_to_channel_map_[req_id] = stub;
+  }
+
   bool has_channel(const std::string& req_id) {
     std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
     return req_to_channel_map_.contains(req_id);
@@ -176,23 +195,57 @@ class TestDisaggPDScheduler final : public DisaggPDScheduler {
   bool reservations_empty() {
     std::lock_guard<std::mutex> lock(received_request_map_mutex_);
     return received_request_map_.empty() &&
+           inflight_decode_pulls_.empty() &&
            instance_to_received_requests_map_.empty() &&
            request_to_instance_map_.empty();
   }
 
+  bool has_aborting_inflight_pull(const std::string& req_id) {
+    std::lock_guard<std::mutex> lock(received_request_map_mutex_);
+    auto it = inflight_decode_pulls_.find(req_id);
+    return it != inflight_decode_pulls_.end() && it->second != nullptr &&
+           it->second->release_requested && !it->second->completed;
+  }
+
   void wait_notifications() {
-    std::promise<void> done;
-    auto future = done.get_future();
-    reservation_release_threadpool_.schedule([&done] { done.set_value(); });
-    future.get();
+    wait_inflight_reservation_releases();
+    const size_t n_threads =
+        std::max<size_t>(1, reservation_release_threadpool_.size());
+    std::vector<std::future<void>> barriers;
+    barriers.reserve(n_threads);
+    for (size_t i = 0; i < n_threads; ++i) {
+      auto p = std::make_shared<std::promise<void>>();
+      barriers.emplace_back(p->get_future());
+      reservation_release_threadpool_.schedule_with_tid(
+          [p]() { p->set_value(); }, i);
+    }
+    for (auto& f : barriers) {
+      f.get();
+    }
+    wait_inflight_reservation_releases();
   }
 
   std::future<void> prefill_completion() {
-    std::promise<void> done;
-    auto future = done.get_future();
-    prefill_threadpool_.schedule(
-        [done = std::move(done)]() mutable { done.set_value(); });
-    return future;
+    return std::async(std::launch::async, [this]() {
+      wait_inflight_prefill_rpcs();
+      const size_t n_prefill = std::max<size_t>(1, prefill_threadpool_.size());
+      std::vector<std::future<void>> barriers;
+      barriers.reserve(n_prefill + 4);
+      for (size_t i = 0; i < n_prefill; ++i) {
+        auto p = std::make_shared<std::promise<void>>();
+        barriers.emplace_back(p->get_future());
+        prefill_threadpool_.schedule_with_tid([p]() { p->set_value(); }, i);
+      }
+      for (size_t i = 0; i < 4; ++i) {
+        auto p = std::make_shared<std::promise<void>>();
+        barriers.emplace_back(p->get_future());
+        prefill_reclaim_threadpool_.schedule_with_tid(
+            [p]() { p->set_value(); }, i);
+      }
+      for (auto& f : barriers) {
+        f.get();
+      }
+    });
   }
 
   void cache_prefill_blocks_for_test(Request* request) {
@@ -605,6 +658,12 @@ TEST(DisaggPDSchedulerTest, GroupedPullAlignsActiveSwaSuffix) {
 }
 
 TEST(DisaggPDSchedulerTest, LinearStatePullFeedsFrameworkDecodeSlot) {
+#if defined(USE_MUSA)
+  if (!c10::is_privateuse1_backend_registered()) {
+    c10::register_privateuse1_backend("musa");
+  }
+  (void)at::detail::getMUSAHooks();
+#endif
   FakeEngine engine(/*num_blocks=*/8,
                     /*block_size=*/2,
                     /*num_speculative_tokens=*/1,
@@ -656,8 +715,10 @@ TEST(DisaggPDSchedulerTest, LinearStatePullFeedsFrameworkDecodeSlot) {
       /*num_decoding_tokens=*/2,
       /*min_decoding_bach_size=*/0,
       engine.model_args());
-  EXPECT_EQ(input.input_params.embedding.linear_state_ids,
-            std::vector<int32_t>({local_linear_state_id}));
+  ASSERT_EQ(input.input_params.embedding.linear_state_ids.size(), 1u);
+  const int32_t write_slot = input.input_params.embedding.linear_state_ids[0];
+  EXPECT_GE(write_slot, 0);
+  EXPECT_NE(write_slot, local_linear_state_id);
   EXPECT_EQ(input.input_params.embedding.linear_state_read_ids,
             std::vector<int32_t>({local_linear_state_id}));
   ASSERT_EQ(input.input_params.attention.host.kv_cache_tokens_nums.size(), 1u);
@@ -1567,4 +1628,611 @@ TEST(DisaggPDSchedulerTest, MtpExhaustionRollsBackKvReservation) {
   EXPECT_TRUE(decode.reservations_empty());
   EXPECT_EQ(pool->num_used_blocks()[0], 0u);
 }
+
+TEST(DisaggPDSchedulerTest,
+     GroupedPullRejectsTruncatedAndInvalidOrdinaryKvWithoutPublishingCache) {
+  FakeEngine engine(/*num_blocks=*/12, /*block_size=*/2);
+  TestDisaggPDScheduler scheduler(&engine, make_decode_options());
+  auto* pool = engine.block_manager_pool();
+
+  // Case 1: truncated remote_ids (size 1 < local blocks size 2, shared_num=0)
+  {
+    auto req1 = make_request({1, 2, 3, 4}, "req_trunc_kv");
+    Sequence* seq1 = req1->sequences()[0].get();
+    ASSERT_TRUE(pool->allocate(seq1));
+    seq1->kv_state().set_kv_cache_tokens_num(seq1->num_prompt_tokens());
+    ASSERT_TRUE(scheduler.decode_schedule(req1, "prefill"));
+
+    KVTransferMapping truncated;
+    truncated.group_id = cache_group_id(BlockType::KV);
+    truncated.remote_ids = {101};
+    EXPECT_FALSE(scheduler.decode_recv_first_generation(
+        "req_trunc_kv",
+        /*token_id=*/42,
+        /*has_logprob=*/false,
+        /*logprob=*/0.0f,
+        /*time_to_first_token_latency_seconds=*/0.1,
+        /*upstream_elapsed_seconds=*/0.0,
+        /*top_tokens=*/{},
+        /*top_logprobs=*/{},
+        /*kv_cache_transfer_mode=*/"PULL",
+        /*src_cluster_ids=*/{1},
+        /*src_addrs=*/{"remote"},
+        /*source_mappings=*/{truncated},
+        /*src_dp_size=*/1,
+        /*src_dp_rank=*/0));
+    EXPECT_EQ(first_cache_size(*pool), 0u);
+    EXPECT_EQ(pool->num_used_blocks()[0], 0u);
+  }
+
+  // Case 2: UINT64_MAX sentinel inside remote_ids must also fail without cache
+  {
+    auto req2 = make_request({5, 6, 7, 8}, "req_invalid_kv");
+    Sequence* seq2 = req2->sequences()[0].get();
+    ASSERT_TRUE(pool->allocate(seq2));
+    seq2->kv_state().set_kv_cache_tokens_num(seq2->num_prompt_tokens());
+    ASSERT_TRUE(scheduler.decode_schedule(req2, "prefill"));
+
+    KVTransferMapping invalid_entry;
+    invalid_entry.group_id = cache_group_id(BlockType::KV);
+    invalid_entry.remote_ids = {std::numeric_limits<uint64_t>::max(), 102};
+    EXPECT_FALSE(scheduler.decode_recv_first_generation(
+        "req_invalid_kv",
+        /*token_id=*/42,
+        /*has_logprob=*/false,
+        /*logprob=*/0.0f,
+        /*time_to_first_token_latency_seconds=*/0.1,
+        /*upstream_elapsed_seconds=*/0.0,
+        /*top_tokens=*/{},
+        /*top_logprobs=*/{},
+        /*kv_cache_transfer_mode=*/"PULL",
+        /*src_cluster_ids=*/{1},
+        /*src_addrs=*/{"remote"},
+        /*source_mappings=*/{invalid_entry},
+        /*src_dp_size=*/1,
+        /*src_dp_rank=*/0));
+    EXPECT_EQ(first_cache_size(*pool), 0u);
+    EXPECT_EQ(pool->num_used_blocks()[0], 0u);
+  }
+}
+
+TEST(DisaggPDSchedulerTest,
+     GroupedPullRejectsTruncatedAndInvalidActiveSwaWindow) {
+  FakeEngine engine(/*num_blocks=*/12, /*block_size=*/2);
+  TestDisaggPDScheduler scheduler(&engine, make_decode_options());
+  auto* pool = engine.block_manager_pool();
+
+  BlockManager::Options swa_options;
+  swa_options.num_blocks(8).block_size(2);
+  BlockManagerImpl swa_manager(swa_options);
+
+  auto run_swa_case = [&](const std::string& req_id,
+                          const std::vector<uint64_t>& remote_swa_ids) {
+    auto req = make_request({1, 2, 3, 4}, req_id);
+    Sequence* seq = req->sequences()[0].get();
+    EXPECT_TRUE(pool->allocate(seq));
+    seq->kv_state().set_kv_cache_tokens_num(seq->num_prompt_tokens());
+
+    std::vector<Block> live_swa = swa_manager.allocate(2);
+    std::vector<Block> logical_swa(2);  // [invalid, invalid, live1, live2]
+    logical_swa.insert(logical_swa.end(),
+                       std::make_move_iterator(live_swa.begin()),
+                       std::make_move_iterator(live_swa.end()));
+    seq->kv_state().add_blocks(BlockType::SWA, std::move(logical_swa));
+    EXPECT_TRUE(scheduler.decode_schedule(req, "prefill"));
+
+    KVTransferMapping swa_mapping;
+    swa_mapping.group_id = cache_group_id(BlockType::SWA);
+    swa_mapping.remote_ids = remote_swa_ids;
+    const bool ok = scheduler.decode_recv_first_generation(
+        req_id,
+        /*token_id=*/42,
+        /*has_logprob=*/false,
+        /*logprob=*/0.0f,
+        /*time_to_first_token_latency_seconds=*/0.1,
+        /*upstream_elapsed_seconds=*/0.0,
+        /*top_tokens=*/{},
+        /*top_logprobs=*/{},
+        /*kv_cache_transfer_mode=*/"PULL",
+        /*src_cluster_ids=*/{1},
+        /*src_addrs=*/{"remote"},
+        /*source_mappings=*/{swa_mapping},
+        /*src_dp_size=*/1,
+        /*src_dp_rank=*/0);
+    seq->kv_state().erase_blocks(BlockType::SWA);
+    return ok;
+  };
+
+  // [102] right-aligns to index 3 and misses live1 at index 2 -> must reject!
+  EXPECT_FALSE(run_swa_case("swa_trunc", {102}));
+  EXPECT_EQ(first_cache_size(*pool), 0u);
+  EXPECT_EQ(pool->num_used_blocks()[0], 0u);
+
+  // [UINT64_MAX, 102] has invalid sentinel on live1 at index 2 -> must reject!
+  EXPECT_FALSE(
+      run_swa_case("swa_invalid", {std::numeric_limits<uint64_t>::max(), 102}));
+  EXPECT_EQ(first_cache_size(*pool), 0u);
+  EXPECT_EQ(pool->num_used_blocks()[0], 0u);
+}
+
+TEST(DisaggPDSchedulerTest,
+     CancelledDecodeFirstGenerationReclaimsBlocksWithoutPublishingCache) {
+  FakeEngine engine(/*num_blocks=*/8, /*block_size=*/2);
+  TestDisaggPDScheduler scheduler(&engine, make_decode_options());
+  auto* pool = engine.block_manager_pool();
+
+  auto req = make_request({1, 2, 3, 4}, "req_cancel");
+  Sequence* seq = req->sequences()[0].get();
+  ASSERT_TRUE(pool->allocate(seq));
+  seq->kv_state().set_kv_cache_tokens_num(seq->num_prompt_tokens());
+  ASSERT_TRUE(scheduler.decode_schedule(req, "prefill"));
+
+  req->set_cancel();
+  KVTransferMapping kv_map;
+  kv_map.group_id = cache_group_id(BlockType::KV);
+  kv_map.remote_ids = {101, 102};
+  EXPECT_FALSE(scheduler.decode_recv_first_generation(
+      "req_cancel",
+      /*token_id=*/42,
+      /*has_logprob=*/false,
+      /*logprob=*/0.0f,
+      /*time_to_first_token_latency_seconds=*/0.1,
+      /*upstream_elapsed_seconds=*/0.0,
+      /*top_tokens=*/{},
+      /*top_logprobs=*/{},
+      /*kv_cache_transfer_mode=*/"PULL",
+      /*src_cluster_ids=*/{1},
+      /*src_addrs=*/{"remote"},
+      /*source_mappings=*/{kv_map},
+      /*src_dp_size=*/1,
+      /*src_dp_rank=*/0));
+  EXPECT_EQ(first_cache_size(*pool), 0u);
+  EXPECT_EQ(pool->num_used_blocks()[0], 0u);
+  EXPECT_TRUE(scheduler.reservations_empty());
+}
+
+class HangingFirstGenService final : public proto::DisaggPDService {
+ public:
+  explicit HangingFirstGenService(DisaggPDScheduler* decode,
+                                  int32_t sleep_ms)
+      : decode_(decode), sleep_ms_(sleep_ms) {}
+
+  std::atomic<int32_t> first_gen_calls{0};
+  std::atomic<int32_t> release_calls{0};
+
+  void FirstGeneration(google::protobuf::RpcController* /*controller*/,
+                       const proto::DisaggGenerationsRequests* /*request*/,
+                       proto::Status* response,
+                       google::protobuf::Closure* done) override {
+    ++first_gen_calls;
+    const int32_t delay = sleep_ms_;
+    std::thread([delay, response, done]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+      response->set_ok(true);
+      done->Run();
+    }).detach();
+  }
+
+  void ReleaseReservation(google::protobuf::RpcController* /*controller*/,
+                          const proto::ReleaseReservationRequest* request,
+                          proto::ReleaseReservationResponse* response,
+                          google::protobuf::Closure* done) override {
+    brpc::ClosureGuard guard(done);
+    ++release_calls;
+    const bool freed = decode_->release_reservation(
+        request->req_id(), request->reservation_id());
+    response->set_result(
+        freed ? proto::ReleaseReservationResponse::RELEASED
+              : proto::ReleaseReservationResponse::NOT_WAITING);
+  }
+
+ private:
+  DisaggPDScheduler* decode_;
+  int32_t sleep_ms_;
+};
+
+TEST(DisaggPDSchedulerTest,
+     PrefillFirstGenerationTimeoutAndCancellationReclaimResourcesAndReleaseDecode) {
+  setenv("XLLM_FIRST_GENERATION_RPC_TIMEOUT_MS", "150", 1);
+
+  FakeEngine decode_engine(/*num_blocks=*/16, /*block_size=*/2);
+  TestDisaggPDScheduler decode(&decode_engine, make_decode_options());
+  HangingFirstGenService service(&decode, /*sleep_ms=*/450);
+  brpc::Server server;
+  ASSERT_EQ(server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+  ASSERT_EQ(server.Start("127.0.0.1:0", nullptr), 0);
+  const std::string peer_addr =
+      "127.0.0.1:" + std::to_string(server.listen_address().port);
+
+  brpc::Channel channel;
+  ASSERT_EQ(channel.Init(peer_addr.c_str(), nullptr), 0);
+  proto::DisaggPDService_Stub stub(&channel);
+
+  FakeEngine prefill_engine(/*num_blocks=*/16,
+                            /*block_size=*/2,
+                            /*num_speculative_tokens=*/0,
+                            /*dp_size=*/1,
+                            /*embedding_blocks=*/8,
+                            /*enable_linear_state=*/true);
+  auto p_opts = make_options();
+  p_opts.instance_role(InstanceRole::PREFILL).kv_cache_transfer_mode("PULL");
+  TestDisaggPDScheduler prefill(&prefill_engine, p_opts);
+  auto* p_pool = prefill_engine.block_manager_pool();
+  auto* d_pool = decode_engine.block_manager_pool();
+
+  // Case A: FirstGeneration RPC times out -> Prefill reclaims KV + LINEAR slot
+  // and releases Decode reservation asynchronously.
+  {
+    auto d_req = make_request({1, 2, 3, 4}, "req_timeout");
+    d_req->state().pd_reservation_id = "res_timeout";
+    ASSERT_TRUE(d_pool->allocate(d_req->sequences()[0].get()));
+    ASSERT_TRUE(decode.decode_schedule(d_req, "prefill"));
+
+    std::atomic<bool> timeout_failed_cb{false};
+    auto p_req = make_request({1, 2, 3, 4}, "req_timeout");
+    p_req->state().stream = true;
+    p_req->state().pd_reservation_id = "res_timeout";
+    p_req->state().decode_rpc_address = peer_addr;
+    p_req->state().decode_address = peer_addr;
+    p_req->state().output_func = [&timeout_failed_cb](const RequestOutput& out) {
+      if (out.status.has_value() && !out.status->ok()) {
+        timeout_failed_cb.store(true, std::memory_order_release);
+      }
+      return true;
+    };
+    Sequence* p_seq = p_req->sequences()[0].get();
+    ASSERT_TRUE(p_pool->allocate(p_seq));
+    ASSERT_GE(p_seq->get_linear_state_slot_id(), 0);
+    p_seq->kv_state().set_kv_cache_tokens_num(p_seq->num_prompt_tokens());
+    p_seq->append_token(Token(42));
+    prefill.set_request_channel("req_timeout", &stub);
+
+    std::vector<std::shared_ptr<Request>> completed{p_req};
+    prefill.prefill_send_first_generation_for_requests(completed);
+    prefill.prefill_completion().get();
+    prefill.wait_notifications();
+
+    EXPECT_EQ(service.first_gen_calls.load(), 1);
+    EXPECT_GE(service.release_calls.load(), 1);
+    for (int i = 0; i < 50 && !timeout_failed_cb.load(std::memory_order_acquire); ++i) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_TRUE(timeout_failed_cb.load(std::memory_order_acquire));
+    EXPECT_EQ(p_pool->num_used_blocks()[0], 0u);
+    EXPECT_EQ(first_cache_size(*p_pool), 2u);
+    EXPECT_EQ(p_seq->get_linear_state_slot_id(), -1);
+    EXPECT_TRUE(decode.reservations_empty());
+    EXPECT_EQ(d_pool->num_used_blocks()[0], 0u);
+  }
+
+  // Case B: Request cancelled before FirstGeneration RPC -> skips RPC, reclaims
+  // Prefill KV + LINEAR slot, and releases Decode reservation immediately.
+  {
+    auto d_req = make_request({5, 6, 7, 8}, "req_pre_cancel");
+    d_req->state().pd_reservation_id = "res_cancel";
+    ASSERT_TRUE(d_pool->allocate(d_req->sequences()[0].get()));
+    ASSERT_TRUE(decode.decode_schedule(d_req, "prefill"));
+
+    auto p_req = make_request({5, 6, 7, 8}, "req_pre_cancel");
+    p_req->state().stream = true;
+    p_req->state().pd_reservation_id = "res_cancel";
+    p_req->state().decode_rpc_address = peer_addr;
+    p_req->state().decode_address = peer_addr;
+    p_req->state().output_func = [](const RequestOutput&) { return true; };
+    p_req->set_cancel();
+    Sequence* p_seq = p_req->sequences()[0].get();
+    ASSERT_TRUE(p_pool->allocate(p_seq));
+    ASSERT_GE(p_seq->get_linear_state_slot_id(), 0);
+    p_seq->kv_state().set_kv_cache_tokens_num(p_seq->num_prompt_tokens());
+    p_seq->append_token(Token(43));
+    prefill.set_request_channel("req_pre_cancel", &stub);
+
+    const int32_t prev_calls = service.first_gen_calls.load();
+    std::vector<std::shared_ptr<Request>> completed{p_req};
+    prefill.prefill_send_first_generation_for_requests(completed);
+    prefill.prefill_completion().get();
+    prefill.wait_notifications();
+
+    EXPECT_EQ(service.first_gen_calls.load(), prev_calls);
+    EXPECT_EQ(p_seq->get_linear_state_slot_id(), -1);
+    EXPECT_TRUE(decode.reservations_empty());
+    EXPECT_EQ(d_pool->num_used_blocks()[0], 0u);
+  }
+
+  // Wait for detached sleep thread from Case A before stopping server.
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+  unsetenv("XLLM_FIRST_GENERATION_RPC_TIMEOUT_MS");
+}
+
+class RealDecodePullFirstGenService final : public proto::DisaggPDService {
+ public:
+  explicit RealDecodePullFirstGenService(DisaggPDScheduler* decode)
+      : decode_(decode) {}
+
+  std::atomic<int32_t> first_gen_calls{0};
+  std::atomic<int32_t> release_calls{0};
+
+  void FirstGeneration(google::protobuf::RpcController* /*controller*/,
+                       const proto::DisaggGenerationsRequests* request,
+                       proto::Status* response,
+                       google::protobuf::Closure* done) override {
+    ++first_gen_calls;
+    auto done_guard = std::make_shared<brpc::ClosureGuard>(done);
+    const auto& g = request->multi_gens(0);
+    std::vector<KVTransferMapping> mappings;
+    for (const auto& group : g.source_groups()) {
+      KVTransferMapping v;
+      v.group_id = group.group_id();
+      v.remote_shared_num = group.remote_shared_num();
+      v.remote_ids.assign(group.ids().begin(), group.ids().end());
+      mappings.emplace_back(std::move(v));
+    }
+    decode_->decode_recv_first_generation_async(
+        g.req_id(),
+        g.tokens(0).token_id(),
+        /*has_logprob=*/false,
+        /*logprob=*/0.0f,
+        /*time_to_first_token_latency_seconds=*/0.1,
+        /*upstream_elapsed_seconds=*/0.0,
+        /*top_tokens=*/{},
+        /*top_logprobs=*/{},
+        g.kv_cache_transfer_mode(),
+        /*src_cluster_ids=*/{1},
+        /*src_addrs=*/{"cpu-control"},
+        std::move(mappings),
+        /*src_dp_size=*/1,
+        /*src_dp_rank=*/0,
+        torch::Tensor(),
+        g.num_cached_tokens(),
+        g.mrope_position_delta(),
+        [response, done_guard](bool ok) { response->set_ok(ok); });
+  }
+
+  void ReleaseReservation(google::protobuf::RpcController* /*controller*/,
+                          const proto::ReleaseReservationRequest* request,
+                          proto::ReleaseReservationResponse* response,
+                          google::protobuf::Closure* done) override {
+    ++release_calls;
+    auto done_guard = std::make_shared<brpc::ClosureGuard>(done);
+    decode_->release_reservation_async(
+        request->req_id(),
+        request->reservation_id(),
+        [response, done_guard](bool freed) {
+          response->set_result(
+              freed ? proto::ReleaseReservationResponse::RELEASED
+                    : proto::ReleaseReservationResponse::NOT_WAITING);
+        });
+  }
+
+  void MultiGenerations(google::protobuf::RpcController* controller,
+                        const proto::DisaggGenerationsRequests* request,
+                        proto::Status* response,
+                        google::protobuf::Closure* done) override {
+    brpc::ClosureGuard guard(done);
+    (void)controller;
+    (void)request;
+    response->set_ok(false);
+  }
+
+ private:
+  DisaggPDScheduler* decode_;
+};
+
+TEST(DisaggPDSchedulerTest,
+     InFlightPullTimeoutHoldsSourceSlotsUntilDecodePullDrainsAndAbortsEnqueue) {
+  setenv("XLLM_FIRST_GENERATION_RPC_TIMEOUT_MS", "150", 1);
+  setenv("XLLM_RELEASE_RESERVATION_RPC_TIMEOUT_MS", "120", 1);
+
+  FakeEngine decode_engine(/*num_blocks=*/16,
+                           /*block_size=*/2,
+                           /*num_speculative_tokens=*/0,
+                           /*dp_size=*/1,
+                           /*embedding_blocks=*/8,
+                           /*enable_linear_state=*/true);
+  TestDisaggPDScheduler decode(&decode_engine, make_decode_options());
+  RealDecodePullFirstGenService service(&decode);
+  brpc::Server server;
+  ASSERT_EQ(server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+  ASSERT_EQ(server.Start("127.0.0.1:0", nullptr), 0);
+  const std::string peer_addr =
+      "127.0.0.1:" + std::to_string(server.listen_address().port);
+
+  brpc::Channel channel;
+  ASSERT_EQ(channel.Init(peer_addr.c_str(), nullptr), 0);
+  proto::DisaggPDService_Stub stub(&channel);
+
+  FakeEngine prefill_engine(/*num_blocks=*/16,
+                            /*block_size=*/2,
+                            /*num_speculative_tokens=*/0,
+                            /*dp_size=*/1,
+                            /*embedding_blocks=*/8,
+                            /*enable_linear_state=*/true);
+  std::promise<void> entered, allow, completed;
+  auto enteredf = entered.get_future();
+  auto allowed = allow.get_future();
+  auto completedf = completed.get_future();
+  std::atomic<int> cell{111}, read_value{-1}, serialized_slot{-1};
+  decode_engine.pull_hook = [&](const std::vector<KVTransferMapping>& maps) {
+    for (const auto& m : maps) {
+      if (m.group_id == cache_group_id(BlockType::LINEAR) &&
+          m.remote_ids.size() == 1) {
+        serialized_slot.store(static_cast<int>(m.remote_ids[0]));
+      }
+    }
+    entered.set_value();
+    const bool resumed =
+        allowed.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+    read_value.store(resumed ? cell.load() : -99);
+    completed.set_value();
+    return true;
+  };
+
+  auto p_opts = make_options();
+  p_opts.instance_role(InstanceRole::PREFILL).kv_cache_transfer_mode("PULL");
+  TestDisaggPDScheduler prefill(&prefill_engine, p_opts);
+  auto* p_pool = prefill_engine.block_manager_pool();
+  auto* d_pool = decode_engine.block_manager_pool();
+
+  auto d_req = make_request({1, 2, 3, 4}, "req_timeout");
+  d_req->state().pd_reservation_id = "res_timeout";
+  ASSERT_TRUE(d_pool->allocate(d_req->sequences()[0].get()));
+  d_req->sequences()[0]->kv_state().set_kv_cache_tokens_num(
+      d_req->sequences()[0]->num_prompt_tokens());
+  ASSERT_TRUE(decode.decode_schedule(d_req, "prefill"));
+
+  std::atomic<bool> timeout_failed_cb{false};
+  auto p_req = make_request({1, 2, 3, 4}, "req_timeout");
+  p_req->state().stream = true;
+  p_req->state().pd_reservation_id = "res_timeout";
+  p_req->state().decode_rpc_address = peer_addr;
+  p_req->state().decode_address = peer_addr;
+  p_req->state().output_func = [&timeout_failed_cb](const RequestOutput& out) {
+    if (out.status.has_value() && !out.status->ok()) {
+      timeout_failed_cb.store(true, std::memory_order_release);
+    }
+    return true;
+  };
+  Sequence* p_seq = p_req->sequences()[0].get();
+  ASSERT_TRUE(p_pool->allocate(p_seq));
+  const int original_slot = p_seq->get_linear_state_slot_id();
+  ASSERT_GE(original_slot, 0);
+  p_seq->kv_state().set_kv_cache_tokens_num(p_seq->num_prompt_tokens());
+  p_seq->append_token(Token(42));
+  p_seq->first_token() = RemoteToken{.token_id = 42};
+  prefill.set_request_channel("req_timeout", &stub);
+
+  std::vector<std::shared_ptr<Request>> completed_reqs{p_req};
+  prefill.prefill_send_first_generation_for_requests(completed_reqs);
+  ASSERT_EQ(enteredf.wait_for(std::chrono::seconds(2)),
+            std::future_status::ready);
+
+  // Prefill RPC timeout fires at ~150ms without wedging prefill_completion().
+  prefill.prefill_completion().get();
+  for (int i = 0; i < 50 && !timeout_failed_cb.load(std::memory_order_acquire);
+       ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_TRUE(timeout_failed_cb.load(std::memory_order_acquire));
+
+  // Wait until Decode receives ReleaseReservation (including polling across
+  // the 120ms ReleaseReservation RPC timeout while PULL stays paused > 150ms).
+  for (int i = 0;
+       i < 60 && !decode.has_aborting_inflight_pull("req_timeout");
+       ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_TRUE(decode.has_aborting_inflight_pull("req_timeout"));
+  std::this_thread::sleep_for(std::chrono::milliseconds(160));
+  EXPECT_GE(service.release_calls.load(), 2);
+
+  // Critical invariant 1: While Decode's PULL is still reading, Prefill MUST
+  // NOT reclaim or reuse p_req's KV blocks or LINEAR slot!
+  EXPECT_NE(completedf.wait_for(std::chrono::milliseconds(0)),
+            std::future_status::ready);
+  EXPECT_EQ(serialized_slot.load(), original_slot);
+  EXPECT_EQ(p_seq->get_linear_state_slot_id(), original_slot);
+  EXPECT_EQ(p_pool->num_used_blocks()[0], 2u);
+  EXPECT_FALSE(decode.reservations_empty());
+
+  bool reused_same_slot = false;
+  std::vector<std::shared_ptr<Request>> extras;
+  for (int i = 0; i < 16; ++i) {
+    auto other = make_request({17 + i, 33 + i}, "reuser-" + std::to_string(i));
+    if (!p_pool->allocate(other->sequences()[0].get())) {
+      break;
+    }
+    if (other->sequences()[0]->get_linear_state_slot_id() == original_slot) {
+      reused_same_slot = true;
+      cell.store(222);
+    }
+    extras.push_back(other);
+  }
+  EXPECT_FALSE(reused_same_slot);
+  for (auto& other : extras) {
+    p_pool->deallocate_without_cache(other->sequences()[0].get());
+  }
+
+  // Resume the paused Decode PULL; once it drains, ReleaseReservation completes
+  // and Prefill reclaims its source blocks/LINEAR slot while Decode aborts
+  // enqueue and frees its local blocks without publishing cache.
+  allow.set_value();
+  ASSERT_EQ(completedf.wait_for(std::chrono::seconds(2)),
+            std::future_status::ready);
+  prefill.wait_notifications();
+
+  EXPECT_EQ(read_value.load(), 111);
+  EXPECT_EQ(p_seq->get_linear_state_slot_id(), -1);
+  EXPECT_EQ(p_pool->num_used_blocks()[0], 0u);
+  EXPECT_EQ(first_cache_size(*p_pool), 2u);
+
+  // Critical invariant 2: Timed-out/released request never enters Decode queue
+  // and leaves zero leaked Decode blocks or unpulled prefix cache entries.
+  std::shared_ptr<Request> queued;
+  EXPECT_FALSE(decode.pop_decode_request_for_test(&queued));
+  EXPECT_EQ(queued, nullptr);
+  EXPECT_TRUE(decode.reservations_empty());
+  EXPECT_EQ(d_pool->num_used_blocks()[0], 0u);
+  EXPECT_EQ(first_cache_size(*d_pool), 0u);
+
+  // Verify original_slot is now cleanly reusable after PULL drained.
+  bool reused_after_drain = false;
+  std::vector<std::shared_ptr<Request>> post_drain_reqs;
+  for (int i = 0; i < 16; ++i) {
+    auto other =
+        make_request({101 + i, 201 + i}, "post-drain-" + std::to_string(i));
+    if (!p_pool->allocate(other->sequences()[0].get())) {
+      break;
+    }
+    if (other->sequences()[0]->get_linear_state_slot_id() == original_slot) {
+      reused_after_drain = true;
+    }
+    post_drain_reqs.push_back(other);
+  }
+  EXPECT_TRUE(reused_after_drain);
+  for (auto& other : post_drain_reqs) {
+    p_pool->deallocate_without_cache(other->sequences()[0].get());
+  }
+
+  server.Stop(0);
+  server.Join();
+  unsetenv("XLLM_RELEASE_RESERVATION_RPC_TIMEOUT_MS");
+  unsetenv("XLLM_FIRST_GENERATION_RPC_TIMEOUT_MS");
+}
+
+TEST(DisaggPDSchedulerTest,
+     ProductionDisaggPDServiceRejectsLegacyMultiGenerationsWithoutFatal) {
+  DisaggPDService service;
+
+  brpc::Server server;
+  ASSERT_EQ(server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+  ASSERT_EQ(server.Start("127.0.0.1:0", nullptr), 0);
+  const std::string addr =
+      "127.0.0.1:" + std::to_string(server.listen_address().port);
+
+  brpc::Channel channel;
+  ASSERT_EQ(channel.Init(addr.c_str(), nullptr), 0);
+  proto::DisaggPDService_Stub stub(&channel);
+
+  {
+    brpc::Controller cntl;
+    proto::DisaggGenerationsRequests req;
+    req.add_multi_gens()->set_req_id("legacy_chunk_req");
+    proto::Status resp;
+    stub.MultiGenerations(&cntl, &req, &resp, nullptr);
+    EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    EXPECT_FALSE(resp.ok());
+  }
+  {
+    brpc::Controller cntl;
+    proto::PullSignal req;
+    proto::Status resp;
+    stub.SendPullSignal(&cntl, &req, &resp, nullptr);
+    EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    EXPECT_FALSE(resp.ok());
+  }
+
+  server.Stop(0);
+  server.Join();
+}
+
 }  // namespace xllm

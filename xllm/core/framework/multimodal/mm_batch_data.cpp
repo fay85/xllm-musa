@@ -50,20 +50,19 @@ void MMBatchData::get(const MMKey& key, std::vector<torch::Tensor>& vec) const {
 }
 
 namespace {
-void move_dict_to_device(MMDict& dict, const torch::Device& device) {
+void move_dict_to_device(MMDict& dict,
+                         const torch::Device& device,
+                         bool keep_vision_grid_on_host) {
   for (auto& [key, value] : dict) {
-#if defined(USE_MUSA)
-    // Keep small grid-shape metadata on CPU to avoid async H2D -> synchronous
-    // D2H (muMemcpyDtoHAsync_v2) stream sync stalls inside ViT encoders.
-    if (key == "image_grid_thw" || key == "video_grid_thw") {
-      continue;
-    }
-#endif
+    const bool host_grid = keep_vision_grid_on_host &&
+                           (key == "image_grid_thw" || key == "video_grid_thw");
+    const torch::Device target =
+        host_grid ? torch::Device(torch::kCPU) : device;
     if (std::holds_alternative<torch::Tensor>(value)) {
-      value = safe_to(std::get<torch::Tensor>(value), device, true);
+      value = safe_to(std::get<torch::Tensor>(value), target, !host_grid);
     } else if (std::holds_alternative<std::vector<torch::Tensor>>(value)) {
       for (auto& tensor : std::get<std::vector<torch::Tensor>>(value)) {
-        tensor = safe_to(tensor, device, true);
+        tensor = safe_to(tensor, target, !host_grid);
       }
     }
   }
@@ -71,7 +70,12 @@ void move_dict_to_device(MMDict& dict, const torch::Device& device) {
 }  // namespace
 
 void MMBatchData::to(const torch::Device& device) {
-  move_dict_to_device(data_, device);
+  move_to(device, /*keep_vision_grid_on_host=*/false);
+}
+
+void MMBatchData::move_to(const torch::Device& device,
+                          bool keep_vision_grid_on_host) {
+  move_dict_to_device(data_, device, keep_vision_grid_on_host);
 
   // Move per-item tensors (raw inputs and user-supplied embeddings) too. The
   // executor re-gathers inputs from per-item MMDataItem data() before running
@@ -81,18 +85,26 @@ void MMBatchData::to(const torch::Device& device) {
   for (auto& mm_data : mm_datas_) {
     if (mm_data.hold<MMItemVec>()) {
       for (auto& item : mm_data.items<MMItemVec>()) {
-        move_dict_to_device(item.mutable_data(), device);
+        move_dict_to_device(
+            item.mutable_data(), device, keep_vision_grid_on_host);
       }
     } else if (mm_data.hold<MMDict>()) {
-      move_dict_to_device(mm_data.items<MMDict>(), device);
+      move_dict_to_device(
+          mm_data.items<MMDict>(), device, keep_vision_grid_on_host);
     }
   }
 }
 
 MMBatchData MMBatchData::to(const MMBatchData& mm_data,
                             const torch::Device& device) {
+  return to(mm_data, device, /*keep_vision_grid_on_host=*/false);
+}
+
+MMBatchData MMBatchData::to(const MMBatchData& mm_data,
+                            const torch::Device& device,
+                            bool keep_vision_grid_on_host) {
   MMBatchData new_mm_data = mm_data;
-  new_mm_data.to(device);
+  new_mm_data.move_to(device, keep_vision_grid_on_host);
   return new_mm_data;
 }
 

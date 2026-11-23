@@ -33,6 +33,11 @@ class GlobalCaptureInstance final {
   std::unique_ptr<PiecewiseGraphs> end_capture();
   void abort_capture() noexcept;
 
+  // Upload an immutable, graph-keyed host layout without capturing an H2D
+  // copy from temporary host storage. The graph owns the resulting tensor.
+  torch::Tensor upload_constant(const torch::Tensor& host,
+                                const torch::Device& device);
+
   void temporarily_end_graph();
   void temporarily_begin_graph();
 

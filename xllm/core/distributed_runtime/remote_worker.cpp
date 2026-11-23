@@ -246,7 +246,7 @@ folly::SemiFuture<bool> RemoteWorker::pull_kv_blocks_async(
     const std::vector<KVTransferMapping>& mappings) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();
-  threadpool_.schedule([this,
+  pull_threadpool_.schedule([this,
                         src_cluster_id,
                         src_addr,
                         mappings,

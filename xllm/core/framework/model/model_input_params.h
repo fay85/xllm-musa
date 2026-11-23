@@ -879,8 +879,13 @@ struct MultiModalInput {
   mutable std::vector<torch::Tensor> deep_stacks;
 
   MultiModalInput to(const torch::Device& device) const {
+    return to(device, /*keep_vision_grid_on_host=*/false);
+  }
+
+  MultiModalInput to(const torch::Device& device,
+                     bool keep_vision_grid_on_host) const {
     MultiModalInput out;
-    out.mm_data = MMBatchData::to(mm_data, device);
+    out.mm_data = MMBatchData::to(mm_data, device, keep_vision_grid_on_host);
     out.deep_stacks = deep_stacks;
     return out;
   }
@@ -1071,13 +1076,18 @@ struct ModelInputParams {
   }
 
   ModelInputParams to(const torch::Device& device) const {
+    return to(device, /*keep_vision_grid_on_host=*/false);
+  }
+
+  ModelInputParams to(const torch::Device& device,
+                      bool keep_vision_grid_on_host) const {
     ModelInputParams params;
     params.meta = meta;
     params.execution_batch = execution_batch;
     params.attention = attention.to(device);
     params.embedding = embedding.to(device);
     params.block_copy = block_copy.to(device);
-    params.multimodal = multimodal.to(device);
+    params.multimodal = multimodal.to(device, keep_vision_grid_on_host);
     params.parallel = parallel.to(device);
     params.expert = expert.to(device);
     params.graph = graph.to(device);

@@ -128,14 +128,19 @@ void record_decode_admission(Request* request,
 
 void send_reservation_release(const std::string& req_id,
                               const std::string& reservation_id,
-                              const std::string& address) {
-  constexpr int32_t kMaxAttempts = 3;
-  constexpr int32_t kTimeoutMs = 1000;
+                              const std::string& address,
+                              bool wait_for_inflight_pull = false) {
+  constexpr int32_t kMaxHardAttempts = 3;
   constexpr int32_t kBackoffMs = 50;
+  const int32_t rpc_timeout_ms = std::max<int32_t>(
+      100, util::get_int_env("XLLM_RELEASE_RESERVATION_RPC_TIMEOUT_MS", 1000));
+  const int32_t max_wait_ms = std::max<int32_t>(
+      rpc_timeout_ms,
+      util::get_int_env("XLLM_SOURCE_RECLAIM_MAX_WAIT_MS", 120000));
   brpc::Channel channel;
   brpc::ChannelOptions options;
-  options.timeout_ms = kTimeoutMs;
-  options.connect_timeout_ms = kTimeoutMs;
+  options.timeout_ms = rpc_timeout_ms;
+  options.connect_timeout_ms = rpc_timeout_ms;
   options.max_retry = 0;
   if (channel.Init(address.c_str(), nullptr, &options) != 0) {
     LOG(ERROR) << "Decode reservation release failed, request_id=" << req_id
@@ -147,7 +152,11 @@ void send_reservation_release(const std::string& req_id,
   proto::ReleaseReservationRequest req;
   req.set_req_id(req_id);
   req.set_reservation_id(reservation_id);
-  for (int32_t attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+  const auto started = std::chrono::steady_clock::now();
+  int32_t attempt = 0;
+  int32_t hard_failures = 0;
+  while (true) {
+    ++attempt;
     brpc::Controller cntl;
     proto::ReleaseReservationResponse resp;
     stub.ReleaseReservation(&cntl, &req, &resp, nullptr);
@@ -159,13 +168,29 @@ void send_reservation_release(const std::string& req_id,
                 << ", attempt=" << attempt;
       return;
     }
+    const auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started)
+            .count();
+    if (wait_for_inflight_pull && cntl.Failed() &&
+        cntl.ErrorCode() == brpc::ERPCTIMEDOUT && elapsed_ms < max_wait_ms) {
+      LOG(WARNING) << "Waiting for Decode in-flight KV pull to drain before "
+                   << "source reclaim, request_id=" << req_id
+                   << ", peer=" << address << ", attempt=" << attempt
+                   << ", elapsed_ms=" << elapsed_ms;
+      continue;
+    }
+    ++hard_failures;
     LOG(WARNING) << "Decode reservation release retry, request_id=" << req_id
                  << ", peer=" << address << ", attempt=" << attempt
+                 << ", hard_failures=" << hard_failures
                  << ", result=" << resp.result()
                  << ", rpc_error=" << cntl.ErrorText();
-    if (attempt < kMaxAttempts) {
-      absl::SleepFor(absl::Milliseconds(kBackoffMs));
+    if (hard_failures >= kMaxHardAttempts ||
+        (wait_for_inflight_pull && elapsed_ms >= max_wait_ms)) {
+      break;
     }
+    absl::SleepFor(absl::Milliseconds(kBackoffMs));
   }
   LOG(ERROR) << "Decode reservation release exhausted retries, request_id="
              << req_id << ", peer=" << address
@@ -252,6 +277,73 @@ DisaggPDScheduler::DisaggPDScheduler(Engine* engine, const Options& options)
   }
 }
 
+namespace {
+
+class LambdaRpcClosure final : public ::google::protobuf::Closure {
+ public:
+  explicit LambdaRpcClosure(std::function<void()> fn) : fn_(std::move(fn)) {}
+  void Run() override {
+    auto fn = std::move(fn_);
+    delete this;
+    fn();
+  }
+
+ private:
+  std::function<void()> fn_;
+};
+
+int32_t first_generation_rpc_timeout_ms() {
+  const int32_t configured =
+      util::get_int_env("XLLM_FIRST_GENERATION_RPC_TIMEOUT_MS", 60000);
+  return std::max<int32_t>(100, configured);
+}
+
+}  // namespace
+
+void DisaggPDScheduler::begin_inflight_prefill_rpc() {
+  std::lock_guard<std::mutex> lock(inflight_prefill_rpcs_mutex_);
+  ++inflight_prefill_rpcs_;
+}
+
+void DisaggPDScheduler::end_inflight_prefill_rpc() {
+  std::lock_guard<std::mutex> lock(inflight_prefill_rpcs_mutex_);
+  CHECK_GT(inflight_prefill_rpcs_, 0U);
+  if (--inflight_prefill_rpcs_ == 0) {
+    inflight_prefill_rpcs_cv_.notify_all();
+  }
+}
+
+void DisaggPDScheduler::wait_inflight_prefill_rpcs() {
+  std::unique_lock<std::mutex> lock(inflight_prefill_rpcs_mutex_);
+  inflight_prefill_rpcs_cv_.wait(
+      lock, [this]() { return inflight_prefill_rpcs_ == 0; });
+}
+
+void DisaggPDScheduler::begin_inflight_reservation_release() {
+  std::lock_guard<std::mutex> lock(inflight_reservation_releases_mutex_);
+  ++inflight_reservation_releases_;
+}
+
+void DisaggPDScheduler::end_inflight_reservation_release() {
+  std::lock_guard<std::mutex> lock(inflight_reservation_releases_mutex_);
+  CHECK_GT(inflight_reservation_releases_, 0U);
+  if (--inflight_reservation_releases_ == 0) {
+    inflight_reservation_releases_cv_.notify_all();
+  }
+}
+
+void DisaggPDScheduler::wait_inflight_reservation_releases() {
+  std::unique_lock<std::mutex> lock(inflight_reservation_releases_mutex_);
+  inflight_reservation_releases_cv_.wait(
+      lock, [this]() { return inflight_reservation_releases_ == 0; });
+}
+
+void DisaggPDScheduler::wait_inflight_decode_pulls() {
+  std::unique_lock<std::mutex> lock(received_request_map_mutex_);
+  inflight_decode_pulls_cv_.wait(
+      lock, [this]() { return inflight_decode_pulls_.empty(); });
+}
+
 DisaggPDScheduler::~DisaggPDScheduler() {
   // Stop accepting RPCs while the service and scheduler dependencies are alive.
   // The RPC thread waits in Server::Join(), so Stop must precede its join.
@@ -269,6 +361,10 @@ DisaggPDScheduler::~DisaggPDScheduler() {
   if (dispatch_thread_ && dispatch_thread_->joinable()) {
     dispatch_thread_->join();
   }
+
+  wait_inflight_prefill_rpcs();
+  wait_inflight_decode_pulls();
+  wait_inflight_reservation_releases();
 
   if (rpc_server != nullptr) {
     ServerRegistry::get_instance().unregister_server(server_name_);
@@ -911,11 +1007,13 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
   non_stream_requests.reserve(candidate_requests.size());
   for (size_t i = 0; i < candidate_requests.size(); ++i) {
     auto request = candidate_requests[i];
-    if (request == nullptr) {
+    if (request == nullptr || request->sequences().empty() ||
+        request->sequences()[0] == nullptr) {
       continue;
     }
+    Sequence* sequence = request->sequences()[0].get();
     // Check if the request is a recently completed prefill request
-    if (request->sequences()[0]->num_generated_tokens() == 1) {
+    if (sequence->num_generated_tokens() == 1) {
       if (!options_.disable_log_stats()) {
         request->log_statistic(request->elapsed_seconds());
       }
@@ -931,6 +1029,10 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
         }
       }
 #endif
+      // Publish newly computed full blocks to Prefill PrefixCache immediately
+      // (0ms delay) while `request` retains refcount >= 1 on all blocks/slots
+      // until Decode finishes pulling KV + LINEAR state.
+      cache_prefill_blocks(request.get());
       requests.emplace_back(request);
       if (!request->state().stream) {
         non_stream_requests.emplace_back(request);
@@ -944,43 +1046,52 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
   }
 
   // No prefill request needs to be transferred to decode.
-  if (requests.size() == 0) {
+  if (requests.empty()) {
     return;
   }
 
-  prefill_threadpool_.schedule([this,
-                                requests = std::move(requests)]() mutable {
-    // send request first token to remote instance
-    // TODO: here we only support one sequence for now.
-    auto fail_request = [this](const std::shared_ptr<Request>& request,
-                               Status status) {
-      response_processor_->process_failed_request(request, status);
-      {
-        std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
-        req_to_channel_map_.erase(request->request_id());
-      }
-      response_processor_->wait_completion();
-      kv_cache_manager_->deallocate(request.get());
-    };
-    // Release the Decode reservation when handoff preparation or the
-    // FirstGeneration RPC fails. Non-stream requests already received their
-    // prefill response, so only shared cleanup is performed for them.
-    auto fail_handoff_request = [this, &fail_request](
-                                    const std::shared_ptr<Request>& request,
-                                    Status status) {
-      release_failed_request(request);
-      if (request->state().stream) {
-        fail_request(request, status);
+  // Dispatch each completed request in parallel onto prefill_threadpool_ and
+  // issue non-blocking async FirstGeneration RPCs so PCP multibatch requests
+  // never serialize behind one another and prefill threads never block on pull.
+  for (auto& completed_req : requests) {
+    begin_inflight_prefill_rpc();
+    prefill_threadpool_.schedule([this,
+                                  request = std::move(completed_req)]() mutable {
+      auto fail_request = [this](const std::shared_ptr<Request>& req,
+                                 Status status) {
+        response_processor_->process_failed_request(req, status);
+        {
+          std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
+          req_to_channel_map_.erase(req->request_id());
+        }
+        response_processor_->wait_completion();
+        kv_cache_manager_->deallocate(req.get());
+      };
+      auto fail_handoff_request = [this, fail_request](
+                                      const std::shared_ptr<Request>& req,
+                                      Status status) {
+        release_failed_request(req);
+        if (req->state().stream) {
+          fail_request(req, status);
+          return;
+        }
+        response_processor_->wait_completion();
+        kv_cache_manager_->deallocate(req.get());
+      };
+
+      if (request->cancelled()) {
+        LOG(WARNING) << "Skipping FirstGeneration for cancelled request, "
+                     << "request_id: " << request->request_id();
+        fail_handoff_request(
+            request,
+            {StatusCode::CANCELLED, "Request cancelled before decode handoff"});
+        end_inflight_prefill_rpc();
         return;
       }
-      response_processor_->wait_completion();
-      kv_cache_manager_->deallocate(request.get());
-    };
-    for (auto& request : requests) {
-      Timer first_generation_timer;
-      // TODO: support batch request later
-      proto::DisaggGenerationsRequests gens;
-      auto gen = gens.mutable_multi_gens()->Add();
+
+      auto first_generation_timer = std::make_shared<Timer>();
+      auto gens = std::make_shared<proto::DisaggGenerationsRequests>();
+      auto* gen = gens->mutable_multi_gens()->Add();
       gen->set_req_id(request->request_id());
       gen->set_x_request_id(request->x_request_id());
       gen->set_x_request_time(request->x_request_time());
@@ -998,7 +1109,7 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
       gen->set_mrope_position_delta(
           request->sequences()[0]->get_mrope_position_delta());
       if (request->sequences()[0]->first_token().has_value()) {
-        auto token = gen->mutable_tokens()->Add();
+        auto* token = gen->mutable_tokens()->Add();
         token->set_token_id(
             request->sequences()[0]->first_token().value().token_id);
         token->set_time_to_first_token_latency_seconds(
@@ -1023,8 +1134,6 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
             request->sequences()[0]->first_token().value().token_top_logprobs);
       }
       gen->set_kv_cache_transfer_mode(options_.kv_cache_transfer_mode());
-      // PUSH is completed before FirstGeneration. Only native PULL needs
-      // source cache metadata in this request.
       if (options_.kv_cache_transfer_mode() == "PULL") {
         ADD_VECTOR_TO_PROTO(gen->mutable_cluster_ids(),
                             instance_info_.cluster_ids);
@@ -1074,7 +1183,8 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
           fail_handoff_request(
               request,
               {StatusCode::UNKNOWN, "Missing MTP bootstrap embedding"});
-          continue;
+          end_inflight_prefill_rpc();
+          return;
         }
         torch::Tensor embedding_cpu = safe_to(embedding, torch::kCPU);
         if (!util::torch_to_proto(embedding_cpu,
@@ -1084,63 +1194,128 @@ void DisaggPDScheduler::prefill_send_first_generation_for_requests(
           fail_handoff_request(request,
                                {StatusCode::UNKNOWN,
                                 "Failed to serialize MTP bootstrap embedding"});
-          continue;
+          end_inflight_prefill_rpc();
+          return;
         }
         request->sequences()[0]->clear_mtp_bootstrap_embedding();
       }
-      const double prepare_seconds = first_generation_timer.elapsed_seconds();
+      const double prepare_seconds = first_generation_timer->elapsed_seconds();
 
-      // send first gens to remote instance
       proto::DisaggPDService_Stub* stub = nullptr;
       {
         std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
-        // now we only support one request once.
-        stub = req_to_channel_map_[request->request_id()];
+        auto it = req_to_channel_map_.find(request->request_id());
+        if (it != req_to_channel_map_.end()) {
+          stub = it->second;
+        }
       }
-
-      // TODO: Async call later
-      proto::Status resp;
-      brpc::Controller cntl;
-      // The first-token response was queued by ContinuousScheduler::step.
-      // Drain its response/RPC tasks before Decode may generate more tokens;
-      // waiting only after FirstGeneration allows Decode's SSE to overtake it.
-      response_processor_->wait_completion();
-      LOG_FIRST_N(INFO, 1)
-          << "[PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff";
-      Timer rpc_timer;
-      gen->set_upstream_elapsed_seconds(request->end_to_end_latency_seconds());
-      stub->FirstGeneration(&cntl, &gens, &resp, nullptr);
-      const double rpc_seconds = rpc_timer.elapsed_seconds();
-      VLOG(1) << "Prefill first-generation request_id=" << request->request_id()
-              << ", prepare_ms=" << prepare_seconds * 1000.0
-              << ", rpc_ms=" << rpc_seconds * 1000.0 << ", total_ms="
-              << first_generation_timer.elapsed_seconds() * 1000.0;
-
-      const bool sent_first_generation = !cntl.Failed() && resp.ok();
-      if (!sent_first_generation) {
-        LOG(ERROR) << "Failed to send first generation to decode instance : "
-                   << request->state().decode_address
-                   << ", error text : " << cntl.ErrorText()
-                   << ", response status: " << resp.ok();
+      if (stub == nullptr) {
+        LOG(ERROR) << "Missing Decode RPC stub for FirstGeneration, request_id: "
+                   << request->request_id();
         fail_handoff_request(
             request,
             {StatusCode::UNAVAILABLE,
-             "Failed to send first generation to decode instance"});
-        continue;
+             "Missing Decode RPC stub for FirstGeneration"});
+        end_inflight_prefill_rpc();
+        return;
       }
 
-      // The handoff succeeded, so the Decode instance owns the reservation.
-      request->state().decode_rpc_address.clear();
-
-      {
-        std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
-        req_to_channel_map_.erase(request->request_id());
-      }
+      // Drain first-token SSE before Decode may generate subsequent tokens.
       response_processor_->wait_completion();
-      cache_prefill_blocks(request.get());
-      kv_cache_manager_->deallocate(request.get());
-    }
-  });
+      LOG_FIRST_N(INFO, 1)
+          << "[PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff";
+
+      if (request->cancelled()) {
+        LOG(WARNING) << "Aborting FirstGeneration before RPC dispatch, "
+                     << "request_id: " << request->request_id();
+        fail_handoff_request(
+            request,
+            {StatusCode::CANCELLED, "Request cancelled before decode handoff"});
+        end_inflight_prefill_rpc();
+        return;
+      }
+
+      auto rpc_timer = std::make_shared<Timer>();
+      gen->set_upstream_elapsed_seconds(request->end_to_end_latency_seconds());
+      auto cntl = std::make_shared<brpc::Controller>();
+      cntl->set_timeout_ms(first_generation_rpc_timeout_ms());
+      auto resp = std::make_shared<proto::Status>();
+      auto* done = new LambdaRpcClosure(
+          [this,
+           request,
+           gens,
+           cntl,
+           resp,
+           prepare_seconds,
+           rpc_timer,
+           first_generation_timer,
+           fail_handoff_request]() mutable {
+            const double rpc_seconds = rpc_timer->elapsed_seconds();
+            const double total_seconds =
+                first_generation_timer->elapsed_seconds();
+            prefill_reclaim_threadpool_.schedule(
+                [this,
+                 request = std::move(request),
+                 cntl = std::move(cntl),
+                 resp = std::move(resp),
+                 prepare_seconds,
+                 rpc_seconds,
+                 total_seconds,
+                 fail_handoff_request]() mutable {
+                  VLOG(1) << "Prefill first-generation request_id="
+                          << request->request_id()
+                          << ", prepare_ms=" << prepare_seconds * 1000.0
+                          << ", rpc_ms=" << rpc_seconds * 1000.0
+                          << ", total_ms=" << total_seconds * 1000.0;
+                  const bool sent_first_generation =
+                      !cntl->Failed() && resp->ok();
+                  if (!sent_first_generation) {
+                    LOG(ERROR)
+                        << "Failed to send first generation to decode instance : "
+                        << request->state().decode_address
+                        << ", error text : " << cntl->ErrorText()
+                        << ", response status: " << resp->ok();
+                    if (cntl->Failed()) {
+                      // Decode may have already popped the waiting reservation
+                      // and entered an asynchronous KV/LINEAR PULL before this
+                      // RPC timed out on Prefill. Notify the client promptly,
+                      // but hold source KV/LINEAR blocks until Decode confirms
+                      // the reservation / in-flight PULL has terminated.
+                      if (request->state().stream) {
+                        response_processor_->process_failed_request(
+                            request,
+                            {StatusCode::UNAVAILABLE,
+                             "Failed to send first generation to decode instance"});
+                      }
+                      {
+                        std::lock_guard<std::mutex> lock(
+                            req_to_channel_map_mutex_);
+                        req_to_channel_map_.erase(request->request_id());
+                      }
+                      response_processor_->wait_completion();
+                      reclaim_failed_handoff_source(std::move(request));
+                    } else {
+                      fail_handoff_request(
+                          request,
+                          {StatusCode::UNAVAILABLE,
+                           "Failed to send first generation to decode instance"});
+                    }
+                    end_inflight_prefill_rpc();
+                    return;
+                  }
+
+                  request->state().decode_rpc_address.clear();
+                  {
+                    std::lock_guard<std::mutex> lock(req_to_channel_map_mutex_);
+                    req_to_channel_map_.erase(request->request_id());
+                  }
+                  kv_cache_manager_->deallocate(request.get());
+                  end_inflight_prefill_rpc();
+                });
+          });
+      stub->FirstGeneration(cntl.get(), gens.get(), resp.get(), done);
+    });
+  }
 }
 
 void DisaggPDScheduler::release_failed_request(
@@ -1163,15 +1338,45 @@ void DisaggPDScheduler::release_failed_request(
     return;
   }
 
-  // This request has been removed from the scheduling queue. LLMEngine::step
-  // waits for every worker, whose step_internal waits for all PUSH futures
-  // (also in overlap mode). Thus prior chunks cannot still write remote KV,
-  // and this failed request cannot enter a later batch or FirstGeneration.
-  // Capture values only: neither Request nor the scheduler's cached raw stub
-  // is needed by retries. The pool drains these tasks during destruction.
-  reservation_release_threadpool_.schedule([req_id, reservation_id, address] {
-    send_reservation_release(req_id, reservation_id, address);
-  });
+  begin_inflight_reservation_release();
+  reservation_release_threadpool_.schedule(
+      [this, req_id, reservation_id, address] {
+        send_reservation_release(
+            req_id, reservation_id, address, /*wait_for_inflight_pull=*/false);
+        end_inflight_reservation_release();
+      });
+}
+
+void DisaggPDScheduler::reclaim_failed_handoff_source(
+    std::shared_ptr<Request> request) {
+  if (request == nullptr) {
+    return;
+  }
+  std::string address = std::move(request->state().decode_rpc_address);
+  request->state().decode_rpc_address.clear();
+  const std::string req_id = request->request_id();
+  const std::string reservation_id = request->state().pd_reservation_id;
+  if (address.empty() || reservation_id.empty()) {
+    if (!address.empty() && reservation_id.empty()) {
+      LOG(ERROR) << "Cannot fence Decode in-flight pull without reservation "
+                 << "identity, request_id=" << req_id << ", peer=" << address;
+    }
+    kv_cache_manager_->deallocate(request.get());
+    return;
+  }
+
+  begin_inflight_reservation_release();
+  reservation_release_threadpool_.schedule(
+      [this,
+       request = std::move(request),
+       req_id,
+       reservation_id,
+       address = std::move(address)]() mutable {
+        send_reservation_release(
+            req_id, reservation_id, address, /*wait_for_inflight_pull=*/true);
+        kv_cache_manager_->deallocate(request.get());
+        end_inflight_reservation_release();
+      });
 }
 
 std::shared_ptr<Request> DisaggPDScheduler::take_waiting_request(
@@ -1196,22 +1401,60 @@ std::shared_ptr<Request> DisaggPDScheduler::take_waiting_request(
   return request;
 }
 
-bool DisaggPDScheduler::release_reservation(const std::string& req_id,
-                                            const std::string& reservation_id) {
-  std::shared_ptr<Request> request;
-  {
-    std::lock_guard<std::mutex> lock(received_request_map_mutex_);
-    auto it = received_request_map_.find(req_id);
-    if (it == received_request_map_.end() || reservation_id.empty() ||
-        it->second->state().pd_reservation_id != reservation_id) {
-      return false;
-    }
-    request = take_waiting_request(req_id);
+void DisaggPDScheduler::release_reservation_async(
+    const std::string& req_id,
+    const std::string& reservation_id,
+    std::function<void(bool)> done_cb) {
+  if (reservation_id.empty()) {
+    done_cb(false);
+    return;
   }
-  for (const auto& sequence : request->sequences()) {
+  std::shared_ptr<Request> waiting_request;
+  {
+    std::unique_lock<std::mutex> lock(received_request_map_mutex_);
+    auto it = received_request_map_.find(req_id);
+    if (it != received_request_map_.end()) {
+      if (it->second->state().pd_reservation_id != reservation_id) {
+        done_cb(false);
+        return;
+      }
+      waiting_request = take_waiting_request(req_id);
+    } else {
+      auto pull_it = inflight_decode_pulls_.find(req_id);
+      if (pull_it == inflight_decode_pulls_.end() ||
+          pull_it->second->reservation_id != reservation_id ||
+          pull_it->second->committed) {
+        done_cb(false);
+        return;
+      }
+      auto inflight = pull_it->second;
+      inflight->release_requested = true;
+      if (inflight->request != nullptr) {
+        inflight->request->set_cancel();
+      }
+      if (inflight->completed) {
+        const bool released = !inflight->committed;
+        lock.unlock();
+        done_cb(released);
+        return;
+      }
+      inflight->release_waiters.emplace_back(std::move(done_cb));
+      return;
+    }
+  }
+  for (const auto& sequence : waiting_request->sequences()) {
     engine_->block_manager_pool()->deallocate_without_cache(sequence.get());
   }
-  return true;
+  done_cb(true);
+}
+
+bool DisaggPDScheduler::release_reservation(const std::string& req_id,
+                                            const std::string& reservation_id) {
+  std::promise<bool> prom;
+  auto fut = prom.get_future();
+  release_reservation_async(
+      req_id, reservation_id, [&prom](bool released) { prom.set_value(released); });
+  return fut.get();
 }
 
 // request is received from prefill
@@ -1224,7 +1467,9 @@ bool DisaggPDScheduler::decode_schedule(
   {
     std::unique_lock<std::mutex> lock(received_request_map_mutex_);
     if (received_request_map_.find(request->request_id()) !=
-        received_request_map_.end()) {
+            received_request_map_.end() ||
+        inflight_decode_pulls_.find(request->request_id()) !=
+            inflight_decode_pulls_.end()) {
       LOG(ERROR) << "Decode receive duplicate request_id from prefill: "
                  << request->request_id();
       lock.unlock();
@@ -1260,27 +1505,168 @@ bool DisaggPDScheduler::decode_recv_first_generation(
     torch::Tensor mtp_bootstrap_embedding,
     int32_t num_cached_tokens,
     int32_t mrope_position_delta) {
-  Timer receive_timer;
-  // push to request_queue_, and will be executed by engine.
+  std::promise<bool> prom;
+  auto fut = prom.get_future();
+  decode_recv_first_generation_async(
+      req_id,
+      token_id,
+      has_logprob,
+      logprob,
+      time_to_first_token_latency_seconds,
+      upstream_elapsed_seconds,
+      std::move(top_tokens),
+      std::move(top_logprobs),
+      kv_cache_transfer_mode,
+      std::move(src_cluster_ids),
+      std::move(src_addrs),
+      std::move(source_mappings),
+      src_dp_size,
+      src_dp_rank,
+      std::move(mtp_bootstrap_embedding),
+      num_cached_tokens,
+      mrope_position_delta,
+      [&prom](bool ok) { prom.set_value(ok); });
+  return fut.get();
+}
+
+void DisaggPDScheduler::decode_recv_first_generation_async(
+    const std::string& req_id,
+    int64_t token_id,
+    bool has_logprob,
+    float logprob,
+    double time_to_first_token_latency_seconds,
+    double upstream_elapsed_seconds,
+    std::vector<int64_t> top_tokens,
+    std::vector<float> top_logprobs,
+    const std::string& kv_cache_transfer_mode,
+    std::vector<uint64_t> src_cluster_ids,
+    std::vector<std::string> src_addrs,
+    std::vector<KVTransferMapping> source_mappings,
+    int32_t src_dp_size,
+    int32_t src_dp_rank,
+    torch::Tensor mtp_bootstrap_embedding,
+    int32_t num_cached_tokens,
+    int32_t mrope_position_delta,
+    std::function<void(bool)> done_cb) {
+  auto receive_timer = std::make_shared<Timer>();
   std::shared_ptr<Request> request = nullptr;
+  auto inflight = std::make_shared<InflightDecodePull>();
   {
     std::lock_guard<std::mutex> lock(received_request_map_mutex_);
     auto it = received_request_map_.find(req_id);
     if (it == received_request_map_.end()) {
       LOG(ERROR) << "Failed to find request, request id: " << req_id;
-      return false;
+      done_cb(false);
+      return;
+    }
+    auto inst_it = request_to_instance_map_.find(req_id);
+    if (inst_it != request_to_instance_map_.end()) {
+      inflight->prefill_instance_name = inst_it->second;
     }
     request = take_waiting_request(req_id);
+    inflight->reservation_id = request->state().pd_reservation_id;
+    inflight->request = request;
+    inflight_decode_pulls_[req_id] = inflight;
   }
+
+  auto deallocate_request_without_cache = [this](Request* req) {
+    if (req == nullptr) {
+      return;
+    }
+    auto* pool = engine_->block_manager_pool();
+    for (auto& seq : req->sequences()) {
+      if (seq == nullptr) {
+        continue;
+      }
+      if (pool != nullptr) {
+        pool->deallocate_without_cache(seq.get());
+      } else {
+        kv_cache_manager_->deallocate(seq.get());
+      }
+    }
+  };
+
+  auto done_shared = std::make_shared<std::function<void(bool)>>(std::move(done_cb));
+
+  auto abort_handoff = [this,
+                        req_id,
+                        inflight,
+                        deallocate_request_without_cache,
+                        done_shared](Request* req) {
+    deallocate_request_without_cache(req);
+    std::vector<std::function<void(bool)>> waiters;
+    {
+      std::lock_guard<std::mutex> lock(received_request_map_mutex_);
+      inflight->completed = true;
+      auto it = inflight_decode_pulls_.find(req_id);
+      if (it != inflight_decode_pulls_.end() && it->second == inflight) {
+        inflight_decode_pulls_.erase(it);
+      }
+      waiters = std::move(inflight->release_waiters);
+      inflight_decode_pulls_cv_.notify_all();
+    }
+    for (auto& waiter : waiters) {
+      waiter(true);
+    }
+    (*done_shared)(false);
+  };
+
+  auto commit_handoff = [this,
+                         req_id,
+                         inflight,
+                         abort_handoff,
+                         done_shared](const std::shared_ptr<Request>& req,
+                                      double prepare_seconds,
+                                      const std::shared_ptr<Timer>& timer) {
+    Timer enqueue_timer;
+    bool aborted_by_release = false;
+    bool enqueue_failed = false;
+    {
+      std::lock_guard<std::mutex> lock(received_request_map_mutex_);
+      if (inflight->release_requested || req->cancelled()) {
+        aborted_by_release = true;
+      } else if (!request_queue_.write(req)) {
+        enqueue_failed = true;
+      } else {
+        inflight->committed = true;
+        inflight->completed = true;
+        auto it = inflight_decode_pulls_.find(req_id);
+        if (it != inflight_decode_pulls_.end() && it->second == inflight) {
+          inflight_decode_pulls_.erase(it);
+        }
+        inflight_decode_pulls_cv_.notify_all();
+      }
+    }
+    if (aborted_by_release) {
+      LOG(WARNING) << "Dropping Decode request cancelled/released before commit, "
+                   << "request_id: " << req_id;
+      abort_handoff(req.get());
+      return;
+    }
+    if (enqueue_failed) {
+      LOG(ERROR) << "Failed to enqueue decode request, request_id: " << req_id;
+      abort_handoff(req.get());
+      return;
+    }
+    VLOG(1) << "Decode first-generation request_id=" << req_id
+            << ", prepare_ms=" << prepare_seconds * 1000.0
+            << ", enqueue_ms=" << enqueue_timer.elapsed_seconds() * 1000.0
+            << ", total_ms=" << timer->elapsed_seconds() * 1000.0;
+    (*done_shared)(true);
+  };
+
+  if (inflight->release_requested || request->cancelled()) {
+    LOG(WARNING) << "Dropping Decode FirstGeneration for cancelled request, "
+                 << "request_id: " << req_id;
+    abort_handoff(request.get());
+    return;
+  }
+
   auto& sequences = request->sequences();
   if (sequences.empty() || sequences[0] == nullptr) {
     LOG(ERROR) << "Request has no valid sequences, request_id: " << req_id;
-    for (auto& sequence : sequences) {
-      if (sequence != nullptr) {
-        kv_cache_manager_->deallocate(sequence.get());
-      }
-    }
-    return false;
+    abort_handoff(request.get());
+    return;
   }
   Sequence* sequence = request->sequences()[0].get();
   if (num_cached_tokens < 0 ||
@@ -1299,20 +1685,20 @@ bool DisaggPDScheduler::decode_recv_first_generation(
     const int32_t slot_id = sequence->get_embedding_block_id();
     if (slot_id < 0) {
       LOG(ERROR) << "Invalid MTP bootstrap slot, request_id: " << req_id;
-      kv_cache_manager_->deallocate(request.get());
-      return false;
+      abort_handoff(request.get());
+      return;
     }
     if (token_id < 0 ||
         token_id > static_cast<int64_t>(std::numeric_limits<int32_t>::max())) {
       LOG(ERROR) << "Invalid MTP bootstrap token, request_id: " << req_id
                  << ", token_id: " << token_id;
-      kv_cache_manager_->deallocate(request.get());
-      return false;
+      abort_handoff(request.get());
+      return;
     }
     if (!mtp_bootstrap_embedding.defined()) {
       LOG(ERROR) << "Missing MTP bootstrap embedding, request_id: " << req_id;
-      kv_cache_manager_->deallocate(request.get());
-      return false;
+      abort_handoff(request.get());
+      return;
     }
 
     sequence->update_mtp_bootstrap_embedding(mtp_bootstrap_embedding);
@@ -1322,31 +1708,19 @@ bool DisaggPDScheduler::decode_recv_first_generation(
   if (has_logprob) {
     first_token.logprob = logprob;
     if (!top_tokens.empty() && !top_logprobs.empty()) {
-      // NOTE: slice vector here, to avoid copy
-      // so we need keep the vector `top_tokens` and `top_logprobs` lifetime
       first_token.top_tokens = top_tokens;
       first_token.top_logprobs = top_logprobs;
     }
   }
-  // Enable checking whether to skip the prefill token
   if (request->state().stream) {
     sequence->enable_checking_prefill_token();
   }
 
-  // update latency metrics
   restore_disaggregated_latency(request.get(),
                                 time_to_first_token_latency_seconds,
                                 upstream_elapsed_seconds);
-  // Rebase the ITL clock to the moment Decode receives the first token. The
-  // cumulative handoff latency is tracked by Request, while ITL only measures
-  // the local interval after the first token is received.
   sequence->tbt(absl::Now());
 
-  // TODO: we only support one sequence for currently.
-  // Heterogeneous TP now restores the Prefill KV/linear state before Decode,
-  // so its first token follows the same overlap protocol as every other PD
-  // transfer path.  Appending the real token here bypasses last_step_token and
-  // makes the first Decode step consume misaligned sequence state.
   if (enable_schedule_overlap()) {
     Token fake_token(-1);
     sequence->append_token(fake_token);
@@ -1354,93 +1728,203 @@ bool DisaggPDScheduler::decode_recv_first_generation(
   } else {
     sequence->append_token(first_token);
   }
-  const double prepare_seconds = receive_timer.elapsed_seconds();
+  const double prepare_seconds = receive_timer->elapsed_seconds();
 
-  // Pull KV cache only in native PULL mode. Heterogeneous PUSH writes directly
-  // into the final destination tensors before FirstGeneration is sent.
-  if (kv_cache_transfer_mode == "PULL") {
-    Timer pull_timer;
-    for (KVTransferMapping& mapping : source_mappings) {
-      const std::optional<BlockType> block_type =
-          block_type_from_cache_group_id(mapping.group_id);
-      if (!block_type.has_value()) {
-        LOG(ERROR) << "Unknown source KV transfer group, request_id=" << req_id
-                   << ", group_id=" << mapping.group_id;
-        kv_cache_manager_->deallocate(request.get());
-        return false;
-      }
+  if (kv_cache_transfer_mode != "PULL") {
+    commit_handoff(request, prepare_seconds, receive_timer);
+    return;
+  }
 
-      if (block_type.value() == BlockType::LINEAR ||
-          block_type.value() == BlockType::EMBEDDING) {
-        const int32_t local_id = block_type.value() == BlockType::LINEAR
-                                     ? sequence->get_linear_state_slot_id()
-                                     : sequence->get_embedding_block_id();
-        if (local_id >= 0) {
-          mapping.local_ids.emplace_back(static_cast<uint64_t>(local_id));
-        }
-      } else {
-        const Slice<Block> blocks =
-            sequence->kv_state().blocks(block_type.value());
-        size_t local_begin = 0;
-        if (block_type.value() == BlockType::SWA &&
-            mapping.remote_ids.size() < blocks.size()) {
-          local_begin = blocks.size() - mapping.remote_ids.size();
-        }
-        // Slid-out SWA pages keep logical UINT64_MAX placeholders. Filter
-        // both sides together so valid local pages never pair with sentinels.
-        std::vector<uint64_t> filtered_remote_ids;
-        filtered_remote_ids.reserve(mapping.remote_ids.size());
-        mapping.local_ids.reserve(blocks.size() - local_begin);
-        for (size_t index = local_begin; index < blocks.size(); ++index) {
-          const Block& block = blocks[index];
-          const size_t remote_index = index - local_begin;
-          const bool remote_valid = remote_index < mapping.remote_ids.size() &&
-                                    mapping.remote_ids[remote_index] !=
-                                        std::numeric_limits<uint64_t>::max();
-          if (block.is_valid() && remote_valid) {
-            mapping.local_ids.emplace_back(static_cast<uint64_t>(block.id()));
-            filtered_remote_ids.emplace_back(mapping.remote_ids[remote_index]);
+  decode_pull_threadpool_.schedule(
+      [this,
+       req_id,
+       request = std::move(request),
+       inflight,
+       src_cluster_ids = std::move(src_cluster_ids),
+       src_addrs = std::move(src_addrs),
+       source_mappings = std::move(source_mappings),
+       src_dp_size,
+       src_dp_rank,
+       prepare_seconds,
+       receive_timer,
+       abort_handoff,
+       commit_handoff]() mutable {
+        {
+          std::lock_guard<std::mutex> lock(received_request_map_mutex_);
+          if (inflight->release_requested || request->cancelled()) {
+            LOG(WARNING) << "Aborting Decode KV pull for cancelled/released "
+                         << "request, request_id: " << req_id;
           }
         }
-        mapping.remote_ids = std::move(filtered_remote_ids);
-      }
-      if (mapping.local_ids.size() != mapping.remote_ids.size()) {
-        LOG(ERROR) << "PULL KV mapping size mismatch, request_id=" << req_id
-                   << ", group_id=" << mapping.group_id
-                   << ", local=" << mapping.local_ids.size()
-                   << ", remote=" << mapping.remote_ids.size();
-        kv_cache_manager_->deallocate(request.get());
-        return false;
-      }
-    }
+        if (inflight->release_requested || request->cancelled()) {
+          abort_handoff(request.get());
+          return;
+        }
+        Sequence* sequence = request->sequences()[0].get();
+        Timer pull_timer;
+        size_t skipped_shared_blocks = 0;
+        size_t pulled_kv_blocks = 0;
+        for (KVTransferMapping& mapping : source_mappings) {
+          const std::optional<BlockType> block_type =
+              block_type_from_cache_group_id(mapping.group_id);
+          if (!block_type.has_value()) {
+            LOG(ERROR) << "Unknown source KV transfer group, request_id="
+                       << req_id << ", group_id=" << mapping.group_id;
+            abort_handoff(request.get());
+            return;
+          }
 
-    const int32_t dst_dp_rank = sequence->dp_rank();
-    const bool pulled = engine_->pull_kv_blocks(src_dp_size,
-                                                src_dp_rank,
-                                                src_cluster_ids,
-                                                src_addrs,
-                                                dst_dp_rank,
-                                                source_mappings);
-    if (!pulled) {
-      LOG(ERROR) << "Failed to pull KV blocks, request_id: " << req_id;
-      kv_cache_manager_->deallocate(request.get());
-      return false;
-    }
-    VLOG(1) << "Decode KV restore request_id=" << req_id
-            << ", pull_ms=" << pull_timer.elapsed_seconds() * 1000.0;
-  }
+          if (block_type.value() == BlockType::LINEAR ||
+              block_type.value() == BlockType::EMBEDDING) {
+            const int32_t local_id =
+                block_type.value() == BlockType::LINEAR
+                    ? sequence->get_linear_state_slot_id()
+                    : sequence->get_embedding_block_id();
+            if (local_id >= 0) {
+              mapping.local_ids.emplace_back(static_cast<uint64_t>(local_id));
+            }
+          } else if (block_type.value() == BlockType::SWA) {
+            const Slice<Block> blocks =
+                sequence->kv_state().blocks(BlockType::SWA);
+            if (mapping.remote_ids.size() > blocks.size()) {
+              LOG(ERROR) << "PULL SWA source exceeds local blocks, request_id="
+                         << req_id << ", local=" << blocks.size()
+                         << ", remote=" << mapping.remote_ids.size();
+              abort_handoff(request.get());
+              return;
+            }
+            const size_t local_begin =
+                blocks.size() - mapping.remote_ids.size();
+            for (size_t index = 0; index < local_begin; ++index) {
+              if (blocks[index].is_valid()) {
+                LOG(ERROR)
+                    << "PULL SWA truncated source misses active local window "
+                       "block, request_id="
+                    << req_id << ", local=" << blocks.size()
+                    << ", remote=" << mapping.remote_ids.size()
+                    << ", live_index=" << index;
+                abort_handoff(request.get());
+                return;
+              }
+            }
+            std::vector<uint64_t> filtered_remote_ids;
+            filtered_remote_ids.reserve(blocks.size() - local_begin);
+            mapping.local_ids.reserve(blocks.size() - local_begin);
+            for (size_t index = local_begin; index < blocks.size(); ++index) {
+              const Block& block = blocks[index];
+              const size_t remote_index = index - local_begin;
+              const bool remote_valid =
+                  remote_index < mapping.remote_ids.size() &&
+                  mapping.remote_ids[remote_index] !=
+                      std::numeric_limits<uint64_t>::max();
+              if (!block.is_valid()) {
+                continue;
+              }
+              if (!remote_valid) {
+                LOG(ERROR)
+                    << "PULL SWA missing source block for active local window, "
+                       "request_id="
+                    << req_id << ", local_index=" << index
+                    << ", remote_index=" << remote_index;
+                abort_handoff(request.get());
+                return;
+              }
+              mapping.local_ids.emplace_back(static_cast<uint64_t>(block.id()));
+              filtered_remote_ids.emplace_back(mapping.remote_ids[remote_index]);
+            }
+            mapping.remote_ids = std::move(filtered_remote_ids);
+          } else {
+            const Slice<Block> blocks =
+                sequence->kv_state().blocks(block_type.value());
+            size_t local_begin = 0;
+            size_t remote_begin = 0;
+            const size_t shared_num =
+                sequence->kv_state().shared_blocks_num(block_type.value());
+            if (shared_num == 0 &&
+                mapping.remote_ids.size() != blocks.size()) {
+              LOG(ERROR)
+                  << "PULL KV source block count mismatch, request_id=" << req_id
+                  << ", group_id=" << mapping.group_id
+                  << ", local=" << blocks.size()
+                  << ", remote=" << mapping.remote_ids.size();
+              abort_handoff(request.get());
+              return;
+            }
+            if (shared_num > 0) {
+              if (shared_num > blocks.size() ||
+                  (mapping.remote_ids.size() != blocks.size() &&
+                   mapping.remote_ids.size() != blocks.size() - shared_num)) {
+                LOG(ERROR)
+                    << "PULL KV shared prefix size mismatch, request_id="
+                    << req_id << ", group_id=" << mapping.group_id
+                    << ", shared_num=" << shared_num
+                    << ", local=" << blocks.size()
+                    << ", remote=" << mapping.remote_ids.size();
+                abort_handoff(request.get());
+                return;
+              }
+              local_begin = shared_num;
+              remote_begin =
+                  mapping.remote_ids.size() == blocks.size() ? shared_num : 0;
+              skipped_shared_blocks += shared_num;
+            }
+            std::vector<uint64_t> filtered_remote_ids;
+            filtered_remote_ids.reserve(blocks.size() - local_begin);
+            mapping.local_ids.reserve(blocks.size() - local_begin);
+            for (size_t index = local_begin; index < blocks.size(); ++index) {
+              const Block& block = blocks[index];
+              const size_t remote_index = remote_begin + (index - local_begin);
+              const bool remote_valid =
+                  remote_index < mapping.remote_ids.size() &&
+                  mapping.remote_ids[remote_index] !=
+                      std::numeric_limits<uint64_t>::max();
+              if (!block.is_valid() || !remote_valid) {
+                LOG(ERROR) << "PULL KV invalid block entry, request_id="
+                           << req_id << ", group_id=" << mapping.group_id
+                           << ", local_index=" << index
+                           << ", local_valid=" << block.is_valid()
+                           << ", remote_valid=" << remote_valid;
+                abort_handoff(request.get());
+                return;
+              }
+              mapping.local_ids.emplace_back(static_cast<uint64_t>(block.id()));
+              filtered_remote_ids.emplace_back(mapping.remote_ids[remote_index]);
+            }
+            if (block_type.value() == BlockType::KV) {
+              pulled_kv_blocks += mapping.local_ids.size();
+            }
+            mapping.remote_ids = std::move(filtered_remote_ids);
+          }
+          if (mapping.local_ids.size() != mapping.remote_ids.size()) {
+            LOG(ERROR) << "PULL KV mapping size mismatch, request_id=" << req_id
+                       << ", group_id=" << mapping.group_id
+                       << ", local=" << mapping.local_ids.size()
+                       << ", remote=" << mapping.remote_ids.size();
+            abort_handoff(request.get());
+            return;
+          }
+        }
 
-  Timer enqueue_timer;
-  if (!request_queue_.write(request)) {
-    LOG(ERROR) << "Failed to enqueue decode request, request_id: " << req_id;
-    kv_cache_manager_->deallocate(request.get());
-    return false;
-  }
-  VLOG(1) << "Decode first-generation request_id=" << req_id
-          << ", prepare_ms=" << prepare_seconds * 1000.0
-          << ", enqueue_ms=" << enqueue_timer.elapsed_seconds() * 1000.0
-          << ", total_ms=" << receive_timer.elapsed_seconds() * 1000.0;
-  return true;
+        const int32_t dst_dp_rank = sequence->dp_rank();
+        const bool pulled = engine_->pull_kv_blocks(src_dp_size,
+                                                    src_dp_rank,
+                                                    src_cluster_ids,
+                                                    src_addrs,
+                                                    dst_dp_rank,
+                                                    source_mappings);
+        if (!pulled) {
+          LOG(ERROR) << "Failed to pull KV blocks, request_id: " << req_id;
+          abort_handoff(request.get());
+          return;
+        }
+        VLOG(1) << "Decode KV restore request_id=" << req_id
+                << ", dp_rank=" << dst_dp_rank
+                << ", skipped_shared_blocks=" << skipped_shared_blocks
+                << ", pulled_kv_blocks=" << pulled_kv_blocks
+                << ", pull_ms=" << pull_timer.elapsed_seconds() * 1000.0;
+
+        commit_handoff(request, prepare_seconds, receive_timer);
+      });
 }
 
 void DisaggPDScheduler::restore_disaggregated_latency(
@@ -1661,16 +2145,53 @@ bool DisaggPDScheduler::unlink_instance(
     const std::vector<uint16_t>& ports,
     const int32_t dp_size,
     const int32_t src_kv_split_size) {
-  // Clear received requests from this instance
+  // Clear received requests from this instance without publishing unpulled KV.
+  std::vector<std::shared_ptr<Request>> retired_requests;
   {
-    std::lock_guard<std::mutex> lock(received_request_map_mutex_);
+    std::unique_lock<std::mutex> lock(received_request_map_mutex_);
     auto it = instance_to_received_requests_map_.find(instance_name);
     if (it != instance_to_received_requests_map_.end()) {
       for (const auto& req_id : it->second) {
-        received_request_map_.erase(req_id);
+        auto req_it = received_request_map_.find(req_id);
+        if (req_it != received_request_map_.end()) {
+          retired_requests.emplace_back(std::move(req_it->second));
+          received_request_map_.erase(req_it);
+        }
         request_to_instance_map_.erase(req_id);
       }
       instance_to_received_requests_map_.erase(it);
+    }
+    std::vector<std::shared_ptr<InflightDecodePull>> retiring_pulls;
+    for (auto& [req_id, inflight] : inflight_decode_pulls_) {
+      if (inflight != nullptr &&
+          inflight->prefill_instance_name == instance_name &&
+          !inflight->committed) {
+        inflight->release_requested = true;
+        if (inflight->request != nullptr) {
+          inflight->request->set_cancel();
+        }
+        retiring_pulls.emplace_back(inflight);
+      }
+    }
+    if (!retiring_pulls.empty()) {
+      inflight_decode_pulls_cv_.wait(lock, [&retiring_pulls]() {
+        for (const auto& inflight : retiring_pulls) {
+          if (!inflight->completed) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+  }
+  for (const auto& req : retired_requests) {
+    if (req == nullptr) {
+      continue;
+    }
+    for (const auto& sequence : req->sequences()) {
+      if (sequence != nullptr) {
+        engine_->block_manager_pool()->deallocate_without_cache(sequence.get());
+      }
     }
   }
 

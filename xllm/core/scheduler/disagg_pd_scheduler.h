@@ -17,8 +17,10 @@ limitations under the License.
 
 #include <brpc/channel.h>
 
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -144,7 +146,32 @@ class DisaggPDScheduler : public ContinuousScheduler {
       int32_t num_cached_tokens = 0,
       int32_t mrope_position_delta = 0);
 
-  // Only consumes a matching waiting reservation, never a running request.
+  void decode_recv_first_generation_async(
+      const std::string& req_id,
+      int64_t token_id,
+      bool has_logprob,
+      float logprob,
+      double time_to_first_token_latency_seconds,
+      double upstream_elapsed_seconds,
+      std::vector<int64_t> top_tokens,
+      std::vector<float> top_logprobs,
+      const std::string& kv_cache_transfer_mode,
+      std::vector<uint64_t> src_cluster_ids,
+      std::vector<std::string> src_addrs,
+      std::vector<KVTransferMapping> source_mappings,
+      int32_t src_dp_size,
+      int32_t src_dp_rank,
+      torch::Tensor mtp_bootstrap_embedding,
+      int32_t num_cached_tokens,
+      int32_t mrope_position_delta,
+      std::function<void(bool)> done_cb);
+
+  // Consumes a matching waiting reservation immediately, or aborts an in-flight
+  // Decode KV/LINEAR pull and invokes done_cb(true) once the pull has drained
+  // and Decode's local blocks are reclaimed without publishing cache.
+  void release_reservation_async(const std::string& req_id,
+                                 const std::string& reservation_id,
+                                 std::function<void(bool)> done_cb);
   bool release_reservation(const std::string& req_id,
                            const std::string& reservation_id);
 
@@ -177,6 +204,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
 
  protected:
   void release_failed_request(const std::shared_ptr<Request>& request) override;
+  void reclaim_failed_handoff_source(std::shared_ptr<Request> request);
 
   // Fail a request whose kv_split pair resolve_kv_split_plan marked
   // UNRECONCILABLE. Shared by every dispatch path (the online dispatch
@@ -285,19 +313,52 @@ class DisaggPDScheduler : public ContinuousScheduler {
   moodycamel::BlockingConcurrentQueue<std::shared_ptr<Request>>
       prefill_request_queue_offline_;
 
+  void begin_inflight_prefill_rpc();
+  void end_inflight_prefill_rpc();
+  void wait_inflight_prefill_rpcs();
+
   // use threadpool to handle prefill-completed request
   ThreadPool prefill_threadpool_{
       /*num_threads=*/(std::getenv("XLLM_PREFILL_SEND_THREADS") != nullptr
                            ? std::max(1, std::atoi(std::getenv("XLLM_PREFILL_SEND_THREADS")))
-                           : 4),
+                           : 8),
       /*cpu_binding=*/false,
       /*pool_name=*/"DisaggPDScheduler.prefill"};
 
-  // Release retries must not delay FirstGeneration or local KV reclamation.
+  ThreadPool prefill_reclaim_threadpool_{
+      /*num_threads=*/4,
+      /*cpu_binding=*/false,
+      /*pool_name=*/"DisaggPDScheduler.prefill_reclaim"};
+
+  // Dedicated multi-lane Decode KV pull pipeline so brpc handlers never block
+  // and concurrent requests across DP0/DP1 & Prefill0..2 overlap Mooncake DMA.
+  ThreadPool decode_pull_threadpool_{
+      /*num_threads=*/(std::getenv("XLLM_DECODE_PULL_THREADS") != nullptr
+                           ? std::max(2, std::atoi(std::getenv("XLLM_DECODE_PULL_THREADS")))
+                           : 12),
+      /*cpu_binding=*/false,
+      /*pool_name=*/"DisaggPDScheduler.decode_pull"};
+
+  void begin_inflight_reservation_release();
+  void end_inflight_reservation_release();
+  void wait_inflight_reservation_releases();
+  void wait_inflight_decode_pulls();
+
+  // Release retries and deferred source-slot fences run off the critical path;
+  // multiple lanes prevent a slow in-flight pull drain from head-of-line
+  // blocking unrelated reservation releases.
   ThreadPool reservation_release_threadpool_{
-      /*num_threads=*/1,
+      /*num_threads=*/4,
       /*cpu_binding=*/false,
       /*pool_name=*/"DisaggPDScheduler.reservation_release"};
+
+  std::mutex inflight_reservation_releases_mutex_;
+  std::condition_variable inflight_reservation_releases_cv_;
+  size_t inflight_reservation_releases_ = 0;
+
+  std::mutex inflight_prefill_rpcs_mutex_;
+  std::condition_variable inflight_prefill_rpcs_cv_;
+  size_t inflight_prefill_rpcs_ = 0;
 
   // related decode instance name(ID) list (used by PDOOCScheduler override)
   std::vector<std::string> decode_inst_names_;
@@ -317,6 +378,18 @@ class DisaggPDScheduler : public ContinuousScheduler {
   // Used to efficiently remove a request from
   // instance_to_received_requests_map_ when the request is processed.
   std::unordered_map<std::string, std::string> request_to_instance_map_;
+  struct InflightDecodePull {
+    std::string reservation_id;
+    std::string prefill_instance_name;
+    std::shared_ptr<Request> request;
+    bool release_requested = false;
+    bool completed = false;
+    bool committed = false;
+    std::vector<std::function<void(bool)>> release_waiters;
+  };
+  std::unordered_map<std::string, std::shared_ptr<InflightDecodePull>>
+      inflight_decode_pulls_;
+  std::condition_variable inflight_decode_pulls_cv_;
   std::mutex received_request_map_mutex_;
 
   // Lock for multi-threaded read-write latency metrics

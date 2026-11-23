@@ -95,6 +95,20 @@ void GlobalCaptureInstance::abort_capture() noexcept {
   capture_lock_.reset();
 }
 
+torch::Tensor GlobalCaptureInstance::upload_constant(
+    const torch::Tensor& host,
+    const torch::Device& device) {
+  CHECK(host.device().is_cpu());
+  if (!is_capturing_) {
+    return host.to(device);
+  }
+  temporarily_end_graph();
+  torch::Tensor constant = host.to(device);
+  current_piecewise_graph_->retain_constant(constant);
+  temporarily_begin_graph();
+  return constant;
+}
+
 void GlobalCaptureInstance::temporarily_end_graph() {
   CHECK(is_capturing_) << "Not capturing, call begin_capture() first";
   temporarily_end_graph_locked();

@@ -163,14 +163,94 @@ int32_t BlockManagerPool::select_dp_rank() const {
 }
 
 int32_t BlockManagerPool::get_dp_rank(Sequence* sequence) const {
-  int32_t dp_rank;
-  if (sequence->dp_rank() >= 0) {
-    dp_rank = sequence->dp_rank();
-  } else {
-    dp_rank = get_manager_with_max_available_blocks();
-    sequence->set_dp_rank(dp_rank);
+  if (sequence == nullptr) {
+    return get_manager_with_max_available_blocks();
   }
-  return dp_rank;
+  if (sequence->dp_rank() >= 0) {
+    return sequence->dp_rank();
+  }
+
+  int32_t selected_rank = -1;
+  if (options_.enable_prefix_cache() && block_managers_.size() > 1 &&
+      sequence->num_tokens() > 0) {
+    const size_t block_size =
+        std::max<size_t>(1, static_cast<size_t>(options_.block_size()));
+    const size_t needed_blocks = (sequence->num_tokens() - 1) / block_size + 1;
+
+    size_t best_hit_tokens = 0;
+    size_t best_hit_available = 0;
+    std::vector<size_t> best_hit_ranks;
+    size_t best_cold_available = 0;
+    std::vector<size_t> feasible_cold_ranks;
+    best_hit_ranks.reserve(block_managers_.size());
+    feasible_cold_ranks.reserve(block_managers_.size());
+
+    for (size_t i = 0; i < block_managers_.size(); ++i) {
+      auto* composite =
+          static_cast<CompositeBlockManager*>(block_managers_[i].get());
+      bool has_resource_slots = true;
+      for (const auto& [type, entry] : composite->leaf_entries()) {
+        if ((type == BlockType::LINEAR || type == BlockType::EMBEDDING) &&
+            entry.leaf != nullptr && entry.leaf->num_free_blocks() == 0) {
+          has_resource_slots = false;
+          break;
+        }
+      }
+      const size_t total_blocks = composite->num_total_blocks();
+      const size_t used_blocks = composite->num_used_blocks();
+      const size_t available_blocks =
+          total_blocks >= used_blocks ? total_blocks - used_blocks : 0;
+      // Effective headroom already includes evictable prefix-cache blocks.
+      // Host hits also need device backing when restored.
+      if (!has_resource_slots || available_blocks < needed_blocks) {
+        continue;
+      }
+      const size_t hit_tokens =
+          probe_prefix_hit_tokens(sequence, static_cast<int32_t>(i));
+
+      if (hit_tokens > 0) {
+        if (best_hit_ranks.empty() || hit_tokens > best_hit_tokens ||
+            (hit_tokens == best_hit_tokens &&
+             available_blocks > best_hit_available)) {
+          best_hit_tokens = hit_tokens;
+          best_hit_available = available_blocks;
+          best_hit_ranks.clear();
+          best_hit_ranks.emplace_back(i);
+        } else if (hit_tokens == best_hit_tokens &&
+                   available_blocks == best_hit_available) {
+          best_hit_ranks.emplace_back(i);
+        }
+      }
+
+      if (feasible_cold_ranks.empty() ||
+          available_blocks > best_cold_available) {
+        best_cold_available = available_blocks;
+        feasible_cold_ranks.clear();
+        feasible_cold_ranks.emplace_back(i);
+      } else if (available_blocks == best_cold_available) {
+        feasible_cold_ranks.emplace_back(i);
+      }
+    }
+
+    const std::vector<size_t>& chosen =
+        !best_hit_ranks.empty() ? best_hit_ranks : feasible_cold_ranks;
+    if (!chosen.empty()) {
+      if (chosen.size() == 1) {
+        selected_rank = static_cast<int32_t>(chosen.front());
+      } else {
+        const size_t offset =
+            dp_selection_cursor_.fetch_add(1, std::memory_order_relaxed) %
+            chosen.size();
+        selected_rank = static_cast<int32_t>(chosen[offset]);
+      }
+    }
+  }
+
+  if (selected_rank < 0) {
+    selected_rank = get_manager_with_max_available_blocks();
+  }
+  sequence->set_dp_rank(selected_rank);
+  return selected_rank;
 }
 
 void BlockManagerPool::deallocate(Request* request) {

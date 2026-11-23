@@ -598,7 +598,15 @@ void build_bucket_context(const AttentionMetadata& global,
 }  // namespace
 
 int32_t single_prefill_front_rows(int32_t query_rows, int32_t history_rows) {
-  return balanced_first_rows(query_rows, history_rows,
+  // Full chunks may hand these rank-local rows directly to the MTP draft.
+  // Its partition uses the live history. Smaller checkpoint buckets gather
+  // their output and can share one split across positive history lengths.
+  const int32_t max_chunk =
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  const int32_t split_history =
+      query_rows == max_chunk ? history_rows : (history_rows > 0 ? 64 : 0);
+  return balanced_first_rows(query_rows,
+                             split_history,
                              /*replicate_final_state=*/true);
 }
 
@@ -761,8 +769,10 @@ void build_context(const AttentionMetadata& global_metadata,
 
     const torch::Device device = global_metadata.q_cu_seq_lens.device();
     torch::Tensor idx_device =
-        torch::tensor(idx_bundle, torch::TensorOptions().dtype(torch::kLong))
-            .to(device);
+        runtime::musa::GlobalCaptureInstance::get_instance().upload_constant(
+            torch::tensor(idx_bundle,
+                          torch::TensorOptions().dtype(torch::kLong)),
+            device);
     pcp_context.rank0_row_indices =
         idx_device.narrow(/*dim=*/0, /*start=*/0, /*length=*/total_front_rows);
     pcp_context.rank1_row_indices = idx_device.narrow(
@@ -816,8 +826,10 @@ void build_context(const AttentionMetadata& global_metadata,
       total_kv_len += kv_b;
     }
     torch::Tensor meta_device =
-        torch::tensor(meta_i32, torch::TensorOptions().dtype(torch::kInt32))
-            .to(device);
+        runtime::musa::GlobalCaptureInstance::get_instance().upload_constant(
+            torch::tensor(meta_i32,
+                          torch::TensorOptions().dtype(torch::kInt32)),
+            device);
 
     AttentionMetadata& local = pcp_context.local_metadata;
     local = global_metadata;
@@ -902,12 +914,10 @@ void build_context(const AttentionMetadata& global_metadata,
           InstanceRole::PREFILL ||
       KVCacheConfig::get_instance().enable_prefix_cache() ||
       !single_chunk_prompt;
-  const int32_t effective_history_rows =
+  const int32_t first_rows =
       active_single_checkpoint_slots != nullptr
-          ? (history_rows > 0 ? 64 : 0)
-          : history_rows;
-  const int32_t first_rows = balanced_first_rows(
-      num_rows, effective_history_rows, replicate_final_state);
+          ? single_prefill_front_rows(num_rows, history_rows)
+          : balanced_first_rows(num_rows, history_rows, replicate_final_state);
   if (first_rows == 0) {
     return;
   }

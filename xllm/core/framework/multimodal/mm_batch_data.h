@@ -47,6 +47,9 @@ class MMBatchData {
   void to(const torch::Device& device);
   static MMBatchData to(const MMBatchData& mm_data,
                         const torch::Device& device);
+  static MMBatchData to(const MMBatchData& mm_data,
+                        const torch::Device& device,
+                        bool keep_vision_grid_on_host);
 
   void batch(const std::vector<MMData>& mm_datas);
 
@@ -83,6 +86,8 @@ class MMBatchData {
   void debug_print() const;
 
  private:
+  void move_to(const torch::Device& device, bool keep_vision_grid_on_host);
+
   uint32_t type_ = MMType::NONE;
   MMDict data_;
   std::vector<MMData> mm_datas_;

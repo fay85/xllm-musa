@@ -436,6 +436,12 @@ struct StepDecodeMeta {
 // Inputs for forward execution
 struct ForwardInput {
   ForwardInput to(const torch::Device& device, torch::ScalarType dtype) const {
+    return to(device, dtype, /*keep_vision_grid_on_host=*/false);
+  }
+
+  ForwardInput to(const torch::Device& device,
+                  torch::ScalarType dtype,
+                  bool keep_vision_grid_on_host) const {
     if (device_tensors_ready) {
       return *this;
     }
@@ -451,7 +457,7 @@ struct ForwardInput {
         if (buffer_inputs.device_tensors_ready) {
           return buffer_inputs;
         }
-        return buffer_inputs.to(device, dtype);
+        return buffer_inputs.to(device, dtype, keep_vision_grid_on_host);
       }
     }
 
@@ -472,7 +478,7 @@ struct ForwardInput {
     inputs.token_ids = safe_to(source_token_ids, device, true);
     inputs.positions = detail::normalize_positions_for_device(
         safe_to(source_positions, device, true));
-    inputs.input_params = input_params.to(device);
+    inputs.input_params = input_params.to(device, keep_vision_grid_on_host);
     inputs.sampling_params = sampling_params.to(device, dtype);
     inputs.decoder_sampling_params = decoder_sampling_params.to(device, dtype);
     copy_metadata_to(inputs);

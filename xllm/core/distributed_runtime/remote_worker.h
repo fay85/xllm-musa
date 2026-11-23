@@ -164,6 +164,14 @@ class RemoteWorker : public WorkerClient {
   ThreadPool copy_threadpool_{/*num_threads=*/4,
                               /*cpu_binding=*/false,
                               /*pool_name=*/"RemoteWorker.copy"};
+  // dedicated multi-lane PD KV pull pool so PullKVCache never queues behind
+  // step_remote_async (16-22ms shm forward step) or blocks Decode steps
+  ThreadPool pull_threadpool_{
+      /*num_threads=*/(std::getenv("XLLM_REMOTE_WORKER_PULL_THREADS") != nullptr
+                           ? std::max(1, std::atoi(std::getenv("XLLM_REMOTE_WORKER_PULL_THREADS")))
+                           : 8),
+      /*cpu_binding=*/false,
+      /*pool_name=*/"RemoteWorker.pull"};
   const torch::Device device_;
 };
 }  // namespace xllm

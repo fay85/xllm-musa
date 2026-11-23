@@ -38,6 +38,12 @@ class PiecewiseGraphs final {
 
   void add_attention_runner(::xllm::kernel::musa::AttentionRunner&& runner);
 
+  // Layout constants are uploaded outside capture and owned until graph
+  // teardown.
+  void retain_constant(torch::Tensor tensor) {
+    constants_.emplace_back(std::move(tensor));
+  }
+
   std::size_t size() const { return graphs_.size(); }
 
   std::size_t num_runners() const { return attention_runners_.size(); }
@@ -49,6 +55,7 @@ class PiecewiseGraphs final {
   std::vector<std::unique_ptr<::xllm::kernel::musa::AttentionRunner>>
       attention_runners_;
   std::vector<InstructionType> instructions_;
+  std::vector<torch::Tensor> constants_;
 };
 
 }  // namespace xllm::runtime::musa

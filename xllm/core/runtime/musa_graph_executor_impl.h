@@ -357,7 +357,8 @@ class MusaGraph final {
                std::vector<KVCache>& kv_cache,
                uint32_t bucket_num_tokens,
                const c10::musa::MempoolId_t& pool,
-               std::unique_ptr<MusaMemPool> pool_owner = nullptr);
+               std::unique_ptr<MusaMemPool> pool_owner = nullptr,
+               std::size_t required_prefill_free_bytes = 0);
 
   // Replay captured graph with new input data
   ModelOutput replay(const torch::Tensor& tokens,
@@ -568,7 +569,8 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   bool use_prefill_piecewise_graph(uint32_t num_tokens,
                                    const ModelInputParams& params,
                                    bool has_interior_checkpoints,
-                                   int64_t bucket_capture_min_hits);
+                                   int64_t bucket_capture_min_hits,
+                                   std::size_t& required_free_bytes);
 
   uint32_t get_prefill_graph_num_tokens(uint32_t num_tokens,
                                         const ModelInputParams& params,

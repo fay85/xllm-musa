@@ -124,6 +124,15 @@ WorkerService::WorkerService(runtime::Options options,
   device_.set_device();
   device_.init_device_context();
   stream_ = device_.get_stream_from_pool();
+  const int pull_threads =
+      std::getenv("XLLM_WORKER_SERVICE_PULL_THREADS") != nullptr
+          ? std::max(1, std::atoi(std::getenv("XLLM_WORKER_SERVICE_PULL_THREADS")))
+          : 8;
+  pull_threadpool_ = std::make_unique<ThreadPool>(
+      /*num_threads=*/pull_threads,
+      /*init_func=*/[this]() mutable { device_.set_device(); },
+      /*cpu_binding=*/false,
+      /*pool_name=*/"WorkerService.pull");
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/4,
       /*init_func=*/[this]() mutable { device_.set_device(); },
@@ -143,6 +152,15 @@ WorkerService::WorkerService(runtime::Options options,
   device_.set_device();
   device_.init_device_context();
   stream_ = device_.get_stream_from_pool();
+  const int pull_threads =
+      std::getenv("XLLM_WORKER_SERVICE_PULL_THREADS") != nullptr
+          ? std::max(1, std::atoi(std::getenv("XLLM_WORKER_SERVICE_PULL_THREADS")))
+          : 8;
+  pull_threadpool_ = std::make_unique<ThreadPool>(
+      /*num_threads=*/pull_threads,
+      /*init_func=*/[this]() mutable { device_.set_device(); },
+      /*cpu_binding=*/false,
+      /*pool_name=*/"WorkerService.pull");
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/4,
       /*init_func=*/[this]() mutable { device_.set_device(); },
@@ -165,6 +183,7 @@ WorkerService::~WorkerService() {
   for (const auto& session : sessions) {
     session->shutdown();
   }
+  pull_threadpool_.reset();
   threadpool_.reset();
   copy_threadpool_.reset();
   prefetch_stats_threadpool_.reset();
@@ -652,7 +671,7 @@ void WorkerService::PullKVCache(::google::protobuf::RpcController* controller,
                                 const proto::PullKVCacheRequest* req,
                                 proto::Status* resp,
                                 ::google::protobuf::Closure* done) {
-  threadpool_->schedule([this, controller, req, resp, done]() mutable {
+  pull_threadpool_->schedule([this, controller, req, resp, done]() mutable {
     brpc::ClosureGuard done_guard(done);
     std::vector<KVTransferMapping> mappings;
     mappings.reserve(req->mappings_size());
