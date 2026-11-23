@@ -19,7 +19,7 @@ CP_SIZE="${GLM5_CP_SIZE:-8}"
 MAX_MEMORY_UTILIZATION="${GLM5_MAX_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-32768}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
-ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-false}"
+ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-fp8_e4m3}"
 DRAFT_MODEL_PATH="${GLM5_DRAFT_MODEL_PATH:-}"
 NUM_SPECULATIVE_TOKENS="${GLM5_NUM_SPECULATIVE_TOKENS:-0}"
@@ -29,14 +29,15 @@ export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-1}"
 export GLM5_KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-fp8_e4m3}"
 export XLLM_MUSA_POOL_COMPUTE_STREAM="${XLLM_MUSA_POOL_COMPUTE_STREAM:-1}"
 export XLLM_MUSA_MCCL_EAGER_P2P="${XLLM_MUSA_MCCL_EAGER_P2P:-1}"
-PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-8}"
+PREFILL_GRAPH_MAX_ENTRIES="${GLM5_PREFILL_GRAPH_MAX_ENTRIES:-16}"
 ENABLE_CHUNKED_PREFILL="${GLM5_ENABLE_CHUNKED_PREFILL:-true}"
 MAX_TOKENS_PER_CHUNK="${GLM5_MAX_TOKENS_PER_CHUNK:-32768}"
 PREFILL_BATCH_WAIT_MS="${GLM5_PREFILL_BATCH_WAIT_MS:-0}"
-# This limit is retained for graph-enabled overrides. It does not affect the
-# default eager path.
-MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-4096}"
-ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-false}"
+# Graph captures can use every token row admitted by the batch budget.  Set a
+# smaller value explicitly when reserving graph memory for short prompts.
+MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-${MAX_TOKENS_PER_BATCH}}"
+ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-true}"
+ENABLE_PREFIX_CACHE="${GLM5_ENABLE_PREFIX_CACHE:-true}"
 ENABLE_SCHEDULE_OVERLAP="${GLM5_ENABLE_SCHEDULE_OVERLAP:-false}"
 # Leave launch blocking unset by default, including for Torch profiling.
 # MUSA_LAUNCH_BLOCKING=1 on the service command opts into synchronous debugging.
@@ -318,7 +319,7 @@ for ((r = 0; r < NNODES; ++r)); do
     --max_tokens_per_batch="${MAX_TOKENS_PER_BATCH}" \
     --max_seqs_per_batch="${MAX_SEQS_PER_BATCH}" \
     --reasoning_parser=glm5 \
-    --enable_prefix_cache=false \
+    --enable_prefix_cache="${ENABLE_PREFIX_CACHE}" \
     --enable_chunked_prefill="${ENABLE_CHUNKED_PREFILL}" \
     --max_tokens_per_chunk_for_prefill="${MAX_TOKENS_PER_CHUNK}" \
     --enable_schedule_overlap="${ENABLE_SCHEDULE_OVERLAP}" \

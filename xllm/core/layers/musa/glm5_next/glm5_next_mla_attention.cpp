@@ -114,11 +114,13 @@ class Glm5NextCpLayout final {
     CHECK_EQ(read_ids.numel(), batch);
     CHECK_GT(metadata.max_seq_len, 0);
     CHECK_LE(metadata.max_seq_len, table.size(1) * 256);
+    // Graph capture uses the same fixed request layout as replay.  The
+    // persistent query lengths and slot mapping are refreshed before every
+    // replay, so a graph can cover arbitrary batch sizes and uneven CP row
+    // counts as long as its shape key remains stable.
     if (graph_capture) {
-      CHECK_EQ(batch, 1)
-          << "GLM5 CP graph currently supports one prefill sequence";
-      CHECK_EQ(total % group.world_size(), 0)
-          << "GLM5 CP graph requires evenly sharded rows";
+      CHECK_EQ(metadata.q_seq_lens_vec.size(), static_cast<size_t>(batch));
+      CHECK_EQ(metadata.kv_seq_lens_vec.size(), static_cast<size_t>(batch));
     }
     std::unordered_set<int32_t> state_owners;
     std::vector<int32_t> requests(static_cast<size_t>(total));
@@ -129,16 +131,27 @@ class Glm5NextCpLayout final {
     std::vector<int32_t> tail_cu{0};
     tail_cu.reserve(batch + 1);
     if (graph_capture) {
-      for (int64_t row = 0; row < total; ++row) {
-        requests[static_cast<size_t>(row)] = 0;
-        if (row % 4 == 3) {
-          pool_rows.emplace_back(row);
+      int64_t row = 0;
+      for (int64_t request = 0; request < batch; ++request) {
+        const int64_t request_rows = metadata.q_seq_lens_vec[request];
+        CHECK_GT(request_rows, 0);
+        const int64_t position_begin =
+            metadata.kv_seq_lens_vec[request] - request_rows;
+        CHECK_GE(position_begin, 0);
+        for (int64_t offset = 0; offset < request_rows; ++offset, ++row) {
+          requests[static_cast<size_t>(row)] = request;
+          if ((position_begin + offset) % 4 == 3) {
+            pool_rows.emplace_back(row);
+          }
         }
+        for (int64_t tail = std::max<int64_t>(0, request_rows - 4);
+             tail < request_rows;
+             ++tail) {
+          tail_rows.emplace_back(row - request_rows + tail);
+        }
+        tail_cu.emplace_back(static_cast<int32_t>(tail_rows.size()));
       }
-      for (int64_t row = std::max<int64_t>(0, total - 4); row < total; ++row) {
-        tail_rows.emplace_back(row);
-      }
-      tail_cu.emplace_back(tail_rows.size());
+      CHECK_EQ(row, total);
     } else {
       auto cu_host =
           metadata.q_cu_seq_lens.to(torch::kCPU, torch::kInt32).contiguous();
@@ -199,16 +212,13 @@ class Glm5NextCpLayout final {
     if (graph_capture) {
       auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
       CHECK_EQ(slots.numel(), total);
-      pool_physical = torch::floor_divide(slots.slice(0, 3, total, 4), 4);
+      pool_indices = indices(pool_rows);
+      pool_physical = torch::floor_divide(slots.index_select(0, pool_indices),
+                                          /*divisor=*/4);
     } else {
       pool_physical = indices(pool_slots);
     }
-    if (graph_capture) {
-      tail_boundaries = torch::arange(
-          0, 5, 4, global_positions.options().dtype(torch::kInt32));
-    } else {
-      tail_boundaries = torch::tensor(tail_cu, torch::kInt32).to(device_);
-    }
+    tail_boundaries = torch::tensor(tail_cu, torch::kInt32).to(device_);
     const int32_t world_size = group_.world_size();
     pool_counts.assign(world_size, 0);
     tail_counts.assign(world_size, 0);
@@ -250,6 +260,7 @@ class Glm5NextCpLayout final {
         static_cast<int64_t>(pool_begin) * kPoolPacketBytes,
         static_cast<int64_t>(local_pool_count) * kPoolPacketBytes);
     const auto tail_row_indices = indices(tail_rows);
+    tail_indices = tail_row_indices;
     tail_positions = global_positions.index_select(0, tail_row_indices);
     std::vector<int64_t> local_tail_rows;
     local_tail_rows.reserve(static_cast<size_t>(local_tail_count));
@@ -547,6 +558,19 @@ class Glm5NextCpLayout final {
           .copy_(tail_rows);
     }
   }
+  void refresh_graph_metadata(const torch::Tensor& positions,
+                              const torch::Tensor& slots) const {
+    CHECK(graph_capture_);
+    CHECK_EQ(positions.numel(), total);
+    CHECK_EQ(slots.scalar_type(), torch::kInt64);
+    CHECK(slots.is_contiguous());
+    CHECK_EQ(slots.numel(), total);
+    global_positions.copy_(positions.to(torch::kInt64).contiguous());
+    tail_positions.copy_(global_positions.index_select(0, tail_indices));
+    pool_physical.copy_(torch::floor_divide(slots.index_select(0, pool_indices),
+                                            /*divisor=*/4));
+    all_pool_byte_indices.copy_(pool_byte_indices(pool_physical));
+  }
   c10::intrusive_ptr<c10d::Work> launch_indexer_gather() const {
     if (group_.world_size() <= 1) {
       indexer_gather.select(0, 0).copy_(indexer_payload);
@@ -575,8 +599,9 @@ class Glm5NextCpLayout final {
   std::vector<int64_t> halo_recv_offsets;
   torch::Tensor global_positions, rows, interleaved, pool_physical,
       tail_boundaries, all_pool_byte_indices, local_pool_byte_indices,
-      tail_positions, local_tail_indices, pool_source_offsets,
-      tail_source_offsets, halo_source_indices, halo_local_indices;
+      tail_positions, local_tail_indices, pool_indices, pool_source_offsets,
+      tail_source_offsets, tail_indices, halo_source_indices,
+      halo_local_indices;
   // These buffers are reused by every layer. The layout itself stays immutable
   // across the forward, so mutation is confined to its communication workspace.
   mutable std::vector<c10::intrusive_ptr<c10d::Work>> halo_works;
@@ -609,6 +634,14 @@ std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
       metadata.glm5_prefill_local_row_end -
           metadata.glm5_prefill_local_row_begin,
       group);
+}
+
+void refresh_glm5_next_cp_layout(
+    const std::shared_ptr<const Glm5NextCpLayout>& layout,
+    const torch::Tensor& global_positions,
+    const torch::Tensor& slot_mapping) {
+  CHECK(layout != nullptr);
+  layout->refresh_graph_metadata(global_positions, slot_mapping);
 }
 
 torch::Tensor glm5_cp_local_rows(const Glm5NextCpLayout& layout) {

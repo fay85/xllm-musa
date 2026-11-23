@@ -46,6 +46,10 @@ std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
     const torch::Tensor& global_positions,
     const AttentionMetadata& metadata,
     ProcessGroup& group);
+void refresh_glm5_next_cp_layout(
+    const std::shared_ptr<const Glm5NextCpLayout>& layout,
+    const torch::Tensor& global_positions,
+    const torch::Tensor& slot_mapping);
 
 // Round-robin CP helpers. Local row counts match the Plain shard counts, but
 // the row order is global_row % cp_size == rank.

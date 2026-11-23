@@ -51,6 +51,7 @@ namespace xllm::musa::model {
 
 struct Glm5NextGraphMetadataState final : ModelGraphMetadataState {
   std::shared_ptr<layer::AttentionMetadata> metadata;
+  torch::Tensor slot_mapping;
 };
 
 class Glm5NextModelImpl final
@@ -208,7 +209,7 @@ class Glm5NextModelImpl final
       // activations below. Build the CP gather/restore plan from that global
       // tensor once per forward and reuse it in every DSA layer instead of
       // all-gathering positions and repeating D2H/H2D work per layer.
-      {
+      if (!modified_input_params.attn_metadata->glm5_prefill_cp_layout) {
         RECORD_USER_SCOPE("nn.Module: Glm5NextModel.CPLayoutPlan");
         modified_input_params.attn_metadata->glm5_prefill_cp_layout =
             layer::build_glm5_next_cp_layout(
@@ -533,6 +534,31 @@ class Glm5NextModelImpl final
               << "KDA write slots must be unique";
         }
         captured->state_indices_long.copy_(slots, /*non_blocking=*/true);
+      }
+    }
+    CHECK(attention.new_cache_slots.defined());
+    if (!graph_state->slot_mapping.defined()) {
+      graph_state->slot_mapping = torch::empty(
+          attention.new_cache_slots.sizes(),
+          attention.new_cache_slots.options().dtype(torch::kInt64));
+    } else {
+      CHECK_EQ(graph_state->slot_mapping.sizes(),
+               attention.new_cache_slots.sizes())
+          << "GLM5 graph slot mapping shape changed within one graph";
+    }
+    graph_state->slot_mapping.copy_(attention.new_cache_slots,
+                                    /*non_blocking=*/true);
+    graph_state->metadata->slot_mapping = graph_state->slot_mapping;
+    if (prefill_cp_enabled_ && is_prefill) {
+      if (!graph_state->metadata->glm5_prefill_cp_layout) {
+        graph_state->metadata->glm5_prefill_cp_layout =
+            layer::build_glm5_next_cp_layout(
+                positions, *graph_state->metadata, *cp_group_);
+      } else {
+        layer::refresh_glm5_next_cp_layout(
+            graph_state->metadata->glm5_prefill_cp_layout,
+            positions,
+            graph_state->slot_mapping);
       }
     }
     params.attn_metadata = graph_state->metadata;

@@ -3893,17 +3893,6 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   if (params.is_spec_verify || params.has_llmrec_params()) {
     return false;
   }
-  // GLM5 CP graph capture currently uses identical local row counts on all
-  // ranks.  An arbitrary short text/image request may not divide evenly by
-  // CP8; run that shape eagerly instead of aborting inside DSA graph capture.
-  if (args_.model_type() == "glm5_next" && options_.cp_size() > 1 &&
-      num_tokens % options_.cp_size() != 0) {
-    LOG_FIRST_N(WARNING, 8)
-        << "GLM5 CP graph requires token count divisible by cp_size; "
-           "falling back to eager Prefill for num_tokens="
-        << num_tokens << " cp_size=" << options_.cp_size();
-    return false;
-  }
   // Multi-sequence GDN chunked prefill runs its recurrence inside the forward
   // rather than in a Mate runner.
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
@@ -3977,12 +3966,15 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
   key.emplace_back(num_sequences == 1 ? 1 : 0);
-  // Multi-sequence Qwen3.5 GDN lays out its padded per-sequence inputs from
-  // the host query lengths, so each length layout is captured separately.
-  if ((num_sequences > 1 || args_.model_type() == "glm5_next") &&
-      !params.embedding.linear_state_ids.empty()) {
+  // Per-sequence query lengths are part of the captured layout.  This is
+  // required by both GLM5 CP metadata and multi-sequence linear-attention
+  // runners.
+  if (num_sequences > 1 || args_.model_type() == "glm5_next") {
     key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
   }
+  key.insert(key.end(),
+             params.attention.host.kv_seq_lens.begin(),
+             params.attention.host.kv_seq_lens.end());
   if (args_.model_type() == "glm5_next") {
     key.emplace_back(params.meta.kv_max_seq_len);
   }
