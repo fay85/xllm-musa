@@ -28,7 +28,7 @@ else
   export GLM5_ENABLE_SCHEDULE_OVERLAP="${GLM5_DECODE_SCHEDULE_OVERLAP:-true}"
   export GLM5_HOST=10.121.34.87 GLM5_PORT=19200 GLM5_MASTER_ADDR=10.121.34.87:29908
   export GLM5_TRANSFER_LISTEN_PORT=26200 GLM5_PD_RPC_PORT=27108 GLM5_LOG_DIR=$PWD/pd_logs/decode
-  export GLM5_ENABLE_GRAPH=${GLM5_DECODE_GRAPH:-true}
+  export GLM5_ENABLE_GRAPH="${GLM5_DECODE_GRAPH:-${GLM5_ENABLE_GRAPH:-true}}"
   # Decode can opt into expert parallelism independently of Prefill. Keep the
   # historical TP-style decode default at 1 until an EP A/B has completed.
   export GLM5_CP_SIZE=1 GLM5_EP_SIZE="${GLM5_DECODE_EP_SIZE:-1}" \
