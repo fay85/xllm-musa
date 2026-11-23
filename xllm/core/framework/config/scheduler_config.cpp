@@ -46,12 +46,13 @@ DEFINE_int32(chunked_match_frequency,
              2,
              "Number of sequence prefix cache match frequency.");
 
-DEFINE_int32(prefill_batch_wait_ms,
-             0,
-             "When the engine is idle, wait up to this many milliseconds for "
-             "requests that have been accepted but are still being "
-             "tokenized, so that requests arriving together are prefilled in "
-             "one batch. 0 disables the wait.");
+DEFINE_int32(
+    prefill_batch_wait_ms,
+    0,
+    "When the engine is idle, wait up to this many milliseconds for "
+    "requests that have been accepted but are still being prepared "
+    "or prefetched, so that requests arriving together are prefilled in "
+    "one batch. 0 disables the wait.");
 
 DEFINE_int32(decode_priority_max_wait_ms,
              0,

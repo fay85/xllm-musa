@@ -77,7 +77,8 @@ class SchedulerConfig final {
   PROPERTY(int32_t, chunked_match_frequency) = 2;
 
   // Upper bound on how long an idle engine waits for requests that are still
-  // being tokenized, so that a burst of arrivals is prefilled in one batch.
+  // being prepared or prefetched, so that a burst of arrivals is prefilled in
+  // one batch.
   PROPERTY(int32_t, prefill_batch_wait_ms) = 0;
 
   // In exclusive prefill/decode batching, keep new prefills out while decode

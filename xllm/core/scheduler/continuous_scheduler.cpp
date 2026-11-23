@@ -511,11 +511,13 @@ void ContinuousScheduler::wait_for_inflight_requests_when_idle() {
   if (has_pending_batch) {
     return;
   }
-  // pending_requests_ counts requests accepted by the master that have not
-  // been pushed to request_queue_ yet.
+  // pending_requests_ covers request handling and prefetching_requests_ covers
+  // asynchronous KV admission before a request is pushed to request_queue_.
   constexpr absl::Duration kPollInterval = absl::Microseconds(200);
   const absl::Time deadline = absl::Now() + absl::Milliseconds(wait_ms);
-  while (num_pending_requests() > 0 && absl::Now() < deadline) {
+  while ((num_pending_requests() > 0 ||
+          prefetching_requests_.load(std::memory_order_acquire) > 0) &&
+         absl::Now() < deadline) {
     absl::SleepFor(kPollInterval);
   }
 }

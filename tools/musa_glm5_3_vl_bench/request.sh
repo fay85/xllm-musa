@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="${GLM5_HOST:-10.121.34.85}"
-PORT="${GLM5_PORT:-28888}"
+HOST="${GLM5_HOST:-127.0.0.1}"
+PORT="${GLM5_PORT:-18901}"
 MODEL_ID="${GLM5_MODEL_ID:-glm-5.3-flash}"
 PROMPT="${1:-${GLM5_PROMPT:-${PROMPT:-请用一句话介绍北京。}}}"
 IMAGE_URL="${GLM5_IMAGE_URL:-${IMAGE_URL:-}}"
