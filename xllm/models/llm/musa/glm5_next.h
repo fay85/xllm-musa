@@ -25,6 +25,7 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -194,7 +195,6 @@ class Glm5NextModelImpl final
         batch_metadata.musa_kda_batch = layer::prepare_musa_kda_batch(
             indices, batch_metadata.q_cu_seq_lens, global_rows, state_capacity);
       }
-      kda_state_capacity_ = state_capacity;
     }
     const layer::AttentionMetadata& attn_metadata =
         *modified_input_params.attn_metadata;
@@ -486,12 +486,7 @@ class Glm5NextModelImpl final
         metadata.has_initial_states = params.linear_state_validity_mask_tensor;
       }
       if (is_decode) {
-        CHECK_GT(kda_state_capacity_, 0);
-        metadata.musa_kda_batch =
-            layer::prepare_musa_kda_batch(params.embedding.linear_state_indices,
-                                          attention.q_seq_lens,
-                                          positions.numel(),
-                                          kda_state_capacity_);
+        CHECK(metadata.musa_kda_batch);
       } else {
         // This performs the host-side schedule construction before stream
         // capture.  Rebuilding it from inside the captured forward would
@@ -516,18 +511,28 @@ class Glm5NextModelImpl final
             params.linear_state_validity_mask_tensor);
       }
       if (metadata.musa_kda_batch) {
-        CHECK_GT(kda_state_capacity_, 0);
-        const auto batch =
-            layer::prepare_musa_kda_batch(params.embedding.linear_state_indices,
-                                          attention.q_seq_lens,
-                                          positions.numel(),
-                                          kda_state_capacity_);
         const auto& captured = metadata.musa_kda_batch;
-        CHECK_EQ(captured->num_tokens, batch->num_tokens);
-        CHECK_EQ(captured->state_capacity, batch->state_capacity);
-        CHECK_EQ(captured->state_indices.data_ptr(),
-                 batch->state_indices.data_ptr());
-        captured->state_indices_long.copy_(batch->state_indices_long);
+        const torch::Tensor& slots = params.embedding.linear_state_indices;
+        CHECK_EQ(captured->num_tokens, positions.numel());
+        CHECK_EQ(captured->state_indices.data_ptr(), slots.data_ptr());
+        // Ordinary decode uses the immutable [0, 1, ..., batch] query offsets.
+        // Validate the live write slots and refresh the captured int64 buffer.
+        const auto& host_ids = params.embedding.linear_state_ids;
+        torch::Tensor host_slots;
+        const int32_t* ids = host_ids.data();
+        if (static_cast<int64_t>(host_ids.size()) != slots.numel()) {
+          // Tensor-only and padded inputs may have no matching host mirror.
+          host_slots = slots.cpu().contiguous();
+          ids = host_slots.data_ptr<int32_t>();
+        }
+        std::unordered_set<int32_t> unique;
+        for (int64_t i = 0; i < slots.numel(); ++i) {
+          CHECK_GE(ids[i], 0);
+          CHECK_LT(ids[i], captured->state_capacity);
+          CHECK(slots.numel() == 1 || unique.insert(ids[i]).second)
+              << "KDA write slots must be unique";
+        }
+        captured->state_indices_long.copy_(slots, /*non_blocking=*/true);
       }
     }
     params.attn_metadata = graph_state->metadata;
@@ -620,7 +625,6 @@ class Glm5NextModelImpl final
 
   torch::Device device_;
   int64_t hc_mult_ = 4;
-  int64_t kda_state_capacity_ = 0;
   ProcessGroup* cp_group_ = nullptr;
   int32_t cp_size_ = 1;
   int32_t ep_size_ = 1;

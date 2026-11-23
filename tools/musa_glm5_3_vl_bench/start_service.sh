@@ -21,6 +21,9 @@ MAX_TOKENS_PER_BATCH="${GLM5_MAX_TOKENS_PER_BATCH:-32768}"
 MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
 ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-false}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-fp8_e4m3}"
+DRAFT_MODEL_PATH="${GLM5_DRAFT_MODEL_PATH:-}"
+NUM_SPECULATIVE_TOKENS="${GLM5_NUM_SPECULATIVE_TOKENS:-0}"
+SPECULATIVE_ALGORITHM="${GLM5_SPECULATIVE_ALGORITHM:-MTP}"
 export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-1}"
 export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-1}"
 export GLM5_KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-fp8_e4m3}"
@@ -34,11 +37,15 @@ PREFILL_BATCH_WAIT_MS="${GLM5_PREFILL_BATCH_WAIT_MS:-0}"
 # default eager path.
 MAX_TOKENS_FOR_GRAPH_MODE="${GLM5_MAX_TOKENS_FOR_GRAPH_MODE:-4096}"
 ENABLE_PREFILL_PIECEWISE_GRAPH="${GLM5_ENABLE_PREFILL_PIECEWISE_GRAPH:-false}"
-# Use eager launches so the driver can block at every kernel in every rank.
-export MUSA_LAUNCH_BLOCKING="${MUSA_LAUNCH_BLOCKING:-0}"
-if [[ "${MUSA_LAUNCH_BLOCKING}" == "1" ]]; then
+ENABLE_SCHEDULE_OVERLAP="${GLM5_ENABLE_SCHEDULE_OVERLAP:-false}"
+# Leave launch blocking unset by default, including for Torch profiling.
+# MUSA_LAUNCH_BLOCKING=1 on the service command opts into synchronous debugging.
+if [[ ${MUSA_LAUNCH_BLOCKING:-0} == 0 ]]; then
+  unset MUSA_LAUNCH_BLOCKING
+elif [[ $MUSA_LAUNCH_BLOCKING == 1 ]]; then
   ENABLE_GRAPH=false
   ENABLE_PREFILL_PIECEWISE_GRAPH=false
+  ENABLE_SCHEDULE_OVERLAP=false
 fi
 ENABLE_DISAGG_PD="${GLM5_ENABLE_DISAGG_PD:-false}"
 INSTANCE_ROLE="${GLM5_INSTANCE_ROLE:-DEFAULT}"
@@ -119,9 +126,48 @@ ensure_ops_cache() {
 PID_FILE="${LOG_DIR}/pids.txt"
 
 stop_service() {
-  if [[ -f "${PID_FILE}" ]]; then
+  if [[ -f "${PID_FILE}" || "$ENABLE_DISAGG_PD" == true ]]; then
+    mkdir -p "$LOG_DIR"
     echo "Stopping GLM-5.3-Flash workers from ${PID_FILE}..."
-    xargs -r kill -9 < "${PID_FILE}" 2>/dev/null || true
+    if [[ "$ENABLE_DISAGG_PD" == true ]]; then
+      python3 - "$LOG_DIR" "$INSTANCE_ROLE" <<'PY_STOP'
+import os
+from pathlib import Path
+import signal
+import sys
+import time
+
+log_dir = Path(sys.argv[1]).resolve()
+role = f"--instance_role={sys.argv[2]}".encode()
+
+def is_rank(pid: int) -> bool:
+    proc = Path(f"/proc/{pid}")
+    try:
+        cmd = (proc / "cmdline").read_bytes().split(b"\0")
+        if role not in cmd or b"--enable_disagg_pd=true" not in cmd:
+            return False
+        log = (proc / "fd/2").resolve()
+        return log.parent == log_dir and log.match("rank_*.log")
+    except (OSError, RuntimeError):
+        return False
+
+pids = [int(name) for name in os.listdir("/proc") if name.isdigit() and is_rank(int(name))]
+for pid in pids:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+for _ in range(100):
+    if not any(is_rank(pid) for pid in pids):
+        break
+    time.sleep(0.1)
+else:
+    sys.exit(f"Workers still active: {pids}")
+print(f"Stopped {len(pids)} local {sys.argv[2]} ranks")
+PY_STOP
+    else
+      xargs -r kill -9 < "${PID_FILE}" 2>/dev/null || true
+    fi
     : > "${PID_FILE}"
   else
     echo "No PID file found at ${PID_FILE}."
@@ -214,6 +260,22 @@ trap cleanup_failed_start EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+PD_ARGS=()
+if [[ "$ENABLE_DISAGG_PD" == true ]]; then
+  PD_ARGS=(--disagg_pd_port="${GLM5_PD_RPC_PORT:-7777}" --enable_native_service_adapter=true
+    --vmodule=disagg_pd_scheduler=1,mooncake_kv_cache_transfer=1 --usercode_in_pthread=true)
+fi
+if [[ $INSTANCE_ROLE == DECODE && $ENABLE_GRAPH == true ]]; then
+  PD_ARGS+=(--enable_graph_vmm_pool=false)
+fi
+SPECULATIVE_ARGS=()
+if [[ "${NUM_SPECULATIVE_TOKENS}" -gt 0 ]]; then
+  [[ -n "${DRAFT_MODEL_PATH}" ]] || DRAFT_MODEL_PATH="${MODEL_PATH}"
+  SPECULATIVE_ARGS=(--draft_model="${DRAFT_MODEL_PATH}"
+    --num_speculative_tokens="${NUM_SPECULATIVE_TOKENS}"
+    --speculative_algorithm="${SPECULATIVE_ALGORITHM}")
+fi
+
 PROFILE_ARGS=()
 if [[ "${TORCH_PROFILE}" == "1" ]]; then
   mkdir -p "${PROFILE_DIR}"
@@ -225,7 +287,7 @@ if [[ "${TORCH_PROFILE}" == "1" ]]; then
 fi
 
 echo "Binary: ${XLLM_BIN}"
-echo "MUSA_LAUNCH_BLOCKING=${MUSA_LAUNCH_BLOCKING} graph=${ENABLE_GRAPH} prefill_piecewise_graph=${ENABLE_PREFILL_PIECEWISE_GRAPH}"
+echo "MUSA_LAUNCH_BLOCKING=${MUSA_LAUNCH_BLOCKING:-unset} graph=${ENABLE_GRAPH} prefill_piecewise_graph=${ENABLE_PREFILL_PIECEWISE_GRAPH} schedule_overlap=${ENABLE_SCHEDULE_OVERLAP}"
 echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
 echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_cp=${XLLM_GLM5_PREFILL_CP} disagg_pd=${ENABLE_DISAGG_PD} instance_role=${INSTANCE_ROLE}"
 echo "Logs: ${LOG_DIR}/rank_*.log"
@@ -259,7 +321,7 @@ for ((r = 0; r < NNODES; ++r)); do
     --enable_prefix_cache=false \
     --enable_chunked_prefill="${ENABLE_CHUNKED_PREFILL}" \
     --max_tokens_per_chunk_for_prefill="${MAX_TOKENS_PER_CHUNK}" \
-    --enable_schedule_overlap=false \
+    --enable_schedule_overlap="${ENABLE_SCHEDULE_OVERLAP}" \
     --prefill_batch_wait_ms="${PREFILL_BATCH_WAIT_MS}" \
     --enable_graph="${ENABLE_GRAPH}" \
     --kv_cache_dtype="${KV_CACHE_DTYPE}" \
@@ -272,7 +334,7 @@ for ((r = 0; r < NNODES; ++r)); do
     --transfer_listen_port="${RANK_TRANSFER_PORT}" \
     --etcd_addr="${ETCD_ADDR}" \
     --enable_shm=false \
-    "${PROFILE_ARGS[@]}" \
+    "${PD_ARGS[@]}" "${SPECULATIVE_ARGS[@]}" "${PROFILE_ARGS[@]}" \
     > "${RANK_LOG}" 2>&1 < /dev/null &
   echo $! >> "${PID_FILE}"
 done

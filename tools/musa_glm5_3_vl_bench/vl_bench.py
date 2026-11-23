@@ -167,10 +167,7 @@ class PromptBuilder:
             "<|begin_of_image|><|image|><|end_of_image|>",
             content,
         )
-        rendered = (
-            f"[gMASK]<sop><|system|>Reasoning Effort: {self._reasoning_effort}"
-            f"<|user|>{text}<|assistant|><think>"
-        )
+        rendered = f"[gMASK]<sop><|system|>Reasoning Effort: {self._reasoning_effort}<|user|>{text}<|assistant|><think>"
         return self._length(rendered) + extra_image_tokens
 
     def _pad(self, head: str, question: str, isl: int) -> str:
@@ -243,7 +240,7 @@ class PromptBuilder:
             ordered = pool[start:] + pool[:start]
             cycle = "".join(para + "\n\n" for para in ordered)
 
-            def paragraphs(count: int) -> str:
+            def paragraphs(count: int, ordered: list[str] = ordered, cycle: str = cycle) -> str:
                 cycles, remainder = divmod(count, len(ordered))
                 return cycle * cycles + "".join(para + "\n\n" for para in ordered[:remainder])
 
@@ -412,6 +409,11 @@ def stream_chat(
                     first = now if first is None else first
                     last = now
                     pieces.append(piece)
+    if os.environ.get("GLM5_PD_BENCH") == "1":
+        if stream_error:
+            raise RuntimeError(f"{request_id}: {stream_error}")
+        if prompt_tokens is None or completion_tokens != osl:
+            raise RuntimeError(f"{request_id}: incomplete usage {prompt_tokens=}, {completion_tokens=}")
     if first is None:
         if stream_error:
             raise RuntimeError(f"server stream error: {stream_error}")
@@ -613,15 +615,43 @@ def _summarize(args: argparse.Namespace, results: list[dict], wall: float, epoch
     prefill_logs = sorted(glob.glob(os.path.join(args.server_log_dir, "prefill*_r0.log")))
     decode_logs = sorted(glob.glob(os.path.join(args.server_log_dir, "decode*.log")))
     rank0_logs = sorted(glob.glob(os.path.join(args.server_log_dir, "rank_0.log")))
+    pd_bench = os.environ.get("GLM5_PD_BENCH") == "1"
+    if pd_bench:
+        decode_dir = os.path.join(os.path.dirname(args.server_log_dir), "decode")
+        decode_logs = [os.path.join(decode_dir, "rank_0.log")]
     prefill = _request_stats(prefill_logs or rank0_logs, f"vl-{tag}-c")
     decode = _request_stats(decode_logs or rank0_logs, f"vl-{tag}-c")
 
     ids = [r["request_id"] for r in results]
+    if pd_bench:
+        # A remote rank's final glog line may follow its SSE response on NFS.
+        deadline = time.monotonic() + 65
+        while (
+            set(ids) - prefill.keys() or (args.osl > 1 and set(ids) - decode.keys())
+        ) and time.monotonic() < deadline:
+            time.sleep(1)
+            prefill = _request_stats(prefill_logs or rank0_logs, f"vl-{tag}-c")
+            decode = _request_stats(decode_logs, f"vl-{tag}-c")
+        for role, path in (("P", os.path.join(args.server_log_dir, "rank_0.log")), ("D", decode_logs[0])):
+            with open(path, errors="replace") as log:
+                for line in log:
+                    if f"vl-{tag}-c" in line and ("x-request-id:" in line or "Decode KV restore" in line):
+                        logger.info(f"{role} {line.rstrip()}")
+        for request in results:
+            rid = request["request_id"]
+            if rid not in prefill or (args.osl > 1 and rid not in decode):
+                raise RuntimeError(f"{rid}: missing P/D completion logs")
+            if request["prompt_tokens"] != args.isl:
+                raise RuntimeError(f"{rid}: expected {args.isl} prompt tokens, got {request['prompt_tokens']}")
     prompt_tokens = sum(prefill[i][0] for i in ids if i in prefill)
     cached_tokens = sum(prefill[i][1] for i in ids if i in prefill)
     accepted = sum(decode[i][2] for i in ids if i in decode)
     proposed = sum(decode[i][3] for i in ids if i in decode)
     captures, errors = _server_log_events(args.server_log_dir, epoch)
+    if pd_bench:
+        decode_captures, decode_errors = _server_log_events(decode_dir, epoch)
+        errors += decode_errors
+        captures += decode_captures
     summary.update(
         {
             "kv_logged_requests": sum(1 for i in ids if i in prefill),
@@ -649,7 +679,9 @@ def main() -> None:
     parser.add_argument("--num-images", type=int, default=1, help="number of images per prompt (default: 1)")
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--requests", type=int, default=4, help="measured requests")
-    parser.add_argument("--warm", type=int, default=10, help="sequential warm-up requests, distinct prompts (default: 10)")
+    parser.add_argument(
+        "--warm", type=int, default=10, help="sequential warm-up requests, distinct prompts (default: 10)"
+    )
     parser.add_argument(
         "--warm-concurrency", type=int, default=1, help="warm-up requests in flight at once during --warm"
     )
@@ -694,7 +726,7 @@ def main() -> None:
     if args.dry_run:
         return
 
-    tag = str(int(time.time()))
+    tag = str(time.time_ns())
     _warm_up(args, prompts, tag)
     measured = prompts[args.warm : args.warm + args.requests]
     results = [None] * len(measured)

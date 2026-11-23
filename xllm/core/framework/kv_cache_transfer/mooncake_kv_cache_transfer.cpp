@@ -45,6 +45,8 @@ namespace xllm {
 
 namespace {
 
+constexpr char kGlm5HybridLayout[] = "glm5_musa_hybrid";
+
 std::string get_merge_key(const uint64_t dst_cluster_id,
                           const std::string& dst_addr) {
   return std::to_string(dst_cluster_id) + "_" + dst_addr;
@@ -207,6 +209,13 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
   // state on the last CP rank, which alone serves transfer as a CP1 worker.
   if (context.coordinates.cp_size > 1 &&
       context.coordinates.kv_split_size == 1) {
+    // GLM KDA partitions its 64 heads across the CP group. Expose the
+    // group's head-owner ranks to the same planner used by TP decode.
+    if (is_glm5_next_target_model(model_args)) {
+      context.coordinates.tp_rank = rank_in_dp;
+      context.coordinates.tp_size =
+          parallel_args.world_size() / parallel_args.dp_size();
+    }
     context.coordinates.cp_rank = 0;
     context.coordinates.cp_size = 1;
   }
@@ -239,6 +248,9 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
   context.backend = "dcu";
 #elif defined(USE_MUSA)
   context.backend = "musa";
+  if (is_glm5_next_target_model(model_args)) {
+    context.layout_family = kGlm5HybridLayout;
+  }
 #else
   context.backend = "cpu";
 #endif
@@ -437,10 +449,16 @@ void MooncakeKVCacheTransferDefault::register_kv_cache(
       if (pending_registration_context_.has_value()) {
         KVCacheTensor described_tensor = cache_tensor;
         std::string descriptor_error;
-        CHECK(
-            describe_cache_tensor(pending_registration_context_->tensor_layout,
-                                  &described_tensor,
-                                  &descriptor_error))
+        auto tensor_layout = pending_registration_context_->tensor_layout;
+        if (pending_registration_context_->layout_family == kGlm5HybridLayout &&
+            (cache_tensor.role == KVCacheTensorRole::CONV ||
+             cache_tensor.role == KVCacheTensorRole::SSM)) {
+          // The recurrent layers own head shards even though the DSA layers use
+          // MLA.
+          tensor_layout.enable_mla = false;
+        }
+        CHECK(describe_cache_tensor(
+            tensor_layout, &described_tensor, &descriptor_error))
             << "Failed to describe cache tensor, layer=" << layer_id
             << ", role=" << cache_tensor.role.to_string() << ": "
             << descriptor_error;

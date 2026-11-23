@@ -836,7 +836,7 @@ void Glm5NextMLAAttentionImpl::materialize_weights() {
   q_norm_->load_state_dict(weight_dict(dense("q_a_layernorm.weight")));
   kv_norm_->load_state_dict(weight_dict(dense("kv_a_layernorm.weight")));
   auto kv_weights = kv_b_proj_->weight().view({-1, 512, 512});
-  w_k_ = kv_weights.narrow(1, 0, 256).transpose(1, 2).contiguous();
+  w_k_ = kv_weights.narrow(1, 0, 256).contiguous();
   w_v_ = kv_weights.narrow(1, 256, 256).transpose(1, 2).contiguous();
   if (enable_indexer_) {
     index_q_->load_state_dict(weight_dict(dense("indexer.wq_b.weight")));

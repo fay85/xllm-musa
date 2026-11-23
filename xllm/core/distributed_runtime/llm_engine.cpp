@@ -1090,6 +1090,7 @@ void LLMEngine::get_cache_info(std::vector<uint64_t>& cluster_ids,
   // transfer and peers see a TP-only layout.
   const bool kv_complete_on_last_cp_rank =
       Platform::is_musa() && cp_size_ > 1 &&
+      !is_glm5_next_target_model(args_) &&
       ::xllm::ParallelConfig::get_instance().kv_split_size_effective() == 1;
   const size_t first_published_worker =
       kv_complete_on_last_cp_rank

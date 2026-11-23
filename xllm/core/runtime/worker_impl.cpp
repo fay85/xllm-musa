@@ -529,8 +529,9 @@ bool WorkerImpl::allocate_kv_cache_storage(
         << "fp8_e4m3 KV cache is only supported on MUSA.";
     CHECK_EQ(args.model_type(), "glm5_next")
         << "fp8_e4m3 KV cache is only supported for glm5_next.";
-    CHECK(!options_.enable_disagg_pd())
-        << "FP8 KV cache is not supported in PD disaggregation mode.";
+    CHECK(!options_.enable_disagg_pd() ||
+          options_.kv_cache_transfer_mode() == "PULL")
+        << "GLM5 FP8 KV transfer requires PULL.";
   }
 
   // Parse mamba_ssm_dtype if specified for linear attention layers.

@@ -25,6 +25,7 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <map>
 #include <shared_mutex>
 #include <vector>
@@ -45,6 +46,7 @@ limitations under the License.
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
 #include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
+#include "core/layers/musa/glm5_next/glm5_next_linear_attention.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/platform/musa_vmm_capture_pool.h"
@@ -2495,6 +2497,25 @@ bool MusaGraph::capture(CausalLM* model,
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
 
+  if (is_glm_graph_ && params.meta.batch_forward_type.is_decode()) {
+    // A dedicated Decode instance can capture its first forward immediately.
+    // Derive the recurrent slot bound from this graph's allocated caches.
+    int64_t slots = std::numeric_limits<int64_t>::max();
+    for (auto& cache : kv_cache) {
+      const torch::Tensor conv = cache.get_conv_cache();
+      if (conv.defined()) {
+        slots = std::min(slots, conv.size(0));
+      }
+    }
+    CHECK_NE(slots, std::numeric_limits<int64_t>::max());
+    auto& capture_params = graph_params_opt.value();
+    capture_params.attn_metadata->musa_kda_batch =
+        layer::prepare_musa_kda_batch(
+            capture_params.embedding.linear_state_indices,
+            capture_params.attention.device.q_seq_lens,
+            padded_num_tokens_,
+            slots);
+  }
   prepare_model_graph_metadata(
       model,
       persistent_param_.persistent_positions(padded_num_tokens_),

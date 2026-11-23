@@ -129,7 +129,8 @@ using Glm5NextSparseAttentionImpl = Glm5NextMLAAttentionImpl;
 using Glm5NextSparseAttention = Glm5NextMLAAttention;
 
 // GLM NoPE attention core after projections/norm and IndexPool selection.
-// q [T,H,256], latent [T,512], w_k/w_v [H,512,256] are BF16; heads are
+// q [T,H,256], latent [T,512], w_k [H,256,512], and
+// w_v [H,512,256] are BF16; heads are
 // already sharded by the caller. Returns [T,H,256] before row-parallel o_proj.
 // candidates [T,K] contains logical token IDs with -1 padding. lengths [T]
 // bounds each candidate prefix; rows [T] maps queries to block_table requests.
@@ -160,8 +161,8 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   CHECK(q.size(1) == 8 || q.size(1) == 16 || q.size(1) == 32 ||
         q.size(1) == 64);
   CHECK_EQ(latent.sizes(), torch::IntArrayRef({q.size(0), 512}));
-  CHECK_EQ(w_k.sizes(), torch::IntArrayRef({q.size(1), 512, 256}));
-  CHECK_EQ(w_v.sizes(), w_k.sizes());
+  CHECK_EQ(w_k.sizes(), torch::IntArrayRef({q.size(1), 256, 512}));
+  CHECK_EQ(w_v.sizes(), torch::IntArrayRef({q.size(1), 512, 256}));
   for (const auto& tensor : {latent, w_k, w_v}) {
     CHECK_EQ(tensor.device(), q.device());
     CHECK_EQ(tensor.scalar_type(), q.scalar_type());
@@ -186,8 +187,7 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   }();
   auto q_latent = [&]() {
     RECORD_USER_SCOPE("MLA: AbsorbQuery");
-    return torch::bmm(q.transpose(0, 1).contiguous(),
-                      w_k.transpose(1, 2).contiguous())
+    return torch::bmm(q.transpose(0, 1).contiguous(), w_k)
         .transpose(0, 1)
         .contiguous();
   }();

@@ -9,6 +9,22 @@
 # Shared prefixes are disabled by default (shared=0); osl defaults to 1.
 # Override with GLM5_ISL / GLM5_SHARED / GLM5_OSL or their VL_ equivalents.
 set -euo pipefail
+kit=$(cd "$(dirname "$0")" && pwd)
+mode=${1:-}
+if [[ $mode == pd || $mode == standalone ]]; then
+  shift
+elif [[ -z ${GLM5_URL:-}${GLM5_HOST:-}${GLM5_PORT:-}${VL_MASTER_URL:-}${VL_HOST:-}${VL_MASTER_HTTP_PORT:-} &&
+        -s $kit/pd_logs/prefill/pids.txt && -s $kit/pd_logs/decode/pids.txt ]]; then
+  mode=pd
+fi
+if [[ $mode == pd ]]; then
+  export GLM5_URL=${GLM5_URL:-http://10.121.34.85:28888}
+  export GLM5_LOG_DIR=$kit/pd_logs/prefill
+  export GLM5_WARM=${GLM5_WARM:-0} GLM5_OSL=${GLM5_OSL:-16}
+  export GLM5_PD_BENCH=1
+  echo "Prefill: $GLM5_LOG_DIR/rank_0.log"
+  echo "Decode:  $kit/pd_logs/decode/rank_0.log"
+fi
 source "$(dirname "$0")/env.sh"
 
 if [[ $# -gt 0 && "$1" != -* ]]; then
