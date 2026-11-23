@@ -167,8 +167,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
-torch::Tensor mate_gated_delta_rule_mtp(
-    MateGatedDeltaRuleMtpParams& params);
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
 
 std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
                                  int64_t num_v_heads,
@@ -231,7 +230,6 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
-
 
 // Graph-safe Qwen3.5 MTP spec-verify causal conv: reads accepted counts on
 // device. x/output [B, dim, seq]; cache_indices int64 [B];

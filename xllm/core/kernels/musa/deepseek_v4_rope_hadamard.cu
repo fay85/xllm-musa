@@ -49,8 +49,7 @@ __global__ void deepseek_v4_rope_hadamard_kernel(
   const int32_t base = lane * kItemsPerThread;
   const ScalarType* query_row =
       query + token * query_token_stride + head * query_head_stride;
-  ScalarType* output_row =
-      output + (token * num_heads + head) * kHeadDim;
+  ScalarType* output_row = output + (token * num_heads + head) * kHeadDim;
   const ScalarType* cos_row = cos + token * cos_stride;
   const ScalarType* sin_row = sin + token * cos_stride;
 
@@ -137,16 +136,15 @@ void launch_rope_hadamard(const torch::Tensor& query,
       <<<grid,
          kThreads * HeadsPerBlock,
          0,
-         current_musa_stream(query.device())>>>(query.data_ptr<c10::BFloat16>(),
-                                                output.data_ptr<c10::BFloat16>(),
-                                                cos.data_ptr<c10::BFloat16>(),
-                                                sin.data_ptr<c10::BFloat16>(),
-                                                num_heads,
-                                                query.stride(0),
-                                                query.dim() == 2
-                                                    ? query.size(1)
-                                                    : query.stride(1),
-                                                cos.size(1));
+         current_musa_stream(query.device())>>>(
+          query.data_ptr<c10::BFloat16>(),
+          output.data_ptr<c10::BFloat16>(),
+          cos.data_ptr<c10::BFloat16>(),
+          sin.data_ptr<c10::BFloat16>(),
+          num_heads,
+          query.stride(0),
+          query.dim() == 2 ? query.size(1) : query.stride(1),
+          cos.size(1));
 }
 
 bool matches_rope_hadamard_contract(const torch::Tensor& query,
@@ -155,17 +153,15 @@ bool matches_rope_hadamard_contract(const torch::Tensor& query,
   const bool query_shape_ok =
       query.defined() &&
       ((query.dim() == 2 && query.size(1) == kHeadDim) ||
-       (query.dim() == 3 && query.size(1) > 0 &&
-        query.size(2) == kHeadDim));
+       (query.dim() == 3 && query.size(1) > 0 && query.size(2) == kHeadDim));
   const int64_t num_heads =
       query_shape_ok ? (query.dim() == 2 ? 1 : query.size(1)) : 0;
   return query_shape_ok && cos.defined() && sin.defined() &&
          !query.device().is_cpu() && query.size(0) > 0 &&
-         query.stride(-1) == 1 && cos.is_contiguous() &&
-         sin.is_contiguous() && cos.dim() == 2 && sin.dim() == 2 &&
-         cos.sizes() == sin.sizes() && cos.size(0) == query.size(0) &&
-         cos.size(1) >= kRopeDim && query.device() == cos.device() &&
-         query.device() == sin.device() &&
+         query.stride(-1) == 1 && cos.is_contiguous() && sin.is_contiguous() &&
+         cos.dim() == 2 && sin.dim() == 2 && cos.sizes() == sin.sizes() &&
+         cos.size(0) == query.size(0) && cos.size(1) >= kRopeDim &&
+         query.device() == cos.device() && query.device() == sin.device() &&
          query.scalar_type() == torch::kBFloat16 &&
          cos.scalar_type() == query.scalar_type() &&
          sin.scalar_type() == query.scalar_type() &&
@@ -209,9 +205,8 @@ bool deepseek_v4_rope_hadamard_out(const torch::Tensor& query,
                                    const torch::Tensor& sin,
                                    torch::Tensor& output) {
   RECORD_USER_SCOPE("kernel: deepseek_v4_rope_hadamard_out");
-  if (!matches_rope_hadamard_contract(query, cos, sin) ||
-      !output.defined() || output.sizes() != query.sizes() ||
-      output.device() != query.device() ||
+  if (!matches_rope_hadamard_contract(query, cos, sin) || !output.defined() ||
+      output.sizes() != query.sizes() || output.device() != query.device() ||
       output.scalar_type() != query.scalar_type() || !output.is_contiguous()) {
     return false;
   }

@@ -19,9 +19,9 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
-#include <map>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -982,7 +982,6 @@ struct ExpertInput {
         safe_to(eplb_decode_token_mask, device, /*non_blocking=*/true);
     return out;
   }
-
 };
 
 struct GraphInput {

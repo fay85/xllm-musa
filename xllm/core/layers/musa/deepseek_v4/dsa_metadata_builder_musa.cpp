@@ -15,18 +15,19 @@ limitations under the License.
 
 #include "core/layers/musa/deepseek_v4/dsa_metadata_builder_musa.h"
 
+#include <glog/logging.h>
+
 #include <algorithm>
 #include <cstdlib>
-#include <glog/logging.h>
 #include <string>
 
 #include "core/framework/model/model_input_params.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/dsa_metadata.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/util/tensor_helper.h"
-#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "framework/block/musa/deepseek_v4_prefix_transfer.h"
 
 namespace xllm::layer {
@@ -283,9 +284,11 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
     if (sas_env != nullptr && std::string(sas_env) == "1") {
       // Keep the public CPU control lengths unchanged. The draft layers
       // share one device vector constructed from the same normalized values.
-      dsa.cp_input_dict[kDsv4BatchedSasKvLengths] = torch::tensor(
-          ctx_lens_vec, torch::TensorOptions().dtype(torch::kInt32).device(
-                            infer_metadata_device(params, positions)));
+      dsa.cp_input_dict[kDsv4BatchedSasKvLengths] =
+          torch::tensor(ctx_lens_vec,
+                        torch::TensorOptions()
+                            .dtype(torch::kInt32)
+                            .device(infer_metadata_device(params, positions)));
     }
   }
   std::vector<int32_t> prefix_snapshot_values;
@@ -427,7 +430,8 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
                 << " batch=" << batch_size << " managers=" << manager_num
                 << " q_lens="
                 << dsv4_metadata_prefix(torch::tensor(q_lens_vec, cpu_options))
-                << " ctx_lens=" << dsv4_metadata_prefix(
+                << " ctx_lens="
+                << dsv4_metadata_prefix(
                        torch::tensor(ctx_lens_vec, cpu_options));
       for (int32_t m = 0; m < manager_num; ++m) {
         LOG(INFO) << "[DSV4_GRAPH_META] manager=" << m
@@ -487,22 +491,27 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
         const auto target = infer_metadata_device(params, positions);
         dsa.cp_input_dict[kDsv4PrefillResetBlocksMetadataKey] =
             reset_blocks.empty()
-                ? torch::empty(
-                      {0}, torch::TensorOptions().dtype(torch::kInt64).device(target))
-                : safe_to(torch::tensor(reset_blocks, torch::kInt64), target, true);
+                ? torch::empty({0},
+                               torch::TensorOptions()
+                                   .dtype(torch::kInt64)
+                                   .device(target))
+                : safe_to(
+                      torch::tensor(reset_blocks, torch::kInt64), target, true);
       }
       if (params.meta.batch_forward_type.no_decode()) {
         auto read_indices = state_block_indices.clone();
         auto read_access = read_indices.accessor<int64_t, 1>();
         bool different_source = false;
         for (int64_t row = 0; row < block_table.size(0); ++row) {
-          const int64_t cached = static_cast<int64_t>(ctx_lens_vec[row]) -
-                                 q_lens_vec[row];
+          const int64_t cached =
+              static_cast<int64_t>(ctx_lens_vec[row]) - q_lens_vec[row];
           if (cached <= 0) continue;
           bool restored_to_destination = false;
           for (const auto& transfer : params.block_copy.swap_blocks) {
-            const auto decoded = musa::decode_deepseek_v4_prefix_transfer(transfer);
-            if (decoded.kind == musa::DeepseekV4PrefixTransferKind::BLOCK_COPY &&
+            const auto decoded =
+                musa::decode_deepseek_v4_prefix_transfer(transfer);
+            if (decoded.kind ==
+                    musa::DeepseekV4PrefixTransferKind::BLOCK_COPY &&
                 decoded.block_type == BlockType::SWA &&
                 decoded.dst_block_id == state_block_access[row]) {
               restored_to_destination = true;
@@ -514,10 +523,12 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
           // containing the preceding chunk's final token, not the newly
           // allocated page at the end of this chunk.
           if (!restored_to_destination) {
-            const int64_t source_column = (cached - 1) / group_infos[m].block_size;
+            const int64_t source_column =
+                (cached - 1) / group_infos[m].block_size;
             CHECK_LT(source_column, block_table.size(1));
             CHECK_GE(block_table_access[row][source_column], 0)
-                << "Previous prefill state page was released before continuation";
+                << "Previous prefill state page was released before "
+                   "continuation";
             read_access[row] = block_table_access[row][source_column];
             different_source |= read_access[row] != state_block_access[row];
           }
@@ -723,8 +734,9 @@ void DSAMetadataBuilderMusa::process_token_group(
 
   const bool fixed_sequence_slots =
       dsv4_fixed_graph_sequences(graph_slot_capacity, q_lens);
-  const int64_t sequence_stride = fixed_sequence_slots
-      ? dsv4_graph_compressed_stride(q_lens.front(), ratio) : 0;
+  const int64_t sequence_stride =
+      fixed_sequence_slots ? dsv4_graph_compressed_stride(q_lens.front(), ratio)
+                           : 0;
   int64_t write_idx = 0;
   int64_t written_rows = 0;
   for (int32_t seq = 0; seq < batch_size; ++seq) {
@@ -990,10 +1002,11 @@ void DSAMetadataBuilderMusa::build_positions(
         // emission. Use the physical width, not the clamped valid q_len:
         // a dummy row has KV=0 and must not truncate preceding live positions.
         // Padding positions are paired with -1 cache slots.
-        c4_positions.resize((seq + 1) *
-            dsv4_graph_compressed_stride(q_lens_vec.front(), 4), 0);
-        c128_positions.resize((seq + 1) *
-            dsv4_graph_compressed_stride(q_lens_vec.front(), 128), 0);
+        c4_positions.resize(
+            (seq + 1) * dsv4_graph_compressed_stride(q_lens_vec.front(), 4), 0);
+        c128_positions.resize(
+            (seq + 1) * dsv4_graph_compressed_stride(q_lens_vec.front(), 128),
+            0);
       }
     }
 

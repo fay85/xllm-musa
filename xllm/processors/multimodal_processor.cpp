@@ -52,9 +52,9 @@ bool MultimodalProcessorBase::tokenize(const std::string& prompt,
   Timer timer;
   const bool reuse_segments =
       !segment_delimiter.empty() && segment_reuse_enabled_.load();
-  const bool ok =
-      reuse_segments ? tokenize_segments(prompt, segment_delimiter, token_ids)
-                     : tokenizer_->encode(prompt, &token_ids);
+  const bool ok = reuse_segments
+                      ? tokenize_segments(prompt, segment_delimiter, token_ids)
+                      : tokenizer_->encode(prompt, &token_ids);
   if (!ok) {
     LOG(ERROR) << "Failed to encode prompt: " + prompt;
     return false;

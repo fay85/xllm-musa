@@ -149,19 +149,17 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     // graph supplies metadata of the live inputs for its eager runners, which
     // a captured forward must not bake in, so prefill and chunked prefill
     // build their own from the persistent inputs.
-    const BatchForwardType& forward_type =
-        input_params.meta.batch_forward_type;
+    const BatchForwardType& forward_type = input_params.meta.batch_forward_type;
     const bool reuse_graph_metadata = input_params.attn_metadata != nullptr &&
                                       !forward_type.is_prefill() &&
                                       !forward_type.is_chunked_prefill();
     layer::AttentionMetadata attn_metadata =
-        reuse_graph_metadata
-            ? *(input_params.attn_metadata)
-            : layer::AttentionMetadataBuilder::build(
-                  input_params,
-                  model_args_.enable_mla(),
-                  build_attention_mask(input_params),
-                  /*device=*/device_);
+        reuse_graph_metadata ? *(input_params.attn_metadata)
+                             : layer::AttentionMetadataBuilder::build(
+                                   input_params,
+                                   model_args_.enable_mla(),
+                                   build_attention_mask(input_params),
+                                   /*device=*/device_);
     attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
     if (reuse_graph_metadata) {
       attn_metadata.fa3_metadata.fa3_scheduler_metadata =
@@ -214,9 +212,9 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
 #endif
 
 #if defined(USE_MUSA)
-    torch::Tensor fc_input = torch::empty(
-        {embedding.size(0), embedding.size(-1) + hidden.size(-1)},
-        embedding.options());
+    torch::Tensor fc_input =
+        torch::empty({embedding.size(0), embedding.size(-1) + hidden.size(-1)},
+                     embedding.options());
     torch::Tensor norm_emb_view =
         fc_input.narrow(/*dim=*/-1, /*start=*/0, /*length=*/embedding.size(-1));
     torch::Tensor norm_hid_view = fc_input.narrow(/*dim=*/-1,

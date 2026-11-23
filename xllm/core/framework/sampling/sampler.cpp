@@ -151,12 +151,12 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     auto picks = random_sample(window_probs);
     auto next_tokens =
         topk_window.indices.gather(/*dim=*/-1, picks.view({-1, 1})).view({-1});
-    auto probs = torch::zeros(
-        {sample_logits.size(0), sample_logits.size(1)},
-        torch::TensorOptions()
-            .dtype(torch::kFloat32)
-            .device(sample_logits.device()));
-    probs.scatter_(/*dim=*/-1, /*index=*/topk_window.indices, /*src=*/window_probs);
+    auto probs = torch::zeros({sample_logits.size(0), sample_logits.size(1)},
+                              torch::TensorOptions()
+                                  .dtype(torch::kFloat32)
+                                  .device(sample_logits.device()));
+    probs.scatter_(
+        /*dim=*/-1, /*index=*/topk_window.indices, /*src=*/window_probs);
     output.probs = probs;
     output.next_tokens = next_tokens.to(torch::kLong);
     return output;

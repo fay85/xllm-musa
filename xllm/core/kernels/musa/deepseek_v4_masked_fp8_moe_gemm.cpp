@@ -130,10 +130,10 @@ torch::Tensor deepseek_v4_masked_fp8_moe_gemm(
   try {
     bind_tvmffi_stream_to_current_torch_stream(input.device());
     tvm::ffi::Function run = get_function(uri, "masked_moe_gemm_8bit");
-    run(ffi::Tuple<ffi::Tensor, ffi::Tensor>(
-            to_ffi_tensor(input), to_ffi_tensor(input_scale)),
-        ffi::Tuple<ffi::Tensor, ffi::Tensor>(
-            to_ffi_tensor(weight), to_ffi_tensor(weight_scale)),
+    run(ffi::Tuple<ffi::Tensor, ffi::Tensor>(to_ffi_tensor(input),
+                                             to_ffi_tensor(input_scale)),
+        ffi::Tuple<ffi::Tensor, ffi::Tensor>(to_ffi_tensor(weight),
+                                             to_ffi_tensor(weight_scale)),
         to_ffi_tensor(masked_tokens),
         ffi::Tuple<int64_t, int64_t, int64_t>(
             int64_t{1}, int64_t{128}, int64_t{128}),

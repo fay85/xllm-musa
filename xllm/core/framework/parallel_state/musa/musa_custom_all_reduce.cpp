@@ -511,8 +511,7 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce_in_slices(
   torch::Tensor flat_input = input.view({-1});
   torch::Tensor output = torch::empty_like(input);
   torch::Tensor flat_output = output.view({-1});
-  for (int64_t offset = 0; offset < flat_input.numel();
-       offset += slice_elems) {
+  for (int64_t offset = 0; offset < flat_input.numel(); offset += slice_elems) {
     const int64_t count = std::min(slice_elems, flat_input.numel() - offset);
     torch::Tensor in_slice = flat_input.narrow(/*dim=*/0, offset, count);
     const std::optional<torch::Tensor> reduced =

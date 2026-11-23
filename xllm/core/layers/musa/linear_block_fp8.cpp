@@ -112,12 +112,12 @@ torch::Tensor block_fp8_linear_forward(const torch::Tensor& input,
   CHECK_EQ(weight_scale_inv.scalar_type(), torch::kFloat32);
   CHECK(weight_scale_inv.is_contiguous());
 
-  torch::Tensor output = block_fp8_gemm(
-      quantized_input,
-      weight,
-      input_scale,
-      weight_scale_inv,
-      get_matmul_output_buffer(input_2d, weight, output_buffer));
+  torch::Tensor output =
+      block_fp8_gemm(quantized_input,
+                     weight,
+                     input_scale,
+                     weight_scale_inv,
+                     get_matmul_output_buffer(input_2d, weight, output_buffer));
   if (bias.has_value() && bias->defined()) {
     output.add_(bias->to(output.scalar_type()));
   }
@@ -263,9 +263,8 @@ std::tuple<torch::Tensor, torch::Tensor> quantize_weight_to_block_fp8(
   const int64_t col_blocks = cols / kBlockFp8Size;
   torch::Tensor quantized =
       torch::empty({rows, cols}, weight.options().dtype(torch::kFloat8_e4m3fn));
-  torch::Tensor scales =
-      torch::empty({rows / kBlockFp8Size, col_blocks},
-                   weight.options().dtype(torch::kFloat32));
+  torch::Tensor scales = torch::empty({rows / kBlockFp8Size, col_blocks},
+                                      weight.options().dtype(torch::kFloat32));
   for (int64_t start = 0; start < rows; start += kQuantizeRowsPerChunk) {
     const int64_t length = std::min(kQuantizeRowsPerChunk, rows - start);
     const int64_t row_blocks = length / kBlockFp8Size;
@@ -304,14 +303,12 @@ torch::Tensor block_fp8_or_bf16_forward(
   return matmul_forward(input, weight, bias, output_buffer);
 }
 
-bool supports_block_fp8_quantized_input(
-    bool input_is_parallelized,
-    const QuantArgs& quant_args,
-    const torch::Tensor& weight,
-    const torch::Tensor& weight_scale_inv) {
+bool supports_block_fp8_quantized_input(bool input_is_parallelized,
+                                        const QuantArgs& quant_args,
+                                        const torch::Tensor& weight,
+                                        const torch::Tensor& weight_scale_inv) {
   return input_is_parallelized && is_block_fp8_quant(quant_args) &&
-         weight.defined() &&
-         weight.scalar_type() == torch::kFloat8_e4m3fn &&
+         weight.defined() && weight.scalar_type() == torch::kFloat8_e4m3fn &&
          weight_scale_inv.defined() &&
          weight_scale_inv.scalar_type() == torch::kFloat32 &&
          weight_scale_inv.is_contiguous();
@@ -347,8 +344,7 @@ torch::Tensor block_fp8_quantized_forward(
         output_buffer.device() != quantized_input.device();
     if (needs_realloc) {
       output_buffer = torch::empty(
-          {256, columns},
-          quantized_input.options().dtype(torch::kBFloat16));
+          {256, columns}, quantized_input.options().dtype(torch::kBFloat16));
     }
     out_buf = output_buffer.narrow(/*dim=*/0, /*start=*/0, /*length=*/rows);
   }

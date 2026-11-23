@@ -131,9 +131,9 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
     const torch::Tensor& mrope_cos_sin) {
   // Pre-attention norm
   NormalizedHiddenStates normed;
-  const bool attention_takes_fp8 = attention_
-                                       ? attention_->supports_fp8_input()
-                                       : linear_attention_->supports_fp8_input();
+  const bool attention_takes_fp8 =
+      attention_ ? attention_->supports_fp8_input()
+                 : linear_attention_->supports_fp8_input();
   const bool keep_normed_input = !attention_;
   if (!residual.has_value()) {
     residual = x;

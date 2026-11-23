@@ -69,7 +69,9 @@ constexpr const char* kFa3FwdCombine32Uri =
 constexpr const char* kFa3FwdCombine64Uri =
     "fmha_fwd_combine_bf16_16x64x64_ragged_q_metadata";
 
-// Dense ragged FA3 prefill. GQA6 is a Mate 0.2.7 head-256 kernel: TileHeadDim 128, stages 2, tile 32. GQA 2/4/7 are Mate 0.2.7 head-128 stage 2. GQA 8 prefill is head-256 TileHeadDim 128.
+// Dense ragged FA3 prefill. GQA6 is a Mate 0.2.7 head-256 kernel: TileHeadDim
+// 128, stages 2, tile 32. GQA 2/4/7 are Mate 0.2.7 head-128 stage 2. GQA 8
+// prefill is head-256 TileHeadDim 128.
 constexpr const char* kFa3PrefillFwdUriHashGqa6 =
     "639113a0bd9f58a20ca13cdc5b37f65cfe8d2b6cba2296105219fd8299cad5bd";
 constexpr const char* kFa3PrefillFwdUriHashGqa2 =
@@ -126,8 +128,7 @@ bool use_fa3_paged_prefill_kernel(int64_t gqa_ratio, int32_t batch_size) {
   static const bool available =
       fa3_module_available(kFa3PagedPrefillFwdUriGqa6) &&
       fa3_module_available(kFa3PagedPrefillMetadataUriGqa6);
-  return available && gqa_ratio == 6 &&
-         fa3_metadata_num_warps(batch_size) == 1;
+  return available && gqa_ratio == 6 && fa3_metadata_num_warps(batch_size) == 1;
 }
 
 int64_t fa3_metadata_numel(int32_t batch_size) {
@@ -387,19 +388,18 @@ void fa3_decode_scheduler_metadata(const torch::Device& device,
 
 // Keep the v0.11 caller ABI while routing it through the MATE 0.2.7
 // scheduler contract.  New callers can provide an explicit split policy.
-torch::Tensor fa3_decode_scheduler_metadata(
-    const torch::Device& device,
-    int32_t batch_size,
-    int32_t num_heads_q,
-    int32_t num_heads_kv,
-    int32_t head_dim_qk,
-    int32_t head_dim_vo,
-    int32_t max_seqlen_q,
-    int32_t max_seqlen_k,
-    int32_t window_size_left,
-    int32_t window_size_right,
-    const torch::Tensor& cu_seqlens_q,
-    const torch::Tensor& seqused_k) {
+torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
+                                            int32_t batch_size,
+                                            int32_t num_heads_q,
+                                            int32_t num_heads_kv,
+                                            int32_t head_dim_qk,
+                                            int32_t head_dim_vo,
+                                            int32_t max_seqlen_q,
+                                            int32_t max_seqlen_k,
+                                            int32_t window_size_left,
+                                            int32_t window_size_right,
+                                            const torch::Tensor& cu_seqlens_q,
+                                            const torch::Tensor& seqused_k) {
   return fa3_decode_scheduler_metadata(device,
                                        batch_size,
                                        num_heads_q,

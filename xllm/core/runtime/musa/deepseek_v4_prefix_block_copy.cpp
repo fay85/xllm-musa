@@ -18,10 +18,10 @@ limitations under the License.
 #include <cstdint>
 #include <vector>
 
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
-#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::musa {
 

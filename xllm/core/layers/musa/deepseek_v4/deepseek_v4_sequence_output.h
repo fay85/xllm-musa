@@ -1,4 +1,5 @@
-// Copyright 2026 The xLLM Authors. Licensed under the Apache License, Version 2.0.
+// Copyright 2026 The xLLM Authors. Licensed under the Apache License,
+// Version 2.0.
 #pragma once
 #include <torch/torch.h>
 
@@ -8,7 +9,8 @@ namespace xllm::layer {
 
 // The caller must finish all writes before use, and keep the backing storage
 // alive until its consumer completes. Disjoint scratch allocations or reordered
-// request rows retain the original cat semantics instead of manufacturing a view.
+// request rows retain the original cat semantics instead of manufacturing a
+// view.
 inline torch::Tensor dsv4_adjacent_row_view_or_cat(
     const std::vector<torch::Tensor>& rows) {
   TORCH_CHECK(!rows.empty());
@@ -19,9 +21,10 @@ inline torch::Tensor dsv4_adjacent_row_view_or_cat(
   bool adjacent = first.is_contiguous();
   for (const auto& row : rows) {
     adjacent = adjacent && row.dim() == first.dim() && row.is_contiguous() &&
-        row.scalar_type() == first.scalar_type() && row.device() == first.device() &&
-        row.is_alias_of(first) && row.strides() == first.strides() &&
-        row.storage_offset() == next_offset;
+               row.scalar_type() == first.scalar_type() &&
+               row.device() == first.device() && row.is_alias_of(first) &&
+               row.strides() == first.strides() &&
+               row.storage_offset() == next_offset;
     if (!adjacent) {
       return torch::cat(rows, 0);
     }
@@ -38,8 +41,8 @@ inline torch::Tensor dsv4_adjacent_row_view_or_cat(
   return first.as_strided(shape, first.strides(), first.storage_offset());
 }
 
-inline torch::Tensor dsv4_retain_sequence_output(
-    const torch::Tensor& output, int64_t sequence_count) {
+inline torch::Tensor dsv4_retain_sequence_output(const torch::Tensor& output,
+                                                 int64_t sequence_count) {
   TORCH_CHECK(sequence_count > 0);
   // Both paged compact verify and MATE may return shared per-layer scratch.
   // Each retained row must outlive the next request's kernel invocation.
@@ -47,9 +50,9 @@ inline torch::Tensor dsv4_retain_sequence_output(
   return sequence_count > 1 ? output.clone() : output;
 }
 
-inline torch::Tensor dsv4_sequence_output_buffer(
-    const torch::Tensor& query, const torch::Tensor& workspace,
-    int64_t sequence_count) {
+inline torch::Tensor dsv4_sequence_output_buffer(const torch::Tensor& query,
+                                                 const torch::Tensor& workspace,
+                                                 int64_t sequence_count) {
   TORCH_CHECK(sequence_count > 0);
   if (sequence_count == 1) {
     return workspace.narrow(0, 0, query.size(0));

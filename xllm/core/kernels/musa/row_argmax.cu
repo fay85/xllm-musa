@@ -140,9 +140,9 @@ __global__ void __launch_bounds__(kThreads)
   reduce_block_best(value, index, values, indices);
   if (threadIdx.x == 0) {
     const int64_t winner = indices[0];
-    output[row] =
-        (column_ids != nullptr && winner != kNoIndex) ? column_ids[winner]
-                                                      : winner;
+    output[row] = (column_ids != nullptr && winner != kNoIndex)
+                      ? column_ids[winner]
+                      : winner;
   }
 }
 

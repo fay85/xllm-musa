@@ -1,7 +1,9 @@
-// Copyright 2026 The xLLM Authors. Licensed under the Apache License, Version 2.0.
+// Copyright 2026 The xLLM Authors. Licensed under the Apache License,
+// Version 2.0.
 #pragma once
 
 #include <torch/torch.h>
+
 #include <cstdint>
 
 namespace xllm::layer {
@@ -49,19 +51,21 @@ inline Dsv4PrefillContinuation dsv4_prefill_continuation(
   }
   kv_parts.push_back(kv);
   score_parts.push_back(score);
-  return {torch::cat(kv_parts, 0), torch::cat(score_parts, 0),
-          overlap + partial, overlap ? 1 : 0};
+  return {torch::cat(kv_parts, 0),
+          torch::cat(score_parts, 0),
+          overlap + partial,
+          overlap ? 1 : 0};
 }
 
 inline int64_t dsv4_prefill_compressed_rows(int64_t cached_tokens,
-                                           int64_t query_tokens,
-                                           int64_t ratio) {
+                                            int64_t query_tokens,
+                                            int64_t ratio) {
   TORCH_CHECK(cached_tokens >= 0 && query_tokens >= 0 && ratio > 0);
   return (cached_tokens + query_tokens) / ratio - cached_tokens / ratio;
 }
 
 inline void dsv4_clear_prefill_state_rows(torch::Tensor state,
-                                         const torch::Tensor& active_blocks) {
+                                          const torch::Tensor& active_blocks) {
   TORCH_CHECK(state.dim() == 3 && active_blocks.dim() == 1 &&
               active_blocks.scalar_type() == torch::kInt64);
   // Called only from eager prefill. Do not clear unrelated decode requests

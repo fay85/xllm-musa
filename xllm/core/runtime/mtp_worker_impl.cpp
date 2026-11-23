@@ -3929,7 +3929,8 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
 #if defined(USE_NPU) || defined(USE_MUSA)
   // update_sampling_params() uses torch::arange + repeat_interleave on device
   // tensors. For greedy decode batches without penalties or masks, reuse
-  // cached [0..total_num_val_tokens-1] indices and all-false do_sample controls.
+  // cached [0..total_num_val_tokens-1] indices and all-false do_sample
+  // controls.
 #if defined(USE_NPU)
   const bool allow_stable_greedy_controls =
       use_explicit_spec_verify_replay_update &&

@@ -94,15 +94,14 @@ __global__ void __launch_bounds__(kGateTopkThreads)
 // the original score is recovered only for the selected experts. Keeping a
 // single eight-value register array avoids the spill-prone duplicate score
 // arrays used by the earlier candidate.
-__global__ void __launch_bounds__(kGateTopkWarps * kGateTopkWarpSize)
-    deepseek_v4_gate_topk_warp_kernel(
-        const float* __restrict__ router_logits,
-        const float* __restrict__ correction_bias,
-        float* __restrict__ topk_weights,
-        int32_t* __restrict__ topk_ids,
-        int64_t num_tokens,
-        int64_t topk,
-        float route_scale) {
+__global__ void __launch_bounds__(kGateTopkWarps* kGateTopkWarpSize)
+    deepseek_v4_gate_topk_warp_kernel(const float* __restrict__ router_logits,
+                                      const float* __restrict__ correction_bias,
+                                      float* __restrict__ topk_weights,
+                                      int32_t* __restrict__ topk_ids,
+                                      int64_t num_tokens,
+                                      int64_t topk,
+                                      float route_scale) {
   const int32_t lane = threadIdx.x;
   const int64_t token =
       static_cast<int64_t>(blockIdx.x) * kGateTopkWarps + threadIdx.y;
@@ -125,8 +124,7 @@ __global__ void __launch_bounds__(kGateTopkWarps * kGateTopkWarpSize)
                                   logits_high.w};
 #pragma unroll
   for (int32_t i = 0; i < kScoresPerLane; ++i) {
-    const int32_t expert =
-        first_expert + (i >= 4 ? 128 : 0) + (i & 3);
+    const int32_t expert = first_expert + (i >= 4 ? 128 : 0) + (i & 3);
     scores[i] = sqrtf(fmaxf(stable_softplus(scores[i]), 0.0f)) +
                 correction_bias[expert];
   }
@@ -137,8 +135,7 @@ __global__ void __launch_bounds__(kGateTopkWarps * kGateTopkWarpSize)
     int32_t selected_expert = first_expert;
 #pragma unroll
     for (int32_t i = 1; i < kScoresPerLane; ++i) {
-      const int32_t expert =
-          first_expert + (i >= 4 ? 128 : 0) + (i & 3);
+      const int32_t expert = first_expert + (i >= 4 ? 128 : 0) + (i & 3);
       if (scores[i] > selected_score) {
         selected_score = scores[i];
         selected_expert = expert;

@@ -472,7 +472,8 @@ namespace {
 
 // Encoder inputs an item no longer needs once its output is cached.
 constexpr std::array<const char*, 2> kEncoderInputKeys = {
-    "pixel_values", "pixel_values_videos"};
+    "pixel_values",
+    "pixel_values_videos"};
 
 class ItemCollector final : public MMDataItem::IVisitor {
  public:
@@ -550,11 +551,11 @@ void EncoderCacheDirectory::plan(MMBatchData& batch) {
 
   MMDataItem& first_item = *collector.items().front();
   for (const XXH3Key& key : evicted) {
-    add_command(first_item,
-                kEncoderCacheEvictPrefix +
-                    absl::BytesToHexString(absl::string_view(
-                        reinterpret_cast<const char*>(key.data),
-                        sizeof(key.data))));
+    add_command(
+        first_item,
+        kEncoderCacheEvictPrefix +
+            absl::BytesToHexString(absl::string_view(
+                reinterpret_cast<const char*>(key.data), sizeof(key.data))));
   }
 }
 
@@ -684,7 +685,8 @@ bool MMSideOutputCacheVisitor::visit(MMDataItem& item) {
   const XXH3Key& key = item.state().schedule_data().key;
   auto ids = item.get<torch::Tensor>("audio|ctc_ids");
   auto conf = item.get<torch::Tensor>("audio|ctc_conf");
-  if (ids.has_value() && ids->defined() && conf.has_value() && conf->defined()) {
+  if (ids.has_value() && ids->defined() && conf.has_value() &&
+      conf->defined()) {
     cache_.insert(key, std::move(*ids), std::move(*conf));
     return true;
   }

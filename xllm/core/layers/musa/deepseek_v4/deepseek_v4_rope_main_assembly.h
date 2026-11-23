@@ -12,13 +12,13 @@ https://www.apache.org/licenses/LICENSE-2.0
 namespace xllm::layer {
 
 inline bool dsv4_prefill_main_rope_assembly_eligible(const torch::Tensor& input,
-                                               int64_t rope_start,
-                                               int64_t rope_width) {
+                                                     int64_t rope_start,
+                                                     int64_t rope_width) {
   return input.defined() && input.dim() == 3 && input.is_contiguous() &&
          input.scalar_type() == torch::kBFloat16 &&
          input.device().is_privateuseone() && input.size(0) >= 128 &&
-         input.size(0) <= 4096 && input.size(1) == 64 &&
-         input.size(2) == 512 && rope_start == 448 && rope_width == 64;
+         input.size(0) <= 4096 && input.size(1) == 64 && input.size(2) == 512 &&
+         rope_start == 448 && rope_width == 64;
 }
 
 // Rotation arithmetic has already completed, with the original dtype/rounding.
@@ -28,8 +28,9 @@ inline torch::Tensor dsv4_assemble_prefill_main_rope(
     const torch::Tensor& input,
     const torch::Tensor& rotated_even,
     const torch::Tensor& rotated_odd) {
-  CHECK(dsv4_prefill_main_rope_assembly_eligible(input, /*rope_start=*/448,
-                                          /*rope_width=*/64));
+  CHECK(dsv4_prefill_main_rope_assembly_eligible(input,
+                                                 /*rope_start=*/448,
+                                                 /*rope_width=*/64));
   CHECK_EQ(rotated_even.dim(), 3);
   CHECK_EQ(rotated_even.size(0), input.size(0));
   CHECK_EQ(rotated_even.size(1), 64);

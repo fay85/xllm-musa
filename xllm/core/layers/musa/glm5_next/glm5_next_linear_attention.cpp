@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "layers/musa/glm5_next/glm5_next_linear_attention.h"
 
-#include "layers/musa/glm5_next/glm5_next_mla_attention.h"
-
 #include <c10/core/DeviceGuard.h>
 #include <glog/logging.h>
 
@@ -33,6 +31,7 @@ limitations under the License.
 #include "framework/state_dict/utils.h"
 #include "kernels/musa/gdn_ops.h"
 #include "kernels/ops_api.h"
+#include "layers/musa/glm5_next/glm5_next_mla_attention.h"
 #include "util/env_var.h"
 
 namespace xllm {

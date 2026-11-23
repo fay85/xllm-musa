@@ -226,8 +226,8 @@ CompositeBlockManager::LeafMap build_composite_leaves(
     CHECK_GT(options.linear_state_num_slots(), 0)
         << "linear_state_num_slots must be set when linear state is enabled";
     const bool linear_prefix_cache = prefix_cache_on && linear_participates;
-    const int32_t kv_split_align =
-        std::max<int32_t>(1, ParallelConfig::get_instance().kv_split_size_effective());
+    const int32_t kv_split_align = std::max<int32_t>(
+        1, ParallelConfig::get_instance().kv_split_size_effective());
     int32_t chunk_stride =
         std::max<int32_t>(1, options.block_size()) * kv_split_align;
     if (linear_prefix_cache) {

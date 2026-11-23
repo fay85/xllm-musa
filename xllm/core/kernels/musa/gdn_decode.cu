@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <ATen/record_function.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <ATen/record_function.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_bf16.h>
@@ -1043,9 +1043,9 @@ namespace {
 bool mate_gdn_mtp_artifact_available(const std::string& uri) {
   const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
   if (ops_path == nullptr || ops_path[0] == '\0') return false;
-  return ::access((std::string(ops_path) + "/" + uri + "/" + uri + ".so")
-                      .c_str(),
-                  R_OK) == 0;
+  return ::access(
+             (std::string(ops_path) + "/" + uri + "/" + uri + ".so").c_str(),
+             R_OK) == 0;
 }
 
 std::string get_mate_gdn_mtp_checkpoint_uri(int64_t num_q_heads,
@@ -1067,8 +1067,8 @@ std::string select_mate_gdn_mtp_checkpoint_uri(int64_t num_q_heads,
                                                torch::ScalarType dtype,
                                                int64_t seq_len,
                                                int64_t batch_size) {
-  const std::string base_uri = get_mate_gdn_mtp_checkpoint_uri(
-      num_q_heads, num_v_heads, dtype, seq_len);
+  const std::string base_uri =
+      get_mate_gdn_mtp_checkpoint_uri(num_q_heads, num_v_heads, dtype, seq_len);
   if (batch_size < 2) {
     return base_uri;
   }
@@ -1113,22 +1113,35 @@ torch::Tensor mate_gated_delta_rule_mtp(
   CHECK_EQ(v.size(2), params.num_v_heads);
   CHECK_EQ(q.size(3), params.head_k_dim);
   CHECK_EQ(v.size(3), params.head_v_dim);
-  auto a = write_checkpoints ? params.a : params.a.to(q.scalar_type()).contiguous();
-  auto b = write_checkpoints ? params.b : params.b.to(q.scalar_type()).contiguous();
-  auto A_log = write_checkpoints ? params.A_log : params.A_log.to(torch::kFloat32).contiguous();
-  auto dt_bias = write_checkpoints ? params.dt_bias : params.dt_bias.to(torch::kFloat32).contiguous();
-  auto state = write_checkpoints ? params.state : params.state.to(torch::kFloat32).contiguous();
-  auto state_indices = write_checkpoints ? params.state_indices : params.state_indices.to(torch::kInt32).contiguous();
+  auto a =
+      write_checkpoints ? params.a : params.a.to(q.scalar_type()).contiguous();
+  auto b =
+      write_checkpoints ? params.b : params.b.to(q.scalar_type()).contiguous();
+  auto A_log = write_checkpoints
+                   ? params.A_log
+                   : params.A_log.to(torch::kFloat32).contiguous();
+  auto dt_bias = write_checkpoints
+                     ? params.dt_bias
+                     : params.dt_bias.to(torch::kFloat32).contiguous();
+  auto state = write_checkpoints
+                   ? params.state
+                   : params.state.to(torch::kFloat32).contiguous();
+  auto state_indices =
+      write_checkpoints ? params.state_indices
+                        : params.state_indices.to(torch::kInt32).contiguous();
   torch::Tensor intermediate = params.intermediate;
   torch::Tensor checkpoint_indices = params.checkpoint_state_indices;
   CHECK(params.output.defined());
-  const std::string uri = write_checkpoints
-                              ? select_mate_gdn_mtp_checkpoint_uri(
-                                    params.num_k_heads, params.num_v_heads,
-                                    q.scalar_type(), q.size(1), q.size(0))
-                              : get_mate_gdn_mtp_uri(
-                                    params.num_k_heads, params.num_v_heads,
-                                    q.scalar_type(), q.size(1));
+  const std::string uri =
+      write_checkpoints ? select_mate_gdn_mtp_checkpoint_uri(params.num_k_heads,
+                                                             params.num_v_heads,
+                                                             q.scalar_type(),
+                                                             q.size(1),
+                                                             q.size(0))
+                        : get_mate_gdn_mtp_uri(params.num_k_heads,
+                                               params.num_v_heads,
+                                               q.scalar_type(),
+                                               q.size(1));
   auto run = get_function(uri, "main");
   TvmffiStreamGuard stream_guard(q.device());
   run(to_ffi_tensor(q),
@@ -2737,7 +2750,6 @@ torch::Tensor fused_gated_delta_rule_decode(
   return output;
 }
 
-
 // ---------------------------------------------------------------------------
 // Graph-safe Qwen3.5 MTP spec-verify causal conv (ported from feihu-1016-dev
 // causal_conv1d_mtp_verify). Reads the per-sequence accepted-token count on
@@ -2751,19 +2763,34 @@ namespace {
 template <typename scalar_t, typename accepted_t>
 __global__ void causal_conv1d_mtp_verify_kernel(
     const scalar_t* __restrict__ x,
-    int64_t x_bs, int64_t x_ds, int64_t x_ts,
+    int64_t x_bs,
+    int64_t x_ds,
+    int64_t x_ts,
     const scalar_t* __restrict__ weight,
-    int64_t w_ds, int64_t w_ws,
+    int64_t w_ds,
+    int64_t w_ws,
     scalar_t* conv_state,
-    int64_t cs_bs, int64_t cs_ds, int64_t cs_ts,
+    int64_t cs_bs,
+    int64_t cs_ds,
+    int64_t cs_ts,
     const int32_t* __restrict__ cache_indices,
     const accepted_t* __restrict__ accepted_tokens,
     scalar_t* __restrict__ out,
-    int64_t o_bs, int64_t o_ds, int64_t o_ts,
+    int64_t o_bs,
+    int64_t o_ds,
+    int64_t o_ts,
     scalar_t* __restrict__ inter,
-    int64_t i_bs, int64_t i_ts, int64_t i_ds, int64_t i_ss,
-    int batch, int dim, int seq_len, int width, int state_len,
-    bool silu_activation, bool write_superstate) {
+    int64_t i_bs,
+    int64_t i_ts,
+    int64_t i_ds,
+    int64_t i_ss,
+    int batch,
+    int dim,
+    int seq_len,
+    int width,
+    int state_len,
+    bool silu_activation,
+    bool write_superstate) {
   const int b = blockIdx.x;
   if (b >= batch) return;
   const int64_t cache_idx = cache_indices[b];
@@ -2776,8 +2803,9 @@ __global__ void causal_conv1d_mtp_verify_kernel(
     float init_hist[4] = {0.f, 0.f, 0.f, 0.f};
     if (cache_idx >= 0) {
       for (int h = 0; h < width - 1; ++h) {
-        hist[h] = to_f32(conv_state[cache_idx * cs_bs + d * cs_ds +
-                                    static_cast<int64_t>(accepted + h) * cs_ts]);
+        hist[h] =
+            to_f32(conv_state[cache_idx * cs_bs + d * cs_ds +
+                              static_cast<int64_t>(accepted + h) * cs_ts]);
         init_hist[h] = hist[h];
       }
     }
@@ -2862,7 +2890,8 @@ ConvSuperstateArgs<scalar_t, accepted_t> make_conv_superstate_args(
   args.cs_ds = conv_state.stride(1);
   args.cs_ts = conv_state.stride(2);
   args.cache_indices = cache_indices.data_ptr<int32_t>();
-  args.accepted_tokens = reinterpret_cast<const accepted_t*>(accepted.data_ptr());
+  args.accepted_tokens =
+      reinterpret_cast<const accepted_t*>(accepted.data_ptr());
   args.out = reinterpret_cast<scalar_t*>(out.data_ptr());
   args.o_bs = out.stride(0);
   args.o_ds = out.stride(1);
@@ -2877,7 +2906,9 @@ ConvSuperstateArgs<scalar_t, accepted_t> make_conv_superstate_args(
 // snapshot, for channel d of sequence b. The window is unrolled so every load
 // of a channel is in flight at once; the generic kernel serializes them per
 // verify step.
-template <typename scalar_t, typename accepted_t, int32_t kWidth,
+template <typename scalar_t,
+          typename accepted_t,
+          int32_t kWidth,
           int32_t kSeqLen>
 __device__ __forceinline__ void conv1d_mtp_verify_superstate_channel(
     const ConvSuperstateArgs<scalar_t, accepted_t>& args,
@@ -2947,7 +2978,9 @@ __device__ __forceinline__ void conv1d_mtp_verify_superstate_channel(
   }
 }
 
-template <typename scalar_t, typename accepted_t, int32_t kWidth,
+template <typename scalar_t,
+          typename accepted_t,
+          int32_t kWidth,
           int32_t kSeqLen>
 __global__ void causal_conv1d_mtp_verify_superstate_kernel(
     ConvSuperstateArgs<scalar_t, accepted_t> args) {
@@ -2964,7 +2997,9 @@ __global__ void causal_conv1d_mtp_verify_superstate_kernel(
 // across all `args.batch` sequences; every later block computes one (seq_idx,
 // col) tile of proj_output[batch * kSeqLen, proj_cols] = proj_input *
 // proj_weight^T.
-template <typename scalar_t, typename accepted_t, int32_t kWidth,
+template <typename scalar_t,
+          typename accepted_t,
+          int32_t kWidth,
           int32_t kSeqLen>
 __global__ void __launch_bounds__(skinny::kThreads)
     causal_conv1d_mtp_verify_superstate_proj_kernel(
@@ -2980,11 +3015,12 @@ __global__ void __launch_bounds__(skinny::kThreads)
   const int32_t total_conv_blocks = args.batch * conv_blocks;
   if (block < total_conv_blocks) {
     const int32_t b = block / conv_blocks;
-    const int32_t d =
-        (block % conv_blocks) * skinny::kThreads +
-        static_cast<int32_t>(threadIdx.x);
+    const int32_t d = (block % conv_blocks) * skinny::kThreads +
+                      static_cast<int32_t>(threadIdx.x);
     if (d < args.dim) {
-      conv1d_mtp_verify_superstate_channel<scalar_t, accepted_t, kWidth,
+      conv1d_mtp_verify_superstate_channel<scalar_t,
+                                           accepted_t,
+                                           kWidth,
                                            kSeqLen>(args, b, d);
     }
     return;
@@ -3017,12 +3053,18 @@ void launch_causal_conv1d_mtp_verify_superstate(
   const int32_t batch = static_cast<int32_t>(x.size(0));
   const int32_t dim = static_cast<int32_t>(x.size(1));
   const int32_t dim_blocks = (dim + kThreads - 1) / kThreads;
-  causal_conv1d_mtp_verify_superstate_kernel<scalar_t, accepted_t, kWidth,
+  causal_conv1d_mtp_verify_superstate_kernel<scalar_t,
+                                             accepted_t,
+                                             kWidth,
                                              kSeqLen>
       <<<dim3(batch, dim_blocks), kThreads, 0, stream>>>(
-          make_conv_superstate_args<scalar_t, accepted_t>(
-              x, weight, conv_state, cache_indices, accepted, out,
-              silu_activation));
+          make_conv_superstate_args<scalar_t, accepted_t>(x,
+                                                          weight,
+                                                          conv_state,
+                                                          cache_indices,
+                                                          accepted,
+                                                          out,
+                                                          silu_activation));
 }
 
 template <typename accepted_t, int32_t kSeqLen>
@@ -3041,15 +3083,21 @@ void launch_causal_conv1d_mtp_verify_superstate_proj(
   constexpr int32_t kWidth = 4;
   const int32_t batch = static_cast<int32_t>(x.size(0));
   const int32_t dim = static_cast<int32_t>(x.size(1));
-  const int32_t conv_blocks =
-      (dim + skinny::kThreads - 1) / skinny::kThreads;
+  const int32_t conv_blocks = (dim + skinny::kThreads - 1) / skinny::kThreads;
   const int32_t proj_cols = static_cast<int32_t>(proj_weight.size(0));
   const int32_t total_blocks = batch * (conv_blocks + proj_cols);
-  causal_conv1d_mtp_verify_superstate_proj_kernel<scalar_t, accepted_t, kWidth,
+  causal_conv1d_mtp_verify_superstate_proj_kernel<scalar_t,
+                                                  accepted_t,
+                                                  kWidth,
                                                   kSeqLen>
       <<<total_blocks, skinny::kThreads, 0, stream>>>(
           make_conv_superstate_args<scalar_t, accepted_t>(
-              x, weight, conv_state, cache_indices, accepted, out,
+              x,
+              weight,
+              conv_state,
+              cache_indices,
+              accepted,
+              out,
               /*silu_activation=*/true),
           conv_blocks,
           reinterpret_cast<const __mt_bfloat16*>(proj_input.data_ptr()),
@@ -3072,11 +3120,19 @@ void dispatch_causal_conv1d_mtp_verify_superstate_proj(
     torch::Tensor& proj_output,
     cudaStream_t stream) {
   switch (x.size(2)) {
-#define XLLM_CONV1D_MTP_PROJ_CASE(SEQ_LEN)                                   \
-  case SEQ_LEN:                                                              \
-    launch_causal_conv1d_mtp_verify_superstate_proj<accepted_t, SEQ_LEN>(    \
-        x, weight, conv_state, cache_indices, accepted, out, proj_input,     \
-        proj_weight, proj_output, stream);                                   \
+#define XLLM_CONV1D_MTP_PROJ_CASE(SEQ_LEN)                                \
+  case SEQ_LEN:                                                           \
+    launch_causal_conv1d_mtp_verify_superstate_proj<accepted_t, SEQ_LEN>( \
+        x,                                                                \
+        weight,                                                           \
+        conv_state,                                                       \
+        cache_indices,                                                    \
+        accepted,                                                         \
+        out,                                                              \
+        proj_input,                                                       \
+        proj_weight,                                                      \
+        proj_output,                                                      \
+        stream);                                                          \
     return;
     XLLM_CONV1D_MTP_PROJ_CASE(2)
     XLLM_CONV1D_MTP_PROJ_CASE(3)
@@ -3105,12 +3161,17 @@ bool try_launch_causal_conv1d_mtp_verify_superstate(
     return false;
   }
   switch (x.size(2)) {
-#define XLLM_CONV1D_MTP_SUPERSTATE_CASE(SEQ_LEN)                         \
-  case SEQ_LEN:                                                          \
-    launch_causal_conv1d_mtp_verify_superstate<scalar_t, accepted_t,     \
-                                               SEQ_LEN>(                 \
-        x, weight, conv_state, cache_indices, accepted, out,             \
-        silu_activation, stream);                                        \
+#define XLLM_CONV1D_MTP_SUPERSTATE_CASE(SEQ_LEN)                               \
+  case SEQ_LEN:                                                                \
+    launch_causal_conv1d_mtp_verify_superstate<scalar_t, accepted_t, SEQ_LEN>( \
+        x,                                                                     \
+        weight,                                                                \
+        conv_state,                                                            \
+        cache_indices,                                                         \
+        accepted,                                                              \
+        out,                                                                   \
+        silu_activation,                                                       \
+        stream);                                                               \
     return true;
     XLLM_CONV1D_MTP_SUPERSTATE_CASE(2)
     XLLM_CONV1D_MTP_SUPERSTATE_CASE(3)
@@ -3138,8 +3199,14 @@ void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
                                      cudaStream_t stream) {
   if (!inter.defined() && write_superstate &&
       try_launch_causal_conv1d_mtp_verify_superstate<scalar_t, accepted_t>(
-          x, weight, conv_state, cache_indices, accepted, out,
-          silu_activation, stream)) {
+          x,
+          weight,
+          conv_state,
+          cache_indices,
+          accepted,
+          out,
+          silu_activation,
+          stream)) {
     return;
   }
   const int batch = static_cast<int>(x.size(0));
@@ -3152,23 +3219,35 @@ void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
   causal_conv1d_mtp_verify_kernel<scalar_t, accepted_t>
       <<<dim3(batch, dim_blocks), kThreads, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(x.data_ptr()),
-          x.stride(0), x.stride(1), x.stride(2),
+          x.stride(0),
+          x.stride(1),
+          x.stride(2),
           reinterpret_cast<const scalar_t*>(weight.data_ptr()),
-          weight.stride(0), weight.stride(1),
+          weight.stride(0),
+          weight.stride(1),
           reinterpret_cast<scalar_t*>(conv_state.data_ptr()),
-          conv_state.stride(0), conv_state.stride(1), conv_state.stride(2),
+          conv_state.stride(0),
+          conv_state.stride(1),
+          conv_state.stride(2),
           cache_indices.data_ptr<int32_t>(),
           reinterpret_cast<const accepted_t*>(accepted.data_ptr()),
           reinterpret_cast<scalar_t*>(out.data_ptr()),
-          out.stride(0), out.stride(1), out.stride(2),
+          out.stride(0),
+          out.stride(1),
+          out.stride(2),
           inter.defined() ? reinterpret_cast<scalar_t*>(inter.data_ptr())
                           : nullptr,
           inter.defined() ? inter.stride(0) : 0,
           inter.defined() ? inter.stride(1) : 0,
           inter.defined() ? inter.stride(2) : 0,
           inter.defined() ? inter.stride(3) : 0,
-          batch, dim, seq_len, width, state_len,
-          silu_activation, write_superstate);
+          batch,
+          dim,
+          seq_len,
+          width,
+          state_len,
+          silu_activation,
+          write_superstate);
 }
 
 template <typename scalar_t>
@@ -3183,13 +3262,27 @@ void dispatch_mtp_verify_accepted(const torch::Tensor& x,
                                   bool write_superstate,
                                   cudaStream_t stream) {
   if (accepted.scalar_type() == torch::kInt32) {
-    launch_causal_conv1d_mtp_verify<scalar_t, int32_t>(
-        x, weight, conv_state, cache_indices, accepted, out, inter,
-        silu_activation, write_superstate, stream);
+    launch_causal_conv1d_mtp_verify<scalar_t, int32_t>(x,
+                                                       weight,
+                                                       conv_state,
+                                                       cache_indices,
+                                                       accepted,
+                                                       out,
+                                                       inter,
+                                                       silu_activation,
+                                                       write_superstate,
+                                                       stream);
   } else {
-    launch_causal_conv1d_mtp_verify<scalar_t, int64_t>(
-        x, weight, conv_state, cache_indices, accepted, out, inter,
-        silu_activation, write_superstate, stream);
+    launch_causal_conv1d_mtp_verify<scalar_t, int64_t>(x,
+                                                       weight,
+                                                       conv_state,
+                                                       cache_indices,
+                                                       accepted,
+                                                       out,
+                                                       inter,
+                                                       silu_activation,
+                                                       write_superstate,
+                                                       stream);
   }
 }
 
@@ -3252,19 +3345,40 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   switch (x.scalar_type()) {
     case torch::kBFloat16:
-      dispatch_mtp_verify_accepted<__nv_bfloat16>(
-          x, weight, conv_state, cache_indices, num_accepted_tokens, output,
-          intermediate, silu_activation, write_superstate, stream);
+      dispatch_mtp_verify_accepted<__nv_bfloat16>(x,
+                                                  weight,
+                                                  conv_state,
+                                                  cache_indices,
+                                                  num_accepted_tokens,
+                                                  output,
+                                                  intermediate,
+                                                  silu_activation,
+                                                  write_superstate,
+                                                  stream);
       break;
     case torch::kHalf:
-      dispatch_mtp_verify_accepted<__half>(
-          x, weight, conv_state, cache_indices, num_accepted_tokens, output,
-          intermediate, silu_activation, write_superstate, stream);
+      dispatch_mtp_verify_accepted<__half>(x,
+                                           weight,
+                                           conv_state,
+                                           cache_indices,
+                                           num_accepted_tokens,
+                                           output,
+                                           intermediate,
+                                           silu_activation,
+                                           write_superstate,
+                                           stream);
       break;
     case torch::kFloat32:
-      dispatch_mtp_verify_accepted<float>(
-          x, weight, conv_state, cache_indices, num_accepted_tokens, output,
-          intermediate, silu_activation, write_superstate, stream);
+      dispatch_mtp_verify_accepted<float>(x,
+                                          weight,
+                                          conv_state,
+                                          cache_indices,
+                                          num_accepted_tokens,
+                                          output,
+                                          intermediate,
+                                          silu_activation,
+                                          write_superstate,
+                                          stream);
       break;
     default:
       LOG(FATAL) << "causal_conv1d_mtp_verify: unsupported dtype "
@@ -3291,9 +3405,8 @@ bool causal_conv1d_mtp_verify_with_projection_supported(
   const int64_t k = proj_input.size(1);
   return batch >= 1 && batch <= 16 && seq_len >= 2 &&
          seq_len <= skinny::kMaxRows && conv_width == 4 &&
-         proj_input.size(0) == batch * seq_len &&
-         proj_weight.size(0) >= 1 && proj_weight.size(1) == k &&
-         k % skinny::kBf16PerVector == 0 &&
+         proj_input.size(0) == batch * seq_len && proj_weight.size(0) >= 1 &&
+         proj_weight.size(1) == k && k % skinny::kBf16PerVector == 0 &&
          k / skinny::kBf16PerVector <=
              skinny::kThreads * skinny::kMaxVectorsPerThread &&
          proj_input.is_contiguous() && proj_weight.is_contiguous() &&
@@ -3326,18 +3439,33 @@ void causal_conv1d_mtp_verify_with_projection(
         proj_output.scalar_type() == torch::kBFloat16 &&
         proj_output.size(0) == proj_input.size(0) &&
         proj_output.size(1) == proj_weight.size(0))
-      << "fused MTP conv projection output mismatch: "
-      << proj_output.sizes();
+      << "fused MTP conv projection output mismatch: " << proj_output.sizes();
   const at::cuda::OptionalCUDAGuard device_guard(device_of(x));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   if (num_accepted_tokens.scalar_type() == torch::kInt32) {
     dispatch_causal_conv1d_mtp_verify_superstate_proj<int32_t>(
-        x, weight, conv_state, cache_indices, num_accepted_tokens, output,
-        proj_input, proj_weight, proj_output, stream);
+        x,
+        weight,
+        conv_state,
+        cache_indices,
+        num_accepted_tokens,
+        output,
+        proj_input,
+        proj_weight,
+        proj_output,
+        stream);
   } else {
     dispatch_causal_conv1d_mtp_verify_superstate_proj<int64_t>(
-        x, weight, conv_state, cache_indices, num_accepted_tokens, output,
-        proj_input, proj_weight, proj_output, stream);
+        x,
+        weight,
+        conv_state,
+        cache_indices,
+        num_accepted_tokens,
+        output,
+        proj_input,
+        proj_weight,
+        proj_output,
+        stream);
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

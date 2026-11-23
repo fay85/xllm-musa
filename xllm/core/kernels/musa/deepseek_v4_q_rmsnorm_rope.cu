@@ -184,8 +184,11 @@ __global__ void deepseek_v4_q_rmsnorm_rope_out_kernel(
   for (int32_t offset = kWarpSize / 2; offset > 0; offset >>= 1) {
     sumsq += __shfl_down_sync(0xffffffffu, sumsq, offset, kWarpSize);
   }
-  const float rrms = __shfl_sync(0xffffffffu,
-      rsqrtf(sumsq / static_cast<float>(kHiddenDim) + eps), 0, kWarpSize);
+  const float rrms =
+      __shfl_sync(0xffffffffu,
+                  rsqrtf(sumsq / static_cast<float>(kHiddenDim) + eps),
+                  0,
+                  kWarpSize);
 #pragma unroll
   for (int32_t tile = 0; tile < kNopeDim / kWarpSize; ++tile) {
     const int32_t col = tile * kWarpSize + lane;
@@ -238,9 +241,13 @@ __global__ void deepseek_v4_weighted_rmsnorm_rope_out_kernel(
     const int32_t even_col = static_cast<int32_t>(kNopeDim) + tid * 2;
     const int32_t odd_col = even_col + 1;
     const c10::BFloat16 even_weighted =
-        static_cast<c10::BFloat16>(static_cast<float>(row_ptr[even_col]) * s_rrms) * weight[even_col];
+        static_cast<c10::BFloat16>(static_cast<float>(row_ptr[even_col]) *
+                                   s_rrms) *
+        weight[even_col];
     const c10::BFloat16 odd_weighted =
-        static_cast<c10::BFloat16>(static_cast<float>(row_ptr[odd_col]) * s_rrms) * weight[odd_col];
+        static_cast<c10::BFloat16>(static_cast<float>(row_ptr[odd_col]) *
+                                   s_rrms) *
+        weight[odd_col];
     const float even = static_cast<float>(even_weighted);
     const float odd = static_cast<float>(odd_weighted);
     const float c = static_cast<float>(cos[token * cos_stride + tid * 2]);
@@ -255,22 +262,28 @@ bool valid_rope_out(const torch::Tensor& input,
                     const torch::Tensor& sin,
                     const torch::Tensor& output,
                     int64_t heads) {
-  return input.defined() && output.defined() && cos.defined() && sin.defined() &&
-         input.device().is_privateuseone() && (input.dim() == 2 || input.dim() == 3) &&
-         input.size(0) > 0 && heads > 0 && input.size(-1) == kHiddenDim &&
-         input.stride(-1) == 1 && input.stride(0) >= heads * kHiddenDim &&
-         (input.dim() != 3 || (input.size(1) == heads && input.stride(1) == kHiddenDim)) &&
+  return input.defined() && output.defined() && cos.defined() &&
+         sin.defined() && input.device().is_privateuseone() &&
+         (input.dim() == 2 || input.dim() == 3) && input.size(0) > 0 &&
+         heads > 0 && input.size(-1) == kHiddenDim && input.stride(-1) == 1 &&
+         input.stride(0) >= heads * kHiddenDim &&
+         (input.dim() != 3 ||
+          (input.size(1) == heads && input.stride(1) == kHiddenDim)) &&
          output.sizes() == input.sizes() && output.is_contiguous() &&
-         output.device() == input.device() && output.scalar_type() == torch::kBFloat16 &&
-         input.scalar_type() == torch::kBFloat16 && !input.is_alias_of(output) &&
-         cos.dim() == 2 && sin.dim() == 2 && cos.sizes() == sin.sizes() &&
-         cos.size(0) == input.size(0) && cos.size(1) >= kRopeDim &&
-         cos.is_contiguous() && sin.is_contiguous() &&
-         cos.device() == input.device() && sin.device() == input.device() &&
-         cos.scalar_type() == torch::kBFloat16 && sin.scalar_type() == torch::kBFloat16 &&
-         !cos.is_alias_of(output) && !sin.is_alias_of(output) &&
+         output.device() == input.device() &&
+         output.scalar_type() == torch::kBFloat16 &&
+         input.scalar_type() == torch::kBFloat16 &&
+         !input.is_alias_of(output) && cos.dim() == 2 && sin.dim() == 2 &&
+         cos.sizes() == sin.sizes() && cos.size(0) == input.size(0) &&
+         cos.size(1) >= kRopeDim && cos.is_contiguous() &&
+         sin.is_contiguous() && cos.device() == input.device() &&
+         sin.device() == input.device() &&
+         cos.scalar_type() == torch::kBFloat16 &&
+         sin.scalar_type() == torch::kBFloat16 && !cos.is_alias_of(output) &&
+         !sin.is_alias_of(output) &&
          input.size(0) <= std::numeric_limits<uint32_t>::max() &&
-         (heads + kWarpsPerBlock - 1) / kWarpsPerBlock <= std::numeric_limits<uint32_t>::max();
+         (heads + kWarpsPerBlock - 1) / kWarpsPerBlock <=
+             std::numeric_limits<uint32_t>::max();
 }
 
 }  // namespace
@@ -286,12 +299,22 @@ bool deepseek_v4_q_rmsnorm_rope_out(const torch::Tensor& query,
     return false;
   }
   const XLLMOptionalDeviceGuard device_guard(query.device());
-  const dim3 grid(static_cast<uint32_t>((query.size(1) + kWarpsPerBlock - 1) / kWarpsPerBlock),
+  const dim3 grid(static_cast<uint32_t>((query.size(1) + kWarpsPerBlock - 1) /
+                                        kWarpsPerBlock),
                   static_cast<uint32_t>(query.size(0)));
-  deepseek_v4_q_rmsnorm_rope_out_kernel<<<grid, kThreads, 0, current_musa_stream(query.device())>>>(
-      query.data_ptr<c10::BFloat16>(), output.data_ptr<c10::BFloat16>(),
-      cos.data_ptr<c10::BFloat16>(), sin.data_ptr<c10::BFloat16>(),
-      query.size(1), query.stride(0), cos.size(1), static_cast<float>(eps));
+  deepseek_v4_q_rmsnorm_rope_out_kernel<<<grid,
+                                          kThreads,
+                                          0,
+                                          current_musa_stream(
+                                              query.device())>>>(
+      query.data_ptr<c10::BFloat16>(),
+      output.data_ptr<c10::BFloat16>(),
+      cos.data_ptr<c10::BFloat16>(),
+      sin.data_ptr<c10::BFloat16>(),
+      query.size(1),
+      query.stride(0),
+      cos.size(1),
+      static_cast<float>(eps));
   check_musa_kernel_launch("DSV4 packed Q copy norm RoPE");
   return true;
 }
@@ -304,17 +327,25 @@ bool deepseek_v4_weighted_rmsnorm_rope_out(const torch::Tensor& input,
                                            const torch::Tensor& output) {
   RECORD_USER_SCOPE("kernel: deepseek_v4_weighted_rmsnorm_rope_out");
   if (!valid_rope_out(input, cos, sin, output, 1) || !weight.defined() ||
-      weight.device() != input.device() || weight.scalar_type() != torch::kBFloat16 ||
-      weight.dim() != 1 || weight.size(0) != kHiddenDim || !weight.is_contiguous() ||
+      weight.device() != input.device() ||
+      weight.scalar_type() != torch::kBFloat16 || weight.dim() != 1 ||
+      weight.size(0) != kHiddenDim || !weight.is_contiguous() ||
       weight.is_alias_of(output)) {
     return false;
   }
   const XLLMOptionalDeviceGuard device_guard(input.device());
-  deepseek_v4_weighted_rmsnorm_rope_out_kernel<<<static_cast<uint32_t>(input.size(0)),
-      kKvCompatThreads, 0, current_musa_stream(input.device())>>>(
-      input.data_ptr<c10::BFloat16>(), output.data_ptr<c10::BFloat16>(),
-      weight.data_ptr<c10::BFloat16>(), cos.data_ptr<c10::BFloat16>(),
-      sin.data_ptr<c10::BFloat16>(), input.stride(0), cos.size(1), static_cast<float>(eps));
+  deepseek_v4_weighted_rmsnorm_rope_out_kernel<<<
+      static_cast<uint32_t>(input.size(0)),
+      kKvCompatThreads,
+      0,
+      current_musa_stream(input.device())>>>(input.data_ptr<c10::BFloat16>(),
+                                             output.data_ptr<c10::BFloat16>(),
+                                             weight.data_ptr<c10::BFloat16>(),
+                                             cos.data_ptr<c10::BFloat16>(),
+                                             sin.data_ptr<c10::BFloat16>(),
+                                             input.stride(0),
+                                             cos.size(1),
+                                             static_cast<float>(eps));
   check_musa_kernel_launch("DSV4 packed KV copy norm RoPE");
   return true;
 }

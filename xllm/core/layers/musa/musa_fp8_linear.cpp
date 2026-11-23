@@ -136,9 +136,8 @@ torch::Tensor fp8_linear_forward(
       output.has_value() ? kHcLaneExpandedWorkspaceRows : kDecodeWorkspaceRows;
   const char* disable_bf16_cache_env =
       std::getenv("XLLM_DSV4_DISABLE_FP8_BF16_CACHE");
-  const bool disable_bf16_cache =
-      disable_bf16_cache_env != nullptr &&
-      std::string(disable_bf16_cache_env) == "1";
+  const bool disable_bf16_cache = disable_bf16_cache_env != nullptr &&
+                                  std::string(disable_bf16_cache_env) == "1";
   if (fp8_weight && input_2d.size(0) > 0 &&
       input_2d.size(0) <= workspace_rows &&
       (output_dtype == torch::kBFloat16 || output_dtype == torch::kFloat16) &&

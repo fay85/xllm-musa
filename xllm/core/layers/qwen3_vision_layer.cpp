@@ -30,17 +30,16 @@ Qwen3_VisionLayerImpl::Qwen3_VisionLayerImpl(const ModelContext& context) {
   norm2_ = register_module("norm2", RMSNorm(dim, args.rms_norm_eps(), options));
   norm1_->set_layernorm_mode();
   norm2_->set_layernorm_mode();
-  mlp_ = register_module(
-      "mlp",
-      DenseMLP(dim,
-               args.mm_intermediate_size(),
-               /*is_gated=*/false,
-               /*has_bias=*/true,
-               args.mm_hidden_act(),
-               /*enable_result_reduction=*/true,
-               quant_config,
-               parallel_args.tp_group_,
-               options));
+  mlp_ = register_module("mlp",
+                         DenseMLP(dim,
+                                  args.mm_intermediate_size(),
+                                  /*is_gated=*/false,
+                                  /*has_bias=*/true,
+                                  args.mm_hidden_act(),
+                                  /*enable_result_reduction=*/true,
+                                  quant_config,
+                                  parallel_args.tp_group_,
+                                  options));
 }
 
 void Qwen3_VisionLayerImpl::load_state_dict(const StateDict& state_dict) {
@@ -59,16 +58,12 @@ torch::Tensor Qwen3_VisionLayerImpl::forward(
     std::vector<int32_t>& cu_seq_len_vec,
     int node_id) {
   auto norm_output1 = std::get<0>(norm1_(x));
-  auto output = x + attention_->forward(
-                          norm_output1,
-                          m_cos_pos,
-                          m_sin_pos,
-                          cu_seq_len,
-                          cu_seq_len_vec);
+  auto output =
+      x + attention_->forward(
+              norm_output1, m_cos_pos, m_sin_pos, cu_seq_len, cu_seq_len_vec);
   auto norm_output2 = std::get<0>(norm2_(output));
   return output + mlp_(norm_output2);
 }
 
 }  // namespace layer
 }  // namespace xllm
-

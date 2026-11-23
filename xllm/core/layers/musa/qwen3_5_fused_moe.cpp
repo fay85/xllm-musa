@@ -115,7 +115,8 @@ bool use_aligned_ragged_fp8_moe_prefill(int64_t num_tokens) {
   static const int64_t max_tokens = std::clamp(
       util::get_int_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL_MAX_TOKENS",
                         kMaxAlignedRaggedFp8PrefillTokens),
-      int64_t{1}, kMaxCompactPrefillTokens);
+      int64_t{1},
+      kMaxCompactPrefillTokens);
   return enabled && num_tokens <= max_tokens;
 }
 
@@ -680,25 +681,39 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   if (use_fp8_ && !is_decode &&
       use_aligned_ragged_fp8_moe_prefill(num_tokens)) {
     auto preprocess = xllm::kernel::musa::fused_moe_preprocess_bf16(
-        hidden_states.contiguous(), topk_ids, num_experts_,
+        hidden_states.contiguous(),
+        topk_ids,
+        num_experts_,
         kCompactBf16MAlignment);
     auto [hidden_fp8, hidden_scale] =
-        xllm::kernel::musa::per_token_group_quant_fp8(
-            std::get<0>(preprocess), /*group_size=*/128);
-    auto gate_up = xllm::kernel::musa::ragged_moe_gemm_fp8(
-        hidden_fp8, hidden_scale, w13_, w13_scale_inv_, std::get<1>(preprocess),
-        hidden_states.scalar_type(), kCompactBf16MAlignment);
+        xllm::kernel::musa::per_token_group_quant_fp8(std::get<0>(preprocess),
+                                                      /*group_size=*/128);
+    auto gate_up =
+        xllm::kernel::musa::ragged_moe_gemm_fp8(hidden_fp8,
+                                                hidden_scale,
+                                                w13_,
+                                                w13_scale_inv_,
+                                                std::get<1>(preprocess),
+                                                hidden_states.scalar_type(),
+                                                kCompactBf16MAlignment);
     torch::Tensor activated;
     activation_->forward(gate_up, activated);
     auto [activated_fp8, activated_scale] =
         xllm::kernel::musa::per_token_group_quant_fp8(activated,
                                                       /*group_size=*/128);
-    auto down = xllm::kernel::musa::ragged_moe_gemm_fp8(
-        activated_fp8, activated_scale, w2_, w2_scale_inv_,
-        std::get<1>(preprocess), hidden_states.scalar_type(),
-        kCompactBf16MAlignment);
+    auto down =
+        xllm::kernel::musa::ragged_moe_gemm_fp8(activated_fp8,
+                                                activated_scale,
+                                                w2_,
+                                                w2_scale_inv_,
+                                                std::get<1>(preprocess),
+                                                hidden_states.scalar_type(),
+                                                kCompactBf16MAlignment);
     return xllm::kernel::musa::moe_combine_result_indexed(
-        down, std::get<2>(preprocess), topk_weights, num_tokens,
+        down,
+        std::get<2>(preprocess),
+        topk_weights,
+        num_tokens,
         static_cast<int32_t>(topk_));
   }
 

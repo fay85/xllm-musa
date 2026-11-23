@@ -123,6 +123,7 @@ class EncoderOutputScatterVisitor : public MMDataItem::IVisitor {
 
   bool visit(MMDataItem& data) override;
   bool finish() const;
+
  public:
   const MMDict& data_;
   int32_t image_idx = 0;
@@ -299,7 +300,7 @@ class MMSideOutputCacheVisitor final : public MMData::IVisitor,
 
 // Collects CTC tensors by sequence index, preserving full-batch empty slots.
 class MMSideOutputCollectVisitor final : public MMData::IVisitor,
-                          public MMDataItem::IVisitor {
+                                         public MMDataItem::IVisitor {
  public:
   explicit MMSideOutputCollectVisitor(int32_t num_sequences);
   bool visit(MMData& data) override;

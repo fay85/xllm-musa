@@ -23,14 +23,14 @@ inline bool dsv4_single_indexer_gemm_shape(int64_t rows,
                                            int64_t head_dim,
                                            int64_t capacity,
                                            int64_t topk) {
-  return rows == 7 && heads == 64 && head_dim == 128 &&
-         topk == 512 && capacity >= topk;
+  return rows == 7 && heads == 64 && head_dim == 128 && topk == 512 &&
+         capacity >= topk;
 }
 
 inline bool dsv4_batched_indexer_bf16_fp32_shape(int64_t batch,
-                                                int64_t query_width,
-                                                int64_t heads,
-                                                int64_t head_dim) {
+                                                 int64_t query_width,
+                                                 int64_t heads,
+                                                 int64_t head_dim) {
   return batch > 1 && batch <= 16 && query_width == 7 && heads == 64 &&
          head_dim == 128;
 }
@@ -45,8 +45,8 @@ inline bool dsv4_single_indexer_bf16_fp32_shape(int64_t batch,
 }
 
 inline bool dsv4_projection_norm_copy_shape(int64_t rows,
-                                             bool prefill,
-                                             bool chunked_prefill) {
+                                            bool prefill,
+                                            bool chunked_prefill) {
   return rows > 1 && rows <= 112 && !prefill && !chunked_prefill;
 }
 
@@ -64,14 +64,16 @@ inline bool dsv4_indexer_relu_weight_shape(int64_t batch,
 }
 
 inline bool dsv4_batched_sas_query_layout(
-    const std::vector<int32_t>& query_lengths, bool is_graph) {
+    const std::vector<int32_t>& query_lengths,
+    bool is_graph) {
   if (is_graph || query_lengths.size() < 2 || query_lengths.size() > 16) {
     return false;
   }
   const int32_t width = query_lengths.front();
   return width >= 5 && width <= 7 &&
-      std::all_of(query_lengths.begin(), query_lengths.end(),
-                  [width](int32_t value) { return value == width; });
+         std::all_of(query_lengths.begin(),
+                     query_lengths.end(),
+                     [width](int32_t value) { return value == width; });
 }
 
 inline bool dsv4_graph_sequence_views_enabled() {

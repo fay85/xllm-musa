@@ -523,17 +523,17 @@ inline int cached_vec8_shared_bytes(int hidden,
 
 template <typename T, bool IsGemma>
 void launch_rmsnorm(const T* input_ptr,
-                          const T* weight_ptr,
-                          T* out_ptr,
-                          int rows,
-                          int hidden,
-                          int input_outer_dim,
-                          int64_t input_outer_stride,
-                          int64_t input_row_stride,
-                          int64_t out_row_stride,
-                          float inv_hidden,
-                          float eps,
-                          cudaStream_t stream) {
+                    const T* weight_ptr,
+                    T* out_ptr,
+                    int rows,
+                    int hidden,
+                    int input_outer_dim,
+                    int64_t input_outer_stride,
+                    int64_t input_row_stride,
+                    int64_t out_row_stride,
+                    float inv_hidden,
+                    float eps,
+                    cudaStream_t stream) {
   if ((hidden % 8) == 0 && hidden <= 32768) {
     if (rows <= 16 && hidden == 1024) {
       constexpr int threads = 128;
@@ -626,15 +626,15 @@ void launch_rmsnorm(const T* input_ptr,
 
 template <typename T, bool IsGemma>
 void launch_fused_add_rmsnorm(T* input_ptr,
-                                    T* residual_ptr,
-                                    const T* weight_ptr,
-                                    int rows,
-                                    int hidden,
-                                    int64_t input_row_stride,
-                                    int64_t residual_row_stride,
-                                    float inv_hidden,
-                                    float eps,
-                                    cudaStream_t stream) {
+                              T* residual_ptr,
+                              const T* weight_ptr,
+                              int rows,
+                              int hidden,
+                              int64_t input_row_stride,
+                              int64_t residual_row_stride,
+                              float inv_hidden,
+                              float eps,
+                              cudaStream_t stream) {
   if ((hidden % 8) == 0 && hidden <= 32768) {
     const int threads = fused_block_threads(hidden);
     const int smem = cached_vec8_shared_bytes(hidden, threads, 32768);
@@ -735,17 +735,17 @@ void rms_norm_entry(torch::Tensor output,
             stream);
       }) AT_DISPATCH_CASE(torch::ScalarType::Float, [&] {
         launch_rmsnorm<float, IsGemma>(input.data_ptr<float>(),
-                                    weight.data_ptr<float>(),
-                                    output.data_ptr<float>(),
-                                    rows,
-                                    hidden,
-                                    input_outer_dim,
-                                    input_outer_stride,
-                                    input_row_stride,
-                                    out_row_stride,
-                                    inv_hidden,
-                                    static_cast<float>(eps),
-                                    stream);
+                                       weight.data_ptr<float>(),
+                                       output.data_ptr<float>(),
+                                       rows,
+                                       hidden,
+                                       input_outer_dim,
+                                       input_outer_stride,
+                                       input_row_stride,
+                                       out_row_stride,
+                                       inv_hidden,
+                                       static_cast<float>(eps),
+                                       stream);
       }));
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
@@ -804,15 +804,15 @@ void fused_add_rms_norm_entry(torch::Tensor& input,
             stream);
       }) AT_DISPATCH_CASE(torch::ScalarType::Float, [&] {
         launch_fused_add_rmsnorm<float, IsGemma>(input.data_ptr<float>(),
-                                              residual.data_ptr<float>(),
-                                              weight.data_ptr<float>(),
-                                              rows,
-                                              hidden,
-                                              input_row_stride,
-                                              residual_row_stride,
-                                              inv_hidden,
-                                              static_cast<float>(epsilon),
-                                              stream);
+                                                 residual.data_ptr<float>(),
+                                                 weight.data_ptr<float>(),
+                                                 rows,
+                                                 hidden,
+                                                 input_row_stride,
+                                                 residual_row_stride,
+                                                 inv_hidden,
+                                                 static_cast<float>(epsilon),
+                                                 stream);
       }));
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

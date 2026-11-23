@@ -18,15 +18,15 @@ namespace xllm::detail {
 // The caller must hold its session lock and have no live session reference for
 // this peer. This is a session-boundary operation, never a per-transfer retry.
 inline bool prepare_mooncake_segment_reopen(mooncake::TransferEngine& engine,
-                                           const std::string& remote_address,
-                                           bool invalidate_endpoints) {
+                                            const std::string& remote_address,
+                                            bool invalidate_endpoints) {
   auto metadata = engine.getMetadata();
   if (!metadata) {
     return false;
   }
   auto previous = metadata->getSegmentDescByName(remote_address);
   auto fresh = metadata->getSegmentDescByName(remote_address,
-                                             /*force_update=*/true);
+                                              /*force_update=*/true);
   if (!fresh) {
     LOG(ERROR) << "Failed to refresh Mooncake peer descriptor: "
                << remote_address;
@@ -35,8 +35,8 @@ inline bool prepare_mooncake_segment_reopen(mooncake::TransferEngine& engine,
   if (!invalidate_endpoints) {
     return true;
   }
-  auto* transport = dynamic_cast<mooncake::RdmaTransport*>(
-      engine.getTransport("rdma"));
+  auto* transport =
+      dynamic_cast<mooncake::RdmaTransport*>(engine.getTransport("rdma"));
   if (transport == nullptr) {
     return true;
   }

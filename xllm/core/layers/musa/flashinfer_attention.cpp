@@ -264,9 +264,8 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
         {num_heads_, query.size(0)}, query.options().dtype(torch::kFloat32));
     chunked_prefill_forward(
         attn_metadata, query, key, output, chunk_lse, k_cache, v_cache);
-  } else if (attn_metadata.is_prefill ||
-             (attn_metadata.is_chunked_prefill &&
-              !spec_verify_expanded_decode)) {
+  } else if (attn_metadata.is_prefill || (attn_metadata.is_chunked_prefill &&
+                                          !spec_verify_expanded_decode)) {
     AttentionMetadata attn_metadata_copy = attn_metadata;
     torch::Tensor query_saved =
         xllm::kernel::musa::piecewise_runner_tensor(query);
@@ -654,21 +653,20 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
                      .view({num_heads_, query.size(0)});
   }
   torch::Tensor query_contiguous = query.contiguous();
-  xllm::kernel::musa::fa3_prefill_paged(
-      query_contiguous,
-      k_cache,
-      v_cache,
-      cu_seqlens_q,
-      cu_seqlens_k_new,
-      seqused_k,
-      attn_metadata.block_table,
-      scheduler_metadata,
-      attn_metadata.max_query_len,
-      sliding_window_,
-      /*window_right=*/0,
-      scale_,
-      output,
-      lse_tensor);
+  xllm::kernel::musa::fa3_prefill_paged(query_contiguous,
+                                        k_cache,
+                                        v_cache,
+                                        cu_seqlens_q,
+                                        cu_seqlens_k_new,
+                                        seqused_k,
+                                        attn_metadata.block_table,
+                                        scheduler_metadata,
+                                        attn_metadata.max_query_len,
+                                        sliding_window_,
+                                        /*window_right=*/0,
+                                        scale_,
+                                        output,
+                                        lse_tensor);
   if (output_lse.has_value()) {
     *output_lse = lse_tensor;
   }
@@ -709,7 +707,8 @@ void FlashInferAttentionImpl::decoder_forward(
     const bool fa3_shape_supported =
         query.scalar_type() == torch::kBFloat16 &&
         is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_);
-    // Match prefill: default FA3 decode for supported shapes (GQA 6/8 + hd256 + bf16).
+    // Match prefill: default FA3 decode for supported shapes (GQA 6/8 + hd256 +
+    // bf16).
     const bool default_to_fa3 = fa3_shape_supported;
     const bool use_fa3 = fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
     if (use_fa3 && fa3_shape_supported) {

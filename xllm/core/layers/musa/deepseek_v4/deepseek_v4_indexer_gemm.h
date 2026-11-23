@@ -81,34 +81,40 @@ inline torch::Tensor dsv4_batched_indexer_gemm(
   const char* single_bf16_env =
       dsv4_single_indexer_bf16_fp32_shape(
           batch, query_rows_per_sequence, heads, dim, capacity)
-          ? std::getenv("XLLM_DSV4_SINGLE_INDEXER_BF16_FP32") : nullptr;
+          ? std::getenv("XLLM_DSV4_SINGLE_INDEXER_BF16_FP32")
+          : nullptr;
   const bool single_bf16 = single_bf16_env != nullptr &&
-      single_bf16_env[0] == '1' && single_bf16_env[1] == '\0';
+                           single_bf16_env[0] == '1' &&
+                           single_bf16_env[1] == '\0';
   const char* bf16_fp32_env = batch > 1 || single_bf16
-      ? std::getenv("XLLM_DSV4_INDEXER_BF16_FP32") : nullptr;
-  const bool bf16_fp32 = fused_metadata &&
+                                  ? std::getenv("XLLM_DSV4_INDEXER_BF16_FP32")
+                                  : nullptr;
+  const bool bf16_fp32 =
+      fused_metadata &&
       (single_bf16 || dsv4_batched_indexer_bf16_fp32_shape(
-          batch, query_rows_per_sequence, heads, dim)) &&
+                          batch, query_rows_per_sequence, heads, dim)) &&
       bf16_fp32_env != nullptr && bf16_fp32_env[0] == '1' &&
       bf16_fp32_env[1] == '\0';
-  const char* bf16_keys_env = bf16_fp32
-      ? std::getenv("XLLM_DSV4_INDEXER_BF16_KEYS") : nullptr;
-  const bool bf16_keys = bf16_keys_env != nullptr &&
-      bf16_keys_env[0] == '1' && bf16_keys_env[1] == '\0';
+  const char* bf16_keys_env =
+      bf16_fp32 ? std::getenv("XLLM_DSV4_INDEXER_BF16_KEYS") : nullptr;
+  const bool bf16_keys = bf16_keys_env != nullptr && bf16_keys_env[0] == '1' &&
+                         bf16_keys_env[1] == '\0';
   auto options = query.options().dtype(torch::kInt64);
   torch::Tensor positions;
   torch::Tensor valid_slots;
   torch::Tensor keys;
   if (fused_metadata) {
-    keys = torch::empty({batch, capacity, dim},
-                        query.options().dtype(bf16_keys ? torch::kBFloat16 : torch::kFloat32));
+    keys = torch::empty(
+        {batch, capacity, dim},
+        query.options().dtype(bf16_keys ? torch::kBFloat16 : torch::kFloat32));
     valid_slots =
         torch::empty({batch, capacity}, query.options().dtype(torch::kBool));
     if (bf16_keys) {
       kernel::musa::deepseek_v4_indexer_gather_keys_bf16(
           cache, scales, blocks.narrow(0, 0, batch), keys, valid_slots);
       LOG_FIRST_N(INFO, 2) << "[DSV4_INDEXER_BF16_KEYS] sequences=" << batch
-                           << " capacity=" << capacity << " unchanged_rounding=1";
+                           << " capacity=" << capacity
+                           << " unchanged_rounding=1";
     } else {
       kernel::musa::deepseek_v4_indexer_gather_keys_fp32(
           cache, scales, blocks.narrow(0, 0, batch), keys, valid_slots);
@@ -149,28 +155,32 @@ inline torch::Tensor dsv4_batched_indexer_gemm(
         query.reshape({batch, query_rows_per_sequence * heads, dim});
     auto keys_bf16 = keys.to(torch::kBFloat16).reshape({batch, capacity, dim});
     scores = torch::empty({batch, query_rows_per_sequence * heads, capacity},
-                           query.options().dtype(torch::kFloat32));
+                          query.options().dtype(torch::kFloat32));
     torch::bmm_out(scores, query_bf16, keys_bf16.transpose(1, 2));
     if (single_bf16) {
       LOG_FIRST_N(INFO, 2) << "[DSV4_SINGLE_INDEXER_BF16_FP32] capacity="
-                           << capacity << " query_width=" << query_rows_per_sequence
+                           << capacity
+                           << " query_width=" << query_rows_per_sequence
                            << " checked_bmm_out=1 fp32_scores=1";
     }
     LOG_FIRST_N(INFO, 2) << "[DSV4_INDEXER_BF16_FP32] sequences=" << batch
                          << " query_width=" << query_rows_per_sequence
                          << " capacity=" << capacity << " checked_bmm_out=1";
   } else {
-    scores = torch::bmm(query.to(torch::kFloat32)
-                     .reshape({batch, query_rows_per_sequence * heads, dim}),
-                 keys.reshape({batch, capacity, dim}).transpose(1, 2));
+    scores =
+        torch::bmm(query.to(torch::kFloat32)
+                       .reshape({batch, query_rows_per_sequence * heads, dim}),
+                   keys.reshape({batch, capacity, dim}).transpose(1, 2));
   }
   scores = scores.view({batch, query_rows_per_sequence, heads, capacity});
-  const char* relu_weight_env = bf16_fp32 &&
-      dsv4_indexer_relu_weight_shape(
-          batch, query_rows_per_sequence, heads, dim, capacity)
-      ? std::getenv("XLLM_DSV4_INDEXER_RELU_WEIGHT") : nullptr;
+  const char* relu_weight_env =
+      bf16_fp32 && dsv4_indexer_relu_weight_shape(
+                       batch, query_rows_per_sequence, heads, dim, capacity)
+          ? std::getenv("XLLM_DSV4_INDEXER_RELU_WEIGHT")
+          : nullptr;
   const bool fused_relu_weight = relu_weight_env != nullptr &&
-      relu_weight_env[0] == '1' && relu_weight_env[1] == '\0';
+                                 relu_weight_env[0] == '1' &&
+                                 relu_weight_env[1] == '\0';
   if (fused_relu_weight) {
     kernel::musa::deepseek_v4_indexer_relu_weight(
         scores, weights.to(torch::kFloat32).contiguous());

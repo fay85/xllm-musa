@@ -271,7 +271,8 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
   if (mm_data.valid()) {
     MMSideOutputCacheVisitor cache_visitor(mm_side_output_cache_);
     mm_data.foreach (static_cast<MMData::IVisitor&>(cache_visitor));
-    MMSideOutputCollectVisitor ctc_output(input.input_params.meta.num_sequences);
+    MMSideOutputCollectVisitor ctc_output(
+        input.input_params.meta.num_sequences);
     mm_data.foreach (static_cast<MMData::IVisitor&>(ctc_output));
     output.sample_output.mm_dict_vec = ctc_output.finish();
   }

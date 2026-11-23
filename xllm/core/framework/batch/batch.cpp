@@ -769,8 +769,7 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
   ensure_sample_token_tensors_on_cpu(
       next_tokens, logprobs, top_tokens, top_logprobs);
 
-  const bool has_next_tokens =
-      next_tokens.defined() && next_tokens.numel() > 0;
+  const bool has_next_tokens = next_tokens.defined() && next_tokens.numel() > 0;
   const bool next_tokens_are_spec_width =
       has_next_tokens && next_tokens.dim() == 2;
   if (sample_output.embeddings.defined() && !next_tokens_are_spec_width) {
@@ -858,16 +857,12 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
 
     if (next_tokens_are_spec_width) {
       const auto curr_next_tokens = next_tokens[output_idx];
-      const auto curr_logprobs = logprobs.defined()
-                                     ? logprobs[output_idx]
-                                     : logprobs;
-      const auto curr_top_tokens = top_tokens.defined()
-                                       ? top_tokens[output_idx]
-                                       : top_tokens;
+      const auto curr_logprobs =
+          logprobs.defined() ? logprobs[output_idx] : logprobs;
+      const auto curr_top_tokens =
+          top_tokens.defined() ? top_tokens[output_idx] : top_tokens;
       const auto curr_top_logprobs =
-          top_logprobs.defined()
-              ? top_logprobs[output_idx]
-              : top_logprobs;
+          top_logprobs.defined() ? top_logprobs[output_idx] : top_logprobs;
 
       const int64_t num_tokens = curr_next_tokens.size(0);
       bool appended_token = false;
@@ -896,11 +891,8 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
       continue;
     }
 
-    const auto token = build_token(output_idx,
-                                   next_tokens,
-                                   logprobs,
-                                   top_tokens,
-                                   top_logprobs);
+    const auto token = build_token(
+        output_idx, next_tokens, logprobs, top_tokens, top_logprobs);
 
     // always append a token, maybe true or fake token
     append_token_for_sequence(seq, token, 0, replace_fake_token);

@@ -343,8 +343,7 @@ class VMMTorchAllocator
     return ptr;
   }
 
-  void* raw_alloc_with_stream(size_t nbytes,
-                              musaStream_t /*stream*/) override {
+  void* raw_alloc_with_stream(size_t nbytes, musaStream_t /*stream*/) override {
     void* ptr = vmm_allocator_->allocate(nbytes);
     total_allocated_ += nbytes;
     alloc_count_++;
@@ -540,9 +539,7 @@ class VMMTorchAllocator
   }
 
  private:
-  static void raw_deleter(void* ptr) {
-    (void)ptr;
-  }
+  static void raw_deleter(void* ptr) { (void)ptr; }
 
   SharedVMMAllocator* vmm_allocator_;
   size_t total_allocated_ = 0;

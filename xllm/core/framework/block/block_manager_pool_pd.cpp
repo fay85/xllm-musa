@@ -13,10 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/framework/block/block_manager_pool.h"
-
 #include <algorithm>
 
+#include "core/framework/block/block_manager_pool.h"
 #include "core/framework/block/composite_block_manager.h"
 #include "core/framework/request/sequence.h"
 
@@ -30,7 +29,8 @@ size_t BlockManagerPool::reclaim_completed_pd_prefill_swa(Sequence* sequence) {
       options_.instance_is_decode() || options_.sliding_window_size() == 0 ||
       options_.enable_host_offload() || options_.enable_kvcache_store() ||
       sequence->check_beam_search() ||
-      sequence->kv_state().kv_cache_tokens_num() < sequence->num_prompt_tokens()) {
+      sequence->kv_state().kv_cache_tokens_num() <
+          sequence->num_prompt_tokens()) {
     return 0;
   }
   const int32_t rank = sequence->dp_rank();
@@ -46,9 +46,10 @@ size_t BlockManagerPool::reclaim_completed_pd_prefill_swa(Sequence* sequence) {
   }
   const auto count_valid = [&]() -> size_t {
     const auto blocks = sequence->kv_state().blocks(BlockType::SWA);
-    return static_cast<size_t>(std::count_if(
-        blocks.begin(), blocks.end(),
-        [](const Block& block) { return block.is_valid(); }));
+    return static_cast<size_t>(
+        std::count_if(blocks.begin(), blocks.end(), [](const Block& block) {
+          return block.is_valid();
+        }));
   };
   const size_t before = count_valid();
   // Publish completed snapshots before releasing live SWA references. The

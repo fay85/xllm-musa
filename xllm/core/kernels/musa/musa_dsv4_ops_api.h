@@ -122,16 +122,15 @@ torch::Tensor deepseek_v4_paged_attention_verify_compressed(
     double softmax_scale,
     const torch::Tensor& output);
 
-torch::Tensor deepseek_v4_paged_attention_sas(
-    const torch::Tensor& q,
-    const torch::Tensor& cache,
-    const torch::Tensor& block_table,
-    int64_t sequence_index,
-    int64_t kv_len,
-    int64_t window_size,
-    const torch::Tensor& attn_sink,
-    double softmax_scale,
-    const torch::Tensor& output);
+torch::Tensor deepseek_v4_paged_attention_sas(const torch::Tensor& q,
+                                              const torch::Tensor& cache,
+                                              const torch::Tensor& block_table,
+                                              int64_t sequence_index,
+                                              int64_t kv_len,
+                                              int64_t window_size,
+                                              const torch::Tensor& attn_sink,
+                                              double softmax_scale,
+                                              const torch::Tensor& output);
 
 torch::Tensor deepseek_v4_greedy_verify_tokens(
     const torch::Tensor& draft_tokens,
@@ -194,14 +193,15 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_partitioned(
 // Each local planner overwrites its metadata slice before every invocation;
 // this in-place rebasing must not be applied twice without that rewrite.
 void deepseek_v4_rebase_mate_partitions(torch::Tensor metadata,
-                                       const torch::Tensor& local_splits,
-                                       torch::Tensor cumulative_splits,
-                                       int64_t query_width);
+                                        const torch::Tensor& local_splits,
+                                        torch::Tensor cumulative_splits,
+                                        int64_t query_width);
 
 // Set the per-step key used to share batched MATE scheduling metadata across
 // DSV4 Attention layers. The key is thread-local to the serving worker.
 void deepseek_v4_mate_sparse_attention_set_metadata_key(int64_t metadata_key);
-void deepseek_v4_mate_sparse_attention_set_metadata_group(int64_t metadata_group);
+void deepseek_v4_mate_sparse_attention_set_metadata_group(
+    int64_t metadata_group);
 void deepseek_v4_mate_causal_lengths(const torch::Tensor& kv_seq_lens,
                                      int64_t compress_ratio,
                                      int64_t topk,

@@ -122,12 +122,11 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
       return;
     }
     int const v_head_idx = local_head_idx - total_qk_heads;
-    int64_t const src = static_cast<int64_t>(token_idx) *
-                            total_heads_per_token * head_dim +
-                        static_cast<int64_t>(k_head_offset + num_heads_k +
-                                             v_head_idx) *
-                            head_dim +
-                        lane_id * kNumElemsPerThread;
+    int64_t const src =
+        static_cast<int64_t>(token_idx) * total_heads_per_token * head_dim +
+        static_cast<int64_t>(k_head_offset + num_heads_k + v_head_idx) *
+            head_dim +
+        lane_id * kNumElemsPerThread;
     int64_t const dst = (slot * num_heads_v + v_head_idx) * head_dim +
                         lane_id * kNumElemsPerThread;
     *reinterpret_cast<vec_T*>(&v_cache[dst]) =

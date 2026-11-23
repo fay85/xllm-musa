@@ -48,8 +48,8 @@ inline bool dsv4_uses_full_kv(int64_t kv_len,
 // omit exact length only for the explicitly validated <=128-token family.
 // Legacy scalar compressed fallback and extreme C128 lengths remain exact.
 inline int64_t dsv4_graph_baked_kv_length(int64_t kv_len,
-                                        bool full_kv,
-                                        bool dynamic_short) {
+                                          bool full_kv,
+                                          bool dynamic_short) {
   const bool live_short = dynamic_short && kv_len >= 0 && kv_len <= 128;
   return ((full_kv && !live_short) || kv_len / 128 > 512) ? kv_len : 0;
 }
@@ -68,8 +68,8 @@ inline int64_t dsv4_graph_short_batch_max_kv(
   }
   int64_t maximum = 0;
   for (std::size_t row = 1; row < cumulative_kv.size(); ++row) {
-    const int64_t length = static_cast<int64_t>(cumulative_kv[row]) -
-                           cumulative_kv[row - 1];
+    const int64_t length =
+        static_cast<int64_t>(cumulative_kv[row]) - cumulative_kv[row - 1];
     if (length < query_width || length > 2048) {
       return 0;
     }
@@ -92,9 +92,9 @@ inline uint32_t dsv4_compact_graph_key(uint32_t token_bucket,
                                        uint32_t c4_outputs,
                                        uint32_t c128_outputs,
                                        bool full_kv) {
-  return (uint32_t{1} << 31) | (token_bucket << 16) |
-         (indexer_capacity << 6) | (static_cast<uint32_t>(full_kv) << 5) |
-         (c128_outputs << 2) | c4_outputs;
+  return (uint32_t{1} << 31) | (token_bucket << 16) | (indexer_capacity << 6) |
+         (static_cast<uint32_t>(full_kv) << 5) | (c128_outputs << 2) |
+         c4_outputs;
 }
 
 }  // namespace xllm::layer

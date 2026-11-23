@@ -964,7 +964,8 @@ void Sequence::fill_ctc_output(const Tokenizer& tokenizer,
   if (conf_it != mm_dict_.end()) {
     torch::Tensor confs;
     if (std::holds_alternative<std::vector<torch::Tensor>>(conf_it->second)) {
-      const auto& conf_vec = std::get<std::vector<torch::Tensor>>(conf_it->second);
+      const auto& conf_vec =
+          std::get<std::vector<torch::Tensor>>(conf_it->second);
       if (conf_vec.empty()) {
         return;
       }

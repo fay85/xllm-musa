@@ -89,16 +89,14 @@ inline torch::Tensor load_tensor(std::string filename) {
   return my_tensor;
 }
 
-inline void print_tensor(
-    const torch::Tensor& tensor,
-    const std::string& tensor_name = "tensor",
-    int num = 10,
-    bool part = true,
-    bool print_value = true,
-    const char* file = __builtin_FILE(),
-    int line = __builtin_LINE()) {
-  auto& log_stream =
-      google::LogMessage(file, line, google::GLOG_INFO).stream();
+inline void print_tensor(const torch::Tensor& tensor,
+                         const std::string& tensor_name = "tensor",
+                         int num = 10,
+                         bool part = true,
+                         bool print_value = true,
+                         const char* file = __builtin_FILE(),
+                         int line = __builtin_LINE()) {
+  auto& log_stream = google::LogMessage(file, line, google::GLOG_INFO).stream();
   if (!tensor.defined()) {
     log_stream << tensor_name << ", Undefined tensor." << std::endl;
     return;

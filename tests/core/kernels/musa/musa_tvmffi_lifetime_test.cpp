@@ -25,7 +25,8 @@ namespace {
 torch::Tensor tracked_cpu_tensor(int32_t* releases) {
   auto storage = std::make_shared<std::vector<float>>(16, 1.0f);
   return torch::from_blob(
-      storage->data(), {4, 4},
+      storage->data(),
+      {4, 4},
       [storage, releases](void* /*data*/) { ++*releases; },
       torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 }
@@ -117,7 +118,8 @@ TEST(MusaTvmffiLifetimeTest, PackedCallReleasesNestedTensorReferences) {
     // Diagnostic A/B build only: reproduces the old call-site ownership gap.
     const auto result = consume(std::make_tuple(first, second));
 #else
-    const auto result = consume(ffi::Tuple<ffi::Tensor, ffi::Tensor>(first, second));
+    const auto result =
+        consume(ffi::Tuple<ffi::Tensor, ffi::Tensor>(first, second));
 #endif
     ASSERT_EQ(result.cast<int64_t>(), 64);
     ASSERT_EQ(first.use_count(), 1);
@@ -134,7 +136,8 @@ TEST(MusaTvmffiLifetimeTest, PackedShapeTupleHeapUsageIsBounded) {
   const auto call_many = [&consume](int32_t count) {
     for (int32_t iteration = 0; iteration < count; ++iteration) {
 #if defined(XLLM_TEST_LEGACY_STL_PACKING)
-      const auto result = consume(std::make_tuple(int64_t{1}, int64_t{128}, int64_t{128}));
+      const auto result =
+          consume(std::make_tuple(int64_t{1}, int64_t{128}, int64_t{128}));
 #else
       const auto result = consume(ffi::Tuple<int64_t, int64_t, int64_t>(
           int64_t{1}, int64_t{128}, int64_t{128}));

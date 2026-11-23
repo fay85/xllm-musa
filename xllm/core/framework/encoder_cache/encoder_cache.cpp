@@ -107,8 +107,8 @@ std::optional<MMSideOutputCache::SideOutput> MMSideOutputCache::lookup(
 }
 
 void MMSideOutputCache::insert(const XXH3Key& key,
-                              torch::Tensor ids,
-                              torch::Tensor conf) {
+                               torch::Tensor ids,
+                               torch::Tensor conf) {
   // Empty but defined IDs are valid for all-blank CTC output.
   if (!ids.defined() || !conf.defined() || max_size_ == 0) {
     return;

@@ -42,8 +42,8 @@ constexpr int32_t kStateWarpSize = 32;
 // not physical block IDs: rolling tables can have holes and arbitrary IDs.
 template <typename index_t>
 __device__ int64_t last_valid_state_block(const index_t* block_table,
-                                         int64_t blocks,
-                                         int64_t* columns) {
+                                          int64_t blocks,
+                                          int64_t* columns) {
   int64_t last_column = -1;
   for (int64_t column = threadIdx.x; column < blocks; column += blockDim.x) {
     if (block_table[column] >= 0) {
@@ -63,7 +63,8 @@ __device__ int64_t last_valid_state_block(const index_t* block_table,
   }
   __syncthreads();
   if (warp == 0) {
-    last_column = lane < kStateLookupThreads / kStateWarpSize ? columns[lane] : -1;
+    last_column =
+        lane < kStateLookupThreads / kStateWarpSize ? columns[lane] : -1;
     for (int32_t offset = kStateWarpSize / 2; offset > 0; offset /= 2) {
       const int64_t other = __shfl_down_sync(0xffffffff, last_column, offset);
       last_column = max(last_column, other);
@@ -91,18 +92,18 @@ __global__ void deepseek_v4_state_slots_kernel(const index_t* block_table,
 
 template <typename index_t>
 __device__ void state_gather_copy(const uint4* cache,
-                                                const index_t* block_table,
-                                                const void* input_positions,
-                                                bool positions_are_int64,
-                                                int64_t blocks,
-                                                int64_t state_rows,
-                                                int64_t block_size,
-                                                int64_t vectors_per_row,
-                                                int64_t* slots,
-                                                uint4* output,
-                                                int64_t& last_block,
-                                                int64_t& source_block,
-                                                int64_t* columns) {
+                                  const index_t* block_table,
+                                  const void* input_positions,
+                                  bool positions_are_int64,
+                                  int64_t blocks,
+                                  int64_t state_rows,
+                                  int64_t block_size,
+                                  int64_t vectors_per_row,
+                                  int64_t* slots,
+                                  uint4* output,
+                                  int64_t& last_block,
+                                  int64_t& source_block,
+                                  int64_t* columns) {
   const auto tail_block = last_valid_state_block(block_table, blocks, columns);
   if (threadIdx.x == 0) {
     last_block = tail_block;
@@ -136,22 +137,39 @@ __device__ void state_gather_copy(const uint4* cache,
   const int64_t source_offset = source_block * block_size * vectors_per_row;
   const int64_t vector_count = state_rows * vectors_per_row;
   for (int64_t index = blockIdx.x * blockDim.x + threadIdx.x;
-       index < vector_count; index += gridDim.x * blockDim.x) {
+       index < vector_count;
+       index += gridDim.x * blockDim.x) {
     output[index] = cache[source_offset + index];
   }
 }
 
 template <typename index_t>
-__global__ void deepseek_v4_state_gather_kernel(
-    const uint4* cache, const index_t* block_table, const void* input_positions,
-    bool positions_are_int64, int64_t blocks, int64_t state_rows,
-    int64_t block_size, int64_t vectors_per_row, int64_t* slots, uint4* output) {
+__global__ void deepseek_v4_state_gather_kernel(const uint4* cache,
+                                                const index_t* block_table,
+                                                const void* input_positions,
+                                                bool positions_are_int64,
+                                                int64_t blocks,
+                                                int64_t state_rows,
+                                                int64_t block_size,
+                                                int64_t vectors_per_row,
+                                                int64_t* slots,
+                                                uint4* output) {
   __shared__ int64_t last_block;
   __shared__ int64_t source_block;
   __shared__ int64_t columns[kStateLookupThreads];
-  state_gather_copy(cache, block_table, input_positions, positions_are_int64,
-                    blocks, state_rows, block_size, vectors_per_row, slots,
-                    output, last_block, source_block, columns);
+  state_gather_copy(cache,
+                    block_table,
+                    input_positions,
+                    positions_are_int64,
+                    blocks,
+                    state_rows,
+                    block_size,
+                    vectors_per_row,
+                    slots,
+                    output,
+                    last_block,
+                    source_block,
+                    columns);
 }
 
 struct StateGatherRole {
@@ -194,42 +212,79 @@ __global__ void deepseek_v4_state_gather_batched_kernel(
                      blockIdx.z * descriptor.table_stride_bytes;
   role.slots += blockIdx.z * descriptor.slots_stride;
   role.output += blockIdx.z * descriptor.output_stride_vectors;
-  const void* position = static_cast<const char*>(positions) +
-                         blockIdx.z * position_stride_bytes;
+  const void* position =
+      static_cast<const char*>(positions) + blockIdx.z * position_stride_bytes;
   __shared__ int64_t last_block;
   __shared__ int64_t source_block;
   __shared__ int64_t columns[kStateLookupThreads];
   if (role.table_is_int64) {
-    state_gather_copy(role.cache, static_cast<const int64_t*>(role.block_table),
-                      position, positions_are_int64, role.blocks, role.rows,
-                      role.block_size, role.vectors_per_row, role.slots,
-                      role.output, last_block, source_block, columns);
+    state_gather_copy(role.cache,
+                      static_cast<const int64_t*>(role.block_table),
+                      position,
+                      positions_are_int64,
+                      role.blocks,
+                      role.rows,
+                      role.block_size,
+                      role.vectors_per_row,
+                      role.slots,
+                      role.output,
+                      last_block,
+                      source_block,
+                      columns);
   } else {
-    state_gather_copy(role.cache, static_cast<const int32_t*>(role.block_table),
-                      position, positions_are_int64, role.blocks, role.rows,
-                      role.block_size, role.vectors_per_row, role.slots,
-                      role.output, last_block, source_block, columns);
+    state_gather_copy(role.cache,
+                      static_cast<const int32_t*>(role.block_table),
+                      position,
+                      positions_are_int64,
+                      role.blocks,
+                      role.rows,
+                      role.block_size,
+                      role.vectors_per_row,
+                      role.slots,
+                      role.output,
+                      last_block,
+                      source_block,
+                      columns);
   }
 }
 
 // Each y block is an independent cache role. Retain the exact scalar lookup
 // and byte-copy semantics, including holes and the previous-page restore.
-__global__ void deepseek_v4_state_gather_many_kernel(
-    StateGatherRoles roles, const void* positions, bool positions_are_int64) {
+__global__ void deepseek_v4_state_gather_many_kernel(StateGatherRoles roles,
+                                                     const void* positions,
+                                                     bool positions_are_int64) {
   const StateGatherRole role = roles.roles[blockIdx.y];
   __shared__ int64_t last_block;
   __shared__ int64_t source_block;
   __shared__ int64_t columns[kStateLookupThreads];
   if (role.table_is_int64) {
-    state_gather_copy(role.cache, static_cast<const int64_t*>(role.block_table),
-                      positions, positions_are_int64, role.blocks, role.rows,
-                      role.block_size, role.vectors_per_row, role.slots,
-                      role.output, last_block, source_block, columns);
+    state_gather_copy(role.cache,
+                      static_cast<const int64_t*>(role.block_table),
+                      positions,
+                      positions_are_int64,
+                      role.blocks,
+                      role.rows,
+                      role.block_size,
+                      role.vectors_per_row,
+                      role.slots,
+                      role.output,
+                      last_block,
+                      source_block,
+                      columns);
   } else {
-    state_gather_copy(role.cache, static_cast<const int32_t*>(role.block_table),
-                      positions, positions_are_int64, role.blocks, role.rows,
-                      role.block_size, role.vectors_per_row, role.slots,
-                      role.output, last_block, source_block, columns);
+    state_gather_copy(role.cache,
+                      static_cast<const int32_t*>(role.block_table),
+                      positions,
+                      positions_are_int64,
+                      role.blocks,
+                      role.rows,
+                      role.block_size,
+                      role.vectors_per_row,
+                      role.slots,
+                      role.output,
+                      last_block,
+                      source_block,
+                      columns);
   }
 }
 
@@ -313,17 +368,17 @@ torch::Tensor deepseek_v4_state_slots(const torch::Tensor& block_table,
   if (block_table.scalar_type() == torch::kInt32) {
     deepseek_v4_state_slots_kernel<int32_t>
         <<<1, kStateLookupThreads, 0, stream>>>(row.data_ptr<int32_t>(),
-                              row.size(0),
-                              state_rows,
-                              block_size,
-                              result.data_ptr<int64_t>());
+                                                row.size(0),
+                                                state_rows,
+                                                block_size,
+                                                result.data_ptr<int64_t>());
   } else {
     deepseek_v4_state_slots_kernel<int64_t>
         <<<1, kStateLookupThreads, 0, stream>>>(row.data_ptr<int64_t>(),
-                              row.size(0),
-                              state_rows,
-                              block_size,
-                              result.data_ptr<int64_t>());
+                                                row.size(0),
+                                                state_rows,
+                                                block_size,
+                                                result.data_ptr<int64_t>());
   }
   const musaError_t status = musaGetLastError();
   CHECK(status == musaSuccess)
@@ -380,7 +435,9 @@ void deepseek_v4_state_gather_many(
             sequence_index * table.stride(0) * table.element_size(),
         slots[i].data_ptr<int64_t>(),
         reinterpret_cast<uint4*>(output.data_ptr()),
-        table.size(1), state_rows[i], cache.size(1),
+        table.size(1),
+        state_rows[i],
+        cache.size(1),
         row_bytes / static_cast<int64_t>(sizeof(uint4)),
         table.scalar_type() == torch::kInt64};
   }
@@ -388,15 +445,21 @@ void deepseek_v4_state_gather_many(
   const char* blocks_env = std::getenv("XLLM_DSV4_STATE_COPY_BLOCKS");
   if (blocks_env != nullptr) {
     const std::string requested(blocks_env);
-    CHECK(requested == "1" || requested == "2" || requested == "4" || requested == "8");
+    CHECK(requested == "1" || requested == "2" || requested == "4" ||
+          requested == "8");
     copy_blocks = static_cast<int32_t>(requested[0] - '0');
   }
   const XLLMOptionalDeviceGuard device_guard(at::device_of(caches[0]));
   const auto stream = current_musa_stream(caches[0].device());
   const dim3 grid(copy_blocks, count);
-  deepseek_v4_state_gather_many_kernel<<<grid, kStateLookupThreads, 0, stream>>>(
-      packed, input_positions.defined() ? input_positions.data_ptr() : nullptr,
-      input_positions.defined() && input_positions.scalar_type() == torch::kInt64);
+  deepseek_v4_state_gather_many_kernel<<<grid,
+                                         kStateLookupThreads,
+                                         0,
+                                         stream>>>(
+      packed,
+      input_positions.defined() ? input_positions.data_ptr() : nullptr,
+      input_positions.defined() &&
+          input_positions.scalar_type() == torch::kInt64);
   const musaError_t status = musaGetLastError();
   CHECK(status == musaSuccess) << "DeepSeek-V4 batched state gather failed: "
                                << musaGetErrorString(status);
@@ -439,18 +502,24 @@ void deepseek_v4_state_gather_batched(
     CHECK(state_rows[role] > 0 && state_rows[role] <= cache.size(1));
     CHECK(slot.defined() && slot.dim() == 2 && slot.is_contiguous() &&
           slot.size(0) == sequence_count && slot.size(1) >= state_rows[role] &&
-          slot.scalar_type() == torch::kInt64 && slot.device() == cache.device());
+          slot.scalar_type() == torch::kInt64 &&
+          slot.device() == cache.device());
     CHECK(output.defined() && output.dim() == 3 && output.is_contiguous() &&
           output.size(0) == sequence_count &&
-          output.size(1) >= state_rows[role] && output.size(2) == cache.size(2) &&
+          output.size(1) >= state_rows[role] &&
+          output.size(2) == cache.size(2) &&
           output.scalar_type() == cache.scalar_type() &&
           output.device() == cache.device());
     const int64_t row_bytes = cache.size(2) * cache.element_size();
     CHECK(row_bytes % sizeof(uint4) == 0);
     packed.roles[role] = {
-        {reinterpret_cast<const uint4*>(cache.data_ptr()), table.data_ptr(),
-         slot.data_ptr<int64_t>(), reinterpret_cast<uint4*>(output.data_ptr()),
-         table.size(1), state_rows[role], cache.size(1),
+        {reinterpret_cast<const uint4*>(cache.data_ptr()),
+         table.data_ptr(),
+         slot.data_ptr<int64_t>(),
+         reinterpret_cast<uint4*>(output.data_ptr()),
+         table.size(1),
+         state_rows[role],
+         cache.size(1),
          row_bytes / static_cast<int64_t>(sizeof(uint4)),
          table.scalar_type() == torch::kInt64},
         table.stride(0) * static_cast<int64_t>(table.element_size()),
@@ -462,19 +531,25 @@ void deepseek_v4_state_gather_batched(
   const char* blocks_env = std::getenv("XLLM_DSV4_STATE_COPY_BLOCKS");
   if (blocks_env != nullptr) {
     const std::string requested(blocks_env);
-    CHECK(requested == "1" || requested == "2" || requested == "4" || requested == "8");
+    CHECK(requested == "1" || requested == "2" || requested == "4" ||
+          requested == "8");
     copy_blocks = static_cast<int32_t>(requested[0] - '0');
   }
   const XLLMOptionalDeviceGuard device_guard(at::device_of(caches[0]));
   const musaStream_t stream = current_musa_stream(caches[0].device());
   const dim3 grid(copy_blocks, count, sequence_count);
-  deepseek_v4_state_gather_batched_kernel<<<grid, kStateLookupThreads, 0, stream>>>(
-      packed, input_positions.data_ptr(),
+  deepseek_v4_state_gather_batched_kernel<<<grid,
+                                            kStateLookupThreads,
+                                            0,
+                                            stream>>>(
+      packed,
+      input_positions.data_ptr(),
       input_positions.scalar_type() == torch::kInt64,
       query_width * static_cast<int64_t>(input_positions.element_size()));
   const musaError_t status = musaGetLastError();
   CHECK(status == musaSuccess)
-      << "DeepSeek-V4 multi-request state restore failed: " << musaGetErrorString(status);
+      << "DeepSeek-V4 multi-request state restore failed: "
+      << musaGetErrorString(status);
 }
 
 torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
@@ -526,36 +601,39 @@ torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
   const char* blocks_env = std::getenv("XLLM_DSV4_STATE_COPY_BLOCKS");
   if (blocks_env != nullptr) {
     const std::string requested(blocks_env);
-    CHECK(requested == "1" || requested == "2" || requested == "4" || requested == "8")
+    CHECK(requested == "1" || requested == "2" || requested == "4" ||
+          requested == "8")
         << "State copy blocks must be 1, 2, 4 or 8";
     copy_blocks = static_cast<int32_t>(requested[0] - '0');
   }
   if (block_table.scalar_type() == torch::kInt32) {
-    deepseek_v4_state_gather_kernel<int32_t><<<copy_blocks, kThreads, 0, stream>>>(
-        reinterpret_cast<const uint4*>(cache.data_ptr()),
-        reinterpret_cast<const int32_t*>(block_row),
-        input_positions.defined() ? input_positions.data_ptr() : nullptr,
-        input_positions.defined() &&
-            input_positions.scalar_type() == torch::kInt64,
-        block_table.size(1),
-        state_rows,
-        block_size,
-        vectors_per_row,
-        slot_result.data_ptr<int64_t>(),
-        reinterpret_cast<uint4*>(result.data_ptr()));
+    deepseek_v4_state_gather_kernel<int32_t>
+        <<<copy_blocks, kThreads, 0, stream>>>(
+            reinterpret_cast<const uint4*>(cache.data_ptr()),
+            reinterpret_cast<const int32_t*>(block_row),
+            input_positions.defined() ? input_positions.data_ptr() : nullptr,
+            input_positions.defined() &&
+                input_positions.scalar_type() == torch::kInt64,
+            block_table.size(1),
+            state_rows,
+            block_size,
+            vectors_per_row,
+            slot_result.data_ptr<int64_t>(),
+            reinterpret_cast<uint4*>(result.data_ptr()));
   } else {
-    deepseek_v4_state_gather_kernel<int64_t><<<copy_blocks, kThreads, 0, stream>>>(
-        reinterpret_cast<const uint4*>(cache.data_ptr()),
-        reinterpret_cast<const int64_t*>(block_row),
-        input_positions.defined() ? input_positions.data_ptr() : nullptr,
-        input_positions.defined() &&
-            input_positions.scalar_type() == torch::kInt64,
-        block_table.size(1),
-        state_rows,
-        block_size,
-        vectors_per_row,
-        slot_result.data_ptr<int64_t>(),
-        reinterpret_cast<uint4*>(result.data_ptr()));
+    deepseek_v4_state_gather_kernel<int64_t>
+        <<<copy_blocks, kThreads, 0, stream>>>(
+            reinterpret_cast<const uint4*>(cache.data_ptr()),
+            reinterpret_cast<const int64_t*>(block_row),
+            input_positions.defined() ? input_positions.data_ptr() : nullptr,
+            input_positions.defined() &&
+                input_positions.scalar_type() == torch::kInt64,
+            block_table.size(1),
+            state_rows,
+            block_size,
+            vectors_per_row,
+            slot_result.data_ptr<int64_t>(),
+            reinterpret_cast<uint4*>(result.data_ptr()));
   }
   const musaError_t status = musaGetLastError();
   CHECK(status == musaSuccess) << "DeepSeek-V4 state-gather kernel failed: "

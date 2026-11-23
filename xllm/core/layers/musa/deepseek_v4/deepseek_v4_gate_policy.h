@@ -14,11 +14,11 @@ inline int64_t dsv4_gate_workspace_capacity(int64_t original, bool batch_mate) {
 // Preserve the original <=16-row GEMV path and all non-target phases. The
 // direct Graph family carries one q7 segment per physical sequence row.
 inline bool dsv4_batch_gate_verify_allowed(int64_t tokens,
-                                          int64_t sequences,
-                                          int64_t query_width,
-                                          bool graph,
-                                          bool decode,
-                                          bool target_verify) {
+                                           int64_t sequences,
+                                           int64_t query_width,
+                                           bool graph,
+                                           bool decode,
+                                           bool target_verify) {
   return graph && decode && target_verify && query_width == 7 &&
          sequences > 2 && sequences <= 16 && tokens == sequences * query_width;
 }

@@ -21,12 +21,13 @@ inline constexpr int32_t kSessionOpenMaxAttempts = 9;
 inline constexpr int32_t kSessionOpenRetryDelayMs = 500;
 
 inline int32_t session_open_retry_delay_ms(const SessionOpenRpcResult& result,
-                                         int32_t attempt,
-                                         int64_t remaining_ms) {
+                                           int32_t attempt,
+                                           int64_t remaining_ms) {
   // EHOSTDOWN is BRPC's cached, not-connected socket result. Do not retry
   // timeouts/resets: the peer may already have incremented its reference count.
-  if (!result.transport_failed || result.peer_ok || result.error_code != EHOSTDOWN ||
-      attempt < 0 || attempt >= kSessionOpenMaxAttempts - 1 ||
+  if (!result.transport_failed || result.peer_ok ||
+      result.error_code != EHOSTDOWN || attempt < 0 ||
+      attempt >= kSessionOpenMaxAttempts - 1 ||
       remaining_ms <= kSessionOpenRetryDelayMs) {
     return 0;
   }
@@ -37,9 +38,7 @@ inline int32_t session_open_retry_delay_ms(const SessionOpenRpcResult& result,
 // the supplied timeout. This is only the RPC phase, before local openSegment
 // or handle insertion, and never replays already-successful peer endpoints.
 template <typename Call, typename Wait, typename Now>
-SessionOpenRpcResult run_session_open_rpc(Call&& call,
-                                         Wait&& wait,
-                                         Now&& now) {
+SessionOpenRpcResult run_session_open_rpc(Call&& call, Wait&& wait, Now&& now) {
   const int64_t start_ms = now();
   for (int32_t attempt = 0; attempt < kSessionOpenMaxAttempts; ++attempt) {
     const int64_t remaining_ms = kSessionOpenBudgetMs - (now() - start_ms);

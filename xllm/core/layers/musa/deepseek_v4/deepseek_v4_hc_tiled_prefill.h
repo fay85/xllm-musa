@@ -3,13 +3,14 @@ Licensed under the Apache License, Version 2.0.
 ==============================================================================*/
 #pragma once
 
+#include <glog/logging.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <tuple>
-#include <glog/logging.h>
 
 #include "core/kernels/musa/deepseek_v4_hc_policy.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
@@ -47,11 +48,11 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> tiled_prefill(
   const int64_t row_limit =
       kernel::musa::deepseek_v4_hc_prefill_row_limit(hidden_dim);
   CHECK(tiled_prefill_shape(rows,
-                           hidden_dim,
-                           row_limit,
-                           hc_mult,
-                           sinkhorn_iters,
-                           /*enabled=*/true));
+                            hidden_dim,
+                            row_limit,
+                            hc_mult,
+                            sinkhorn_iters,
+                            /*enabled=*/true));
   auto output = torch::empty({rows, hidden_dim}, x.options());
   auto post = torch::empty({rows, hc_mult}, hc_scale.options());
   auto comb = torch::empty({rows, hc_mult, hc_mult}, hc_scale.options());
@@ -62,20 +63,19 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> tiled_prefill(
   const int64_t tile_rows = rows == row_limit + 1 ? row_limit - 1 : row_limit;
   for (int64_t start = 0; start < rows; start += tile_rows) {
     const int64_t count = std::min(tile_rows, rows - start);
-    kernel::musa::deepseek_v4_hc_pre_decode(
-        x.narrow(0, start, count),
-        hc_fn,
-        hc_scale,
-        hc_base,
-        hc_mult,
-        sinkhorn_iters,
-        norm_eps,
-        hc_eps,
-        output.narrow(0, start, count),
-        post.narrow(0, start, count),
-        comb.narrow(0, start, count),
-        /*norm_weight=*/std::nullopt,
-        /*output_is_normalized=*/nullptr);
+    kernel::musa::deepseek_v4_hc_pre_decode(x.narrow(0, start, count),
+                                            hc_fn,
+                                            hc_scale,
+                                            hc_base,
+                                            hc_mult,
+                                            sinkhorn_iters,
+                                            norm_eps,
+                                            hc_eps,
+                                            output.narrow(0, start, count),
+                                            post.narrow(0, start, count),
+                                            comb.narrow(0, start, count),
+                                            /*norm_weight=*/std::nullopt,
+                                            /*output_is_normalized=*/nullptr);
   }
   return std::make_tuple(output, post, comb);
 }

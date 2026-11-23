@@ -63,9 +63,8 @@ bool long_warp_swiglu_quant_enabled(const torch::Tensor& gate_up) {
   // The original dispatch remains unchanged for short rows and other widths.
   const char* value = std::getenv("XLLM_DSV4_LONG_MOE_WARP_SWIGLU");
   return value != nullptr && std::string(value) == "1" &&
-         gate_up.scalar_type() == torch::kBFloat16 &&
-         gate_up.size(1) == 512 && gate_up.size(0) >= 4096 * 6 &&
-         gate_up.size(0) <= 16384 * 6;
+         gate_up.scalar_type() == torch::kBFloat16 && gate_up.size(1) == 512 &&
+         gate_up.size(0) >= 4096 * 6 && gate_up.size(0) <= 16384 * 6;
 }
 
 constexpr bool restore_combine_2d_enabled() { return true; }
@@ -326,7 +325,8 @@ __global__ void build_padded_metadata_parallel_prefix_kernel(
     if (row >= padded_m) {
       break;
     }
-    const int32_t route = index < count ? sorted_assignment[source_offset + index] : -1;
+    const int32_t route =
+        index < count ? sorted_assignment[source_offset + index] : -1;
     padded_assignment[row] = route;
     m_indices[row] = index < count ? expert : -1;
     if (route_to_padded != nullptr && route >= 0) {
@@ -355,11 +355,16 @@ void launch_build_padded_metadata(const int32_t* sorted_assignment,
                                   musaStream_t stream) {
   if (metadata_parallel_prefix_enabled() && num_experts == 256) {
     build_padded_metadata_parallel_prefix_kernel<<<256, 256, 0, stream>>>(
-        sorted_assignment, expert_counts, padded_assignment, m_indices,
-        route_to_padded, padded_m, alignment_m);
+        sorted_assignment,
+        expert_counts,
+        padded_assignment,
+        m_indices,
+        route_to_padded,
+        padded_m,
+        alignment_m);
     LOG_FIRST_N(INFO, 1) << "[DSV4_MOE_PARALLEL_PREFIX] experts=256 padded_m="
-                        << padded_m << " alignment=" << alignment_m
-                        << " integer_only=1 distributed_tail=1";
+                         << padded_m << " alignment=" << alignment_m
+                         << " integer_only=1 distributed_tail=1";
     return;
   }
   if (metadata_expert_parallel_enabled() && num_experts > 0) {
@@ -1235,8 +1240,8 @@ __global__ void restore_combine_vector8_kernel(
   constexpr int32_t kTopk = 6;
   constexpr int32_t kValues = 8;
   const int64_t token = blockIdx.x;
-  const int32_t column = blockIdx.y * kMetadataBlock * kValues +
-                         threadIdx.x * kValues;
+  const int32_t column =
+      blockIdx.y * kMetadataBlock * kValues + threadIdx.x * kValues;
   __shared__ int32_t route_rows[kTopk];
   __shared__ float route_weights[kTopk];
   if (threadIdx.x < kTopk) {
@@ -1289,9 +1294,11 @@ void launch_restore_combine(const torch::Tensor& sorted_output,
           <<<dim3(topk_weights.size(0), 2), kMetadataBlock, 0, stream>>>(
               sorted_output.data_ptr<scalar_t>(),
               route_to_padded.data_ptr<int32_t>(),
-              topk_weights.data_ptr<weight_t>(), output.data_ptr<scalar_t>());
-      LOG_FIRST_N(INFO, 1) << "[DSV4_LONG_MOE_VECTOR_RESTORE] rows=" << topk_weights.size(0)
-                          << " hidden=4096 topk=6 bf16_router=1";
+              topk_weights.data_ptr<weight_t>(),
+              output.data_ptr<scalar_t>());
+      LOG_FIRST_N(INFO, 1) << "[DSV4_LONG_MOE_VECTOR_RESTORE] rows="
+                           << topk_weights.size(0)
+                           << " hidden=4096 topk=6 bf16_router=1";
       return;
     }
   }

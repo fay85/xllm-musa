@@ -145,7 +145,8 @@ VLMMaster::VLMMaster(const Options& options)
 
   if (options_.enable_service_routing()) {
     XServiceClient* xservice_client = XServiceClient::get_instance();
-    // Registration builds the Native V2 descriptor only when this pointer is set.
+    // Registration builds the Native V2 descriptor only when this pointer is
+    // set.
     xservice_client->set_engine(engine_.get());
     if (!xservice_client->init(options_.etcd_addr().value_or(""),
                                options_.instance_name().value_or(""),
@@ -201,9 +202,8 @@ VLMMaster::VLMMaster(const Options& options)
   // large tokenizer.json. Pay that while the pool starts, not on a request.
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/options_.num_request_handling_threads(),
-      /*init_func=*/[tokenizer = tokenizer_.get()]() {
-        (void)tokenizer->vocab_size();
-      },
+      /*init_func=*/
+      [tokenizer = tokenizer_.get()]() { (void)tokenizer->vocab_size(); },
       /*cpu_binding=*/false,
       /*pool_name=*/"VLMMaster.request");
 }

@@ -27,8 +27,8 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
-#include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/deepseek_v4_hc_policy.h"
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
@@ -146,22 +146,26 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                             bool* output_is_normalized) {
   // Large rows are opt-in; the original <=320 model-validated route remains
   // the default until the candidate also completes model-level acceptance.
-  const int64_t max_prefill_tokens = deepseek_v4_hc_prefill_row_limit(x.size(2));
+  const int64_t max_prefill_tokens =
+      deepseek_v4_hc_prefill_row_limit(x.size(2));
   const int64_t tokens = x.size(0);
   if (x.scalar_type() != torch::kBFloat16 || tokens < 1 ||
       tokens > max_prefill_tokens || sinkhorn_iters != 20) {
     return false;
   }
   const bool is_prefill = tokens > 1;
-  const char* batched_finish_env = std::getenv("XLLM_DSV4_HC_PRE_BATCHED_FINISH");
-  const bool use_batched_finish = is_prefill && tokens <= 8 &&
-      norm_weight.has_value() && batched_finish_env != nullptr &&
-      std::string(batched_finish_env) == "1";
+  const char* batched_finish_env =
+      std::getenv("XLLM_DSV4_HC_PRE_BATCHED_FINISH");
+  const bool use_batched_finish =
+      is_prefill && tokens <= 8 && norm_weight.has_value() &&
+      batched_finish_env != nullptr && std::string(batched_finish_env) == "1";
   const char* small_tile_env = std::getenv("XLLM_DSV4_HC_PRE_SMALL_TILE");
   const bool use_small_tile = is_prefill && tokens <= 8 &&
-      small_tile_env != nullptr && std::string(small_tile_env) == "1";
+                              small_tile_env != nullptr &&
+                              std::string(small_tile_env) == "1";
   const char* prenorm_uri = use_small_tile ? kMateHcSmallPrenormUri
-      : is_prefill ? kMateHcVerifyPrenormUri : kMateHcPrenormUri;
+                            : is_prefill   ? kMateHcVerifyPrenormUri
+                                           : kMateHcPrenormUri;
   auto prenorm = get_mate_hc_function(prenorm_uri, "tf32_hc_prenorm_gemm");
   if (!prenorm.defined()) {
     return false;
@@ -238,20 +242,20 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                              static_cast<float>(norm_eps),
                              static_cast<float>(hc_eps));
           } else {
-            dsv4_hc_pre_finish_kernel<scalar_t><<<static_cast<unsigned int>(tokens),
-                                                kThreads, 0, stream>>>(
-                x.data_ptr<scalar_t>(),
-                workspace.gemm_partials.data_ptr<float>(),
-                workspace.sqr_sum_partials.data_ptr<float>(),
-                hc_scale.data_ptr<float>(),
-                hc_base.data_ptr<float>(),
-                output.data_ptr<scalar_t>(),
-                post.data_ptr<float>(),
-                comb.data_ptr<float>(),
-                x.size(2),
-                sinkhorn_iters,
-                static_cast<float>(norm_eps),
-                static_cast<float>(hc_eps));
+            dsv4_hc_pre_finish_kernel<scalar_t>
+                <<<static_cast<unsigned int>(tokens), kThreads, 0, stream>>>(
+                    x.data_ptr<scalar_t>(),
+                    workspace.gemm_partials.data_ptr<float>(),
+                    workspace.sqr_sum_partials.data_ptr<float>(),
+                    hc_scale.data_ptr<float>(),
+                    hc_base.data_ptr<float>(),
+                    output.data_ptr<scalar_t>(),
+                    post.data_ptr<float>(),
+                    comb.data_ptr<float>(),
+                    x.size(2),
+                    sinkhorn_iters,
+                    static_cast<float>(norm_eps),
+                    static_cast<float>(hc_eps));
           }
         });
     check_last_error();
@@ -789,17 +793,17 @@ deepseek_v4_hc_pre_decode(const torch::Tensor& x,
   const bool disable_mate_hc =
       disable_mate_hc_env != nullptr && std::string(disable_mate_hc_env) == "1";
   if (!disable_mate_hc && try_mate_hc_pre_decode(x,
-                             hc_fn,
-                             hc_scale,
-                             hc_base,
-                             result,
-                             post_result,
-                             comb_result,
-                             sinkhorn_iters,
-                             norm_eps,
-                             hc_eps,
-                             norm_weight,
-                             output_is_normalized)) {
+                                                 hc_fn,
+                                                 hc_scale,
+                                                 hc_base,
+                                                 result,
+                                                 post_result,
+                                                 comb_result,
+                                                 sinkhorn_iters,
+                                                 norm_eps,
+                                                 hc_eps,
+                                                 norm_weight,
+                                                 output_is_normalized)) {
     return {result, post_result, comb_result};
   }
 

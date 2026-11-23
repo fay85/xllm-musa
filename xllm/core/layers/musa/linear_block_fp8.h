@@ -89,10 +89,9 @@ torch::Tensor block_fp8_quantized_forward(
     const std::optional<torch::Tensor>& bias,
     torch::Tensor& output_buffer);
 
-bool supports_block_fp8_quantized_input(
-    bool input_is_parallelized,
-    const QuantArgs& quant_args,
-    const torch::Tensor& weight,
-    const torch::Tensor& weight_scale_inv);
+bool supports_block_fp8_quantized_input(bool input_is_parallelized,
+                                        const QuantArgs& quant_args,
+                                        const torch::Tensor& weight,
+                                        const torch::Tensor& weight_scale_inv);
 
 }  // namespace xllm::layer::musa
