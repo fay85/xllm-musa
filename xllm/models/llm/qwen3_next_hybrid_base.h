@@ -221,11 +221,19 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
         attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
       }
 #endif
-      // Capture hooks run before a layer. Worker-side draft config loading
-      // converts target output layer L to capture index L + 1, matching the
-      // established Qwen3 DFlash convention. Hybrid layers keep the residual
-      // stream split between h and residual, so capture their sum.
+#if !defined(USE_MUSA)
+      aux_capture_.capture_layer(static_cast<int32_t>(i), h, residual);
+#endif
+      auto& layer = layers_[i];
+      h = layer->forward(h,
+                         residual,
+                         positions,
+                         *layer_metadata,
+                         kv_caches[i],
+                         input_params,
+                         mrope_cos_sin);
 #if defined(USE_MUSA)
+      // DFlash2 config names zero-based decoder-layer outputs.
       // Non-final chunks skip the hidden gather and return local rows, so
       // their capture stays local too. Every other CP forward gathers the
       // captured rows; finish() returns the same full sequence.
@@ -243,17 +251,7 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       } else {
         aux_capture_.capture_layer(static_cast<int32_t>(i), h, residual);
       }
-#else
-      aux_capture_.capture_layer(static_cast<int32_t>(i), h, residual);
 #endif
-      auto& layer = layers_[i];
-      h = layer->forward(h,
-                         residual,
-                         positions,
-                         *layer_metadata,
-                         kv_caches[i],
-                         input_params,
-                         mrope_cos_sin);
 #if defined(USE_NPU)
       if (input_params.parallel.layer_synchronizer != nullptr &&
           !input_params.parallel.layer_synchronizer->record_event(
