@@ -24,6 +24,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -34,6 +35,7 @@ limitations under the License.
 #include "core/framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
+#include "core/util/env_var.h"
 
 namespace xllm::kernel::musa {
 namespace {
@@ -297,7 +299,8 @@ struct GdnInt8CheckpointPool {
 
 uint8_t* ensure_host_ckpt_slot_ptr(GdnInt8CheckpointPool* pool,
                                    int64_t host_slot,
-                                   bool* out_is_pinned) {
+                                   bool* out_is_pinned,
+                                   bool startup_allocation = false) {
   CHECK(pool != nullptr);
   CHECK_GE(host_slot, 0);
   CHECK_LT(host_slot, pool->num_host_ckpt_slots);
@@ -316,6 +319,7 @@ uint8_t* ensure_host_ckpt_slot_ptr(GdnInt8CheckpointPool* pool,
         static_cast<size_t>(slots_in_slab * pool->total_slot_bytes);
     const XLLMOptionalDeviceGuard device_guard(pool->device);
     void* raw = nullptr;
+    const auto allocation_start = std::chrono::steady_clock::now();
     musaError_t err = musaHostAlloc(&raw, bytes, musaHostAllocDefault);
     if (err == musaSuccess && raw != nullptr) {
       slab.ptr = static_cast<uint8_t*>(raw);
@@ -328,10 +332,16 @@ uint8_t* ensure_host_ckpt_slot_ptr(GdnInt8CheckpointPool* pool,
       slab.ptr = static_cast<uint8_t*>(fallback);
       slab.is_pinned = false;
     }
+    const double allocation_ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - allocation_start)
+            .count();
     LOG(INFO) << "Allocated MUSA GDN Int8 Host L2 Slab #" << slab_idx
               << ": slots=" << slots_in_slab
               << ", bytes=" << (bytes / (1024.0 * 1024.0)) << " MB"
-              << ", pinned=" << slab.is_pinned;
+              << ", pinned=" << slab.is_pinned
+              << ", source=" << (startup_allocation ? "startup" : "serving")
+              << ", alloc_ms=" << allocation_ms;
   }
   if (out_is_pinned != nullptr) {
     *out_is_pinned = slab.is_pinned;
@@ -598,6 +608,19 @@ void init_gdn_int8_checkpoint_pool(
   pool->d_ssm_ptrs = h_ssm_ptrs.to(*dev);
   pool->d_conv_ptrs = h_conv_ptrs.to(*dev);
   musaDeviceSynchronize();
+
+  // Reserve the first slabs before publishing the pool so their pinned
+  // allocations do not stall the first checkpoint demotions.
+  const int64_t preallocated_slabs = std::clamp<int64_t>(
+      ::xllm::util::get_int_env("XLLM_MUSA_GDN_HOST_L2_PREALLOC_SLABS", 0),
+      0,
+      static_cast<int64_t>(pool->host_slabs.size()));
+  for (int64_t slab = 0; slab < preallocated_slabs; ++slab) {
+    ensure_host_ckpt_slot_ptr(pool.get(),
+                              slab * kGdnHostSlabSlots,
+                              /*out_is_pinned=*/nullptr,
+                              /*startup_allocation=*/true);
+  }
 
   const void* key = reinterpret_cast<const void*>(ssm_ptrs[0]);
   {
