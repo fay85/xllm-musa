@@ -714,5 +714,87 @@ TEST_F(Qwen3CoderDetectorTest, PerformanceWithManyToolCalls) {
   }
 }
 
+
+void ExpectSameAcrossChunkings(const std::vector<JsonTool>& tools,
+                                const std::string& text,
+                                const std::vector<std::vector<std::string>>& chunkings,
+                                const std::string& expected_text,
+                                size_t expected_calls,
+                                const std::string& expected_name) {
+  auto run = [&](const std::vector<std::string>& chunks) {
+    FunctionCallParser parser(tools, "qwen3_coder");
+    std::string normal_text;
+    std::vector<StreamCallAccumulator> acc;
+    for (const auto& chunk : chunks) {
+      merge_stream_result(
+          parser.parse_streaming_increment(chunk), &normal_text, &acc);
+    }
+    return std::make_pair(normal_text, std::move(acc));
+  };
+
+  std::vector<std::string> characters;
+  characters.reserve(text.size());
+  for (char ch : text) {
+    characters.emplace_back(1, ch);
+  }
+  std::vector<std::vector<std::string>> all = chunkings;
+  all.push_back(std::vector<std::string>{text});
+  all.push_back(characters);
+
+  for (const auto& chunks : all) {
+    std::pair<std::string, std::vector<StreamCallAccumulator>> got = run(chunks);
+    EXPECT_EQ(got.first, expected_text);
+    ASSERT_EQ(got.second.size(), expected_calls);
+    if (expected_calls == 1) {
+      EXPECT_EQ(got.second[0].name, expected_name);
+    }
+  }
+}
+
+TEST_F(Qwen3CoderDetectorTest, NoToolsStreamsAngleBracketsAsText) {
+  Qwen3CoderDetector detector;
+  const std::string text =
+      "see <parameter=location>Boston</parameter> and </function> and <think>";
+  auto result = detector.parse_streaming_increment(text, {});
+  EXPECT_EQ(result.normal_text, text);
+  EXPECT_TRUE(result.calls.empty());
+}
+
+TEST_F(Qwen3CoderDetectorTest, IsolatedParameterStaysTextAcrossChunkings) {
+  const std::string text =
+      "The format is <parameter=location>Boston</parameter> okay?";
+  ExpectSameAcrossChunkings(
+      tools_,
+      text,
+      {{"The format is <par", "ameter=location>Boston</par", "ameter> okay?"}},
+      text,
+      0,
+      "");
+}
+
+TEST_F(Qwen3CoderDetectorTest, IsolatedFunctionEndStaysTextAcrossChunkings) {
+  const std::string text = "tail </function> more";
+  ExpectSameAcrossChunkings(
+      tools_, text, {{"tail </fun", "ction> more"}}, text, 0, "");
+}
+
+TEST_F(Qwen3CoderDetectorTest, BareFunctionCloseAgreesWhenSplit) {
+  const std::string text = "<function=get_current_weather></function>";
+  ExpectSameAcrossChunkings(
+      tools_,
+      text,
+      {{"<function=get_current_weather>", "</fun", "ction>"}},
+      "",
+      1,
+      "get_current_weather");
+}
+
+TEST_F(Qwen3CoderDetectorTest, DetectIsolatedParameterIsNotAToolCall) {
+  const std::string text = "<parameter=location>Boston</parameter>";
+  auto result = detector_->detect_and_parse(text, tools_);
+  EXPECT_EQ(result.normal_text, text);
+  EXPECT_TRUE(result.calls.empty());
+}
+
 }  // namespace function_call
 }  // namespace xllm

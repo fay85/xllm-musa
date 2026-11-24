@@ -479,7 +479,8 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
       continue;
     }
 
-    if (starts_with(current_slice, parameter_prefix_)) {
+    if (current_func_name_.has_value() &&
+        starts_with(current_slice, parameter_prefix_)) {
       size_t name_end = current_slice.find('>');
       if (name_end == std::string_view::npos) {
         break;
@@ -545,7 +546,8 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
       continue;
     }
 
-    if (starts_with(current_slice, function_end_token_)) {
+    if (current_func_name_.has_value() &&
+        starts_with(current_slice, function_end_token_)) {
       if (!json_started_) {
         calls.emplace_back(current_tool_id_, std::nullopt, "{");
         json_started_ = true;
@@ -556,7 +558,8 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
       continue;
     }
 
-    if (starts_with(current_slice, tool_call_end_token_)) {
+    if (is_inside_tool_call_ &&
+        starts_with(current_slice, tool_call_end_token_)) {
       parsed_pos_ += tool_call_end_token_.length();
       is_inside_tool_call_ = false;
       continue;
@@ -564,7 +567,7 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
 
     size_t next_open_angle = current_slice.find('<');
     if (next_open_angle == std::string::npos) {
-      if (!is_inside_tool_call_) {
+      if (!is_inside_tool_call_ && !current_func_name_.has_value()) {
         normal_text.append(current_slice);
       }
       parsed_pos_ += current_slice.length();
@@ -572,29 +575,35 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
     }
 
     if (next_open_angle == 0) {
+      // Only <tool_call and <function= can open a call. Parameter and end
+      // tags are structural only after that function is open, so a split
+      // fragment of those tags stays ordinary text outside a function and
+      // stays one tag inside it.
       bool is_potential_tag =
           starts_with(tool_call_start_token_, current_slice) ||
           starts_with(tool_call_prefix_, current_slice);
-      if (is_inside_tool_call_ && !is_potential_tag) {
+      if (current_func_name_.has_value() && !is_potential_tag) {
         is_potential_tag =
-            starts_with(tool_call_end_token_, current_slice) ||
             starts_with(function_end_token_, current_slice) ||
             starts_with(parameter_prefix_, current_slice) ||
             starts_with(parameter_end_token_, current_slice);
+      }
+      if (is_inside_tool_call_ && !is_potential_tag) {
+        is_potential_tag = starts_with(tool_call_end_token_, current_slice);
       }
 
       if (is_potential_tag) {
         break;
       }
 
-      if (!is_inside_tool_call_) {
+      if (!is_inside_tool_call_ && !current_func_name_.has_value()) {
         normal_text.push_back('<');
       }
       parsed_pos_ += 1;
       continue;
     }
 
-    if (!is_inside_tool_call_) {
+    if (!is_inside_tool_call_ && !current_func_name_.has_value()) {
       normal_text.append(current_slice.substr(0, next_open_angle));
     }
     parsed_pos_ += next_open_angle;
@@ -609,7 +618,8 @@ StreamingParseResult Qwen3CoderDetector::parse_streaming_increment(
 }
 
 std::string Qwen3CoderDetector::finish_pending_text() {
-  if (is_inside_tool_call_ || buffer_.empty()) {
+  if (is_inside_tool_call_ || current_func_name_.has_value() ||
+      buffer_.empty()) {
     return "";
   }
   std::string pending = std::move(buffer_);
