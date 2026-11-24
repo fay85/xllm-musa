@@ -120,6 +120,7 @@ limitations under the License.
 #include "llm/musa/deepseek_v4.h"      // IWYU pragma: keep
 #include "llm/musa/deepseek_v4_mtp.h"  // IWYU pragma: keep
 #include "llm/musa/glm5_next.h"        // IWYU pragma: keep
+#include "llm/musa/glm5_next_mtp.h"    // IWYU pragma: keep
 #include "llm/qwen3_5.h"               // IWYU pragma: keep
 #include "llm/qwen3_5_mtp.h"           // IWYU pragma: keep
 #include "llm/qwen3_next.h"            // IWYU pragma: keep

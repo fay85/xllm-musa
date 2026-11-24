@@ -22,6 +22,7 @@ limitations under the License.
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "core/framework/model/mtp_topk_state.h"
@@ -163,6 +164,26 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
                                 input_ids,
                                 decoder_forward,
                                 aux_hidden_states);
+  }
+
+  template <typename DecoderForward>
+  torch::Tensor forward_with_custom_decoder(
+      torch::Tensor embed,
+      std::optional<torch::Tensor>& residual,
+      torch::Tensor positions,
+      const layer::AttentionMetadata& attn_metadata,
+      KVCache& kv_cache,
+      ModelInputParams& input_params,
+      const std::optional<torch::Tensor>& input_ids,
+      DecoderForward&& decoder_forward) {
+    return forward_with_decoder(std::move(embed),
+                                residual,
+                                std::move(positions),
+                                attn_metadata,
+                                kv_cache,
+                                input_params,
+                                input_ids,
+                                std::forward<DecoderForward>(decoder_forward));
   }
 
  protected:
@@ -550,7 +571,10 @@ class MtpModelImplBase : public torch::nn::Module {
                                                      /*device=*/device_));
     }
     auto& attn_metadata = *(modified_input_params.attn_metadata);
-    torch::Tensor hidden_states = embed_tokens_(tokens);
+    torch::Tensor hidden_states =
+        modified_input_params.embedding.mtp_token_embedding.defined()
+            ? modified_input_params.embedding.mtp_token_embedding
+            : embed_tokens_(tokens);
     // Mask out embeddings where positions == 0 (for MTP not needed at pos 0)
     hidden_states.masked_fill_((positions == 0).unsqueeze(-1), 0);
 

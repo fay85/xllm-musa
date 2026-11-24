@@ -42,6 +42,11 @@ namespace xllm::layer {
 // all DSA layers, mirroring sglang's device-side CP metadata organization.
 class Glm5NextCpLayout;
 
+void prepare_glm5_next_cp_metadata(AttentionMetadata& metadata,
+                                   ProcessGroup& group,
+                                   int64_t global_rows,
+                                   const torch::Device& device);
+
 std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
     const torch::Tensor& global_positions,
     const AttentionMetadata& metadata,

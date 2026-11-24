@@ -20,8 +20,13 @@ limitations under the License.
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <string_view>
 
 namespace xllm::layer {
+
+inline bool uses_glm5_next_graph(std::string_view model_type) {
+  return model_type == "glm5_next" || model_type == "glm5_next_mtp";
+}
 
 inline uint32_t glm5_next_graph_context_capacity(int64_t length) {
   CHECK_GT(length, 0);

@@ -4019,6 +4019,8 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
 #if defined(USE_MUSA)
     if (use_chunked_prefill_spec_verify_path() &&
+        !is_glm5_next_target_model_type(
+            context_.get_model_args().model_type()) &&
         layer::use_mate_gdn_mtp_kernel()) {
       if (input_params.gdn_mtp_verify_cache == nullptr) {
         input_params.gdn_mtp_verify_cache =
@@ -4456,13 +4458,18 @@ void MTPWorkerImpl::prepare_draft_replay_inputs(
       << "Draft context replay policy is not initialized.";
   const int32_t uniform_width =
       draft_context_replay_policy_->target_expansion_width;
+  // MUSA GLM DSA updates one KPool ring per request. Replay the real
+  // accepted span as a packed causal query sharing that request's table.
+  const bool packed_replay =
+      Platform::is_musa() &&
+      draft_impl_->context_.get_model_args().model_type() == "glm5_next_mtp";
   mtp_async::DraftReplayInputPlan plan =
       mtp_async::build_draft_replay_input_plan(
           base_input,
           last_states,
           embedding_cache_->embedding_placeholder(),
           options_.block_size() * parallel_args_.kv_split_size_effective(),
-          uniform_width,
+          packed_replay ? 0 : uniform_width,
           extend_input.input_params.meta.is_graph_warmup,
           Platform::is_mlu() ? -1 : 0);
   auto& input_params = extend_input.input_params;
@@ -4491,19 +4498,50 @@ void MTPWorkerImpl::prepare_draft_replay_inputs(
     extend_input.positions =
         safe_to(rotary_host, base_input.positions.options(), true);
   }
-  input_params.meta.num_sequences = num_rows;
-  input_params.meta.batch_forward_type = BatchForwardType::DECODE;
   input_params.is_spec_verify = false;
-  input_params.attention.host.kpool_query_lens = plan.kpool_query_lens;
   input_params.attn_metadata.reset();
-  specBuilder::update_input_params(input_params,
-                                   rows,
-                                   /*q_max_seq_len=*/1,
-                                   std::move(rows.out_q_seq_lens),
-                                   std::move(rows.out_q_cu_seq_lens),
-                                   rows.meta.kv_max_seq_len,
-                                   std::move(rows.out_kv_seq_lens),
-                                   /*update_block_tables=*/true);
+  if (packed_replay) {
+    auto& host = input_params.attention.host;
+    host.kpool_query_lens.clear();
+    host.kv_cache_tokens_nums.clear();
+    std::vector<int32_t> query_lens;
+    std::vector<int32_t> query_ends;
+    std::vector<int32_t> kv_lens;
+    int32_t begin = 0;
+    int32_t max_query = 0;
+    for (const int32_t last : plan.selected_rows) {
+      const int32_t width = last + 1 - begin;
+      const int32_t kv_len = rows.out_positions[last] + 1;
+      host.kpool_query_lens.emplace_back(width);
+      host.kv_cache_tokens_nums.emplace_back(kv_len - width);
+      specBuilder::append_q_seq_len(query_lens, query_ends, width);
+      specBuilder::append_seq_len_by_layout(kv_lens, kv_len);
+      max_query = std::max(max_query, width);
+      begin = last + 1;
+    }
+    input_params.meta.batch_forward_type =
+        max_query == 1 ? BatchForwardType::DECODE
+                       : BatchForwardType::CHUNKED_PREFILL;
+    specBuilder::update_input_params(input_params,
+                                     rows,
+                                     max_query,
+                                     std::move(query_lens),
+                                     std::move(query_ends),
+                                     rows.meta.kv_max_seq_len,
+                                     std::move(kv_lens));
+  } else {
+    input_params.meta.num_sequences = num_rows;
+    input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+    input_params.attention.host.kpool_query_lens = plan.kpool_query_lens;
+    specBuilder::update_input_params(input_params,
+                                     rows,
+                                     /*q_max_seq_len=*/1,
+                                     std::move(rows.out_q_seq_lens),
+                                     std::move(rows.out_q_cu_seq_lens),
+                                     rows.meta.kv_max_seq_len,
+                                     std::move(rows.out_kv_seq_lens),
+                                     /*update_block_tables=*/true);
+  }
   input_params.attention.rebuild_device_buffer(device_);
   for (auto& embedding : plan.embeddings) {
     embedding = embedding.to(device_);

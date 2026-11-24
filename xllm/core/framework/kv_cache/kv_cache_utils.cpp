@@ -236,9 +236,10 @@ KVCacheTensors create_kv_cache_tensors(
   }
 #else
   // The serialized shape carries the inline E4M3 record including its scales.
-  const bool glm_inline_fp8 = Platform::is_musa() &&
-                              create_options.model_type() == "glm5_next" &&
-                              kv_cache_shape.key_cache_shape().back() == 528;
+  const bool glm_inline_fp8 =
+      Platform::is_musa() &&
+      is_glm5_next_model_type(create_options.model_type()) &&
+      kv_cache_shape.key_cache_shape().back() == 528;
   tensors.key_cache = alloc_cache_tensor(
       KVCacheTensorRole::KEY,
       kv_cache_shape.key_cache_shape(),
@@ -292,7 +293,7 @@ IndexedKVCacheTensors create_indexed_kv_cache_tensors(
   }
   const bool mla_packed_c8 = create_options.mla_packed_c8();
   if (create_options.enable_mla_kv_cache_fp8()) {
-    CHECK_EQ(create_options.model_type(), "glm5_next");
+    CHECK(is_glm5_next_model_type(create_options.model_type()));
     CHECK(!create_options.enable_kv_cache_quant());
     CHECK(!kv_cache_shape.has_value_cache_shape())
         << "GLM FP8 MLA cache must use one packed key cache.";

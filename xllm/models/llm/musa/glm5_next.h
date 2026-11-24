@@ -134,7 +134,7 @@ class Glm5NextModelImpl final
     torch::NoGradGuard no_grad;
     CHECK_EQ(kv_caches.size(), layers_.size());
     const bool use_prefill_cp =
-        prefill_cp_enabled_ &&
+        prefill_cp_enabled_ && !input_params.is_spec_verify &&
         (input_params.meta.batch_forward_type.is_prefill() ||
          input_params.meta.batch_forward_type.is_chunked_prefill());
     last_forward_prefill_cp_ = use_prefill_cp;
@@ -165,7 +165,10 @@ class Glm5NextModelImpl final
     if (use_prefill_cp &&
         modified_input_params.meta.batch_forward_type.no_decode() &&
         !modified_input_params.is_spec_verify) {
-      prepare_prefill_cp_metadata(modified_input_params, global_rows);
+      layer::prepare_glm5_next_cp_metadata(*modified_input_params.attn_metadata,
+                                           *cp_group_,
+                                           global_rows,
+                                           device_);
     }
     if (!modified_input_params.attn_metadata->enable_cuda_graph ||
         !modified_input_params.attn_metadata->musa_kda_batch) {
@@ -289,6 +292,11 @@ class Glm5NextModelImpl final
     if (hidden_states.numel() != 0) {
       RECORD_USER_SCOPE("nn.Module: RMSNorm_22");
       hidden_states = std::get<0>(norm_->forward(hidden_states));
+    }
+    if (use_prefill_cp &&
+        SpeculativeConfig::get_instance().num_speculative_tokens() > 0) {
+      hidden_states = restore_prefill_cp_hidden(hidden_states);
+      last_forward_prefill_cp_ = false;
     }
     return ModelOutput(hidden_states);
   }
@@ -436,13 +444,13 @@ class Glm5NextModelImpl final
                                       ModelInputParams& params) {
     auto* graph_state = dynamic_cast<Glm5NextGraphMetadataState*>(state);
     CHECK(graph_state != nullptr);
-    CHECK(!params.is_spec_verify);
     const bool is_decode = params.meta.batch_forward_type.is_decode();
     const bool is_prefill = params.meta.batch_forward_type.is_prefill() ||
                             params.meta.batch_forward_type.is_chunked_prefill();
     CHECK(is_decode || is_prefill);
-    if (prefill_cp_enabled_ && is_prefill) {
-      prepare_prefill_cp_metadata(params, positions.size(/*dim=*/0));
+    if (prefill_cp_enabled_ && is_prefill && !params.is_spec_verify) {
+      layer::prepare_glm5_next_cp_metadata(
+          *params.attn_metadata, *cp_group_, positions.size(0), device_);
     }
     const auto& attention = params.attention.device;
     const auto copy_cp_metadata = [](const layer::AttentionMetadata& source,
@@ -472,11 +480,15 @@ class Glm5NextModelImpl final
                                  ? layer::glm5_next_graph_context_capacity(
                                        params.meta.kv_max_seq_len)
                                  : params.meta.kv_max_seq_len;
+      if (params.is_spec_verify) {
+        metadata.is_spec_verify = true;
+        metadata.max_seq_len = attention.block_tables.size(1) * 256;
+      }
       metadata.q_cu_seq_lens = attention.q_seq_lens;
       metadata.kv_cu_seq_lens = attention.kv_seq_lens;
       metadata.block_table = attention.block_tables;
       metadata.slot_mapping = attention.new_cache_slots;
-      if (prefill_cp_enabled_ && is_prefill) {
+      if (prefill_cp_enabled_ && is_prefill && !params.is_spec_verify) {
         copy_cp_metadata(*params.attn_metadata, metadata);
       }
       if (params.embedding.linear_state_indices.defined()) {
@@ -499,11 +511,15 @@ class Glm5NextModelImpl final
       }
     } else {
       auto& metadata = *graph_state->metadata;
+      if (params.is_spec_verify) {
+        metadata.is_spec_verify = true;
+        metadata.max_seq_len = attention.block_tables.size(1) * 256;
+      }
       metadata.q_cu_seq_lens = attention.q_seq_lens;
       metadata.kv_cu_seq_lens = attention.kv_seq_lens;
       metadata.block_table = attention.block_tables;
       metadata.slot_mapping = attention.new_cache_slots;
-      if (prefill_cp_enabled_ && is_prefill) {
+      if (prefill_cp_enabled_ && is_prefill && !params.is_spec_verify) {
         copy_cp_metadata(*params.attn_metadata, metadata);
       }
       if (params.linear_state_validity_mask_tensor.defined() &&
@@ -549,7 +565,7 @@ class Glm5NextModelImpl final
     graph_state->slot_mapping.copy_(attention.new_cache_slots,
                                     /*non_blocking=*/true);
     graph_state->metadata->slot_mapping = graph_state->slot_mapping;
-    if (prefill_cp_enabled_ && is_prefill) {
+    if (prefill_cp_enabled_ && is_prefill && !params.is_spec_verify) {
       if (!graph_state->metadata->glm5_prefill_cp_layout) {
         graph_state->metadata->glm5_prefill_cp_layout =
             layer::build_glm5_next_cp_layout(
@@ -581,42 +597,6 @@ class Glm5NextModelImpl final
   }
 
  private:
-  void prepare_prefill_cp_metadata(ModelInputParams& params,
-                                   int64_t global_rows) const {
-    CHECK(cp_group_ != nullptr);
-    const int32_t cp_rank = cp_group_->rank();
-    const int32_t cp_size = cp_group_->world_size();
-    CHECK_EQ(cp_size, cp_size_);
-    CHECK_GT(cp_size, 1);
-    CHECK_GT(global_rows, 0);
-    CHECK_LE(global_rows, std::numeric_limits<int32_t>::max());
-
-    const int64_t rows_per_rank = global_rows / cp_size;
-    const int64_t remainder = global_rows % cp_size;
-    const int64_t local_row_begin =
-        cp_rank * rows_per_rank + std::min<int64_t>(cp_rank, remainder);
-    const int64_t local_row_count =
-        rows_per_rank + (cp_rank < remainder ? static_cast<int64_t>(1) : 0);
-    auto& metadata = *params.attn_metadata;
-    metadata.glm5_prefill_cp_enabled = true;
-    metadata.glm5_prefill_cp_rank = cp_rank;
-    metadata.glm5_prefill_cp_size = cp_size;
-    metadata.glm5_prefill_global_rows = global_rows;
-    metadata.glm5_prefill_local_row_begin = local_row_begin;
-    metadata.glm5_prefill_local_row_end = local_row_begin + local_row_count;
-    metadata.glm5_prefill_local_row_indices = torch::arange(
-        local_row_begin,
-        local_row_begin + local_row_count,
-        torch::TensorOptions().dtype(torch::kInt32).device(device_));
-    metadata.glm5_prefill_row_offsets.resize(static_cast<size_t>(cp_size) + 1);
-    for (int32_t rank = 0; rank <= cp_size; ++rank) {
-      const int64_t offset =
-          rank * rows_per_rank + std::min<int64_t>(rank, remainder);
-      metadata.glm5_prefill_row_offsets[static_cast<size_t>(rank)] =
-          static_cast<int32_t>(offset);
-    }
-  }
-
   void prepare_attention_metadata(ModelInputParams& params) const {
     const bool ordinary_prefill =
         params.meta.batch_forward_type.no_decode() && !params.is_spec_verify;

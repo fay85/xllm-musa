@@ -510,7 +510,8 @@ RoutedMoeImpl::RoutedMoeImpl(const ModelArgs& model_args,
 
   // The supported checkpoint has one compiled expert layout. The EP case
   // receives local CP rows. TP8 attention supplies replicated rows instead.
-  if (model_args.model_type() == "glm5_next" &&
+  if ((model_args.model_type() == "glm5_next" ||
+       model_args.model_type() == "glm5_next_mtp") &&
       quant_args.quant_method() == "fp8" && num_total_experts_ == 288 &&
       topk_ == 8 && hidden_size_ == 4096 && intermediate_size_ == 2048 &&
       (ep_size == 8 || (ep_size == 1 && world_size == 8))) {
@@ -1321,7 +1322,8 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
   if (mega_moe_ && ep_dispatch_enabled_) {
     CHECK(fp8_experts_loaded());
     int64_t max_rows = input_2d.size(0);
-    if (use_prefill_cp && input_params.attn_metadata) {
+    if (use_prefill_cp && input_params.attn_metadata &&
+        input_params.attn_metadata->glm5_prefill_cp_enabled) {
       const int64_t total =
           input_params.attn_metadata->glm5_prefill_global_rows;
       max_rows = (total + prefill_cp_size_ - 1) / prefill_cp_size_;

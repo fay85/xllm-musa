@@ -486,11 +486,10 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   c10::DeviceGuard device_guard(hidden_states.device());
   CHECK(!kernel::musa::is_stream_capturing() ||
         (attn_metadata.enable_cuda_graph && attn_metadata.musa_kda_batch &&
-         !attn_metadata.is_spec_verify && !attn_metadata.is_mixed))
+         !attn_metadata.is_mixed))
       << "KDA capture requires prepared graph metadata";
-  CHECK(!attn_metadata.is_spec_verify && !input_params.is_spec_verify &&
-        !attn_metadata.is_mixed)
-      << "KDA does not support speculative or mixed batches";
+  const bool verify = input_params.is_spec_verify;
+  CHECK(!attn_metadata.is_mixed);
   CHECK(!attn_metadata.linear_state_read_indices.defined() &&
         (input_params.embedding.linear_state_read_ids.empty() ||
          input_params.embedding.linear_state_read_ids ==
@@ -558,7 +557,16 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   CHECK_EQ(cu_seqlens.scalar_type(), torch::kInt32);
   CHECK_EQ(conv_cache.dim(), 3);
   CHECK_EQ(conv_cache.size(1), 3 * local_projection_size_);
-  CHECK_EQ(conv_cache.size(2), conv_kernel_size_ - 1);
+  const int64_t committed_conv_state_len = conv_kernel_size_ - 1;
+  CHECK_GE(conv_cache.size(2), committed_conv_state_len);
+  // MTP reserves trailing speculative history slots in the target cache.
+  // Ordinary prefill and decode must update only the committed convolution
+  // history. Speculative verification owns the expanded tail.
+  torch::Tensor conv_state = conv_cache;
+  if (conv_cache.size(2) != committed_conv_state_len) {
+    conv_state = conv_cache.narrow(
+        /*dim=*/2, /*start=*/0, /*length=*/committed_conv_state_len);
+  }
   CHECK_EQ(ssm_cache.dim(), 4);
   CHECK_EQ(ssm_cache.size(1), local_num_heads_);
   CHECK_EQ(ssm_cache.size(2), head_dim_);
@@ -584,9 +592,10 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   CHECK_LE(batch->state_capacity, conv_cache.size(0));
   CHECK_EQ(batch->state_indices.device(), hidden_states.device());
   const int64_t checkpoint_stride = get_checkpoint_stride(kv_cache);
-  CHECK_EQ(checkpoint_stride, 1)
-      << "MUSA GLM5-Next KDA currently requires checkpoint_stride=1";
   const torch::Tensor& state_indices = batch->state_indices;
+  const torch::Tensor state_indices_long =
+      checkpoint_stride == 1 ? batch->state_indices_long
+                             : batch->state_indices_long * checkpoint_stride;
   if (!conv_weight_.defined()) {
     conv_weight_ =
         torch::cat(
@@ -597,7 +606,26 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   const bool is_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
 
-  if (is_prefill) {
+  const int64_t batch_size = state_indices.numel();
+  if (verify) {
+    CHECK_EQ(num_tokens, batch_size * checkpoint_stride);
+    CHECK_EQ(conv_cache.size(2),
+             committed_conv_state_len + checkpoint_stride - 1);
+    const auto input =
+        mixed_qkv.view({batch_size, checkpoint_stride, -1}).transpose(1, 2);
+    auto convolved = torch::empty(mixed_qkv.sizes(), mixed_qkv.options());
+    kernel::musa::causal_conv1d_mtp_verify(
+        input,
+        conv_weight,
+        conv_cache,
+        state_indices,
+        input_params.num_accepted_tokens,
+        convolved.view({batch_size, checkpoint_stride, -1}).transpose(1, 2),
+        {},
+        true,
+        true);
+    mixed_qkv = std::move(convolved);
+  } else if (is_prefill) {
     CHECK(attn_metadata.has_initial_states.defined())
         << "GLM5-Next KDA prefill requires has_initial_states";
     CHECK_EQ(attn_metadata.has_initial_states.scalar_type(), torch::kBool);
@@ -607,7 +635,7 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
     mixed_qkv = xllm::kernel::musa::causal_conv1d_prefill(
         mixed_qkv,
         conv_weight,
-        conv_cache,
+        conv_state,
         std::nullopt,
         cu_seqlens,
         state_indices,
@@ -616,7 +644,7 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   } else {
     xllm::kernel::CausalConv1dUpdateParams conv_params;
     conv_params.x = mixed_qkv;
-    conv_params.conv_state = conv_cache;
+    conv_params.conv_state = conv_state;
     conv_params.weight = conv_weight;
     conv_params.conv_state_indices = state_indices;
     conv_params.query_start_loc = cu_seqlens;
@@ -633,31 +661,56 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   torch::Tensor g = raw_gate.view({1, num_tokens, local_num_heads_, head_dim_});
   beta = beta.view({1, num_tokens, local_num_heads_});
 
-  torch::Tensor initial_state =
-      ssm_cache.index_select(0, batch->state_indices_long).contiguous();
-  if (is_prefill) {
-    const torch::Tensor valid =
-        attn_metadata.has_initial_states.view({-1, 1, 1, 1});
-    initial_state =
-        torch::where(valid, initial_state, torch::zeros_like(initial_state));
-  }
-  torch::Tensor final_state = torch::empty_like(initial_state);
+  const auto bias = dt_bias_.view({local_num_heads_, head_dim_});
+  const double scale = 1.0 / std::sqrt(static_cast<double>(head_dim_));
   torch::Tensor core_output = torch::empty_like(v);
-  xllm::kernel::musa::flash_kda(q,
-                                k,
-                                v,
-                                g,
-                                beta,
-                                1.0 / std::sqrt(128.0),
-                                core_output,
-                                A_log_,
-                                dt_bias_.view({local_num_heads_, head_dim_}),
-                                gate_lower_bound_,
-                                initial_state,
-                                final_state,
-                                cu_seqlens);
-  ssm_cache.index_copy_(
-      0, batch->state_indices_long, final_state.to(ssm_cache.scalar_type()));
+  if (verify) {
+    namespace km = kernel::musa;
+    const auto slots =
+        state_indices.unsqueeze(1) * checkpoint_stride +
+        torch::arange(checkpoint_stride, state_indices.options());
+    const auto accepted = input_params.num_accepted_tokens.to(torch::kInt32);
+    const std::string module =
+        "glm5_kda_verify_bf16_h" + std::to_string(local_num_heads_);
+    km::get_function(module, "main")(km::to_ffi_tensor(q),
+                                     km::to_ffi_tensor(k),
+                                     km::to_ffi_tensor(v),
+                                     km::to_ffi_tensor(A_log_),
+                                     km::to_ffi_tensor(g),
+                                     km::to_ffi_tensor(bias),
+                                     km::to_ffi_tensor(beta),
+                                     km::to_ffi_tensor(cu_seqlens),
+                                     km::to_ffi_tensor(accepted),
+                                     /*fixed_seq_len=*/0,
+                                     scale,
+                                     static_cast<double>(gate_lower_bound_),
+                                     km::to_ffi_tensor(slots),
+                                     km::to_ffi_tensor(ssm_cache),
+                                     km::to_ffi_tensor(ssm_cache),
+                                     km::to_ffi_tensor(core_output));
+  } else {
+    auto initial_state = ssm_cache.index_select(0, state_indices_long);
+    if (is_prefill) {
+      initial_state.masked_fill_(
+          attn_metadata.has_initial_states.logical_not().view({-1, 1, 1, 1}),
+          0);
+    }
+    auto final_state = torch::empty_like(initial_state);
+    kernel::musa::flash_kda(q,
+                            k,
+                            v,
+                            g,
+                            beta,
+                            scale,
+                            core_output,
+                            A_log_,
+                            bias,
+                            gate_lower_bound_,
+                            initial_state,
+                            final_state,
+                            cu_seqlens);
+    ssm_cache.index_copy_(0, state_indices_long, final_state);
+  }
 
   core_output = core_output.squeeze(/*dim=*/0).reshape({-1, head_dim_});
   output_gate = output_gate.reshape({-1, head_dim_});

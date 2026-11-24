@@ -624,6 +624,41 @@ class Glm5NextCpLayout final {
                                                       const torch::Tensor&);
 };
 
+void prepare_glm5_next_cp_metadata(AttentionMetadata& metadata,
+                                   ProcessGroup& group,
+                                   int64_t global_rows,
+                                   const torch::Device& device) {
+  const int32_t cp_rank = group.rank();
+  const int32_t cp_size = group.world_size();
+  CHECK_GT(cp_size, 1);
+  CHECK_GT(global_rows, 0);
+  CHECK_LE(global_rows, std::numeric_limits<int32_t>::max());
+
+  const int64_t rows_per_rank = global_rows / cp_size;
+  const int64_t remainder = global_rows % cp_size;
+  const int64_t local_row_begin =
+      cp_rank * rows_per_rank + std::min<int64_t>(cp_rank, remainder);
+  const int64_t local_row_count =
+      rows_per_rank + (cp_rank < remainder ? static_cast<int64_t>(1) : 0);
+  metadata.glm5_prefill_cp_enabled = true;
+  metadata.glm5_prefill_cp_rank = cp_rank;
+  metadata.glm5_prefill_cp_size = cp_size;
+  metadata.glm5_prefill_global_rows = global_rows;
+  metadata.glm5_prefill_local_row_begin = local_row_begin;
+  metadata.glm5_prefill_local_row_end = local_row_begin + local_row_count;
+  metadata.glm5_prefill_local_row_indices =
+      torch::arange(local_row_begin,
+                    local_row_begin + local_row_count,
+                    torch::TensorOptions().dtype(torch::kInt32).device(device));
+  metadata.glm5_prefill_row_offsets.resize(static_cast<size_t>(cp_size) + 1);
+  for (int32_t rank = 0; rank <= cp_size; ++rank) {
+    const int64_t offset =
+        rank * rows_per_rank + std::min<int64_t>(rank, remainder);
+    metadata.glm5_prefill_row_offsets[static_cast<size_t>(rank)] =
+        static_cast<int32_t>(offset);
+  }
+}
+
 std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
     const torch::Tensor& global_positions,
     const AttentionMetadata& metadata,
@@ -949,8 +984,7 @@ Glm5NextMLAAttentionImpl::forward(
   CHECK_EQ(positions.sizes(), torch::IntArrayRef({hidden_states.size(0)}));
   CHECK_EQ(positions.device(), hidden_states.device());
   c10::DeviceGuard device_guard(hidden_states.device());
-  CHECK(!kernel::musa::is_stream_capturing() ||
-        (metadata.enable_cuda_graph && !metadata.is_spec_verify));
+  CHECK(!kernel::musa::is_stream_capturing() || metadata.enable_cuda_graph);
   CHECK(enable_indexer_ ? shared_selection == nullptr
                         : shared_selection != nullptr);
   const bool use_prefill_cp =
@@ -1060,8 +1094,7 @@ Glm5NextMLAAttentionImpl::forward_cp(
   CHECK_EQ(cache.get_k_cache().dim(), 4);
   if (enable_indexer_) {
     CHECK_EQ(cache.get_kpool_tail().dim(), 4);
-    CHECK_EQ(cache.get_kpool_tail().sizes().slice(1),
-             torch::IntArrayRef({2, 4, 128}));
+    CHECK_GE(cache.get_kpool_tail().size(2), 4);
     CHECK_EQ(cache.get_index_cache().dim(), 4);
     CHECK_EQ(cache.get_index_cache().size(0), cache.get_k_cache().size(0));
   }

@@ -22,7 +22,7 @@ MAX_SEQS_PER_BATCH="${GLM5_MAX_SEQS_PER_BATCH:-16}"
 ENABLE_GRAPH="${GLM5_ENABLE_GRAPH:-true}"
 KV_CACHE_DTYPE="${GLM5_KV_CACHE_DTYPE:-fp8_e4m3}"
 DRAFT_MODEL_PATH="${GLM5_DRAFT_MODEL_PATH:-}"
-NUM_SPECULATIVE_TOKENS="${GLM5_NUM_SPECULATIVE_TOKENS:-0}"
+NUM_SPECULATIVE_TOKENS="${GLM5_NUM_SPECULATIVE_TOKENS:-6}"
 SPECULATIVE_ALGORITHM="${GLM5_SPECULATIVE_ALGORITHM:-MTP}"
 export XLLM_GLM5_PREFILL_EP="${XLLM_GLM5_PREFILL_EP:-1}"
 export XLLM_GLM5_PREFILL_CP="${XLLM_GLM5_PREFILL_CP:-1}"
@@ -94,6 +94,14 @@ ensure_sparse_ops_cache() {
 
 ensure_ops_cache() {
   ensure_sparse_ops_cache
+  if (( NUM_SPECULATIVE_TOKENS > 0 )); then
+    local heads=$((64 / NNODES))
+    local verify_module="glm5_kda_verify_bf16_h${heads}"
+    if [[ ! -f "${FLASHINFER_OPS_PATH}/${verify_module}/${verify_module}.so" ]]; then
+      MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
+        python3 "${SCRIPT_DIR}/compile_musa_kda.py" --verify-heads "${heads}" --ops-path "${FLASHINFER_OPS_PATH}"
+    fi
+  fi
   if [[ ! -f "${FLASHINFER_OPS_PATH}/glm_kpool_nonpaged_v1/glm_kpool_nonpaged_v1.so" ]]; then
     MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 \
       python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --indexer-only --ops-path "${FLASHINFER_OPS_PATH}"
@@ -290,6 +298,9 @@ fi
 echo "Binary: ${XLLM_BIN}"
 echo "MUSA_LAUNCH_BLOCKING=${MUSA_LAUNCH_BLOCKING:-unset} graph=${ENABLE_GRAPH} prefill_piecewise_graph=${ENABLE_PREFILL_PIECEWISE_GRAPH} schedule_overlap=${ENABLE_SCHEDULE_OVERLAP}"
 echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
+if (( NUM_SPECULATIVE_TOKENS > 0 )); then
+  echo "Speculative decoding: algorithm=${SPECULATIVE_ALGORITHM} draft_tokens=${NUM_SPECULATIVE_TOKENS} draft_model=${DRAFT_MODEL_PATH}"
+fi
 echo "Parallel contract: ep_size=${EP_SIZE} cp_size=${CP_SIZE} kv_split_size=1 prefill_ep=${XLLM_GLM5_PREFILL_EP} prefill_cp=${XLLM_GLM5_PREFILL_CP} disagg_pd=${ENABLE_DISAGG_PD} instance_role=${INSTANCE_ROLE}"
 echo "Logs: ${LOG_DIR}/rank_*.log"
 if [[ "${TORCH_PROFILE}" == "1" ]]; then

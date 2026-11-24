@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/common/metrics.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/rec_config.h"
+#include "core/framework/config/speculative_config.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/global_capture_instance.h"
@@ -652,6 +653,7 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
   const bool mrope_prefill_graphs =
       execution_config.enable_prefill_piecewise_graph() &&
+      args_.model_type() != "glm5_next_mtp" &&
       (options_.mrope_positions() ||
        (options_.backend() == "vlm" &&
         !args_.rope_scaling_mrope_section().empty()));
@@ -917,6 +919,12 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
 
   ModelInputParams params_for_capture = params;
   params_for_capture.attn_metadata = attn_metadata;
+  if (params.is_spec_verify && args_.model_type() == "glm5_next") {
+    auto accepted = persistent_num_accepted_tokens(
+        static_cast<uint32_t>(actual_batch_size));
+    accepted.copy_(params.num_accepted_tokens, /*non_blocking=*/true);
+    params_for_capture.num_accepted_tokens = accepted;
+  }
   if (padded_num_tokens > actual_num_tokens) {
     // Captured launches size rows and host scalars from the padded count,
     // while the persistent cumulative lengths keep the live rows.
@@ -1761,7 +1769,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
     kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences + 1)
         .zero_();
-    if (args_.model_type() == "glm5_next") {
+    if (layer::uses_glm5_next_graph(args_.model_type())) {
       CHECK_EQ(graph_slot_tokens, actual_num_tokens);
       persistent_new_cache_slots_.narrow(0, 0, actual_num_tokens)
           .copy_(params.attention.device.new_cache_slots,
@@ -1794,7 +1802,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                /*non_blocking=*/true);
   }
 
-  if (update_attention_plan || args_.model_type() == "glm5_next") {
+  if (update_attention_plan ||
+      layer::uses_glm5_next_graph(args_.model_type())) {
     // Copy block table data. In rec multi-round, block_tables may already be
     // expanded to batch_size * beam_width rows while num_sequences still tracks
     // the logical request count. Use the tensor's real row count here.
@@ -1924,9 +1933,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         .copy_(embedding, /*non_blocking=*/true);
   }
 
-  // Qwen3.5 MTP draft token embedding. The draft forward consumes it instead
-  // of running embed_tokens_ (IndexSelect) inside the captured graph, which
-  // is not capture-safe on MUSA and yields NaN/garbage draft hidden states.
+  // MTP draft token embedding. The draft forward consumes it instead of
+  // running embed_tokens_ (IndexSelect) inside the captured graph, which is
+  // not capture-safe on MUSA and yields NaN/garbage draft hidden states.
   const torch::Tensor& mtp_token_embedding =
       params.embedding.mtp_token_embedding;
   if (mtp_token_embedding.defined()) {
@@ -2382,8 +2391,9 @@ void MusaGraph::prepare_model_graph_metadata(CausalLM* model,
 
 void MusaGraph::update_result_token_count(const ModelInputParams& params) {
   result_tokens_ = 0;
-  if (is_glm_prefill_ && params.attn_metadata &&
-      params.attn_metadata->glm5_prefill_cp_enabled) {
+  if (is_glm_prefill_ &&
+      SpeculativeConfig::get_instance().num_speculative_tokens() == 0 &&
+      params.attn_metadata && params.attn_metadata->glm5_prefill_cp_enabled) {
     result_tokens_ = static_cast<uint32_t>(
         params.attn_metadata->glm5_prefill_local_row_end -
         params.attn_metadata->glm5_prefill_local_row_begin);
@@ -2401,7 +2411,7 @@ bool MusaGraph::capture(CausalLM* model,
                         const c10::musa::MempoolId_t& pool,
                         std::unique_ptr<MusaMemPool> pool_owner) {
   model_ = model;
-  is_glm_graph_ = args.model_type() == "glm5_next";
+  is_glm_graph_ = layer::uses_glm5_next_graph(args.model_type());
   is_glm_prefill_ =
       is_glm_graph_ && (params.meta.batch_forward_type.is_prefill() ||
                         params.meta.batch_forward_type.is_chunked_prefill());
@@ -2497,7 +2507,8 @@ bool MusaGraph::capture(CausalLM* model,
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
 
-  if (is_glm_graph_ && params.meta.batch_forward_type.is_decode()) {
+  if (args.model_type() == "glm5_next" &&
+      params.meta.batch_forward_type.is_decode()) {
     // A dedicated Decode instance can capture its first forward immediately.
     // Derive the recurrent slot bound from this graph's allocated caches.
     int64_t slots = std::numeric_limits<int64_t>::max();
@@ -3170,7 +3181,7 @@ std::unique_ptr<MusaMemPool> MusaGraphExecutorImpl::create_vmm_mempool(
   // legacy MUSA IPC. musaIpcGetMemHandle rejects their VMM-backed allocation
   // base on MP31. Use native graph pools, which provide exportable
   // allocations and keeps direct-buffer custom all-reduce inside the graph.
-  if (args_.model_type() == "glm5_next" &&
+  if (layer::uses_glm5_next_graph(args_.model_type()) &&
       physical_pool_id == kPhysicalPoolIdPrefill) {
     return nullptr;
   }
@@ -3356,12 +3367,14 @@ ModelInputParams MusaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
     return params;
   }
 
-  // Qwen3.5 MTP draft: input_embedding carries the target hidden state, so
-  // the token embedding must also be precomputed outside the captured region
-  // and fed through the persistent MTP token-embedding buffer.
+  // MTP drafts receive the target hidden state through input_embedding, so
+  // their token embedding must also be precomputed outside the captured
+  // region and fed through the persistent MTP token-embedding buffer.
   const bool is_qwen35_mtp = args_.model_type() == "qwen3_5_mtp" ||
                              args_.model_type() == "qwen3_5_moe_mtp";
-  if (is_qwen35_mtp && params.embedding.input_embedding.defined() &&
+  const bool is_glm5_next_mtp = args_.model_type() == "glm5_next_mtp";
+  if ((is_qwen35_mtp || is_glm5_next_mtp) &&
+      params.embedding.input_embedding.defined() &&
       !params.embedding.mtp_token_embedding.defined()) {
     const int64_t vocab = embed_layer->weight().size(0);
     // Placeholder (-1) rows are padding/rejected slots; clamp without a host
@@ -3429,11 +3442,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   torch::NoGradGuard no_grad;
   const bool is_prefill = params.meta.batch_forward_type.is_prefill();
   const bool is_decode = params.meta.batch_forward_type.is_decode();
-  if (args_.model_type() == "glm5_next") {
+  if (layer::uses_glm5_next_graph(args_.model_type())) {
     bool supported_forward =
         (is_decode || is_prefill ||
-         params.meta.batch_forward_type.is_chunked_prefill()) &&
-        !params.is_spec_verify;
+         params.meta.batch_forward_type.is_chunked_prefill());
     if (supported_forward) {
       for (const auto& cache : kv_caches) {
         const torch::Tensor key = cache.get_k_cache();
@@ -3493,9 +3505,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         *persistent_param_,
         device_.index(),
         get_capture_stream(device_.index()),
-        /*is_piecewise=*/args_.model_type() != "glm5_next");
+        /*is_piecewise=*/!layer::uses_glm5_next_graph(args_.model_type()));
     auto pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
-    const bool glm_full_prefill = args_.model_type() == "glm5_next";
+    const bool glm_full_prefill =
+        layer::uses_glm5_next_graph(args_.model_type());
     // A larger capture may repurpose free segments in a shared native pool.
     // GLM keeps independently replayable exact-shape graphs, so each native
     // pool must retain the addresses of that graph's intermediate buffers.
@@ -3517,7 +3530,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         << "Failed to capture MUSA prefill graph, num_tokens="
         << graph_num_tokens << " (actual num_tokens: " << n_tokens << ")";
     LOG(INFO) << "Lazy capturing MUSA "
-              << (args_.model_type() == "glm5_next" ? "full" : "piecewise")
+              << (layer::uses_glm5_next_graph(args_.model_type()) ? "full"
+                                                                  : "piecewise")
               << " prefill graph num_tokens=" << graph_num_tokens
               << " (actual num_tokens: " << n_tokens
               << ") num_sequences=" << effective_num_sequences << " chunked="
@@ -3647,7 +3661,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // KDA and KPool update live state rows: ordinary GLM decode has no dummy
   // rows, so use an exact batch shape instead of padding state slot IDs.
-  uint32_t bucket_num_tokens = args_.model_type() == "glm5_next"
+  uint32_t bucket_num_tokens = layer::uses_glm5_next_graph(args_.model_type())
                                    ? n_tokens
                                    : get_bucket_num_tokens(n_tokens);
   const char* stable_multi_graph_env =
@@ -3789,7 +3803,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       bucket_num_tokens = sequences * width;
     }
     const uint32_t graph_shape_key =
-        args_.model_type() == "glm5_next"
+        layer::uses_glm5_next_graph(args_.model_type())
             ? layer::glm5_next_graph_key(bucket_num_tokens,
                                          params.meta.kv_max_seq_len)
             : dsv4_graph_shape_key(
@@ -3890,7 +3904,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
     return false;
   }
   // Spec verify has its own graph.
-  if (params.is_spec_verify || params.has_llmrec_params()) {
+  if ((params.is_spec_verify && args_.model_type() != "glm5_next") ||
+      params.has_llmrec_params()) {
     return false;
   }
   // Multi-sequence GDN chunked prefill runs its recurrence inside the forward
@@ -3898,8 +3913,9 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
                                     ? params.meta.actual_num_sequences
                                     : params.meta.num_sequences;
-  if (args_.model_type() != "glm5_next" && forward_type.is_chunked_prefill() &&
-      num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
+  if (!layer::uses_glm5_next_graph(args_.model_type()) &&
+      forward_type.is_chunked_prefill() && num_sequences > 1 &&
+      !params.embedding.linear_state_ids.empty()) {
     return false;
   }
   const int64_t bucket_num_tokens =
@@ -3933,7 +3949,7 @@ uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
   // captured graph would therefore advance the row with synthetic tokens and
   // corrupt the next decode step.  Use exact token shapes until a device-side
   // padded-row mask is implemented for causal_conv1d_prefill.
-  if (args_.model_type() == "glm5_next") {
+  if (layer::uses_glm5_next_graph(args_.model_type())) {
     return num_tokens;
   }
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
@@ -3960,6 +3976,14 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
   key.emplace_back(
       static_cast<int32_t>(get_prefill_graph_num_tokens(num_tokens, params)));
   key.emplace_back(params.meta.batch_forward_type.is_chunked_prefill() ? 1 : 0);
+  if (args_.model_type() == "glm5_next" && params.is_spec_verify) {
+    // Verify uses the request's live positions and state slots. DSA sizes its
+    // workspace from the page-table width, independent of the exact KV ends.
+    key.emplace_back(-1);
+    key.emplace_back(params.attention.device.block_tables.size(1));
+    key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
+    return key;
+  }
   // A single sequence captures attention and GDN inside the graph, while a
   // multi-sequence batch runs them between the captured segments.
   const int64_t num_sequences = params.meta.actual_num_sequences > 0
@@ -3969,13 +3993,13 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
   // Per-sequence query lengths are part of the captured layout.  This is
   // required by both GLM5 CP metadata and multi-sequence linear-attention
   // runners.
-  if (num_sequences > 1 || args_.model_type() == "glm5_next") {
+  if (num_sequences > 1 || layer::uses_glm5_next_graph(args_.model_type())) {
     key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
   }
   key.insert(key.end(),
              params.attention.host.kv_seq_lens.begin(),
              params.attention.host.kv_seq_lens.end());
-  if (args_.model_type() == "glm5_next") {
+  if (layer::uses_glm5_next_graph(args_.model_type())) {
     key.emplace_back(params.meta.kv_max_seq_len);
   }
   return key;

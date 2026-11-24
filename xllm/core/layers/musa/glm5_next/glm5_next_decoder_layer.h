@@ -80,6 +80,7 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
  private:
   int32_t layer_id_ = 0;
   Glm5NextLayerRole role_;
+  bool uses_mhc_ = true;
   bool enable_indexer_ = true;
   bool prefill_cp_enabled_ = false;
   std::unique_ptr<ProcessGroup> single_rank_group_;

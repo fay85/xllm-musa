@@ -527,7 +527,7 @@ bool WorkerImpl::allocate_kv_cache_storage(
   if (enable_mla_kv_cache_fp8) {
     CHECK(Platform::is_musa())
         << "fp8_e4m3 KV cache is only supported on MUSA.";
-    CHECK_EQ(args.model_type(), "glm5_next")
+    CHECK(is_glm5_next_model_type(args.model_type()))
         << "fp8_e4m3 KV cache is only supported for glm5_next.";
     CHECK(!options_.enable_disagg_pd() ||
           options_.kv_cache_transfer_mode() == "PULL")
@@ -2191,6 +2191,7 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
               {"deepseek_v32", "deepseek_v32_mtp"},
               {"deepseek_v4", "deepseek_v4_mtp"},
               {"glm_moe_dsa", "glm_moe_dsa_mtp"},
+              {"glm5_next", "glm5_next_mtp"},
               {"joyai_llm_flash", "joyai_llm_flash_mtp"},
               {"mimo", "mimo_mtp"},
               {"qwen3_5", "qwen3_5_mtp"},

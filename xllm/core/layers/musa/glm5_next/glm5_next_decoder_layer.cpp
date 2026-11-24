@@ -67,7 +67,8 @@ Glm5NextLayerRole resolve_glm5_next_layer_role(const ModelArgs& args,
 Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
                                                    int32_t layer_id)
     : layer_id_(layer_id),
-      role_(resolve_glm5_next_layer_role(context.get_model_args(), layer_id)) {
+      role_(resolve_glm5_next_layer_role(context.get_model_args(), layer_id)),
+      uses_mhc_(context.get_model_args().model_type() != "glm5_next_mtp") {
   const ModelArgs& args = context.get_model_args();
   const QuantArgs& quant_args = context.get_quant_args();
   const ParallelArgs& parallel_args = context.get_parallel_args();
@@ -81,21 +82,23 @@ Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
   }
   const int64_t hidden_size = args.hidden_size();
   const double norm_eps = static_cast<double>(args.rms_norm_eps());
-  attn_hc_pre_ = register_module("attn_hc_pre",
-                                 MHCPre(args.hc_mult(),
-                                        hidden_size,
-                                        args.hc_sinkhorn_iters(),
-                                        static_cast<double>(args.hc_eps()),
-                                        norm_eps,
-                                        options));
-  ffn_hc_pre_ = register_module("ffn_hc_pre",
-                                MHCPre(args.hc_mult(),
-                                       hidden_size,
-                                       args.hc_sinkhorn_iters(),
-                                       static_cast<double>(args.hc_eps()),
-                                       norm_eps,
-                                       options));
-  hc_post_ = register_module("hc_post", MHCPost(norm_eps));
+  if (uses_mhc_) {
+    attn_hc_pre_ = register_module("attn_hc_pre",
+                                   MHCPre(args.hc_mult(),
+                                          hidden_size,
+                                          args.hc_sinkhorn_iters(),
+                                          static_cast<double>(args.hc_eps()),
+                                          norm_eps,
+                                          options));
+    ffn_hc_pre_ = register_module("ffn_hc_pre",
+                                  MHCPre(args.hc_mult(),
+                                         hidden_size,
+                                         args.hc_sinkhorn_iters(),
+                                         static_cast<double>(args.hc_eps()),
+                                         norm_eps,
+                                         options));
+    hc_post_ = register_module("hc_post", MHCPost(norm_eps));
+  }
   input_norm_ = register_module(
       "input_layernorm", RMSNorm(hidden_size, args.rms_norm_eps(), options));
   post_norm_ =
@@ -105,7 +108,9 @@ Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
     linear_attention_ =
         register_module("self_attn", Glm5NextLinearAttention(context));
   } else {
-    enable_indexer_ = DsaTopkSharePlan(args).layer_uses_indexer(layer_id);
+    const int32_t plan_layer_id =
+        args.model_type() == "glm5_next_mtp" ? 0 : layer_id;
+    enable_indexer_ = DsaTopkSharePlan(args).layer_uses_indexer(plan_layer_id);
     mla_attention_ = register_module(
         "self_attn",
         Glm5NextMLAAttention(args, parallel_args, options, enable_indexer_));
@@ -159,15 +164,19 @@ void Glm5NextDecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
     }
     sparse_moe_->load_state_dict(mlp_state);
   }
-  attn_hc_pre_->load_state_dict(
-      get_mhc_state(state_dict, "attn_hc_pre.", "hc_attn_"));
-  ffn_hc_pre_->load_state_dict(
-      get_mhc_state(state_dict, "ffn_hc_pre.", "hc_ffn_"));
+  if (uses_mhc_) {
+    attn_hc_pre_->load_state_dict(
+        get_mhc_state(state_dict, "attn_hc_pre.", "hc_attn_"));
+    ffn_hc_pre_->load_state_dict(
+        get_mhc_state(state_dict, "ffn_hc_pre.", "hc_ffn_"));
+  }
 }
 
 void Glm5NextDecoderLayerImpl::verify_loaded_weights() const {
-  attn_hc_pre_->verify_loaded_weights("attn_hc_pre.");
-  ffn_hc_pre_->verify_loaded_weights("ffn_hc_pre.");
+  if (uses_mhc_) {
+    attn_hc_pre_->verify_loaded_weights("attn_hc_pre.");
+    ffn_hc_pre_->verify_loaded_weights("ffn_hc_pre.");
+  }
   if (linear_attention_) {
     linear_attention_->verify_loaded_weights("self_attn.");
   } else {
@@ -196,10 +205,8 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
   // ProcessGroup wait joins those collectives back to this current stream.
   kernel::musa::TvmffiComputeStreamGuard compute_stream_guard(
       hidden_states.device());
-  const bool use_prefill_cp =
-      prefill_cp_enabled_ &&
-      (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
-  CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, use_prefill_cp);
+  const bool use_prefill_cp = attn_metadata.glm5_prefill_cp_enabled;
+  CHECK(!use_prefill_cp || prefill_cp_enabled_);
   if (use_prefill_cp) {
     CHECK(attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
     CHECK(!attn_metadata.is_dummy && !attn_metadata.is_mixed &&
@@ -215,10 +222,18 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
   }
   residual = std::nullopt;
   const bool has_pending = pending_mhc != nullptr && pending_mhc->has_value();
+  if (!uses_mhc_) {
+    CHECK(!has_pending)
+        << "GLM5 MTP decoder does not support a pending mHC state";
+  }
   torch::Tensor residual_attention;
   MHCPreOutput attention_hc;
   torch::Tensor attention_input;
-  if (has_pending) {
+  if (!uses_mhc_) {
+    residual_attention = hidden_states;
+    RECORD_USER_SCOPE("nn.Module: RMSNorm_input");
+    attention_input = std::get<0>(input_norm_->forward(hidden_states));
+  } else if (has_pending) {
     PendingMHC& pending = pending_mhc->value();
     RECORD_USER_SCOPE("nn.Module: MHCPre_post_pre_norm");
     std::tie(attention_input,
@@ -266,6 +281,54 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     attention_output = std::move(output);
   }
 
+  auto run_ffn = [&](torch::Tensor ffn_input) {
+    torch::Tensor ffn_output;
+    if (dense_mlp_) {
+      if (use_prefill_cp && ffn_input.size(0) == 0) {
+        ffn_output = torch::empty_like(ffn_input);
+      } else {
+        RECORD_USER_SCOPE("nn.Module: DeepseekV2MLP");
+        ffn_output = dense_mlp_->forward(ffn_input);
+      }
+    } else {
+      torch::Tensor ffn_input_2d = ffn_input.reshape({-1, ffn_input.size(-1)});
+      const bool is_prefill =
+          attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
+      RECORD_USER_SCOPE("nn.Module: MoEGate");
+      auto [topk_weights, topk_ids] =
+          sparse_gate_->forward(ffn_input_2d, is_prefill);
+      ModelInputParams moe_input_params;
+      moe_input_params.attn_metadata = input_params.attn_metadata;
+      moe_input_params.meta.batch_forward_type =
+          input_params.meta.batch_forward_type;
+      if (moe_input_params.meta.batch_forward_type.is_empty()) {
+        if (attn_metadata.is_chunked_prefill) {
+          moe_input_params.meta.batch_forward_type =
+              BatchForwardType::CHUNKED_PREFILL;
+        } else if (attn_metadata.is_prefill) {
+          moe_input_params.meta.batch_forward_type = BatchForwardType::PREFILL;
+        } else {
+          moe_input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+        }
+      }
+      {
+        RECORD_USER_SCOPE("nn.Module: DeepEPMoE");
+        ffn_output = sparse_moe_->forward_with_selected_experts(
+            ffn_input_2d, topk_weights, topk_ids, moe_input_params);
+      }
+      ffn_output = ffn_output.reshape(ffn_input.sizes());
+    }
+    return ffn_output;
+  };
+
+  if (!uses_mhc_) {
+    torch::Tensor residual_ffn = residual_attention + attention_output;
+    RECORD_USER_SCOPE("nn.Module: RMSNorm_post_attention");
+    torch::Tensor ffn_input = std::get<0>(post_norm_->forward(residual_ffn));
+    hidden_states = residual_ffn + run_ffn(std::move(ffn_input));
+    return hidden_states;
+  }
+
   torch::Tensor ffn_input;
   torch::Tensor residual_ffn;
   MHCPreOutput ffn_hc;
@@ -278,42 +341,7 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
                                    attention_hc.comb,
                                    post_norm_->weight());
   }
-  torch::Tensor ffn_output;
-  if (dense_mlp_) {
-    if (use_prefill_cp && ffn_input.size(0) == 0) {
-      ffn_output = torch::empty_like(ffn_input);
-    } else {
-      RECORD_USER_SCOPE("nn.Module: DeepseekV2MLP");
-      ffn_output = dense_mlp_->forward(ffn_input);
-    }
-  } else {
-    torch::Tensor ffn_input_2d = ffn_input.reshape({-1, ffn_input.size(-1)});
-    const bool is_prefill =
-        attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
-    RECORD_USER_SCOPE("nn.Module: MoEGate");
-    auto [topk_weights, topk_ids] =
-        sparse_gate_->forward(ffn_input_2d, is_prefill);
-    ModelInputParams moe_input_params;
-    moe_input_params.attn_metadata = input_params.attn_metadata;
-    moe_input_params.meta.batch_forward_type =
-        input_params.meta.batch_forward_type;
-    if (moe_input_params.meta.batch_forward_type.is_empty()) {
-      if (attn_metadata.is_chunked_prefill) {
-        moe_input_params.meta.batch_forward_type =
-            BatchForwardType::CHUNKED_PREFILL;
-      } else if (attn_metadata.is_prefill) {
-        moe_input_params.meta.batch_forward_type = BatchForwardType::PREFILL;
-      } else {
-        moe_input_params.meta.batch_forward_type = BatchForwardType::DECODE;
-      }
-    }
-    {
-      RECORD_USER_SCOPE("nn.Module: DeepEPMoE");
-      ffn_output = sparse_moe_->forward_with_selected_experts(
-          ffn_input_2d, topk_weights, topk_ids, moe_input_params);
-    }
-    ffn_output = ffn_output.reshape(ffn_input.sizes());
-  }
+  torch::Tensor ffn_output = run_ffn(std::move(ffn_input));
   if (!is_last_layer && pending_mhc != nullptr) {
     pending_mhc->emplace(
         PendingMHC{ffn_output, residual_ffn, ffn_hc.post, ffn_hc.comb});

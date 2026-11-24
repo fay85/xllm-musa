@@ -84,6 +84,7 @@ __global__ void update_pools(const c10::BFloat16* keys,
                              int32_t* rows,
                              int32_t* pool_lengths,
                              int64_t states,
+                             int64_t tail_len,
                              int64_t pages,
                              int64_t table_width) {
   const int32_t request = blockIdx.x;
@@ -93,9 +94,9 @@ __global__ void update_pools(const c10::BFloat16* keys,
   const bool valid = state > 0 && state < states;
   __shared__ float shared[128];
   if (valid && source > 0 && source < states && source != state) {
-    for (int32_t field = 0; field < 8; ++field) {
-      tail[state * 1024 + field * 128 + lane] =
-          read_tail[source * 1024 + field * 128 + lane];
+    for (int32_t field = 0; field < 2 * tail_len; ++field) {
+      tail[state * (2 * tail_len * 128) + field * 128 + lane] =
+          read_tail[source * (2 * tail_len * 128) + field * 128 + lane];
     }
   }
   __syncthreads();
@@ -109,15 +110,18 @@ __global__ void update_pools(const c10::BFloat16* keys,
       continue;
     }
     if (position == 0) {
-      for (int32_t field = 0; field < 8; ++field) {
-        tail[state * 1024 + field * 128 + lane] = c10::BFloat16(0.0f);
+      for (int32_t field = 0; field < 2 * tail_len; ++field) {
+        tail[state * (2 * tail_len * 128) + field * 128 + lane] =
+            c10::BFloat16(0.0f);
       }
     }
-    const int64_t ring = position % 4;
-    tail[state * 1024 + ring * 128 + lane] = keys[row * 128 + lane];
-    tail[state * 1024 + 512 + ring * 128 + lane] = gates[row * 128 + lane];
+    const int64_t ring = position % tail_len;
+    tail[state * (2 * tail_len * 128) + ring * 128 + lane] =
+        keys[row * 128 + lane];
+    tail[state * (2 * tail_len * 128) + tail_len * 128 + ring * 128 + lane] =
+        gates[row * 128 + lane];
     __syncthreads();
-    if (ring != 3) {
+    if (position % 4 != 3) {
       continue;
     }
     const int64_t pool = position / 4;
@@ -130,9 +134,10 @@ __global__ void update_pools(const c10::BFloat16* keys,
     float logits[4];
     float maximum = -INFINITY;
     for (int32_t j = 0; j < 4; ++j) {
-      logits[j] =
-          static_cast<float>(tail[state * 1024 + 512 + j * 128 + lane]) +
-          ape[j * 128 + lane];
+      logits[j] = static_cast<float>(
+                      tail[state * (2 * tail_len * 128) + tail_len * 128 +
+                           ((position - 3 + j) % tail_len) * 128 + lane]) +
+                  ape[j * 128 + lane];
       maximum = fmaxf(maximum, logits[j]);
     }
     float numerator = 0;
@@ -140,7 +145,9 @@ __global__ void update_pools(const c10::BFloat16* keys,
     for (int32_t j = 0; j < 4; ++j) {
       const float probability = expf(logits[j] - maximum);
       numerator +=
-          probability * static_cast<float>(tail[state * 1024 + j * 128 + lane]);
+          probability * static_cast<float>(
+                            tail[state * (2 * tail_len * 128) +
+                                 ((position - 3 + j) % tail_len) * 128 + lane]);
       denominator += probability;
     }
     float value =
@@ -171,6 +178,7 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
                                       int32_t* rows,
                                       int32_t* pool_lengths,
                                       int64_t states,
+                                      int64_t tail_len,
                                       int64_t pages,
                                       int64_t table_width,
                                       int64_t first_row = 0,
@@ -197,10 +205,12 @@ __global__ void update_pools_parallel(const c10::BFloat16* keys,
   float pool_gates[4];
   for (int32_t j = 0; j < 4; ++j) {
     const int64_t read_state = source > 0 && source < states ? source : state;
-    pool_keys[j] =
-        static_cast<float>(read_tail[read_state * 1024 + j * 128 + lane]);
-    pool_gates[j] =
-        static_cast<float>(read_tail[read_state * 1024 + 512 + j * 128 + lane]);
+    pool_keys[j] = static_cast<float>(
+        read_tail[read_state * (2 * tail_len * 128) +
+                  ((position - 3 + j) % tail_len) * 128 + lane]);
+    pool_gates[j] = static_cast<float>(
+        read_tail[read_state * (2 * tail_len * 128) + tail_len * 128 +
+                  ((position - 3 + j) % tail_len) * 128 + lane]);
     // Find the most recent write to this ring entry. Normally this reads at
     // most four positions; padding is skipped just as in the decode kernel.
     for (int32_t input_row = row;
@@ -269,54 +279,45 @@ __device__ void update_pool_tails_impl(int32_t request,
                                        const int32_t* read_ids,
                                        const c10::BFloat16* snapshot,
                                        c10::BFloat16* tail,
-                                       int64_t states) {
+                                       int64_t states,
+                                       int64_t tail_len) {
   const int64_t state = state_ids[request];
   const int64_t source = read_ids[request];
   if (state <= 0 || state >= states) {
     return;
   }
-  for (int32_t field = 0; field < 8; ++field) {
+  for (int32_t field = 0; field < 2 * tail_len; ++field) {
     if (source > 0 && source < states && source != state) {
-      tail[state * 1024 + field * 128 + lane] =
-          snapshot[source * 1024 + field * 128 + lane];
+      tail[state * (2 * tail_len * 128) + field * 128 + lane] =
+          snapshot[source * (2 * tail_len * 128) + field * 128 + lane];
     }
   }
-  // Keep the last write to each ring entry, including across padded rows.
-  int32_t written = 0;
-  for (int32_t row = cu[request + 1] - 1; row >= cu[request]; --row) {
+  // Rows are consecutive within a request. Only the newest full ring
+  // survives this update. CP supplies the last pool of committed rows.
+  const int32_t begin = cu[request];
+  const int32_t end = cu[request + 1];
+  if (begin < end && positions[begin] == 0) {
+    for (int64_t field = 0; field < 2 * tail_len; ++field) {
+      tail[(state * 2 * tail_len + field) * 128 + lane] = c10::BFloat16(0.0f);
+    }
+  }
+  int32_t first = end;
+  for (int64_t live = 0; first > begin && live < tail_len;) {
+    if (positions[--first] >= 0) ++live;
+  }
+  for (int32_t row = first; row < end; ++row) {
     const int64_t position = positions[row];
-    if (position < 0) {
-      continue;
-    }
-    const c10::BFloat16* row_keys = nullptr;
-    const c10::BFloat16* row_gates = nullptr;
-    if (gathered != nullptr) {
-      const int64_t offset = tail_offsets[row];
-      row_keys = reinterpret_cast<const c10::BFloat16*>(gathered + offset);
-      row_gates =
-          reinterpret_cast<const c10::BFloat16*>(gathered + offset + 256);
-    } else {
-      row_keys = keys + row * 128;
-      row_gates = gates + row * 128;
-    }
-    const int64_t ring = position % 4;
-    if (!(written & (1 << ring))) {
-      tail[state * 1024 + ring * 128 + lane] = row_keys[lane];
-      tail[state * 1024 + 512 + ring * 128 + lane] = row_gates[lane];
-      written |= 1 << ring;
-    }
-    if (position == 0) {
-      for (int32_t j = 0; j < 4; ++j) {
-        if (!(written & (1 << j))) {
-          tail[state * 1024 + j * 128 + lane] = c10::BFloat16(0.0f);
-          tail[state * 1024 + 512 + j * 128 + lane] = c10::BFloat16(0.0f);
-        }
-      }
-      break;
-    }
-    if (written == 15) {
-      break;
-    }
+    if (position < 0) continue;
+    const auto* row_keys = gathered == nullptr
+                               ? keys + row * 128
+                               : reinterpret_cast<const c10::BFloat16*>(
+                                     gathered + tail_offsets[row]);
+    const auto* row_gates =
+        gathered == nullptr ? gates + row * 128 : row_keys + 128;
+    const int64_t offset =
+        (state * 2 * tail_len + position % tail_len) * 128 + lane;
+    tail[offset] = row_keys[lane];
+    tail[offset + tail_len * 128] = row_gates[lane];
   }
 }
 
@@ -328,7 +329,8 @@ __global__ void update_pool_tails(const c10::BFloat16* keys,
                                   const int32_t* read_ids,
                                   const c10::BFloat16* snapshot,
                                   c10::BFloat16* tail,
-                                  int64_t states) {
+                                  int64_t states,
+                                  int64_t tail_len) {
   update_pool_tails_impl(blockIdx.x,
                          threadIdx.x,
                          keys,
@@ -341,7 +343,8 @@ __global__ void update_pool_tails(const c10::BFloat16* keys,
                          read_ids,
                          snapshot,
                          tail,
-                         states);
+                         states,
+                         tail_len);
 }
 
 // Materialize all gathered compressed pools and the recurrent tail in one
@@ -360,6 +363,7 @@ __global__ void scatter_indexer_cp(const uint8_t* gathered,
                                    const c10::BFloat16* snapshot,
                                    c10::BFloat16* tail,
                                    int64_t states,
+                                   int64_t tail_len,
                                    int32_t request_count,
                                    int64_t tail_count) {
   const int64_t block = blockIdx.x;
@@ -383,7 +387,8 @@ __global__ void scatter_indexer_cp(const uint8_t* gathered,
                            read_ids,
                            snapshot,
                            tail,
-                           states);
+                           states,
+                           tail_len);
   }
 }
 
@@ -1060,7 +1065,9 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
   CHECK_EQ(cache.dim(), 4);
   CHECK_EQ(cache.sizes().slice(1), torch::IntArrayRef({64, 1, 132}));
   CHECK_EQ(tail.dim(), 4);
-  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  CHECK_EQ(tail.size(1), 2);
+  CHECK_GE(tail.size(2), 4);
+  CHECK_EQ(tail.size(3), 128);
   CHECK_GT(token_topk, 0);
   CHECK_EQ(token_topk % 4, 0);
   CHECK_LE(token_topk, 2048);
@@ -1105,6 +1112,7 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
         query_rows.data_ptr<int32_t>(),
         pool_lengths.data_ptr<int32_t>(),
         tail.size(0),
+        tail.size(2),
         cache.size(0),
         block_table.size(1));
     update_pool_tails<<<batch, 128, 0, stream>>>(
@@ -1116,7 +1124,8 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
         read_state_ids.data_ptr<int32_t>(),
         snapshot.data_ptr<c10::BFloat16>(),
         tail.data_ptr<c10::BFloat16>(),
-        tail.size(0));
+        tail.size(0),
+        tail.size(2));
   } else {
     update_pools<<<batch, 128, 0, stream>>>(raw_key.data_ptr<c10::BFloat16>(),
                                             gate.data_ptr<c10::BFloat16>(),
@@ -1132,6 +1141,7 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                             query_rows.data_ptr<int32_t>(),
                                             pool_lengths.data_ptr<int32_t>(),
                                             tail.size(0),
+                                            tail.size(2),
                                             cache.size(0),
                                             block_table.size(1));
   }
@@ -1342,7 +1352,9 @@ void glm5_next_indexer_update_cp(const torch::Tensor& keys,
   CHECK_EQ(cache.dim(), 4);
   CHECK_EQ(cache.sizes().slice(1), torch::IntArrayRef({64, 1, 132}));
   CHECK_EQ(tail.dim(), 4);
-  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  CHECK_EQ(tail.size(1), 2);
+  CHECK_GE(tail.size(2), 4);
+  CHECK_EQ(tail.size(3), 128);
   for (const auto& value : {keys, gates, tail}) {
     check_tensor(value, keys, torch::kBFloat16);
   }
@@ -1371,6 +1383,7 @@ void glm5_next_indexer_update_cp(const torch::Tensor& keys,
       rows.data_ptr<int32_t>(),
       lengths.data_ptr<int32_t>(),
       tail.size(0),
+      tail.size(2),
       cache.size(0),
       table.size(1),
       first_row,
@@ -1400,7 +1413,9 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
   CHECK_EQ(cu.numel(), ids.numel() + 1);
   CHECK_EQ(read_ids.sizes(), ids.sizes());
   CHECK_EQ(tail.dim(), 4);
-  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  CHECK_EQ(tail.size(1), 2);
+  CHECK_GE(tail.size(2), 4);
+  CHECK_EQ(tail.size(3), 128);
   auto snapshot = tail.clone();
   update_pool_tails<<<ids.numel(),
                       128,
@@ -1414,7 +1429,8 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
       read_ids.data_ptr<int32_t>(),
       snapshot.data_ptr<c10::BFloat16>(),
       tail.data_ptr<c10::BFloat16>(),
-      tail.size(0));
+      tail.size(0),
+      tail.size(2));
   check_musa_kernel_launch("GLM CP IndexPool tail update");
 }
 
@@ -1452,7 +1468,9 @@ void glm5_next_indexer_scatter_cp(const torch::Tensor& gathered,
   CHECK_EQ(cache.dim(), 4);
   CHECK_EQ(cache.sizes().slice(1), torch::IntArrayRef({64, 1, 132}));
   CHECK_EQ(tail.dim(), 4);
-  CHECK_EQ(tail.sizes().slice(1), torch::IntArrayRef({2, 4, 128}));
+  CHECK_EQ(tail.size(1), 2);
+  CHECK_GE(tail.size(2), 4);
+  CHECK_EQ(tail.size(3), 128);
   const int64_t pool_count = pool_source_offsets.numel();
   const int64_t blocks = std::max(pool_count, ids.numel());
   CHECK_LE(blocks, std::numeric_limits<int32_t>::max());
@@ -1474,6 +1492,7 @@ void glm5_next_indexer_scatter_cp(const torch::Tensor& gathered,
       snapshot.data_ptr<c10::BFloat16>(),
       tail.data_ptr<c10::BFloat16>(),
       tail.size(0),
+      tail.size(2),
       static_cast<int32_t>(ids.numel()),
       tail_source_offsets.numel());
   check_musa_kernel_launch("GLM CP Indexed cache and tail scatter");

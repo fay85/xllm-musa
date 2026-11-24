@@ -411,7 +411,8 @@ void KVCacheShape::init_key_cache_shape(const KVCacheCapacity& kv_cache_cap,
         kv_cache_cap.n_blocks(),
         kv_cache_cap.block_size(),
         1,
-        (Platform::is_musa() && model_args.model_type() == "glm5_next" &&
+        (Platform::is_musa() &&
+         is_glm5_next_model_type(model_args.model_type()) &&
          kv_cache_cap.slot_size() == 528)
             ? 528
             : model_args.kv_lora_rank()};
@@ -494,7 +495,7 @@ void KVCacheShape::init_mla_packed_c8_shape(const KVCacheCapacity& kv_cache_cap,
 
 void KVCacheShape::init_mla_fp8_cache_shape(const KVCacheCapacity& kv_cache_cap,
                                             const ModelArgs& model_args) {
-  CHECK_EQ(model_args.model_type(), "glm5_next")
+  CHECK(is_glm5_next_model_type(model_args.model_type()))
       << "The MUSA inline FP8 MLA cache is only supported by glm5_next.";
   CHECK_EQ(model_args.kv_lora_rank(), 512);
   CHECK_EQ(model_args.qk_rope_head_dim(), 0);

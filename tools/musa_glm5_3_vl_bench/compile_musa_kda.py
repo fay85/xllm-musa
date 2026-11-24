@@ -46,16 +46,45 @@ def _build_and_export(spec: "JitSpec", ops_path: Path) -> str:
     return str(target)
 
 
+def _export_verify(ops_path: Path, heads: int) -> None:
+    from mate.kda_kernels.tilelang.mp31.kda_decode import (
+        _get_kda_decode_kernel, _resolve_autotuned_kernel_config,
+    )
+    from compile_musa_sparse_mla import _export
+
+    name = f"glm5_kda_verify_bf16_h{heads}"
+    target = ops_path / name / f"{name}.so"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    config = _resolve_autotuned_kernel_config(1, "float32", True, 128, True)
+    kernel = _get_kda_decode_kernel(
+        qk_head=heads, head=heads, dim_k=128, dim_v=128,
+        input_dtype="bfloat16", gate_batch_dtype="bfloat16",
+        dt_bias_dtype="float32", output_dtype="bfloat16", b_dtype="bfloat16",
+        use_qk_l2norm=True, use_initial_state=True, is_varlen=True,
+        inplace_final_state=True, is_beta_headwise=False,
+        is_continuous_batching=True, is_spec_decoding=True,
+        store_final_state=True, has_dt_bias=True, use_gate_in_kernel=True,
+        use_lower_bound=True, apply_beta_sigmoid=True, allow_neg_eigval=False,
+        state_v_first=True, state_dtype="float32", **config,
+    )
+    _export(kernel, target)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ops-path", type=Path,
                         default=os.environ.get("FLASHINFER_OPS_PATH"))
     parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--verify-heads", type=int)
     args = parser.parse_args()
     if args.ops_path is None:
         parser.error("set FLASHINFER_OPS_PATH or pass --ops-path")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+
+    if args.verify_heads is not None:
+        _export_verify(args.ops_path, args.verify_heads)
+        return
 
     import torch
     import torch_musa  # noqa: F401 - register the MUSA device backend

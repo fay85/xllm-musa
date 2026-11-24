@@ -847,6 +847,11 @@ inline bool is_glm5_next_target_model(const ModelArgs& args) {
   return is_glm5_next_target_model_type(args.model_type());
 }
 
+inline bool is_glm5_next_model_type(std::string_view model_type) {
+  return is_glm5_next_target_model_type(model_type) ||
+         model_type == "glm5_next_mtp";
+}
+
 // Keep the NPU compressed KPool rollout on a closed model/configuration set.
 // Other indexer models and GLM5 configurations that do not compress multiple
 // rows while guaranteeing causal tail selection retain their packed layout.

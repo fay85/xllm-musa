@@ -409,22 +409,19 @@ def stream_chat(
                     first = now if first is None else first
                     last = now
                     pieces.append(piece)
-    if os.environ.get("GLM5_PD_BENCH") == "1":
-        if stream_error:
-            raise RuntimeError(f"{request_id}: {stream_error}")
-        if prompt_tokens is None or completion_tokens != osl:
-            raise RuntimeError(f"{request_id}: incomplete usage {prompt_tokens=}, {completion_tokens=}")
+    if stream_error:
+        raise RuntimeError(f"{request_id}: server stream error: {stream_error}")
     if first is None:
-        if stream_error:
-            raise RuntimeError(f"server stream error: {stream_error}")
         raise RuntimeError(f"no content streamed for {request_id}")
+    if prompt_tokens is None or completion_tokens != osl:
+        raise RuntimeError(f"{request_id}: incomplete usage {prompt_tokens=}, {completion_tokens=}, expected={osl}")
     return {
         "request_id": request_id,
         "ttft_ms": (first - start) * 1e3,
         "last_ms": (last - start) * 1e3,
         "prompt_tokens": prompt_tokens,
         "cached_tokens": cached_tokens,
-        "completion_tokens": completion_tokens or osl,
+        "completion_tokens": completion_tokens,
         "text": "".join(pieces),
     }
 

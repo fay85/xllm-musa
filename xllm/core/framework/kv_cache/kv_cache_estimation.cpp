@@ -61,7 +61,7 @@ int64_t kv_cache_dtype_size(const std::string& kv_cache_dtype,
 int64_t kv_slot_size(const ModelArgs& model_args,
                      const KVCacheEstimateOptions& options,
                      int64_t cache_dtype_size) {
-  if (Platform::is_musa() && model_args.model_type() == "glm5_next") {
+  if (Platform::is_musa() && is_glm5_next_model_type(model_args.model_type())) {
     CHECK(options.kv_cache_dtype == "auto" ||
           options.kv_cache_dtype == "fp8_e4m3")
         << "GLM MUSA supports BF16 or inline E4M3 KV cache";
@@ -163,7 +163,8 @@ IndexCacheFootprint estimate_index_cache_footprint(
 int64_t scale_slot_size(const ModelArgs& model_args,
                         const KVCacheEstimateOptions& options) {
   if (options.kv_cache_dtype == "auto" ||
-      (Platform::is_musa() && model_args.model_type() == "glm5_next" &&
+      (Platform::is_musa() &&
+       is_glm5_next_model_type(model_args.model_type()) &&
        options.kv_cache_dtype == "fp8_e4m3")) {
     // GLM E4M3 stores its four FP32 scales inside the 528-byte record.
     return 0;
@@ -1049,9 +1050,9 @@ KVCacheCapacity estimate_kv_cache_capacity(
 
   const int64_t dtype_size = static_cast<int64_t>(
       torch::scalarTypeToTypeMeta(options.dtype).itemsize());
-  const bool enable_mla_fp8 = Platform::is_musa() &&
-                              model_args.model_type() == "glm5_next" &&
-                              options.kv_cache_dtype == "fp8_e4m3";
+  const bool enable_mla_fp8 =
+      Platform::is_musa() && is_glm5_next_model_type(model_args.model_type()) &&
+      options.kv_cache_dtype == "fp8_e4m3";
   if (options.kv_cache_dtype == "fp8_e4m3") {
     CHECK(enable_mla_fp8)
         << "fp8_e4m3 KV cache is only supported for glm5_next on MUSA.";
@@ -1112,9 +1113,8 @@ KVCacheCapacity estimate_kv_cache_capacity(
     const int64_t num_speculative_tokens =
         effective_num_speculative_tokens(options);
     CHECK_GE(num_speculative_tokens, 0);
-    if (uses_musa_compressed_kpool_tail(model_args)) {
-      kv_cache_cap.kpool_tail_len(model_args.index_kpool());
-    } else if (uses_npu_compressed_kpool_tail(model_args)) {
+    if (uses_musa_compressed_kpool_tail(model_args) ||
+        uses_npu_compressed_kpool_tail(model_args)) {
       // Preserve one complete pool plus speculative rows that may be rejected.
       // The verify base token advances the committed sequence and is already
       // covered by the regular pool tail.
