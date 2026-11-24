@@ -277,12 +277,7 @@ folly::SemiFuture<uint32_t> RemoteWorker::transfer_kv_blocks(
 void RemoteWorker::transfer_kv_blocks(
     const uint64_t batch_id,
     const std::vector<BlockTransferInfo>& block_transfer_info) {
-  threadpool_.schedule(
-      [this,
-       batch_id = batch_id,
-       block_transfer_info = std::move(block_transfer_info)]() mutable {
-        channel_->transfer_kv_blocks(batch_id, block_transfer_info);
-      });
+  channel_->transfer_kv_blocks(batch_id, block_transfer_info);
 }
 
 void RemoteWorker::prefetch_from_storage(

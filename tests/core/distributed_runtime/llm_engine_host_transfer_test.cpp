@@ -13,15 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <folly/ScopeGuard.h>
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <future>
 #include <iterator>
 #include <memory>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -167,6 +171,71 @@ class ClientEngine final : public LLMEngine {
       : LLMEngine(std::move(options), std::move(clients)) {}
 };
 
+class RestoreAckWorker final : public WorkerClient {
+ public:
+  explicit RestoreAckWorker(std::future<void> ack = {})
+      : ack_(std::move(ack)) {}
+
+  void transfer_kv_blocks(
+      uint64_t /*unused*/,
+      const std::vector<BlockTransferInfo>& /*unused*/) override {
+    entered.set_value();
+    if (ack_.valid()) {
+      ack_.get();
+    }
+  }
+
+  std::promise<void> entered;
+
+ private:
+  std::future<void> ack_;
+};
+
+TEST(EngineHostRestoreTest, SubmitsInParallelAndWaitsForEveryAck) {
+  using namespace std::chrono_literals;
+  std::promise<void> slow_ack;
+  auto slow_worker = std::make_shared<RestoreAckWorker>(slow_ack.get_future());
+  auto fast_worker = std::make_shared<RestoreAckWorker>();
+  runtime::Options options;
+  options.world_size(2).dp_size(1).cp_size(1).host_blocks_factor(2.0);
+  ClientEngine engine(std::move(options), {slow_worker, fast_worker});
+  BlockTransferInfo info(/*src_block_id=*/3, /*dst_block_id=*/7);
+  info.transfer_type = TransferType::H2D;
+  auto registration = std::async(std::launch::async, [&] {
+    engine.transfer_kv_blocks(/*dp_rank=*/0, /*batch_id=*/123, {info});
+  });
+  auto release_ack = folly::makeGuard([&] { slow_ack.set_value(); });
+
+  ASSERT_EQ(slow_worker->entered.get_future().wait_for(5s),
+            std::future_status::ready);
+  ASSERT_EQ(fast_worker->entered.get_future().wait_for(5s),
+            std::future_status::ready);
+  EXPECT_EQ(registration.wait_for(20ms), std::future_status::timeout);
+
+  slow_ack.set_value();
+  release_ack.dismiss();
+  EXPECT_EQ(registration.wait_for(5s), std::future_status::ready);
+  EXPECT_NO_THROW(registration.get());
+}
+
+TEST(EngineHostRestoreTest, RegistrationWaitHasItsOwnDeadline) {
+  using namespace std::chrono_literals;
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  EXPECT_DEATH(
+      {
+        ExecutionConfig::get_instance().forward_execution_timeout_ms(5000);
+        auto worker = std::make_shared<RestoreAckWorker>(std::async(
+            std::launch::async, [] { std::this_thread::sleep_for(2s); }));
+        runtime::Options options;
+        options.world_size(1).dp_size(1).cp_size(1).host_blocks_factor(2.0);
+        ClientEngine engine(std::move(options), {worker});
+        BlockTransferInfo info(/*src_block_id=*/3, /*dst_block_id=*/7);
+        info.transfer_type = TransferType::H2D;
+        engine.transfer_kv_blocks(/*dp_rank=*/0, /*batch_id=*/123, {info});
+      },
+      "H2D registration wait failed for batch_id=123");
+}
+
 struct TransferTopology {
   uint32_t workers_;
   uint32_t dp_;
@@ -192,7 +261,8 @@ TEST_P(EngineHostTransferTest, TransfersEveryShardInOnlyTheRequestedDpGroup) {
   runtime::Options options;
   options.world_size(static_cast<int32_t>(topology.workers_))
       .dp_size(static_cast<int32_t>(topology.dp_))
-      .cp_size(static_cast<int32_t>(topology.cp_));
+      .cp_size(static_cast<int32_t>(topology.cp_))
+      .host_blocks_factor(2.0);
   ClientEngine engine(std::move(options), std::move(clients));
   EXPECT_EQ(engine.host_transfer_worker_count(), topology.expected_.size());
   BlockTransferInfo info(/*src_block_id=*/3, /*dst_block_id=*/7);
@@ -206,6 +276,7 @@ TEST_P(EngineHostTransferTest, TransfersEveryShardInOnlyTheRequestedDpGroup) {
   }
   info.transfer_type = TransferType::H2D;
   engine.transfer_kv_blocks(topology.rank_, /*batch_id=*/123, {info});
+  engine.transfer_kv_blocks(topology.rank_, /*batch_id=*/124, {});
   std::vector<uint32_t> offloaded;
   std::vector<uint32_t> loaded;
   offloaded.reserve(topology.workers_);

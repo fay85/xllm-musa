@@ -27,6 +27,7 @@ limitations under the License.
 #include <limits>
 
 #include "common/global_flags.h"
+#include "core/common/constants.h"
 #include "core/common/health_check_manager.h"
 #include "core/framework/config/execution_config.h"
 
@@ -404,10 +405,14 @@ void CommChannel::transfer_kv_blocks(
       batch_id, block_transfer_info, &pb_block_transfer_info))
       << "Failed to serialize H2D transfer for batch_id=" << batch_id;
   brpc::Controller cntl;
+  cntl.set_timeout_ms(kHostRestoreRegistrationTimeoutMs);
+  // A retry could register a second handle for the same batch.
+  cntl.set_max_retry(0);
   proto::TransferStatus response;
   stub_->TransferBlocks(&cntl, &pb_block_transfer_info, &response, nullptr);
   CHECK(!cntl.Failed()) << "H2D transfer registration RPC failed for batch_id="
-                        << batch_id << ": " << cntl.ErrorText();
+                        << batch_id << ", remote=" << cntl.remote_side() << ": "
+                        << cntl.ErrorText();
   CHECK_EQ(response.success_cnt(), block_transfer_info.size())
       << "H2D transfer registration was not acknowledged for batch_id="
       << batch_id;

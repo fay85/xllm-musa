@@ -22,6 +22,9 @@ namespace xllm {
 inline constexpr char kInferContentLength[] = "Infer-Content-Length";
 inline constexpr char kContentLength[] = "Content-Length";
 
+// Bounds H2D handle registration before forward dispatch.
+inline constexpr int32_t kHostRestoreRegistrationTimeoutMs = 1000;
+
 // Reserved row 0 of the linear / SSM state cache, used as the padding slot for
 // padded decode batch rows. This mirrors the KV cache convention, where block
 // id 0 is permanently held for padding (see BlockManagerImpl and

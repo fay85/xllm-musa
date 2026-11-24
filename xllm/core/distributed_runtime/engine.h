@@ -29,8 +29,11 @@ limitations under the License.
 #include "framework/tokenizer/tokenizer_args.h"
 #include "runtime/decode_graph_bucket.h"
 #include "runtime/options.h"
+#include "util/threadpool.h"
 
 namespace xllm {
+
+class WorkerClient;
 
 class Engine {
  public:
@@ -210,6 +213,15 @@ class Engine {
   };
 
  protected:
+  void init_host_restore_threadpool(const runtime::Options& options,
+                                    uint32_t dp_group_size);
+
+  void register_host_restore(
+      const std::vector<std::shared_ptr<WorkerClient>>& worker_clients,
+      const std::vector<uint32_t>& worker_indices,
+      uint64_t batch_id,
+      const std::vector<BlockTransferInfo>& block_transfer_info);
+
   void configure_prefix_cache(runtime::Options& options) const {
     const bool enable_xtensor = KVCacheConfig::get_instance().enable_xtensor();
     if (options.enable_prefix_cache() && enable_xtensor) {
@@ -236,5 +248,8 @@ class Engine {
 
   // tokenizer
   std::unique_ptr<Tokenizer> tokenizer_;
+
+ private:
+  std::unique_ptr<ThreadPool> host_restore_threadpool_;
 };
 }  // namespace xllm

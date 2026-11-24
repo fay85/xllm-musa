@@ -13,9 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <brpc/closure_guard.h>
 #include <brpc/details/controller_private_accessor.h>
 #include <brpc/policy/baidu_rpc_protocol.h>
+#include <brpc/server.h>
 #include <brpc/span.h>
+#include <bthread/bthread.h>
 #include <butil/time.h>
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
@@ -29,9 +32,42 @@ limitations under the License.
 #include "core/common/health_check_manager.h"
 #include "core/distributed_runtime/comm_channel.h"
 #include "core/distributed_runtime/shm_channel.h"
+#include "core/framework/config/execution_config.h"
 
 namespace xllm {
 namespace {
+
+class SlowHostRestoreService final : public proto::DistributeWorker {
+ public:
+  void TransferBlocks(google::protobuf::RpcController* /*unused*/,
+                      const proto::BlockTransferInfos* request,
+                      proto::TransferStatus* response,
+                      google::protobuf::Closure* done) override {
+    brpc::ClosureGuard guard(done);
+    bthread_usleep(2000000);
+    response->set_success_cnt(request->transfer_infos_size());
+  }
+};
+
+TEST(CommChannelFailureTest, HostRestoreRegistrationRpcHonorsDeadline) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  EXPECT_DEATH(
+      {
+        SlowHostRestoreService service;
+        brpc::Server server;
+        ASSERT_EQ(server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE),
+                  0);
+        ASSERT_EQ(server.Start("127.0.0.1:0", nullptr), 0);
+        CommChannel channel;
+        ASSERT_TRUE(channel.init_brpc(
+            butil::endpoint2str(server.listen_address()).c_str()));
+        BlockTransferInfo info(/*src_block_id=*/3, /*dst_block_id=*/7);
+        info.transfer_type = TransferType::H2D;
+        ExecutionConfig::get_instance().forward_execution_timeout_ms(5000);
+        channel.transfer_kv_blocks(/*batch_id=*/123, {info});
+      },
+      "H2D transfer registration RPC failed for batch_id=123.*timeout=1000ms");
+}
 
 TEST(CommChannelFailureTest,
      RpcFailureResolvesWithFailureInsteadOfEmptyOutput) {

@@ -124,6 +124,7 @@ VLMEngine::VLMEngine(const runtime::Options& options,
     }
     dp_local_tp_size_ = dp_local_size_ / cp_size_;
   }
+  init_host_restore_threadpool(options_, dp_local_size_);
 
   process_group_test();
 
@@ -951,10 +952,8 @@ void VLMEngine::transfer_kv_blocks(
     const std::vector<BlockTransferInfo>& block_transfer_info) {
   const auto worker_indices = dp_group_worker_indices(
       dp_rank, dp_size_, dp_local_size_, worker_clients_.size());
-  for (const uint32_t worker_rank : worker_indices) {
-    worker_clients_[worker_rank]->transfer_kv_blocks(batch_id,
-                                                     block_transfer_info);
-  }
+  register_host_restore(
+      worker_clients_, worker_indices, batch_id, block_transfer_info);
 }
 
 void VLMEngine::prefetch_from_storage(

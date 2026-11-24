@@ -15,13 +15,18 @@ limitations under the License.
 
 #include "core/distributed_runtime/engine_utils.h"
 
+#include <folly/Unit.h>
+#include <folly/futures/Future.h>
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <utility>
 #include <vector>
 
+#include "core/common/constants.h"
+#include "core/distributed_runtime/engine.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/scheduler_config.h"
@@ -175,6 +180,64 @@ std::vector<uint32_t> dp_group_worker_indices(uint32_t dp_rank,
     worker_indices.emplace_back(static_cast<uint32_t>(begin + local_rank));
   }
   return worker_indices;
+}
+
+void Engine::init_host_restore_threadpool(const runtime::Options& options,
+                                          uint32_t dp_group_size) {
+  if (options.host_blocks_factor() > 1.0 && dp_group_size > 0) {
+    host_restore_threadpool_ =
+        std::make_unique<ThreadPool>(/*num_threads=*/dp_group_size,
+                                     /*cpu_binding=*/false,
+                                     /*pool_name=*/"Engine.host_restore");
+  }
+}
+
+void Engine::register_host_restore(
+    const std::vector<std::shared_ptr<WorkerClient>>& worker_clients,
+    const std::vector<uint32_t>& worker_indices,
+    uint64_t batch_id,
+    const std::vector<BlockTransferInfo>& block_transfer_info) {
+  if (block_transfer_info.empty()) {
+    return;
+  }
+  CHECK(host_restore_threadpool_) << "Host restore thread pool is unavailable";
+
+  const auto deadline =
+      std::chrono::steady_clock::now() +
+      std::chrono::milliseconds(kHostRestoreRegistrationTimeoutMs);
+  const auto blocks = std::make_shared<const std::vector<BlockTransferInfo>>(
+      block_transfer_info);
+  std::vector<folly::SemiFuture<folly::Unit>> registrations;
+  registrations.reserve(worker_indices.size());
+  for (const uint32_t worker_rank : worker_indices) {
+    auto [promise, future] = folly::makePromiseContract<folly::Unit>();
+    registrations.emplace_back(std::move(future));
+    host_restore_threadpool_->schedule([client = worker_clients[worker_rank],
+                                        batch_id,
+                                        blocks,
+                                        promise =
+                                            std::move(promise)]() mutable {
+      promise.setWith([&] { client->transfer_kv_blocks(batch_id, *blocks); });
+    });
+  }
+
+  // The driver's SHM input wakes the whole group.
+  const auto remaining = std::chrono::duration_cast<folly::HighResDuration>(
+      deadline - std::chrono::steady_clock::now());
+  CHECK(remaining > folly::HighResDuration::zero())
+      << "H2D registration submission timed out for batch_id=" << batch_id;
+  const auto completion =
+      folly::collectAll(registrations).within(remaining).getTry();
+  CHECK(completion.hasValue())
+      << "H2D registration wait failed for batch_id=" << batch_id << ": "
+      << completion.exception().what();
+  const auto& results = completion.value();
+  for (size_t i = 0; i < results.size(); ++i) {
+    CHECK(results[i].hasValue())
+        << "H2D registration failed for batch_id=" << batch_id
+        << ", worker_rank=" << worker_indices[i] << ": "
+        << results[i].exception().what();
+  }
 }
 
 void dispatch_storage_prefetch(

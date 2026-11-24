@@ -163,6 +163,7 @@ void LLMEngine::init_worker_topology() {
   dp_batch_embedding_ids_.resize(dp_size_);
   dp_batch_request_ids_.resize(dp_size_);
   dp_batch_generations_.resize(dp_size_, 0);
+  init_host_restore_threadpool(options_, dp_local_size_);
 }
 
 runtime::DecodeGraphWarmupConfig LLMEngine::decode_graph_warmup_config() const {
@@ -838,10 +839,8 @@ void LLMEngine::transfer_kv_blocks(
     const std::vector<BlockTransferInfo>& block_transfer_info) {
   const auto worker_indices = dp_group_worker_indices(
       dp_rank, dp_size_, dp_local_size_, worker_clients_.size());
-  for (const uint32_t worker_rank : worker_indices) {
-    worker_clients_[worker_rank]->transfer_kv_blocks(batch_id,
-                                                     block_transfer_info);
-  }
+  register_host_restore(
+      worker_clients_, worker_indices, batch_id, block_transfer_info);
 }
 
 void LLMEngine::prefetch_from_storage(
