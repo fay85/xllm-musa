@@ -59,6 +59,8 @@ common=(--server_host="$host" --etcd_addr="$host:22379" --block_size=256
   --tokenizer_path="${GLM5_MODEL_PATH:-/data/nfs_shared/models/GLM-5.3-Flash}"
   --native_pd_routing_policy=STATIC_BUCKET --kv_route_mode=DISABLED
   --internal_api_token="$(cat "$token_file")" --logtostderr=true
+  --provider_ensure_link_timeout_ms=120000 --provider_adjacency_prewarm_timeout_ms=120000
+  --flow_max_queue_wait_ms=150000
   --default_request_deadline_ms=300000 --max_request_deadline_ms=300000)
 for spec in 'router ROUTER 28888 28889' 'coordinator COORDINATOR 28890 28891'; do
   read -r name role http rpc <<<"$spec"

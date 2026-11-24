@@ -9,7 +9,31 @@ case "$role:$action" in
 esac
 # Keep concurrent starts/stops on this host from replacing each other's PID list.
 if [[ ${GLM5_ROLE_LOCKED:-} != "$role" ]]; then
-  exec flock --nonblock --close "/tmp/glm53-pd-$role.lock" env GLM5_ROLE_LOCKED="$role" bash "$PWD/pd_role.sh" "$role" "$action"
+  flock --nonblock --close "/tmp/glm53-pd-$role.lock" env GLM5_ROLE_LOCKED="$role" bash "$PWD/pd_role.sh" "$role" "$action"
+  if [[ $action == start && ${GLM5_WAIT_READY:-1} == 1 ]]; then
+    peer=10.121.34.87:19200
+    if [[ $role == DECODE ]]; then peer=10.121.34.85:19100; fi
+    if curl --noproxy '*' -fsSo /dev/null --max-time 2 "http://$peer/v1/models" 2>/dev/null; then
+      # Only the coordinator prewarms links. The router creates its own link
+      # entry on first dispatch, so its ready-pair count can be zero when idle.
+      echo "Both HTTP servers are up. Waiting for the P/D transfer link..."
+      deadline=$((SECONDS + ${GLM5_WAIT_TIMEOUT_SEC:-600}))
+      while ! { curl --noproxy '*' -fsS --max-time 2 \
+          http://10.121.34.85:28890/vars/xllm_service_provider_link_ready_pairs 2>/dev/null |
+          awk '$1 == "xllm_service_provider_link_ready_pairs" && $3+0 >= 1 {ready=1} END {exit !ready}' &&
+          curl --noproxy '*' -fsSo /dev/null --max-time 2 http://10.121.34.85:28888/readyz 2>/dev/null; }; do
+        if (( SECONDS >= deadline )); then
+          echo "P/D link readiness timed out. See pd_logs/control/coordinator.log and pd_logs/decode/rank_0.log." >&2
+          exit 1
+        fi
+        sleep 1
+      done
+      echo "P/D ready at http://10.121.34.85:28888"
+    else
+      echo "$role HTTP ready. The peer at $peer has not started serving yet."
+    fi
+  fi
+  exit 0
 fi
 export GLM5_INSTANCE_ROLE=$role GLM5_ENABLE_DISAGG_PD=true GLM5_KV_CACHE_TRANSFER_MODE=PULL
 export GLM5_ETCD_ADDR=10.121.34.85:22379 GLM5_NNODES=8

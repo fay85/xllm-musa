@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "core/distributed_runtime/disagg_pd_service_impl.h"
 
+#include <folly/ScopeGuard.h>
 #include <glog/logging.h>
 
 #include <cstdint>
@@ -616,7 +617,17 @@ void DisaggPDServiceImpl::ensure_link(const proto::EnsureLinkRequest* request,
       response->set_reason("ready");
       return;
     }
+    if (!connecting_links_.insert(key).second) {
+      set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_CONNECTING,
+                                "link-in-progress",
+                                response);
+      return;
+    }
   }
+  auto clear_connecting = folly::makeGuard([&] {
+    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
+    connecting_links_.erase(key);
+  });
 
   // Record the prefill peer. On MUSA the Mooncake session is established by
   // the existing PULL path, so a repeated handshake is not required.
@@ -638,30 +649,20 @@ void DisaggPDServiceImpl::ensure_link(const proto::EnsureLinkRequest* request,
   }
 
   uint64_t generation = 0;
-  bool replayed = false;
   {
     std::lock_guard<std::mutex> lock(ensured_links_mutex_);
-    const auto existing = ensured_links_.find(key);
-    if (existing != ensured_links_.end()) {
-      generation = existing->second;
-      replayed = true;
-    } else {
+    generation = ++next_link_generation_;
+    if (generation == 0) {
       generation = ++next_link_generation_;
-      if (generation == 0) {
-        generation = ++next_link_generation_;
-      }
-      ensured_links_.emplace(key, generation);
     }
+    ensured_links_.emplace(key, generation);
   }
   response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
   response->set_link_generation(generation);
-  response->set_replayed(replayed);
   response->set_reason("ready");
-  if (!replayed) {
-    LOG(INFO) << "ensure_link ready prefill=" << spec.prefill().engine_uid()
-              << " decode=" << spec.decode().engine_uid()
-              << " link_generation=" << generation;
-  }
+  LOG(INFO) << "ensure_link ready prefill=" << spec.prefill().engine_uid()
+            << " decode=" << spec.decode().engine_uid()
+            << " link_generation=" << generation;
 }
 
 void DisaggPDServiceImpl::drain_link(const proto::DrainLinkRequest* request,
@@ -697,7 +698,14 @@ void DisaggPDServiceImpl::drain_link(const proto::DrainLinkRequest* request,
   uint64_t generation = 1;
   {
     std::lock_guard<std::mutex> lock(ensured_links_mutex_);
-    const auto existing = ensured_links_.find(ensured_link_key(spec.prefill()));
+    const std::string key = ensured_link_key(spec.prefill());
+    if (connecting_links_.count(key) > 0) {
+      set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_CONNECTING,
+                                "link-in-progress",
+                                response);
+      return;
+    }
+    const auto existing = ensured_links_.find(key);
     if (existing != ensured_links_.end()) {
       generation = existing->second;
       ensured_links_.erase(existing);

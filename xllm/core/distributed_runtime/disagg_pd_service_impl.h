@@ -20,6 +20,7 @@ limitations under the License.
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "disagg_pd.pb.h"
 #include "framework/sampling/json_object_grammar.h"
@@ -80,6 +81,7 @@ class DisaggPDServiceImpl {
   std::shared_ptr<const JsonObjectGrammar> json_reasoning_grammar_;
   std::mutex ensured_links_mutex_;
   std::unordered_map<std::string, uint64_t> ensured_links_;
+  std::unordered_set<std::string> connecting_links_;
   uint64_t next_link_generation_ = 0;
 };
 

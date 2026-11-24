@@ -283,6 +283,11 @@ if [[ "${NUM_SPECULATIVE_TOKENS}" -gt 0 ]]; then
   SPECULATIVE_ARGS=(--draft_model="${DRAFT_MODEL_PATH}"
     --num_speculative_tokens="${NUM_SPECULATIVE_TOKENS}"
     --speculative_algorithm="${SPECULATIVE_ALGORITHM}")
+  if [[ ${INSTANCE_ROLE} == DECODE ]]; then
+    # GLM-5.3 TP8 vocab shards have 19360 rows, short of a full FP8 tile.
+    SPECULATIVE_ARGS+=(--enable_mtp_draft_fp8_lm_head=false
+      --enable_mtp_target_fp8_lm_head=false)
+  fi
 fi
 
 PROFILE_ARGS=()

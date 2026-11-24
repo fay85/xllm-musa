@@ -248,7 +248,7 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
   context.backend = "dcu";
 #elif defined(USE_MUSA)
   context.backend = "musa";
-  if (is_glm5_next_target_model(model_args)) {
+  if (is_glm5_next_model_type(model_args.model_type())) {
     context.layout_family = kGlm5HybridLayout;
   }
 #else
