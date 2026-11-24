@@ -27,6 +27,7 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "framework/block/block_manager_pool_test_peer.h"
 #include "framework/block/linear_state_block_manager.h"
+#include "framework/kv_cache_transfer/scoped_environment_variable.h"
 #include "framework/model/model_input_params.h"
 #include "framework/prefix_cache/block_hasher.h"
 #include "framework/request/incremental_decoder.h"
@@ -321,6 +322,87 @@ TEST_F(BlockManagerPoolTest, EqualAvailableCapacityRotatesAcrossDpRanks) {
   EXPECT_EQ(BlockManagerPoolTestPeer::select_dp_rank(pool), 1);
   EXPECT_EQ(BlockManagerPoolTestPeer::select_dp_rank(pool), 2);
   EXPECT_EQ(BlockManagerPoolTestPeer::select_dp_rank(pool), 0);
+}
+
+class DpAffinityTestPool final : public BlockManagerPool {
+ public:
+  using BlockManagerPool::BlockManagerPool;
+  using BlockManagerPool::get_dp_rank;
+
+  Block reserve_sequence_slot(int32_t rank) {
+    auto* composite =
+        static_cast<CompositeBlockManager*>(block_managers_[rank].get());
+    return composite->leaf_entries().at(BlockType::EMBEDDING).leaf->allocate();
+  }
+
+  size_t probe_prefix_hit_tokens(Sequence*, int32_t rank) const override {
+    return rank == 0 ? rank_zero_hit_tokens : 0;
+  }
+
+  size_t rank_zero_hit_tokens = 0;
+};
+
+TEST_F(BlockManagerPoolTest, DecodeDpAffinityHonorsHitAndLoadThresholds) {
+  tests::ScopedEnvironmentVariable balance("XLLM_DECODE_DP_PREFIX_BALANCE");
+  ASSERT_TRUE(balance.set("1"));
+  BlockManagerPool::Options options;
+  options.num_blocks(256)
+      .block_size(64)
+      .num_embedding_blocks(8)
+      .num_speculative_tokens(1)
+      .instance_is_decode(true);
+  DpAffinityTestPool pool(options, /*dp_size=*/2);
+  const std::vector<int32_t> prompt(5000, 1);
+  Block active = pool.reserve_sequence_slot(0);
+  ASSERT_TRUE(active.is_valid());
+
+  pool.rank_zero_hit_tokens = 4095;
+  Sequence below_threshold = make_sequence(0, prompt);
+  EXPECT_EQ(pool.get_dp_rank(&below_threshold), 1);
+
+  pool.rank_zero_hit_tokens = 4096;
+  Sequence within_skew = make_sequence(1, prompt);
+  EXPECT_EQ(pool.get_dp_rank(&within_skew), 0);
+
+  Block second_active = pool.reserve_sequence_slot(0);
+  ASSERT_TRUE(second_active.is_valid());
+  Sequence overloaded = make_sequence(2, prompt);
+  EXPECT_EQ(pool.get_dp_rank(&overloaded), 1);
+  EXPECT_EQ(pool.get_dp_rank(&within_skew), 0);
+}
+
+TEST_F(BlockManagerPoolTest, DecodeDpAffinityDefaultsToExistingPolicy) {
+  constexpr char kBalanceEnv[] = "XLLM_DECODE_DP_PREFIX_BALANCE";
+  tests::ScopedEnvironmentVariable balance(kBalanceEnv);
+  ASSERT_EQ(unsetenv(kBalanceEnv), 0);
+  BlockManagerPool::Options options;
+  options.num_blocks(256)
+      .block_size(64)
+      .num_embedding_blocks(8)
+      .num_speculative_tokens(1)
+      .instance_is_decode(true);
+  DpAffinityTestPool pool(options, /*dp_size=*/2);
+  Block active = pool.reserve_sequence_slot(0);
+  ASSERT_TRUE(active.is_valid());
+  pool.rank_zero_hit_tokens = 64;
+  Sequence request = make_sequence(0, std::vector<int32_t>(5000, 1));
+  EXPECT_EQ(pool.get_dp_rank(&request), 0);
+}
+
+TEST_F(BlockManagerPoolTest, PrefillDpStillPrefersAnyPrefixHit) {
+  tests::ScopedEnvironmentVariable balance("XLLM_DECODE_DP_PREFIX_BALANCE");
+  ASSERT_TRUE(balance.set("1"));
+  BlockManagerPool::Options options;
+  options.num_blocks(256)
+      .block_size(64)
+      .num_embedding_blocks(8)
+      .num_speculative_tokens(1);
+  DpAffinityTestPool pool(options, /*dp_size=*/2);
+  Block active = pool.reserve_sequence_slot(0);
+  ASSERT_TRUE(active.is_valid());
+  pool.rank_zero_hit_tokens = 64;
+  Sequence request = make_sequence(0, std::vector<int32_t>(5000, 1));
+  EXPECT_EQ(pool.get_dp_rank(&request), 0);
 }
 
 TEST_F(BlockManagerPoolTest, DpLinearStateAndPrefixCachesAreIsolated) {

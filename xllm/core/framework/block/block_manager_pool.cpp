@@ -28,6 +28,7 @@ limitations under the License.
 #include "framework/xtensor/phy_page_pool.h"
 #include "framework/xtensor/xtensor_block_manager_impl.h"
 #include "linear_state_block_manager.h"
+#include "util/env_var.h"
 #if defined(USE_MUSA)
 #include "framework/block/musa/deepseek_v4_prefix_cache_policy.h"
 #include "framework/block/musa/deepseek_v4_prefix_transfer.h"
@@ -173,27 +174,51 @@ int32_t BlockManagerPool::get_dp_rank(Sequence* sequence) const {
   int32_t selected_rank = -1;
   if (options_.enable_prefix_cache() && block_managers_.size() > 1 &&
       sequence->num_tokens() > 0) {
+    // Keep the latency/cache-affinity trade-off opt-in for Decode.
+    const bool balance_affinity =
+        options_.instance_is_decode() &&
+        util::get_bool_env("XLLM_DECODE_DP_PREFIX_BALANCE", false);
+    static const size_t min_affinity_tokens =
+        static_cast<size_t>(std::max<int64_t>(
+            1, util::get_int_env("XLLM_DP_PREFIX_AFFINITY_MIN_TOKENS", 4096)));
+    static const size_t max_affinity_load_skew =
+        static_cast<size_t>(std::max<int64_t>(
+            0, util::get_int_env("XLLM_DP_PREFIX_AFFINITY_MAX_SKEW", 1)));
+
     const size_t block_size =
         std::max<size_t>(1, static_cast<size_t>(options_.block_size()));
     const size_t needed_blocks = (sequence->num_tokens() - 1) / block_size + 1;
 
-    size_t best_hit_tokens = 0;
-    size_t best_hit_available = 0;
-    std::vector<size_t> best_hit_ranks;
-    size_t best_cold_available = 0;
-    std::vector<size_t> feasible_cold_ranks;
-    best_hit_ranks.reserve(block_managers_.size());
-    feasible_cold_ranks.reserve(block_managers_.size());
+    struct RankCandidate {
+      size_t rank = 0;
+      size_t available_blocks = 0;
+      size_t active_seqs = 0;
+      bool has_seq_load = false;
+      size_t hit_tokens = 0;
+    };
+    std::vector<RankCandidate> candidates;
+    candidates.reserve(block_managers_.size());
+    size_t min_active_seqs = std::numeric_limits<size_t>::max();
+    bool any_seq_load = false;
 
     for (size_t i = 0; i < block_managers_.size(); ++i) {
       auto* composite =
           static_cast<CompositeBlockManager*>(block_managers_[i].get());
       bool has_resource_slots = true;
+      size_t active_seqs = 0;
+      bool has_seq_load = false;
       for (const auto& [type, entry] : composite->leaf_entries()) {
         if ((type == BlockType::LINEAR || type == BlockType::EMBEDDING) &&
-            entry.leaf != nullptr && entry.leaf->num_free_blocks() == 0) {
-          has_resource_slots = false;
-          break;
+            entry.leaf != nullptr) {
+          if (entry.leaf->num_free_blocks() == 0) {
+            has_resource_slots = false;
+            break;
+          }
+          if (balance_affinity &&
+              (type == BlockType::EMBEDDING || !has_seq_load)) {
+            active_seqs = entry.leaf->num_used_blocks();
+            has_seq_load = true;
+          }
         }
       }
       const size_t total_blocks = composite->num_total_blocks();
@@ -207,28 +232,78 @@ int32_t BlockManagerPool::get_dp_rank(Sequence* sequence) const {
       }
       const size_t hit_tokens =
           probe_prefix_hit_tokens(sequence, static_cast<int32_t>(i));
-
-      if (hit_tokens > 0) {
-        if (best_hit_ranks.empty() || hit_tokens > best_hit_tokens ||
-            (hit_tokens == best_hit_tokens &&
-             available_blocks > best_hit_available)) {
-          best_hit_tokens = hit_tokens;
-          best_hit_available = available_blocks;
-          best_hit_ranks.clear();
-          best_hit_ranks.emplace_back(i);
-        } else if (hit_tokens == best_hit_tokens &&
-                   available_blocks == best_hit_available) {
-          best_hit_ranks.emplace_back(i);
-        }
+      if (has_seq_load) {
+        min_active_seqs = std::min(min_active_seqs, active_seqs);
+        any_seq_load = true;
       }
+      candidates.push_back(RankCandidate{
+          i, available_blocks, active_seqs, has_seq_load, hit_tokens});
+    }
 
-      if (feasible_cold_ranks.empty() ||
-          available_blocks > best_cold_available) {
-        best_cold_available = available_blocks;
-        feasible_cold_ranks.clear();
-        feasible_cold_ranks.emplace_back(i);
-      } else if (available_blocks == best_cold_available) {
-        feasible_cold_ranks.emplace_back(i);
+    size_t best_hit_tokens = 0;
+    size_t best_hit_active = std::numeric_limits<size_t>::max();
+    size_t best_hit_available = 0;
+    std::vector<size_t> best_hit_ranks;
+    std::vector<size_t> feasible_cold_ranks;
+    best_hit_ranks.reserve(candidates.size());
+    feasible_cold_ranks.reserve(candidates.size());
+
+    for (const auto& c : candidates) {
+      if (c.hit_tokens < (balance_affinity ? min_affinity_tokens : 1)) {
+        continue;
+      }
+      if (any_seq_load && c.has_seq_load &&
+          c.active_seqs - min_active_seqs > max_affinity_load_skew) {
+        continue;
+      }
+      const size_t eff_active = c.has_seq_load ? c.active_seqs : 0;
+      if (best_hit_ranks.empty() || c.hit_tokens > best_hit_tokens ||
+          (c.hit_tokens == best_hit_tokens && eff_active < best_hit_active) ||
+          (c.hit_tokens == best_hit_tokens && eff_active == best_hit_active &&
+           c.available_blocks > best_hit_available)) {
+        best_hit_tokens = c.hit_tokens;
+        best_hit_active = eff_active;
+        best_hit_available = c.available_blocks;
+        best_hit_ranks.clear();
+        best_hit_ranks.emplace_back(c.rank);
+      } else if (c.hit_tokens == best_hit_tokens &&
+                 eff_active == best_hit_active &&
+                 c.available_blocks == best_hit_available) {
+        best_hit_ranks.emplace_back(c.rank);
+      }
+    }
+
+    if (best_hit_ranks.empty() && !candidates.empty()) {
+      if (any_seq_load) {
+        size_t max_minload_avail = 0;
+        for (const auto& c : candidates) {
+          if (c.has_seq_load && c.active_seqs == min_active_seqs) {
+            max_minload_avail = std::max(max_minload_avail, c.available_blocks);
+          }
+        }
+        const size_t ample_blocks = needed_blocks * 2;
+        for (const auto& c : candidates) {
+          if (!c.has_seq_load || c.active_seqs != min_active_seqs) {
+            continue;
+          }
+          if (max_minload_avail >= ample_blocks
+                  ? c.available_blocks >= ample_blocks
+                  : c.available_blocks == max_minload_avail) {
+            feasible_cold_ranks.emplace_back(c.rank);
+          }
+        }
+      } else {
+        size_t best_cold_available = 0;
+        for (const auto& c : candidates) {
+          if (feasible_cold_ranks.empty() ||
+              c.available_blocks > best_cold_available) {
+            best_cold_available = c.available_blocks;
+            feasible_cold_ranks.clear();
+            feasible_cold_ranks.emplace_back(c.rank);
+          } else if (c.available_blocks == best_cold_available) {
+            feasible_cold_ranks.emplace_back(c.rank);
+          }
+        }
       }
     }
 
