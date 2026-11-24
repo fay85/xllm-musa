@@ -65,6 +65,26 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     int64_t max_context,
     int64_t token_topk);
 
+// Candidate scoring consumes FP8 Q and the head gates folded with its scale.
+// Both tensors can be omitted when every visible token is selected directly.
+struct Glm5NextIndexerQuery {
+  torch::Tensor fp8;
+  torch::Tensor scaled_weights;
+};
+
+Glm5NextIndexerQuery glm5_next_indexer_prepare_query(
+    const torch::Tensor& query,
+    const torch::Tensor& weights);
+
+Glm5NextIndexerSelection glm5_next_indexer_select(
+    const Glm5NextIndexerQuery& prepared,
+    const torch::Tensor& positions,
+    const torch::Tensor& rows,
+    const torch::Tensor& block_table,
+    const torch::Tensor& cache,
+    int64_t max_context,
+    int64_t token_topk);
+
 // CP cache update uses natural-order projected key/gate rows [key_begin,
 // first_row+count), including up to three predecessor rows. It writes only
 // completed pools ending in [first_row, first_row+count), without changing

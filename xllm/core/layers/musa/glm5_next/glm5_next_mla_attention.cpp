@@ -1190,20 +1190,30 @@ Glm5NextMLAAttentionImpl::forward_cp(
     indexer_work->wait();
   }
   auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
+  // Keep the main-cache collective in rank order with the indexer gather.
+  // Q projection and quantization only read local tensors. Join the gather
+  // before the cache writes, candidate search, and sparse attention.
+  const bool packed_cache = main_cache.scalar_type() == torch::kUInt8;
+  auto cache_payload = packed_cache
+                           ? km::flash_mla_sparse_fp8_cache_pack(latent)
+                           : latent.contiguous();
+  auto latent_gather =
+      parallel_state::launch_gather(cache_payload, cp_group_, layout.counts);
+  km::Glm5NextIndexerQuery index_query;
+  if (enable_indexer_ && local_count > 0 &&
+      metadata.max_seq_len > token_topk_) {
+    RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerQuery");
+    auto iq = index_q_->forward(q_norm).view({local_count, 32, 128});
+    index_query = km::glm5_next_indexer_prepare_query(iq, indexer_weights);
+  }
   {
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CacheWrite");
-    if (main_cache.scalar_type() == torch::kUInt8) {
-      // Quantize before the CP gather so communication carries the exact
-      // packed cache representation instead of the wider BF16 latent. The
-      // local latent remains BF16 for query absorption below.
-      auto packed_latent = km::flash_mla_sparse_fp8_cache_pack(latent);
-      auto global_packed =
-          parallel_state::gather(packed_latent, cp_group_, layout.counts);
+    auto global_latent =
+        parallel_state::finish_gather(std::move(latent_gather));
+    if (packed_cache) {
       km::flash_mla_sparse_fp8_cache_write_packed(
-          global_packed, slots, main_cache);
+          global_latent, slots, main_cache);
     } else {
-      auto global_latent =
-          parallel_state::gather(latent.contiguous(), cp_group_, layout.counts);
       km::flash_mla_sparse_cache_write(global_latent, slots, main_cache);
     }
   }
@@ -1220,16 +1230,7 @@ Glm5NextMLAAttentionImpl::forward_cp(
                                      indexer_cache,
                                      indexer_tail);
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.CPIndexerSelect");
-    auto iq = torch::empty({local_count, 32, 128}, hidden_states.options());
-    auto weights = torch::empty({local_count, 32},
-                                hidden_states.options().dtype(torch::kFloat32));
-    if (local_count > 0) {
-      iq.copy_(index_q_->forward(q_norm).view({local_count, 32, 128}));
-      CHECK(indexer_weights.defined());
-      weights.copy_(indexer_weights);
-    }
-    selection = km::glm5_next_indexer_select(iq,
-                                             weights,
+    selection = km::glm5_next_indexer_select(index_query,
                                              pos,
                                              query_rows,
                                              table,

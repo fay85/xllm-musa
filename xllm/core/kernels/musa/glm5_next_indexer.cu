@@ -392,36 +392,34 @@ __global__ void scatter_indexer_cp(const uint8_t* gathered,
   }
 }
 
-// One warp owns one query head. Each lane loads four values, matching
-// sglang's fused indexer Q kernel and keeping all Hadamard stages inside a
-// warp. Four warps share a block to provide the same 128-thread launch shape.
-template <int32_t kWarpsPerBlock>
-__global__ void quantize_query_grouped(const c10::BFloat16* query,
+// Sixteen lanes transform one 128-element head; one block handles 16 of
+// the 32 heads in a token. All lanes participate in every shuffle.
+__global__ void quantize_indexer_query(const c10::BFloat16* query,
                                        const float* weights,
                                        c10::Float8_e4m3fn* output,
-                                       float* scaled_weights,
-                                       int64_t rows) {
-  constexpr int32_t kWarpThreads = 32;
-  constexpr int32_t kItemsPerLane = 4;
-  const int32_t warp = threadIdx.x / kWarpThreads;
-  const int32_t lane = threadIdx.x % kWarpThreads;
-  const int64_t row = static_cast<int64_t>(blockIdx.x) * kWarpsPerBlock + warp;
-  const int32_t base = lane * kItemsPerLane;
+                                       float* scaled_weights) {
+  constexpr int32_t kGroupLanes = 16;
+  constexpr int32_t kItemsPerLane = 8;
+  const int64_t row =
+      static_cast<int64_t>(blockIdx.x) * 16 + threadIdx.x / kGroupLanes;
+  const int32_t lane = threadIdx.x % kGroupLanes;
+  const int64_t base = row * 128 + lane * kItemsPerLane;
   float value[kItemsPerLane];
-  if (row < rows) {
+  if (reinterpret_cast<uintptr_t>(query) % alignof(uint4) == 0) {
+    const uint4 packed = *reinterpret_cast<const uint4*>(query + base);
+    const uint32_t pairs[] = {packed.x, packed.y, packed.z, packed.w};
 #pragma unroll
-    for (int32_t item = 0; item < kItemsPerLane; ++item) {
-      value[item] = static_cast<float>(query[row * 128 + base + item]);
+    for (int32_t i = 0; i < 4; ++i) {
+      value[2 * i] = __uint_as_float(pairs[i] << 16);
+      value[2 * i + 1] = __uint_as_float(pairs[i] & 0xffff0000u);
     }
   } else {
 #pragma unroll
-    for (int32_t item = 0; item < kItemsPerLane; ++item) {
-      value[item] = 0.0f;
+    for (int32_t i = 0; i < kItemsPerLane; ++i) {
+      value[i] = static_cast<float>(query[base + i]);
     }
   }
 
-  // The first two Hadamard stages stay within the four values held by a lane.
-  // The remaining five stages exchange values through lane shuffles.
 #pragma unroll
   for (int32_t step = 1; step < kItemsPerLane; step <<= 1) {
 #pragma unroll
@@ -436,11 +434,11 @@ __global__ void quantize_query_grouped(const c10::BFloat16* query,
     }
   }
 #pragma unroll
-  for (int32_t lane_mask = 1; lane_mask < kWarpThreads; lane_mask <<= 1) {
+  for (int32_t lane_mask = 1; lane_mask < kGroupLanes; lane_mask <<= 1) {
 #pragma unroll
     for (int32_t item = 0; item < kItemsPerLane; ++item) {
       const float other =
-          __shfl_xor_sync(0xffffffffu, value[item], lane_mask, kWarpThreads);
+          __shfl_xor_sync(0xffffffffu, value[item], lane_mask, kGroupLanes);
       value[item] =
           (lane & lane_mask) ? other - value[item] : value[item] + other;
     }
@@ -457,22 +455,26 @@ __global__ void quantize_query_grouped(const c10::BFloat16* query,
     max_value = fmaxf(max_value, fabsf(value[item]));
   }
 #pragma unroll
-  for (int32_t offset = kWarpThreads / 2; offset > 0; offset >>= 1) {
+  for (int32_t offset = kGroupLanes / 2; offset > 0; offset >>= 1) {
     max_value =
         fmaxf(max_value,
-              __shfl_xor_sync(0xffffffffu, max_value, offset, kWarpThreads));
+              __shfl_xor_sync(0xffffffffu, max_value, offset, kGroupLanes));
   }
   const float scale = exp2f(ceilf(log2f(fmaxf(max_value, 1.0e-4f) / 448.0f)));
-  if (row < rows) {
+  // The scale is a power of two, so multiplying by its inverse preserves
+  // the scaled values while allowing a packed four-value FP8 conversion.
+  const float inv_scale = 1.0f / scale;
 #pragma unroll
-    for (int32_t item = 0; item < kItemsPerLane; ++item) {
-      output[row * 128 + base + item] =
-          QuantConverter<c10::Float8_e4m3fn>::convert(
-              __fdiv_rn(value[item], scale));
-    }
-    if (lane == 0) {
-      scaled_weights[row] = weights[row] * scale * (1.0f / 64.0f);
-    }
+  for (int32_t i = 0; i < kItemsPerLane; i += 4) {
+    const float4 scaled = {value[i] * inv_scale,
+                           value[i + 1] * inv_scale,
+                           value[i + 2] * inv_scale,
+                           value[i + 3] * inv_scale};
+    *reinterpret_cast<uint32_t*>(output + base + i) =
+        __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3);
+  }
+  if (lane == 0) {
+    scaled_weights[row] = weights[row] * scale * (1.0f / 64.0f);
   }
 }
 
@@ -1156,6 +1158,33 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                   token_topk);
 }
 
+Glm5NextIndexerQuery glm5_next_indexer_prepare_query(
+    const torch::Tensor& query,
+    const torch::Tensor& weights) {
+  XLLMDeviceGuard device_guard(query.device());
+  check_tensor(query, query, torch::kBFloat16);
+  check_tensor(weights, query, torch::kFloat32);
+  const int64_t tokens = query.size(0);
+  CHECK_GT(tokens, 0);
+  CHECK_EQ(query.sizes(), torch::IntArrayRef({tokens, 32, 128}));
+  CHECK_EQ(weights.sizes(), torch::IntArrayRef({tokens, 32}));
+  auto quant = torch::empty({tokens, 32, 128},
+                            query.options().dtype(torch::kFloat8_e4m3fn));
+  // MATE checks the row stride even for single-token decode.
+  auto scaled_weights = torch::empty({tokens, 32}, weights.options());
+  quantize_indexer_query<<<tokens * 2,
+                           256,
+                           0,
+                           current_musa_stream(query.device())>>>(
+      query.data_ptr<c10::BFloat16>(),
+      weights.data_ptr<float>(),
+      quant.data_ptr<c10::Float8_e4m3fn>(),
+      scaled_weights.data_ptr<float>());
+  check_musa_kernel_launch("GLM IndexPool query quantization");
+
+  return {std::move(quant), std::move(scaled_weights)};
+}
+
 Glm5NextIndexerSelection glm5_next_indexer_select(
     const torch::Tensor& query,
     const torch::Tensor& weights,
@@ -1165,17 +1194,34 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     const torch::Tensor& cache,
     int64_t max_context,
     int64_t token_topk) {
-  RECORD_USER_SCOPE("kernel: glm5_next_indexer_select");
-  XLLMDeviceGuard device_guard(query.device());
-  check_tensor(query, query, torch::kBFloat16);
-  check_tensor(weights, query, torch::kFloat32);
-  check_tensor(positions, query, torch::kInt64);
-  check_tensor(rows, query, torch::kInt32);
-  check_tensor(block_table, query, torch::kInt32);
-  check_tensor(cache, query, torch::kUInt8);
   const int64_t tokens = query.size(0);
-  CHECK_EQ(query.sizes(), torch::IntArrayRef({tokens, 32, 128}));
+  check_tensor(query, positions, torch::kBFloat16);
+  check_tensor(weights, positions, torch::kFloat32);
+  CHECK_EQ(query.sizes(), torch::IntArrayRef({positions.size(0), 32, 128}));
   CHECK_EQ(weights.sizes(), torch::IntArrayRef({tokens, 32}));
+  Glm5NextIndexerQuery prepared;
+  if (tokens > 0 && max_context > token_topk) {
+    prepared = glm5_next_indexer_prepare_query(query, weights);
+  }
+  return glm5_next_indexer_select(
+      prepared, positions, rows, block_table, cache, max_context, token_topk);
+}
+
+Glm5NextIndexerSelection glm5_next_indexer_select(
+    const Glm5NextIndexerQuery& prepared,
+    const torch::Tensor& positions,
+    const torch::Tensor& rows,
+    const torch::Tensor& block_table,
+    const torch::Tensor& cache,
+    int64_t max_context,
+    int64_t token_topk) {
+  RECORD_USER_SCOPE("kernel: glm5_next_indexer_select");
+  XLLMDeviceGuard device_guard(positions.device());
+  check_tensor(positions, positions, torch::kInt64);
+  check_tensor(rows, positions, torch::kInt32);
+  check_tensor(block_table, positions, torch::kInt32);
+  check_tensor(cache, positions, torch::kUInt8);
+  const int64_t tokens = positions.size(0);
   CHECK_EQ(positions.sizes(), torch::IntArrayRef({tokens}));
   CHECK_EQ(rows.sizes(), positions.sizes());
   CHECK_EQ(block_table.dim(), 2);
@@ -1188,7 +1234,7 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
   CHECK_EQ(token_topk % 4, 0);
   CHECK_LE(token_topk, 2048);
   const int64_t width = ((token_topk + 3 + 127) / 128) * 128;
-  auto ints = query.options().dtype(torch::kInt32);
+  auto ints = positions.options().dtype(torch::kInt32);
   Glm5NextIndexerSelection result{
       torch::empty({tokens, width}, ints), torch::empty({tokens}, ints), rows};
   if (tokens == 0) {
@@ -1198,10 +1244,10 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
       torch::where(rows.ge(0), (positions + 1).div(4, "floor"), 0)
           .to(torch::kInt32);
   musaDeviceProp properties{};
-  CHECK_EQ(musaGetDeviceProperties(&properties, query.device().index()),
+  CHECK_EQ(musaGetDeviceProperties(&properties, positions.device().index()),
            musaSuccess);
   CHECK_EQ(properties.major * 10 + properties.minor, 31);
-  const auto stream = current_musa_stream(query.device());
+  const auto stream = current_musa_stream(positions.device());
   const int64_t pools = max_context / 4;
   const int64_t batch = block_table.size(0);
   CHECK_GT(batch, 0);
@@ -1231,18 +1277,12 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     return result;
   }
 
-  auto quant = torch::empty({tokens, 32, 128},
-                            query.options().dtype(torch::kFloat8_e4m3fn));
-  // MATE checks the row stride even for single-token decode.
-  auto scaled_weights = torch::empty({tokens, 32}, weights.options());
-  const int64_t query_rows = tokens * 32;
-  quantize_query_grouped<4><<<(query_rows + 3) / 4, 128, 0, stream>>>(
-      query.data_ptr<c10::BFloat16>(),
-      weights.data_ptr<float>(),
-      quant.data_ptr<c10::Float8_e4m3fn>(),
-      scaled_weights.data_ptr<float>(),
-      query_rows);
-  check_musa_kernel_launch("GLM IndexPool query quantization");
+  const auto& quant = prepared.fp8;
+  const auto& scaled_weights = prepared.scaled_weights;
+  check_tensor(quant, positions, torch::kFloat8_e4m3fn);
+  check_tensor(scaled_weights, positions, torch::kFloat32);
+  CHECK_EQ(quant.sizes(), torch::IntArrayRef({tokens, 32, 128}));
+  CHECK_EQ(scaled_weights.sizes(), torch::IntArrayRef({tokens, 32}));
 
   // Pack consecutive requests so every Q has a contiguous logical K range.
   // Bound the replicated prefix storage for batches with widely varying
@@ -1274,7 +1314,7 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
   for (int64_t request = 0; request < batch; request += group_size) {
     const int64_t count = std::min(group_size, batch - request);
     auto keys = torch::empty({count * pools, 128}, quant.options());
-    auto scales = torch::empty({count * pools}, weights.options());
+    auto scales = torch::empty({count * pools}, scaled_weights.options());
     gather_pool_prefix<<<dim3((pools + 63) / 64, count), 256, 0, stream>>>(
         cache.data_ptr<uint8_t>(),
         block_table.data_ptr<int32_t>() + request * block_table.size(1),
@@ -1296,7 +1336,7 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
       const int64_t size = std::min(chunk, tokens - first);
       ffi::Tensor logits;
       {
-        TvmffiStreamGuard guard(query.device());
+        TvmffiStreamGuard guard(positions.device());
         logits = score_fn(to_ffi_tensor(quant.narrow(0, first, size)),
                           to_ffi_tensor(keys),
                           to_ffi_tensor(scaled_weights.narrow(0, first, size)),
@@ -1307,7 +1347,7 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
                           int64_t{0})
                      .cast<ffi::Tensor>();
       }
-      auto scores = own_logits(std::move(logits), query.options());
+      auto scores = own_logits(std::move(logits), positions.options());
       select_rows(scores.data_ptr<float>(),
                   scores.stride(0),
                   first,

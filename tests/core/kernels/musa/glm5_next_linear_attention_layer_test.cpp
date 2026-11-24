@@ -649,6 +649,28 @@ TEST(GlmKdaLayerTest, McclContextParallelWorker) {
       EXPECT_TRUE(
           torch::equal(unused_state, torch::full_like(unused_state, 0.125)));
     }
+    // Exercise the real MCCL backend as well as the counting adapter. Equal
+    // Plain shards use current-stream collectives on MUSA.
+    if (tokens == 128) {
+      auto direct_cp = cp;
+      direct_cp.cp_group_ = group.get();
+      Glm5NextKDA direct(args, QuantArgs(), direct_cp, opts);
+      direct->load_state_dict(StateDict(weights));
+      auto direct_cache = make_cache(kLocalHeads);
+      auto reference_cache = make_cache(kHeads);
+      global.has_initial_states.zero_();
+      sharded.has_initial_states.zero_();
+      global.is_chunked_prefill = false;
+      sharded.is_chunked_prefill = false;
+      const auto input =
+          torch::randn({tokens, kHidden}, torch::kFloat32).to(opts);
+      const auto reference =
+          full->forward(input, global, reference_cache, params);
+      compare(direct->forward(
+                  input.narrow(0, begin, count), sharded, direct_cache, params),
+              reference.narrow(0, begin, count),
+              "current-stream gather and reduce-scatter");
+    }
     // CP state ownership matches head-TP ownership: the existing TP decoder
     // must read the final prefill state correctly for the next token.
     const int64_t batch_size = static_cast<int64_t>(cu.size()) - 1;

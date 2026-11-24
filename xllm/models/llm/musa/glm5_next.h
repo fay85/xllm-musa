@@ -29,6 +29,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "core/framework/config/speculative_config.h"
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/model/model_output.h"
