@@ -27,6 +27,7 @@ limitations under the License.
 #include <unordered_set>
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "framework/parallel_state/musa_process_group.h"
 #include "framework/parallel_state/parallel_state.h"
 #include "framework/state_dict/utils.h"
 #include "kernels/musa/gdn_ops.h"
@@ -335,6 +336,11 @@ void Glm5NextLinearAttentionImpl::load_state_dict(const StateDict& state_dict) {
   load_column_linear(f_b_proj_, state_dict, "f_b_proj.");
   load_column_linear(g_b_proj_, state_dict, "g_b_proj.");
 
+  if (cp_group_ != nullptr && !fg_b_weight_.defined() &&
+      f_b_proj_->is_weight_loaded() && g_b_proj_->is_weight_loaded()) {
+    fg_b_weight_ = torch::stack({f_b_proj_->weight(), g_b_proj_->weight()});
+  }
+
   load_conv_linear(q_conv1d_, state_dict, "q_conv1d");
   load_conv_linear(k_conv1d_, state_dict, "k_conv1d");
   load_conv_linear(v_conv1d_, state_dict, "v_conv1d");
@@ -505,12 +511,32 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
       cp_group_ != nullptr && attn_metadata.glm5_prefill_cp_enabled;
   CHECK_EQ(attn_metadata.glm5_prefill_cp_enabled, use_prefill_cp)
       << "KDA CP layer and token-shard metadata must agree";
+  kernel::musa::TvmffiComputeStreamGuard compute_stream_guard(
+      hidden_states.device());
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+  // Equal Plain shards have no inter-rank padding or permutation.
+  auto* stream_group = use_prefill_cp && !attn_metadata.enable_cuda_graph &&
+                               !attn_metadata.glm5_prefill_cp_round_robin &&
+                               attn_metadata.glm5_prefill_global_rows %
+                                       cp_group_->world_size() ==
+                                   0
+                           ? dynamic_cast<ProcessGroupImpl*>(cp_group_)
+                           : nullptr;
+#endif
   std::vector<int32_t> cp_token_counts;
   torch::Tensor global_hidden_states = hidden_states;
   if (use_prefill_cp) {
     cp_token_counts =
         validate_kda_cp_input(hidden_states, attn_metadata, *cp_group_);
-    if (attn_metadata.glm5_prefill_cp_round_robin) {
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+    if (stream_group != nullptr) {
+      global_hidden_states = stream_group->gather_rows_on_current_stream(
+          hidden_states.contiguous());
+    } else
+#endif
+        if (attn_metadata.glm5_prefill_cp_round_robin) {
       CHECK(attn_metadata.glm5_prefill_cp_layout != nullptr)
           << "Round-robin KDA requires the shared CP layout";
       global_hidden_states = glm5_cp_gather_plain_order(
@@ -520,11 +546,6 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
           hidden_states.contiguous(), cp_group_, cp_token_counts);
     }
   }
-  // Keep the collective on its process-group stream.  Once its result is
-  // available, use one concrete compute stream for Torch and the KDA FFI
-  // kernels throughout the local attention calculation.
-  kernel::musa::TvmffiComputeStreamGuard compute_stream_guard(
-      hidden_states.device());
   const int64_t num_tokens = global_hidden_states.size(0);
   torch::Tensor projected = in_proj_qkvbfg_a_->forward(global_hidden_states);
   const auto projections = projected.split_with_sizes(
@@ -535,13 +556,23 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   // projection allocation instead of copying the full [tokens, 3*dim] slice.
   torch::Tensor mixed_qkv = projections[0];
   torch::Tensor beta = projections[1].contiguous();
-  torch::Tensor raw_gate = f_b_proj_->forward(projections[2].contiguous())
-                               .view({num_tokens, local_num_heads_, head_dim_})
-                               .contiguous();
-  torch::Tensor output_gate =
-      g_b_proj_->forward(projections[3].contiguous())
-          .view({num_tokens, local_num_heads_, head_dim_})
-          .contiguous();
+  torch::Tensor raw_gate;
+  torch::Tensor output_gate;
+  if (use_prefill_cp) {
+    const auto fg_input =
+        projected
+            .narrow(
+                1, 3 * local_projection_size_ + local_num_heads_, 2 * head_dim_)
+            .view({num_tokens, 2, head_dim_})
+            .transpose(0, 1)
+            .contiguous();
+    const auto gates = torch::bmm(fg_input, fg_b_weight_.transpose(1, 2));
+    raw_gate = gates[0];
+    output_gate = gates[1];
+  } else {
+    raw_gate = f_b_proj_->forward(projections[2].contiguous());
+    output_gate = g_b_proj_->forward(projections[3].contiguous());
+  }
 
   torch::Tensor conv_cache = kv_cache.get_conv_cache();
   torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
@@ -717,8 +748,13 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   torch::Tensor normalized = o_norm_->forward_sigmoid(core_output, output_gate);
   torch::Tensor output =
       o_proj_->forward(normalized.view({num_tokens, local_projection_size_}));
-  // Communication owns its stream/order. Do not make ReduceScatter wait on or
-  // execute inside the temporary Torch/FFI compute-stream guard.
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+  if (stream_group != nullptr) {
+    return stream_group->reduce_scatter_rows_on_current_stream(
+        output.contiguous());
+  }
+#endif
   compute_stream_guard.release();
   if (use_prefill_cp) {
     torch::Tensor partial = output;

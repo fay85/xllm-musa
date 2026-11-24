@@ -501,10 +501,10 @@ void causal_conv1d_fwd_cuda(ConvParamsBase& params, cudaStream_t stream) {
 }
 
 template <typename input_t, typename weight_t, int kBlockTokens>
-__global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
+__device__ inline void causal_conv1d_token_major_feature(ConvParamsBase params,
+                                                         int32_t feature) {
   const int seq_idx = blockIdx.x;
   const int token_offset = blockIdx.y * kBlockTokens;
-  const int feature = blockIdx.z * blockDim.x + threadIdx.x;
   if (feature >= params.dim) {
     return;
   }
@@ -612,6 +612,82 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
   }
 }
 
+template <typename input_t, typename weight_t, int kBlockTokens>
+__global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
+  causal_conv1d_token_major_feature<input_t, weight_t, kBlockTokens>(
+      params, blockIdx.z * blockDim.x + threadIdx.x);
+}
+
+// The interior of a long BF16 sequence uses aligned 128-bit transactions.
+// Each group of 32 threads covers 256 features and produces four tokens.
+// Only the first tile reads and updates cache history.
+template <typename T>
+struct alignas(16) ConvFeaturePack {
+  T values[8];
+};
+
+constexpr int32_t kTokensPerGroup = 4;
+constexpr int32_t kPackedTileTokens = 4 * kTokensPerGroup;
+
+template <typename T>
+__global__ void causal_conv1d_bf16_packed_kernel(ConvParamsBase params) {
+  constexpr int32_t kTileFeatures = 256;
+  const int32_t seq = blockIdx.x;
+  const auto* offsets = static_cast<const int32_t*>(params.query_start_loc_ptr);
+  const int32_t length = offsets[seq + 1] - offsets[seq];
+  const int32_t tile = blockIdx.y * kPackedTileTokens;
+  if (tile >= length) {
+    return;
+  }
+  const int32_t feature_base = blockIdx.z * kTileFeatures;
+  if (tile == 0 || tile + kPackedTileTokens > length) {
+    causal_conv1d_token_major_feature<T, T, kPackedTileTokens>(
+        params, feature_base + threadIdx.x);
+    causal_conv1d_token_major_feature<T, T, kPackedTileTokens>(
+        params, feature_base + threadIdx.x + 128);
+    return;
+  }
+  if (static_cast<const int32_t*>(params.cache_indices_ptr)[seq] ==
+      params.pad_slot_id) {
+    return;
+  }
+  const int64_t token = static_cast<int64_t>(offsets[seq]) + tile +
+                        (threadIdx.x / 32) * kTokensPerGroup;
+  const int32_t feature = feature_base + (threadIdx.x % 32) * 8;
+  const auto* x = static_cast<const T*>(params.x_ptr) +
+                  (token - 3) * params.x_l_stride + feature;
+  auto* out =
+      static_cast<T*>(params.out_ptr) + token * params.out_l_stride + feature;
+  ConvFeaturePack<T> inputs[kTokensPerGroup + 3];
+#pragma unroll
+  for (int32_t i = 0; i < kTokensPerGroup + 3; ++i) {
+    inputs[i] =
+        *reinterpret_cast<const ConvFeaturePack<T>*>(x + i * params.x_l_stride);
+  }
+  ConvFeaturePack<T> outputs[kTokensPerGroup];
+  const auto* weight = static_cast<const T*>(params.weight_ptr) + feature * 4;
+#pragma unroll
+  for (int32_t lane = 0; lane < 8; ++lane) {
+    const auto* w = weight + lane * 4;
+#pragma unroll
+    for (int32_t i = 0; i < kTokensPerGroup; ++i) {
+      float value = 0.0f;
+#pragma unroll
+      for (int32_t j = 0; j < 4; ++j) {
+        value += static_cast<float>(inputs[i + j].values[lane]) *
+                 static_cast<float>(w[j]);
+      }
+      constexpr float kLog2e = 1.4426950408889634f;
+      outputs[i].values[lane] = T(value / (1.0f + exp2f(-value * kLog2e)));
+    }
+  }
+#pragma unroll
+  for (int32_t i = 0; i < kTokensPerGroup; ++i) {
+    *reinterpret_cast<ConvFeaturePack<T>*>(out + i * params.out_l_stride) =
+        outputs[i];
+  }
+}
+
 template <typename input_t, typename weight_t>
 void causal_conv1d_fwd_token_major_cuda(ConvParamsBase& params,
                                         cudaStream_t stream) {
@@ -620,6 +696,24 @@ void causal_conv1d_fwd_token_major_cuda(ConvParamsBase& params,
   const dim3 grid(params.batch,
                   (params.seqlen + kBlockTokens - 1) / kBlockTokens,
                   (params.dim + kThreads - 1) / kThreads);
+  if constexpr (std::is_same_v<input_t, at::BFloat16> &&
+                std::is_same_v<input_t, weight_t>) {
+    if (params.dim % kThreads == 0 && params.x_l_stride % 8 == 0 &&
+        reinterpret_cast<uintptr_t>(params.x_ptr) % 16 == 0 &&
+        reinterpret_cast<uintptr_t>(params.out_ptr) % 16 == 0 &&
+        params.weight_c_stride == 4 && params.weight_width_stride == 1 &&
+        params.bias_ptr == nullptr && params.silu_activation &&
+        params.seqlen >= 2 * kPackedTileTokens) {
+      const dim3 packed_grid(
+          grid.x,
+          (params.seqlen + kPackedTileTokens - 1) / kPackedTileTokens,
+          grid.z);
+      causal_conv1d_bf16_packed_kernel<input_t>
+          <<<packed_grid, 128, 0, stream>>>(params);
+      C10_CUDA_KERNEL_LAUNCH_CHECK();
+      return;
+    }
+  }
   causal_conv1d_fwd_token_major_kernel<input_t, weight_t, kBlockTokens>
       <<<grid, kThreads, 0, stream>>>(params);
   C10_CUDA_KERNEL_LAUNCH_CHECK();

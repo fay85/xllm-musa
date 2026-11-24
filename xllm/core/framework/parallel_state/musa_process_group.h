@@ -63,6 +63,36 @@ class ProcessGroupImpl : public ProcessGroup {
         rank, rank_size, group_name, device, store);
   }
 
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+  // torch_musa enqueues asyncOp=false collectives on the current Torch
+  // stream. This mode can return null after enqueuing its watchdog work.
+  torch::Tensor gather_rows_on_current_stream(torch::Tensor input) {
+    auto output = torch::empty({world_size() * input.size(0), input.size(1)},
+                               input.options());
+    c10d::AllgatherOptions options;
+    options.asyncOp = false;
+    auto work = pg_->_allgather_base(output, input, options);
+    if (work) {
+      work->wait();
+    }
+    return output;
+  }
+
+  torch::Tensor reduce_scatter_rows_on_current_stream(torch::Tensor input) {
+    auto output = torch::empty({input.size(0) / world_size(), input.size(1)},
+                               input.options());
+    c10d::ReduceScatterOptions options;
+    options.asyncOp = false;
+    options.reduceOp = c10d::ReduceOp::SUM;
+    auto work = pg_->_reduce_scatter_base(output, input, options);
+    if (work) {
+      work->wait();
+    }
+    return output;
+  }
+#endif
+
   // The caller already resolved this rank's position inside group_ranks.
   ProcessGroupImpl(int32_t global_rank,
                    int32_t local_rank,

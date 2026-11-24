@@ -123,6 +123,7 @@ class Glm5NextLinearAttentionImpl final : public torch::nn::Module {
   musa::RmsNormGated o_norm_{nullptr};
 
   torch::Tensor conv_weight_;
+  torch::Tensor fg_b_weight_;
 
   bool o_norm_is_loaded_ = false;
 
