@@ -1485,7 +1485,7 @@ void ProfileManager::warmup_prefill_for_graph() {
       };
       double ckpt_runner_warmup_ms = 0.0;
       int32_t ckpt_runner_buckets = 0;
-      for (int32_t b : {1024, 2048, 3072, 4096, 6144}) {
+      for (int32_t b : {1024, 1536, 2048, 3072, 4096, 6144, 6656}) {
         if (b < prefill_tokens) {
           const double latency_ms =
               run_single_ckpt_warmup(b, /*prefix_len=*/prefix_step);

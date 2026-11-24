@@ -922,7 +922,7 @@ void LinearStateBlockManager::publish_linear_checkpoint(
     const bool started_cold = (initial_hit == 0);
     const size_t warm_min_advance = std::max<size_t>(
         chunk_stride,
-        read_env_size_t("XLLM_GDN_SINGLEPASS_WARM_MIN_ADVANCE", 1472));
+        read_env_size_t("XLLM_GDN_SINGLEPASS_WARM_MIN_ADVANCE", 512));
     const size_t cold_stride_raw =
         read_env_size_t("XLLM_GDN_SINGLEPASS_COLD_STRIDE", 2048);
     const size_t cold_stride =
@@ -989,12 +989,12 @@ void LinearStateBlockManager::publish_linear_checkpoint(
         }
       }
       if (bounds.end_ckpt > start_pos && bounds.end_ckpt <= max_ckpt_pos) {
-        if (started_cold) {
+        if (started_cold || bounds.hist_ckpt > initial_hit + 192) {
           const size_t base_pos = std::max<size_t>(start_pos, bounds.hist_ckpt);
           if (bounds.end_ckpt >= base_pos + 512) {
             candidate_positions.push_back(bounds.end_ckpt);
           }
-        } else if (bounds.hist_ckpt <= initial_hit + 192) {
+        } else {
           const size_t req_adv =
               (bounds.end_ckpt == step_end_tokens)
                   ? std::max<size_t>(chunk_stride * 4, 256)

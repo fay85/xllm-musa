@@ -125,47 +125,50 @@ int32_t single_checkpoint_runner_bucket_tokens(
   if (num_tokens <= 256) {
     return 0;
   }
-  int32_t bucket_tokens = 0;
-  if (in_top_chunk_bucket || num_tokens > 6144) {
-    bucket_tokens = max_chunk;
-  } else if (num_tokens <= 1024) {
-    bucket_tokens = 1024;
-  } else if (num_tokens <= 2048) {
-    bucket_tokens = 2048;
-  } else if (num_tokens <= 3072) {
-    bucket_tokens = 3072;
-  } else if (num_tokens <= 4096) {
-    bucket_tokens = 4096;
-  } else {
-    bucket_tokens = 6144;
-  }
-  if (params.pcp_input_is_sharded &&
-      bucket_tokens != static_cast<int32_t>(num_tokens)) {
-    return 0;
-  }
   const int32_t history = host.kv_seq_lens.back() - host.q_seq_lens.back();
-  const int32_t front_rows =
-      bucket_tokens == 256
-          ? 256
-          : layer::musa_pcp::single_prefill_front_rows(bucket_tokens, history);
-  if (front_rows <= 0 ||
-      (bucket_tokens > 256 && static_cast<int32_t>(num_tokens) <= front_rows)) {
-    return 0;
-  }
+  std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget> targets;
   if (has_interior_checkpoints) {
-    constexpr int32_t kConvStateLen = 3;
-    std::vector<::xllm::kernel::musa::GdnSinglepassInteriorTarget> targets;
     parse_gdn_singlepass_checkpoints(params, &targets, nullptr);
-    for (const auto& t : targets) {
-      if (t.offset_tokens < kConvStateLen ||
-          t.offset_tokens > static_cast<int32_t>(num_tokens) ||
-          (t.offset_tokens > front_rows &&
-           (t.offset_tokens - front_rows) < kConvStateLen)) {
-        return 0;
+  }
+  const int32_t candidates[] = {
+      1024, 1536, 2048, 3072, 4096, 6144, 6656, max_chunk};
+  for (int32_t cand : candidates) {
+    if (cand <= 0 || cand > max_chunk ||
+        static_cast<int32_t>(num_tokens) > cand) {
+      continue;
+    }
+    if (in_top_chunk_bucket && cand < max_chunk) {
+      continue;
+    }
+    if (params.pcp_input_is_sharded &&
+        cand != static_cast<int32_t>(num_tokens)) {
+      continue;
+    }
+    const int32_t front_rows =
+        cand == 256 ? 256
+                    : layer::musa_pcp::single_prefill_front_rows(cand, history);
+    if (front_rows <= 0 ||
+        (cand > 256 && static_cast<int32_t>(num_tokens) <= front_rows)) {
+      continue;
+    }
+    bool targets_ok = true;
+    if (has_interior_checkpoints) {
+      constexpr int32_t kConvStateLen = 3;
+      for (const auto& t : targets) {
+        if (t.offset_tokens < kConvStateLen ||
+            t.offset_tokens > static_cast<int32_t>(num_tokens) ||
+            (t.offset_tokens > front_rows &&
+             (t.offset_tokens - front_rows) < kConvStateLen)) {
+          targets_ok = false;
+          break;
+        }
       }
     }
+    if (targets_ok) {
+      return cand;
+    }
   }
-  return bucket_tokens;
+  return 0;
 }
 
 int32_t single_checkpoint_runner_front_rows(
