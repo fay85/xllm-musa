@@ -18,6 +18,7 @@ limitations under the License.
 #ifndef C10_USE_GLOG
 #define C10_USE_GLOG 1
 #endif
+#include <c10/util/env.h>
 #include <glog/logging.h>
 #include <musa_bf16.h>
 #include <musa_fp16.h>
@@ -41,6 +42,8 @@ namespace xllm::kernel::musa {
 namespace {
 
 constexpr int32_t kQuantThreads = 128;
+constexpr int32_t kTiledStateDim = 128;
+constexpr int32_t kTiledColumns = 16;
 constexpr int32_t kConvCopyThreads = 256;
 
 template <typename T>
@@ -416,6 +419,59 @@ __global__ void quantize_single_layer_ssm_to_int8_kernel(
       qf = fminf(fmaxf(qf, -127.0f), 127.0f);
       dst_q[v * head_k_dim + k] = static_cast<int8_t>(qf);
     }
+  }
+}
+
+// Specialization for the 128 x 128 SSM state. The caller dispatches all other
+// shapes to quantize_single_layer_ssm_to_int8_kernel.
+template <typename SsmT>
+__global__ void quantize_single_layer_ssm_to_int8_tiled_kernel(
+    const SsmT* __restrict__ src_layer_ssm,
+    int8_t* __restrict__ qdata,
+    __mt_bfloat16* __restrict__ scales,
+    int64_t layer,
+    int64_t num_ckpt_slots,
+    int64_t num_heads,
+    int64_t ckpt_slot) {
+  constexpr int32_t kParts = kQuantThreads / kTiledColumns;
+  const int64_t head = blockIdx.x / (kTiledStateDim / kTiledColumns);
+  const int32_t col = threadIdx.x % kTiledColumns;
+  const int32_t part = threadIdx.x / kTiledColumns;
+  const int32_t k =
+      (blockIdx.x % (kTiledStateDim / kTiledColumns)) * kTiledColumns + col;
+  const int64_t slot_head =
+      (layer * num_ckpt_slots + ckpt_slot) * num_heads + head;
+  const SsmT* src =
+      src_layer_ssm + (head * kTiledStateDim * kTiledStateDim) + k;
+  int8_t* dst = qdata + slot_head * kTiledStateDim * kTiledStateDim + k;
+  __shared__ float maxes[kParts][kTiledColumns];
+  float values[kTiledStateDim / kParts];
+  float amax = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kTiledStateDim / kParts; ++i) {
+    const float val = ssm_to_float(src[(i * kParts + part) * kTiledStateDim]);
+    values[i] = val;
+    amax = fmaxf(amax, fabsf(val));
+  }
+  maxes[part][col] = amax;
+  __syncthreads();
+  if (part == 0) {
+#pragma unroll
+    for (int32_t i = 1; i < kParts; ++i) {
+      amax = fmaxf(amax, maxes[i][col]);
+    }
+    const __mt_bfloat16 scale =
+        __float2bfloat16_rn(fmaxf(amax, 1e-8f) / 127.0f);
+    scales[slot_head * kTiledStateDim + k] = scale;
+    maxes[0][col] = 1.0f / fmaxf(__bfloat162float(scale), 1e-12f);
+  }
+  __syncthreads();
+  const float inv_scale = maxes[0][col];
+#pragma unroll
+  for (int32_t i = 0; i < kTiledStateDim / kParts; ++i) {
+    const float q = nearbyintf(values[i] * inv_scale);
+    dst[(i * kParts + part) * kTiledStateDim] =
+        static_cast<int8_t>(fminf(fmaxf(q, -127.0f), 127.0f));
   }
 }
 
@@ -821,47 +877,51 @@ void store_gdn_int8_checkpoint_from_tensors(
   CHECK_GT(src_conv_cols, 0);
   CHECK_LE(src_conv_cols, dst_conv_cols);
 
-  const dim3 quant_grid(static_cast<uint32_t>(pool->num_heads), 1u);
   int8_t* qdata = pool->qdata.data_ptr<int8_t>();
   __mt_bfloat16* scales =
       reinterpret_cast<__mt_bfloat16*>(pool->scale.data_ptr());
-
+  static const bool tiled_enabled =
+      c10::utils::check_env("XLLM_MUSA_GDN_TILED_CHECKPOINT").value_or(false);
+  const bool use_tiled = tiled_enabled && pool->head_v_dim == kTiledStateDim &&
+                         pool->head_k_dim == kTiledStateDim;
+  const auto launch_quantize = [&](const auto* src) {
+    if (use_tiled) {
+      const dim3 grid(static_cast<uint32_t>(pool->num_heads *
+                                            (kTiledStateDim / kTiledColumns)));
+      quantize_single_layer_ssm_to_int8_tiled_kernel<<<grid,
+                                                       kQuantThreads,
+                                                       0,
+                                                       stream>>>(
+          src,
+          qdata,
+          scales,
+          layer_idx,
+          pool->num_ckpt_slots,
+          pool->num_heads,
+          ckpt_slot);
+    } else {
+      const dim3 grid(static_cast<uint32_t>(pool->num_heads));
+      quantize_single_layer_ssm_to_int8_kernel<<<grid,
+                                                 kQuantThreads,
+                                                 0,
+                                                 stream>>>(src,
+                                                           qdata,
+                                                           scales,
+                                                           layer_idx,
+                                                           pool->num_ckpt_slots,
+                                                           pool->num_heads,
+                                                           pool->head_v_dim,
+                                                           pool->head_k_dim,
+                                                           ckpt_slot);
+    }
+  };
   if (pool->ssm_dtype == torch::kFloat32) {
-    quantize_single_layer_ssm_to_int8_kernel<float>
-        <<<quant_grid, kQuantThreads, 0, stream>>>(
-            ssm_contig.data_ptr<float>(),
-            qdata,
-            scales,
-            layer_idx,
-            pool->num_ckpt_slots,
-            pool->num_heads,
-            pool->head_v_dim,
-            pool->head_k_dim,
-            ckpt_slot);
+    launch_quantize(ssm_contig.data_ptr<float>());
   } else if (pool->ssm_dtype == torch::kBFloat16) {
-    quantize_single_layer_ssm_to_int8_kernel<__mt_bfloat16>
-        <<<quant_grid, kQuantThreads, 0, stream>>>(
-            reinterpret_cast<const __mt_bfloat16*>(ssm_contig.data_ptr()),
-            qdata,
-            scales,
-            layer_idx,
-            pool->num_ckpt_slots,
-            pool->num_heads,
-            pool->head_v_dim,
-            pool->head_k_dim,
-            ckpt_slot);
+    launch_quantize(
+        reinterpret_cast<const __mt_bfloat16*>(ssm_contig.data_ptr()));
   } else if (pool->ssm_dtype == torch::kFloat16) {
-    quantize_single_layer_ssm_to_int8_kernel<__half>
-        <<<quant_grid, kQuantThreads, 0, stream>>>(
-            reinterpret_cast<const __half*>(ssm_contig.data_ptr()),
-            qdata,
-            scales,
-            layer_idx,
-            pool->num_ckpt_slots,
-            pool->num_heads,
-            pool->head_v_dim,
-            pool->head_k_dim,
-            ckpt_slot);
+    launch_quantize(reinterpret_cast<const __half*>(ssm_contig.data_ptr()));
   } else {
     LOG(FATAL) << "Unsupported GDN SSM dtype for Int8 checkpoint: "
                << pool->ssm_dtype;
