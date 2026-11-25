@@ -371,7 +371,8 @@ TEST_F(BlockManagerPoolTest, DecodeDpAffinityHonorsHitAndLoadThresholds) {
   EXPECT_EQ(pool.get_dp_rank(&within_skew), 0);
 }
 
-TEST_F(BlockManagerPoolTest, DecodeDpAffinityDefaultsToExistingPolicy) {
+TEST_F(BlockManagerPoolTest,
+       DecodeDpAffinityDefaultsToBalancedAndSupportsOptOut) {
   constexpr char kBalanceEnv[] = "XLLM_DECODE_DP_PREFIX_BALANCE";
   tests::ScopedEnvironmentVariable balance(kBalanceEnv);
   ASSERT_EQ(unsetenv(kBalanceEnv), 0);
@@ -386,6 +387,9 @@ TEST_F(BlockManagerPoolTest, DecodeDpAffinityDefaultsToExistingPolicy) {
   ASSERT_TRUE(active.is_valid());
   pool.rank_zero_hit_tokens = 64;
   Sequence request = make_sequence(0, std::vector<int32_t>(5000, 1));
+  EXPECT_EQ(pool.get_dp_rank(&request), 1);
+
+  ASSERT_TRUE(balance.set("0"));
   EXPECT_EQ(pool.get_dp_rank(&request), 0);
 }
 

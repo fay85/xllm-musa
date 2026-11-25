@@ -174,10 +174,11 @@ int32_t BlockManagerPool::get_dp_rank(Sequence* sequence) const {
   int32_t selected_rank = -1;
   if (options_.enable_prefix_cache() && block_managers_.size() > 1 &&
       sequence->num_tokens() > 0) {
-    // Keep the latency/cache-affinity trade-off opt-in for Decode.
+    // Enable load-aware prefix affinity balancing by default on Decode DP
+    // pools (can be disabled via XLLM_DECODE_DP_PREFIX_BALANCE=0).
     const bool balance_affinity =
         options_.instance_is_decode() &&
-        util::get_bool_env("XLLM_DECODE_DP_PREFIX_BALANCE", false);
+        util::get_bool_env("XLLM_DECODE_DP_PREFIX_BALANCE", true);
     static const size_t min_affinity_tokens =
         static_cast<size_t>(std::max<int64_t>(
             1, util::get_int_env("XLLM_DP_PREFIX_AFFINITY_MIN_TOKENS", 4096)));
