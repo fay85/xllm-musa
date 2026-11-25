@@ -376,7 +376,12 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     }
   }
 
-  if (!use_prompt_as_is && sp.tools.empty() && pretokenized_ids.has_value() &&
+  // Gateway (xllm_master_serving) renders messages + tools + chat_template_kwargs
+  // via NativeModelRuntimeContext::render_and_tokenize before populating
+  // rpc_request.token_ids(). Reusing pretokenized_ids avoids redundant 25k+ token
+  // Jinja2/BPE tokenization on Prefill and keeps Prefill KV block hashes aligned
+  // with Gateway KV_ROUTE shadow hashes.
+  if (!use_prompt_as_is && pretokenized_ids.has_value() &&
       !pretokenized_ids->empty() && model_args_->audio_token_id() == 0) {
     std::vector<int32_t> prompt_tokens;
     if (processor_->process_pretokenized_prompt(

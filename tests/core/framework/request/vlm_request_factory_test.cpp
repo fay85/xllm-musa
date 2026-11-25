@@ -92,6 +92,17 @@ class FakeProcessor final : public MultimodalProcessorBase {
     return true;
   }
 
+  bool process_pretokenized_prompt(
+      const std::vector<int32_t>& base_tokens,
+      MMData& /*mm_data*/,
+      std::vector<int32_t>& token_ids) override {
+    if (!process_pretokenized_succeed_) {
+      return false;
+    }
+    token_ids = base_tokens;
+    return true;
+  }
+
   bool process_multimodal(const MMInput& /*inputs*/,
                           MMData& /*data*/) const override {
     return process_multimodal_succeed_;
@@ -101,12 +112,17 @@ class FakeProcessor final : public MultimodalProcessorBase {
     process_prompt_succeed_ = succeed;
   }
 
+  void set_process_pretokenized_succeed(bool succeed) {
+    process_pretokenized_succeed_ = succeed;
+  }
+
   void set_prompt_tokens(std::vector<int32_t> tokens) {
     prompt_tokens_ = std::move(tokens);
   }
 
  private:
   bool process_prompt_succeed_ = true;
+  bool process_pretokenized_succeed_ = false;
   bool process_multimodal_succeed_ = true;
   std::vector<int32_t> prompt_tokens_{1, 2, 3};
 };
@@ -326,6 +342,39 @@ TEST_F(VLMRequestFactoryTest, MessageOverloadCreatesRequestOnSuccess) {
 
   ASSERT_NE(request, nullptr);
   EXPECT_FALSE(capture.called);
+  EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 1);
+}
+
+TEST_F(VLMRequestFactoryTest, ReusesPretokenizedIdsWhenToolsArePresent) {
+  auto factory = make_factory();
+  processor_->set_process_pretokenized_succeed(true);
+  // Fail template rendering if invoked, proving pretokenized_ids short-circuits
+  // redundant Jinja2/BPE re-tokenization even when OpenAI tools are attached.
+  chat_template_->set_succeed(false);
+  CallbackCapture capture;
+  RequestParams sp;
+  sp.request_id = "req-chat-tools";
+  sp.max_tokens = 16;
+  sp.tools.emplace_back(
+      "function",
+      JsonFunction("get_weather", "Lookup weather", nlohmann::json::object()));
+
+  MMContentVec content;
+  content.emplace_back("text", std::string("weather in Beijing?"));
+  std::vector<Message> messages;
+  messages.emplace_back("user", content);
+  const std::vector<int32_t> pretokenized{101, 102, 103, 104};
+
+  auto request = factory->create(messages,
+                                 sp,
+                                 /*payload=*/std::string{},
+                                 make_capture_callback(&capture),
+                                 /*use_prompt_as_is=*/false,
+                                 pretokenized);
+
+  ASSERT_NE(request, nullptr);
+  EXPECT_FALSE(capture.called);
+  EXPECT_EQ(request->state().prompt_tokens, pretokenized);
   EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 1);
 }
 
