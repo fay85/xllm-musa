@@ -41,7 +41,9 @@ std::shared_ptr<const MusaKdaBatchMetadata> prepare_musa_kda_batch(
     const torch::Tensor& indices,
     const torch::Tensor& cu_seqlens,
     int64_t tokens,
-    int64_t state_capacity);
+    int64_t state_capacity,
+    const torch::Tensor& host_indices = {},
+    const torch::Tensor& host_cu = {});
 
 // Packs the four head-sharded projections and two replicated low-rank
 // projections into one local GEMM. Checkpoint shards may arrive in any order.

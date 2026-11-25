@@ -40,6 +40,24 @@ constexpr int64_t kMqaLogitsFreeMemDenominator = 5;
 constexpr int64_t kMqaLogitsTotalMemNumerator = 3;
 constexpr int64_t kMqaLogitsTotalMemDenominator = 10;
 
+// Each MATE page stores 64 payload rows followed by their four-byte scales.
+__global__ void fill_pool_byte_indices(const int64_t* slots,
+                                       int64_t* indices,
+                                       int64_t elements) {
+  const int64_t index =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= elements) {
+    return;
+  }
+  const int64_t slot = slots[index / kPoolPacketBytes];
+  const int32_t column = index % kPoolPacketBytes;
+  const int64_t page_base = (slot / 64) * 64 * kPoolPacketBytes;
+  const int32_t row = slot % 64;
+  indices[index] =
+      page_base +
+      (column < 128 ? row * 128 + column : 64 * 128 + row * 4 + column - 128);
+}
+
 // Every thread owns one channel. Each butterfly reads the previous stage
 // before any lane overwrites shared memory.
 __device__ float hadamard(float value, float* shared) {
@@ -1506,6 +1524,28 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
       tail.size(0),
       tail.size(2));
   check_musa_kernel_launch("GLM CP IndexPool tail update");
+}
+
+torch::Tensor glm5_next_pool_byte_indices(const torch::Tensor& physical) {
+  XLLMDeviceGuard guard(physical.device());
+  CHECK_EQ(physical.dim(), 1);
+  CHECK(physical.is_contiguous());
+  auto output =
+      torch::empty({physical.numel() * kPoolPacketBytes}, physical.options());
+  if (output.numel() > 0) {
+    constexpr int32_t threads = 256;
+    const int64_t blocks = (output.numel() + threads - 1) / threads;
+    CHECK_LE(blocks, std::numeric_limits<int32_t>::max());
+    fill_pool_byte_indices<<<blocks,
+                             threads,
+                             0,
+                             current_musa_stream(physical.device())>>>(
+        physical.data_ptr<int64_t>(),
+        output.data_ptr<int64_t>(),
+        output.numel());
+    check_musa_kernel_launch("GLM CP pool byte indices");
+  }
+  return output;
 }
 
 void glm5_next_indexer_scatter_cp(const torch::Tensor& gathered,

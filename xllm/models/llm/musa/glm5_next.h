@@ -172,6 +172,29 @@ class Glm5NextModelImpl final
                                            global_rows,
                                            device_);
     }
+    // Reuse scheduler mirrors only for the eager batch they describe.
+    const auto& attention = modified_input_params.attention;
+    const auto& embedding = modified_input_params.embedding;
+    const auto& batch = *modified_input_params.attn_metadata;
+    torch::Tensor host_cu, host_ids, host_table;
+    if (use_prefill_cp && !batch.enable_cuda_graph) {
+      if (batch.q_cu_seq_lens.is_same(attention.device.q_seq_lens) &&
+          static_cast<int64_t>(attention.host.q_seq_lens.size()) ==
+              batch.q_cu_seq_lens.numel()) {
+        host_cu = torch::tensor(attention.host.q_seq_lens, torch::kInt32);
+      }
+      if (batch.linear_state_indices.defined() &&
+          batch.linear_state_indices.is_same(embedding.linear_state_indices) &&
+          static_cast<int64_t>(embedding.linear_state_ids.size()) ==
+              batch.linear_state_indices.numel()) {
+        host_ids = torch::tensor(embedding.linear_state_ids, torch::kInt32);
+      }
+      if (attention.host.block_tables.defined() &&
+          attention.host.block_tables.device().is_cpu() &&
+          batch.block_table.is_same(attention.device.block_tables)) {
+        host_table = attention.host.block_tables;
+      }
+    }
     if (!modified_input_params.attn_metadata->enable_cuda_graph ||
         !modified_input_params.attn_metadata->musa_kda_batch) {
       // Own a fresh batch descriptor even when the scheduler reuses metadata.
@@ -198,8 +221,13 @@ class Glm5NextModelImpl final
                                 torch::TensorOptions()
                                     .dtype(torch::kInt32)
                                     .device(device_));
-        batch_metadata.musa_kda_batch = layer::prepare_musa_kda_batch(
-            indices, batch_metadata.q_cu_seq_lens, global_rows, state_capacity);
+        batch_metadata.musa_kda_batch =
+            layer::prepare_musa_kda_batch(indices,
+                                          batch_metadata.q_cu_seq_lens,
+                                          global_rows,
+                                          state_capacity,
+                                          host_ids,
+                                          host_cu);
       }
     }
     const layer::AttentionMetadata& attn_metadata =
@@ -217,8 +245,12 @@ class Glm5NextModelImpl final
       if (!modified_input_params.attn_metadata->glm5_prefill_cp_layout) {
         RECORD_USER_SCOPE("nn.Module: Glm5NextModel.CPLayoutPlan");
         modified_input_params.attn_metadata->glm5_prefill_cp_layout =
-            layer::build_glm5_next_cp_layout(
-                positions, attn_metadata, *cp_group_);
+            layer::build_glm5_next_cp_layout(positions,
+                                             attn_metadata,
+                                             *cp_group_,
+                                             host_ids,
+                                             host_cu,
+                                             host_table);
       }
     }
 
@@ -237,8 +269,6 @@ class Glm5NextModelImpl final
         tokens = tokens.slice(/*dim=*/0, begin, end).contiguous();
       }
       modified_input_params.attn_metadata->glm5_prefill_cp_round_robin = false;
-      modified_input_params.attn_metadata->glm5_prefill_local_row_indices =
-          torch::arange(begin, end, positions.options().dtype(torch::kInt32));
     }
     torch::Tensor hidden_states =
         input_embedding.defined()

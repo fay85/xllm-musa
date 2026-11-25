@@ -404,6 +404,23 @@ TEST_F(GlmSparseTest, NonpagedSelectionRespectsRequestAndCausalEnd) {
   }
 }
 
+TEST_F(GlmSparseTest, CpPoolByteIndicesAddressPayloadAndScalePlanes) {
+  const auto options =
+      torch::TensorOptions().device(device_).dtype(torch::kInt64);
+  auto slots = torch::tensor({64, 0, 127, 63}, options);
+  auto indices = kernel::musa::glm5_next_pool_byte_indices(slots);
+  auto page_bytes =
+      torch::arange(2 * 64 * 132, torch::kInt64).reshape({2, 64 * 132});
+  auto payload = page_bytes.narrow(1, 0, 64 * 128).reshape({128, 128});
+  auto scales = page_bytes.narrow(1, 64 * 128, 64 * 4).reshape({128, 4});
+  auto expected = torch::cat({payload, scales}, 1).index_select(0, slots.cpu());
+  EXPECT_TRUE(torch::equal(indices.cpu(), expected.flatten()));
+  EXPECT_EQ(
+      kernel::musa::glm5_next_pool_byte_indices(torch::empty({0}, options))
+          .numel(),
+      0);
+}
+
 TEST_F(GlmSparseTest, CpPayloadScatterWritesPoolsAndTail) {
   const auto opts =
       torch::TensorOptions().device(device_).dtype(torch::kBFloat16);

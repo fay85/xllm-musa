@@ -113,6 +113,8 @@ void glm5_next_indexer_update_tail(const torch::Tensor& keys,
                                    const torch::Tensor& read_ids,
                                    torch::Tensor& tail);
 
+torch::Tensor glm5_next_pool_byte_indices(const torch::Tensor& physical);
+
 // Materialize the combined CP indexer payload into the replicated cache and
 // recurrent tail. Pool packets are copied bytewise because their destination
 // spans the payload/scale planes of each MATE page. Tail rows are decoded

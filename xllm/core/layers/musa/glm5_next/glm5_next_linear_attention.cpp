@@ -444,7 +444,9 @@ std::shared_ptr<const MusaKdaBatchMetadata> prepare_musa_kda_batch(
     const torch::Tensor& indices,
     const torch::Tensor& cu_seqlens,
     int64_t tokens,
-    int64_t state_capacity) {
+    int64_t state_capacity,
+    const torch::Tensor& host_indices,
+    const torch::Tensor& host_cu) {
   CHECK_EQ(indices.dim(), 1);
   CHECK_EQ(indices.scalar_type(), torch::kInt32);
   CHECK_EQ(cu_seqlens.dim(), 1);
@@ -452,8 +454,12 @@ std::shared_ptr<const MusaKdaBatchMetadata> prepare_musa_kda_batch(
   CHECK_EQ(indices.numel() + 1, cu_seqlens.numel());
   CHECK_EQ(indices.device(), cu_seqlens.device());
   // Transfer only metadata, once, before any layer queues device work.
-  const torch::Tensor ids_host = indices.cpu().contiguous();
-  const torch::Tensor cu_host = cu_seqlens.cpu().contiguous();
+  const torch::Tensor ids_host =
+      host_indices.defined() ? host_indices : indices.cpu().contiguous();
+  const torch::Tensor cu_host =
+      host_cu.defined() ? host_cu : cu_seqlens.cpu().contiguous();
+  CHECK_EQ(ids_host.numel(), indices.numel());
+  CHECK_EQ(cu_host.numel(), cu_seqlens.numel());
   const int32_t* ids = ids_host.data_ptr<int32_t>();
   const int32_t* cu = cu_host.data_ptr<int32_t>();
   CHECK_EQ(cu[0], 0);

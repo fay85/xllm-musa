@@ -50,7 +50,10 @@ void prepare_glm5_next_cp_metadata(AttentionMetadata& metadata,
 std::shared_ptr<const Glm5NextCpLayout> build_glm5_next_cp_layout(
     const torch::Tensor& global_positions,
     const AttentionMetadata& metadata,
-    ProcessGroup& group);
+    ProcessGroup& group,
+    const torch::Tensor& host_ids = {},
+    const torch::Tensor& host_cu = {},
+    const torch::Tensor& host_table = {});
 void refresh_glm5_next_cp_layout(
     const std::shared_ptr<const Glm5NextCpLayout>& layout,
     const torch::Tensor& global_positions,

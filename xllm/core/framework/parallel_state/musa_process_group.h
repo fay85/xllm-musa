@@ -67,15 +67,20 @@ class ProcessGroupImpl : public ProcessGroup {
     (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
   // torch_musa enqueues asyncOp=false collectives on the current Torch
   // stream. This mode can return null after enqueuing its watchdog work.
-  torch::Tensor gather_rows_on_current_stream(torch::Tensor input) {
-    auto output = torch::empty({world_size() * input.size(0), input.size(1)},
-                               input.options());
+  void allgather_into_on_current_stream(torch::Tensor input,
+                                        torch::Tensor output) {
     c10d::AllgatherOptions options;
     options.asyncOp = false;
     auto work = pg_->_allgather_base(output, input, options);
     if (work) {
       work->wait();
     }
+  }
+
+  torch::Tensor gather_rows_on_current_stream(torch::Tensor input) {
+    auto output = torch::empty({world_size() * input.size(0), input.size(1)},
+                               input.options());
+    allgather_into_on_current_stream(input, output);
     return output;
   }
 
