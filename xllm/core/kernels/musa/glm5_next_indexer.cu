@@ -727,26 +727,31 @@ __device__ __forceinline__ void radix_topk_musa_split_hist(
     }
   }
   if constexpr (kExactOverflow) {
-    s_thread_key_min[tx] = local_key_min;
-    s_thread_key_max[tx] = local_key_max;
-    __syncthreads_lm();
+    // Only an overflowing boundary bin needs a full-key range reduction.
+    if (s_num_input[1] > SMEM_INPUT_SIZE) {
+      s_thread_key_min[tx] = local_key_min;
+      s_thread_key_max[tx] = local_key_max;
+      __syncthreads_lm();
 #pragma unroll
-    for (uint32_t offset = kSglBlockSize / 2; offset > 0; offset >>= 1) {
-      if (tx < offset) {
-        const uint32_t other_min = s_thread_key_min[tx + offset];
-        const uint32_t other_max = s_thread_key_max[tx + offset];
-        s_thread_key_min[tx] =
-            other_min < s_thread_key_min[tx] ? other_min : s_thread_key_min[tx];
-        s_thread_key_max[tx] =
-            other_max > s_thread_key_max[tx] ? other_max : s_thread_key_max[tx];
+      for (uint32_t offset = kSglBlockSize / 2; offset > 0; offset >>= 1) {
+        if (tx < offset) {
+          const uint32_t other_min = s_thread_key_min[tx + offset];
+          const uint32_t other_max = s_thread_key_max[tx + offset];
+          s_thread_key_min[tx] = other_min < s_thread_key_min[tx]
+                                     ? other_min
+                                     : s_thread_key_min[tx];
+          s_thread_key_max[tx] = other_max > s_thread_key_max[tx]
+                                     ? other_max
+                                     : s_thread_key_max[tx];
+        }
+        __syncthreads_lm();
+      }
+      if (tx == 0) {
+        s_threshold_key_min = s_thread_key_min[0];
+        s_threshold_key_max = s_thread_key_max[0];
       }
       __syncthreads_lm();
     }
-    if (tx == 0) {
-      s_threshold_key_min = s_thread_key_min[0];
-      s_threshold_key_max = s_thread_key_max[0];
-    }
-    __syncthreads_lm();
 
     if (s_num_input[1] > SMEM_INPUT_SIZE &&
         s_threshold_key_min != s_threshold_key_max) {
@@ -939,13 +944,42 @@ __global__ void select_pool_tokens_sgl(const float* scores,
                     12 * 1024 * sizeof(uint32_t));
       extern __shared__ uint32_t sort_scratch[];
       __syncthreads_lm();
-      uint32_t pool_id[1] = {static_cast<uint32_t>(lane) < wanted
-                                 ? static_cast<uint32_t>(selected[lane])
-                                 : UINT32_MAX};
-      auto& sort_storage =
-          *reinterpret_cast<BlockSort::TempStorage*>(sort_scratch);
-      BlockSort(sort_storage).Sort(pool_id, 0, 32 - __clz(pool_length));
-      selected[lane] = static_cast<int32_t>(pool_id[0]);
+      if (pool_length <= kThreads * 32) {
+        // Each selected pool is unique. Rank its bit among set bits to emit
+        // the same ascending IDs without repeatedly sorting 512 keys.
+        sort_scratch[lane] = 0;
+        __syncthreads_lm();
+        if (static_cast<uint32_t>(lane) < wanted) {
+          const uint32_t id = selected[lane];
+          ::atomicOr(&sort_scratch[id / 32], 1u << (id % 32));
+        }
+        __syncthreads_lm();
+        uint32_t bits = sort_scratch[lane];
+        const uint32_t count = __popc(bits);
+        const uint32_t warp_lane = lane % 32;
+        const uint32_t warp = lane / 32;
+        const uint32_t prefix = warp_inclusive_sum_musa(warp_lane, count);
+        if (warp_lane == 31) {
+          sort_scratch[kThreads + warp] = prefix;
+        }
+        __syncthreads_lm();
+        uint32_t dest = prefix - count;
+        for (uint32_t i = 0; i < warp; ++i) {
+          dest += sort_scratch[kThreads + i];
+        }
+        while (bits != 0) {
+          selected[dest++] = lane * 32 + __ffs(bits) - 1;
+          bits &= bits - 1;
+        }
+      } else {
+        uint32_t pool_id[1] = {static_cast<uint32_t>(lane) < wanted
+                                   ? static_cast<uint32_t>(selected[lane])
+                                   : UINT32_MAX};
+        auto& sort_storage =
+            *reinterpret_cast<BlockSort::TempStorage*>(sort_scratch);
+        BlockSort(sort_storage).Sort(pool_id, 0, 32 - __clz(pool_length));
+        selected[lane] = static_cast<int32_t>(pool_id[0]);
+      }
     }
   }
   __syncthreads_lm();

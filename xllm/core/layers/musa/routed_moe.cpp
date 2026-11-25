@@ -31,6 +31,7 @@ limitations under the License.
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/parallel_state.h"
+#include "core/kernels/musa/fp8_shared_swiglu.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/attention_metadata.h"
@@ -389,6 +390,13 @@ torch::Tensor RoutedMoeSharedExpertImpl::forward(
   }
 
   torch::Tensor gate_up = gate_up_proj_->forward(input);
+  if (num_tokens > kFp8GemvWorkspaceTokens && fused_shared_swiglu_ &&
+      down_proj_->supports_block_fp8_quantized_input()) {
+    auto [quantized, scales] =
+        kernel::musa::quantize_shared_swiglu_fp8(gate_up, swiglu_limit_);
+    return down_proj_->forward_block_fp8_quantized(quantized, scales)
+        .reshape(hidden_states.sizes());
+  }
   torch::Tensor activated =
       torch::empty({num_tokens, local_intermediate_size_}, gate_up.options());
   if (fused_shared_swiglu_) {

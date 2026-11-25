@@ -1788,7 +1788,16 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
       broadcast_spec_tokens(output.sample_output.next_tokens, parallel_args_);
     }
     if (embeddings.defined()) {
-      prefill_input.input_params.embedding.input_embedding = embeddings.clone();
+      bool copy_embeddings = true;
+#if defined(USE_MUSA)
+      // GLM5 eager returns owned target storage. Its draft reads the hidden
+      // states through hnorm and the output keeps them alive through forward.
+      copy_embeddings = ExecutionConfig::get_instance().enable_graph() ||
+                        draft_impl_->context_.get_model_args().model_type() !=
+                            "glm5_next_mtp";
+#endif
+      prefill_input.input_params.embedding.input_embedding =
+          copy_embeddings ? embeddings.clone() : embeddings;
     }
     if (output.sample_output.next_tokens.defined()) {
       replace_host_token_placeholders(prefill_input,

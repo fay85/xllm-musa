@@ -26,6 +26,7 @@ limitations under the License.
 #include <limits>
 #include <tuple>
 
+#include "core/kernels/musa/fp8_shared_swiglu.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
 namespace xllm::kernel::musa {
@@ -767,6 +768,7 @@ __global__ void moe_ragged_swiglu_quant_kernel(
   }
 }
 
+template <bool SharedExpert>
 __global__ void swiglu_quant_kernel(const __mt_bfloat16* __restrict__ input,
                                     __mt_fp8_e4m3* __restrict__ output_q,
                                     float* __restrict__ output_s,
@@ -808,10 +810,15 @@ __global__ void swiglu_quant_kernel(const __mt_bfloat16* __restrict__ input,
     float gate = __bfloat162float(gate_values.values[j]);
     float up = __bfloat162float(up_values.values[j]);
     if (swiglu_limit > 0.0f) {
-      // Comparisons preserve NaNs, as Torch clamp does.
-      gate = gate > swiglu_limit ? swiglu_limit : gate;
-      up = up < -swiglu_limit ? -swiglu_limit : up;
-      up = up > swiglu_limit ? swiglu_limit : up;
+      if constexpr (SharedExpert) {
+        gate = fminf(gate, swiglu_limit);
+        up = fminf(fmaxf(up, -swiglu_limit), swiglu_limit);
+      } else {
+        // Comparisons preserve NaNs, as Torch clamp does.
+        gate = gate > swiglu_limit ? swiglu_limit : gate;
+        up = up < -swiglu_limit ? -swiglu_limit : up;
+        up = up > swiglu_limit ? swiglu_limit : up;
+      }
     }
     // Match Activation: FP32 clamp/SiLU/multiply, then round once to BF16.
     const __mt_bfloat16 product =
@@ -1236,9 +1243,8 @@ int32_t choose_subwarps_per_block(int64_t hidden_dim_num_groups) {
   return 1;
 }
 
-}  // namespace
-
-std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+template <bool SharedExpert>
+std::tuple<torch::Tensor, torch::Tensor> launch_swiglu_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size,
     double swiglu_limit) {
@@ -1248,20 +1254,21 @@ std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
   CHECK(input.device().is_privateuseone());
   CHECK_GT(input.size(1), 0);
   CHECK_EQ(group_size, kGroupSize);
-  // Use the same effective-limit convention as Activation.
-  const float effective_limit = std::isfinite(swiglu_limit) &&
-                                        swiglu_limit > 0.0 &&
-                                        swiglu_limit < 1000000.0
-                                    ? static_cast<float>(swiglu_limit)
-                                    : 0.0f;
+  const float effective_limit =
+      SharedExpert || (std::isfinite(swiglu_limit) && swiglu_limit > 0.0 &&
+                       swiglu_limit < 1000000.0)
+          ? static_cast<float>(swiglu_limit)
+          : 0.0f;
   CHECK_EQ(input.size(1) % (2 * kGroupSize), 0);
 
   const int64_t num_rows = input.size(0);
   const int64_t intermediate_size = input.size(1) / 2;
   const int32_t hidden_dim_num_groups =
       static_cast<int32_t>(intermediate_size / kGroupSize);
-  // Prefer graph tile: MTP verify is captured; eager remains correct.
-  const int32_t groups_per_tile = kDenseSwigluGraphGroupsPerBlock;
+  // Smaller blocks distribute long prefill rows across more execution units.
+  const int32_t groups_per_tile = num_rows >= 256
+                                      ? kDenseSwigluGroupsPerBlock
+                                      : kDenseSwigluGraphGroupsPerBlock;
   const int32_t groups_per_block =
       std::min(hidden_dim_num_groups, groups_per_tile);
   const int32_t group_tiles =
@@ -1278,23 +1285,40 @@ std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  swiglu_quant_kernel<<<dim3(static_cast<unsigned int>(group_tiles),
-                             static_cast<unsigned int>(num_rows)),
-                        static_cast<unsigned int>(groups_per_block *
-                                                  kThreadsPerGroup),
-                        0,
-                        stream>>>(
-      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
-      output_s.data_ptr<float>(),
-      num_rows,
-      intermediate_size,
-      hidden_dim_num_groups,
-      groups_per_tile,
-      /*row_stride=*/1,
-      effective_limit);
+  swiglu_quant_kernel<SharedExpert>
+      <<<dim3(static_cast<unsigned int>(group_tiles),
+              static_cast<unsigned int>(num_rows)),
+         static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
+         0,
+         stream>>>(
+          reinterpret_cast<const __mt_bfloat16*>(
+              input.data_ptr<at::BFloat16>()),
+          reinterpret_cast<__mt_fp8_e4m3*>(
+              output_q.data_ptr<c10::Float8_e4m3fn>()),
+          output_s.data_ptr<float>(),
+          num_rows,
+          intermediate_size,
+          hidden_dim_num_groups,
+          groups_per_tile,
+          /*row_stride=*/1,
+          effective_limit);
   C10_CUDA_CHECK(cudaGetLastError());
   return std::make_tuple(output_q, output_s);
+}
+
+}  // namespace
+
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size,
+    double swiglu_limit) {
+  return launch_swiglu_quant_fp8<false>(input, group_size, swiglu_limit);
+}
+
+std::tuple<torch::Tensor, torch::Tensor> quantize_shared_swiglu_fp8(
+    const torch::Tensor& input,
+    double swiglu_limit) {
+  return launch_swiglu_quant_fp8<true>(input, kGroupSize, swiglu_limit);
 }
 
 std::tuple<torch::Tensor, torch::Tensor> fused_gated_rms_norm_quant_fp8(

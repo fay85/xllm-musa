@@ -57,35 +57,33 @@ __global__ void write_fp8_cache(const c10::BFloat16* latent,
   }
 }
 
-__global__ void pack_fp8_cache(const c10::BFloat16* latent,
-                               uint8_t* packed,
-                               int64_t rows) {
+__global__ void pack_fp8_cache(const c10::BFloat16* latent, uint8_t* packed) {
   const int64_t row = blockIdx.x;
-  if (row >= rows) {
-    return;
+  const int32_t group = threadIdx.x / 32;
+  const int32_t lane = threadIdx.x % 32;
+  const int32_t first = group * 128 + lane * 4;
+  float values[4];
+  float maximum = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < 4; ++i) {
+    values[i] = static_cast<float>(latent[row * 512 + first + i]);
+    maximum = fmaxf(maximum, fabsf(values[i]));
   }
-  __shared__ float values[128];
-  const int32_t lane = threadIdx.x;
-  for (int32_t group = 0; group < 4; ++group) {
-    const float value =
-        static_cast<float>(latent[row * 512 + group * 128 + lane]);
-    values[lane] = fabsf(value);
-    __syncthreads();
-    for (int32_t offset = 64; offset > 0; offset /= 2) {
-      if (lane < offset) {
-        values[lane] = fmaxf(values[lane], values[lane + offset]);
-      }
-      __syncthreads();
-    }
-    const float scale = fmaxf(__fdiv_rn(values[0], 448.0f), 1.0e-4f);
-    if (lane == 0) {
-      reinterpret_cast<float*>(packed + row * 528 + 512)[group] = scale;
-    }
-    reinterpret_cast<c10::Float8_e4m3fn*>(packed +
-                                          row * 528)[group * 128 + lane] =
-        QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
-    __syncthreads();
+#pragma unroll
+  for (int32_t offset = 16; offset > 0; offset >>= 1) {
+    maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffffu, maximum, offset, 32));
   }
+  const float scale = fmaxf(__fdiv_rn(maximum, 448.0f), 1.0e-4f);
+  uint8_t* dest = packed + row * 528;
+  if (lane == 0) {
+    reinterpret_cast<float*>(dest + 512)[group] = scale;
+  }
+  const float4 scaled = {__fdiv_rn(values[0], scale),
+                         __fdiv_rn(values[1], scale),
+                         __fdiv_rn(values[2], scale),
+                         __fdiv_rn(values[3], scale)};
+  *reinterpret_cast<uint32_t*>(dest + first) =
+      __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3);
 }
 
 __global__ void write_packed_fp8_cache(const uint8_t* packed,
@@ -119,27 +117,33 @@ __global__ void map_indices(const int32_t* logical,
                             const int64_t* positions,
                             const int32_t* table,
                             int32_t* output,
-                            int64_t elements,
+                            int64_t queries,
                             int64_t width,
                             int64_t batch,
                             int64_t table_width,
-                            int64_t page_size,
+                            int32_t page_size,
+                            int32_t page_shift,
                             int64_t pages) {
-  for (int64_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-       offset < elements;
-       offset += gridDim.x * blockDim.x) {
-    const int64_t query = offset / width;
+  for (int64_t query = blockIdx.x; query < queries; query += gridDim.x) {
     const int64_t row = rows[query];
-    const int64_t token = logical[offset];
-    int32_t slot = -1;
-    if (row >= 0 && row < batch && token >= 0 && token <= positions[query] &&
-        token / page_size < table_width) {
-      const int64_t page = table[row * table_width + token / page_size];
-      if (page >= 0 && page < pages) {
-        slot = static_cast<int32_t>(page * page_size + token % page_size);
+    const int64_t position = positions[query];
+    for (int64_t col = blockIdx.y * blockDim.x + threadIdx.x; col < width;
+         col += gridDim.y * blockDim.x) {
+      const int64_t offset = query * width + col;
+      const int32_t token = logical[offset];
+      int32_t slot = -1;
+      if (row >= 0 && row < batch && token >= 0 && token <= position) {
+        const int32_t block =
+            page_shift >= 0 ? token >> page_shift : token / page_size;
+        if (block < table_width) {
+          const int32_t page = table[row * table_width + block];
+          if (page >= 0 && page < pages) {
+            slot = page * page_size + (token - block * page_size);
+          }
+        }
       }
+      output[offset] = slot;
     }
-    output[offset] = slot;
   }
 }
 
@@ -228,9 +232,7 @@ torch::Tensor sparse_mla_fp8_cache_pack(const torch::Tensor& latent) {
                    128,
                    0,
                    current_musa_stream(latent.device())>>>(
-      latent.data_ptr<c10::BFloat16>(),
-      packed.data_ptr<uint8_t>(),
-      latent.size(0));
+      latent.data_ptr<c10::BFloat16>(), packed.data_ptr<uint8_t>());
   check_musa_kernel_launch("sparse MLA FP8 cache pack");
   return packed;
 }
@@ -292,18 +294,24 @@ torch::Tensor sparse_mla_map_indices(const torch::Tensor& logical,
     return output;
   }
   XLLMDeviceGuard device_guard(logical.device());
-  const int64_t blocks = std::min<int64_t>((logical.numel() + 255) / 256, 4096);
+  const dim3 blocks(std::min<int64_t>(logical.size(0), 65535),
+                    std::min<int64_t>((logical.size(1) + 255) / 256, 65535));
+  const int32_t page_shift =
+      (page_size & (page_size - 1)) == 0
+          ? __builtin_ctz(static_cast<unsigned>(page_size))
+          : -1;
   map_indices<<<blocks, 256, 0, current_musa_stream(logical.device())>>>(
       logical.data_ptr<int32_t>(),
       rows.data_ptr<int32_t>(),
       positions.data_ptr<int64_t>(),
       block_table.data_ptr<int32_t>(),
       output.data_ptr<int32_t>(),
-      logical.numel(),
+      logical.size(0),
       logical.size(1),
       block_table.size(0),
       block_table.size(1),
-      page_size,
+      static_cast<int32_t>(page_size),
+      page_shift,
       num_pages);
   check_musa_kernel_launch("sparse MLA logical to physical mapping");
   return output;

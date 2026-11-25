@@ -103,6 +103,33 @@ __global__ void mhc_head_kernel(const scalar_t* __restrict__ residual,
   }
 }
 
+struct alignas(16) Bf16Block {
+  c10::BFloat16 values[8];
+};
+
+__global__ void mhc_contract_mean_four_kernel(const Bf16Block* residual,
+                                              Bf16Block* output,
+                                              int64_t blocks_per_row) {
+  const int64_t token = blockIdx.x;
+  for (int64_t col = threadIdx.x; col < blocks_per_row; col += blockDim.x) {
+    float sum[8] = {};
+#pragma unroll
+    for (int32_t row = 0; row < 4; ++row) {
+      const auto block = residual[(token * 4 + row) * blocks_per_row + col];
+#pragma unroll
+      for (int32_t i = 0; i < 8; ++i) {
+        sum[i] += static_cast<float>(block.values[i]);
+      }
+    }
+    Bf16Block result;
+#pragma unroll
+    for (int32_t i = 0; i < 8; ++i) {
+      result.values[i] = static_cast<c10::BFloat16>(sum[i] * 0.25f);
+    }
+    output[token * blocks_per_row + col] = result;
+  }
+}
+
 template <typename scalar_t>
 __global__ void mhc_contract_mean_kernel(const scalar_t* __restrict__ residual,
                                          scalar_t* __restrict__ output,
@@ -199,7 +226,19 @@ torch::Tensor mhc_contract_mean(const torch::Tensor& residual) {
   const int64_t tokens = residual_flat.size(0);
   torch::Tensor output =
       torch::empty({tokens, hidden_size}, residual.options());
-  if (tokens > 0) {
+  if (tokens >= 256 && hc_mult == 4 && hidden_size % 8 == 0 &&
+      reinterpret_cast<uintptr_t>(residual_flat.data_ptr()) %
+              alignof(Bf16Block) ==
+          0) {
+    mhc_contract_mean_four_kernel<<<tokens,
+                                    kThreads,
+                                    0,
+                                    current_musa_stream(residual.device())>>>(
+        reinterpret_cast<const Bf16Block*>(residual_flat.data_ptr()),
+        reinterpret_cast<Bf16Block*>(output.data_ptr()),
+        hidden_size / 8);
+    check_musa_kernel_launch("mhc_contract_mean_four");
+  } else if (tokens > 0) {
     const dim3 block(kThreads);
     const dim3 grid(
         static_cast<uint32_t>(tokens),
