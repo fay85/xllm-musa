@@ -60,6 +60,20 @@ torch::Tensor deepseek_v4_indexer_prefill_fp8_mqa_topk512(
     float score_scale,
     int64_t absolute_start);
 
+// Graph-capture-safe decode indexer FP8 MQA scoring (D4a): gathers paged int8
+// keys directly to e4m3fn + fp32 scale, quantizes query + folds weights, runs
+// MATE fp8_mqa_logits_out per sequence, and outputs masked FP32 scores
+// [batch * Q, capacity]. Returns undefined tensor to fall back if unavailable.
+torch::Tensor deepseek_v4_indexer_decode_fp8_mqa_scores(
+    const torch::Tensor& query,
+    const torch::Tensor& weights,
+    const torch::Tensor& cache,
+    const torch::Tensor& scales,
+    const torch::Tensor& blocks,
+    const torch::Tensor& lengths,
+    int64_t query_rows_per_sequence,
+    int64_t capacity);
+
 void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& compressed_blocks,

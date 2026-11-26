@@ -1313,6 +1313,321 @@ torch::Tensor deepseek_v4_indexer_prefill_fp8_mqa_topk512(
   return selected;
 }
 
+namespace {
+
+template <typename WeightT, int32_t HeadsPerBlock>
+__global__ void indexer_decode_q_fp8_quant_kernel(
+    const c10::BFloat16* __restrict__ query,
+    const WeightT* __restrict__ weights,
+    const int32_t* __restrict__ lengths,
+    int64_t capacity,
+    c10::Float8_e4m3fn* __restrict__ q_fp8,
+    float* __restrict__ w_scaled,
+    int32_t* __restrict__ ks,
+    int32_t* __restrict__ ke) {
+  const int64_t row = static_cast<int64_t>(blockIdx.y);
+  const int32_t head_lane =
+      static_cast<int32_t>(threadIdx.x) / kMqaSubwarpThreads;
+  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kMqaSubwarpThreads;
+  const int64_t head =
+      static_cast<int64_t>(blockIdx.x) * HeadsPerBlock + head_lane;
+  const int32_t base = lane * kMqaItemsPerThread;
+
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    ks[row] = 0;
+    const int32_t live = lengths[row] > 0 ? lengths[row] : 0;
+    const int32_t valid =
+        live / 4 < capacity ? live / 4 : static_cast<int32_t>(capacity);
+    ke[row] = valid;
+  }
+
+  const c10::BFloat16* q_row = query + (row * 64 + head) * kHeadDim + base;
+  float value[kMqaItemsPerThread];
+  float max_abs = 0.0f;
+#pragma unroll
+  for (int32_t item = 0; item < kMqaItemsPerThread; ++item) {
+    const float v = static_cast<float>(q_row[item]);
+    value[item] = v;
+    max_abs = fmaxf(max_abs, fabsf(v));
+  }
+#pragma unroll
+  for (int32_t stage = 0; stage < 4; ++stage) {
+    const float other =
+        __shfl_xor_sync(0xffffffffu, max_abs, 1 << stage, kMqaSubwarpThreads);
+    max_abs = fmaxf(max_abs, other);
+  }
+
+  const float q_scale = fmaxf(max_abs / kMqaFp8Max, kMqaScaleMin);
+  const float inv_scale = 1.0f / q_scale;
+  const float4 s0 = make_float4(value[0] * inv_scale,
+                                value[1] * inv_scale,
+                                value[2] * inv_scale,
+                                value[3] * inv_scale);
+  const float4 s1 = make_float4(value[4] * inv_scale,
+                                value[5] * inv_scale,
+                                value[6] * inv_scale,
+                                value[7] * inv_scale);
+  const uint32_t p0 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(s0, __MT_SATFINITE, __MT_E4M3));
+  const uint32_t p1 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(s1, __MT_SATFINITE, __MT_E4M3));
+  uint32_t* out_u32 = reinterpret_cast<uint32_t*>(
+      reinterpret_cast<uint8_t*>(q_fp8) + (row * 64 + head) * kHeadDim + base);
+  out_u32[0] = p0;
+  out_u32[1] = p1;
+
+  if (lane == 0) {
+    w_scaled[row * 64 + head] = static_cast<float>(weights[row * 64 + head]) * q_scale;
+  }
+}
+
+template <typename BlockIndex>
+__global__ void indexer_gather_keys_fp8_kernel(
+    const int8_t* __restrict__ cache,
+    const c10::Half* __restrict__ scales,
+    const BlockIndex* __restrict__ blocks,
+    c10::Float8_e4m3fn* __restrict__ k_fp8,
+    float* __restrict__ k_scale,
+    bool* __restrict__ valid_slots,
+    int32_t capacity,
+    int64_t table_columns,
+    int64_t page,
+    int64_t physical_pages) {
+  const int64_t seq = static_cast<int64_t>(blockIdx.y);
+  const int64_t total_slots = physical_pages * page;
+  const int32_t total_vec4 = capacity * 32;  // 128 / 4 = 32 vec4s per key row
+  uint32_t* out_u32_base = reinterpret_cast<uint32_t*>(
+      reinterpret_cast<uint8_t*>(k_fp8) + seq * capacity * kHeadDim);
+  for (int32_t offset =
+           static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+       offset < total_vec4;
+       offset += static_cast<int32_t>(gridDim.x * blockDim.x)) {
+    const int32_t position = offset >> 5;
+    const int32_t vec_idx = offset & 31;
+    const int64_t table_col = position / page;
+    const int64_t in_page = position - table_col * page;
+    const int64_t block =
+        static_cast<int64_t>(blocks[seq * table_columns + table_col]);
+    const int64_t adjusted =
+        block >= physical_pages && block > 0 ? block - 1 : block;
+    const bool valid = adjusted >= 0 && adjusted < physical_pages;
+    const int64_t slot = adjusted < 0 ? 0
+                         : adjusted >= physical_pages
+                             ? total_slots - 1
+                             : adjusted * page + in_page;
+    const uint32_t raw4 = *reinterpret_cast<const uint32_t*>(
+        cache + slot * kHeadDim + vec_idx * 4);
+    const int8_t c0 = static_cast<int8_t>(raw4 & 0xffu);
+    const int8_t c1 = static_cast<int8_t>((raw4 >> 8) & 0xffu);
+    const int8_t c2 = static_cast<int8_t>((raw4 >> 16) & 0xffu);
+    const int8_t c3 = static_cast<int8_t>((raw4 >> 24) & 0xffu);
+    const float4 vals = make_float4(static_cast<float>(c0),
+                                    static_cast<float>(c1),
+                                    static_cast<float>(c2),
+                                    static_cast<float>(c3));
+    out_u32_base[offset] = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(vals, __MT_SATFINITE, __MT_E4M3));
+    if (vec_idx == 0) {
+      k_scale[seq * capacity + position] =
+          valid ? static_cast<float>(scales[slot]) : 0.0f;
+      valid_slots[seq * capacity + position] = valid;
+    }
+  }
+}
+
+__global__ void indexer_extract_mask_mqa_scores_kernel(
+    const float* __restrict__ logits_storage,
+    const int32_t* __restrict__ lengths,
+    const bool* __restrict__ valid_slots,
+    float* __restrict__ scores_out,
+    int32_t capacity,
+    int32_t query_rows_per_sequence,
+    int32_t aligned_q,
+    int64_t logits_stride) {
+  const int32_t row = static_cast<int32_t>(blockIdx.y);
+  const int32_t seq = row / query_rows_per_sequence;
+  const int32_t q_in_seq = row - seq * query_rows_per_sequence;
+  const int32_t live = lengths[row] > 0 ? lengths[row] : 0;
+  const int32_t valid_len = live / 4;
+  const float* src_row =
+      logits_storage +
+      (static_cast<int64_t>(seq) * aligned_q + q_in_seq) * logits_stride;
+  float* dst_row = scores_out + static_cast<int64_t>(row) * capacity;
+  const bool* seq_valid = valid_slots + static_cast<int64_t>(seq) * capacity;
+  for (int32_t pos =
+           static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+       pos < capacity;
+       pos += static_cast<int32_t>(gridDim.x * blockDim.x)) {
+    dst_row[pos] = (pos < valid_len && seq_valid[pos]) ? src_row[pos] : -INFINITY;
+  }
+}
+
+}  // namespace
+
+torch::Tensor deepseek_v4_indexer_decode_fp8_mqa_scores(
+    const torch::Tensor& query,
+    const torch::Tensor& weights,
+    const torch::Tensor& cache,
+    const torch::Tensor& scales,
+    const torch::Tensor& blocks,
+    const torch::Tensor& lengths,
+    int64_t query_rows_per_sequence,
+    int64_t capacity) {
+  if (!query.defined() || !weights.defined() || !cache.defined() ||
+      !scales.defined() || !blocks.defined() || !lengths.defined() ||
+      !query.device().is_privateuseone() || query.dim() != 3 ||
+      query.size(1) != 64 || query.size(2) != kHeadDim ||
+      query.scalar_type() != torch::kBFloat16 ||
+      (weights.scalar_type() != torch::kFloat32 &&
+       weights.scalar_type() != torch::kBFloat16) ||
+      cache.scalar_type() != torch::kInt8 || !cache.is_contiguous() ||
+      scales.scalar_type() != torch::kFloat16 || !scales.is_contiguous() ||
+      lengths.scalar_type() != torch::kInt32 || !lengths.is_contiguous() ||
+      !blocks.is_contiguous() ||
+      (blocks.scalar_type() != torch::kInt32 &&
+       blocks.scalar_type() != torch::kInt64) ||
+      query_rows_per_sequence <= 0 ||
+      query.size(0) % query_rows_per_sequence != 0 || capacity < kTopk) {
+    return torch::Tensor();
+  }
+  auto mqa_fn = get_mate_mqa_logits_out_fn();
+  if (!mqa_fn.defined()) {
+    return torch::Tensor();
+  }
+
+  const int64_t total_q = query.size(0);
+  const int64_t batch = total_q / query_rows_per_sequence;
+  const int64_t physical_pages = cache.size(0);
+  const int64_t page = cache.size(1);
+  const int64_t table_columns = blocks.size(1);
+  const int64_t aligned_q = ((query_rows_per_sequence + 1) / 2) * 2;
+  const int64_t logits_stride = ((capacity + 128 + 7) / 8) * 8;
+
+  const auto q_contig = query.is_contiguous() ? query : query.contiguous();
+  const auto w_contig = weights.is_contiguous() ? weights : weights.contiguous();
+  const auto opts = query.options();
+
+  // Graph-local allocations prevent VMM scratch aliasing across captured graphs.
+  auto q_fp8 = torch::empty({total_q, 64, kHeadDim}, opts.dtype(torch::kFloat8_e4m3fn));
+  auto w_scaled = torch::empty({total_q, 64}, opts.dtype(torch::kFloat32));
+  auto ks = torch::empty({total_q}, opts.dtype(torch::kInt32));
+  auto ke = torch::empty({total_q}, opts.dtype(torch::kInt32));
+  auto k_fp8 = torch::empty({batch, capacity, kHeadDim}, opts.dtype(torch::kFloat8_e4m3fn));
+  auto k_scale = torch::empty({batch, capacity}, opts.dtype(torch::kFloat32));
+  auto valid_slots = torch::empty({batch, capacity}, opts.dtype(torch::kBool));
+  auto logits_storage =
+      torch::empty({batch, aligned_q, logits_stride}, opts.dtype(torch::kFloat32));
+  auto scores_out = torch::empty({total_q, capacity}, opts.dtype(torch::kFloat32));
+
+  {
+    const XLLMOptionalDeviceGuard guard(query.device());
+    const musaStream_t stream = current_musa_stream(query.device());
+    constexpr int32_t kHeadsPerBlock = 8;
+    const dim3 q_grid(static_cast<unsigned int>(64 / kHeadsPerBlock),
+                      static_cast<unsigned int>(total_q));
+    if (w_contig.scalar_type() == torch::kFloat32) {
+      indexer_decode_q_fp8_quant_kernel<float, kHeadsPerBlock>
+          <<<q_grid, kMqaSubwarpThreads * kHeadsPerBlock, 0, stream>>>(
+              q_contig.data_ptr<c10::BFloat16>(),
+              w_contig.data_ptr<float>(),
+              lengths.data_ptr<int32_t>(),
+              capacity,
+              q_fp8.data_ptr<c10::Float8_e4m3fn>(),
+              w_scaled.data_ptr<float>(),
+              ks.data_ptr<int32_t>(),
+              ke.data_ptr<int32_t>());
+    } else {
+      indexer_decode_q_fp8_quant_kernel<c10::BFloat16, kHeadsPerBlock>
+          <<<q_grid, kMqaSubwarpThreads * kHeadsPerBlock, 0, stream>>>(
+              q_contig.data_ptr<c10::BFloat16>(),
+              w_contig.data_ptr<c10::BFloat16>(),
+              lengths.data_ptr<int32_t>(),
+              capacity,
+              q_fp8.data_ptr<c10::Float8_e4m3fn>(),
+              w_scaled.data_ptr<float>(),
+              ks.data_ptr<int32_t>(),
+              ke.data_ptr<int32_t>());
+    }
+    check_musa_kernel_launch("dsv4 decode indexer Q fp8 quant");
+
+    const int32_t k_blocks_x =
+        static_cast<int32_t>(std::min<int64_t>((capacity * 32 + kThreads - 1) / kThreads, 512));
+    const dim3 k_grid(static_cast<unsigned int>(k_blocks_x),
+                      static_cast<unsigned int>(batch));
+    if (blocks.scalar_type() == torch::kInt32) {
+      indexer_gather_keys_fp8_kernel<int32_t><<<k_grid, kThreads, 0, stream>>>(
+          cache.data_ptr<int8_t>(),
+          scales.data_ptr<c10::Half>(),
+          blocks.data_ptr<int32_t>(),
+          k_fp8.data_ptr<c10::Float8_e4m3fn>(),
+          k_scale.data_ptr<float>(),
+          valid_slots.data_ptr<bool>(),
+          static_cast<int32_t>(capacity),
+          table_columns,
+          page,
+          physical_pages);
+    } else {
+      indexer_gather_keys_fp8_kernel<int64_t><<<k_grid, kThreads, 0, stream>>>(
+          cache.data_ptr<int8_t>(),
+          scales.data_ptr<c10::Half>(),
+          blocks.data_ptr<int64_t>(),
+          k_fp8.data_ptr<c10::Float8_e4m3fn>(),
+          k_scale.data_ptr<float>(),
+          valid_slots.data_ptr<bool>(),
+          static_cast<int32_t>(capacity),
+          table_columns,
+          page,
+          physical_pages);
+    }
+    check_musa_kernel_launch("dsv4 decode indexer gather keys fp8");
+  }
+
+  try {
+    TvmffiStreamGuard stream_guard(query.device());
+    for (int64_t b = 0; b < batch; ++b) {
+      auto q_b = q_fp8.narrow(/*dim=*/0, b * query_rows_per_sequence, query_rows_per_sequence);
+      auto k_b = k_fp8.select(/*dim=*/0, b);
+      auto w_b = w_scaled.narrow(/*dim=*/0, b * query_rows_per_sequence, query_rows_per_sequence);
+      auto ks_b = ks.narrow(/*dim=*/0, b * query_rows_per_sequence, query_rows_per_sequence);
+      auto ke_b = ke.narrow(/*dim=*/0, b * query_rows_per_sequence, query_rows_per_sequence);
+      auto sfk_b = k_scale.select(/*dim=*/0, b);
+      auto out_b = logits_storage.select(/*dim=*/0, b);
+      mqa_fn.value()(to_ffi_tensor(q_b),
+                     to_ffi_tensor(k_b),
+                     to_ffi_tensor(w_b),
+                     to_ffi_tensor(ks_b),
+                     to_ffi_tensor(ke_b),
+                     to_ffi_tensor(sfk_b),
+                     to_ffi_tensor(out_b));
+    }
+  } catch (const std::exception& e) {
+    LOG_FIRST_N(WARNING, 2)
+        << "[DSV4_DECODE_FP8_MQA_LOGITS] launch failed, falling back: "
+        << e.what();
+    return torch::Tensor();
+  }
+
+  {
+    const XLLMOptionalDeviceGuard guard(query.device());
+    const musaStream_t stream = current_musa_stream(query.device());
+    const int32_t m_blocks_x =
+        static_cast<int32_t>(std::min<int64_t>((capacity + kThreads - 1) / kThreads, 64));
+    const dim3 m_grid(static_cast<unsigned int>(m_blocks_x),
+                      static_cast<unsigned int>(total_q));
+    indexer_extract_mask_mqa_scores_kernel<<<m_grid, kThreads, 0, stream>>>(
+        logits_storage.data_ptr<float>(),
+        lengths.data_ptr<int32_t>(),
+        valid_slots.data_ptr<bool>(),
+        scores_out.data_ptr<float>(),
+        static_cast<int32_t>(capacity),
+        static_cast<int32_t>(query_rows_per_sequence),
+        static_cast<int32_t>(aligned_q),
+        logits_stride);
+    check_musa_kernel_launch("dsv4 decode indexer extract+mask mqa scores");
+  }
+  return scores_out;
+}
+
 void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& compressed_blocks,

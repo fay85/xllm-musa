@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <string>
 
@@ -78,6 +79,43 @@ inline torch::Tensor dsv4_batched_indexer_gemm(
       lengths.scalar_type() == torch::kInt32 && lengths.is_contiguous() &&
       blocks.is_contiguous() && compressed_blocks.is_contiguous() &&
       swa_blocks.is_contiguous();
+  const char* decode_mqa_env =
+      std::getenv("XLLM_DSV4_DECODE_FP8_MQA_LOGITS");
+  const bool decode_mqa_enabled =
+      decode_mqa_env == nullptr || std::strcmp(decode_mqa_env, "0") != 0;
+  if (decode_mqa_enabled && fused_metadata && heads == 64 && dim == 128) {
+    torch::Tensor mqa_scores =
+        kernel::musa::deepseek_v4_indexer_decode_fp8_mqa_scores(
+            query,
+            weights,
+            cache,
+            scales,
+            blocks.narrow(0, 0, batch),
+            lengths,
+            query_rows_per_sequence,
+            capacity);
+    if (mqa_scores.defined()) {
+      auto selected = std::get<1>(mqa_scores.topk(topk,
+                                                  /*dim=*/1,
+                                                  /*largest=*/true,
+                                                  /*sorted=*/false));
+      kernel::musa::deepseek_v4_indexer_map_outputs(selected,
+                                                    lengths,
+                                                    compressed_blocks,
+                                                    swa_blocks,
+                                                    query_rows_per_sequence,
+                                                    capacity,
+                                                    window,
+                                                    mate_block_size,
+                                                    output,
+                                                    physical_output,
+                                                    extra_output);
+      LOG_FIRST_N(INFO, 2)
+          << "[DSV4_DECODE_FP8_MQA_LOGITS] batch=" << batch
+          << " q_rows=" << query_rows_per_sequence << " capacity=" << capacity;
+      return output;
+    }
+  }
   const char* single_bf16_env =
       dsv4_single_indexer_bf16_fp32_shape(
           batch, query_rows_per_sequence, heads, dim, capacity)
