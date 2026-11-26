@@ -1,0 +1,516 @@
+diff --git a/tests/core/framework/request/request_params_test.cpp b/tests/core/framework/request/request_params_test.cpp
+index 4744a8da3..30943b4fa 100644
+--- a/tests/core/framework/request/request_params_test.cpp
++++ b/tests/core/framework/request/request_params_test.cpp
+@@ -224,0 +225,18 @@ std::optional<Status> verify(const RequestParams& params) {
++TEST(RequestParamsTest, CompletionParsesRouterWireIdentity) {
++  // Router field 43 contains a length-delimited RequestCorrelation. Its field
++  // 4 is an optional uint64 attempt sequence. Explicit zero is a valid value.
++  const std::string wire("\xda\x02\x02\x20\x00", 5);
++  proto::CompletionRequest request;
++  ASSERT_TRUE(request.ParseFromString(wire));
++  RequestParams params(request, "", "");
++  EXPECT_EQ(params.v2_attempt_seq, 0u);
++  EXPECT_TRUE(params.logprob_token_ids.empty());
++  request.mutable_correlation()->set_attempt_seq(17);
++  request.add_logprob_token_ids(7);
++  RequestParams both(request, "", "");
++  EXPECT_EQ(both.v2_attempt_seq, 17u);
++  EXPECT_EQ(both.logprob_token_ids, std::vector<int32_t>{7});
++  request.clear_correlation();
++  EXPECT_FALSE(RequestParams(request, "", "").v2_attempt_seq.has_value());
++}
++
+diff --git a/tests/core/kernels/musa/v41_verify_graph_inputs_test_module.cpp b/tests/core/kernels/musa/v41_verify_graph_inputs_test_module.cpp
+index 76b9f5e2a..096affbb4 100644
+--- a/tests/core/kernels/musa/v41_verify_graph_inputs_test_module.cpp
++++ b/tests/core/kernels/musa/v41_verify_graph_inputs_test_module.cpp
+@@ -5,0 +6 @@ SPDX-License-Identifier: Apache-2.0
++#include "core/kernels/musa/deepseek_v41_w4a8.h"
+@@ -7,0 +9,3 @@ SPDX-License-Identifier: Apache-2.0
++#include "core/layers/musa/deepseek_v41/graph_ring_table.h"
++#include "core/layers/musa/deepseek_v41/hyper_connection.h"
++#include "core/layers/musa/deepseek_v41/prefill_tail.h"
+@@ -9,0 +14,131 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
++  module.def("pad_prefill_tail", &xllm::layer::deepseek_v41_pad_prefill_tail);
++  module.def("tail_collective_input",
++             &xllm::layer::deepseek_v41_tail_collective_input);
++  module.def("partition_prefill_tail",
++             &xllm::layer::deepseek_v41_partition_prefill_tail);
++  module.def(
++      "gate_projection",
++      [](const torch::Tensor& input, const torch::Tensor& weight) {
++        xllm::kernel::musa::TvmffiStreamGuard stream_guard(input.device());
++        return xllm::kernel::musa::deepseek_v4_gate_bf16_fp32(
++            input, weight, std::nullopt);
++      });
++  module.def("gate_routes",
++             [](const torch::Tensor& input,
++                const torch::Tensor& weight,
++                const torch::Tensor& bias,
++                bool prefill) {
++               const xllm::layer::DeepseekV41Gate gate(
++                   weight,
++                   bias,
++                   std::nullopt,
++                   129264,
++                   6,
++                   true,
++                   1.5,
++                   /*cache_fp32_weight=*/true,
++                   /*use_bf16_fp32_projection=*/false,
++                   /*use_simt_projection=*/false,
++                   prefill);
++               return gate.forward(input, std::nullopt);
++             });
++  using SharedMlp = xllm::layer::DeepseekV41SharedMlp;
++  pybind11::class_<SharedMlp>(module, "SharedMlp")
++      .def(
++          pybind11::
++              init<torch::Tensor, torch::Tensor, torch::Tensor, double, bool>())
++      .def("forward", &SharedMlp::forward);
++  module.def("swiglu", &xllm::kernel::musa::deepseek_v41_w4a8_swiglu_quant);
++  module.def("direct_rope_table", &xllm::kernel::musa::deepseek_v41_rope_table);
++  module.def(
++      "reference_rope_table",
++      [](const torch::Tensor& input,
++         const torch::Tensor& positions,
++         const torch::Tensor& table,
++         bool inverse) {
++        const int64_t width = table.size(1);
++        const torch::Tensor rows =
++            table.index_select(0, positions.to(torch::kInt64));
++        const torch::Tensor cosine =
++            rows.narrow(1, 0, width / 2).repeat_interleave(2, -1).contiguous();
++        const torch::Tensor sine = rows.narrow(1, width / 2, width / 2)
++                                       .repeat_interleave(2, -1)
++                                       .contiguous();
++        const torch::Tensor value =
++            input.to(torch::kFloat32)
++                .reshape({input.size(0), -1, input.size(-1)})
++                .contiguous();
++        torch::Tensor output;
++        CHECK(
++            xllm::kernel::musa::deepseek_v4_partial_rope(value,
++                                                         cosine,
++                                                         sine,
++                                                         input.size(-1) - width,
++                                                         width,
++                                                         inverse,
++                                                         output));
++        return output.reshape(input.sizes()).to(input.scalar_type());
++      });
++  module.def("copy_graph_ring_table",
++             &xllm::layer::deepseek_v41_copy_graph_ring_table);
++  module.def("scatter_prefill",
++             &xllm::kernel::musa::deepseek_v41_scatter_prefill_cache_native);
++  module.def(
++      "prefill_mhc_prepare",
++      [](const torch::Tensor& fn,
++         const torch::Tensor& scale,
++         const torch::Tensor& base,
++         const torch::Tensor& residual,
++         const torch::Tensor& carried_pre,
++         const std::string& directory,
++         bool fused) {
++        xllm::layer::DeepseekV41HyperConnection hc(
++            fn, scale, base, 20, 1e-20, 1e-6, directory, false, {}, fused);
++        return hc.prepare(residual, carried_pre);
++      });
++  module.def(
++      "paged_prefill_partition",
++      [](torch::Tensor cache,
++         const torch::Tensor& query,
++         const torch::Tensor& current_kv,
++         const torch::Tensor& table,
++         int64_t context,
++         const torch::Tensor& sink,
++         const std::optional<torch::Tensor>& compressed,
++         const std::optional<torch::Tensor>& picks,
++         const torch::Tensor& positions,
++         int64_t offset,
++         const std::string& library,
++         int64_t window_floor) {
++        xllm::layer::DeepseekV41PagedAttention attention(cache,
++                                                         128,
++                                                         std::pow(512., -.5),
++                                                         library,
++                                                         true,
++                                                         false,
++                                                         false,
++                                                         false);
++        return attention.forward_with_window_floor(query,
++                                                   current_kv,
++                                                   table,
++                                                   context,
++                                                   sink,
++                                                   compressed,
++                                                   picks,
++                                                   positions,
++                                                   window_floor,
++                                                   false,
++                                                   offset);
++      },
++      pybind11::arg("cache"),
++      pybind11::arg("query"),
++      pybind11::arg("current_kv"),
++      pybind11::arg("table"),
++      pybind11::arg("context"),
++      pybind11::arg("sink"),
++      pybind11::arg("compressed"),
++      pybind11::arg("picks"),
++      pybind11::arg("positions"),
++      pybind11::arg("offset"),
++      pybind11::arg("library"),
++      pybind11::arg("window_floor") = 0);
+@@ -18,0 +154,7 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
++      .def(pybind11::init<std::vector<torch::Tensor>,
++                          int64_t,
++                          int64_t,
++                          double,
++                          bool,
++                          std::string,
++                          int64_t>())
+@@ -44,0 +187,4 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
++      .def_readwrite("prefill_cache_read_reuse",
++                     &NativeAttentionConfig::prefill_cache_read_reuse)
++      .def_readwrite("prefill_fused_swa_commit",
++                     &NativeAttentionConfig::prefill_fused_swa_commit)
+@@ -48,0 +195,2 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
++      .def_readwrite("prefill_direct_rope_table",
++                     &NativeAttentionConfig::prefill_direct_rope_table)
+@@ -68 +216,2 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
+-                     &NativeAttentionConfig::original_fp8_activation);
++                     &NativeAttentionConfig::original_fp8_activation)
++      .def_readwrite("prefill_query_only", &NativeAttentionConfig::prefill_query_only);
+@@ -94,0 +244,2 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
++      .def_readwrite("swa_replay_start",
++                     &NativeAttentionRuntime::swa_replay_start)
+@@ -108,0 +260,3 @@ PYBIND11_MODULE(v41_verify_graph_inputs_test_module, module) {
++      .def("forward_query_partition",
++           &NativeAttention::forward_query_partition,
++           pybind11::call_guard<pybind11::gil_scoped_release>())
+diff --git a/tests/core/layers/deepseek_v41_decode_capacity_test.cpp b/tests/core/layers/deepseek_v41_decode_capacity_test.cpp
+index de5863c7b..9931dc4c2 100644
+--- a/tests/core/layers/deepseek_v41_decode_capacity_test.cpp
++++ b/tests/core/layers/deepseek_v41_decode_capacity_test.cpp
+@@ -39,0 +40,9 @@ TEST(DeepseekV41DecodeCapacity, SizesUsingLastVerifyRowNotAcceptedPrefix) {
++TEST(DeepseekV41DecodeCapacity, CoversLongVerifyRowsOnlyWhenEnabled) {
++  EXPECT_EQ(deepseek_v41_decode_capacity(21504, false, true, true), 21504);
++  EXPECT_EQ(deepseek_v41_decode_capacity(21505, false, true), 0);
++  for (int64_t end : {21505, 32000, 33006, 41004, 41216}) {
++    EXPECT_EQ(deepseek_v41_decode_capacity(end, false, true, true), 41216);
++  }
++  EXPECT_EQ(deepseek_v41_decode_capacity(41217, false, true, true), 0);
++  EXPECT_EQ(deepseek_v41_decode_capacity(-1, false, true, true), 0);
++}
+diff --git a/xllm/core/framework/request/request_params.cpp b/xllm/core/framework/request/request_params.cpp
+index 68fa476f3..a0be9e0ae 100644
+--- a/xllm/core/framework/request/request_params.cpp
++++ b/xllm/core/framework/request/request_params.cpp
+@@ -139,0 +140,3 @@ RequestParams::RequestParams(const proto::CompletionRequest& request,
++  if (request.has_correlation() && request.correlation().has_attempt_seq()) {
++    v2_attempt_seq = request.correlation().attempt_seq();
++  }
+diff --git a/xllm/core/kernels/musa/deepseek_v41_w4a8.cu b/xllm/core/kernels/musa/deepseek_v41_w4a8.cu
+index 3a80faca1..582dd112e 100644
+--- a/xllm/core/kernels/musa/deepseek_v41_w4a8.cu
++++ b/xllm/core/kernels/musa/deepseek_v41_w4a8.cu
+@@ -241,6 +241,7 @@ void check_gpu_contiguous(const torch::Tensor& tensor,
+-std::optional<DeepseekV41W4A8Dispatch> dispatch(const torch::Tensor& input,
+-                                                const torch::Tensor& expert_ids,
+-                                                int64_t first_expert,
+-                                                int64_t local_experts,
+-                                                double static_scale,
+-                                                bool compact) {
++std::optional<DeepseekV41W4A8Dispatch> dispatch(
++    const torch::Tensor& input,
++    const torch::Tensor& expert_ids,
++    int64_t first_expert,
++    int64_t local_experts,
++    double static_scale,
++    bool compact) {
+@@ -267,2 +268 @@ std::optional<DeepseekV41W4A8Dispatch> dispatch(const torch::Tensor& input,
+-    counts =
+-        torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
++    counts = torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
+@@ -298,2 +298 @@ std::optional<DeepseekV41W4A8Dispatch> dispatch(const torch::Tensor& input,
+-    counts =
+-        torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
++    counts = torch::zeros({local_experts}, input.options().dtype(torch::kInt32));
+@@ -331,7 +330,2 @@ DeepseekV41W4A8Dispatch deepseek_v41_w4a8_dispatch(
+-  return dispatch(input,
+-                  expert_ids,
+-                  first_expert,
+-                  local_experts,
+-                  static_scale,
+-                  false)
+-      .value();
++  return dispatch(input, expert_ids, first_expert, local_experts, static_scale,
++                  false).value();
+@@ -346,2 +340,2 @@ std::optional<DeepseekV41W4A8Dispatch> deepseek_v41_w4a8_dispatch_compact(
+-  return dispatch(
+-      input, expert_ids, first_expert, local_experts, static_scale, true);
++  return dispatch(input, expert_ids, first_expert, local_experts, static_scale,
++                  true);
+diff --git a/xllm/core/kernels/musa/deepseek_v41_w4a8.h b/xllm/core/kernels/musa/deepseek_v41_w4a8.h
+index 0360f767f..9fe5763d1 100644
+--- a/xllm/core/kernels/musa/deepseek_v41_w4a8.h
++++ b/xllm/core/kernels/musa/deepseek_v41_w4a8.h
+@@ -21,6 +21,5 @@ using DeepseekV41W4A8Dispatch =
+-DeepseekV41W4A8Dispatch deepseek_v41_w4a8_dispatch(
+-    const torch::Tensor& input,
+-    const torch::Tensor& expert_ids,
+-    int64_t first_expert,
+-    int64_t local_experts,
+-    double static_scale = 0.0);
++DeepseekV41W4A8Dispatch deepseek_v41_w4a8_dispatch(const torch::Tensor& input,
++                           const torch::Tensor& expert_ids,
++                           int64_t first_expert,
++                           int64_t local_experts,
++                           double static_scale = 0.0);
+diff --git a/xllm/core/kernels/musa/deepseek_v4_dsa_cache_ops.cu b/xllm/core/kernels/musa/deepseek_v4_dsa_cache_ops.cu
+index d665453ba..02642d5ef 100644
+--- a/xllm/core/kernels/musa/deepseek_v4_dsa_cache_ops.cu
++++ b/xllm/core/kernels/musa/deepseek_v4_dsa_cache_ops.cu
+@@ -137,2 +137,2 @@ __global__ void dsv41_indexer_filter_selected_kernel(
+-  using BlockSort = cub::
+-      BlockRadixSort<uint32_t, kVerifyIndexThreads, kVerifyIndicesPerThread>;
++  using BlockSort =
++      cub::BlockRadixSort<uint32_t, kVerifyIndexThreads, kVerifyIndicesPerThread>;
+@@ -160,2 +160,3 @@ __global__ void dsv41_indexer_filter_selected_kernel(
+-    output[slot] =
+-        score > -INFINITY && score < INFINITY ? static_cast<int32_t>(ix) : -1;
++    output[slot] = score > -INFINITY && score < INFINITY
++                       ? static_cast<int32_t>(ix)
++                       : -1;
+@@ -3765,4 +3766 @@ torch::Tensor deepseek_v41_indexer_filter_selected(
+-    dsv41_indexer_filter_selected_kernel<<<rows,
+-                                           kVerifyIndexThreads,
+-                                           0,
+-                                           stream>>>(
++    dsv41_indexer_filter_selected_kernel<<<rows, kVerifyIndexThreads, 0, stream>>>(
+@@ -3776,4 +3774 @@ torch::Tensor deepseek_v41_indexer_filter_selected(
+-    dsv41_indexer_filter_selected_kernel<<<rows,
+-                                           kVerifyIndexThreads,
+-                                           0,
+-                                           stream>>>(
++    dsv41_indexer_filter_selected_kernel<<<rows, kVerifyIndexThreads, 0, stream>>>(
+diff --git a/xllm/core/layers/musa/deepseek_v41/decode_capacity.h b/xllm/core/layers/musa/deepseek_v41/decode_capacity.h
+index fc31481ed..067c2f422 100644
+--- a/xllm/core/layers/musa/deepseek_v41/decode_capacity.h
++++ b/xllm/core/layers/musa/deepseek_v41/decode_capacity.h
+@@ -14 +14,2 @@ constexpr int64_t deepseek_v41_decode_capacity(int64_t length,
+-                                               bool long_context = false) {
++                                               bool long_context = false,
++                                               bool extended_context = false) {
+@@ -26 +27,6 @@ constexpr int64_t deepseek_v41_decode_capacity(int64_t length,
+-  return long_context && length <= 21504 ? 21504 : 0;
++  if (long_context && length <= 21504) {
++    return 21504;
++  }
++  // Cover the measured maximum 39998 input, 1000 output and six verify rows.
++  // Align to 256 positions so both cache ratios use complete 128-slot pages.
++  return extended_context && length <= 41216 ? 41216 : 0;
+diff --git a/xllm/core/layers/musa/deepseek_v41/decode_graph.h b/xllm/core/layers/musa/deepseek_v41/decode_graph.h
+index b69b29022..7503fc713 100644
+--- a/xllm/core/layers/musa/deepseek_v41/decode_graph.h
++++ b/xllm/core/layers/musa/deepseek_v41/decode_graph.h
+@@ -62 +62,2 @@ class DeepseekV41DecodeGraph final {
+-      bool enable_21504_bucket = false)
++      bool enable_21504_bucket = false,
++      bool enable_41216_bucket = false)
+@@ -67 +68,2 @@ class DeepseekV41DecodeGraph final {
+-        enable_21504_bucket_(enable_21504_bucket) {}
++        enable_21504_bucket_(enable_21504_bucket),
++        enable_41216_bucket_(enable_41216_bucket) {}
+@@ -70,2 +72,4 @@ class DeepseekV41DecodeGraph final {
+-    return deepseek_v41_decode_capacity(
+-               length, enable_3072_bucket_, enable_21504_bucket_) > 0;
++    return deepseek_v41_decode_capacity(length,
++                                        enable_3072_bucket_,
++                                        enable_21504_bucket_,
++                                        enable_41216_bucket_) > 0;
+@@ -84,2 +88,4 @@ class DeepseekV41DecodeGraph final {
+-    const int64_t capacity = deepseek_v41_decode_capacity(
+-        input.context_length, enable_3072_bucket_, enable_21504_bucket_);
++    const int64_t capacity = deepseek_v41_decode_capacity(input.context_length,
++                                                          enable_3072_bucket_,
++                                                          enable_21504_bucket_,
++                                                          enable_41216_bucket_);
+@@ -328,0 +335 @@ class DeepseekV41DecodeGraph final {
++  const bool enable_41216_bucket_;
+diff --git a/xllm/core/layers/musa/deepseek_v41/draft_graph.h b/xllm/core/layers/musa/deepseek_v41/draft_graph.h
+index 44d6815f0..17b93fb46 100644
+--- a/xllm/core/layers/musa/deepseek_v41/draft_graph.h
++++ b/xllm/core/layers/musa/deepseek_v41/draft_graph.h
+@@ -20,0 +21 @@ SPDX-License-Identifier: Apache-2.0
++#include "core/layers/musa/deepseek_v41/graph_ring_table.h"
+@@ -23,0 +25 @@ SPDX-License-Identifier: Apache-2.0
++#include "core/util/env_var.h"
+@@ -55 +57,14 @@ class DeepseekV41DraftGraph final {
+-    const Key key{tokens.numel(), table.size(1)};
++    // Draft history uses table[(position / block_size) % columns]. Extend the
++    // logical mapping over the whole replay domain before capturing. The real
++    // previous_context and positions stay dynamic on every replay.
++    constexpr int64_t kLongCapacity = 41216;
++    const bool fixed_ring = bound_long_ring_ && replay_graph &&
++                            previous_context > 4096 &&
++                            previous_context + tokens.numel() <= kLongCapacity;
++    CHECK_GT(caches.front().size(1), 0);
++    const auto block_size = caches.front().size(1);
++    for (const auto& cache : caches) CHECK_EQ(cache.size(1), block_size);
++    const int64_t columns = fixed_ring
++                                ? (kLongCapacity + block_size - 1) / block_size
++                                : table.size(1);
++    const Key key{tokens.numel(), columns};
+@@ -61 +76 @@ class DeepseekV41DraftGraph final {
+-      entry->input.table = torch::empty_like(table);
++      entry->input.table = torch::empty({1, columns}, table.options());
+@@ -79 +94,5 @@ class DeepseekV41DraftGraph final {
+-    entry.input.table.copy_(table);
++    if (fixed_ring) {
++      deepseek_v41_copy_graph_ring_table(entry.input.table, table);
++    } else {
++      entry.input.table.copy_(table);
++    }
+@@ -129,0 +149 @@ class DeepseekV41DraftGraph final {
++              << ", table_columns=" << entry.input.table.size(1)
+@@ -133,0 +154,2 @@ class DeepseekV41DraftGraph final {
++  const bool bound_long_ring_ =
++      util::get_bool_env("XLLM_DSV41_DRAFT_BOUND_GRAPH_RING", false);
+diff --git a/xllm/core/layers/musa/deepseek_v41/w4a8_experts.h b/xllm/core/layers/musa/deepseek_v41/w4a8_experts.h
+index 94ed16d06..5cfaf1fcf 100644
+--- a/xllm/core/layers/musa/deepseek_v41/w4a8_experts.h
++++ b/xllm/core/layers/musa/deepseek_v41/w4a8_experts.h
+@@ -64,6 +64,3 @@ class DeepseekV41W4A8Experts final {
+-    auto dispatched =
+-        kernel::musa::deepseek_v41_w4a8_dispatch(input.contiguous(),
+-                                                 ids.contiguous(),
+-                                                 first_expert_,
+-                                                 gate_up_.size(0),
+-                                                 gate_up_input_scale_);
++    auto dispatched = kernel::musa::deepseek_v41_w4a8_dispatch(
++        input.contiguous(), ids.contiguous(), first_expert_, gate_up_.size(0),
++        gate_up_input_scale_);
+@@ -83,6 +80,3 @@ class DeepseekV41W4A8Experts final {
+-    auto dispatched =
+-        kernel::musa::deepseek_v41_w4a8_dispatch_compact(input.contiguous(),
+-                                                         ids.contiguous(),
+-                                                         first_expert_,
+-                                                         gate_up_.size(0),
+-                                                         gate_up_input_scale_);
++    auto dispatched = kernel::musa::deepseek_v41_w4a8_dispatch_compact(
++        input.contiguous(), ids.contiguous(), first_expert_, gate_up_.size(0),
++        gate_up_input_scale_);
+@@ -95,3 +89,3 @@ class DeepseekV41W4A8Experts final {
+-    LOG_FIRST_N(INFO, 1) << "V4.1 compact wide P dispatch: input rows="
+-                         << input.size(0) << ", expert capacity="
+-                         << std::get<0>(*dispatched).size(1);
++    LOG_FIRST_N(INFO, 1)
++        << "V4.1 compact wide P dispatch: input rows=" << input.size(0)
++        << ", expert capacity=" << std::get<0>(*dispatched).size(1);
+@@ -129,5 +123,3 @@ class DeepseekV41W4A8Experts final {
+-    return kernel::musa::deepseek_v41_w4a8_combine(down,
+-                                                   ids.contiguous(),
+-                                                   route_rows,
+-                                                   route_weights.contiguous(),
+-                                                   first_expert_);
++    return kernel::musa::deepseek_v41_w4a8_combine(
++        down, ids.contiguous(), route_rows, route_weights.contiguous(),
++        first_expert_);
+diff --git a/xllm/core/runtime/dflash/dflash_worker_impl.cpp b/xllm/core/runtime/dflash/dflash_worker_impl.cpp
+index 8818496f8..c4492305d 100644
+--- a/xllm/core/runtime/dflash/dflash_worker_impl.cpp
++++ b/xllm/core/runtime/dflash/dflash_worker_impl.cpp
+@@ -706,5 +706,3 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
+-    output = speculative_worker::run_worker_no_sync(*impl_,
+-                                                    input,
+-                                                    *prepare_stream_,
+-                                                    *compute_stream_,
+-                                                    &processed_target_input)
++    output = speculative_worker::run_worker_no_sync(
++                 *impl_, input, *prepare_stream_, *compute_stream_,
++                 &processed_target_input)
+@@ -757,4 +755,2 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
+-        write_context_kv(processed_target_input,
+-                         embeddings,
+-                         processed_target_input.positions,
+-                         context_cache_slots);
++        write_context_kv(processed_target_input, embeddings,
++                         processed_target_input.positions, context_cache_slots);
+@@ -773,2 +769 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
+-        output.sample_output.next_tokens,
+-        embeddings,
++        output.sample_output.next_tokens, embeddings,
+diff --git a/xllm/core/runtime/dflash_worker_impl.cpp b/xllm/core/runtime/dflash_worker_impl.cpp
+index 355bb9490..966d2cca4 100644
+--- a/xllm/core/runtime/dflash_worker_impl.cpp
++++ b/xllm/core/runtime/dflash_worker_impl.cpp
+@@ -46,0 +47 @@ limitations under the License.
++#include "core/util/env_var.h"
+@@ -866,0 +868,20 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
++    torch::Tensor context_embeddings = embeddings;
++    torch::Tensor context_positions = processed_target_input.positions;
++#if defined(USE_MUSA)
++    if (util::get_bool_env("XLLM_DSV41_BOUNDED_PREFILL_REPLAY", false)) {
++      const ModelArgs& target_args = impl_->context_.get_model_args();
++      CHECK_EQ(target_args.model_type(), "deepseek_v41");
++      CHECK_EQ(target_args.window_size(), 128);
++      CHECK_EQ(draft_impl_->context_.get_model_args().window_size(), 128);
++      CHECK_EQ(processed_target_input.input_params.meta.num_sequences, 1);
++      const int64_t rows = std::min<int64_t>(128, embeddings.size(0));
++      const int64_t offset = embeddings.size(0) - rows;
++      // Earlier external rows are only padding that preserves selected-token
++      // indices. Never write them into the draft's accepted context history.
++      context_embeddings = embeddings.narrow(0, offset, rows).contiguous();
++      context_positions =
++          context_positions.narrow(0, offset, rows).contiguous();
++      context_cache_slots =
++          context_cache_slots.narrow(0, offset, rows).contiguous();
++    }
++#endif
+@@ -869,2 +890,2 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
+-                         embeddings,
+-                         processed_target_input.positions,
++                         context_embeddings,
++                         context_positions,
+diff --git a/xllm/models/llm/musa/deepseek_v41_native.h b/xllm/models/llm/musa/deepseek_v41_native.h
+index bb74e0c4a..a0b03c738 100644
+--- a/xllm/models/llm/musa/deepseek_v41_native.h
++++ b/xllm/models/llm/musa/deepseek_v41_native.h
+@@ -126,0 +127,3 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
++    decode_41216_bucket_ =
++        util::get_bool_env("XLLM_DSV41_DECODE_41216_BUCKET", false);
++    CHECK(!decode_41216_bucket_ || full_decode_graph_);
+@@ -357 +360,2 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
+-          decode_21504_bucket_);
++          decode_21504_bucket_,
++          decode_41216_bucket_);
+@@ -362,0 +367 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
++                << (decode_41216_bucket_ ? "/41216" : "")
+@@ -949,0 +955 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
++        (static_cast<int32_t>(decode_41216_bucket_) << 23) |
+@@ -1790,0 +1797 @@ class DeepseekV41NativeCausalLM final : public CausalLM {
++  bool decode_41216_bucket_ = false;
+diff --git a/xllm/proto/completion.proto b/xllm/proto/completion.proto
+index b9170ae14..40c97aee9 100644
+--- a/xllm/proto/completion.proto
++++ b/xllm/proto/completion.proto
+@@ -22,0 +23 @@ import "rec.proto";
++import "provider.proto";
+@@ -24 +25 @@ import "rec.proto";
+-// Next ID: 44
++// Next ID: 50
+@@ -144,0 +146,8 @@ message CompletionRequest {
++  // Match the xLLM Service V2 CompletionRequest wire contract.
++  RequestCorrelation correlation = 43;
++  optional uint64 remaining_deadline_ms = 44;
++  optional uint64 first_event_retry_budget_ms = 45;
++  optional uint64 first_event_dispatch_margin_ms = 46;
++  ExecutionPlan execution_plan = 47;
++  string kv_namespace = 48;
++
+@@ -146 +155 @@ message CompletionRequest {
+-  repeated int32 logprob_token_ids = 43;
++  repeated int32 logprob_token_ids = 49;

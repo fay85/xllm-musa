@@ -1,0 +1,857 @@
+{
+  "cases": {
+    "G32PEXPM256": {
+      "p": {
+        "template": "prefill_m256",
+        "archived_config_sha256": "8f3ae6874f326306374e1f83c10e92c6cb9f6a2e20ff0710ac3757f5a013cba2"
+      },
+      "d": {
+        "template": "decode",
+        "archived_config_sha256": "154bbb31d07997b0ac76ec02103a650ec37861d7264543f4182f90868da8d047"
+      }
+    },
+    "G32DRINGC1": {
+      "p": {
+        "template": "prefill_ragged",
+        "archived_config_sha256": "be5c11fefcb391ac06a6b4330a19050a1a63d723a36d5838fb0e35e6b68910de"
+      },
+      "d": {
+        "template": "decode",
+        "archived_config_sha256": "e9642656afe4034578022a5068673f1b3c86c005dd333a9556d35ffd2eab9a1c"
+      }
+    }
+  },
+  "templates": {
+    "prefill_m256": {
+      "role": "PREFILL",
+      "TP": 8,
+      "EP": 8,
+      "MoE_TP": 1,
+      "control_ports": {
+        "etcd_peer": 31178,
+        "etcd": 31179,
+        "router_http": 31180,
+        "router_rpc": 31181,
+        "coordinator_http": 31182,
+        "coordinator_rpc": 31183
+      },
+      "binary": "@BINARY@",
+      "binary_sha256": "bb1adf5014a612941ca91a02875879c9ee1023bdfeb57375b5905c00284b99b9",
+      "model": "@MODEL@",
+      "control_host": "@D_IP@",
+      "namespace": "@NAMESPACE@",
+      "base_command": [
+        "@BINARY@",
+        "--model=@MODEL@",
+        "--model_id=deepseek-v4.1-flash-1017-w4afp8-mt",
+        "--backend=llm",
+        "--model_impl=native",
+        "--host=@P_IP@",
+        "--port=22000",
+        "--master_node_addr=@P_IP@:22100",
+        "--nnodes=8",
+        "--node_rank=0",
+        "--dp_size=1",
+        "--ep_size=8",
+        "--cp_size=1",
+        "--kv_split_size=1",
+        "--enable_graph=false",
+        "--enable_schedule_overlap=false",
+        "--enable_prefix_cache=false",
+        "--enable_in_batch_prefix_cache=false",
+        "--enable_chunked_prefill=true",
+        "--max_tokens_per_chunk_for_prefill=8192",
+        "--max_tokens_per_batch=16384",
+        "--max_seqs_per_batch=1",
+        "--communication_backend=mccl",
+        "--max_cache_size=1610612736",
+        "--max_memory_utilization=0.98",
+        "--random_seed=1105",
+        "--logtostderr=true",
+        "--enable_dump_config_json=true",
+        "--dump_config_json_file=@RUN@/sj9/resolved_rank0.json",
+        "--enable_disagg_pd=true",
+        "--instance_role=PREFILL",
+        "--kv_cache_transfer_mode=PULL",
+        "--enable_native_service_adapter=true",
+        "--etcd_addr=@D_IP@:31179",
+        "--etcd_namespace=@NAMESPACE@",
+        "--disagg_pd_port=22200",
+        "--transfer_listen_port=22300",
+        "--num_speculative_tokens=5",
+        "--block_size=128",
+        "--use_cpp_chat_template=true",
+        "--enable_online_profile=true",
+        "--profile_backend=torch",
+        "--profile_dir=@RUN@/sj9/profile",
+        "--speculative_algorithm=DSpark",
+        "--draft_model=@MODEL@"
+      ],
+      "base_environment": {
+        "LD_PRELOAD": "@DRIVER@/libmusa.so.1:/expt/artifacts/native_sg438_control_v1/lib/profiling/libxllm_native_cpp_stack.so:/expt/artifacts/native_sg438_control_v1/lib/runtime/libmusa_backend_init.so",
+        "PYTHONPATH": "/expt/repos/xllm-musa",
+        "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "120",
+        "XLLM_MUSA_ENABLE_TP_CUSTOM_AR": "0",
+        "OMP_NUM_THREADS": "2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MAX_JOBS": "2",
+        "MC_MIN_RPC_PORT": "42400",
+        "MC_MAX_RPC_PORT": "42409",
+        "ENABLE_DECODE_RESPONSE_TO_SERVICE": "true",
+        "MCCL_TIMEOUT": "120",
+        "MUSA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+        "MTHREADS_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+        "MC_TE_FILTERS": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+        "MCCL_SOCKET_IFNAME": "bond0",
+        "GLOO_SOCKET_IFNAME": "bond0",
+        "XLLM_DSV41_MUSA_SHARED_SWIGLU": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_POST": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_PRE": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_METADATA": "v4_fused",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XLLM_DSV41_MUSA_ATTENTION_QUANT": "original_qdq",
+        "XLLM_DSV41_MUSA_GATE": "v41_fused",
+        "XLLM_DSV41_MUSA_ROPE": "v4_fused",
+        "XLLM_TILELANG_LIB": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libtilelang.so",
+        "XLLM_DSV41_MUSA_DENSE_QUANT": "original_qdq",
+        "XLLM_DSV41_MUSA_ENGRAM_GATE": "sglang_fused",
+        "XLLM_DSV41_EXPERT_FORMAT": "w4afp8_mt",
+        "XLLM_DSV41_MATE_W4A8_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/static/libdeepseek_v41_w4a8_static.so",
+        "XLLM_DSV41_MATE_MHC_DIR": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/mhc",
+        "XLLM_DSV41_INDEXER_AOT_DIR": "/expt/long_opt_20261119/build_2k_1905/radixadaptivev1/lib",
+        "XLLM_DSV41_MATE_SPARSE_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/sparse-h8/libdeepseek_v41_sparse_h8_bf16.so",
+        "XLLM_DSV41_ENGRAM_AOT_DIR": "/expt/artifacts/native_sg438_control_v1/lib/engram_gather",
+        "XLLM_DSV41_ENGRAM_HASH_AOT_DIR": "/expt/artifacts/native_sg438_control_v1/lib/engram_hash",
+        "XLLM_CPP_STACK_DIR": "@RUN@/sj9/profile",
+        "TORCH_MCCL_TRACE_BUFFER_SIZE": "65536",
+        "TORCH_MCCL_DUMP_ON_TIMEOUT": "1",
+        "TORCH_MCCL_DESYNC_DEBUG": "1",
+        "XLLM_DSV41_DECODE_EP_CUSTOM_AR": "0",
+        "XLLM_DSV41_DECODE_CACHE_READ_REUSE": "0",
+        "XLLM_DSV41_DECODE_MHC_FUSED_REDUCE": "0",
+        "XLLM_DSV41_PREFILL_FFI_SYNC": "1",
+        "XLLM_DSV41_DECODE_FUSED_SWA_READ": "0",
+        "XLLM_DSV41_SHARED_EXPERT_TP": "0",
+        "XLLM_DSV41_MODEL_NONDEFAULT_STREAM": "1",
+        "TORCH_MCCL_BLOCKING_WAIT": "0",
+        "XLLM_MUSA_SYNC_COLLECTIVE_STREAM": "0",
+        "XLLM_DSV41_GATE_CACHE_FP32_WEIGHT": "0",
+        "XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP": "0",
+        "XLLM_DSV41_DECODE_PACKED_QKV": "0",
+        "XLLM_DSV41_DSPARK_NATIVE": "1",
+        "XLLM_DSV41_BOUNDED_PREFILL_REPLAY": "1",
+        "XLLM_DSV41_BATCHED_DECODE": "0",
+        "XLLM_DSV41_DECODE_FFN_TAIL_GRAPH": "0",
+        "XLLM_DSV41_MHC_SMALL_BATCH_FUSION": "0",
+        "LD_LIBRARY_PATH": "@DRIVER@:/expt/artifacts/native_sg438_control_v1/lib/runtime:/opt/venv/lib/python3.10/site-packages/torch_musa/lib:/opt/venv/lib/python3.10/site-packages/torch/lib:/opt/venv/lib/python3.10/site-packages/tvm_ffi/lib:/opt/venv/lib/python3.10/site-packages/tilelang/lib:/opt/venv/lib/python3.10/site-packages/z3/lib:/usr/local/musa/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu",
+        "XLLM_DSV41_STATIC_DECODE": "0",
+        "XLLM_DSV41_FULL_DECODE_GRAPH": "0",
+        "XLLM_DSV41_SPEC_SELECTIVE_COMMIT": "1",
+        "XLLM_DSV41_REPLICATED_ATTENTION": "1",
+        "XLLM_DSV41_VERIFY_CUSTOM_AR": "0",
+        "XLLM_DSV41_FUSED_SPEC_SNAPSHOT": "0",
+        "XLLM_DSV41_DRAFT_CUSTOM_AR": "0",
+        "XLLM_DSV41_STATIC_DRAFT": "0",
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": "0",
+        "XLLM_DSV41_W4A8_STATIC_ACTIVATION": "1",
+        "XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU": "1",
+        "XLLM_DSV41_VERIFY_SKINNY_PROJECTION": "0",
+        "XLLM_DSV41_SHORT_CONTEXT_INDEXER": "0",
+        "XLLM_MUSA_PROFILE_REFRESH_GRAPHS": "1",
+        "XLLM_DSV41_PARALLEL_GATE_TOPK": "0",
+        "XLLM_DSV41_HC_METADATA_WARP": "0",
+        "XLLM_DSV41_MARKOV_FP32_LOGITS": "0",
+        "XLLM_DSV41_VERIFY_FUSED_SWA_READ": "0",
+        "XLLM_DSV41_GATE_BF16_FP32": "0",
+        "XLLM_MUSA_NATIVE_SYNC_COLLECTIVES": "1",
+        "XLLM_DSV41_GATE_SIMT": "0",
+        "XLLM_DSV41_GATHER_BF16_BITS": "0",
+        "XLLM_DSV41_DIRECT_ROPE_TABLE": "0",
+        "XLLM_DSV41_DECODE_21504_BUCKET": "0",
+        "XLLM_DSV41_DECODE_3072_BUCKET": "0",
+        "XLLM_DSV41_DRAFT_SMALL_COMMIT": "0",
+        "XLLM_DSV41_INDEXER_LONG_RADIX": "0",
+        "XLLM_DSV41_PREFILL_CACHE_READ_REUSE": "0",
+        "XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE": "0",
+        "XLLM_DSV41_PREFILL_FUSED_SWA_COMMIT": "0",
+        "XLLM_DSV41_PREFILL_MHC_FUSED_REDUCE": "0",
+        "XLLM_DSV41_PREFILL_QUERY_PARTITION": "1",
+        "XLLM_DSV41_TARGET_MATE_SPARSE_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/sparse-h64/libdeepseek_v41_sparse_h64_bf16.so",
+        "XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE": "0",
+        "XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY": "1",
+        "XLLM_DSV41_PREFILL_VALID_PREFIX_SWIGLU": "0",
+        "XLLM_DSV41_PREFILL_SHARED_ROW_PARTITION": "0",
+        "XLLM_DSV41_PREFILL_GATE_BF16_FP32": "0",
+        "XLLM_DSV41_INDEXER_PARTIAL_TOPK": "0",
+        "XLLM_DSV41_PREFILL_QUERY_ONLY": "0",
+        "XLLM_DSV41_PREFILL_ALLOW_8192": "1",
+        "XLLM_DSV41_PREFILL_RESIDUAL_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_GATE_ROW_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_CONTEXT_KV_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_COMPACT_EXPERTS": "0",
+        "XLLM_DSV41_SKIP_INTERMEDIATE_CED": "1",
+        "XLLM_DSV41_PREFILL_PARALLEL_SWIGLU": "1",
+        "XLLM_DSV41_PREFILL_EP_ROUND_ROBIN": "0",
+        "XLLM_DSV41_PREFILL_COMPRESSOR_PROJECTION_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_SLICED_ROPE": "0",
+        "XLLM_DSV41_PREFILL_WIDE_SWA_COMMIT": "1",
+        "XLLM_DSV41_PREFILL_EXPERT_TP": "1",
+        "XLLM_DSV41_PREFILL_RAGGED_S4FP8_DIR": "@RAGGED_PROVIDER@",
+        "XLLM_DSV41_PREFILL_RAGGED_M256": "1"
+      },
+      "rank_overrides": [
+        {
+          "rank": 0,
+          "command_overrides": {},
+          "environment_overrides": {}
+        },
+        {
+          "rank": 1,
+          "command_overrides": {
+            "6": "--port=22001",
+            "9": "--node_rank=1",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank1.json",
+            "36": "--transfer_listen_port=22301"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42410",
+            "MC_MAX_RPC_PORT": "42419"
+          }
+        },
+        {
+          "rank": 2,
+          "command_overrides": {
+            "6": "--port=22002",
+            "9": "--node_rank=2",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank2.json",
+            "36": "--transfer_listen_port=22302"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42420",
+            "MC_MAX_RPC_PORT": "42429"
+          }
+        },
+        {
+          "rank": 3,
+          "command_overrides": {
+            "6": "--port=22003",
+            "9": "--node_rank=3",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank3.json",
+            "36": "--transfer_listen_port=22303"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42430",
+            "MC_MAX_RPC_PORT": "42439"
+          }
+        },
+        {
+          "rank": 4,
+          "command_overrides": {
+            "6": "--port=22004",
+            "9": "--node_rank=4",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank4.json",
+            "36": "--transfer_listen_port=22304"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42440",
+            "MC_MAX_RPC_PORT": "42449"
+          }
+        },
+        {
+          "rank": 5,
+          "command_overrides": {
+            "6": "--port=22005",
+            "9": "--node_rank=5",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank5.json",
+            "36": "--transfer_listen_port=22305"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42450",
+            "MC_MAX_RPC_PORT": "42459"
+          }
+        },
+        {
+          "rank": 6,
+          "command_overrides": {
+            "6": "--port=22006",
+            "9": "--node_rank=6",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank6.json",
+            "36": "--transfer_listen_port=22306"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42460",
+            "MC_MAX_RPC_PORT": "42469"
+          }
+        },
+        {
+          "rank": 7,
+          "command_overrides": {
+            "6": "--port=22007",
+            "9": "--node_rank=7",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank7.json",
+            "36": "--transfer_listen_port=22307"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42470",
+            "MC_MAX_RPC_PORT": "42479"
+          }
+        }
+      ],
+      "variant": "G32PM2561"
+    },
+    "decode": {
+      "role": "DECODE",
+      "TP": 8,
+      "EP": 8,
+      "MoE_TP": 1,
+      "control_ports": {
+        "etcd_peer": 31178,
+        "etcd": 31179,
+        "router_http": 31180,
+        "router_rpc": 31181,
+        "coordinator_http": 31182,
+        "coordinator_rpc": 31183
+      },
+      "binary": "@BINARY@",
+      "binary_sha256": "978ff27fae311cdf77b31c4ef55457f78692ef28d52fa237d1c066dc4cbb266f",
+      "model": "@MODEL@",
+      "control_host": "@D_IP@",
+      "namespace": "@NAMESPACE@",
+      "base_command": [
+        "@BINARY@",
+        "--model=@MODEL@",
+        "--model_id=deepseek-v4.1-flash-1017-w4afp8-mt",
+        "--backend=llm",
+        "--model_impl=native",
+        "--host=@D_IP@",
+        "--port=32000",
+        "--master_node_addr=@D_IP@:32100",
+        "--nnodes=8",
+        "--node_rank=0",
+        "--dp_size=1",
+        "--ep_size=8",
+        "--cp_size=1",
+        "--kv_split_size=1",
+        "--enable_graph=false",
+        "--enable_schedule_overlap=true",
+        "--enable_prefix_cache=false",
+        "--enable_in_batch_prefix_cache=false",
+        "--enable_chunked_prefill=true",
+        "--max_tokens_per_chunk_for_prefill=256",
+        "--max_tokens_per_batch=13312",
+        "--max_seqs_per_batch=1",
+        "--communication_backend=mccl",
+        "--max_cache_size=6442450944",
+        "--max_memory_utilization=0.95",
+        "--random_seed=1105",
+        "--logtostderr=true",
+        "--enable_dump_config_json=true",
+        "--dump_config_json_file=@RUN@/sj10/resolved_rank0.json",
+        "--enable_disagg_pd=true",
+        "--instance_role=DECODE",
+        "--kv_cache_transfer_mode=PULL",
+        "--enable_native_service_adapter=true",
+        "--etcd_addr=@D_IP@:31179",
+        "--etcd_namespace=@NAMESPACE@",
+        "--disagg_pd_port=32200",
+        "--transfer_listen_port=32300",
+        "--num_speculative_tokens=5",
+        "--block_size=128",
+        "--use_cpp_chat_template=true",
+        "--enable_online_profile=true",
+        "--profile_backend=torch",
+        "--profile_dir=@RUN@/sj10/profile",
+        "--speculative_algorithm=DSpark",
+        "--draft_model=@MODEL@"
+      ],
+      "base_environment": {
+        "LD_PRELOAD": "@DRIVER@/libmusa.so.1:/opt/venv/lib/python3.10/site-packages/torch_musa/lib/libmusa_python.so:/expt/artifacts/native_sg438_control_v1/lib/profiling/libxllm_native_cpp_stack.so:/expt/artifacts/native_sg438_control_v1/lib/runtime/libmusa_backend_init.so",
+        "PYTHONPATH": "/expt/dependencies/deepep_sg_b_090e0fe2:/opt/venv/lib/python3.10/site-packages",
+        "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "120",
+        "XLLM_MUSA_ENABLE_TP_CUSTOM_AR": "1",
+        "OMP_NUM_THREADS": "2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MAX_JOBS": "2",
+        "MC_MIN_RPC_PORT": "32400",
+        "MC_MAX_RPC_PORT": "32409",
+        "ENABLE_DECODE_RESPONSE_TO_SERVICE": "true",
+        "MCCL_TIMEOUT": "120",
+        "MUSA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+        "MTHREADS_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+        "MC_TE_FILTERS": "mlx5_1,mlx5_11,mlx5_8,mlx5_6,mlx5_4,mlx5_0,mlx5_7,mlx5_5",
+        "MCCL_SOCKET_IFNAME": "bond0",
+        "GLOO_SOCKET_IFNAME": "lo",
+        "XLLM_DSV41_MUSA_SHARED_SWIGLU": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_POST": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_PRE": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_METADATA": "v4_fused",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XLLM_DSV41_MUSA_ATTENTION_QUANT": "original_qdq",
+        "XLLM_DSV41_MUSA_GATE": "v41_fused",
+        "XLLM_DSV41_MUSA_ROPE": "v4_fused",
+        "XLLM_TILELANG_LIB": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libtilelang.so",
+        "XLLM_DSV41_MUSA_DENSE_QUANT": "original_qdq",
+        "XLLM_DSV41_MUSA_ENGRAM_GATE": "sglang_fused",
+        "XLLM_DSV41_EXPERT_FORMAT": "w4afp8_mt",
+        "XLLM_DSV41_MATE_W4A8_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/static/libdeepseek_v41_w4a8_static.so",
+        "XLLM_DSV41_MATE_MHC_DIR": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/mhc",
+        "XLLM_DSV41_INDEXER_AOT_DIR": "/expt/long_opt_20261119/build_2k_1905/radixadaptivev1/lib",
+        "XLLM_DSV41_MATE_SPARSE_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/sparse-h8/libdeepseek_v41_sparse_h8_bf16.so",
+        "XLLM_DSV41_ENGRAM_AOT_DIR": "/expt/artifacts/native_sg438_control_v1/lib/engram_gather",
+        "XLLM_DSV41_ENGRAM_HASH_AOT_DIR": "/expt/artifacts/native_sg438_control_v1/lib/engram_hash",
+        "XLLM_CPP_STACK_DIR": "@RUN@/sj10/profile",
+        "TORCH_MCCL_TRACE_BUFFER_SIZE": "65536",
+        "TORCH_MCCL_DUMP_ON_TIMEOUT": "1",
+        "TORCH_MCCL_DESYNC_DEBUG": "1",
+        "XLLM_DSV41_DECODE_EP_CUSTOM_AR": "1",
+        "XLLM_DSV41_DECODE_CACHE_READ_REUSE": "1",
+        "XLLM_DSV41_DECODE_MHC_FUSED_REDUCE": "1",
+        "XLLM_DSV41_PREFILL_FFI_SYNC": "0",
+        "XLLM_DSV41_DECODE_FUSED_SWA_READ": "1",
+        "XLLM_DSV41_SHARED_EXPERT_TP": "1",
+        "XLLM_DSV41_MODEL_NONDEFAULT_STREAM": "1",
+        "TORCH_MCCL_BLOCKING_WAIT": "0",
+        "XLLM_MUSA_SYNC_COLLECTIVE_STREAM": "0",
+        "XLLM_DSV41_GATE_CACHE_FP32_WEIGHT": "0",
+        "XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP": "0",
+        "XLLM_DSV41_DECODE_PACKED_QKV": "0",
+        "XLLM_DSV41_DSPARK_NATIVE": "1",
+        "XLLM_DSV41_BOUNDED_PREFILL_REPLAY": "0",
+        "XLLM_DSV41_BATCHED_DECODE": "0",
+        "XLLM_DSV41_DECODE_FFN_TAIL_GRAPH": "0",
+        "XLLM_DSV41_MHC_SMALL_BATCH_FUSION": "0",
+        "LD_LIBRARY_PATH": "@DRIVER@:/usr/local/mtshmem/lib:/expt/artifacts/native_sg438_control_v1/lib/runtime:/opt/venv/lib/python3.10/site-packages/torch_musa/lib:/opt/venv/lib/python3.10/site-packages/torch/lib:/opt/venv/lib/python3.10/site-packages/tvm_ffi/lib:/opt/venv/lib/python3.10/site-packages/tilelang/lib:/opt/venv/lib/python3.10/site-packages/z3/lib:/usr/local/musa/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu",
+        "XLLM_DSV41_STATIC_DECODE": "1",
+        "XLLM_DSV41_FULL_DECODE_GRAPH": "1",
+        "XLLM_DSV41_SPEC_SELECTIVE_COMMIT": "1",
+        "XLLM_DSV41_REPLICATED_ATTENTION": "0",
+        "XLLM_DSV41_VERIFY_CUSTOM_AR": "1",
+        "XLLM_DSV41_FUSED_SPEC_SNAPSHOT": "1",
+        "XLLM_DSV41_DRAFT_CUSTOM_AR": "1",
+        "XLLM_DSV41_STATIC_DRAFT": "1",
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": "1",
+        "XLLM_DSV41_W4A8_STATIC_ACTIVATION": "1",
+        "XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU": "1",
+        "XLLM_DSV41_VERIFY_SKINNY_PROJECTION": "1",
+        "XLLM_DSV41_SHORT_CONTEXT_INDEXER": "1",
+        "XLLM_MUSA_PROFILE_REFRESH_GRAPHS": "1",
+        "XLLM_DSV41_PARALLEL_GATE_TOPK": "1",
+        "XLLM_DSV41_HC_METADATA_WARP": "1",
+        "XLLM_DSV41_MARKOV_FP32_LOGITS": "0",
+        "XLLM_DSV41_VERIFY_FUSED_SWA_READ": "1",
+        "XLLM_DSV41_GATE_BF16_FP32": "0",
+        "XLLM_MUSA_NATIVE_SYNC_COLLECTIVES": "1",
+        "XLLM_DSV41_OWNER_DEEPEP_LL": "0",
+        "XLLM_MUSA_SPEC_TIMING_PREFIX": "@RUN@/runtime_timing/phase",
+        "XLLM_MUSA_SPEC_TIMING_ARM_FILE": "@RUN@/runtime_timing/armed",
+        "XLLM_MUSA_SPEC_TIMING_EVERY": "8",
+        "XLLM_MUSA_SPEC_TIMING_LIMIT": "128",
+        "XLLM_DSV41_GATE_SIMT": "1",
+        "XLLM_DSV41_GATHER_BF16_BITS": "0",
+        "XLLM_DSV41_DIRECT_ROPE_TABLE": "1",
+        "XLLM_DSV41_DECODE_21504_BUCKET": "1",
+        "XLLM_DSV41_DECODE_3072_BUCKET": "0",
+        "XLLM_DSV41_DRAFT_SMALL_COMMIT": "1",
+        "XLLM_DSV41_INDEXER_LONG_RADIX": "0",
+        "XLLM_DSV41_PREFILL_CACHE_READ_REUSE": "0",
+        "XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE": "0",
+        "XLLM_DSV41_PREFILL_FUSED_SWA_COMMIT": "0",
+        "XLLM_DSV41_PREFILL_MHC_FUSED_REDUCE": "0",
+        "XLLM_DSV41_PREFILL_QUERY_PARTITION": "0",
+        "XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE": "0",
+        "XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY": "0",
+        "XLLM_DSV41_PREFILL_VALID_PREFIX_SWIGLU": "0",
+        "XLLM_DSV41_PREFILL_SHARED_ROW_PARTITION": "0",
+        "XLLM_DSV41_PREFILL_GATE_BF16_FP32": "0",
+        "XLLM_DSV41_INDEXER_PARTIAL_TOPK": "0",
+        "XLLM_DSV41_PREFILL_QUERY_ONLY": "0",
+        "XLLM_TTFT20_NATIVE_TERMINAL": "1",
+        "XLLM_DSV41_VERIFY_PACKED_COMPRESSED_READ": "1",
+        "XLLM_DSV41_VERIFY_NORMALIZED_PICKS": "1",
+        "XLLM_DSV41_VERIFY_SHARED_EXPERT_OVERLAP": "1",
+        "XLLM_DSV41_VERIFY_QKV_PROJECTION_OVERLAP": "1",
+        "XLLM_DSV41_VERIFY_FUSED_INDEX_FILTER": "1",
+        "XLLM_DSV41_VERIFY_MERGE_GATE_ROUTES": "1",
+        "XLLM_DSV41_DECODE_41216_BUCKET": "1",
+        "XLLM_DSV41_DRAFT_BOUND_GRAPH_RING": "1"
+      },
+      "rank_overrides": [
+        {
+          "rank": 0,
+          "command_overrides": {},
+          "environment_overrides": {}
+        },
+        {
+          "rank": 1,
+          "command_overrides": {
+            "6": "--port=32001",
+            "9": "--node_rank=1",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank1.json",
+            "36": "--transfer_listen_port=32301"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32410",
+            "MC_MAX_RPC_PORT": "32419"
+          }
+        },
+        {
+          "rank": 2,
+          "command_overrides": {
+            "6": "--port=32002",
+            "9": "--node_rank=2",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank2.json",
+            "36": "--transfer_listen_port=32302"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32420",
+            "MC_MAX_RPC_PORT": "32429"
+          }
+        },
+        {
+          "rank": 3,
+          "command_overrides": {
+            "6": "--port=32003",
+            "9": "--node_rank=3",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank3.json",
+            "36": "--transfer_listen_port=32303"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32430",
+            "MC_MAX_RPC_PORT": "32439"
+          }
+        },
+        {
+          "rank": 4,
+          "command_overrides": {
+            "6": "--port=32004",
+            "9": "--node_rank=4",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank4.json",
+            "36": "--transfer_listen_port=32304"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32440",
+            "MC_MAX_RPC_PORT": "32449"
+          }
+        },
+        {
+          "rank": 5,
+          "command_overrides": {
+            "6": "--port=32005",
+            "9": "--node_rank=5",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank5.json",
+            "36": "--transfer_listen_port=32305"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32450",
+            "MC_MAX_RPC_PORT": "32459"
+          }
+        },
+        {
+          "rank": 6,
+          "command_overrides": {
+            "6": "--port=32006",
+            "9": "--node_rank=6",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank6.json",
+            "36": "--transfer_listen_port=32306"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32460",
+            "MC_MAX_RPC_PORT": "32469"
+          }
+        },
+        {
+          "rank": 7,
+          "command_overrides": {
+            "6": "--port=32007",
+            "9": "--node_rank=7",
+            "28": "--dump_config_json_file=@RUN@/sj10/resolved_rank7.json",
+            "36": "--transfer_listen_port=32307"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "32470",
+            "MC_MAX_RPC_PORT": "32479"
+          }
+        }
+      ],
+      "variant": "G32DRING1"
+    },
+    "prefill_ragged": {
+      "role": "PREFILL",
+      "TP": 8,
+      "EP": 8,
+      "MoE_TP": 1,
+      "control_ports": {
+        "etcd_peer": 31178,
+        "etcd": 31179,
+        "router_http": 31180,
+        "router_rpc": 31181,
+        "coordinator_http": 31182,
+        "coordinator_rpc": 31183
+      },
+      "binary": "@BINARY@",
+      "binary_sha256": "6d73861f0da39b7f0e29157531d00420f953cf36daaa193a9bfecabb8576f417",
+      "model": "@MODEL@",
+      "control_host": "@D_IP@",
+      "namespace": "@NAMESPACE@",
+      "base_command": [
+        "@BINARY@",
+        "--model=@MODEL@",
+        "--model_id=deepseek-v4.1-flash-1017-w4afp8-mt",
+        "--backend=llm",
+        "--model_impl=native",
+        "--host=@P_IP@",
+        "--port=22000",
+        "--master_node_addr=@P_IP@:22100",
+        "--nnodes=8",
+        "--node_rank=0",
+        "--dp_size=1",
+        "--ep_size=8",
+        "--cp_size=1",
+        "--kv_split_size=1",
+        "--enable_graph=false",
+        "--enable_schedule_overlap=false",
+        "--enable_prefix_cache=false",
+        "--enable_in_batch_prefix_cache=false",
+        "--enable_chunked_prefill=true",
+        "--max_tokens_per_chunk_for_prefill=8192",
+        "--max_tokens_per_batch=16384",
+        "--max_seqs_per_batch=1",
+        "--communication_backend=mccl",
+        "--max_cache_size=1610612736",
+        "--max_memory_utilization=0.98",
+        "--random_seed=1105",
+        "--logtostderr=true",
+        "--enable_dump_config_json=true",
+        "--dump_config_json_file=@RUN@/sj9/resolved_rank0.json",
+        "--enable_disagg_pd=true",
+        "--instance_role=PREFILL",
+        "--kv_cache_transfer_mode=PULL",
+        "--enable_native_service_adapter=true",
+        "--etcd_addr=@D_IP@:31179",
+        "--etcd_namespace=@NAMESPACE@",
+        "--disagg_pd_port=22200",
+        "--transfer_listen_port=22300",
+        "--num_speculative_tokens=5",
+        "--block_size=128",
+        "--use_cpp_chat_template=true",
+        "--enable_online_profile=true",
+        "--profile_backend=torch",
+        "--profile_dir=@RUN@/sj9/profile",
+        "--speculative_algorithm=DSpark",
+        "--draft_model=@MODEL@"
+      ],
+      "base_environment": {
+        "LD_PRELOAD": "@DRIVER@/libmusa.so.1:/expt/artifacts/native_sg438_control_v1/lib/profiling/libxllm_native_cpp_stack.so:/expt/artifacts/native_sg438_control_v1/lib/runtime/libmusa_backend_init.so",
+        "PYTHONPATH": "/expt/repos/xllm-musa",
+        "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "120",
+        "XLLM_MUSA_ENABLE_TP_CUSTOM_AR": "0",
+        "OMP_NUM_THREADS": "2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MAX_JOBS": "2",
+        "MC_MIN_RPC_PORT": "42400",
+        "MC_MAX_RPC_PORT": "42409",
+        "ENABLE_DECODE_RESPONSE_TO_SERVICE": "true",
+        "MCCL_TIMEOUT": "120",
+        "MUSA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+        "MTHREADS_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+        "MC_TE_FILTERS": "mlx5_1,mlx5_6,mlx5_4,mlx5_2,mlx5_0,mlx5_9,mlx5_5,mlx5_3",
+        "MCCL_SOCKET_IFNAME": "bond0",
+        "GLOO_SOCKET_IFNAME": "bond0",
+        "XLLM_DSV41_MUSA_SHARED_SWIGLU": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_POST": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_PRE": "v4_fused",
+        "XLLM_DSV41_MUSA_HC_METADATA": "v4_fused",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XLLM_DSV41_MUSA_ATTENTION_QUANT": "original_qdq",
+        "XLLM_DSV41_MUSA_GATE": "v41_fused",
+        "XLLM_DSV41_MUSA_ROPE": "v4_fused",
+        "XLLM_TILELANG_LIB": "/opt/venv/lib/python3.10/site-packages/tilelang/lib/libtilelang.so",
+        "XLLM_DSV41_MUSA_DENSE_QUANT": "original_qdq",
+        "XLLM_DSV41_MUSA_ENGRAM_GATE": "sglang_fused",
+        "XLLM_DSV41_EXPERT_FORMAT": "w4afp8_mt",
+        "XLLM_DSV41_MATE_W4A8_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/group128/libdeepseek_v41_w4a8_group128.so",
+        "XLLM_DSV41_MATE_MHC_DIR": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/mhc",
+        "XLLM_DSV41_INDEXER_AOT_DIR": "/expt/long_opt_20261119/build_2k_1905/radixadaptivev1/lib",
+        "XLLM_DSV41_MATE_SPARSE_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/sparse-h8/libdeepseek_v41_sparse_h8_bf16.so",
+        "XLLM_DSV41_ENGRAM_AOT_DIR": "/expt/artifacts/native_sg438_control_v1/lib/engram_gather",
+        "XLLM_DSV41_ENGRAM_HASH_AOT_DIR": "/expt/artifacts/native_sg438_control_v1/lib/engram_hash",
+        "XLLM_CPP_STACK_DIR": "@RUN@/sj9/profile",
+        "TORCH_MCCL_TRACE_BUFFER_SIZE": "65536",
+        "TORCH_MCCL_DUMP_ON_TIMEOUT": "1",
+        "TORCH_MCCL_DESYNC_DEBUG": "1",
+        "XLLM_DSV41_DECODE_EP_CUSTOM_AR": "0",
+        "XLLM_DSV41_DECODE_CACHE_READ_REUSE": "0",
+        "XLLM_DSV41_DECODE_MHC_FUSED_REDUCE": "0",
+        "XLLM_DSV41_PREFILL_FFI_SYNC": "1",
+        "XLLM_DSV41_DECODE_FUSED_SWA_READ": "0",
+        "XLLM_DSV41_SHARED_EXPERT_TP": "0",
+        "XLLM_DSV41_MODEL_NONDEFAULT_STREAM": "1",
+        "TORCH_MCCL_BLOCKING_WAIT": "0",
+        "XLLM_MUSA_SYNC_COLLECTIVE_STREAM": "0",
+        "XLLM_DSV41_GATE_CACHE_FP32_WEIGHT": "0",
+        "XLLM_DSV41_DECODE_PACKED_SHARED_GATE_UP": "0",
+        "XLLM_DSV41_DECODE_PACKED_QKV": "0",
+        "XLLM_DSV41_DSPARK_NATIVE": "1",
+        "XLLM_DSV41_BOUNDED_PREFILL_REPLAY": "1",
+        "XLLM_DSV41_BATCHED_DECODE": "0",
+        "XLLM_DSV41_DECODE_FFN_TAIL_GRAPH": "0",
+        "XLLM_DSV41_MHC_SMALL_BATCH_FUSION": "0",
+        "LD_LIBRARY_PATH": "@DRIVER@:/expt/artifacts/native_sg438_control_v1/lib/runtime:/opt/venv/lib/python3.10/site-packages/torch_musa/lib:/opt/venv/lib/python3.10/site-packages/torch/lib:/opt/venv/lib/python3.10/site-packages/tvm_ffi/lib:/opt/venv/lib/python3.10/site-packages/tilelang/lib:/opt/venv/lib/python3.10/site-packages/z3/lib:/usr/local/musa/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu",
+        "XLLM_DSV41_STATIC_DECODE": "0",
+        "XLLM_DSV41_FULL_DECODE_GRAPH": "0",
+        "XLLM_DSV41_SPEC_SELECTIVE_COMMIT": "1",
+        "XLLM_DSV41_REPLICATED_ATTENTION": "1",
+        "XLLM_DSV41_VERIFY_CUSTOM_AR": "0",
+        "XLLM_DSV41_FUSED_SPEC_SNAPSHOT": "0",
+        "XLLM_DSV41_DRAFT_CUSTOM_AR": "0",
+        "XLLM_DSV41_STATIC_DRAFT": "0",
+        "XLLM_DSV41_FULL_DRAFT_GRAPH": "0",
+        "XLLM_DSV41_W4A8_STATIC_ACTIVATION": "0",
+        "XLLM_DSV41_W4A8_VALID_PREFIX_SWIGLU": "1",
+        "XLLM_DSV41_VERIFY_SKINNY_PROJECTION": "0",
+        "XLLM_DSV41_SHORT_CONTEXT_INDEXER": "0",
+        "XLLM_MUSA_PROFILE_REFRESH_GRAPHS": "1",
+        "XLLM_DSV41_PARALLEL_GATE_TOPK": "0",
+        "XLLM_DSV41_HC_METADATA_WARP": "0",
+        "XLLM_DSV41_MARKOV_FP32_LOGITS": "0",
+        "XLLM_DSV41_VERIFY_FUSED_SWA_READ": "0",
+        "XLLM_DSV41_GATE_BF16_FP32": "0",
+        "XLLM_MUSA_NATIVE_SYNC_COLLECTIVES": "1",
+        "XLLM_DSV41_GATE_SIMT": "0",
+        "XLLM_DSV41_GATHER_BF16_BITS": "0",
+        "XLLM_DSV41_DIRECT_ROPE_TABLE": "0",
+        "XLLM_DSV41_DECODE_21504_BUCKET": "0",
+        "XLLM_DSV41_DECODE_3072_BUCKET": "0",
+        "XLLM_DSV41_DRAFT_SMALL_COMMIT": "0",
+        "XLLM_DSV41_INDEXER_LONG_RADIX": "0",
+        "XLLM_DSV41_PREFILL_CACHE_READ_REUSE": "0",
+        "XLLM_DSV41_PREFILL_CUSTOM_ALLREDUCE": "0",
+        "XLLM_DSV41_PREFILL_FUSED_SWA_COMMIT": "0",
+        "XLLM_DSV41_PREFILL_MHC_FUSED_REDUCE": "0",
+        "XLLM_DSV41_PREFILL_QUERY_PARTITION": "1",
+        "XLLM_DSV41_TARGET_MATE_SPARSE_SO": "/expt/long_opt_20261119/goal20k200k_20261119/mate_eval_028/abi-r1/artifacts/sparse-h64/libdeepseek_v41_sparse_h64_bf16.so",
+        "XLLM_DSV41_PREFILL_DIRECT_ROPE_TABLE": "0",
+        "XLLM_MUSA_NATIVE_COLLECTIVES_TP_ONLY": "1",
+        "XLLM_DSV41_PREFILL_VALID_PREFIX_SWIGLU": "0",
+        "XLLM_DSV41_PREFILL_SHARED_ROW_PARTITION": "0",
+        "XLLM_DSV41_PREFILL_GATE_BF16_FP32": "0",
+        "XLLM_DSV41_INDEXER_PARTIAL_TOPK": "0",
+        "XLLM_DSV41_PREFILL_QUERY_ONLY": "0",
+        "XLLM_DSV41_PREFILL_ALLOW_8192": "1",
+        "XLLM_DSV41_PREFILL_RESIDUAL_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_GATE_ROW_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_CONTEXT_KV_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_COMPACT_EXPERTS": "0",
+        "XLLM_DSV41_SKIP_INTERMEDIATE_CED": "1",
+        "XLLM_DSV41_PREFILL_PARALLEL_SWIGLU": "1",
+        "XLLM_DSV41_PREFILL_EP_ROUND_ROBIN": "0",
+        "XLLM_DSV41_PREFILL_COMPRESSOR_PROJECTION_PARTITION": "1",
+        "XLLM_DSV41_PREFILL_SLICED_ROPE": "0",
+        "XLLM_DSV41_PREFILL_WIDE_SWA_COMMIT": "1",
+        "XLLM_DSV41_PREFILL_EXPERT_TP": "2"
+      },
+      "rank_overrides": [
+        {
+          "rank": 0,
+          "command_overrides": {},
+          "environment_overrides": {}
+        },
+        {
+          "rank": 1,
+          "command_overrides": {
+            "6": "--port=22001",
+            "9": "--node_rank=1",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank1.json",
+            "36": "--transfer_listen_port=22301"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42410",
+            "MC_MAX_RPC_PORT": "42419"
+          }
+        },
+        {
+          "rank": 2,
+          "command_overrides": {
+            "6": "--port=22002",
+            "9": "--node_rank=2",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank2.json",
+            "36": "--transfer_listen_port=22302"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42420",
+            "MC_MAX_RPC_PORT": "42429"
+          }
+        },
+        {
+          "rank": 3,
+          "command_overrides": {
+            "6": "--port=22003",
+            "9": "--node_rank=3",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank3.json",
+            "36": "--transfer_listen_port=22303"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42430",
+            "MC_MAX_RPC_PORT": "42439"
+          }
+        },
+        {
+          "rank": 4,
+          "command_overrides": {
+            "6": "--port=22004",
+            "9": "--node_rank=4",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank4.json",
+            "36": "--transfer_listen_port=22304"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42440",
+            "MC_MAX_RPC_PORT": "42449"
+          }
+        },
+        {
+          "rank": 5,
+          "command_overrides": {
+            "6": "--port=22005",
+            "9": "--node_rank=5",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank5.json",
+            "36": "--transfer_listen_port=22305"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42450",
+            "MC_MAX_RPC_PORT": "42459"
+          }
+        },
+        {
+          "rank": 6,
+          "command_overrides": {
+            "6": "--port=22006",
+            "9": "--node_rank=6",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank6.json",
+            "36": "--transfer_listen_port=22306"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42460",
+            "MC_MAX_RPC_PORT": "42469"
+          }
+        },
+        {
+          "rank": 7,
+          "command_overrides": {
+            "6": "--port=22007",
+            "9": "--node_rank=7",
+            "28": "--dump_config_json_file=@RUN@/sj9/resolved_rank7.json",
+            "36": "--transfer_listen_port=22307"
+          },
+          "environment_overrides": {
+            "MC_MIN_RPC_PORT": "42470",
+            "MC_MAX_RPC_PORT": "42479"
+          }
+        }
+      ],
+      "variant": "G32RAGP1"
+    }
+  }
+}
