@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "core/runtime/native_provider_runtime.h"
 
+#include <glog/logging.h>
 #include <torch/version.h>
 
 #include <algorithm>
@@ -136,15 +137,81 @@ std::string kv_layout_contract(const ModelArgs& args,
 
 std::vector<std::string> cache_groups(
     const BlockManagerPool::Options& options) {
+  // The composite pool describes every grouped cache leaf as one
+  // (manager type, compress ratio) pair -- see
+  // BlockManagerPool::Options::manager_types / compress_ratios and
+  // build_composite_leaves(). The manager type selects the allocator
+  // implementation; it is not a BlockType. Compressed TOKEN leaves all use
+  // BlockManagerImpl (0) and are distinguished only by their ratio, while the
+  // sliding-window leaf (1) carries ratio 0 as an unused placeholder.
+  // Interpreting the manager type as a BlockType therefore collapsed every
+  // TOKEN leaf onto "group:0" (KV): C4/C128 were mislabeled and the duplicate
+  // entries made the descriptor fail validation ("invalid repeated fields").
+  constexpr uint32_t kManagerTypeBlockManagerImpl = 0;
+  constexpr uint32_t kManagerTypeSlidingWindowBlockManager = 1;
+
+  std::vector<int32_t> group_ids;
+  const auto add_group = [&group_ids](BlockType block_type) {
+    group_ids.emplace_back(cache_group_id(block_type));
+  };
+
   if (options.manager_types().empty()) {
-    return {"group:" + std::to_string(cache_group_id(BlockType::KV))};
+    // Flat KV pool (normal / Qwen / xtensor): one KV cache group.
+    add_group(BlockType::KV);
+  } else {
+    const std::vector<uint32_t>& manager_types = options.manager_types();
+    const std::vector<uint32_t>& compress_ratios = options.compress_ratios();
+    CHECK_EQ(manager_types.size(), compress_ratios.size())
+        << "manager_types and compress_ratios must have the same size";
+    for (size_t index = 0; index < manager_types.size(); ++index) {
+      const uint32_t manager_type = manager_types[index];
+      const uint32_t compress_ratio = compress_ratios[index];
+      if (manager_type == kManagerTypeSlidingWindowBlockManager) {
+        // Sliding-window leaf: its ratio is a placeholder, not a compression
+        // ratio, so it must never be mapped to a TOKEN group.
+        add_group(BlockType::SWA);
+        continue;
+      }
+      CHECK_EQ(manager_type, kManagerTypeBlockManagerImpl)
+          << "unexpected composite manager type " << manager_type;
+      switch (compress_ratio) {
+        case 1:
+          add_group(BlockType::C1);
+          break;
+        case 2:
+          add_group(BlockType::C2);
+          break;
+        case 4:
+          add_group(BlockType::C4);
+          break;
+        case 128:
+          add_group(BlockType::C128);
+          break;
+        default:
+          LOG(FATAL) << "unexpected compress ratio " << compress_ratio
+                     << " for a composite BlockManagerImpl sub-manager";
+      }
+    }
   }
+  if (options.enable_linear_state()) {
+    // LinearStateBlockManager leaf (GDN recurrent state).
+    add_group(BlockType::LINEAR);
+  }
+  if (options.num_speculative_tokens() > 0) {
+    // The pool appends the per-sequence EMBEDDING leaf for spec decode.
+    add_group(BlockType::EMBEDDING);
+  }
+
+  // The descriptor contract requires non-empty, unique entries. Group ids are
+  // emitted in ascending order so the published order never depends on config
+  // traversal order.
+  std::sort(group_ids.begin(), group_ids.end());
+  group_ids.erase(std::unique(group_ids.begin(), group_ids.end()),
+                  group_ids.end());
   std::vector<std::string> groups;
-  groups.reserve(options.manager_types().size());
-  for (size_t index = 0; index < options.manager_types().size(); ++index) {
-    const BlockType block_type =
-        static_cast<BlockType>(options.manager_types()[index]);
-    groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
+  groups.reserve(group_ids.size());
+  for (const int32_t group_id : group_ids) {
+    groups.emplace_back("group:" + std::to_string(group_id));
   }
   return groups;
 }
