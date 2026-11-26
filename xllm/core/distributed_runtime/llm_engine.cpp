@@ -1462,10 +1462,12 @@ bool mtp_prefill_early_token_enabled() {
 
 bool mark_mtp_prefill_target_only(const runtime::Options& options,
                                   std::vector<ForwardInput>& inputs) {
+  const bool supported_algo =
+      options.speculative_algorithm() == "mtp" ||
+      options.speculative_algorithm() == "MTP" ||
+      SpeculativeConfig::is_dspark_algorithm(options.speculative_algorithm());
   if (!mtp_prefill_early_token_enabled() ||
-      options.num_speculative_tokens() <= 0 ||
-      (options.speculative_algorithm() != "mtp" &&
-       options.speculative_algorithm() != "MTP") ||
+      options.num_speculative_tokens() <= 0 || !supported_algo ||
       options.instance_role() != InstanceRole::PREFILL ||
       options.enable_schedule_overlap() || inputs.size() != 1) {
     return false;

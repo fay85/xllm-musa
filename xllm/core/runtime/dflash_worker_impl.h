@@ -92,6 +92,9 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
 
   std::tuple<int64_t, int64_t> estimate_kv_cache_capacity() override;
 
+  void prepare_work_before_execute(const ForwardInput& input,
+                                   ForwardInput& processed_input) override;
+
  protected:
   std::optional<ForwardOutput> step_prefill(const ForwardInput& input) override;
 
@@ -265,6 +268,14 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
   // Preformatted labels keep per-position acceptance telemetry allocation-free
   // on the decode hot path.
   std::vector<std::string> speculative_position_labels_;
+  struct PendingPrefillContextKv {
+    ForwardInput processed_target_input;
+    torch::Tensor embeddings;
+  };
+  // Stashed by phase 1 (target-token-first publish) and consumed by phase 2
+  // (finish_mtp_prefill_draft) before DisaggPDScheduler::prefill_send_first_generation.
+  std::optional<PendingPrefillContextKv> pending_prefill_context_kv_;
+
   dflash_detail::DSparkSasMode draft_sas_mode_ =
       dflash_detail::DSparkSasMode::NOT_DSPARK;
 };

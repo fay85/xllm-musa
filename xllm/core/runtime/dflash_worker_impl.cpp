@@ -790,9 +790,116 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
   return output;
 }
 
+void DFlashWorkerImpl::prepare_work_before_execute(
+    const ForwardInput& input,
+    ForwardInput& processed_input) {
+  const uint8_t phase = input.mtp_prefill_phase;
+  if (phase == 2) {
+    // Continuation RPC is only a trigger; skip H2D of the empty input.
+    processed_input = input;
+    return;
+  }
+  DraftModelSpecWorkerImpl::prepare_work_before_execute(input, processed_input);
+  // ForwardInput::to() can unpack a host buffer packed before the engine set
+  // the phase. Preserve the phase from the RPC payload.
+  processed_input.mtp_prefill_phase = phase;
+}
+
 std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     const ForwardInput& input) {
   discard_draft_prelaunch();
+  auto run_prefill_context_kv =
+      [this](const ForwardInput& target_input,
+             const torch::Tensor& context_embeddings)
+      -> std::vector<std::string> {
+    if (!context_embeddings.defined()) {
+      return {};
+    }
+    CHECK(target_input.positions_host.defined())
+        << "DFlash prefill requires processed positions_host.";
+    // Qwen3.5 mRoPE stores positions as [3, tokens]. The draft RoPE consumes
+    // one text position per hidden row, which is axis 0 for text tokens.
+    torch::Tensor context_positions_host = target_input.positions_host;
+    torch::Tensor context_positions = target_input.positions;
+    if (context_positions_host.dim() == 2 &&
+        context_positions_host.size(0) == 3) {
+      context_positions_host = context_positions_host[0].contiguous();
+      if (context_positions.defined() && context_positions.dim() == 2 &&
+          context_positions.size(0) == 3) {
+        context_positions = context_positions[0].contiguous();
+      }
+    }
+    if (context_positions.defined() &&
+        context_positions.numel() == context_positions_host.numel() * 3) {
+      context_positions =
+          context_positions.reshape({3, context_positions_host.numel()})[0]
+              .contiguous();
+    }
+    if (!context_positions.defined() ||
+        context_positions.numel() != context_positions_host.numel()) {
+      context_positions = context_positions_host.to(
+          target_input.positions.device(), /*non_blocking=*/true);
+    }
+    Slice<int32_t> positions = {
+        context_positions_host.data_ptr<int32_t>(),
+        static_cast<size_t>(context_positions_host.numel())};
+    CHECK_EQ(positions.size(), static_cast<size_t>(context_embeddings.size(0)))
+        << "DFlash prefill hidden/position count mismatch.";
+    torch::Tensor context_cache_slots =
+        target_input.input_params.attention.device.new_cache_slots;
+    if (!target_input.input_params.multi_block_tables.empty()) {
+      const std::vector<int32_t> grouped_swa_slots =
+          specBuilder::build_grouped_prefill_swa_slots(target_input,
+                                                       options_.block_size());
+      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+      context_cache_slots = cpu_int_vec_to_device(grouped_swa_slots, device_);
+    }
+    CHECK(context_cache_slots.defined())
+        << "DFlash prefill requires context cache slots.";
+    CHECK_EQ(static_cast<size_t>(context_cache_slots.numel()), positions.size())
+        << "DFlash prefill hidden/cache slot count mismatch.";
+
+    Timer draft_timer;
+    std::vector<std::string> failed_request_ids =
+        write_context_kv(target_input,
+                         context_embeddings,
+                         context_positions,
+                         context_cache_slots);
+    COUNTER_ADD(speculative_execution_latency_seconds_draft,
+                draft_timer.elapsed_seconds());
+    return failed_request_ids;
+  };
+
+  if (input.mtp_prefill_phase == 2) {
+    CHECK(pending_prefill_context_kv_.has_value())
+        << "DSpark prefill draft continuation without a stashed target prefill";
+    PendingPrefillContextKv pending = std::move(*pending_prefill_context_kv_);
+    pending_prefill_context_kv_.reset();
+#if defined(USE_MUSA)
+    c10::StreamGuard prefill_stream_guard = compute_stream_->set_stream_guard();
+#endif
+    ForwardOutput output;
+    std::vector<std::string> failed_request_ids = run_prefill_context_kv(
+        pending.processed_target_input, pending.embeddings);
+    output.failed_request_ids = std::move(failed_request_ids);
+#if defined(USE_MUSA)
+    if (enable_schedule_overlap()) {
+      output.ready_event = compute_stream_->record_event_or_sync();
+    } else {
+      CHECK_EQ(compute_stream_->synchronize(), 0)
+          << "failed to finalize deferred DSpark prefill context KV";
+    }
+#endif
+    if (!enable_schedule_overlap() && !driver_ && !dp_driver_) {
+      if (output.failed_request_ids.empty()) {
+        return std::nullopt;
+      }
+      return make_failed_output(std::move(output.failed_request_ids));
+    }
+    return output;
+  }
+  CHECK(!pending_prefill_context_kv_.has_value())
+      << "Previous deferred DSpark prefill context KV was not finalized";
 #if defined(USE_MUSA)
   // Target/context work uses compute_stream_, but bootstrap index_select and
   // EmbeddingCache tail clones previously escaped onto the caller's default
@@ -866,64 +973,17 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
   }
 #endif
 
-  const torch::Tensor& embeddings = output.sample_output.embeddings;
-  if (embeddings.defined()) {
-    CHECK(processed_target_input.positions_host.defined())
-        << "DFlash prefill requires processed positions_host.";
-    // Qwen3.5 mRoPE stores positions as [3, tokens]. The draft RoPE consumes
-    // one text position per hidden row, which is axis 0 for text tokens.
-    torch::Tensor context_positions_host = processed_target_input.positions_host;
-    torch::Tensor context_positions = processed_target_input.positions;
-    if (context_positions_host.dim() == 2 &&
-        context_positions_host.size(0) == 3) {
-      context_positions_host = context_positions_host[0].contiguous();
-      if (context_positions.defined() && context_positions.dim() == 2 &&
-          context_positions.size(0) == 3) {
-        context_positions = context_positions[0].contiguous();
-      }
-    }
-    if (context_positions.defined() &&
-        context_positions.numel() == context_positions_host.numel() * 3) {
-      context_positions =
-          context_positions.reshape({3, context_positions_host.numel()})[0]
-              .contiguous();
-    }
-    if (!context_positions.defined() ||
-        context_positions.numel() != context_positions_host.numel()) {
-      context_positions = context_positions_host.to(
-          processed_target_input.positions.device(), /*non_blocking=*/true);
-    }
-    Slice<int32_t> positions = {
-        context_positions_host.data_ptr<int32_t>(),
-        static_cast<size_t>(context_positions_host.numel())};
-    CHECK_EQ(positions.size(), static_cast<size_t>(embeddings.size(0)))
-        << "DFlash prefill hidden/position count mismatch.";
-    torch::Tensor context_cache_slots =
-        processed_target_input.input_params.attention.device.new_cache_slots;
-    if (!processed_target_input.input_params.multi_block_tables.empty()) {
-      const std::vector<int32_t> grouped_swa_slots =
-          specBuilder::build_grouped_prefill_swa_slots(processed_target_input,
-                                                       options_.block_size());
-      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
-      context_cache_slots = cpu_int_vec_to_device(grouped_swa_slots, device_);
-    }
-    CHECK(context_cache_slots.defined())
-        << "DFlash prefill requires context cache slots.";
-    CHECK_EQ(static_cast<size_t>(context_cache_slots.numel()), positions.size())
-        << "DFlash prefill hidden/cache slot count mismatch.";
-
-    timer.reset();
+  // Take embeddings by value before output.sample_output.embeddings is
+  // replaced with the 1-row bootstrap slice below (required for phase-2 defer).
+  torch::Tensor embeddings = output.sample_output.embeddings;
+  const bool defer_context_kv = input.mtp_prefill_phase == 1;
+  if (!defer_context_kv && embeddings.defined()) {
     std::vector<std::string> failed_request_ids =
-        write_context_kv(processed_target_input,
-                         embeddings,
-                         context_positions,
-                         context_cache_slots);
+        run_prefill_context_kv(processed_target_input, embeddings);
     output.failed_request_ids.insert(
         output.failed_request_ids.end(),
         std::make_move_iterator(failed_request_ids.begin()),
         std::make_move_iterator(failed_request_ids.end()));
-    COUNTER_ADD(speculative_execution_latency_seconds_draft,
-                timer.elapsed_seconds());
   }
 
   // Embedding ids are recycled across requests when the scheduler does not
@@ -989,6 +1049,10 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
         << dsv4_cpu_tensor_vector_string(output.sample_output.next_tokens);
   }
 #endif
+  if (defer_context_kv) {
+    pending_prefill_context_kv_.emplace(PendingPrefillContextKv{
+        std::move(processed_target_input), std::move(embeddings)});
+  }
   if (!enable_schedule_overlap() && !driver_ && !dp_driver_) {
     if (output.failed_request_ids.empty()) {
       return std::nullopt;
