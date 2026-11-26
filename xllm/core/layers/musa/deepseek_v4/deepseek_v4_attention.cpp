@@ -724,6 +724,11 @@ torch::Tensor create_normalized_hadamard(int64_t dim,
   return matrix.to(options.device()).contiguous();
 }
 
+bool dsv4_prefill_fused_rope_hadamard_enabled() {
+  const char* env = std::getenv("XLLM_DSV4_PREFILL_FUSED_ROPE_HADAMARD");
+  return env == nullptr || std::strcmp(env, "0") != 0;
+}
+
 torch::Tensor apply_indexer_hadamard(const torch::Tensor& input,
                                      const torch::Tensor& hadamard) {
   if (!input.defined() || input.numel() == 0) {
@@ -731,6 +736,15 @@ torch::Tensor apply_indexer_hadamard(const torch::Tensor& input,
   }
   CHECK(hadamard.defined());
   CHECK_EQ(input.size(-1), hadamard.size(0));
+  if (dsv4_prefill_fused_rope_hadamard_enabled() &&
+      input.scalar_type() == torch::kBFloat16 && input.size(-1) == 128 &&
+      !input.device().is_cpu()) {
+    auto input_contig = input.is_contiguous() ? input : input.contiguous();
+    auto output = torch::empty_like(input_contig);
+    if (kernel::musa::deepseek_v4_hadamard_out(input_contig, output)) {
+      return output;
+    }
+  }
   auto output = torch::matmul(input.to(torch::kFloat32),
                               hadamard.to(torch::kFloat32).transpose(0, 1));
   return output.to(input.dtype()).contiguous();
@@ -3070,7 +3084,21 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
   }
   compressed = compressed.to(hidden_states.dtype());
   compressed = std::get<0>(indexer_compressor_norm_->forward(compressed));
-  if (effective_cos.defined() && effective_sin.defined() &&
+  bool fused_cmp_rope_hadamard = false;
+  if (dsv4_prefill_fused_rope_hadamard_enabled() && effective_cos.defined() &&
+      effective_sin.defined() &&
+      effective_cos.numel() >= blocks * rope_head_dim_ &&
+      effective_sin.numel() >= blocks * rope_head_dim_ &&
+      index_head_dim_ == 128 && rope_head_dim_ == 64 &&
+      compressed.scalar_type() == torch::kBFloat16 &&
+      compressed.is_contiguous()) {
+    fused_cmp_rope_hadamard = kernel::musa::deepseek_v4_rope_hadamard_inplace(
+        compressed,
+        effective_cos.slice(/*dim=*/0, /*start=*/0, /*end=*/blocks),
+        effective_sin.slice(/*dim=*/0, /*start=*/0, /*end=*/blocks));
+  }
+  if (!fused_cmp_rope_hadamard && effective_cos.defined() &&
+      effective_sin.defined() &&
       effective_cos.numel() >= blocks * rope_head_dim_ &&
       effective_sin.numel() >= blocks * rope_head_dim_) {
     compressed = apply_interleaved_partial_rope(
@@ -3090,6 +3118,9 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
     compressed = compressed.slice(/*dim=*/0,
                                   /*start=*/output_block_offset,
                                   /*end=*/compressed.size(0));
+  }
+  if (fused_cmp_rope_hadamard) {
+    return compressed.is_contiguous() ? compressed : compressed.contiguous();
   }
   return apply_indexer_hadamard(compressed, indexer_hadamard_);
 }
@@ -3352,17 +3383,27 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
         query,
         cos.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
         sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens));
-  } else if (q_tokens > 2 && q_tokens < 128 && cos.defined() && sin.defined() &&
-             cos.size(0) >= q_tokens && sin.size(0) >= q_tokens) {
-    torch::Tensor transform_output =
-        torch::empty(query.sizes(), query.options());
-    fused_rope_hadamard = kernel::musa::deepseek_v4_rope_hadamard_out(
-        query,
-        cos.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
-        sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
-        transform_output);
-    if (fused_rope_hadamard) {
-      query = transform_output;
+  } else if (((q_tokens > 2 && q_tokens < 128) ||
+              (q_tokens >= 128 && dsv4_prefill_fused_rope_hadamard_enabled())) &&
+             cos.defined() && sin.defined() && cos.size(0) >= q_tokens &&
+             sin.size(0) >= q_tokens) {
+    if (q_tokens >= 128 && !precomputed_query.defined() &&
+        query.is_contiguous()) {
+      fused_rope_hadamard = kernel::musa::deepseek_v4_rope_hadamard_inplace(
+          query,
+          cos.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
+          sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens));
+    } else {
+      torch::Tensor transform_output =
+          torch::empty(query.sizes(), query.options());
+      fused_rope_hadamard = kernel::musa::deepseek_v4_rope_hadamard_out(
+          query,
+          cos.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
+          sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
+          transform_output);
+      if (fused_rope_hadamard) {
+        query = transform_output;
+      }
     }
   }
   if (!fused_rope_hadamard && cos.defined() && sin.defined() &&

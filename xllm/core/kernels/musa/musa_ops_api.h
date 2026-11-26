@@ -609,6 +609,9 @@ bool deepseek_v4_rope_hadamard_out(const torch::Tensor& query,
                                    const torch::Tensor& sin,
                                    torch::Tensor& output);
 
+bool deepseek_v4_hadamard_out(const torch::Tensor& input,
+                              torch::Tensor& output);
+
 bool deepseek_v4_q_rmsnorm_rope_inplace(torch::Tensor& query,
                                         const torch::Tensor& cos,
                                         const torch::Tensor& sin,
