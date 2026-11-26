@@ -1373,8 +1373,14 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     return local;
   }
   if (tp_pg_ != nullptr && tp_pg_->world_size() > 1 && !skip_tp_allreduce) {
+    const char* custom_ar_all_layers_env =
+        std::getenv("XLLM_DSV4_CUSTOM_AR_ALL_LAYERS");
+    const bool custom_ar_all_layers =
+        custom_ar_all_layers_env == nullptr ||
+        std::strcmp(custom_ar_all_layers_env, "0") != 0;
     const bool use_custom_allreduce =
-        is_prefill || num_layers_ <= 4 || layer_id_ < num_layers_ - 4;
+        is_prefill || num_layers_ <= 4 || custom_ar_all_layers ||
+        layer_id_ < num_layers_ - 4;
     bool used_custom_allreduce = false;
     if (use_custom_allreduce && output.dim() == 2 && output.size(0) > 0 &&
         output.size(0) <= (is_prefill ? kPrefillCustomAllreduceWorkspaceTokens
