@@ -36,6 +36,7 @@ limitations under the License.
 #include "framework/kv_cache_transfer/push_route.h"
 #include "framework/xtensor/global_xtensor.h"
 #include "framework/xtensor/xtensor_allocator.h"
+#include "util/env_var.h"
 #include "util/net.h"
 #include "util/timer.h"
 #include "util/utils.h"
@@ -739,20 +740,32 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   uint64_t logical_regions = 0;
   for (const ByteRegion& region : all_regions) {
     const uint64_t repeats = byte_region_repeats(region);
+    const bool dense_repeat =
+        repeats <= 1 ||
+        (region.local_stride == region.length &&
+         region.remote_stride == region.length);
+    const uint64_t effective_regions = dense_repeat ? 1 : repeats;
     const uint64_t max_count = std::numeric_limits<uint64_t>::max();
-    if (repeats > max_count - logical_regions ||
+    if (effective_regions > max_count - logical_regions ||
         region.length > (max_count - region_bytes) / repeats) {
       LOG(ERROR) << "PULL KV byte-region count overflow";
       return false;
     }
-    logical_regions += repeats;
+    logical_regions += effective_regions;
     region_bytes += region.length * repeats;
   }
   // Heterogeneous TP yields per-token head-shard regions (~1 KiB each); read
   // their remote-contiguous runs through a staging buffer instead.
-  const bool staged =
+  const std::string staging_mode =
+      util::get_string_env("XLLM_MUSA_PULL_STAGING_MODE");
+  bool staged =
       logical_regions >= 4096 &&
       region_bytes / std::max<uint64_t>(logical_regions, 1) < 16384;
+  if (staging_mode == "direct") {
+    staged = false;
+  } else if (staging_mode == "staged") {
+    staged = true;
+  }
   const double bind_ms = bind_timer.elapsed_seconds() * 1000.0;
   Timer move_timer;
   double staged_read_ms = 0.0;

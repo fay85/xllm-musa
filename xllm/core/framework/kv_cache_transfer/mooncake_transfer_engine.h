@@ -282,6 +282,7 @@ class MooncakeTransferEngine {
   Device device_;
   std::mutex staging_mutex_;
   torch::Tensor staging_;
+  std::unique_ptr<Stream> staging_stream_;
   uint64_t staging_buf_id_ = 0;
   MooncakeTransferEngineCore& core_;
   std::mutex session_mutex_;

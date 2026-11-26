@@ -1932,6 +1932,95 @@ TEST(ReshardPlannerTest, RepeatedAndExpandedSpansPreserveEveryByte) {
   }
 }
 
+TEST(ReshardPlannerTest, IdenticalSpanPlanFoldsContiguousRepeats) {
+  auto make_replicated_worker = [](const std::string& addr,
+                                   uint64_t buffer_id,
+                                   int32_t tp_rank) {
+    WorkerCacheLayoutManifest manifest;
+    manifest.incarnation_id = addr + "-inc";
+    manifest.layout_generation = 1;
+    manifest.fingerprint = "replicated-contiguous-fold";
+    manifest.backend = "musa";
+    manifest.layout_family = "token_head_dim";
+    manifest.cluster_id = buffer_id;
+    manifest.addr = addr;
+    manifest.listen_port = static_cast<uint16_t>(22000 + buffer_id);
+    manifest.coordinates.tp_rank = tp_rank;
+    manifest.coordinates.tp_size = 8;
+
+    CacheTensorManifest tensor;
+    tensor.cache_namespace = CacheNamespace::MAIN;
+    tensor.layer_id = 0;
+    tensor.role = 0;
+    tensor.group_id = 1;
+    tensor.mooncake_buffer_id = static_cast<int64_t>(buffer_id);
+    tensor.scalar_type = 0;
+    tensor.element_bytes = 2;
+    tensor.shape = {2, 128, 1, 576};
+    tensor.stride = {128 * 576, 576, 576, 1};
+    tensor.contiguous = true;
+    tensor.resource_count = 2;
+    tensor.resource_stride_bytes = 128 * 1152;
+    tensor.buffer_bytes = 2 * 128 * 1152;
+    tensor.block_token_capacity = 128;
+    tensor.shard.kind = LogicalShardKind::REPLICATED;
+    tensor.shard.resource_scope = CacheResourceScope::BLOCK;
+
+    LogicalSpan span;
+    span.logical_tensor = "KEY";
+    span.logical_offset_bytes = 0;
+    span.bytes_per_region = 1152;
+    span.repeat_count = 128;
+    span.logical_stride_bytes = 1152;
+    span.physical_offset_bytes = 0;
+    span.physical_stride_bytes = 1152;
+    span.owner_tp_rank = 0;
+    tensor.shard.spans.push_back(span);
+
+    manifest.tensors.push_back(std::move(tensor));
+    return manifest;
+  };
+
+  std::vector<WorkerCacheLayoutManifest> sources;
+  for (int32_t rank = 0; rank < 8; ++rank) {
+    sources.push_back(make_replicated_worker(
+        "src-" + std::to_string(rank), static_cast<uint64_t>(10 + rank), rank));
+  }
+
+  for (int32_t dst_rank : {0, 1}) {
+    const WorkerCacheLayoutManifest dst =
+        make_replicated_worker("dst-" + std::to_string(dst_rank), 100, dst_rank);
+    std::vector<size_t> selected;
+    std::vector<ReshardPlanTemplate> plans;
+    const Status plan_status =
+        ReshardPlanner().build_incoming_plans(sources, dst, &selected, &plans);
+    ASSERT_TRUE(plan_status.ok()) << plan_status.message();
+    ASSERT_EQ(selected.size(), 1U);
+    EXPECT_EQ(selected[0], 0U);
+    ASSERT_EQ(plans[0].regions.size(), 1U);
+    EXPECT_EQ(plans[0].regions[0].repeat_count, 1U);
+    EXPECT_EQ(plans[0].regions[0].bytes_per_region, 128U * 1152U);
+
+    KVTransferMapping mapping;
+    mapping.group_id = 1;
+    mapping.local_ids = {1};
+    mapping.remote_ids = {0};
+
+    std::vector<ByteRegion> regions;
+    const Status bind_status = RequestRegionBinder().bind_pull(
+        plans[0],
+        {mapping},
+        CacheNamespace::MAIN,
+        /*layer_id=*/0,
+        &regions,
+        /*compact_strided_repeats=*/true);
+    ASSERT_TRUE(bind_status.ok()) << bind_status.message();
+    ASSERT_EQ(regions.size(), 1U);
+    EXPECT_EQ(regions[0].repeat_count, 1U);
+    EXPECT_EQ(regions[0].length, 128U * 1152U);
+  }
+}
+
 }  // namespace
 
 }  // namespace xllm

@@ -1614,6 +1614,9 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
   std::lock_guard<std::mutex> lock(staging_mutex_);
   TransferEngine* engine = core_.engine();
   device_.set_device();
+  if (!staging_stream_) {
+    staging_stream_ = device_.get_stream_from_pool();
+  }
   const torch::Device torch_device = device_.unwrap();
   if (!staging_.defined()) {
     torch::Tensor staging = torch::empty(
@@ -1751,19 +1754,43 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
         const ByteRegion& region = fitting[order[k]];
         const uint64_t repeats = byte_region_repeats(region);
         const int64_t length = static_cast<int64_t>(region.length);
-        if (repeats > 1 && length > 0 &&
+        const bool buffer_valid =
+            region.local_buffer_id < local_desc->buffers.size();
+        const uint64_t stage_off =
+            stage_base + region.remote_offset - run.remote_offset;
+        const int64_t usable_staging_bytes =
+            length > 0 ? (kStagingBytes / length) * length : 0;
+        const int64_t usable_local_bytes =
+            (buffer_valid && length > 0)
+                ? (static_cast<int64_t>(
+                       local_desc->buffers[region.local_buffer_id].length) /
+                   length) *
+                      length
+                : 0;
+        const bool strided_bounds_ok =
+            buffer_valid && repeats > 1 && length > 0 &&
+            usable_staging_bytes >= length && usable_local_bytes >= length &&
             region.local_stride % region.length == 0 &&
             region.remote_stride % region.length == 0 &&
             region.local_offset % region.length == 0 &&
-            (stage_base + region.remote_offset - run.remote_offset) %
-                    region.length ==
-                0) {
+            stage_off % region.length == 0 &&
+            !multiply_overflows(repeats - 1, region.remote_stride) &&
+            !multiply_overflows(repeats - 1, region.local_stride) &&
+            stage_off <= static_cast<uint64_t>(usable_staging_bytes) -
+                             region.length &&
+            (repeats - 1) * region.remote_stride <=
+                static_cast<uint64_t>(usable_staging_bytes) - region.length -
+                    stage_off &&
+            region.local_offset <=
+                static_cast<uint64_t>(usable_local_bytes) - region.length &&
+            (repeats - 1) * region.local_stride <=
+                static_cast<uint64_t>(usable_local_bytes) - region.length -
+                    region.local_offset;
+        if (strided_bounds_ok) {
           strided_scatters.push_back(StridedScatter{
               region.local_buffer_id,
               length,
-              static_cast<int64_t>(
-                  (stage_base + region.remote_offset - run.remote_offset) /
-                  region.length),
+              static_cast<int64_t>(stage_off / region.length),
               static_cast<int64_t>(region.local_offset / region.length),
               static_cast<int64_t>(repeats),
               static_cast<int64_t>(region.remote_stride / region.length),
@@ -1795,11 +1822,17 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
         return false;
       }
       const auto& buffer = local_desc->buffers[local_buffer_id];
-      bool aligned = static_cast<int64_t>(buffer.length) % length == 0 &&
-                     kStagingBytes % length == 0;
+      const int64_t usable_staging_bytes = (kStagingBytes / length) * length;
+      const int64_t usable_local_bytes =
+          (static_cast<int64_t>(buffer.length) / length) * length;
+      bool aligned =
+          usable_staging_bytes >= length && usable_local_bytes >= length;
       for (size_t i = 0; aligned && i < offsets.first.size(); ++i) {
-        aligned =
-            offsets.first[i] % length == 0 && offsets.second[i] % length == 0;
+        aligned = offsets.first[i] >= 0 && offsets.second[i] >= 0 &&
+                  offsets.first[i] % length == 0 &&
+                  offsets.second[i] % length == 0 &&
+                  offsets.first[i] + length <= usable_staging_bytes &&
+                  offsets.second[i] + length <= usable_local_bytes;
       }
       if (!aligned) {
         unaligned_offsets.emplace_back(&offsets);
@@ -1827,6 +1860,19 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
         LOG(ERROR) << "PULL strided scatter is out of range";
         return false;
       }
+      const auto& buffer = local_desc->buffers[scatter.local_buffer_id];
+      const int64_t staging_rows = kStagingBytes / scatter.length;
+      const int64_t dst_rows =
+          static_cast<int64_t>(buffer.length) / scatter.length;
+      const int64_t max_stage_row =
+          scatter.stage_row + (scatter.count - 1) * scatter.remote_stride_rows;
+      const int64_t max_local_row =
+          scatter.local_row + (scatter.count - 1) * scatter.local_stride_rows;
+      if (scatter.stage_row < 0 || scatter.local_row < 0 ||
+          max_stage_row >= staging_rows || max_local_row >= dst_rows) {
+        LOG(ERROR) << "PULL strided scatter row index exceeds buffer bounds";
+        return false;
+      }
       strided_by_key[{scatter.local_buffer_id, scatter.length}].push_back(
           &scatter);
     }
@@ -1849,40 +1895,52 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
       }
       aligned_groups.emplace_back(key.first, key.second, base, n);
     }
-    torch::Tensor device_rows;
-    if (!all_rows.empty()) {
-      device_rows = torch::from_blob(all_rows.data(),
-                                     {static_cast<int64_t>(all_rows.size())},
-                                     index_options)
-                        .to(torch_device);
-    }
-    for (const auto& [local_buffer_id, length, base, n] : aligned_groups) {
-      const auto& buffer = local_desc->buffers[local_buffer_id];
-      torch::Tensor dst = torch::from_blob(
-          reinterpret_cast<void*>(buffer.addr),
-          {static_cast<int64_t>(buffer.length) / length, length},
-          uint8_options);
-      torch::Tensor src_index = device_rows.narrow(
-          0, static_cast<int64_t>(base), static_cast<int64_t>(n));
-      torch::Tensor dst_index = device_rows.narrow(
-          0, static_cast<int64_t>(base + n), static_cast<int64_t>(n));
-      dst.index_copy_(
-          0, dst_index, staging_.view({-1, length}).index_select(0, src_index));
-    }
-    for (size_t g = 0; g < unaligned_offsets.size(); ++g) {
-      const auto& buffer = local_desc->buffers[unaligned_keys[g].first];
-      const int64_t length = unaligned_keys[g].second;
-      torch::Tensor dst_flat =
-          torch::from_blob(reinterpret_cast<void*>(buffer.addr),
-                           {static_cast<int64_t>(buffer.length)},
-                           uint8_options);
-      const auto& offsets = *unaligned_offsets[g];
-      for (size_t i = 0; i < offsets.first.size(); ++i) {
-        dst_flat.narrow(0, offsets.second[i], length)
-            .copy_(staging_.narrow(0, offsets.first[i], length));
+    {
+      const c10::StreamGuard stream_guard =
+          staging_stream_->set_stream_guard();
+      torch::Tensor device_rows;
+      if (!all_rows.empty()) {
+        device_rows = torch::from_blob(all_rows.data(),
+                                       {static_cast<int64_t>(all_rows.size())},
+                                       index_options)
+                          .to(torch_device);
       }
+      for (const auto& [local_buffer_id, length, base, n] : aligned_groups) {
+        const auto& buffer = local_desc->buffers[local_buffer_id];
+        const int64_t dst_rows =
+            static_cast<int64_t>(buffer.length) / length;
+        const int64_t staging_rows = kStagingBytes / length;
+        const int64_t usable_staging_bytes = staging_rows * length;
+        torch::Tensor dst = torch::from_blob(
+            reinterpret_cast<void*>(buffer.addr),
+            {dst_rows, length},
+            uint8_options);
+        torch::Tensor src_index = device_rows.narrow(
+            0, static_cast<int64_t>(base), static_cast<int64_t>(n));
+        torch::Tensor dst_index = device_rows.narrow(
+            0, static_cast<int64_t>(base + n), static_cast<int64_t>(n));
+        dst.index_copy_(
+            0,
+            dst_index,
+            staging_.narrow(0, 0, usable_staging_bytes)
+                .view({staging_rows, length})
+                .index_select(0, src_index));
+      }
+      for (size_t g = 0; g < unaligned_offsets.size(); ++g) {
+        const auto& buffer = local_desc->buffers[unaligned_keys[g].first];
+        const int64_t length = unaligned_keys[g].second;
+        torch::Tensor dst_flat =
+            torch::from_blob(reinterpret_cast<void*>(buffer.addr),
+                             {static_cast<int64_t>(buffer.length)},
+                             uint8_options);
+        const auto& offsets = *unaligned_offsets[g];
+        for (size_t i = 0; i < offsets.first.size(); ++i) {
+          dst_flat.narrow(0, offsets.second[i], length)
+              .copy_(staging_.narrow(0, offsets.first[i], length));
+        }
+      }
+      staging_stream_->synchronize();
     }
-    device_.current_stream()->synchronize();
     total_scatter_ms += scatter_timer.elapsed_seconds() * 1000.0;
   }
   if (read_ms != nullptr) {

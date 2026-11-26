@@ -1557,6 +1557,7 @@ bool append_identical_span_regions(const WorkerCacheLayoutManifest& source,
       regions.emplace_back(std::move(region));
     }
   }
+  fold_repeat_to_span(&regions);
   plan->regions = std::move(regions);
   return true;
 }
