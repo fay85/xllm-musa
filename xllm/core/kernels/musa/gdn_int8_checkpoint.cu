@@ -668,7 +668,7 @@ void init_gdn_int8_checkpoint_pool(
   // Reserve the first slabs before publishing the pool so their pinned
   // allocations do not stall the first checkpoint demotions.
   const int64_t preallocated_slabs = std::clamp<int64_t>(
-      ::xllm::util::get_int_env("XLLM_MUSA_GDN_HOST_L2_PREALLOC_SLABS", 0),
+      ::xllm::util::get_int_env("XLLM_MUSA_GDN_HOST_L2_PREALLOC_SLABS", 2),
       0,
       static_cast<int64_t>(pool->host_slabs.size()));
   for (int64_t slab = 0; slab < preallocated_slabs; ++slab) {
@@ -881,7 +881,7 @@ void store_gdn_int8_checkpoint_from_tensors(
   __mt_bfloat16* scales =
       reinterpret_cast<__mt_bfloat16*>(pool->scale.data_ptr());
   static const bool tiled_enabled =
-      c10::utils::check_env("XLLM_MUSA_GDN_TILED_CHECKPOINT").value_or(false);
+      c10::utils::check_env("XLLM_MUSA_GDN_TILED_CHECKPOINT").value_or(true);
   const bool use_tiled = tiled_enabled && pool->head_v_dim == kTiledStateDim &&
                          pool->head_k_dim == kTiledStateDim;
   const auto launch_quantize = [&](const auto* src) {
