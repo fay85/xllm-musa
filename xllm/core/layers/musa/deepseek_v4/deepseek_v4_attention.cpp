@@ -3376,6 +3376,38 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
   }
   CHECK_EQ(query.sizes(),
            torch::IntArrayRef({q_tokens, index_n_heads_, index_head_dim_}));
+  const char* fp8_mqa_env = std::getenv("XLLM_DSV4_PREFILL_FP8_MQA_LOGITS");
+  const bool fp8_mqa_enabled =
+      fp8_mqa_env == nullptr || std::strcmp(fp8_mqa_env, "0") != 0;
+  if (fp8_mqa_enabled && !use_fused_topk && q_tokens >= 128 &&
+      index_n_heads_ == 64 && index_head_dim_ == 128 && index_topk_ == 512 &&
+      q_abs_start >= 0 && !dsv4_musa_indexer_query_int8_enabled() &&
+      query.scalar_type() == torch::kBFloat16 && active_index_kv.defined() &&
+      active_index_kv.scalar_type() == torch::kBFloat16 &&
+      active_index_kv.size(0) >= kv_tokens &&
+      !kernel::musa::is_stream_capturing()) {
+    torch::Tensor raw_head_weights =
+        precomputed_head_weights.defined()
+            ? precomputed_head_weights
+            : indexer_weights_proj_->forward(hidden_states);
+    const bool has_valid_rope = cos.defined() && sin.defined() &&
+                                cos.size(0) >= q_tokens &&
+                                sin.size(0) >= q_tokens;
+    torch::Tensor mqa_selected =
+        kernel::musa::deepseek_v4_indexer_prefill_fp8_mqa_topk512(
+            query,
+            has_valid_rope ? cos.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens)
+                           : torch::Tensor(),
+            has_valid_rope ? sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens)
+                           : torch::Tensor(),
+            active_index_kv.narrow(/*dim=*/0, /*start=*/0, /*length=*/kv_tokens),
+            raw_head_weights,
+            static_cast<float>(indexer_score_scale_),
+            q_abs_start);
+    if (mqa_selected.defined()) {
+      return mqa_selected;
+    }
+  }
   bool fused_rope_hadamard = false;
   if (q_tokens == 1 && cos.defined() && sin.defined() &&
       cos.size(0) >= q_tokens && sin.size(0) >= q_tokens) {

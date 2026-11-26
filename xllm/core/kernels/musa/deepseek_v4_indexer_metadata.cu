@@ -1,17 +1,23 @@
 // Copyright 2026 The xLLM Authors. Licensed under the Apache License,
 // Version 2.0.
 #include <glog/logging.h>
+#include <musa_fp8.h>
 #include <musa_runtime_api.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
 #include <limits>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include "core/kernels/musa/deepseek_v4_indexer_metadata.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::musa {
 namespace {
@@ -651,6 +657,7 @@ __device__ __forceinline__ uint32_t prefill_float_to_ordered_u32(float v) {
 __global__ void __launch_bounds__(kPrefillTopK512)
 indexer_prefill_causal_topk512_kernel(
     const float* __restrict__ scores,
+    int64_t row_stride,
     int64_t absolute_start,
     int32_t keys,
     int32_t* __restrict__ output) {
@@ -667,7 +674,7 @@ indexer_prefill_causal_topk512_kernel(
     return;
   }
 
-  const float* row_scores = scores + static_cast<int64_t>(row) * keys;
+  const float* row_scores = scores + static_cast<int64_t>(row) * row_stride;
 
   __shared__ uint32_t s_group_hist[kPrefillHistGroups][kPrefillRadixBins];
   __shared__ uint32_t s_hist[kPrefillRadixBins];
@@ -828,6 +835,273 @@ indexer_prefill_causal_topk512_kernel(
   }
 }
 
+constexpr int32_t kMqaSubwarpThreads = 16;
+constexpr int32_t kMqaItemsPerThread = 8;
+constexpr int32_t kMqaRopeDim = 64;
+constexpr float kMqaHadamardScale = 0.08838834764831845f;
+constexpr float kMqaFp8Max = 448.0f;
+constexpr float kMqaScaleMin = 1.0e-6f;
+constexpr char kMateMqaLogitsOutUri[] =
+    "mate_fp8_mqa_logits_h64_d128_q2_kv128_full_out";
+
+template <bool ApplyRope, typename WeightT, int32_t HeadsPerBlock>
+__global__ void indexer_q_rope_hadamard_fp8_quant_kernel(
+    const c10::BFloat16* __restrict__ query,
+    const c10::BFloat16* __restrict__ cos,
+    const c10::BFloat16* __restrict__ sin,
+    const WeightT* __restrict__ raw_weights,
+    float score_scale,
+    int64_t q_token_stride,
+    int64_t q_head_stride,
+    int64_t cos_stride,
+    int64_t w_row_stride,
+    int64_t absolute_start,
+    int64_t kv_tokens,
+    c10::Float8_e4m3fn* __restrict__ q_fp8,
+    float* __restrict__ w_scaled,
+    int32_t* __restrict__ ks,
+    int32_t* __restrict__ ke) {
+  const int64_t token = static_cast<int64_t>(blockIdx.y);
+  const int32_t head_lane = static_cast<int32_t>(threadIdx.x) / kMqaSubwarpThreads;
+  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kMqaSubwarpThreads;
+  const int64_t head = static_cast<int64_t>(blockIdx.x) * HeadsPerBlock + head_lane;
+  const int32_t base = lane * kMqaItemsPerThread;
+
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    ks[token] = 0;
+    const int64_t num = absolute_start + token + 1;
+    const int32_t valid =
+        num <= 0 ? 0
+                 : static_cast<int32_t>(num / 4 < kv_tokens ? num / 4 : kv_tokens);
+    ke[token] = valid;
+  }
+
+  const c10::BFloat16* q_row =
+      query + token * q_token_stride + head * q_head_stride + base;
+  float value[kMqaItemsPerThread];
+#pragma unroll
+  for (int32_t item = 0; item < kMqaItemsPerThread; ++item) {
+    value[item] = static_cast<float>(q_row[item]);
+  }
+
+  if constexpr (ApplyRope) {
+    if (base >= kMqaRopeDim) {
+      const c10::BFloat16* cos_row = cos + token * cos_stride;
+      const c10::BFloat16* sin_row = sin + token * cos_stride;
+#pragma unroll
+      for (int32_t item = 0; item < kMqaItemsPerThread; item += 2) {
+        const int32_t rope_col = base + item - kMqaRopeDim;
+        const float even = value[item];
+        const float odd = value[item + 1];
+        const float c = static_cast<float>(cos_row[rope_col]);
+        const float s = static_cast<float>(sin_row[rope_col]);
+        value[item] = even * c - odd * s;
+        value[item + 1] = even * s + odd * c;
+      }
+    }
+  }
+
+  // Sylvester H128: 3 local stages + 4 subwarp shuffle stages
+  for (int32_t step = 1; step < kMqaItemsPerThread; step <<= 1) {
+#pragma unroll
+    for (int32_t group = 0; group < kMqaItemsPerThread; group += 2 * step) {
+#pragma unroll
+      for (int32_t offset = 0; offset < step; ++offset) {
+        const float left = value[group + offset];
+        const float right = value[group + step + offset];
+        value[group + offset] = left + right;
+        value[group + step + offset] = left - right;
+      }
+    }
+  }
+#pragma unroll
+  for (int32_t stage = 0; stage < 4; ++stage) {
+    const int32_t lane_mask = 1 << stage;
+    const float sign = (lane & lane_mask) == 0 ? 1.0f : -1.0f;
+#pragma unroll
+    for (int32_t item = 0; item < kMqaItemsPerThread; ++item) {
+      const float other =
+          __shfl_xor_sync(0xffffffffu, value[item], lane_mask, kMqaSubwarpThreads);
+      value[item] = sign * value[item] + other;
+    }
+  }
+
+  float max_abs = 0.0f;
+#pragma unroll
+  for (int32_t item = 0; item < kMqaItemsPerThread; ++item) {
+    value[item] *= kMqaHadamardScale;
+    max_abs = fmaxf(max_abs, fabsf(value[item]));
+  }
+#pragma unroll
+  for (int32_t stage = 0; stage < 4; ++stage) {
+    const float other =
+        __shfl_xor_sync(0xffffffffu, max_abs, 1 << stage, kMqaSubwarpThreads);
+    max_abs = fmaxf(max_abs, other);
+  }
+
+  const float q_scale = fmaxf(max_abs / kMqaFp8Max, kMqaScaleMin);
+  const float inv_scale = 1.0f / q_scale;
+  const float4 s0 = make_float4(value[0] * inv_scale,
+                                value[1] * inv_scale,
+                                value[2] * inv_scale,
+                                value[3] * inv_scale);
+  const float4 s1 = make_float4(value[4] * inv_scale,
+                                value[5] * inv_scale,
+                                value[6] * inv_scale,
+                                value[7] * inv_scale);
+  const uint32_t p0 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(s0, __MT_SATFINITE, __MT_E4M3));
+  const uint32_t p1 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(s1, __MT_SATFINITE, __MT_E4M3));
+  uint32_t* out_u32 = reinterpret_cast<uint32_t*>(
+      reinterpret_cast<uint8_t*>(q_fp8) + (token * 64 + head) * kHeadDim + base);
+  out_u32[0] = p0;
+  out_u32[1] = p1;
+
+  if (lane == 0) {
+    w_scaled[token * 64 + head] =
+        static_cast<float>(raw_weights[token * w_row_stride + head]) *
+        score_scale * q_scale;
+  }
+}
+
+template <int32_t RowsPerBlock>
+__global__ void indexer_k_fp8_quant_kernel(
+    const c10::BFloat16* __restrict__ key,
+    c10::Float8_e4m3fn* __restrict__ k_fp8,
+    float* __restrict__ k_scale,
+    int64_t kv_tokens) {
+  const int32_t row_lane = static_cast<int32_t>(threadIdx.x) / kMqaSubwarpThreads;
+  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kMqaSubwarpThreads;
+  const int64_t row =
+      static_cast<int64_t>(blockIdx.x) * RowsPerBlock + row_lane;
+  const int32_t base = lane * kMqaItemsPerThread;
+  const bool valid = row < kv_tokens;
+
+  float value[kMqaItemsPerThread];
+  float max_abs = 0.0f;
+  if (valid) {
+    const uint32_t* in_u32 =
+        reinterpret_cast<const uint32_t*>(key + row * kHeadDim + base);
+#pragma unroll
+    for (int32_t i = 0; i < kMqaItemsPerThread / 2; ++i) {
+      const uint32_t packed = in_u32[i];
+      c10::BFloat16 lo, hi;
+      lo.x = static_cast<uint16_t>(packed & 0xffffu);
+      hi.x = static_cast<uint16_t>(packed >> 16);
+      const float v0 = static_cast<float>(lo);
+      const float v1 = static_cast<float>(hi);
+      value[i * 2] = v0;
+      value[i * 2 + 1] = v1;
+      max_abs = fmaxf(max_abs, fmaxf(fabsf(v0), fabsf(v1)));
+    }
+  } else {
+#pragma unroll
+    for (int32_t i = 0; i < kMqaItemsPerThread; ++i) {
+      value[i] = 0.0f;
+    }
+  }
+
+#pragma unroll
+  for (int32_t stage = 0; stage < 4; ++stage) {
+    const float other =
+        __shfl_xor_sync(0xffffffffu, max_abs, 1 << stage, kMqaSubwarpThreads);
+    max_abs = fmaxf(max_abs, other);
+  }
+
+  if (valid) {
+    const float scale = fmaxf(max_abs / kMqaFp8Max, kMqaScaleMin);
+    const float inv_scale = 1.0f / scale;
+    const float4 s0 = make_float4(value[0] * inv_scale,
+                                  value[1] * inv_scale,
+                                  value[2] * inv_scale,
+                                  value[3] * inv_scale);
+    const float4 s1 = make_float4(value[4] * inv_scale,
+                                  value[5] * inv_scale,
+                                  value[6] * inv_scale,
+                                  value[7] * inv_scale);
+    const uint32_t p0 = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(s0, __MT_SATFINITE, __MT_E4M3));
+    const uint32_t p1 = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(s1, __MT_SATFINITE, __MT_E4M3));
+    uint32_t* out_u32 = reinterpret_cast<uint32_t*>(
+        reinterpret_cast<uint8_t*>(k_fp8) + row * kHeadDim + base);
+    out_u32[0] = p0;
+    out_u32[1] = p1;
+    if (lane == 0) {
+      k_scale[row] = scale;
+    }
+  }
+}
+
+struct MqaLogitsWorkspace {
+  int64_t cap_q = 0;
+  int64_t cap_kv = 0;
+  int64_t cap_logits_rows = 0;
+  int64_t cap_logits_cols = 0;
+  torch::Tensor q_fp8;
+  torch::Tensor w_scaled;
+  torch::Tensor ks;
+  torch::Tensor ke;
+  torch::Tensor k_fp8;
+  torch::Tensor k_scale;
+  torch::Tensor logits_storage;
+};
+
+MqaLogitsWorkspace& get_mqa_logits_workspace(const torch::Device& device,
+                                             int64_t q_tokens,
+                                             int64_t kv_tokens) {
+  static thread_local std::unordered_map<int32_t, MqaLogitsWorkspace> map;
+  auto& ws = map[static_cast<int32_t>(device.index())];
+  const auto opts = torch::TensorOptions().device(device);
+  if (ws.cap_q < q_tokens || !ws.q_fp8.defined()) {
+    const int64_t cap = std::max<int64_t>(q_tokens, ws.cap_q > 0 ? ws.cap_q * 2 : 1);
+    ws.cap_q = cap;
+    ws.q_fp8 = torch::empty({cap, 64, kHeadDim}, opts.dtype(torch::kFloat8_e4m3fn));
+    ws.w_scaled = torch::empty({cap, 64}, opts.dtype(torch::kFloat32));
+    ws.ks = torch::empty({cap}, opts.dtype(torch::kInt32));
+    ws.ke = torch::empty({cap}, opts.dtype(torch::kInt32));
+  }
+  if (ws.cap_kv < kv_tokens || !ws.k_fp8.defined()) {
+    const int64_t cap = std::max<int64_t>(kv_tokens, ws.cap_kv > 0 ? ws.cap_kv * 2 : 1);
+    ws.cap_kv = cap;
+    ws.k_fp8 = torch::empty({cap, kHeadDim}, opts.dtype(torch::kFloat8_e4m3fn));
+    ws.k_scale = torch::empty({cap}, opts.dtype(torch::kFloat32));
+  }
+  const int64_t req_rows = ((q_tokens + 1) / 2) * 2;
+  const int64_t req_cols = ((kv_tokens + 128 + 7) / 8) * 8;
+  if (ws.cap_logits_rows < req_rows || ws.cap_logits_cols < req_cols ||
+      !ws.logits_storage.defined()) {
+    ws.cap_logits_rows = std::max<int64_t>(req_rows, ws.cap_logits_rows);
+    ws.cap_logits_cols = std::max<int64_t>(req_cols, ws.cap_logits_cols);
+    ws.logits_storage = torch::empty(
+        {ws.cap_logits_rows, ws.cap_logits_cols}, opts.dtype(torch::kFloat32));
+  }
+  return ws;
+}
+
+ffi::Optional<ffi::Function> get_mate_mqa_logits_out_fn() {
+  static std::once_flag once;
+  static ffi::Optional<ffi::Function> cached_fn;
+  std::call_once(once, []() {
+    const char* root = std::getenv("FLASHINFER_OPS_PATH");
+    if (root == nullptr || root[0] == 0) {
+      return;
+    }
+    std::ifstream so_file(path_to_uri_so_lib(kMateMqaLogitsOutUri));
+    if (!so_file.good()) {
+      return;
+    }
+    try {
+      cached_fn = get_module(kMateMqaLogitsOutUri)->GetFunction("fp8_mqa_logits_out");
+    } catch (const std::exception& e) {
+      LOG(WARNING) << "[DSV4_PREFILL_FP8_MQA_LOGITS] failed loading "
+                   << kMateMqaLogitsOutUri << ": " << e.what();
+    }
+  });
+  return cached_fn;
+}
+
 }  // namespace
 
 void deepseek_v4_indexer_prefill_causal_topk512(
@@ -836,10 +1110,12 @@ void deepseek_v4_indexer_prefill_causal_topk512(
     torch::Tensor output) {
   CHECK(scores.defined());
   CHECK(scores.device().is_privateuseone());
-  check_tensor(scores, scores, torch::kFloat32);
+  CHECK_EQ(scores.scalar_type(), torch::kFloat32);
   CHECK_EQ(scores.dim(), 2);
   CHECK_GT(scores.size(0), 0);
   CHECK_GT(scores.size(1), 0);
+  CHECK_EQ(scores.stride(1), 1);
+  CHECK_GE(scores.stride(0), scores.size(1));
   check_tensor(output, scores, torch::kInt32);
   CHECK_EQ(output.dim(), 2);
   CHECK_EQ(output.size(0), scores.size(0));
@@ -852,10 +1128,189 @@ void deepseek_v4_indexer_prefill_causal_topk512(
       0,
       current_musa_stream(scores.device())>>>(
       scores.data_ptr<float>(),
+      scores.stride(0),
       absolute_start,
       static_cast<int32_t>(scores.size(1)),
       output.data_ptr<int32_t>());
   check_musa_kernel_launch("dsv4 Indexer prefill causal topk512");
+}
+
+torch::Tensor deepseek_v4_indexer_prefill_fp8_mqa_topk512(
+    const torch::Tensor& query_raw,
+    const torch::Tensor& cos,
+    const torch::Tensor& sin,
+    const torch::Tensor& key,
+    const torch::Tensor& raw_head_weights,
+    float score_scale,
+    int64_t absolute_start) {
+  if (!query_raw.defined() || !key.defined() || !raw_head_weights.defined() ||
+      !query_raw.device().is_privateuseone() ||
+      query_raw.device() != key.device() ||
+      query_raw.device() != raw_head_weights.device() ||
+      query_raw.dim() != 3 || key.dim() != 2 || raw_head_weights.dim() != 2 ||
+      query_raw.size(1) != 64 || query_raw.size(2) != kHeadDim ||
+      key.size(1) != kHeadDim || raw_head_weights.size(0) != query_raw.size(0) ||
+      raw_head_weights.size(1) != 64 || query_raw.size(0) <= 0 ||
+      key.size(0) <= 0 || absolute_start < 0 ||
+      query_raw.scalar_type() != torch::kBFloat16 ||
+      key.scalar_type() != torch::kBFloat16 ||
+      (raw_head_weights.scalar_type() != torch::kBFloat16 &&
+       raw_head_weights.scalar_type() != torch::kFloat32) ||
+      query_raw.stride(-1) != 1 || raw_head_weights.stride(-1) != 1) {
+    return torch::Tensor();
+  }
+  const bool apply_rope =
+      cos.defined() && sin.defined() && cos.dim() == 2 && sin.dim() == 2 &&
+      cos.size(0) >= query_raw.size(0) && sin.size(0) >= query_raw.size(0) &&
+      cos.size(1) >= kMqaRopeDim && sin.size(1) >= kMqaRopeDim &&
+      cos.scalar_type() == torch::kBFloat16 &&
+      sin.scalar_type() == torch::kBFloat16 && cos.device() == query_raw.device() &&
+      sin.device() == query_raw.device() && cos.is_contiguous() &&
+      sin.is_contiguous();
+  if ((cos.defined() || sin.defined()) && !apply_rope) {
+    return torch::Tensor();
+  }
+
+  const int64_t q_tokens = query_raw.size(0);
+  const int64_t kv_tokens = key.size(0);
+  auto selected = torch::empty(
+      {q_tokens, kPrefillTopK512}, query_raw.options().dtype(torch::kInt32));
+
+  // Fast path: if every query row has valid <= 512, topk512 returns [0..valid-1, -1...]
+  // directly without scoring at all.
+  const int64_t max_valid =
+      std::min<int64_t>(kv_tokens, (absolute_start + q_tokens) / 4);
+  if (max_valid <= kPrefillTopK512) {
+    const XLLMOptionalDeviceGuard guard(query_raw.device());
+    indexer_prefill_causal_topk512_kernel<<<
+        static_cast<uint32_t>(q_tokens),
+        kPrefillTopK512,
+        0,
+        current_musa_stream(query_raw.device())>>>(
+        nullptr,
+        0,
+        absolute_start,
+        static_cast<int32_t>(kv_tokens),
+        selected.data_ptr<int32_t>());
+    check_musa_kernel_launch("dsv4 Indexer prefill causal topk512 short-circuit");
+    return selected;
+  }
+
+  auto mqa_fn = get_mate_mqa_logits_out_fn();
+  if (!mqa_fn.defined()) {
+    return torch::Tensor();
+  }
+
+  const torch::Tensor key_contig = key.is_contiguous() ? key : key.contiguous();
+  auto& ws = get_mqa_logits_workspace(query_raw.device(), q_tokens, kv_tokens);
+  auto q_fp8 = ws.q_fp8.narrow(/*dim=*/0, 0, q_tokens);
+  auto w_scaled = ws.w_scaled.narrow(/*dim=*/0, 0, q_tokens);
+  auto ks = ws.ks.narrow(/*dim=*/0, 0, q_tokens);
+  auto ke = ws.ke.narrow(/*dim=*/0, 0, q_tokens);
+  auto k_fp8 = ws.k_fp8.narrow(/*dim=*/0, 0, kv_tokens);
+  auto k_scale = ws.k_scale.narrow(/*dim=*/0, 0, kv_tokens);
+  const int64_t aligned_q = ((q_tokens + 1) / 2) * 2;
+  auto logits_storage = ws.logits_storage.narrow(/*dim=*/0, 0, aligned_q);
+
+  {
+    const XLLMOptionalDeviceGuard guard(query_raw.device());
+    const musaStream_t stream = current_musa_stream(query_raw.device());
+    constexpr int32_t kHeadsPerBlock = 8;
+    const dim3 q_grid(static_cast<unsigned int>(64 / kHeadsPerBlock),
+                      static_cast<unsigned int>(q_tokens));
+    const c10::BFloat16* cos_ptr =
+        apply_rope ? cos.data_ptr<c10::BFloat16>() : nullptr;
+    const c10::BFloat16* sin_ptr =
+        apply_rope ? sin.data_ptr<c10::BFloat16>() : nullptr;
+    const int64_t cos_stride = apply_rope ? cos.size(1) : 0;
+
+    auto launch_q = [&](auto apply_rope_tag, auto* w_ptr) {
+      using WeightT = std::remove_const_t<std::remove_pointer_t<decltype(w_ptr)>>;
+      indexer_q_rope_hadamard_fp8_quant_kernel<decltype(apply_rope_tag)::value,
+                                               WeightT,
+                                               kHeadsPerBlock>
+          <<<q_grid, kMqaSubwarpThreads * kHeadsPerBlock, 0, stream>>>(
+              query_raw.data_ptr<c10::BFloat16>(),
+              cos_ptr,
+              sin_ptr,
+              w_ptr,
+              score_scale,
+              query_raw.stride(0),
+              query_raw.stride(1),
+              cos_stride,
+              raw_head_weights.stride(0),
+              absolute_start,
+              kv_tokens,
+              q_fp8.data_ptr<c10::Float8_e4m3fn>(),
+              w_scaled.data_ptr<float>(),
+              ks.data_ptr<int32_t>(),
+              ke.data_ptr<int32_t>());
+    };
+
+    if (raw_head_weights.scalar_type() == torch::kBFloat16) {
+      if (apply_rope) {
+        launch_q(std::true_type{}, raw_head_weights.data_ptr<c10::BFloat16>());
+      } else {
+        launch_q(std::false_type{}, raw_head_weights.data_ptr<c10::BFloat16>());
+      }
+    } else {
+      if (apply_rope) {
+        launch_q(std::true_type{}, raw_head_weights.data_ptr<float>());
+      } else {
+        launch_q(std::false_type{}, raw_head_weights.data_ptr<float>());
+      }
+    }
+    check_musa_kernel_launch("dsv4 Indexer Q rope+hadamard+fp8 quant");
+
+    constexpr int32_t kRowsPerBlock = 8;
+    const int64_t k_blocks = (kv_tokens + kRowsPerBlock - 1) / kRowsPerBlock;
+    indexer_k_fp8_quant_kernel<kRowsPerBlock>
+        <<<static_cast<unsigned int>(k_blocks),
+           kMqaSubwarpThreads * kRowsPerBlock,
+           0,
+           stream>>>(key_contig.data_ptr<c10::BFloat16>(),
+                     k_fp8.data_ptr<c10::Float8_e4m3fn>(),
+                     k_scale.data_ptr<float>(),
+                     kv_tokens);
+    check_musa_kernel_launch("dsv4 Indexer K fp8 quant");
+  }
+
+  try {
+    TvmffiStreamGuard stream_guard(query_raw.device());
+    mqa_fn.value()(to_ffi_tensor(q_fp8),
+                   to_ffi_tensor(k_fp8),
+                   to_ffi_tensor(w_scaled),
+                   to_ffi_tensor(ks),
+                   to_ffi_tensor(ke),
+                   to_ffi_tensor(k_scale),
+                   to_ffi_tensor(logits_storage));
+  } catch (const std::exception& e) {
+    LOG_FIRST_N(WARNING, 2)
+        << "[DSV4_PREFILL_FP8_MQA_LOGITS] launch failed, falling back: "
+        << e.what();
+    return torch::Tensor();
+  }
+
+  {
+    const XLLMOptionalDeviceGuard guard(query_raw.device());
+    indexer_prefill_causal_topk512_kernel<<<
+        static_cast<uint32_t>(q_tokens),
+        kPrefillTopK512,
+        0,
+        current_musa_stream(query_raw.device())>>>(
+        logits_storage.data_ptr<float>(),
+        logits_storage.stride(0),
+        absolute_start,
+        static_cast<int32_t>(kv_tokens),
+        selected.data_ptr<int32_t>());
+    check_musa_kernel_launch("dsv4 Indexer prefill fp8 mqa topk512");
+  }
+
+  LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_FP8_MQA_LOGITS] queries=" << q_tokens
+                       << " keys=" << kv_tokens
+                       << " absolute_start=" << absolute_start
+                       << " logits_stride=" << logits_storage.stride(0);
+  return selected;
 }
 
 void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,

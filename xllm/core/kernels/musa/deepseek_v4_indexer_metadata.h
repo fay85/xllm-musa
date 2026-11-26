@@ -48,6 +48,18 @@ void deepseek_v4_indexer_prefill_causal_topk512(
     int64_t absolute_start,
     torch::Tensor output);
 
+// Fused prefill indexer path (P4a): RoPE+Hadamard+FP8 quant on Q, FP8 quant on K,
+// MATE Mp31Fp8NonPagedMqaLogits into a preallocated workspace, and inline-causal
+// TopK-512. Returns undefined tensor to fall back when unavailable.
+torch::Tensor deepseek_v4_indexer_prefill_fp8_mqa_topk512(
+    const torch::Tensor& query_raw,
+    const torch::Tensor& cos,
+    const torch::Tensor& sin,
+    const torch::Tensor& key,
+    const torch::Tensor& raw_head_weights,
+    float score_scale,
+    int64_t absolute_start);
+
 void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& compressed_blocks,
