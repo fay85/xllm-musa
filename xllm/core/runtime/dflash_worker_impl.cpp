@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -40,6 +41,7 @@ limitations under the License.
 #include "core/framework/speculative/adaptive_speculative_controller.h"
 #include "core/framework/speculative/speculative_profile_registry.h"
 #include "core/layers/common/kv_shard_batch_metadata.h"
+#include "core/layers/common/lm_head.h"
 #include "framework/model/model_args.h"
 #include "framework/sampling/sampling_params.h"
 #if defined(USE_MUSA)
@@ -629,6 +631,58 @@ bool DFlashWorkerImpl::init_model(const std::string& model_weights_path,
         }
       }
     }
+#if defined(USE_MUSA)
+    {
+      const char* dflash_fp8_head_env =
+          std::getenv("XLLM_DSV4_DFLASH_FP8_LM_HEAD");
+      const bool enable_dflash_fp8_head =
+          dflash_fp8_head_env == nullptr ||
+          std::strcmp(dflash_fp8_head_env, "0") != 0;
+      if (enable_dflash_fp8_head) {
+        const SpeculativeConfig& speculative_config =
+            ::xllm::SpeculativeConfig::get_instance();
+        constexpr int64_t kTargetLmHeadExactTopK = 8;
+        auto is_block_fp8_lm_head_eligible = [](const layer::LmHead& head) {
+          if (!head) {
+            return false;
+          }
+          const torch::Tensor& weight = head->weight();
+          return weight.defined() && weight.dim() == 2 &&
+                 weight.scalar_type() == torch::kBFloat16 &&
+                 weight.size(0) % 128 == 0 && weight.size(1) % 128 == 0;
+        };
+        // Quantize draft LM head first while target weight is still BF16
+        // in case draft and target share the same LmHead module.
+        if (speculative_config.enable_mtp_draft_fp8_lm_head() &&
+            is_block_fp8_lm_head_eligible(draft_impl_->get_lm_head())) {
+          layer::LmHead draft_head(draft_impl_->context_);
+          const char* draft_exact_env =
+              std::getenv("XLLM_DSV4_DFLASH_DRAFT_EXACT_TOPK");
+          if (draft_exact_env != nullptr &&
+              std::strcmp(draft_exact_env, "1") == 0) {
+            draft_head->load_block_fp8_with_exact_top_k_from(
+                draft_impl_->get_lm_head()->weight(), kTargetLmHeadExactTopK);
+          } else {
+            draft_head->load_block_fp8_from(
+                draft_impl_->get_lm_head()->weight());
+          }
+          draft_impl_->set_lm_head(draft_head);
+          LOG(INFO) << "[DSV4_DFLASH_FP8_LM_HEAD] DFlash draft proposes with "
+                       "block-FP8 LM head.";
+        }
+        if (speculative_config.enable_mtp_target_fp8_lm_head() &&
+            is_block_fp8_lm_head_eligible(impl_->get_lm_head())) {
+          layer::LmHead target_head(impl_->context_);
+          target_head->load_block_fp8_with_exact_top_k_from(
+              impl_->get_lm_head()->weight(), kTargetLmHeadExactTopK);
+          impl_->set_lm_head(target_head);
+          LOG(INFO) << "[DSV4_DFLASH_FP8_LM_HEAD] DFlash target verifies with "
+                       "block-FP8 LM head (exact_top_k="
+                    << kTargetLmHeadExactTopK << ").";
+        }
+      }
+    }
+#endif
 
     JsonReader reader;
     const std::string config_path = model_weights_path + "/config.json";
