@@ -441,17 +441,30 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   if (!should_use(input)) {
     return std::nullopt;
   }
-  // MUSA runs kernels launched during stream capture. Custom all-reduce
-  // peer pointers are published only after capture ends, so the barrier
-  // spins and capture_stream.synchronize() never returns. Capture MCCL
-  // instead. Eager calls still use this kernel.
+  // MUSA runs kernels launched during stream capture. DPxCP prefill piecewise
+  // capture skips custom all-reduce, while DS-V4 decode full-graph capture
+  // registers and finalizes custom all-reduce buffers via
+  // finalize_musa_custom_allreduce_graphs() (matching T08).
   {
-    musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
-    const musaError_t capture_err = musaStreamIsCapturing(
-        c10::musa::getCurrentMUSAStream(device_.index()), &capture_status);
-    if (capture_err == musaSuccess &&
-        capture_status == musaStreamCaptureStatusActive) {
-      return std::nullopt;
+    const char* custom_ar_in_graph_env =
+        std::getenv("XLLM_MUSA_CUSTOM_AR_IN_GRAPH");
+    const char* graph_two_shot_env =
+        std::getenv("XLLM_DSV4_GRAPH_TP_BF16_TWO_SHOT");
+    const bool allow_custom_ar_in_graph =
+        (custom_ar_in_graph_env != nullptr &&
+         std::string(custom_ar_in_graph_env) == "1") ||
+        ((custom_ar_in_graph_env == nullptr ||
+          std::string(custom_ar_in_graph_env) != "0") &&
+         group_name_ == "tp_group" && graph_two_shot_env != nullptr &&
+         std::string(graph_two_shot_env) == "1");
+    if (!allow_custom_ar_in_graph) {
+      musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
+      const musaError_t capture_err = musaStreamIsCapturing(
+          c10::musa::getCurrentMUSAStream(device_.index()), &capture_status);
+      if (capture_err == musaSuccess &&
+          capture_status == musaStreamCaptureStatusActive) {
+        return std::nullopt;
+      }
     }
   }
   torch::Tensor output = output_workspace.has_value()
