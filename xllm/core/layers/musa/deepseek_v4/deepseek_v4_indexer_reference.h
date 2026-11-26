@@ -126,13 +126,6 @@ inline torch::Tensor dsv4_tiled_indexer_topk(const torch::Tensor& query,
   const int64_t rows = std::max<int64_t>(
       1, score_bytes / (query.size(1) * keys * int64_t{sizeof(float)}));
   const int64_t selected_count = std::min(topk, keys);
-  // All columns are overwritten when enough keys exist. Otherwise retain
-  // the required -1 padding in the columns beyond selected_count.
-  auto selected =
-      keys >= topk
-          ? torch::empty({queries, topk}, query.options().dtype(torch::kInt32))
-          : torch::full(
-                {queries, topk}, -1, query.options().dtype(torch::kInt32));
   const bool use_bf16 = bf16_fp32 && query.device().is_privateuseone() &&
                         query.scalar_type() == torch::kBFloat16 &&
                         key.scalar_type() == torch::kBFloat16 &&
@@ -140,6 +133,41 @@ inline torch::Tensor dsv4_tiled_indexer_topk(const torch::Tensor& query,
                             queries, query.size(1), keys, query.size(2));
   auto key_transposed =
       use_bf16 ? key.transpose(0, 1) : key.to(torch::kFloat32).transpose(0, 1);
+#if defined(USE_MUSA)
+  const char* fast_topk_env = std::getenv("XLLM_DSV4_PREFILL_FAST_TOPK512");
+  const bool use_fast_topk512 =
+      (fast_topk_env == nullptr || std::string(fast_topk_env) != "0") &&
+      topk == 512 && query.device().is_privateuseone();
+  if (use_fast_topk512) {
+    auto selected =
+        torch::empty({queries, topk}, query.options().dtype(torch::kInt32));
+    LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_FAST_TOPK512] queries=" << queries
+                         << " keys=" << keys
+                         << " absolute_start=" << absolute_start
+                         << " reg_cache=" << (keys <= 4096 ? 1 : 0);
+    for (int64_t start = 0; start < queries; start += rows) {
+      const int64_t count = std::min(rows, queries - start);
+      auto score =
+          dsv4_prefill_indexer_score_tile(query.narrow(0, start, count),
+                                          key_transposed,
+                                          weights.narrow(0, start, count),
+                                          use_bf16);
+      if (!score.is_contiguous()) {
+        score = score.contiguous();
+      }
+      kernel::musa::deepseek_v4_indexer_prefill_causal_topk512(
+          score, absolute_start + start, selected.narrow(0, start, count));
+    }
+    return selected;
+  }
+#endif
+  // All columns are overwritten when enough keys exist. Otherwise retain
+  // the required -1 padding in the columns beyond selected_count.
+  auto selected =
+      keys >= topk
+          ? torch::empty({queries, topk}, query.options().dtype(torch::kInt32))
+          : torch::full(
+                {queries, topk}, -1, query.options().dtype(torch::kInt32));
   auto keys_index = torch::arange(keys, query.options().dtype(torch::kInt64));
   auto ranks = torch::arange(selected_count, keys_index.options()).unsqueeze(0);
   torch::Tensor full_score_mask;

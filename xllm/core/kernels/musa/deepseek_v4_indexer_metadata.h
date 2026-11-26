@@ -40,6 +40,14 @@ void deepseek_v4_indexer_mask_scores(const torch::Tensor& scores,
 
 // Does not select or sort keys. Preserve the supplied TopK order except for
 // the existing all-valid short-row shortcut and its -1 padding.
+// Single-kernel causal TopK-512 over prefill indexer FP32 scores [queries, keys].
+// Applies inline causal bound valid = clamp((absolute_start + row + 1) / 4, 0, keys)
+// and writes int32 selected indices directly into output [queries, 512].
+void deepseek_v4_indexer_prefill_causal_topk512(
+    const torch::Tensor& scores,
+    int64_t absolute_start,
+    torch::Tensor output);
+
 void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& compressed_blocks,

@@ -630,6 +630,234 @@ void deepseek_v4_indexer_mask_scores(const torch::Tensor& scores,
   check_musa_kernel_launch("dsv4 Indexer fused score mask");
 }
 
+namespace {
+
+constexpr int32_t kPrefillTopK512 = 512;
+constexpr int32_t kPrefillRadixBins = 256;
+constexpr int32_t kPrefillHistGroups = 4;
+constexpr int32_t kPrefillMaxRegChunks = 8;  // 512 * 8 = 4096 keys in regs
+
+__device__ __forceinline__ uint32_t prefill_float_to_ordered_u32(float v) {
+  if (isnan(v)) {
+    return 0u;
+  }
+  if (v == 0.0f) {
+    return 0x80000000u;
+  }
+  const uint32_t bits = __float_as_uint(v);
+  return (bits & 0x80000000u) ? ~bits : (bits | 0x80000000u);
+}
+
+__global__ void __launch_bounds__(kPrefillTopK512)
+indexer_prefill_causal_topk512_kernel(
+    const float* __restrict__ scores,
+    int64_t absolute_start,
+    int32_t keys,
+    int32_t* __restrict__ output) {
+  const int32_t row = static_cast<int32_t>(blockIdx.x);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  int32_t* out_row = output + static_cast<int64_t>(row) * kPrefillTopK512;
+
+  const int64_t num = absolute_start + static_cast<int64_t>(row) + 1;
+  const int32_t valid =
+      num <= 0 ? 0 : static_cast<int32_t>(num / 4 < keys ? num / 4 : keys);
+
+  if (valid <= kPrefillTopK512) {
+    out_row[tid] = tid < valid ? tid : -1;
+    return;
+  }
+
+  const float* row_scores = scores + static_cast<int64_t>(row) * keys;
+
+  __shared__ uint32_t s_group_hist[kPrefillHistGroups][kPrefillRadixBins];
+  __shared__ uint32_t s_hist[kPrefillRadixBins];
+  __shared__ uint32_t s_prefix;
+  __shared__ uint32_t s_needed;
+  __shared__ uint32_t s_exact_done;
+  __shared__ uint32_t s_gt_pos;
+  __shared__ uint32_t s_eq_pos;
+
+  if (tid == 0) {
+    s_prefix = 0u;
+    s_needed = static_cast<uint32_t>(kPrefillTopK512);
+    s_exact_done = 0u;
+    s_gt_pos = 0u;
+    s_eq_pos = 0u;
+  }
+
+  const bool use_reg_cache = (valid <= kPrefillTopK512 * kPrefillMaxRegChunks);
+  uint32_t reg_keys[kPrefillMaxRegChunks];
+  if (use_reg_cache) {
+#pragma unroll
+    for (int32_t c = 0; c < kPrefillMaxRegChunks; ++c) {
+      const int32_t col = tid + c * kPrefillTopK512;
+      if (col < valid) {
+        reg_keys[c] = prefill_float_to_ordered_u32(row_scores[col]);
+      }
+    }
+  }
+
+  const int32_t hist_group = tid & (kPrefillHistGroups - 1);
+  uint32_t mask = 0u;
+
+#pragma unroll
+  for (int32_t pass = 0; pass < 4; ++pass) {
+    const int32_t shift = 24 - pass * 8;
+    s_group_hist[tid >> 8][tid & 255] = 0u;
+    s_group_hist[(tid >> 8) + 2][tid & 255] = 0u;
+    __syncthreads();
+
+    const uint32_t prefix = s_prefix;
+    if (use_reg_cache) {
+#pragma unroll
+      for (int32_t c = 0; c < kPrefillMaxRegChunks; ++c) {
+        const int32_t col = tid + c * kPrefillTopK512;
+        if (col < valid) {
+          const uint32_t k = reg_keys[c];
+          if ((k & mask) == prefix) {
+            atomicAdd(&s_group_hist[hist_group][(k >> shift) & 0xffu], 1u);
+          }
+        }
+      }
+    } else {
+      for (int32_t col = tid; col < valid; col += kPrefillTopK512) {
+        const uint32_t k = prefill_float_to_ordered_u32(row_scores[col]);
+        if ((k & mask) == prefix) {
+          atomicAdd(&s_group_hist[hist_group][(k >> shift) & 0xffu], 1u);
+        }
+      }
+    }
+    __syncthreads();
+
+    if (tid < kPrefillRadixBins) {
+      s_hist[tid] = s_group_hist[0][tid] + s_group_hist[1][tid] +
+                    s_group_hist[2][tid] + s_group_hist[3][tid];
+    }
+    __syncthreads();
+
+    if (tid == 0) {
+      uint32_t acc = 0u;
+      const uint32_t needed = s_needed;
+      uint32_t chosen_bin = 0u;
+      for (int32_t b = kPrefillRadixBins - 1; b >= 0; --b) {
+        const uint32_t cnt = s_hist[b];
+        if (acc + cnt >= needed) {
+          chosen_bin = static_cast<uint32_t>(b);
+          break;
+        }
+        acc += cnt;
+      }
+      s_prefix = prefix | (chosen_bin << shift);
+      const uint32_t remaining = needed - acc;
+      if (s_hist[chosen_bin] == remaining) {
+        s_exact_done = 1u;
+        s_needed = 0u;
+      } else {
+        s_needed = remaining;
+      }
+    }
+    __syncthreads();
+
+    if (s_exact_done != 0u) {
+      break;
+    }
+    mask |= (0xffu << shift);
+  }
+
+  if (tid == 0) {
+    s_gt_pos = 0u;
+    s_eq_pos = static_cast<uint32_t>(kPrefillTopK512) - s_needed;
+  }
+  __syncthreads();
+
+  const uint32_t threshold = s_prefix;
+  const bool exact_ge = (s_exact_done != 0u);
+
+  if (use_reg_cache) {
+#pragma unroll
+    for (int32_t c = 0; c < kPrefillMaxRegChunks; ++c) {
+      const int32_t col = tid + c * kPrefillTopK512;
+      if (col < valid) {
+        const uint32_t k = reg_keys[c];
+        if (exact_ge) {
+          if (k >= threshold) {
+            const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+            if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+              out_row[pos] = col;
+            }
+          }
+        } else {
+          if (k > threshold) {
+            const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+            if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+              out_row[pos] = col;
+            }
+          } else if (k == threshold) {
+            const uint32_t pos = atomicAdd(&s_eq_pos, 1u);
+            if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+              out_row[pos] = col;
+            }
+          }
+        }
+      }
+    }
+  } else {
+    for (int32_t col = tid; col < valid; col += kPrefillTopK512) {
+      const uint32_t k = prefill_float_to_ordered_u32(row_scores[col]);
+      if (exact_ge) {
+        if (k >= threshold) {
+          const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+          if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+            out_row[pos] = col;
+          }
+        }
+      } else {
+        if (k > threshold) {
+          const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+          if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+            out_row[pos] = col;
+          }
+        } else if (k == threshold) {
+          const uint32_t pos = atomicAdd(&s_eq_pos, 1u);
+          if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+            out_row[pos] = col;
+          }
+        }
+      }
+    }
+  }
+}
+
+}  // namespace
+
+void deepseek_v4_indexer_prefill_causal_topk512(
+    const torch::Tensor& scores,
+    int64_t absolute_start,
+    torch::Tensor output) {
+  CHECK(scores.defined());
+  CHECK(scores.device().is_privateuseone());
+  check_tensor(scores, scores, torch::kFloat32);
+  CHECK_EQ(scores.dim(), 2);
+  CHECK_GT(scores.size(0), 0);
+  CHECK_GT(scores.size(1), 0);
+  check_tensor(output, scores, torch::kInt32);
+  CHECK_EQ(output.dim(), 2);
+  CHECK_EQ(output.size(0), scores.size(0));
+  CHECK_EQ(output.size(1), kPrefillTopK512);
+
+  const XLLMOptionalDeviceGuard guard(scores.device());
+  indexer_prefill_causal_topk512_kernel<<<
+      static_cast<uint32_t>(scores.size(0)),
+      kPrefillTopK512,
+      0,
+      current_musa_stream(scores.device())>>>(
+      scores.data_ptr<float>(),
+      absolute_start,
+      static_cast<int32_t>(scores.size(1)),
+      output.data_ptr<int32_t>());
+  check_musa_kernel_launch("dsv4 Indexer prefill causal topk512");
+}
+
 void deepseek_v4_indexer_map_outputs(const torch::Tensor& selected,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& compressed_blocks,
