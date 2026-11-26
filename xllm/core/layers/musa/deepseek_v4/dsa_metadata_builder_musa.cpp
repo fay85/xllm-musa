@@ -17,8 +17,15 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <glog/logging.h>
+#include <mutex>
 #include <string>
+#include <vector>
+#if defined(USE_MUSA)
+#include <musa_runtime_api.h>
+#include "torch_musa/csrc/core/MUSAStream.h"
+#endif
 
 #include "core/framework/model/model_input_params.h"
 #include "core/layers/common/attention_metadata.h"
@@ -323,9 +330,77 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
   // Keep base RoPE tables in metadata. Per-forward cos/sin slices are
   // calculated in DeepseekV4ModelImpl::forward to align with MindIE timing.
   if (dsa_cos_sin.defined()) {
-    auto cos_sin_chunks = dsa_cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
-    dsa.cos_table = cos_sin_chunks[0].contiguous();
-    dsa.sin_table = cos_sin_chunks[1].contiguous();
+    const char* cache_env = std::getenv("XLLM_DSV4_CACHE_COS_SIN_SPLIT");
+    const bool use_cache =
+        (cache_env == nullptr || std::strcmp(cache_env, "0") != 0) &&
+        dsa_cos_sin.dim() == 2;
+    bool cache_hit = false;
+    if (use_cache) {
+      struct CosSinSplitEntry {
+        const void* data_ptr = nullptr;
+        int64_t dim0 = 0;
+        int64_t dim1 = 0;
+        torch::ScalarType dtype = torch::kFloat32;
+        torch::Device device = torch::kCPU;
+        torch::Tensor source_ref;
+        torch::Tensor cos_table;
+        torch::Tensor sin_table;
+      };
+      static std::mutex cache_mutex;
+      static std::vector<CosSinSplitEntry> cache;
+      const void* ptr = dsa_cos_sin.data_ptr();
+      const int64_t d0 = dsa_cos_sin.size(0);
+      const int64_t d1 = dsa_cos_sin.size(1);
+      const auto dt = dsa_cos_sin.scalar_type();
+      const auto dev = dsa_cos_sin.device();
+      {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        for (const auto& entry : cache) {
+          if (entry.data_ptr == ptr && entry.dim0 == d0 &&
+              entry.dim1 == d1 && entry.dtype == dt &&
+              entry.device == dev) {
+            dsa.cos_table = entry.cos_table;
+            dsa.sin_table = entry.sin_table;
+            cache_hit = true;
+            break;
+          }
+        }
+      }
+      if (!cache_hit) {
+        auto cos_sin_chunks = dsa_cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
+        dsa.cos_table = cos_sin_chunks[0].contiguous();
+        dsa.sin_table = cos_sin_chunks[1].contiguous();
+        bool is_capturing = false;
+#if defined(USE_MUSA)
+        if (dev.is_privateuseone()) {
+          musaStreamCaptureStatus status = musaStreamCaptureStatusNone;
+          musaStream_t stream =
+              c10::musa::getCurrentMUSAStream(dev.index()).stream();
+          if (musaStreamIsCapturing(stream, &status) == musaSuccess &&
+              status != musaStreamCaptureStatusNone) {
+            is_capturing = true;
+          }
+        }
+#endif
+        if (!is_capturing) {
+          std::lock_guard<std::mutex> lock(cache_mutex);
+          if (cache.size() < 16) {
+            cache.push_back(CosSinSplitEntry{
+                ptr, d0, d1, dt, dev, dsa_cos_sin, dsa.cos_table,
+                dsa.sin_table});
+            LOG_FIRST_N(INFO, 2)
+                << "[DSV4_CACHE_COS_SIN_SPLIT] cached contiguous cos/sin "
+                << "tables shape=[" << d0 << "," << (d1 / 2) << "]";
+          }
+        }
+        cache_hit = true;
+      }
+    }
+    if (!cache_hit) {
+      auto cos_sin_chunks = dsa_cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
+      dsa.cos_table = cos_sin_chunks[0].contiguous();
+      dsa.sin_table = cos_sin_chunks[1].contiguous();
+    }
   }
 
   if (positions.defined()) {
