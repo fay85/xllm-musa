@@ -709,9 +709,9 @@ std::vector<bool> XServiceClient::generations(
     req->set_sender_engine_uid(instance_name_);
     req->set_sender_incarnation_id(incarnation_id_);
     if (!output.service_request_id.empty() && !output.attempt_seq.has_value()) {
-      LOG(ERROR) << "V2 output missing attempt_seq, service_req="
-                 << output.service_request_id
-                 << " outputs=" << output.outputs.size();
+      LOG_FIRST_N(WARNING, 3) << "V2 output missing attempt_seq, service_req="
+                              << output.service_request_id
+                              << " outputs=" << output.outputs.size();
     }
     if (output.usage.has_value()) {
       proto::OutputUsage* proto_usage = req->mutable_usage();
