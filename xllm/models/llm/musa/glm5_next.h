@@ -232,6 +232,19 @@ class Glm5NextModelImpl final
     }
     const layer::AttentionMetadata& attn_metadata =
         *modified_input_params.attn_metadata;
+    if (modified_input_params.is_spec_verify && attn_metadata.musa_kda_batch) {
+      // All KDA layers verify the same rows. Build this once inside forward
+      // so replay reads the live state indices from the persistent input.
+      auto kda = std::make_shared<layer::MusaKdaBatchMetadata>(
+          *attn_metadata.musa_kda_batch);
+      const int64_t sequences = kda->state_indices.numel();
+      CHECK_GT(sequences, 0);
+      CHECK_EQ(global_rows % sequences, 0);
+      const int64_t width = global_rows / sequences;
+      kda->verify_slots = kda->state_indices.unsqueeze(1) * width +
+                          torch::arange(width, kda->state_indices.options());
+      modified_input_params.attn_metadata->musa_kda_batch = std::move(kda);
+    }
 
     if (use_prefill_cp) {
       cp_global_rows_ = attn_metadata.glm5_prefill_global_rows;

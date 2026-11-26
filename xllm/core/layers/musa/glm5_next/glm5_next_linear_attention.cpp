@@ -336,8 +336,8 @@ void Glm5NextLinearAttentionImpl::load_state_dict(const StateDict& state_dict) {
   load_column_linear(f_b_proj_, state_dict, "f_b_proj.");
   load_column_linear(g_b_proj_, state_dict, "g_b_proj.");
 
-  if (cp_group_ != nullptr && !fg_b_weight_.defined() &&
-      f_b_proj_->is_weight_loaded() && g_b_proj_->is_weight_loaded()) {
+  if (!fg_b_weight_.defined() && f_b_proj_->is_weight_loaded() &&
+      g_b_proj_->is_weight_loaded()) {
     fg_b_weight_ = torch::stack({f_b_proj_->weight(), g_b_proj_->weight()});
   }
 
@@ -564,7 +564,7 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   torch::Tensor beta = projections[1].contiguous();
   torch::Tensor raw_gate;
   torch::Tensor output_gate;
-  if (use_prefill_cp) {
+  if (use_prefill_cp || (verify && num_tokens <= 8)) {
     const auto fg_input =
         projected
             .narrow(
@@ -630,9 +630,7 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   CHECK_EQ(batch->state_indices.device(), hidden_states.device());
   const int64_t checkpoint_stride = get_checkpoint_stride(kv_cache);
   const torch::Tensor& state_indices = batch->state_indices;
-  const torch::Tensor state_indices_long =
-      checkpoint_stride == 1 ? batch->state_indices_long
-                             : batch->state_indices_long * checkpoint_stride;
+
   if (!conv_weight_.defined()) {
     conv_weight_ =
         torch::cat(
@@ -704,8 +702,10 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
   if (verify) {
     namespace km = kernel::musa;
     const auto slots =
-        state_indices.unsqueeze(1) * checkpoint_stride +
-        torch::arange(checkpoint_stride, state_indices.options());
+        batch->verify_slots.defined()
+            ? batch->verify_slots
+            : state_indices.unsqueeze(1) * checkpoint_stride +
+                  torch::arange(checkpoint_stride, state_indices.options());
     const auto accepted = input_params.num_accepted_tokens.to(torch::kInt32);
     const std::string module =
         "glm5_kda_verify_bf16_h" + std::to_string(local_num_heads_);
@@ -726,6 +726,9 @@ torch::Tensor Glm5NextLinearAttentionImpl::forward(
                                      km::to_ffi_tensor(ssm_cache),
                                      km::to_ffi_tensor(core_output));
   } else {
+    const torch::Tensor state_indices_long =
+        checkpoint_stride == 1 ? batch->state_indices_long
+                               : batch->state_indices_long * checkpoint_stride;
     auto initial_state = ssm_cache.index_select(0, state_indices_long);
     if (is_prefill) {
       initial_state.masked_fill_(

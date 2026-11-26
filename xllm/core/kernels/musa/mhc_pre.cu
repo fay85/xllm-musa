@@ -389,9 +389,25 @@ MHCPreOutput mhc_pre(const torch::Tensor& residual,
                               static_cast<float>(rms_eps) == 1e-5f);
     if (used_mate && fused_shape) {
       CHECK(ensure_tilelang_loader());
-      const std::string uri = static_cast<float>(rms_eps) == 1e-5f
-                                  ? "mhc_pre_big_fuse_glm53_eps5_v1"
-                                  : "mhc_pre_big_fuse_glm53_eps6_v1";
+      const bool eps5 = static_cast<float>(rms_eps) == 1e-5f;
+      const char* uri = eps5 ? "mhc_pre_big_fuse_glm53_eps5_v1"
+                             : "mhc_pre_big_fuse_glm53_eps6_v1";
+      // The small-row specialization keeps the same split-K summation and
+      // Sinkhorn arithmetic, with more threads processing each hidden tile.
+      if (tokens <= 8) {
+        const char* small_uri = eps5 ? "mhc_pre_big_fuse_glm53_eps5_small_v1"
+                                     : "mhc_pre_big_fuse_glm53_eps6_small_v1";
+        static const bool have_small[] = {
+            std::ifstream(
+                path_to_uri_so_lib("mhc_pre_big_fuse_glm53_eps6_small_v1"))
+                .good(),
+            std::ifstream(
+                path_to_uri_so_lib("mhc_pre_big_fuse_glm53_eps5_small_v1"))
+                .good()};
+        if (have_small[eps5]) {
+          uri = small_uri;
+        }
+      }
       TvmffiStreamGuard stream_guard(residual.device());
       get_function(uri, "main")(to_ffi_tensor(partial_mixes),
                                 to_ffi_tensor(partial_squares),

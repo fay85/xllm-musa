@@ -126,6 +126,7 @@ struct MusaKdaBatchMetadata {
   torch::Tensor state_indices_long;
   int64_t state_capacity = 0;
   int64_t num_tokens = 0;
+  torch::Tensor verify_slots;
 };
 
 // FA3 / FlashInfer extras used by MUSA attention and graph replay:

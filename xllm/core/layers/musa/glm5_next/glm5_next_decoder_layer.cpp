@@ -299,6 +299,7 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
           sparse_gate_->forward(ffn_input_2d, is_prefill);
       ModelInputParams moe_input_params;
       moe_input_params.attn_metadata = input_params.attn_metadata;
+      moe_input_params.is_spec_verify = input_params.is_spec_verify;
       moe_input_params.meta.batch_forward_type =
           input_params.meta.batch_forward_type;
       if (moe_input_params.meta.batch_forward_type.is_empty()) {
