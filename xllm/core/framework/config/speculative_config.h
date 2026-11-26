@@ -163,6 +163,34 @@ class SpeculativeConfig final {
     return model_type == "qwen3_vl" && algorithm == "Eagle3";
   }
 
+  // JoyaiASR uses the CTC prompt-lookup Suffix draft on the VLM path. The
+  // draft is built from audio CTC hypotheses and token history, so the
+  // combination needs no separate draft checkpoint. It is admitted for
+  // aggregated service routing only; the gated PD path is unchanged.
+  static bool is_joyai_asr_suffix(std::string_view model_type,
+                                  std::string_view algorithm) {
+    return model_type == "joyai_asr" && algorithm == "Suffix";
+  }
+
+  // Every OxygenVLM-prefixed target shares the same speculative treatment as
+  // Qwen3.5: MTP and DFlash2 use the target's own draft path, DSpark uses the
+  // standalone block-diffusion drafter.
+  static bool is_oxygenvlm_target_model_type(std::string_view model_type) {
+    return model_type.rfind("oxygenvlm", 0) == 0;
+  }
+
+  static bool is_oxygenvlm_mtp_or_dflash2(std::string_view model_type,
+                                          std::string_view algorithm) {
+    return is_oxygenvlm_target_model_type(model_type) &&
+           (is_mtp_algorithm(algorithm) || is_dflash2_algorithm(algorithm));
+  }
+
+  static bool is_oxygenvlm_dspark(std::string_view model_type,
+                                  std::string_view algorithm) {
+    return is_oxygenvlm_target_model_type(model_type) &&
+           is_dspark_algorithm(algorithm);
+  }
+
   // True for the DSpark block-diffusion draft.
   static bool is_dspark_algorithm(std::string_view algorithm) {
     return boost::iequals(algorithm, "DSpark");

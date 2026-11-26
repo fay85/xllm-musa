@@ -85,6 +85,10 @@ VlmPdTransferSupport vlm_speculative_pd_transfer_support(
     return Platform::is_mlu() ? VlmPdTransferSupport::PUSH_ONLY
                               : VlmPdTransferSupport::PUSH_OR_PULL;
   }
+  if (SpeculativeConfig::is_oxygenvlm_mtp_or_dflash2(model_type, algorithm)) {
+    return Platform::is_mlu() ? VlmPdTransferSupport::PUSH_ONLY
+                              : VlmPdTransferSupport::PUSH_OR_PULL;
+  }
   if (Platform::is_mlu() && model_type == "glm5_next" &&
       SpeculativeConfig::is_mtp_algorithm(algorithm)) {
     return VlmPdTransferSupport::PUSH_ONLY;
@@ -94,7 +98,8 @@ VlmPdTransferSupport vlm_speculative_pd_transfer_support(
       SpeculativeConfig::is_qwen3_5_dspark(model_type, algorithm) ||
       SpeculativeConfig::is_qwen3_5_python_dflash(
           model_type, algorithm, ModelConfig::get_instance().model_impl()) ||
-      SpeculativeConfig::is_qwen3_vl_eagle3(model_type, algorithm)) {
+      SpeculativeConfig::is_qwen3_vl_eagle3(model_type, algorithm) ||
+      SpeculativeConfig::is_oxygenvlm_dspark(model_type, algorithm)) {
     return VlmPdTransferSupport::PUSH_OR_PULL;
   }
   return VlmPdTransferSupport::UNSUPPORTED;
@@ -560,6 +565,12 @@ Master::Master(const Options& options, EngineType type)
       const bool supports_pd =
           vlm_speculative_pd_transfer_support(model_type, algorithm) !=
           VlmPdTransferSupport::UNSUPPORTED;
+      // JoyaiASR + Suffix serves aggregated requests through the service
+      // router, but its draft has no P/D bootstrap embedding, so disaggregated
+      // PD stays rejected by the supports_pd gate below.
+      const bool supports_routing =
+          supports_pd ||
+          SpeculativeConfig::is_joyai_asr_suffix(model_type, algorithm);
       CHECK(!options_.enable_disagg_pd() || supports_pd)
           << "VLM speculative PD does not support model_type=" << model_type
           << ", speculative_algorithm=" << algorithm
@@ -569,7 +580,7 @@ Master::Master(const Options& options, EngineType type)
       CHECK(!transfer_mode_error.has_value()) << transfer_mode_error.value();
       CHECK(!options_.enable_pd_ooc())
           << "VLM speculative decoding does not support PD OOC";
-      CHECK(!options_.enable_service_routing() || supports_pd)
+      CHECK(!options_.enable_service_routing() || supports_routing)
           << "VLM speculative service routing does not support model_type="
           << model_type << ", speculative_algorithm=" << algorithm
           << ", platform=" << Platform::type_str();

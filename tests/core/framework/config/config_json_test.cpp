@@ -572,6 +572,38 @@ TEST(SpeculativeConfigTest, MatchesQwen35PythonDflashPairing) {
       "qwen3_5", "DFlash2", "python"));
 }
 
+TEST(SpeculativeConfigTest, MatchesJoyaiAsrSuffixPairing) {
+  EXPECT_TRUE(SpeculativeConfig::is_joyai_asr_suffix("joyai_asr", "Suffix"));
+  EXPECT_FALSE(SpeculativeConfig::is_joyai_asr_suffix("joyai_asr", "suffix"));
+  EXPECT_FALSE(SpeculativeConfig::is_joyai_asr_suffix("qwen3_vl", "Suffix"));
+  EXPECT_FALSE(SpeculativeConfig::is_joyai_asr_suffix("joyai_asr", "MTP"));
+}
+
+TEST(SpeculativeConfigTest, MatchesOxygenvlmMtpAndDflash2Pairing) {
+  for (const std::string& model_type :
+       {"oxygenvlm", "oxygenvlm_text", "oxygenvlm_moe"}) {
+    SCOPED_TRACE(model_type);
+    EXPECT_TRUE(
+        SpeculativeConfig::is_oxygenvlm_mtp_or_dflash2(model_type, "MTP"));
+    EXPECT_TRUE(
+        SpeculativeConfig::is_oxygenvlm_mtp_or_dflash2(model_type, "DFlash2"));
+    EXPECT_FALSE(
+        SpeculativeConfig::is_oxygenvlm_mtp_or_dflash2(model_type, "DSpark"));
+  }
+  EXPECT_FALSE(
+      SpeculativeConfig::is_oxygenvlm_mtp_or_dflash2("qwen3_5", "MTP"));
+  EXPECT_FALSE(
+      SpeculativeConfig::is_oxygenvlm_mtp_or_dflash2("glm5_next", "DFlash2"));
+}
+
+TEST(SpeculativeConfigTest, MatchesOxygenvlmDsparkPairing) {
+  EXPECT_TRUE(SpeculativeConfig::is_oxygenvlm_dspark("oxygenvlm", "DSpark"));
+  EXPECT_TRUE(
+      SpeculativeConfig::is_oxygenvlm_dspark("oxygenvlm_text", "dspark"));
+  EXPECT_FALSE(SpeculativeConfig::is_oxygenvlm_dspark("oxygenvlm", "MTP"));
+  EXPECT_FALSE(SpeculativeConfig::is_oxygenvlm_dspark("qwen3_5", "DSpark"));
+}
+
 TEST(SpeculativeConfigTest, MatchesQwen3VlEagle3Pairing) {
   EXPECT_TRUE(SpeculativeConfig::is_qwen3_vl_eagle3("qwen3_vl", "Eagle3"));
   EXPECT_FALSE(SpeculativeConfig::is_qwen3_vl_eagle3("qwen3_vl", "eagle3"));
