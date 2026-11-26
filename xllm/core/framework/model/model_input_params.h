@@ -437,6 +437,11 @@ struct AttentionInput {
     torch::Tensor* device_view = nullptr;
   };
 
+  struct PackedTensorInput {
+    torch::Tensor host_tensor;
+    torch::Tensor* device_view;
+  };
+
   AttentionHostInput host;
   AttentionDeviceInput device;
   torch::Tensor attention_host_buffer;
@@ -460,7 +465,8 @@ struct AttentionInput {
   bool rebuild_device_buffer(
       const torch::Device& target_device,
       const std::vector<PackedIntInput>& extra_int_inputs = {},
-      BufferReusePolicy reuse_policy = BufferReusePolicy::COPY_ON_WRITE) {
+      BufferReusePolicy reuse_policy = BufferReusePolicy::COPY_ON_WRITE,
+      const std::vector<PackedTensorInput>& extra_tensors = {}) {
     struct Entry {
       const void* source = nullptr;
       std::vector<int64_t> sizes;
@@ -536,6 +542,11 @@ struct AttentionInput {
                               0});
     };
 
+    for (const auto& extra : extra_tensors) {
+      CHECK(extra.host_tensor.defined() && extra.host_tensor.device().is_cpu());
+      CHECK(extra.device_view != nullptr);
+      add_cpu_tensor(extra.host_tensor, extra.device_view);
+    }
     for (const PackedIntInput& extra : extra_int_inputs) {
       CHECK(extra.values != nullptr);
       add_int_vector(*extra.values, extra.host_view, extra.device_view);

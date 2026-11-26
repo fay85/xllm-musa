@@ -773,7 +773,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
     const torch::Tensor& positions,
     const ModelInputParams& params,
     uint32_t padded_num_tokens,
-    bool return_capture_params) {
+    bool return_capture_params,
+    bool materialize_paged_kv_host) {
   const uint32_t actual_num_tokens = tokens.size(/*dim=*/0);
   const int64_t actual_batch_size = params.meta.actual_num_sequences > 0
                                         ? params.meta.actual_num_sequences
@@ -785,10 +786,21 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
   CHECK_LT(actual_batch_size, q_seq_lens_.size(0))
       << "prefill graph sequences exceed persistent capacity";
 
-  // Runners read this metadata on replay. It is built from the live inputs.
-  std::shared_ptr<layer::AttentionMetadata> attn_metadata =
-      std::make_shared<layer::AttentionMetadata>(
-          layer::AttentionMetadataBuilder::build(params, args_.enable_mla()));
+  // A GLM replay reads a persistent validity row. Populate it on the
+  // device instead of uploading the same host scalar twice per forward.
+  const bool scalar_validity =
+      layer::uses_glm5_next_graph(args_.model_type()) &&
+      params.linear_state_validity_mask.size() == 1 &&
+      !params.linear_state_validity_mask_tensor.defined();
+  layer::AttentionMetadataBuildOptions build_options;
+  build_options.materialize_linear_state_validity = !scalar_validity;
+  build_options.materialize_paged_kv_host = materialize_paged_kv_host;
+  auto attn_metadata = std::make_shared<layer::AttentionMetadata>(
+      layer::AttentionMetadataBuilder::build(params,
+                                             args_.enable_mla(),
+                                             std::nullopt,
+                                             std::nullopt,
+                                             build_options));
   CHECK(attn_metadata) << "attn_metadata should not be null";
   attn_metadata->fa3_metadata.share_fa3_scheduler_metadata = true;
 
@@ -870,7 +882,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
   }
   const int64_t validity_rows =
       static_cast<int64_t>(params.linear_state_validity_mask.size());
-  if (validity_rows > 0) {
+  if (scalar_validity) {
+    auto row = persistent_linear_state_validity_.narrow(0, 0, 1);
+    row.fill_(params.linear_state_validity_mask.front() != 0);
+    attn_metadata->has_initial_states = row;
+  } else if (validity_rows > 0) {
     CHECK_LE(validity_rows, persistent_linear_state_validity_.numel());
     persistent_linear_state_validity_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/validity_rows)
@@ -1251,7 +1267,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     const ModelInputParams& params,
     uint32_t padded_num_tokens,
     bool return_capture_params,
-    bool update_attention_plan) {
+    bool update_attention_plan,
+    bool materialize_paged_kv_host) {
   std::optional<ModelInputParams> params_for_capture;
   if (return_capture_params) {
     CHECK_GT(padded_num_tokens, 0)
@@ -1268,6 +1285,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         refresh_linear_state_validity(params.linear_state_validity_mask);
   }
   layer::AttentionMetadataBuildOptions metadata_build_options;
+  metadata_build_options.materialize_paged_kv_host = materialize_paged_kv_host;
   metadata_build_options.materialize_linear_state_validity =
       !linear_state_validity.defined();
   // Build attn_metadata with original model_input_params. So we can set actual
@@ -1384,7 +1402,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       params.graph.expanded_paged_kv_indptr.defined();
   const int64_t expanded_rows =
       use_expanded_spec_verify ? params.graph.expanded_kv_seq_lens.numel() : 0;
-  if (decode_path) {
+  if (decode_path && materialize_paged_kv_host) {
     auto ensure_host_mirror = [](torch::Tensor& host_field,
                                  const torch::Tensor& device_field) {
       if (host_field.defined()) {
@@ -2934,10 +2952,23 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // page fault inside the captured Mate decode kernel (see .mudmp under
     // repro logs and refresh_persistent_paged_kv_host_mirrors() for the
     // pointer-stability rationale).
+    static const bool s_keep_host_mirror_refresh = [] {
+      const char* env = std::getenv("XLLM_KEEP_HOST_MIRROR_REFRESH");
+      return env && std::string(env) == "1";
+    }();
+    // GLM's captured KDA/MLA forward consumes the updated device tensors.
+    // Host page mirrors are used for planning at capture, or by the
+    // explicitly requested diagnostic refresh.
+    const bool materialize_paged_kv_host =
+        !is_glm_graph_ || s_keep_host_mirror_refresh;
     auto replay_params_opt =
         is_glm_prefill_
-            ? persistent_param_.update_prefill(
-                  tokens, positions, params, padded_num_tokens_, true)
+            ? persistent_param_.update_prefill(tokens,
+                                               positions,
+                                               params,
+                                               padded_num_tokens_,
+                                               true,
+                                               materialize_paged_kv_host)
             : persistent_param_.update(tokens,
                                        k_cache,
                                        v_cache,
@@ -2946,7 +2977,8 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                                        padded_num_tokens_,
                                        /*return_capture_params=*/true,
                                        /*update_attention_plan=*/
-                                       !needs_model_graph_metadata);
+                                       !needs_model_graph_metadata,
+                                       materialize_paged_kv_host);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
 
@@ -3008,10 +3040,6 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // otherwise stall the CPU for ~48 ms waiting for the previous graph to
     // complete on the same stream. Set XLLM_KEEP_HOST_MIRROR_REFRESH=1 to
     // re-enable for debugging.
-    static const bool s_keep_host_mirror_refresh = [] {
-      const char* env = std::getenv("XLLM_KEEP_HOST_MIRROR_REFRESH");
-      return env && std::string(env) == "1";
-    }();
     if (s_keep_host_mirror_refresh) {
       refresh_persistent_paged_kv_host_mirrors(
           replay_params_opt.value().attn_metadata, params.attention.host);

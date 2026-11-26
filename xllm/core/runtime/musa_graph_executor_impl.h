@@ -77,7 +77,8 @@ class MusaGraphPersistentParam final {
                                          const ModelInputParams& params,
                                          uint32_t padded_num_tokens = 0,
                                          bool return_capture_params = false,
-                                         bool update_attention_plan = true);
+                                         bool update_attention_plan = true,
+                                         bool materialize_paged_kv_host = true);
 
   // Prefill counterpart of update() for piecewise graphs. Capture params point
   // every device input that the model reads inside its forward at persistent
@@ -88,7 +89,8 @@ class MusaGraphPersistentParam final {
       const torch::Tensor& positions,
       const ModelInputParams& params,
       uint32_t padded_num_tokens,
-      bool return_capture_params = false);
+      bool return_capture_params = false,
+      bool materialize_paged_kv_host = true);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {

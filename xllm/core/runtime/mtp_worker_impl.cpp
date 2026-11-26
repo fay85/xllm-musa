@@ -604,15 +604,50 @@ void replace_host_token_placeholders(ForwardInput& input,
   }
 }
 
-void set_positions_tensor(ForwardInput& input,
-                          const torch::Tensor& positions_host,
-                          const torch::TensorOptions& device_options) {
-  input.device_tensors_ready = false;
-  input.positions_host = positions_host;
-  input.positions =
-      specBuilder::host_to_device_async(input.positions_host, device_options);
-  input.device_tensors_ready = true;
-}
+// Stage model inputs alongside attention metadata on the same prepare stream.
+// Retain the int32 CPU mirrors used by speculative row planning even when the
+// model expects int64 positions. The packed host tensor already has the device
+// dtype, so no conversion or separate H2D is needed on the compute stream.
+class MtpInputUpload final {
+ public:
+  explicit MtpInputUpload(bool pack) : pack_(pack) {}
+
+  void stage(torch::Tensor source,
+             const torch::TensorOptions& options,
+             torch::Tensor& result) {
+    if (pack_ && options.device().is_privateuseone() && source.numel() > 0) {
+      pending_.push_back({source.to(options.dtype()), &result});
+    } else {
+      result = specBuilder::host_to_device_async(source, options);
+    }
+  }
+
+  void set_rows(ForwardInput& input,
+                const specBuilder::DecodeBuildBuffers& rows,
+                const torch::TensorOptions& token_options,
+                const torch::TensorOptions& position_options) {
+    input.input_host_buffer_has_layout = false;
+    input.device_tensors_ready = false;
+    input.token_ids_host = specBuilder::make_cpu_int_tensor(rows.out_token_ids);
+    input.positions_host = specBuilder::make_cpu_int_tensor(rows.out_positions);
+    stage(input.token_ids_host, token_options, input.token_ids);
+    stage(input.positions_host, position_options, input.positions);
+  }
+
+  void upload(AttentionInput& attention,
+              const torch::Device& device,
+              const std::vector<AttentionInput::PackedIntInput>& extra = {}) {
+    attention.rebuild_device_buffer(
+        device,
+        extra,
+        AttentionInput::BufferReusePolicy::COPY_ON_WRITE,
+        pending_);
+  }
+
+ private:
+  bool pack_;
+  std::vector<AttentionInput::PackedTensorInput> pending_;
+};
 
 runtime::Options mtp_target_options(const runtime::Options& options) {
   auto opts = options;
@@ -4006,12 +4041,11 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
   CHECK_EQ(buf.out_positions.size(), buf.out_token_ids.size())
       << "validate positions/tokens mismatch";
 
+  MtpInputUpload upload(
+      Platform::is_musa() &&
+      is_glm5_next_target_model_type(context_.get_model_args().model_type()));
   if (!use_explicit_spec_verify_replay_update) {
-    specBuilder::set_token_position_tensors(validate_input,
-                                            buf.out_token_ids,
-                                            buf.out_positions,
-                                            token_options,
-                                            position_options);
+    upload.set_rows(validate_input, buf, token_options, position_options);
   }
   if (!use_atb_spec_kernel) {
     input_params.meta.num_sequences = total_num_val_tokens;
@@ -4312,7 +4346,7 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
                                   nullptr,
                                   &input_params.num_accepted_tokens});
     }
-    input_params.attention.rebuild_device_buffer(device_, extra_int_inputs);
+    upload.upload(input_params.attention, device_, extra_int_inputs);
   }
   if (builds_expanded_spec_verify_attention()) {
     build_expanded_spec_verify_graph_input(
@@ -4598,11 +4632,11 @@ void MTPWorkerImpl::prepare_draft_replay_inputs(
   const int32_t num_sequences = input_params.meta.num_sequences;
   auto& rows = plan.rows;
   const int32_t num_rows = static_cast<int32_t>(rows.out_positions.size());
-  specBuilder::set_token_position_tensors(extend_input,
-                                          rows.out_token_ids,
-                                          rows.out_positions,
-                                          base_input.token_ids.options(),
-                                          base_input.positions.options());
+  MtpInputUpload upload(packed_replay && plan.mrope_positions.empty());
+  upload.set_rows(extend_input,
+                  rows,
+                  base_input.token_ids.options(),
+                  base_input.positions.options());
   if (!plan.mrope_positions.empty()) {
     CHECK_EQ(plan.mrope_positions.size(), static_cast<size_t>(num_rows));
     std::vector<int32_t> rotary(3 * num_rows);
@@ -4661,7 +4695,7 @@ void MTPWorkerImpl::prepare_draft_replay_inputs(
                                      std::move(rows.out_kv_seq_lens),
                                      /*update_block_tables=*/true);
   }
-  input_params.attention.rebuild_device_buffer(device_);
+
   for (auto& embedding : plan.embeddings) {
     embedding = embedding.to(device_);
   }
@@ -4692,10 +4726,10 @@ void MTPWorkerImpl::prepare_draft_replay_inputs(
   const auto idx_options = sampling.selected_token_idxes.defined()
                                ? sampling.selected_token_idxes.options()
                                : torch::dtype(torch::kInt).device(device_);
-  sampling.selected_token_idxes =
-      safe_to(specBuilder::make_cpu_int_tensor(plan.selected_rows),
-              idx_options,
-              /*non_blocking=*/true);
+  upload.stage(specBuilder::make_cpu_int_tensor(plan.selected_rows),
+               idx_options,
+               sampling.selected_token_idxes);
+  upload.upload(input_params.attention, device_);
   if (!sampling.sample_idxes.defined()) {
     sampling.sample_idxes = torch::arange(num_sequences, idx_options);
   }
@@ -5057,9 +5091,13 @@ void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
       << "draft kv slots/positions mismatch";
 
   torch::TensorOptions position_options = input.positions.options();
-  set_positions_tensor(draft_input,
-                       specBuilder::make_cpu_int_tensor(buf.out_positions),
-                       position_options);
+  MtpInputUpload upload(Platform::is_musa() &&
+                        draft_impl_->context_.get_model_args().model_type() ==
+                            "glm5_next_mtp");
+  draft_input.positions_host =
+      specBuilder::make_cpu_int_tensor(buf.out_positions);
+  upload.stage(
+      draft_input.positions_host, position_options, draft_input.positions);
   specBuilder::update_input_params(
       input_params,
       buf,
@@ -5079,7 +5117,7 @@ void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
           input_params.get_q_seq_len(i));
     }
   }
-  input_params.attention.rebuild_device_buffer(device_);
+  upload.upload(input_params.attention, device_);
 #if defined(USE_NPU)
   // Later draft steps share the B cache variant.
   draft_impl_->prepare_dp_ep_padding_on_stream(input_params, *prepare_stream_);

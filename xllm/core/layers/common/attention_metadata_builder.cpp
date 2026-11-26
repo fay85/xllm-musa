@@ -98,7 +98,8 @@ void convert_cumulative_lengths(std::vector<int32_t>& lengths,
 void populate_fa3_attention_metadata(
     AttentionMetadata& attn_metadata,
     const ModelInputParams& params,
-    const std::optional<torch::Tensor>& attn_mask) {
+    const std::optional<torch::Tensor>& attn_mask,
+    bool materialize_paged_kv_host) {
   const bool q_lengths_are_cumulative =
       params.attention.host.q_seq_lens.size() > 1 &&
       params.attention.host.q_seq_lens.front() == 0;
@@ -173,15 +174,18 @@ void populate_fa3_attention_metadata(
             .contiguous();
   }
 
-  if (!attn_metadata.fa3_metadata.paged_kv_indptr_host.defined()) {
+  if (materialize_paged_kv_host &&
+      !attn_metadata.fa3_metadata.paged_kv_indptr_host.defined()) {
     attn_metadata.fa3_metadata.paged_kv_indptr_host =
         to_host_int32_contiguous(params.attention.device.paged_kv_indptr);
   }
-  if (!attn_metadata.fa3_metadata.paged_kv_indices_host.defined()) {
+  if (materialize_paged_kv_host &&
+      !attn_metadata.fa3_metadata.paged_kv_indices_host.defined()) {
     attn_metadata.fa3_metadata.paged_kv_indices_host =
         to_host_int32_contiguous(params.attention.device.paged_kv_indices);
   }
-  if (!attn_metadata.fa3_metadata.paged_kv_last_page_len_host.defined()) {
+  if (materialize_paged_kv_host &&
+      !attn_metadata.fa3_metadata.paged_kv_last_page_len_host.defined()) {
     attn_metadata.fa3_metadata.paged_kv_last_page_len_host =
         to_host_int32_contiguous(
             params.attention.device.paged_kv_last_page_len);
@@ -531,7 +535,10 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
 #if defined(USE_MUSA)
-  populate_fa3_attention_metadata(attn_metadata, params, attn_mask);
+  populate_fa3_attention_metadata(attn_metadata,
+                                  params,
+                                  attn_mask,
+                                  build_options.materialize_paged_kv_host);
 #endif
 
 #if defined(USE_CUDA)

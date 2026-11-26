@@ -31,6 +31,7 @@ struct AttentionMetadata;
 
 struct AttentionMetadataBuildOptions {
   bool materialize_linear_state_validity = true;
+  bool materialize_paged_kv_host = true;
 };
 
 // Builder class for AttentionMetadata to avoid circular dependency.
