@@ -70,6 +70,126 @@ __global__ void __launch_bounds__(kRopeBlockSize)
   }
 }
 
+constexpr int kInplaceWarpSize = 32;
+constexpr int kInplaceWarpsPerBlock = 8;
+
+template <typename scalar_t>
+__global__ void __launch_bounds__(kInplaceWarpsPerBlock * kInplaceWarpSize)
+    deepseek_v4_partial_rope_inplace_64_kernel(
+        scalar_t* __restrict__ data,
+        const scalar_t* __restrict__ cos,
+        const scalar_t* __restrict__ sin,
+        int64_t rows,
+        int64_t heads,
+        int64_t hidden_dim,
+        int64_t rope_start_dim,
+        int64_t cos_stride,
+        bool inverse) {
+  const int32_t warp = threadIdx.x / kInplaceWarpSize;
+  const int32_t lane = threadIdx.x % kInplaceWarpSize;
+  const int64_t row =
+      static_cast<int64_t>(blockIdx.x) * kInplaceWarpsPerBlock + warp;
+  if (row >= rows) {
+    return;
+  }
+  const int64_t token = row / heads;
+  const int64_t pair_offset = static_cast<int64_t>(lane) * 2;
+  const int64_t col = rope_start_dim + pair_offset;
+  scalar_t* row_ptr = data + row * hidden_dim;
+  const scalar_t* cos_row = cos + token * cos_stride;
+  const scalar_t* sin_row = sin + token * cos_stride;
+
+  const float x = static_cast<float>(row_ptr[col]);
+  const float y = static_cast<float>(row_ptr[col + 1]);
+  const float c = static_cast<float>(cos_row[pair_offset]);
+  const float s = inverse ? -static_cast<float>(sin_row[pair_offset])
+                          : static_cast<float>(sin_row[pair_offset]);
+  row_ptr[col] = static_cast<scalar_t>(x * c - y * s);
+  row_ptr[col + 1] = static_cast<scalar_t>(y * c + x * s);
+}
+
+template <typename scalar_t>
+__global__ void __launch_bounds__(kRopeBlockSize)
+    deepseek_v4_partial_rope_inplace_generic_kernel(
+        scalar_t* __restrict__ data,
+        const scalar_t* __restrict__ cos,
+        const scalar_t* __restrict__ sin,
+        int64_t rows,
+        int64_t heads,
+        int64_t hidden_dim,
+        int64_t rope_start_dim,
+        int64_t pairs,
+        int64_t cos_stride,
+        bool inverse) {
+  const int64_t row = static_cast<int64_t>(blockIdx.x);
+  if (row >= rows) {
+    return;
+  }
+  const int64_t token = row / heads;
+  scalar_t* row_ptr = data + row * hidden_dim;
+  const scalar_t* cos_row = cos + token * cos_stride;
+  const scalar_t* sin_row = sin + token * cos_stride;
+
+  for (int64_t p = threadIdx.x; p < pairs; p += blockDim.x) {
+    const int64_t pair_offset = p * 2;
+    const int64_t col = rope_start_dim + pair_offset;
+    const float x = static_cast<float>(row_ptr[col]);
+    const float y = static_cast<float>(row_ptr[col + 1]);
+    const float c = static_cast<float>(cos_row[pair_offset]);
+    const float s = inverse ? -static_cast<float>(sin_row[pair_offset])
+                            : static_cast<float>(sin_row[pair_offset]);
+    row_ptr[col] = static_cast<scalar_t>(x * c - y * s);
+    row_ptr[col + 1] = static_cast<scalar_t>(y * c + x * s);
+  }
+}
+
+template <typename scalar_t>
+void launch_deepseek_v4_partial_rope_inplace(torch::Tensor& input,
+                                             const torch::Tensor& cos,
+                                             const torch::Tensor& sin,
+                                             int64_t rows,
+                                             int64_t heads,
+                                             int64_t hidden_dim,
+                                             int64_t rope_start_dim,
+                                             int64_t rope_head_dim,
+                                             int64_t cos_stride,
+                                             bool inverse) {
+  const musaStream_t stream = current_musa_stream(input.device());
+  if (rope_head_dim == 64) {
+    const int64_t grid =
+        (rows + kInplaceWarpsPerBlock - 1) / kInplaceWarpsPerBlock;
+    deepseek_v4_partial_rope_inplace_64_kernel<scalar_t>
+        <<<static_cast<unsigned int>(grid),
+           kInplaceWarpsPerBlock * kInplaceWarpSize,
+           0,
+           stream>>>(input.data_ptr<scalar_t>(),
+                     cos.data_ptr<scalar_t>(),
+                     sin.data_ptr<scalar_t>(),
+                     rows,
+                     heads,
+                     hidden_dim,
+                     rope_start_dim,
+                     cos_stride,
+                     inverse);
+    return;
+  }
+  const int64_t pairs = rope_head_dim / 2;
+  const int block =
+      static_cast<int>(pairs < kRopeBlockSize ? pairs : kRopeBlockSize);
+  deepseek_v4_partial_rope_inplace_generic_kernel<scalar_t>
+      <<<static_cast<unsigned int>(rows), block, 0, stream>>>(
+          input.data_ptr<scalar_t>(),
+          cos.data_ptr<scalar_t>(),
+          sin.data_ptr<scalar_t>(),
+          rows,
+          heads,
+          hidden_dim,
+          rope_start_dim,
+          pairs,
+          cos_stride,
+          inverse);
+}
+
 template <typename scalar_t>
 void launch_deepseek_v4_partial_rope(const torch::Tensor& input,
                                      const torch::Tensor& cos,
@@ -158,6 +278,59 @@ bool deepseek_v4_partial_rope(const torch::Tensor& input,
                                         output);
                                   });
   check_musa_kernel_launch("deepseek_v4_partial_rope");
+  return true;
+}
+
+bool deepseek_v4_partial_rope_inplace(torch::Tensor& input,
+                                      const torch::Tensor& cos,
+                                      const torch::Tensor& sin,
+                                      int64_t rope_start_dim,
+                                      int64_t rope_head_dim,
+                                      bool inverse) {
+  if (!input.defined() || !cos.defined() || !sin.defined() ||
+      input.device().is_cpu() || input.dim() < 2 || input.dim() > 3 ||
+      !input.is_contiguous() || !cos.is_contiguous() || !sin.is_contiguous() ||
+      input.scalar_type() != cos.scalar_type() ||
+      input.scalar_type() != sin.scalar_type() || cos.dim() != 2 ||
+      sin.dim() != 2 || cos.sizes() != sin.sizes() || rope_start_dim < 0 ||
+      rope_head_dim <= 0 || (rope_head_dim & 1) != 0 ||
+      input.size(-1) < rope_start_dim + rope_head_dim ||
+      cos.size(0) != input.size(0) || sin.size(0) != input.size(0) ||
+      cos.size(1) < rope_head_dim || sin.size(1) < rope_head_dim ||
+      input.device() != cos.device() || input.device() != sin.device()) {
+    return false;
+  }
+
+  const int64_t tokens = input.size(0);
+  const int64_t hidden_dim = input.size(-1);
+  const int64_t heads = input.dim() == 3 ? input.size(1) : 1;
+  const int64_t rows = tokens * heads;
+  if (rows == 0) {
+    return true;
+  }
+  if (rows < 0 || rows > std::numeric_limits<unsigned int>::max()) {
+    return false;
+  }
+
+  const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
+  AT_DISPATCH_FLOATING_TYPES_AND2(
+      at::ScalarType::Half,
+      at::ScalarType::BFloat16,
+      input.scalar_type(),
+      "deepseek_v4_partial_rope_inplace",
+      [&] {
+        launch_deepseek_v4_partial_rope_inplace<scalar_t>(input,
+                                                          cos,
+                                                          sin,
+                                                          rows,
+                                                          heads,
+                                                          hidden_dim,
+                                                          rope_start_dim,
+                                                          rope_head_dim,
+                                                          cos.size(1),
+                                                          inverse);
+      });
+  check_musa_kernel_launch("deepseek_v4_partial_rope_inplace");
   return true;
 }
 

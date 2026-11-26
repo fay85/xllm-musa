@@ -563,6 +563,11 @@ std::pair<torch::Tensor, torch::Tensor> select_rope_tables(
   return {attn_metadata.cos, attn_metadata.sin};
 }
 
+bool dsv4_prefill_inplace_rope_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_PREFILL_INPLACE_ROPE");
+  return value == nullptr || std::string(value) != "0";
+}
+
 torch::Tensor apply_interleaved_partial_rope(
     torch::Tensor input,
     int64_t rope_start_dim,
@@ -572,7 +577,8 @@ torch::Tensor apply_interleaved_partial_rope(
     bool inverse = false,
     torch::Tensor output_workspace = torch::Tensor(),
     bool allow_prefill_assembly = false,
-    bool allow_main_assembly = false) {
+    bool allow_main_assembly = false,
+    bool allow_inplace = false) {
   if (!input.defined() || !cos.defined() || !sin.defined() ||
       rope_head_dim <= 0 || rope_start_dim < 0 ||
       input.size(-1) < rope_start_dim + rope_head_dim) {
@@ -603,6 +609,25 @@ torch::Tensor apply_interleaved_partial_rope(
                                                inverse,
                                                output_workspace)) {
       return output_workspace;
+    }
+  }
+
+  // P3b: In-place fused partial RoPE for prefill tensors owned exclusively by
+  // the caller. Touches only the 64 rotary dims instead of copying the full
+  // 512-dim tensor through slice/neg/stack/cat.
+  if (allow_inplace && dsv4_prefill_inplace_rope_enabled() &&
+      !output_workspace.defined() && !kernel::musa::is_stream_capturing() &&
+      input.is_contiguous() && cos.is_contiguous() && sin.is_contiguous() &&
+      input.device() == cos.device() && input.device() == sin.device() &&
+      input.scalar_type() == cos.scalar_type() &&
+      input.scalar_type() == sin.scalar_type()) {
+    if (kernel::musa::deepseek_v4_partial_rope_inplace(
+            input, cos, sin, rope_start_dim, rope_head_dim, inverse)) {
+      LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_INPLACE_ROPE] shape="
+                           << input.sizes() << " rope_start=" << rope_start_dim
+                           << " rope_dim=" << rope_head_dim
+                           << " inverse=" << inverse;
+      return input;
     }
   }
 
@@ -2630,7 +2655,16 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
     auto sin_slice =
         effective_sin.slice(/*dim=*/0, /*start=*/0, /*end=*/blocks);
     compressed = apply_interleaved_partial_rope(
-        compressed, nope_head_dim_, rope_head_dim_, cos_slice, sin_slice);
+        compressed,
+        nope_head_dim_,
+        rope_head_dim_,
+        cos_slice,
+        sin_slice,
+        /*inverse=*/false,
+        /*output_workspace=*/torch::Tensor(),
+        /*allow_prefill_assembly=*/false,
+        /*allow_main_assembly=*/false,
+        /*allow_inplace=*/true);
     maybe_sync_attention_stage(layer_id_, "compress_prefill_rope", compressed);
   }
   maybe_sync_attention_stage(
@@ -3044,7 +3078,12 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
         index_head_dim_ - rope_head_dim_,
         rope_head_dim_,
         effective_cos.slice(/*dim=*/0, /*start=*/0, /*end=*/blocks),
-        effective_sin.slice(/*dim=*/0, /*start=*/0, /*end=*/blocks));
+        effective_sin.slice(/*dim=*/0, /*start=*/0, /*end=*/blocks),
+        /*inverse=*/false,
+        /*output_workspace=*/torch::Tensor(),
+        /*allow_prefill_assembly=*/false,
+        /*allow_main_assembly=*/false,
+        /*allow_inplace=*/true);
   }
   if (output_block_offset > 0) {
     CHECK_GE(compressed.size(0), output_block_offset);
@@ -3336,7 +3375,9 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
         sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
         /*inverse=*/false,
         /*output_workspace=*/torch::Tensor(),
-        /*allow_prefill_assembly=*/q_tokens > decode_workspace_tokens_);
+        /*allow_prefill_assembly=*/q_tokens > decode_workspace_tokens_,
+        /*allow_main_assembly=*/false,
+        /*allow_inplace=*/q_tokens > decode_workspace_tokens_);
   }
   if (!fused_rope_hadamard) {
     query = apply_indexer_hadamard(query, indexer_hadamard_);
@@ -7983,7 +8024,9 @@ DeepseekV4AttentionImpl::project_attention_output(
       /*inverse=*/true,
       inverse_rope_workspace,
       /*allow_prefill_assembly=*/false,
-      /*allow_main_assembly=*/is_prefill || is_chunked_prefill);
+      /*allow_main_assembly=*/is_prefill || is_chunked_prefill,
+      /*allow_inplace=*/(is_prefill || is_chunked_prefill) && !is_graph &&
+          !inverse_rope_workspace.defined());
   maybe_sync_attention_stage(layer_id_, "output_inverse_rope", o);
   const int64_t num_tokens = o.size(0);
   if (dsv4_defer_o_a_projection) {
