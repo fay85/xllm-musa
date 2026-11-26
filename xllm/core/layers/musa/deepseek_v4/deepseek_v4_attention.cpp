@@ -4589,8 +4589,47 @@ DeepseekV4AttentionImpl::forward_current_impl(
       ori_kv.defined() && (is_prefill || is_chunked_prefill)) {
     kv = dsv4_musa_pcp::relay_kv(kv, *pcp_context_);
   }
+  torch::Tensor swa_write_slot_mapping = swa_slot_mapping;
+  torch::Tensor swa_write_kv = kv;
+  const char* trim_swa_env = std::getenv("XLLM_DSV4_PREFILL_TRIM_SWA_WRITE");
+  const bool trim_swa_write_enabled =
+      trim_swa_env == nullptr || std::strcmp(trim_swa_env, "0") != 0;
+  const bool single_seq_prefill_swa =
+      sp_context != nullptr ||
+      (attn_metadata.actual_seq_lengths_kv.defined() &&
+       attn_metadata.actual_seq_lengths_kv.numel() == 1) ||
+      (attn_metadata.seq_lens.defined() && attn_metadata.seq_lens.numel() == 1);
+  if (trim_swa_write_enabled && is_prefill && !is_chunked_prefill &&
+      pcp_context_ == nullptr && single_seq_prefill_swa && window_size_ > 0 &&
+      kv.defined() && swa_slot_mapping.defined() &&
+      swa_slot_mapping.dim() == 1 && kv.size(0) == swa_slot_mapping.size(0) &&
+      kv.size(0) > window_size_) {
+    const int64_t swa_block_size =
+        ori_kv.defined() && ori_kv.dim() >= 2 && ori_kv.size(1) > 0
+            ? ori_kv.size(1)
+            : (mate_swa_cache.defined() && mate_swa_cache.dim() >= 2 &&
+                       mate_swa_cache.size(1) > 0
+                   ? mate_swa_cache.size(1)
+                   : window_size_);
+    const int64_t kv_rows = kv.size(0);
+    const int64_t last_block_start =
+        ((kv_rows - 1) / swa_block_size) * swa_block_size;
+    const int64_t trim_start =
+        std::max<int64_t>(0, last_block_start - window_size_);
+    if (trim_start > 0) {
+      const int64_t trim_len = kv_rows - trim_start;
+      swa_write_slot_mapping =
+          swa_slot_mapping.narrow(/*dim=*/0, trim_start, trim_len);
+      swa_write_kv = kv.narrow(/*dim=*/0, trim_start, trim_len);
+      LOG_FIRST_N(INFO, 2)
+          << "[DSV4_PREFILL_TRIM_SWA_WRITE] layer=" << layer_id_
+          << " kv_rows=" << kv_rows << " trim_start=" << trim_start
+          << " trim_len=" << trim_len << " window=" << window_size_
+          << " block_size=" << swa_block_size;
+    }
+  }
   if (ori_kv.defined()) {
-    scatter_by_slot(ori_kv, swa_slot_mapping, kv);
+    scatter_by_slot(ori_kv, swa_write_slot_mapping, swa_write_kv);
     maybe_sync_attention_stage(layer_id_, "swa_scatter_by_slot", kv);
   }
   const bool skip_mate_swa_graph_decode_pack =
@@ -4606,7 +4645,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
   // rows. DSpark's accepted-context writeback updates the draft cache, not this
   // target MODEL1 cache. Leaving it frozen reuses prefill/previous-request KV.
   if (mate_swa_cache.defined() && !skip_mate_swa_graph_decode_pack) {
-    pack_mate_model1_cache(mate_swa_cache, swa_slot_mapping, kv);
+    pack_mate_model1_cache(
+        mate_swa_cache, swa_write_slot_mapping, swa_write_kv);
     maybe_sync_attention_stage(layer_id_, "mate_swa_pack", kv);
   }
 
