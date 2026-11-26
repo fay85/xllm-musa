@@ -4537,8 +4537,9 @@ DeepseekV4AttentionImpl::forward_current_impl(
               << " seq_lens=" << tensor_i64_prefix(attn_metadata.seq_lens)
               << " seq_lens_q=" << tensor_i64_prefix(attn_metadata.seq_lens_q);
   }
-  std::vector<torch::Tensor> outputs;
-  outputs.reserve(query_ranges.size());
+  std::vector<torch::Tensor> outputs(query_ranges.size());
+  bool any_non_mate_output = false;
+  torch::Tensor single_merged_mate_output;
   struct PendingBatchedMate {
     torch::Tensor q;
     torch::Tensor logical_indices;
@@ -4546,6 +4547,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
     torch::Tensor extra_physical_indices;
     int64_t kv_len = 0;
     int64_t q_start = 0;
+    size_t seq_idx = 0;
   };
   const bool batch_mate_across_sequences =
       dsv4_sequence_view_active && query_ranges.size() > 1 &&
@@ -7039,7 +7041,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
               ? cmp_extra_physical_indices
               : cmp_extra_physical_indices.contiguous().clone(),
           kv_lens[seq_idx],
-          q_start});
+          q_start,
+          seq_idx});
       continue;
     }
     if (dsv4_musa_mate_sparse_decode_enabled() &&
@@ -7328,7 +7331,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
             // Views are disjoint for every request. Cache publication occurs
             // once after the loop,before the merged MATE reader is enqueued.
             pending_batched_mate.emplace_back(PendingBatchedMate{
-                q_seq, logical, physical, extra, kv_lens[seq_idx], q_start});
+                q_seq, logical, physical, extra, kv_lens[seq_idx], q_start, seq_idx});
             LOG_FIRST_N(INFO, 1) << "[DSV4_PARTITIONED_C128_MATE] sequences="
                                  << query_ranges.size() << " query_width=7";
             continue;
@@ -7530,10 +7533,11 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 << " kv_seq_stats=" << tensor_stat_string(kv_seq)
                 << " out_stats=" << tensor_stat_string(seq_output);
     }
-    outputs.emplace_back(
+    outputs[seq_idx] =
         batched_sas_output.defined()
             ? seq_output
-            : dsv4_retain_sequence_output(seq_output, query_ranges.size()));
+            : dsv4_retain_sequence_output(seq_output, query_ranges.size());
+    any_non_mate_output = true;
   }
   flush_decode_compressed_cache();
   launch_batched_indexer();
@@ -7702,11 +7706,30 @@ DeepseekV4AttentionImpl::forward_current_impl(
       // MATE writes every group into the same persistent decode scratch. A
       // view would be overwritten by the next group and reorder/contaminate
       // requests at the final cat; snapshot each group before continuing.
-      const bool only_launch = batch_mate_metadata && group_start == 0 &&
-                               group_end == pending_batched_mate.size() &&
-                               outputs.empty();
-      outputs.push_back(only_launch ? batched_mate_output
-                                    : batched_mate_output.clone());
+      bool covers_all_in_order = !any_non_mate_output && group_start == 0 &&
+                                 group_end == pending_batched_mate.size() &&
+                                 pending_batched_mate.size() == query_ranges.size();
+      for (size_t pi = 0; covers_all_in_order && pi < pending_batched_mate.size(); ++pi) {
+        if (pending_batched_mate[pi].seq_idx != pi) {
+          covers_all_in_order = false;
+        }
+      }
+      const bool only_launch = batch_mate_metadata && covers_all_in_order;
+      if (only_launch) {
+        single_merged_mate_output = batched_mate_output;
+      } else {
+        const bool need_clone = group_end < pending_batched_mate.size() ||
+                                any_non_mate_output;
+        auto group_out =
+            need_clone ? batched_mate_output.clone() : batched_mate_output;
+        int64_t row_off = 0;
+        for (size_t pi = group_start; pi < group_end; ++pi) {
+          const int64_t rows = pending_batched_mate[pi].q.size(0);
+          outputs[pending_batched_mate[pi].seq_idx] =
+              group_out.narrow(/*dim=*/0, /*start=*/row_off, /*length=*/rows);
+          row_off += rows;
+        }
+      }
     }
     LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_MATE_ACROSS_SEQUENCES] sequences="
                          << pending_batched_mate.size()
@@ -7724,25 +7747,38 @@ DeepseekV4AttentionImpl::forward_current_impl(
     // The full-batch output has private storage: no reused scalar scratch,
     // per-sequence clone, or concatenation is required.
     attn_output = batched_sas_output;
-  } else if (outputs.empty()) {
-    if (decode_spec_attention_output_.defined() &&
-        decode_spec_attention_output_.size(0) >= q.size(0) &&
-        decode_spec_attention_output_.size(1) == q.size(1) &&
-        decode_spec_attention_output_.size(2) == q.size(2) &&
-        decode_spec_attention_output_.scalar_type() == q.scalar_type() &&
-        decode_spec_attention_output_.device() == q.device()) {
-      attn_output = decode_spec_attention_output_.narrow(
-          /*dim=*/0, /*start=*/0, /*length=*/q.size(0));
-      attn_output.zero_();
-    } else {
-      attn_output = torch::zeros_like(q);
-    }
-  } else if (outputs.size() == 1) {
-    attn_output = outputs.front().is_contiguous()
-                      ? outputs.front()
-                      : outputs.front().contiguous();
+  } else if (single_merged_mate_output.defined()) {
+    attn_output = single_merged_mate_output.is_contiguous()
+                      ? single_merged_mate_output
+                      : single_merged_mate_output.contiguous();
   } else {
-    attn_output = torch::cat(outputs, /*dim=*/0);
+    std::vector<torch::Tensor> ordered_outputs;
+    ordered_outputs.reserve(outputs.size());
+    for (const auto& t : outputs) {
+      if (t.defined()) {
+        ordered_outputs.push_back(t);
+      }
+    }
+    if (ordered_outputs.empty()) {
+      if (decode_spec_attention_output_.defined() &&
+          decode_spec_attention_output_.size(0) >= q.size(0) &&
+          decode_spec_attention_output_.size(1) == q.size(1) &&
+          decode_spec_attention_output_.size(2) == q.size(2) &&
+          decode_spec_attention_output_.scalar_type() == q.scalar_type() &&
+          decode_spec_attention_output_.device() == q.device()) {
+        attn_output = decode_spec_attention_output_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/q.size(0));
+        attn_output.zero_();
+      } else {
+        attn_output = torch::zeros_like(q);
+      }
+    } else if (ordered_outputs.size() == 1) {
+      attn_output = ordered_outputs.front().is_contiguous()
+                        ? ordered_outputs.front()
+                        : ordered_outputs.front().contiguous();
+    } else {
+      attn_output = torch::cat(ordered_outputs, /*dim=*/0);
+    }
   }
   maybe_sync_attention_stage(layer_id_, "outputs_cat", attn_output);
 
