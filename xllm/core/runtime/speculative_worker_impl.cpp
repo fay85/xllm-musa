@@ -292,6 +292,10 @@ bool SpeculativeWorkerImpl::allocate_kv_cache_with_transfer(
 
 std::optional<ForwardOutput> SpeculativeWorkerImpl::step(
     const ForwardInput& input) {
+  // Draft continuation has no tokens. Do not treat it as an empty step.
+  if (input.mtp_prefill_phase == 2) {
+    return step_prefill(input);
+  }
   ModelInputParams& mutable_params =
       const_cast<ModelInputParams&>(input.input_params);
   set_hierarchy_layer_synchronizer(mutable_params);

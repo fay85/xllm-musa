@@ -43,6 +43,13 @@ class Engine {
   // execute model with batch input
   virtual ForwardOutput step(std::vector<Batch>& batch) = 0;
 
+  // True when step() published an MTP target token and still owes the
+  // draft prefill. The scheduler sends that token before calling
+  // finish_mtp_prefill_draft().
+  virtual bool take_mtp_prefill_draft_pending() { return false; }
+
+  virtual void finish_mtp_prefill_draft() {}
+
   virtual bool supports_async_dp_step() const { return false; }
 
   virtual ForwardOutput step_dp_group(uint32_t /*dp_rank*/, Batch& /*batch*/) {

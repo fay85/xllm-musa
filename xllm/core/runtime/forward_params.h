@@ -549,6 +549,7 @@ struct ForwardInput {
     inputs.transfer_kv_infos = transfer_kv_infos;
     inputs.step_decode = step_decode;
     inputs.skip_sampling_for_logits_only = skip_sampling_for_logits_only;
+    inputs.mtp_prefill_phase = mtp_prefill_phase;
     inputs.return_selected_hidden = return_selected_hidden;
     inputs.kv_slot_layout = kv_slot_layout;
     inputs.metadata_ready_event = metadata_ready_event;
@@ -625,6 +626,10 @@ struct ForwardInput {
   std::optional<StepDecodeMeta> step_decode;
   // If true, skip sampler forward and only keep logits.
   bool skip_sampling_for_logits_only = false;
+  // 0: target and draft together. 1: return the target token first.
+  // 2: run the draft prefill stashed by phase 1. Scheduler-local RPC
+  // marker; the draft continuation carries no new batch.
+  uint8_t mtp_prefill_phase = 0;
   // If true, populate ForwardOutput.selected_hidden with hidden states matching
   // the `logits` selection layout. Used by DSpark ConfidenceHead which needs
   // pre-lm_head hidden states of the draft tokens.

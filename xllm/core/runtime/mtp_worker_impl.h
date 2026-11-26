@@ -329,6 +329,8 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   // before control returns to the scheduler.  The following scheduler turn
   // consumes this output and only submits draft steps 1..N-1.
   PendingDraftContext pending_draft_context_;
+  // Prefill draft input saved after the target token is published.
+  std::optional<ForwardInput> pending_prefill_draft_input_;
 
   // Classified once when the corresponding models are loaded. Decode-path
   // decisions only read these closed policies.

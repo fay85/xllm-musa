@@ -1640,8 +1640,17 @@ MTPWorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
 
 void MTPWorkerImpl::prepare_work_before_execute(const ForwardInput& input,
                                                 ForwardInput& processed_input) {
+  const uint8_t phase = input.mtp_prefill_phase;
+  if (phase == 2) {
+    // Continuation RPC is only a trigger. Skip H2D of the empty input.
+    processed_input = input;
+    return;
+  }
   // Composite skips CP prepare; leaves run it on their execution streams.
   SpeculativeWorkerImpl::prepare_work_before_execute(input, processed_input);
+  // ForwardInput::to() can unpack a host buffer packed before the engine set
+  // the phase. Keep the phase from the RPC payload.
+  processed_input.mtp_prefill_phase = phase;
 }
 
 bool MTPWorkerImpl::owns_npu_parallel_input_prepare() const { return false; }
@@ -1774,6 +1783,37 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_empty(
 
 std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
     const ForwardInput& input) {
+  if (input.mtp_prefill_phase == 2) {
+    CHECK(pending_prefill_draft_input_.has_value())
+        << "MTP prefill draft continuation without a stashed target prefill";
+    ForwardInput prefill_input = std::move(*pending_prefill_draft_input_);
+    pending_prefill_draft_input_.reset();
+    Timer timer;
+    ForwardInput draft_prepared;
+    ForwardOutput draft_output =
+        run_worker_no_sync(*draft_impl_, prefill_input, draft_prepared)
+            .value();
+    {
+      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+      process_draft_sample_output(draft_output.sample_output);
+    }
+    COUNTER_ADD(speculative_execution_latency_seconds_draft,
+                timer.elapsed_seconds());
+    ForwardOutput output;
+    transfer_retained_inputs(output, draft_output);
+    append_failed_request_ids(output, draft_output);
+    finalize_output_on_stream(
+        output, *compute_stream_, enable_schedule_overlap());
+    if (!enable_schedule_overlap() && !driver_ && !dp_driver_ &&
+        !::xllm::EPLBConfig::get_instance().enable_eplb()) {
+      if (!output.failed_request_ids.empty()) {
+        return make_failed_output(std::move(output.failed_request_ids));
+      }
+      return std::nullopt;
+    }
+    return output;
+  }
+
   flush_pending_target_context();
 
   Timer timer;
@@ -1850,6 +1890,50 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
   if (profile_prefill) {
     LOG(INFO) << "[MTP_PREFILL_PROFILE] prep_draft_input_ms="
               << timer.elapsed_milliseconds();
+  }
+  if (input.mtp_prefill_phase == 1) {
+    // Publish the target token before draft prefill. Draft KV is filled by
+    // the continuation RPC, which overlaps the client send.
+    if (input.sampling_params.selected_token_idxes.defined()) {
+      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+      const torch::Tensor& target_hidden =
+          output.sample_output.selected_embeddings.defined()
+              ? output.sample_output.selected_embeddings
+              : embeddings;
+      torch::Tensor bootstrap_embeddings = target_hidden;
+      if (bootstrap_embeddings.size(0) !=
+          static_cast<int64_t>(
+              input.input_params.embedding.embedding_ids.size())) {
+        torch::Tensor bootstrap_idxes =
+            input.sampling_params.selected_token_idxes.to(
+                torch::dtype(torch::kLong)
+                    .device(bootstrap_embeddings.device()));
+        bootstrap_embeddings =
+            bootstrap_embeddings.index_select(/*dim=*/0, bootstrap_idxes);
+      }
+      output.sample_output.embeddings = bootstrap_embeddings.detach();
+      embedding_cache_->write_prefill_target_context(
+          input.input_params.embedding.embedding_ids,
+          input.input_params.embedding.request_ids,
+          output.sample_output.next_tokens,
+          target_hidden,
+          input.sampling_params.selected_token_idxes,
+          input.positions);
+      clear_selected_embeddings(output);
+    } else {
+      clear_all_output_embeddings(output);
+    }
+    pending_prefill_draft_input_ = std::move(prefill_input);
+    finalize_output_on_stream(
+        output, *compute_stream_, enable_schedule_overlap());
+    if (!enable_schedule_overlap() && !driver_ && !dp_driver_ &&
+        !::xllm::EPLBConfig::get_instance().enable_eplb()) {
+      if (!output.failed_request_ids.empty()) {
+        return make_failed_output(std::move(output.failed_request_ids));
+      }
+      return std::nullopt;
+    }
+    return output;
   }
   // generate kv cache for draft model
   timer.reset();

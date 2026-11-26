@@ -44,6 +44,10 @@ class VLMEngine : public Engine {
 
   ForwardOutput step(std::vector<Batch>& batch) override;
 
+  bool take_mtp_prefill_draft_pending() override;
+
+  void finish_mtp_prefill_draft() override;
+
   bool supports_async_dp_step() const override;
 
   ForwardOutput step_dp_group(uint32_t dp_rank, Batch& batch) override;
@@ -92,6 +96,7 @@ class VLMEngine : public Engine {
   uint32_t dp_local_tp_size_;
 
   bool layer_forward_interrupted_ = false;
+  bool mtp_prefill_draft_pending_ = false;
 
   std::shared_ptr<DistManager> dist_manager_ = nullptr;
 

@@ -45,6 +45,14 @@ class SpeculativeEngineBase : public Engine {
   // step the engine forward
   ForwardOutput step(std::vector<Batch>& batch) override;
 
+  bool take_mtp_prefill_draft_pending() override {
+    return engine_->take_mtp_prefill_draft_pending();
+  }
+
+  void finish_mtp_prefill_draft() override {
+    engine_->finish_mtp_prefill_draft();
+  }
+
   bool supports_async_dp_step() const override {
     return engine_->supports_async_dp_step();
   }

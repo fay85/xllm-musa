@@ -512,7 +512,40 @@ ForwardOutput VLMEngine::step_dp_group(uint32_t dp_rank, Batch& batch) {
   return {};
 }
 
+
+namespace {
+bool mtp_prefill_early_token_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MTP_PREFILL_EARLY_TOKEN");
+    return env == nullptr || env[0] == '\0' || std::string(env) != "0";
+  }();
+  return enabled;
+}
+
+bool mark_mtp_prefill_target_only(const runtime::Options& options,
+                                  std::vector<ForwardInput>& inputs) {
+  if (!mtp_prefill_early_token_enabled() ||
+      options.num_speculative_tokens() <= 0 ||
+      (options.speculative_algorithm() != "mtp" &&
+       options.speculative_algorithm() != "MTP") ||
+      options.instance_role() != InstanceRole::PREFILL ||
+      options.enable_schedule_overlap() || inputs.size() != 1) {
+    return false;
+  }
+  ForwardInput& input = inputs.front();
+  if (input.input_params.meta.is_graph_warmup ||
+      !input.sampling_params.selected_token_idxes.defined()) {
+    return false;
+  }
+  input.mtp_prefill_phase = 1;
+  LOG_FIRST_N(INFO, 1)
+      << "MTP prefill sends the first token before draft prefill";
+  return true;
+}
+}  // namespace
+
 ForwardOutput VLMEngine::step(std::vector<Batch>& batch) {
+  mtp_prefill_draft_pending_ = false;
   if (worker_clients_.empty()) {
     // empty worker, return
     return {};
@@ -527,6 +560,7 @@ ForwardOutput VLMEngine::step(std::vector<Batch>& batch) {
   DCHECK(dp_size_ == forward_inputs.size())
       << "The processed forward inputs size " << forward_inputs.size()
       << " is not equal to dp size " << dp_size_ << ".";
+  mtp_prefill_draft_pending_ = mark_mtp_prefill_target_only(options_, forward_inputs);
 
   std::vector<folly::SemiFuture<std::optional<RawForwardOutput>>> futures;
   futures.reserve(worker_clients_num_);
@@ -580,6 +614,34 @@ ForwardOutput VLMEngine::step(std::vector<Batch>& batch) {
 
   COUNTER_ADD(engine_latency_seconds, timer.elapsed_seconds());
   return {};
+}
+
+void VLMEngine::finish_mtp_prefill_draft() {
+  if (worker_clients_.empty()) {
+    return;
+  }
+  ForwardInput trigger;
+  trigger.mtp_prefill_phase = 2;
+  std::vector<folly::SemiFuture<std::optional<RawForwardOutput>>> futures;
+  futures.reserve(worker_clients_num_);
+  for (uint32_t worker_rank = 0; worker_rank < worker_clients_num_;
+       ++worker_rank) {
+    futures.emplace_back(
+        worker_clients_[worker_rank]->step_remote_async(trigger));
+  }
+  auto results = folly::collectAll(futures).get();
+  for (uint32_t worker_rank = 0; worker_rank < worker_clients_num_;
+       ++worker_rank) {
+    if (!results[worker_rank].hasValue() || !results[worker_rank].value()) {
+      LOG(FATAL) << "MTP prefill draft continuation failed";
+    }
+  }
+}
+
+bool VLMEngine::take_mtp_prefill_draft_pending() {
+  const bool pending = mtp_prefill_draft_pending_;
+  mtp_prefill_draft_pending_ = false;
+  return pending;
 }
 
 void VLMEngine::update_last_step_result(std::vector<Batch>& last_batch) {

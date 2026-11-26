@@ -113,7 +113,7 @@ inline bool is_aligned_for_cuda_zero_copy(const void* ptr) {
 // self-description), so the tag MUST bump with every descriptor change --
 // a mixed-version master/worker pair now fails this check loudly instead of
 // misparsing the tail of every TransferKVInfo.
-constexpr uint64_t kRawInputFormatTag = 0x584C4C4D00000002ULL;
+constexpr uint64_t kRawInputFormatTag = 0x584C4C4D00000003ULL;
 
 struct RawInputLayoutHeader final {
   uint64_t format_tag = kRawInputFormatTag;
@@ -2752,6 +2752,7 @@ inline void deserialize_forward_input_payload(
     read_dit_forward_input(
         context, dit_forward_input, stabilize_dit_host_tensors);
   }
+  read_data(context, forward_input.mtp_prefill_phase);
 
   finalize_device_buffer_session(device_session, stream);
   forward_input.input_host_buffer_has_layout = true;
@@ -3249,6 +3250,7 @@ inline void serialize_forward_input_sections(
   if (has_dit_forward_input) {
     write_dit_forward_input(context, *input_params.dit_forward_input);
   }
+  write_data(context.descriptor, input.mtp_prefill_phase);
 }
 
 inline RawInputLayoutHeader calculate_forward_input_layout(

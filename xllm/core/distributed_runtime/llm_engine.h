@@ -57,6 +57,10 @@ class LLMEngine : public Engine {
 
   ForwardOutput step(std::vector<Batch>& batch) override;
 
+  bool take_mtp_prefill_draft_pending() override;
+
+  void finish_mtp_prefill_draft() override;
+
   bool supports_async_dp_step() const override;
 
   ForwardOutput step_dp_group(uint32_t dp_rank, Batch& batch) override;
@@ -238,6 +242,7 @@ class LLMEngine : public Engine {
   std::unique_ptr<ThreadPool> threadpool_ = nullptr;
 
   bool layer_forward_interrupted_ = false;
+  bool mtp_prefill_draft_pending_ = false;
 
   // threadpool for link cluster
   std::unique_ptr<ThreadPool> link_threadpool_;

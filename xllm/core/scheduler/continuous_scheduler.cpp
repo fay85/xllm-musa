@@ -572,8 +572,14 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
       step_with_pd_ooc(batch);
     }
 
+    // MTP prefill can publish the target token before draft KV is filled.
+    // Queue that token first so the client send overlaps draft prefill.
+    const bool mtp_draft_pending = engine_->take_mtp_prefill_draft_pending();
     // process request output in batch
     process_batch_output(false);
+    if (mtp_draft_pending) {
+      engine_->finish_mtp_prefill_draft();
+    }
   } else {
     step_with_schedule_overlap(timeout);
   }
