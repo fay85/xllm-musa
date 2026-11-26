@@ -2618,10 +2618,24 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
     }
   }
 
-  // The native MATE 0.2.7 prefill ABI uses one combined KV tensor.
-  // Version the URI so a legacy 11-tensor module cannot be called here.
-  auto function = try_get_dsv4_mate_fused_dsa_function(
-      &reason, "dsa_model1_mate027_prefill_h64");
+  // MATE 0.2.8 fixes EC_007 barrier-phase reuse across persistent CTA waves,
+  // enabling a single persistent launch per layer instead of 60-query chunking.
+  // Fall back automatically to the pinned MATE 0.2.7 AOT when disabled or absent.
+  const char* mate028_env = std::getenv("XLLM_DSV4_PREFILL_DSA_MATE028");
+  const bool prefer_mate028 =
+      mate028_env == nullptr || std::string(mate028_env) != "0";
+  bool using_mate028 = false;
+  ffi::Optional<ffi::Function> function;
+  if (prefer_mate028) {
+    std::string mate028_reason;
+    function = try_get_dsv4_mate_fused_dsa_function(
+        &mate028_reason, "dsa_model1_mate028_prefill_h64");
+    using_mate028 = function.defined();
+  }
+  if (!using_mate028) {
+    function = try_get_dsv4_mate_fused_dsa_function(
+        &reason, "dsa_model1_mate027_prefill_h64");
+  }
   if (!function.defined()) {
     static std::once_flag once;
     std::call_once(once, [&reason]() {
@@ -2662,29 +2676,51 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
     check_musa_kernel_launch("dsv4 kernel");
 
     bind_dsv4_local_prefill_tvmffi_current_stream(q.device());
-    const int64_t launch_limit =
-        max_queries_per_launch > 0
-            ? std::min<int64_t>(max_queries_per_launch, 60)
-            : std::min<int64_t>(q.size(0), 60);
     const int64_t kv_span_bytes =
         workspace.combined_kv.numel() * workspace.combined_kv.element_size();
-    for (int64_t first = 0; first < q.size(0); first += launch_limit) {
-      const int64_t count = std::min(launch_limit, q.size(0) - first);
+    if (using_mate028) {
+      const int32_t persistent_blocks =
+          static_cast<int32_t>(std::min<int64_t>(q.size(0), 60));
       function.value()(
-          to_ffi_tensor(q.narrow(0, first, count)),
+          to_ffi_tensor(q),
           to_ffi_tensor(workspace.combined_kv),
-          to_ffi_tensor(workspace.indices.narrow(0, first, count)),
-          to_ffi_tensor(workspace.output.narrow(0, first, count)),
-          to_ffi_tensor(workspace.max_logits.narrow(0, first, count)),
-          to_ffi_tensor(workspace.lse.narrow(0, first, count)),
-          to_ffi_tensor(workspace.topk_length.narrow(0, first, count)),
+          to_ffi_tensor(workspace.indices.narrow(0, 0, q.size(0))),
+          to_ffi_tensor(workspace.output.narrow(0, 0, q.size(0))),
+          to_ffi_tensor(workspace.max_logits.narrow(0, 0, q.size(0))),
+          to_ffi_tensor(workspace.lse.narrow(0, 0, q.size(0))),
+          to_ffi_tensor(workspace.topk_length.narrow(0, 0, q.size(0))),
           to_ffi_tensor(workspace.sink),
           softmax_scale * 1.44269504,
-          static_cast<int32_t>(count),
+          persistent_blocks,
           kv_span_bytes);
+      LOG_FIRST_N(INFO, 1) << "[DSV4_MATE028_LOCAL_PREFILL] rows=" << q.size(0)
+                           << " kv=" << kv.size(0)
+                           << " ratio=" << compress_ratio
+                           << " persistent_blocks=" << persistent_blocks;
+    } else {
+      const int64_t launch_limit =
+          max_queries_per_launch > 0
+              ? std::min<int64_t>(max_queries_per_launch, 60)
+              : std::min<int64_t>(q.size(0), 60);
+      for (int64_t first = 0; first < q.size(0); first += launch_limit) {
+        const int64_t count = std::min(launch_limit, q.size(0) - first);
+        function.value()(
+            to_ffi_tensor(q.narrow(0, first, count)),
+            to_ffi_tensor(workspace.combined_kv),
+            to_ffi_tensor(workspace.indices.narrow(0, first, count)),
+            to_ffi_tensor(workspace.output.narrow(0, first, count)),
+            to_ffi_tensor(workspace.max_logits.narrow(0, first, count)),
+            to_ffi_tensor(workspace.lse.narrow(0, first, count)),
+            to_ffi_tensor(workspace.topk_length.narrow(0, first, count)),
+            to_ffi_tensor(workspace.sink),
+            softmax_scale * 1.44269504,
+            static_cast<int32_t>(count),
+            kv_span_bytes);
+      }
+      LOG_FIRST_N(INFO, 1) << "[DSV4_MATE027_LOCAL_PREFILL] rows=" << q.size(0)
+                           << " kv=" << kv.size(0)
+                           << " ratio=" << compress_ratio;
     }
-    LOG_FIRST_N(INFO, 1) << "[DSV4_MATE027_LOCAL_PREFILL] rows=" << q.size(0)
-                         << " kv=" << kv.size(0) << " ratio=" << compress_ratio;
     if (output.has_value()) {
       CHECK_EQ(output.value().sizes(), q.sizes());
       output.value().copy_(workspace.output);
@@ -4397,6 +4433,30 @@ torch::Tensor deepseek_v4_mate_local_sparse_attention_prefill(
     int64_t compress_ratio,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
+  const char* mate028_env = std::getenv("XLLM_DSV4_PREFILL_DSA_MATE028");
+  const bool prefer_mate028 =
+      mate028_env == nullptr || std::string(mate028_env) != "0";
+  if (prefer_mate028) {
+    std::string mate028_reason;
+    if (try_get_dsv4_mate_fused_dsa_function(
+            &mate028_reason, "dsa_model1_mate028_prefill_h64")
+            .defined()) {
+      auto result = try_dsv4_mate_model1_local_sparse_prefill(
+          q,
+          kv,
+          compressed_kv,
+          compressed_indices,
+          attn_sink,
+          q_abs_start,
+          compress_ratio,
+          softmax_scale,
+          output,
+          /*max_queries_per_launch=*/0);
+      if (result.defined()) {
+        return result;
+      }
+    }
+  }
   const char* chunk_setting = std::getenv("XLLM_DSV4_LONG_PREFILL_QUERY_CHUNK");
   if (chunk_setting != nullptr && q.dim() == 3 && kv.dim() == 2 &&
       kv.size(0) >= 4096) {
