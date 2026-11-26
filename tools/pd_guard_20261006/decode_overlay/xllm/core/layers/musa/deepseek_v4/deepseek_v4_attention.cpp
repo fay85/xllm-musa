@@ -7388,8 +7388,36 @@ DeepseekV4AttentionImpl::forward_current_impl(
                  decode_spec_attention_output_.size(2) == q_seq.size(2)) {
         auto spec_output = decode_spec_attention_output_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/q_seq.size(0));
-        bool all_tokens_completed = true;
-        for (int64_t token_idx = 0; token_idx < q_seq.size(0); ++token_idx) {
+        if (compress_ratio_ == 1 && !cmp_seq.defined() &&
+            paged_cmp_len == 0 && window_size_ > 0 &&
+            window_size_ + q_seq.size(0) <= 256) {
+          auto tc_out =
+              kernel::musa::deepseek_v4_paged_attention_swa_verify_batched(
+                  q_seq.is_contiguous() ? q_seq : q_seq.contiguous(),
+                  ori_kv,
+                  paged_swa_table,
+                  graph_decode_kv_seq_lens.defined()
+                      ? graph_decode_kv_seq_lens.narrow(
+                            /*dim=*/0,
+                            /*start=*/q_start,
+                            /*length=*/q_seq.size(0))
+                      : torch::Tensor(),
+                  paged_sequence_index,
+                  kv_lens[seq_idx],
+                  window_size_,
+                  attn_sink_.defined()
+                      ? attn_sink_.to(q.device()).to(torch::kFloat32).contiguous()
+                      : torch::Tensor(),
+                  softmax_scale_,
+                  spec_output);
+          if (tc_out.defined()) {
+            paged_output = tc_out;
+          }
+        }
+        bool all_tokens_completed = !paged_output.defined();
+        for (int64_t token_idx = 0;
+             !paged_output.defined() && token_idx < q_seq.size(0);
+             ++token_idx) {
           const int64_t token_kv_len = std::max<int64_t>(
               kv_lens[seq_idx] - (q_seq.size(0) - 1 - token_idx), 1);
           const int64_t dense_compressed_rows =

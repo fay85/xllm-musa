@@ -22,6 +22,7 @@ limitations under the License.
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <mutex>
@@ -1993,7 +1994,16 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
     // a subsequent-request hang, while the FFI-stream path is the last
     // configuration that passed the complete 2.5K+1.5K gate. The h8 kernel
     // keeps its separately validated current-stream fast path.
-    const bool use_current_stream = heads == 8;
+    const char* h64_curr_env = std::getenv("XLLM_DSV4_DSA_H64_CURR_STREAM");
+    const bool h64_curr_stream =
+        h64_curr_env == nullptr || std::strcmp(h64_curr_env, "0") != 0;
+    const bool use_current_stream =
+        heads == 8 || (heads == 64 && h64_curr_stream);
+    if (heads == 64 && h64_curr_stream) {
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_DSA_H64_CURR_STREAM] h64 MATE decode bound to current "
+             "stream";
+    }
     if (use_current_stream) {
       bind_musa_tvmffi_current_stream(q.device());
     } else {
@@ -3052,6 +3062,340 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
 }
 #endif  // !defined(USE_DCU)
 
+#if !defined(USE_DCU)
+template <typename index_t>
+__global__ void dsv4_swa_tc_gather_kv_kernel(
+    const c10::BFloat16* __restrict__ cache,
+    const index_t* __restrict__ block_table,
+    const int32_t* __restrict__ kv_seq_lens,
+    int64_t static_kv_len,
+    int64_t seq_offset,
+    int64_t query_rows_per_sequence,
+    int64_t union_cap,
+    int64_t block_size,
+    int64_t num_blocks,
+    int64_t max_blocks_per_seq,
+    int64_t row_width,
+    bool causal_per_query,
+    c10::BFloat16* __restrict__ k_win,
+    uint8_t* __restrict__ win_valid,
+    int32_t* __restrict__ win_start) {
+  const int64_t j = static_cast<int64_t>(blockIdx.x);
+  const int64_t seq = static_cast<int64_t>(blockIdx.y);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);  // 0..63 -> 8 BF16s each = 512
+  int64_t raw_end = static_kv_len;
+  if (kv_seq_lens != nullptr) {
+    if (causal_per_query) {
+      raw_end = 0;
+      const int64_t base = seq * query_rows_per_sequence;
+      for (int64_t t = 0; t < query_rows_per_sequence; ++t) {
+        const int64_t v = static_cast<int64_t>(kv_seq_lens[base + t]);
+        if (v > raw_end) {
+          raw_end = v;
+        }
+      }
+    } else {
+      raw_end = static_cast<int64_t>(kv_seq_lens[seq]);
+    }
+  }
+  if (raw_end < 0) {
+    raw_end = 0;
+  }
+  const int64_t cache_capacity = max_blocks_per_seq * block_size;
+  const int64_t eff_end = raw_end < cache_capacity ? raw_end : cache_capacity;
+  const int64_t u_len = eff_end < union_cap ? eff_end : union_cap;
+  const int64_t u_start = eff_end - u_len;
+  if (j == 0 && tid == 0) {
+    win_start[seq] = static_cast<int32_t>(u_start);
+  }
+  const bool in_range = j < u_len;
+  const int64_t flat = in_range ? dsv4_paged_flat_row_from_table(
+                                      block_table,
+                                      seq_offset + seq,
+                                      u_start + j,
+                                      block_size,
+                                      num_blocks,
+                                      max_blocks_per_seq)
+                                : int64_t{-1};
+  const bool row_valid = in_range && flat >= 0;
+  uint4* dst = reinterpret_cast<uint4*>(
+      k_win + (seq * union_cap + j) * int64_t{512});
+  if (row_valid) {
+    const uint4* src =
+        reinterpret_cast<const uint4*>(cache + flat * row_width);
+    dst[tid] = src[tid];
+  } else {
+    dst[tid] = make_uint4(0u, 0u, 0u, 0u);
+  }
+  if (tid == 0) {
+    win_valid[seq * union_cap + j] = row_valid ? uint8_t{1} : uint8_t{0};
+  }
+}
+
+__global__ void dsv4_swa_tc_softmax_sink_kernel(
+    const float* __restrict__ scores_f32,
+    const uint8_t* __restrict__ win_valid,
+    const int32_t* __restrict__ win_start,
+    const int32_t* __restrict__ kv_seq_lens,
+    const float* __restrict__ attn_sink,
+    c10::BFloat16* __restrict__ probs_bf16,
+    int64_t static_kv_len,
+    int64_t num_heads,
+    int64_t query_rows_per_sequence,
+    int64_t window_size,
+    int64_t union_cap,
+    int64_t cache_capacity,
+    float softmax_scale,
+    bool causal_per_query,
+    bool has_sink) {
+  const int64_t head = static_cast<int64_t>(blockIdx.x);
+  const int64_t q_row = static_cast<int64_t>(blockIdx.y);
+  const int64_t seq = static_cast<int64_t>(blockIdx.z);
+  const int32_t lane = static_cast<int32_t>(threadIdx.x);  // 0..31
+
+  const int64_t u_start = static_cast<int64_t>(win_start[seq]);
+  int64_t raw_len = 0;
+  if (causal_per_query) {
+    if (kv_seq_lens != nullptr) {
+      raw_len = static_cast<int64_t>(
+          kv_seq_lens[seq * query_rows_per_sequence + q_row]);
+    } else {
+      raw_len = static_kv_len - (query_rows_per_sequence - 1 - q_row);
+      if (raw_len < 1) {
+        raw_len = 1;
+      }
+    }
+  } else {
+    raw_len = kv_seq_lens != nullptr ? static_cast<int64_t>(kv_seq_lens[seq])
+                                     : static_kv_len;
+  }
+  if (raw_len < 0) {
+    raw_len = 0;
+  }
+  const int64_t eff_len = raw_len < cache_capacity ? raw_len : cache_capacity;
+  const int64_t q_win = eff_len < window_size ? eff_len : window_size;
+  const int64_t q_kv_start = eff_len - q_win;
+  const int64_t q_kv_end = eff_len;
+
+  const int64_t row_idx =
+      (seq * query_rows_per_sequence + q_row) * num_heads + head;
+  const float* src_scores = scores_f32 + row_idx * union_cap;
+  c10::BFloat16* dst_probs = probs_bf16 + row_idx * union_cap;
+  const uint8_t* seq_valid = win_valid + seq * union_cap;
+
+  constexpr int32_t kMaxChunks = 8;  // 8 * 32 = 256 >= union_cap
+  float s_reg[kMaxChunks];
+  uint8_t v_reg[kMaxChunks];
+  float local_max = -INFINITY;
+#pragma unroll
+  for (int32_t c = 0; c < kMaxChunks; ++c) {
+    const int64_t j = static_cast<int64_t>(lane + c * 32);
+    if (j < union_cap) {
+      const int64_t pos = u_start + j;
+      const bool valid =
+          (seq_valid[j] != 0u) && (pos >= q_kv_start) && (pos < q_kv_end);
+      v_reg[c] = valid ? uint8_t{1} : uint8_t{0};
+      const float s = valid ? (src_scores[j] * softmax_scale) : -INFINITY;
+      s_reg[c] = s;
+      if (s > local_max) {
+        local_max = s;
+      }
+    } else {
+      v_reg[c] = 0u;
+      s_reg[c] = -INFINITY;
+    }
+  }
+
+#pragma unroll
+  for (int32_t offset = 16; offset > 0; offset >>= 1) {
+    const float other = __shfl_xor_sync(0xffffffffu, local_max, offset, 32);
+    local_max = fmaxf(local_max, other);
+  }
+  const float sink_val = has_sink ? attn_sink[head] : -INFINITY;
+  const float m = has_sink ? fmaxf(local_max, sink_val) : local_max;
+
+  float p_reg[kMaxChunks];
+  float local_sum = 0.0f;
+#pragma unroll
+  for (int32_t c = 0; c < kMaxChunks; ++c) {
+    if (v_reg[c] != 0u && isfinite(m)) {
+      const float p = expf(s_reg[c] - m);
+      p_reg[c] = p;
+      local_sum += p;
+    } else {
+      p_reg[c] = 0.0f;
+    }
+  }
+#pragma unroll
+  for (int32_t offset = 16; offset > 0; offset >>= 1) {
+    local_sum += __shfl_xor_sync(0xffffffffu, local_sum, offset, 32);
+  }
+  if (has_sink && isfinite(m)) {
+    local_sum += expf(sink_val - m);
+  }
+  const bool any_finite = isfinite(m) && local_sum > 1.0e-20f;
+  const float inv_denom = any_finite ? (1.0f / local_sum) : 0.0f;
+
+#pragma unroll
+  for (int32_t c = 0; c < kMaxChunks; ++c) {
+    const int64_t j = static_cast<int64_t>(lane + c * 32);
+    if (j < union_cap) {
+      const float prob = (v_reg[c] != 0u && any_finite) ? (p_reg[c] * inv_denom) : 0.0f;
+      dst_probs[j] = static_cast<c10::BFloat16>(prob);
+    }
+  }
+}
+
+bool try_dsv4_swa_tc_mqa_batched(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    int64_t sequence_index_offset,
+    int64_t static_kv_len,
+    int64_t batch_size,
+    int64_t query_rows_per_sequence,
+    int64_t window_size,
+    bool causal_per_query,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output) {
+  const char* env = std::getenv("XLLM_DSV4_SWA_TC_MQA");
+  if (env != nullptr && std::strcmp(env, "0") == 0) {
+    return false;
+  }
+  if (!q.defined() || !cache.defined() || !block_table.defined() ||
+      !output.defined() || q.dim() != 3 || q.size(2) != 512 ||
+      q.scalar_type() != torch::kBFloat16 ||
+      cache.scalar_type() != torch::kBFloat16 ||
+      output.scalar_type() != torch::kBFloat16 ||
+      !q.is_contiguous() || !cache.is_contiguous() ||
+      !block_table.is_contiguous() || !output.is_contiguous() ||
+      batch_size <= 0 || query_rows_per_sequence <= 0 ||
+      q.size(0) != batch_size * query_rows_per_sequence ||
+      output.sizes() != q.sizes() || cache.size(-1) < 512 ||
+      (cache.size(-1) % 8) != 0 || window_size <= 0) {
+    return false;
+  }
+  const int64_t raw_union =
+      causal_per_query ? (window_size + query_rows_per_sequence - 1)
+                       : window_size;
+  const int64_t union_cap = ((raw_union + 15) / 16) * 16;
+  if (union_cap <= 0 || union_cap > 256) {
+    return false;
+  }
+  if (kv_seq_lens.defined()) {
+    if (kv_seq_lens.scalar_type() != torch::kInt32 ||
+        !kv_seq_lens.is_contiguous()) {
+      return false;
+    }
+    const int64_t expected_lens =
+        causal_per_query ? (batch_size * query_rows_per_sequence) : batch_size;
+    if (kv_seq_lens.numel() < expected_lens) {
+      return false;
+    }
+  }
+  const bool has_sink = attn_sink.defined() && attn_sink.numel() == q.size(1) &&
+                        attn_sink.scalar_type() == torch::kFloat32 &&
+                        attn_sink.is_contiguous();
+
+  const int64_t num_heads = q.size(1);
+  const int64_t block_size = cache.size(1);
+  const int64_t num_blocks = cache.size(0);
+  const int64_t max_blocks_per_seq = block_table.size(1);
+  const int64_t row_width = cache.size(-1);
+  const int64_t cache_capacity = max_blocks_per_seq * block_size;
+  const auto dev_opts = q.options();
+
+  // Graph-local scratch allocations: private per captured graph, no VMM alias.
+  auto k_win = torch::empty({batch_size, union_cap, 512}, dev_opts);
+  auto win_valid = torch::empty(
+      {batch_size, union_cap}, dev_opts.dtype(torch::kUInt8));
+  auto win_start = torch::empty({batch_size}, dev_opts.dtype(torch::kInt32));
+  auto scores_f32 = torch::empty(
+      {batch_size, query_rows_per_sequence * num_heads, union_cap},
+      dev_opts.dtype(torch::kFloat32));
+  auto probs_bf16 = torch::empty(
+      {batch_size, query_rows_per_sequence * num_heads, union_cap}, dev_opts);
+
+  const musaStream_t stream = current_dsv4_cache_stream();
+  const dim3 gather_grid(static_cast<unsigned int>(union_cap),
+                         static_cast<unsigned int>(batch_size));
+  const int32_t* lens_ptr =
+      kv_seq_lens.defined() ? kv_seq_lens.data_ptr<int32_t>() : nullptr;
+  if (block_table.scalar_type() == torch::kInt32) {
+    dsv4_swa_tc_gather_kv_kernel<int32_t><<<gather_grid, 64, 0, stream>>>(
+        cache.data_ptr<c10::BFloat16>(),
+        block_table.data_ptr<int32_t>(),
+        lens_ptr,
+        static_kv_len,
+        sequence_index_offset,
+        query_rows_per_sequence,
+        union_cap,
+        block_size,
+        num_blocks,
+        max_blocks_per_seq,
+        row_width,
+        causal_per_query,
+        k_win.data_ptr<c10::BFloat16>(),
+        win_valid.data_ptr<uint8_t>(),
+        win_start.data_ptr<int32_t>());
+  } else {
+    dsv4_swa_tc_gather_kv_kernel<int64_t><<<gather_grid, 64, 0, stream>>>(
+        cache.data_ptr<c10::BFloat16>(),
+        block_table.data_ptr<int64_t>(),
+        lens_ptr,
+        static_kv_len,
+        sequence_index_offset,
+        query_rows_per_sequence,
+        union_cap,
+        block_size,
+        num_blocks,
+        max_blocks_per_seq,
+        row_width,
+        causal_per_query,
+        k_win.data_ptr<c10::BFloat16>(),
+        win_valid.data_ptr<uint8_t>(),
+        win_start.data_ptr<int32_t>());
+  }
+  check_musa_kernel_launch("dsv4 swa tc gather kv");
+
+  auto q_mat = q.view({batch_size, query_rows_per_sequence * num_heads, 512});
+  torch::bmm_out(scores_f32, q_mat, k_win.transpose(1, 2));
+
+  const dim3 sm_grid(static_cast<unsigned int>(num_heads),
+                     static_cast<unsigned int>(query_rows_per_sequence),
+                     static_cast<unsigned int>(batch_size));
+  dsv4_swa_tc_softmax_sink_kernel<<<sm_grid, 32, 0, stream>>>(
+      scores_f32.data_ptr<float>(),
+      win_valid.data_ptr<uint8_t>(),
+      win_start.data_ptr<int32_t>(),
+      lens_ptr,
+      has_sink ? attn_sink.data_ptr<float>() : nullptr,
+      probs_bf16.data_ptr<c10::BFloat16>(),
+      static_kv_len,
+      num_heads,
+      query_rows_per_sequence,
+      window_size,
+      union_cap,
+      cache_capacity,
+      static_cast<float>(softmax_scale),
+      causal_per_query,
+      has_sink);
+  check_musa_kernel_launch("dsv4 swa tc softmax sink");
+
+  auto out_mat =
+      output.view({batch_size, query_rows_per_sequence * num_heads, 512});
+  torch::bmm_out(out_mat, probs_bf16, k_win);
+  LOG_FIRST_N(INFO, 2) << "[DSV4_SWA_TC_MQA] batch=" << batch_size
+                       << " q_rows=" << query_rows_per_sequence
+                       << " heads=" << num_heads << " window=" << window_size
+                       << " union_cap=" << union_cap
+                       << " causal=" << causal_per_query;
+  return true;
+}
+#endif  // !defined(USE_DCU)
+
 template <typename scalar_t>
 __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
     dsv4_paged_decode_scores_kernel(
@@ -3816,6 +4160,21 @@ torch::Tensor deepseek_v4_paged_attention_sas(const torch::Tensor& q,
     CHECK(tensor.is_contiguous());
     CHECK_EQ(tensor.device(), q.device());
   }
+  if (try_dsv4_swa_tc_mqa_batched(q,
+                                  cache,
+                                  block_table,
+                                  torch::Tensor(),
+                                  sequence_index,
+                                  kv_len,
+                                  /*batch_size=*/1,
+                                  q.size(0),
+                                  window_size,
+                                  /*causal_per_query=*/false,
+                                  attn_sink,
+                                  softmax_scale,
+                                  output)) {
+    return output;
+  }
   const int64_t visible = std::min(kv_len, window_size);
   const size_t shared_bytes =
       ((visible + kDecodeAttentionBlockSize + 1) / 2) * 2 * sizeof(float) +
@@ -3920,6 +4279,21 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
     CHECK_EQ(tensor.device(), q.device());
   }
 
+  if (try_dsv4_swa_tc_mqa_batched(q,
+                                  cache,
+                                  block_table,
+                                  kv_seq_lens,
+                                  /*sequence_index_offset=*/0,
+                                  /*static_kv_len=*/0,
+                                  block_table.size(0),
+                                  query_rows_per_sequence,
+                                  window_size,
+                                  /*causal_per_query=*/false,
+                                  attn_sink,
+                                  softmax_scale,
+                                  output)) {
+    return output;
+  }
   // Each sequence retains the scalar SAS reduction order. Only the launch
   // grid is merged; every query in a sequence reads its same live full
   // context+diffusion-block window, never a per-query causal prefix.
@@ -3978,6 +4352,40 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
   });
   check_musa_kernel_launch("dsv4 batched noncausal SAS");
   return output;
+#endif
+}
+
+
+torch::Tensor deepseek_v4_paged_attention_swa_verify_batched(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    int64_t sequence_index,
+    int64_t static_kv_len,
+    int64_t window_size,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output) {
+#if defined(USE_DCU)
+  return torch::Tensor();
+#else
+  if (try_dsv4_swa_tc_mqa_batched(q,
+                                  cache,
+                                  block_table,
+                                  kv_seq_lens,
+                                  sequence_index,
+                                  static_kv_len,
+                                  /*batch_size=*/1,
+                                  q.size(0),
+                                  window_size,
+                                  /*causal_per_query=*/true,
+                                  attn_sink,
+                                  softmax_scale,
+                                  output)) {
+    return output;
+  }
+  return torch::Tensor();
 #endif
 }
 

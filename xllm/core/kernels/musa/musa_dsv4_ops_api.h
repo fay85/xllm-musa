@@ -159,6 +159,20 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
     double softmax_scale,
     const torch::Tensor& output);
 
+// TensorCore MQA-64 SWA verify for compress_ratio==1 (no compressed KV).
+// Processes all query rows of a sequence in one batched GEMM+softmax+GEMM.
+torch::Tensor deepseek_v4_paged_attention_swa_verify_batched(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    int64_t sequence_index,
+    int64_t static_kv_len,
+    int64_t window_size,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output);
+
 torch::Tensor deepseek_v4_paged_attention_verify_c128(
     const torch::Tensor& q,
     const torch::Tensor& cache,
