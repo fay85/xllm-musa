@@ -1637,6 +1637,150 @@ deepseek_v4_fp8_moe_prepare(const torch::Tensor& input,
   return {sorted_input, padded_assignment, m_indices};
 }
 
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_quant_tokens(
+    const torch::Tensor& input) {
+  CHECK(input.defined() && input.dim() == 2 && input.is_contiguous());
+  CHECK(input.size(0) > 0 && input.size(1) > 0 &&
+        input.size(1) % kQuantBlock == 0);
+  CHECK(input.scalar_type() == torch::kBFloat16 ||
+        input.scalar_type() == torch::kHalf);
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(input.data_ptr()) % 8, 0u);
+
+  const int64_t num_tokens = input.size(0);
+  const int64_t scale_cols = input.size(1) / kQuantBlock;
+  auto& workspace = get_quant_prepare_workspace(input, /*rows=*/1, /*routes=*/1);
+  if (workspace.capacity_tokens < num_tokens ||
+      !workspace.token_fp8.defined() || !workspace.token_scale.defined()) {
+    const int64_t capacity = std::max<int64_t>(
+        num_tokens,
+        workspace.capacity_tokens > 0 ? workspace.capacity_tokens * 2 : 1);
+    workspace.capacity_tokens = capacity;
+    workspace.token_fp8 = torch::empty(
+        {capacity, input.size(1)}, input.options().dtype(torch::kFloat8_e4m3fn));
+    workspace.token_scale = torch::empty(
+        {capacity, scale_cols}, input.options().dtype(torch::kFloat32));
+  }
+  auto token_fp8 = workspace.token_fp8.narrow(/*dim=*/0, 0, num_tokens);
+  auto token_scale = workspace.token_scale.narrow(/*dim=*/0, 0, num_tokens);
+
+  const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
+  const musaStream_t stream = current_musa_stream(input.device());
+  constexpr int32_t kQuantWarpsPerCta = 8;
+  const int64_t total_groups = num_tokens * scale_cols;
+  const int64_t quant_grid =
+      (total_groups + kQuantWarpsPerCta - 1) / kQuantWarpsPerCta;
+  if (input.scalar_type() == torch::kBFloat16) {
+    token_blockwise_fp8_quant_only_kernel<c10::BFloat16, kQuantWarpsPerCta>
+        <<<quant_grid, kQuantWarpsPerCta * kWarpSize, 0, stream>>>(
+            input.data_ptr<c10::BFloat16>(),
+            token_fp8.data_ptr<c10::Float8_e4m3fn>(),
+            token_scale.data_ptr<float>(),
+            num_tokens,
+            input.size(1),
+            scale_cols);
+  } else {
+    token_blockwise_fp8_quant_only_kernel<c10::Half, kQuantWarpsPerCta>
+        <<<quant_grid, kQuantWarpsPerCta * kWarpSize, 0, stream>>>(
+            input.data_ptr<c10::Half>(),
+            token_fp8.data_ptr<c10::Float8_e4m3fn>(),
+            token_scale.data_ptr<float>(),
+            num_tokens,
+            input.size(1),
+            scale_cols);
+  }
+  check_last_error("shared quant tokens");
+  return {token_fp8, token_scale};
+}
+
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+deepseek_v4_fp8_moe_gather_prequantized(const torch::Tensor& input,
+                                        const torch::Tensor& token_fp8,
+                                        const torch::Tensor& token_scale,
+                                        const torch::Tensor& sorted_assignment,
+                                        const torch::Tensor& expert_counts,
+                                        int64_t topk,
+                                        int64_t alignment_m,
+                                        int64_t max_padded_assignments) {
+  CHECK(input.defined() && input.dim() == 2 && input.is_contiguous());
+  CHECK(token_fp8.defined() && token_fp8.dim() == 2 &&
+        token_fp8.is_contiguous() &&
+        token_fp8.scalar_type() == torch::kFloat8_e4m3fn);
+  CHECK(token_scale.defined() && token_scale.dim() == 2 &&
+        token_scale.is_contiguous() &&
+        token_scale.scalar_type() == torch::kFloat32);
+  CHECK_EQ(token_fp8.size(0), input.size(0));
+  CHECK_EQ(token_fp8.size(1), input.size(1));
+  CHECK_EQ(token_scale.size(0), input.size(0));
+  CHECK_EQ(token_scale.size(1), input.size(1) / kQuantBlock);
+  CHECK(sorted_assignment.defined() && sorted_assignment.dim() == 1 &&
+        sorted_assignment.is_contiguous() &&
+        sorted_assignment.scalar_type() == torch::kInt32);
+  CHECK(expert_counts.defined() && expert_counts.dim() == 1 &&
+        expert_counts.is_contiguous() &&
+        expert_counts.scalar_type() == torch::kInt32);
+  CHECK(topk > 0 && max_padded_assignments > 0);
+  CHECK(alignment_m == 1 || alignment_m == 128 || alignment_m == 256);
+
+  const int64_t num_assignments = input.size(0) * topk;
+  if (alignment_m == 1) {
+    CHECK_GE(max_padded_assignments, num_assignments);
+  }
+  auto& workspace = get_quant_prepare_workspace(
+      input, max_padded_assignments, num_assignments);
+  auto input_fp8 = workspace.input_fp8.narrow(0, 0, max_padded_assignments);
+  auto input_scale = workspace.input_scale.narrow(0, 0, max_padded_assignments);
+  auto padded_assignment =
+      workspace.padded_assignment.narrow(0, 0, max_padded_assignments);
+  auto m_indices = workspace.m_indices.narrow(0, 0, max_padded_assignments);
+  auto route_to_padded =
+      workspace.route_to_padded.narrow(0, 0, num_assignments);
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(token_fp8.data_ptr()) % 16, 0u);
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(input_fp8.data_ptr()) % 16, 0u);
+
+  const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
+  const musaStream_t stream = current_musa_stream(input.device());
+  const musaError_t route_init_status =
+      musaMemsetAsync(route_to_padded.data_ptr<int32_t>(),
+                      0xff,
+                      route_to_padded.numel() * sizeof(int32_t),
+                      stream);
+  CHECK(route_init_status == musaSuccess)
+      << "DeepSeek-V4 FP8 MoE route metadata initialization failed: "
+      << musaGetErrorString(route_init_status);
+  launch_build_padded_metadata(sorted_assignment.data_ptr<int32_t>(),
+                               expert_counts.data_ptr<int32_t>(),
+                               padded_assignment.data_ptr<int32_t>(),
+                               m_indices.data_ptr<int32_t>(),
+                               route_to_padded.data_ptr<int32_t>(),
+                               max_padded_assignments,
+                               static_cast<int32_t>(expert_counts.numel()),
+                               static_cast<int32_t>(alignment_m),
+                               stream);
+  check_last_error("prequant metadata");
+
+  const int64_t scale_cols = input.size(1) / kQuantBlock;
+  padded_fp8_gather_uint4_kernel<<<
+      static_cast<unsigned int>(max_padded_assignments),
+      kMetadataBlock,
+      0,
+      stream>>>(token_fp8.data_ptr<c10::Float8_e4m3fn>(),
+                token_scale.data_ptr<float>(),
+                padded_assignment.data_ptr<int32_t>(),
+                input_fp8.data_ptr<c10::Float8_e4m3fn>(),
+                input_scale.data_ptr<float>(),
+                max_padded_assignments,
+                input.size(1),
+                scale_cols,
+                static_cast<int32_t>(topk));
+  check_last_error("prequant gather uint4");
+  return {
+      input_fp8, input_scale, padded_assignment, m_indices, route_to_padded};
+}
+
 std::tuple<torch::Tensor,
            torch::Tensor,
            torch::Tensor,

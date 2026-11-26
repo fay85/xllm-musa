@@ -706,6 +706,23 @@ deepseek_v4_fp8_moe_prepare(const torch::Tensor& input,
                             int64_t alignment_m,
                             int64_t max_padded_assignments);
 
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_quant_tokens(
+    const torch::Tensor& input);
+
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+deepseek_v4_fp8_moe_gather_prequantized(const torch::Tensor& input,
+                                        const torch::Tensor& token_fp8,
+                                        const torch::Tensor& token_scale,
+                                        const torch::Tensor& sorted_assignment,
+                                        const torch::Tensor& expert_counts,
+                                        int64_t topk,
+                                        int64_t alignment_m,
+                                        int64_t max_padded_assignments);
+
 std::tuple<torch::Tensor,
            torch::Tensor,
            torch::Tensor,

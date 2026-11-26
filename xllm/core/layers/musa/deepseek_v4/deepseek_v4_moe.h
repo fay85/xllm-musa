@@ -51,6 +51,10 @@ class DeepseekV4SharedExpertImpl final : public torch::nn::Module {
                              double swiglu_limit);
 
   torch::Tensor forward(const torch::Tensor& hidden_states);
+  bool fp8_prequant_ready() const { return fp8_decode_ready(); }
+  torch::Tensor forward_prequantized(const torch::Tensor& input_fp8,
+                                     const torch::Tensor& input_scale,
+                                     torch::IntArrayRef output_sizes);
 
   void load_state_dict(const StateDict& state_dict);
   void load_state_dict(const StateDict& state_dict,
@@ -119,7 +123,9 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
       const torch::Tensor& topk_weights,
       bool compact_rows = false,
       const torch::Tensor& shared_output = torch::Tensor(),
-      void* shared_ready_event = nullptr) const;
+      void* shared_ready_event = nullptr,
+      const torch::Tensor& prequant_token_fp8 = torch::Tensor(),
+      const torch::Tensor& prequant_token_scale = torch::Tensor()) const;
   void ensure_dense_expert_storage();
   void ensure_fp8_expert_storage();
   void ensure_packed_fp4_expert_storage();

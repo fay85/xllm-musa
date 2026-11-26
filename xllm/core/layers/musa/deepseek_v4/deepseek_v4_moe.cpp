@@ -344,6 +344,23 @@ torch::Tensor DeepseekV4SharedExpertImpl::forward(
   return down_proj_->forward(activated).reshape(hidden_states.sizes());
 }
 
+torch::Tensor DeepseekV4SharedExpertImpl::forward_prequantized(
+    const torch::Tensor& input_fp8,
+    const torch::Tensor& input_scale,
+    torch::IntArrayRef output_sizes) {
+  const int64_t num_tokens = input_fp8.size(0);
+  auto gate_up = kernel::musa::gemm_fp8_nt_groupwise(
+      input_fp8,
+      gate_up_proj_->weight(),
+      input_scale,
+      gate_up_proj_->weight_scale(),
+      /*output_dtype=*/torch::kBFloat16);
+  torch::Tensor activated =
+      torch::empty({num_tokens, local_intermediate_size_}, gate_up.options());
+  act_->forward(gate_up, activated);
+  return down_proj_->forward(activated).reshape(output_sizes);
+}
+
 void DeepseekV4SharedExpertImpl::load_down_scale(const StateDict& state_dict,
                                                  const std::string& down_name) {
   const int64_t rank = process_group_->rank();
@@ -796,7 +813,9 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
     const torch::Tensor& topk_weights,
     bool compact_rows,
     const torch::Tensor& shared_output,
-    void* shared_ready_event) const {
+    void* shared_ready_event,
+    const torch::Tensor& prequant_token_fp8,
+    const torch::Tensor& prequant_token_scale) const {
   if (!fp8_experts_loaded()) {
     return torch::Tensor();
   }
@@ -848,18 +867,35 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
   torch::Tensor padded_assignment;
   torch::Tensor padded_expert;
   torch::Tensor route_to_padded;
-  std::tie(sorted_input_fp8,
-           sorted_input_scale,
-           padded_assignment,
-           padded_expert,
-           route_to_padded) =
-      kernel::musa::deepseek_v4_fp8_moe_quant_prepare(
-          input,
-          dst_to_src,
-          expert_counts,
-          topk_,
-          compact_rows ? 1 : kAlignmentM,
-          max_padded_assignments);
+  if (prequant_token_fp8.defined() && prequant_token_scale.defined()) {
+    std::tie(sorted_input_fp8,
+             sorted_input_scale,
+             padded_assignment,
+             padded_expert,
+             route_to_padded) =
+        kernel::musa::deepseek_v4_fp8_moe_gather_prequantized(
+            input,
+            prequant_token_fp8,
+            prequant_token_scale,
+            dst_to_src,
+            expert_counts,
+            topk_,
+            compact_rows ? 1 : kAlignmentM,
+            max_padded_assignments);
+  } else {
+    std::tie(sorted_input_fp8,
+             sorted_input_scale,
+             padded_assignment,
+             padded_expert,
+             route_to_padded) =
+        kernel::musa::deepseek_v4_fp8_moe_quant_prepare(
+            input,
+            dst_to_src,
+            expert_counts,
+            topk_,
+            compact_rows ? 1 : kAlignmentM,
+            max_padded_assignments);
+  }
 
   auto gate_up =
       compact_rows ? kernel::musa::contiguous_moe_gemm_fp8(sorted_input_fp8,
@@ -1038,6 +1074,28 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   const bool use_shared_expert_overlap = is_prefill && shared_experts_ &&
                                          input_2d.device().is_privateuseone() &&
                                          !kernel::musa::is_stream_capturing();
+  const char* shared_moe_quant_env =
+      std::getenv("XLLM_DSV4_PREFILL_SHARED_MOE_QUANT");
+  const bool shared_moe_quant_enabled =
+      shared_moe_quant_env == nullptr ||
+      std::strcmp(shared_moe_quant_env, "0") != 0;
+  torch::Tensor shared_token_fp8;
+  torch::Tensor shared_token_scale;
+  torch::Tensor input_2d_contig;
+  if (shared_moe_quant_enabled && use_shared_expert_overlap &&
+      fp8_experts_loaded() && shared_experts_->fp8_prequant_ready() &&
+      input_2d.scalar_type() == torch::kBFloat16 && input_2d.size(0) >= 64 &&
+      input_2d.size(1) % 128 == 0) {
+    input_2d_contig =
+        input_2d.is_contiguous() ? input_2d : input_2d.contiguous();
+    if (reinterpret_cast<std::uintptr_t>(input_2d_contig.data_ptr()) % 8 == 0) {
+      std::tie(shared_token_fp8, shared_token_scale) =
+          kernel::musa::deepseek_v4_fp8_moe_quant_tokens(input_2d_contig);
+      LOG_FIRST_N(INFO, 2)
+          << "[DSV4_PREFILL_SHARED_MOE_QUANT] tokens="
+          << input_2d_contig.size(0) << " hidden=" << input_2d_contig.size(1);
+    }
+  }
   torch::Tensor shared_output;
   SharedExpertOverlapState* shared_overlap_state = nullptr;
   if (use_shared_expert_overlap) {
@@ -1054,7 +1112,12 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
              musaSuccess);
     {
       c10::StreamGuard stream_guard(shared_overlap_state->stream.unwrap());
-      shared_output = shared_experts_(input);
+      shared_output = shared_token_fp8.defined()
+                          ? shared_experts_->forward_prequantized(
+                                shared_token_fp8,
+                                shared_token_scale,
+                                input.sizes())
+                          : shared_experts_(input);
       if (shared_expert_gate_ && shared_expert_gate_is_loaded_) {
         auto gate = torch::sigmoid(shared_expert_gate_->forward(input));
         shared_output.mul_(gate);
@@ -1164,14 +1227,16 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     // weights_2d retains the original non-Decode BF16 conversion above. Only
     // expert-row padding changes; the existing quant/SwiGLU/restore remains.
     output = forward_grouped_fp8(
-        input_2d.contiguous(),
+        input_2d_contig.defined() ? input_2d_contig : input_2d.contiguous(),
         ids_2d,
         weights_2d,
         compact_prefill,
         fuse_shared_in_restore ? shared_output : torch::Tensor(),
         fuse_shared_in_restore
             ? reinterpret_cast<void*>(shared_overlap_state->shared_ready)
-            : nullptr);
+            : nullptr,
+        shared_token_fp8,
+        shared_token_scale);
     if (fuse_shared_in_restore && output.defined()) {
       shared_fused_in_restore = true;
     }
