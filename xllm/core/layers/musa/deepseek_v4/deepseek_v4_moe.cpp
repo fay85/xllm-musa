@@ -1075,12 +1075,28 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
       input_params.meta.batch_forward_type.is_decode(),
       start_expert_id_ == 0 && num_experts_per_rank_ == num_total_experts_,
       fp8_experts_loaded());
-  const bool use_fp8_gemv = !disable_fp8_gemv && !grouped_fp8_verify &&
-                            input_params.meta.batch_forward_type.is_decode() &&
-                            input_2d.size(0) > 0 &&
-                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
-                            fp8_experts_loaded();
-  if (!use_fp8_gemv && !grouped_fp8_verify &&
+  const char* dspark_draft_moe_env =
+      std::getenv("XLLM_DSV4_DSPARK_DRAFT_GRAPH");
+  const bool is_dspark_draft_decode =
+      (dspark_draft_moe_env == nullptr ||
+       std::string(dspark_draft_moe_env) != "0") &&
+      num_layers_ <= 4 &&
+      input_params.meta.batch_forward_type.is_chunked_prefill() &&
+      !input_params.is_spec_verify && input_2d.size(0) > 0 &&
+      input_2d.size(0) <= kFp8GemvWorkspaceTokens && fp8_experts_loaded();
+  const bool dspark_draft_compact_grouped =
+      is_dspark_draft_decode &&
+      input_2d.size(0) >= grouped_fp8_decode_min_tokens_ &&
+      start_expert_id_ == 0 && num_experts_per_rank_ == num_total_experts_ &&
+      (ep_pg_ == nullptr || ep_pg_->world_size() == 1);
+  const bool use_fp8_gemv =
+      !disable_fp8_gemv && !grouped_fp8_verify &&
+      !dspark_draft_compact_grouped &&
+      (input_params.meta.batch_forward_type.is_decode() ||
+       is_dspark_draft_decode) &&
+      input_2d.size(0) > 0 && input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
+      fp8_experts_loaded();
+  if (!use_fp8_gemv && !grouped_fp8_verify && !dspark_draft_compact_grouped &&
       weights_2d.scalar_type() != input_2d.scalar_type()) {
     weights_2d = weights_2d.to(input_2d.dtype());
   }
@@ -1118,6 +1134,13 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                          << " query_width=" << input_params.meta.q_max_seq_len;
   }
   bool shared_fused_in_restore = false;
+  if (!output.defined() && dspark_draft_compact_grouped) {
+    output = forward_grouped_fp8(
+        input_2d.contiguous(), ids_2d, weights_2d, /*compact_rows=*/true);
+    LOG_FIRST_N(INFO, 1) << "[DSV4_DSPARK_DRAFT_COMPACT_MOE] rows="
+                         << input_2d.size(0)
+                         << " assignments=" << input_2d.size(0) * topk_;
+  }
   if (!output.defined() && !input_params.meta.batch_forward_type.is_decode() &&
       fp8_experts_loaded()) {
     const bool compact_prefill =

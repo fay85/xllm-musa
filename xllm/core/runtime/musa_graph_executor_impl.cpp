@@ -4133,8 +4133,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   }
 
   // Prefill (including non-spec-verify chunked prefill) without a piecewise
-  // graph runs eager.
-  if (is_prefill || (params.meta.batch_forward_type.is_chunked_prefill() &&
+  // graph runs eager. DSpark draft blocks use chunked_prefill with
+  // q_max_seq_len == draft_graph_query_width and route to full decode graphs.
+  if (is_prefill || (!is_dspark_draft_block &&
+                     params.meta.batch_forward_type.is_chunked_prefill() &&
                      !params.is_spec_verify)) {
     COUNTER_INC(num_model_execution_total_eager);
     if (has_interior_checkpoints) {

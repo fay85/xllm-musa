@@ -5948,7 +5948,17 @@ DeepseekV4AttentionImpl::forward_current_impl(
       // host sidecar from the same ctx_lens vector. Reuse it without new per-
       // layer H2D copies. All cache rows were published before this loop.
       auto sas_query = q.is_contiguous() ? q : q.contiguous();
-      batched_sas_output = torch::empty(q.sizes(), q.options());
+      if (decode_spec_attention_output_.defined() &&
+          decode_spec_attention_output_.size(0) >= q.size(0) &&
+          decode_spec_attention_output_.size(1) == q.size(1) &&
+          decode_spec_attention_output_.size(2) == q.size(2) &&
+          decode_spec_attention_output_.scalar_type() == q.scalar_type() &&
+          decode_spec_attention_output_.device() == q.device()) {
+        batched_sas_output = decode_spec_attention_output_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/q.size(0));
+      } else {
+        batched_sas_output = torch::empty(q.sizes(), q.options());
+      }
       kernel::musa::deepseek_v4_paged_attention_sas_batched(
           sas_query,
           ori_kv,
