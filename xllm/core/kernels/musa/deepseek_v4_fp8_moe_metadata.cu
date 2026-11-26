@@ -55,6 +55,18 @@ constexpr bool warp_quant_scatter_enabled() { return true; }
 
 constexpr int32_t warp_quant_scatter_warps_per_cta() { return 16; }
 
+bool prefill_fast_scatter_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_PREFILL_FAST_SCATTER");
+  return value == nullptr || std::string(value) != "0";
+}
+
+__device__ __forceinline__ float fast_pow2_ceil(float raw_scale) {
+  // raw_scale is finite and >= 1.0e-4f (strictly positive normal IEEE-754).
+  const uint32_t bits = __float_as_uint(raw_scale);
+  const uint32_t ceil_bits = (bits + 0x007fffffu) & 0xff800000u;
+  return __uint_as_float(ceil_bits);
+}
+
 constexpr bool warp_swiglu_quant_enabled() { return false; }
 
 bool long_warp_swiglu_quant_enabled(const torch::Tensor& gate_up) {
@@ -648,6 +660,106 @@ __global__ void token_blockwise_fp8_scatter_warp_kernel(
   }
 }
 
+// P3a: Quantize each unique token once (vectorized uint2 BF16/FP16 loads +
+// bit-exact pow2-ceil scale + uint32 packed FP8 stores), then gather into
+// expert-sorted padded rows via contiguous uint4 writes using padded_assignment.
+template <typename scalar_t, int32_t kWarpsPerCta>
+__global__ void token_blockwise_fp8_quant_only_kernel(
+    const scalar_t* __restrict__ input,
+    c10::Float8_e4m3fn* __restrict__ token_fp8,
+    float* __restrict__ token_scales,
+    int64_t num_tokens,
+    int64_t hidden_size,
+    int64_t blocks_per_row) {
+  constexpr int32_t kValuesPerLane = kQuantBlock / kWarpSize;
+  static_assert(kValuesPerLane == 4);
+  static_assert(sizeof(scalar_t) == 2);
+  static_assert(sizeof(c10::Float8_e4m3fn) == 1);
+
+  const int32_t warp = threadIdx.x / kWarpSize;
+  const int32_t lane = threadIdx.x % kWarpSize;
+  const int64_t group = static_cast<int64_t>(blockIdx.x) * kWarpsPerCta + warp;
+  const int64_t total_groups = num_tokens * blocks_per_row;
+  if (group >= total_groups) {
+    return;
+  }
+  const int64_t token = group / blocks_per_row;
+  const int64_t quant_block = group - token * blocks_per_row;
+  const int64_t column_base = quant_block * kQuantBlock + lane * kValuesPerLane;
+
+  alignas(8) scalar_t raw_vals[kValuesPerLane];
+  *reinterpret_cast<uint2*>(raw_vals) = *reinterpret_cast<const uint2*>(
+      input + token * hidden_size + column_base);
+
+  float values[kValuesPerLane];
+  float max_abs = 0.0f;
+#pragma unroll
+  for (int32_t value_id = 0; value_id < kValuesPerLane; ++value_id) {
+    values[value_id] = static_cast<float>(raw_vals[value_id]);
+    max_abs = fmaxf(max_abs, fabsf(values[value_id]));
+  }
+#pragma unroll
+  for (int32_t delta = kWarpSize / 2; delta > 0; delta >>= 1) {
+    max_abs = fmaxf(max_abs, __shfl_down_sync(0xffffffffu, max_abs, delta));
+  }
+  max_abs = __shfl_sync(0xffffffffu, max_abs, 0);
+  const float raw_scale = fmaxf(max_abs / kFp8Max, 1.0e-4f);
+  const float scale = fast_pow2_ceil(raw_scale);
+  const float inverse_scale = 1.0f / scale;
+
+  uint32_t packed = 0;
+#pragma unroll
+  for (int32_t value_id = 0; value_id < kValuesPerLane; ++value_id) {
+    const auto quantized = scaled_fp8_conversion<true, c10::Float8_e4m3fn>(
+        values[value_id], inverse_scale);
+    packed |= static_cast<uint32_t>(quantized.x) << (value_id * 8);
+  }
+
+  auto* output_bytes =
+      reinterpret_cast<uint8_t*>(token_fp8) + token * hidden_size + column_base;
+  *reinterpret_cast<uint32_t*>(output_bytes) = packed;
+  if (lane == 0) {
+    token_scales[token * blocks_per_row + quant_block] = scale;
+  }
+}
+
+__global__ void padded_fp8_gather_uint4_kernel(
+    const c10::Float8_e4m3fn* __restrict__ token_fp8,
+    const float* __restrict__ token_scales,
+    const int32_t* __restrict__ padded_assignment,
+    c10::Float8_e4m3fn* __restrict__ output_fp8,
+    float* __restrict__ output_scales,
+    int64_t max_padded_assignments,
+    int64_t hidden_size,
+    int64_t blocks_per_row,
+    int32_t topk) {
+  const int64_t dst = static_cast<int64_t>(blockIdx.x);
+  if (dst >= max_padded_assignments) {
+    return;
+  }
+  const int32_t src_route = padded_assignment[dst];
+  float* dst_scale_row = output_scales + dst * blocks_per_row;
+  if (src_route < 0) {
+    for (int64_t s = threadIdx.x; s < blocks_per_row; s += blockDim.x) {
+      dst_scale_row[s] = 0.0f;
+    }
+    return;
+  }
+  const int64_t src_token = static_cast<int64_t>(src_route) / topk;
+  const int64_t vec_cols = hidden_size / 16;
+  const uint4* src_row = reinterpret_cast<const uint4*>(
+      reinterpret_cast<const uint8_t*>(token_fp8) + src_token * hidden_size);
+  uint4* dst_row = reinterpret_cast<uint4*>(
+      reinterpret_cast<uint8_t*>(output_fp8) + dst * hidden_size);
+  for (int64_t v = threadIdx.x; v < vec_cols; v += blockDim.x) {
+    dst_row[v] = src_row[v];
+  }
+  const float* src_scale_row = token_scales + src_token * blocks_per_row;
+  for (int64_t s = threadIdx.x; s < blocks_per_row; s += blockDim.x) {
+    dst_scale_row[s] = src_scale_row[s];
+  }
+}
+
 __global__ void prequantized_fp8_scatter_kernel(
     const c10::Float8_e4m3fn* __restrict__ input,
     const float* __restrict__ input_scales,
@@ -775,12 +887,15 @@ struct QuantPrepareWorkspace {
   int64_t capacity_rows = 0;
   int64_t capacity_routes = 0;
   int64_t capacity_experts = 0;
+  int64_t capacity_tokens = 0;
   torch::Tensor input_fp8;
   torch::Tensor input_scale;
   torch::Tensor padded_assignment;
   torch::Tensor m_indices;
   torch::Tensor route_to_padded;
   torch::Tensor masked_tokens;
+  torch::Tensor token_fp8;
+  torch::Tensor token_scale;
 };
 
 struct SwigluQuantWorkspaceKey {
@@ -1461,6 +1576,72 @@ deepseek_v4_fp8_moe_quant_prepare(const torch::Tensor& input,
   check_last_error("quant metadata");
 
   const int64_t scale_cols = input.size(1) / kQuantBlock;
+  const bool use_fast_scatter =
+      prefill_fast_scatter_enabled() && input.size(0) >= 64 &&
+      (input.scalar_type() == torch::kBFloat16 ||
+       input.scalar_type() == torch::kHalf) &&
+      reinterpret_cast<std::uintptr_t>(input.data_ptr()) % 8 == 0 &&
+      reinterpret_cast<std::uintptr_t>(input_fp8.data_ptr()) % 16 == 0;
+  if (use_fast_scatter) {
+    const int64_t num_tokens = input.size(0);
+    if (workspace.capacity_tokens < num_tokens ||
+        !workspace.token_fp8.defined() || !workspace.token_scale.defined()) {
+      const int64_t capacity = std::max<int64_t>(
+          num_tokens,
+          workspace.capacity_tokens > 0 ? workspace.capacity_tokens * 2 : 1);
+      workspace.capacity_tokens = capacity;
+      workspace.token_fp8 =
+          torch::empty({capacity, input.size(1)},
+                       input.options().dtype(torch::kFloat8_e4m3fn));
+      workspace.token_scale = torch::empty(
+          {capacity, scale_cols}, input.options().dtype(torch::kFloat32));
+    }
+    auto token_fp8 = workspace.token_fp8.narrow(0, 0, num_tokens);
+    auto token_scale = workspace.token_scale.narrow(0, 0, num_tokens);
+    constexpr int32_t kQuantWarpsPerCta = 8;
+    const int64_t total_groups = num_tokens * scale_cols;
+    const int64_t quant_grid =
+        (total_groups + kQuantWarpsPerCta - 1) / kQuantWarpsPerCta;
+    if (input.scalar_type() == torch::kBFloat16) {
+      token_blockwise_fp8_quant_only_kernel<c10::BFloat16, kQuantWarpsPerCta>
+          <<<quant_grid, kQuantWarpsPerCta * kWarpSize, 0, stream>>>(
+              input.data_ptr<c10::BFloat16>(),
+              token_fp8.data_ptr<c10::Float8_e4m3fn>(),
+              token_scale.data_ptr<float>(),
+              num_tokens,
+              input.size(1),
+              scale_cols);
+    } else {
+      token_blockwise_fp8_quant_only_kernel<c10::Half, kQuantWarpsPerCta>
+          <<<quant_grid, kQuantWarpsPerCta * kWarpSize, 0, stream>>>(
+              input.data_ptr<c10::Half>(),
+              token_fp8.data_ptr<c10::Float8_e4m3fn>(),
+              token_scale.data_ptr<float>(),
+              num_tokens,
+              input.size(1),
+              scale_cols);
+    }
+    check_last_error("fast quant only");
+    padded_fp8_gather_uint4_kernel<<<
+        static_cast<unsigned int>(max_padded_assignments),
+        kMetadataBlock,
+        0,
+        stream>>>(token_fp8.data_ptr<c10::Float8_e4m3fn>(),
+                  token_scale.data_ptr<float>(),
+                  padded_assignment.data_ptr<int32_t>(),
+                  input_fp8.data_ptr<c10::Float8_e4m3fn>(),
+                  input_scale.data_ptr<float>(),
+                  max_padded_assignments,
+                  input.size(1),
+                  scale_cols,
+                  static_cast<int32_t>(topk));
+    check_last_error("fast gather uint4");
+    LOG_FIRST_N(INFO, 1) << "[DSV4_PREFILL_FAST_SCATTER] tokens=" << num_tokens
+                         << " padded_rows=" << max_padded_assignments
+                         << " hidden=" << input.size(1) << " topk=" << topk;
+    return {
+        input_fp8, input_scale, padded_assignment, m_indices, route_to_padded};
+  }
   const musaError_t scale_init_status =
       musaMemsetAsync(input_scale.data_ptr<float>(),
                       0,
