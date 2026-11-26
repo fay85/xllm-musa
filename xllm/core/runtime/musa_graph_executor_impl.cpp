@@ -476,6 +476,41 @@ uint32_t dsv4_graph_shape_key(uint32_t bucket_num_tokens,
       return entry->second;
     }
   }
+  // Under DP8 lockstep decode, a 1-sequence rank padded into a multi-sequence
+  // bucket (e.g., actual=7, bucket=14) executes the multi-sequence fixed-slot
+  // path (sequences = bucket / query_width). Give it a stable key independent
+  // of start_position % 4 so C16 warms in <= 2 captures instead of churning.
+  if (bucket_num_tokens > query_width && actual_num_tokens == query_width &&
+      bucket_num_tokens % query_width == 0 &&
+      layer::dsv4_graph_sequence_views_enabled()) {
+    const int64_t kv_len = static_cast<int64_t>(kv_lens[1]);
+    const int64_t idx_cap = layer::dsv4_graph_indexer_capacity(
+        std::max<int64_t>(kv_len / 4, 1), /*multi_sequence=*/true);
+    const bool full_kv = layer::dsv4_uses_full_kv(
+        kv_len, layer::dsv4_full_kv_threshold(), args.window_size());
+    std::vector<int64_t> padded_shape{
+        bucket_num_tokens,
+        actual_num_tokens,
+        query_width,
+        args.window_size(),
+        layer::dsv4_full_kv_threshold(),
+        idx_cap / 512,
+        full_kv ? 1 : 0};
+    static thread_local std::map<std::vector<int64_t>, uint32_t>
+        padded_dp_signatures;
+    auto [entry, inserted] = padded_dp_signatures.try_emplace(padded_shape, 0);
+    if (inserted) {
+      CHECK_LT(padded_dp_signatures.size(), uint32_t{1} << 28);
+      entry->second = (uint32_t{3} << 29) | padded_dp_signatures.size();
+      if (emit_trace) {
+        LOG(INFO) << "[DSV4_PADDED_DP_GRAPH_KEY] key=" << entry->second
+                  << " bucket=" << bucket_num_tokens
+                  << " actual=" << actual_num_tokens
+                  << " idx_cap=" << idx_cap;
+      }
+    }
+    return entry->second;
+  }
   const int64_t start_position = static_cast<int64_t>(kv_lens[1]) - query_width;
   if (start_position < 0) {
     return bucket_num_tokens;
@@ -4343,7 +4378,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       stable_multi_graph_env != nullptr &&
       std::string(stable_multi_graph_env) == "1";
   const bool reuse_existing_graph =
-      stable_multi_graph_sequences && is_decode &&
+      !use_dp_lockstep_decode_graph && stable_multi_graph_sequences && is_decode &&
       args_.model_type() == "deepseek_v4" && params.is_spec_verify &&
       options_.num_decoding_tokens() > 1 && options_.max_seqs_per_batch() > 1 &&
       layer::dsv4_graph_sequence_views_enabled() &&
