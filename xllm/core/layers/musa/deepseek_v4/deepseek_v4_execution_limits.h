@@ -28,7 +28,7 @@ inline constexpr int64_t kDsv4PrefillAllreduceWorkspaceRows = 1024;
 inline constexpr int64_t kDsv4GroupedVerifySmallRows = 77;
 inline constexpr int64_t kDsv4GroupedVerifyOptimizedMinRows = 63;
 inline constexpr int64_t kDsv4GroupedVerifyLargeRows = 112;
-inline constexpr int64_t kDsv4VerifyWorkspaceRows = 128;
+inline constexpr int64_t kDsv4VerifyWorkspaceRows = 1024;
 inline constexpr int64_t kDsv4VerifyQueryWidth = 7;
 
 inline bool dsv4_grouped_verify_minimum_supported(int64_t rows) {
