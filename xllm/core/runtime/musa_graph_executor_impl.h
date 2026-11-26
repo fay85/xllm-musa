@@ -552,6 +552,9 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   ProcessGroup* dp_group_ = nullptr;
 
   bool agree_bool_across_model_group(bool local_flag) const;
+  int32_t agree_or_mask_across_model_group(int32_t local_mask) const;
+  mutable torch::Tensor agree_dev_buf_;
+  mutable torch::Tensor agree_host_buf_;
 
   int64_t max_tokens_for_graph_mode_ = 0;
 

@@ -3460,25 +3460,40 @@ void MusaGraphExecutorImpl::set_model_parallel_groups(ProcessGroup* tp_group,
   cp_group_ = cp_group;
 }
 
-bool MusaGraphExecutorImpl::agree_bool_across_model_group(
-    bool local_flag) const {
-  bool agreed = local_flag;
+int32_t MusaGraphExecutorImpl::agree_or_mask_across_model_group(
+    int32_t local_mask) const {
+  // Pack up to 3 boolean flags into 8-bit sum lanes (bits 0, 8, 16) so a
+  // single in-place SUM allreduce agrees across up to 128 ranks without
+  // overflow or per-call GPU tensor allocations.
+  int32_t agreed_mask = local_mask & 0x7;
   auto reduce_in_group = [&](ProcessGroup* group) {
     if (group == nullptr || group->world_size() <= 1) {
       return;
     }
-    torch::Tensor local = torch::tensor(
-        {agreed ? int32_t{1} : int32_t{0}},
-        torch::TensorOptions().dtype(torch::kInt32).device(device_));
-    torch::Tensor gathered =
-        group->allgather_base_sync(local).to(torch::kCPU).contiguous();
-    const int32_t* values = gathered.data_ptr<int32_t>();
-    for (int32_t i = 0; i < group->world_size(); ++i) {
-      if (values[i] == 0) {
-        agreed = false;
-        break;
-      }
+    if (!agree_dev_buf_.defined() || agree_dev_buf_.device() != device_) {
+      agree_dev_buf_ = torch::empty(
+          {1}, torch::TensorOptions().dtype(torch::kInt32).device(device_));
     }
+    if (!agree_host_buf_.defined()) {
+      agree_host_buf_ = torch::empty(
+          {1},
+          torch::TensorOptions()
+              .dtype(torch::kInt32)
+              .device(torch::kCPU)
+              .pinned_memory(true));
+    }
+    const int32_t packed = ((agreed_mask & 1) ? 1 : 0) |
+                           ((agreed_mask & 2) ? (1 << 8) : 0) |
+                           ((agreed_mask & 4) ? (1 << 16) : 0);
+    agree_host_buf_.data_ptr<int32_t>()[0] = packed;
+    agree_dev_buf_.copy_(agree_host_buf_, /*non_blocking=*/true);
+    group->allreduce(agree_dev_buf_);
+    agree_host_buf_.copy_(agree_dev_buf_, /*non_blocking=*/false);
+    const uint32_t reduced =
+        static_cast<uint32_t>(agree_host_buf_.data_ptr<int32_t>()[0]);
+    agreed_mask = (((reduced & 0xffu) != 0u) ? 1 : 0) |
+                  ((((reduced >> 8) & 0xffu) != 0u) ? 2 : 0) |
+                  ((((reduced >> 16) & 0xffu) != 0u) ? 4 : 0);
   };
   reduce_in_group(tp_group_);
   if (cp_group_ != tp_group_) {
@@ -3488,7 +3503,12 @@ bool MusaGraphExecutorImpl::agree_bool_across_model_group(
       dp_group_ != cp_group_) {
     reduce_in_group(dp_group_);
   }
-  return agreed;
+  return agreed_mask;
+}
+
+bool MusaGraphExecutorImpl::agree_bool_across_model_group(
+    bool local_flag) const {
+  return (agree_or_mask_across_model_group(local_flag ? 0 : 1) & 1) == 0;
 }
 
 MusaGraphExecutorImpl::~MusaGraphExecutorImpl() {
@@ -4395,26 +4415,6 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     const bool local_force_eager =
         force_eager_compact_verify || default_eager_compact_verify ||
         multi_sequence_eager || short_fullkv_eager;
-    const bool agreed_force_eager =
-        use_dp_lockstep_decode_graph
-            ? !agree_bool_across_model_group(!local_force_eager)
-            : local_force_eager;
-    if (agreed_force_eager) {
-      LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
-                   "tokens="
-                << n_tokens << " reason="
-                << (short_fullkv_eager
-                        ? "short_fullkv"
-                        : (multi_sequence_eager
-                               ? "multi_sequence"
-                               : (force_eager_compact_verify ? "forced"
-                                                             : "default")));
-      ModelInputParams eager_params = params;
-      eager_params.enable_graph = false;
-      eager_params.attn_metadata.reset();
-      COUNTER_INC(num_model_execution_total_eager);
-      return model_->forward(tokens, positions, kv_caches, eager_params);
-    }
 
     // Check if conditions are suitable for graph execution (replay or capture)
     const auto max_seq_len = args_.max_position_embeddings();
@@ -4480,10 +4480,91 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
     const bool local_graph_supported =
         seq_len_supported && graph_capacity_supported;
-    const bool agreed_graph_supported =
-        use_dp_lockstep_decode_graph
-            ? agree_bool_across_model_group(local_graph_supported)
-            : local_graph_supported;
+
+    const char* fast_agree_env =
+        std::getenv("XLLM_DSV4_GRAPH_FAST_REPLAY_AGREE");
+    const bool fast_replay_agree =
+        fast_agree_env == nullptr || std::strcmp(fast_agree_env, "0") != 0;
+
+    bool agreed_force_eager = local_force_eager;
+    bool agreed_graph_supported = local_graph_supported;
+    bool agreed_graph_hit = false;
+    uint32_t graph_shape_key = bucket_num_tokens;
+    auto it = graphs_.end();
+
+    if (use_dp_lockstep_decode_graph && fast_replay_agree) {
+      // Compute graph_shape_key & local cache hit before synchronizing so all
+      // 3 lockstep booleans coalesce into a single in-place collective (6->2
+      // per decode step across draft+target) with zero deadlock risk.
+      bool local_graph_hit = false;
+      if (!local_force_eager && local_graph_supported) {
+        if (reuse_existing_graph) {
+          const uint32_t width =
+              static_cast<uint32_t>(options_.num_decoding_tokens());
+          CHECK_EQ(n_tokens % width, 0);
+          const uint32_t maximum_sequences = std::min<uint32_t>(
+              static_cast<uint32_t>(options_.max_seqs_per_batch()),
+              max_graph_tokens > 0
+                  ? static_cast<uint32_t>(max_graph_tokens) / width
+                  : static_cast<uint32_t>(options_.max_seqs_per_batch()));
+          const uint32_t sequences = layer::dsv4_select_existing_graph_sequences(
+              n_tokens / width,
+              maximum_sequences,
+              [&](uint32_t candidate_sequences) {
+                const uint32_t candidate_tokens = candidate_sequences * width;
+                const uint32_t key = dsv4_graph_shape_key(candidate_tokens,
+                                                          n_tokens,
+                                                          args_,
+                                                          options_,
+                                                          run_params,
+                                                          /*emit_trace=*/false);
+                const auto candidate = graphs_.find(key);
+                return candidate != graphs_.end() &&
+                       candidate->second->captured_without_padding();
+              });
+          bucket_num_tokens = sequences * width;
+        }
+        graph_shape_key = dsv4_graph_shape_key(
+            bucket_num_tokens, n_tokens, args_, options_, run_params);
+        it = graphs_.find(graph_shape_key);
+        local_graph_hit = (it != graphs_.end());
+      }
+      const int32_t local_mask = (local_force_eager ? 1 : 0) |
+                                 (!local_graph_supported ? 2 : 0) |
+                                 (!local_graph_hit ? 4 : 0);
+      const int32_t agreed_mask =
+          agree_or_mask_across_model_group(local_mask);
+      agreed_force_eager = (agreed_mask & 1) != 0;
+      agreed_graph_supported = (agreed_mask & 2) == 0;
+      agreed_graph_hit = (agreed_mask & 4) == 0;
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_GRAPH_FAST_REPLAY_AGREE] coalesced 3->1 in-place allreduce "
+             "active";
+    } else if (use_dp_lockstep_decode_graph) {
+      agreed_force_eager = !agree_bool_across_model_group(!local_force_eager);
+    }
+
+    if (agreed_force_eager) {
+      LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
+                   "tokens="
+                << n_tokens << " reason="
+                << (short_fullkv_eager
+                        ? "short_fullkv"
+                        : (multi_sequence_eager
+                               ? "multi_sequence"
+                               : (force_eager_compact_verify ? "forced"
+                                                             : "default")));
+      ModelInputParams eager_params = params;
+      eager_params.enable_graph = false;
+      eager_params.attn_metadata.reset();
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, eager_params);
+    }
+
+    if (use_dp_lockstep_decode_graph && !fast_replay_agree) {
+      agreed_graph_supported =
+          agree_bool_across_model_group(local_graph_supported);
+    }
     // Early return if conditions are not suitable for graph operations
     if (!agreed_graph_supported) {
       LOG(WARNING)
@@ -4509,44 +4590,46 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     // maybe_precompute_embedding_for_graph() for the full rationale.
     const ModelInputParams graph_params =
         maybe_precompute_embedding_for_graph(run_tokens, run_params);
-    if (reuse_existing_graph) {
-      const uint32_t width =
-          static_cast<uint32_t>(options_.num_decoding_tokens());
-      CHECK_EQ(n_tokens % width, 0);
-      const uint32_t maximum_sequences = std::min<uint32_t>(
-          static_cast<uint32_t>(options_.max_seqs_per_batch()),
-          max_graph_tokens > 0
-              ? static_cast<uint32_t>(max_graph_tokens) / width
-              : static_cast<uint32_t>(options_.max_seqs_per_batch()));
-      const uint32_t sequences = layer::dsv4_select_existing_graph_sequences(
-          n_tokens / width,
-          maximum_sequences,
-          [&](uint32_t candidate_sequences) {
-            const uint32_t candidate_tokens = candidate_sequences * width;
-            const uint32_t key = dsv4_graph_shape_key(candidate_tokens,
-                                                      n_tokens,
-                                                      args_,
-                                                      options_,
-                                                      graph_params,
-                                                      /*emit_trace=*/false);
-            const auto candidate = graphs_.find(key);
-            return candidate != graphs_.end() &&
-                   candidate->second->captured_without_padding();
-          });
-      bucket_num_tokens = sequences * width;
-    }
-    const uint32_t graph_shape_key = dsv4_graph_shape_key(
-        bucket_num_tokens, n_tokens, args_, options_, graph_params);
+    if (!(use_dp_lockstep_decode_graph && fast_replay_agree)) {
+      if (reuse_existing_graph) {
+        const uint32_t width =
+            static_cast<uint32_t>(options_.num_decoding_tokens());
+        CHECK_EQ(n_tokens % width, 0);
+        const uint32_t maximum_sequences = std::min<uint32_t>(
+            static_cast<uint32_t>(options_.max_seqs_per_batch()),
+            max_graph_tokens > 0
+                ? static_cast<uint32_t>(max_graph_tokens) / width
+                : static_cast<uint32_t>(options_.max_seqs_per_batch()));
+        const uint32_t sequences = layer::dsv4_select_existing_graph_sequences(
+            n_tokens / width,
+            maximum_sequences,
+            [&](uint32_t candidate_sequences) {
+              const uint32_t candidate_tokens = candidate_sequences * width;
+              const uint32_t key = dsv4_graph_shape_key(candidate_tokens,
+                                                        n_tokens,
+                                                        args_,
+                                                        options_,
+                                                        graph_params,
+                                                        /*emit_trace=*/false);
+              const auto candidate = graphs_.find(key);
+              return candidate != graphs_.end() &&
+                     candidate->second->captured_without_padding();
+            });
+        bucket_num_tokens = sequences * width;
+      }
+      graph_shape_key = dsv4_graph_shape_key(
+          bucket_num_tokens, n_tokens, args_, options_, graph_params);
 
-    // Check if captured graph exists for this bucket num_tokens. Under DP8
-    // decode, all DP ranks must enter replay or capture in lockstep so MoE
-    // AllGather/AllReduce and custom-AR graph finalization never deadlock.
-    auto it = graphs_.find(graph_shape_key);
-    const bool local_graph_hit = (it != graphs_.end());
-    const bool agreed_graph_hit =
-        use_dp_lockstep_decode_graph
-            ? agree_bool_across_model_group(local_graph_hit)
-            : local_graph_hit;
+      // Check if captured graph exists for this bucket num_tokens. Under DP8
+      // decode, all DP ranks must enter replay or capture in lockstep so MoE
+      // AllGather/AllReduce and custom-AR graph finalization never deadlock.
+      it = graphs_.find(graph_shape_key);
+      const bool local_graph_hit = (it != graphs_.end());
+      agreed_graph_hit =
+          use_dp_lockstep_decode_graph
+              ? agree_bool_across_model_group(local_graph_hit)
+              : local_graph_hit;
+    }
     if (agreed_graph_hit) {
       CHECK(it != graphs_.end());
       CHECK(!reuse_existing_graph || it->second->captured_without_padding());
