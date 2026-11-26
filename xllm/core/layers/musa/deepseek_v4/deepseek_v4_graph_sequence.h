@@ -101,9 +101,10 @@ inline int64_t dsv4_graph_indexer_bucket(int64_t rows, bool middle_buckets) {
   while (capacity < fine_capacity) {
     capacity *= 2;
   }
-  // Add one fixed intermediate bucket per long power-of-two interval. The
-  // bucket, not capture-time live length, is part of every structural key.
-  const int64_t middle = capacity / 2 + capacity / 8;
+  // Add one fixed intermediate bucket per long power-of-two interval (3072
+  // for cap=4096, covering kv_len=8193..12288 in one bucket without splitting
+  // 10K->11K decode across 2560->4096).
+  const int64_t middle = capacity / 2 + capacity / 4;
   if (middle_buckets && capacity >= 4096 && fine_capacity <= middle) {
     return middle;
   }
@@ -113,11 +114,15 @@ inline int64_t dsv4_graph_indexer_bucket(int64_t rows, bool middle_buckets) {
 // Allocation capacity, never causal key length. Use this same policy for the
 // Graph key, persistent block-table capacity and the attention launch.
 inline int64_t dsv4_graph_indexer_capacity(int64_t rows, bool multi_sequence) {
-  if (!multi_sequence) {
-    return ((std::max<int64_t>(rows, 1) + 511) / 512) * 512;
-  }
   const char* value = std::getenv("XLLM_DSV4_MID_INDEXER_BUCKETS");
   const bool middle = value != nullptr && value[0] == '1' && value[1] == '\0';
+  if (!multi_sequence) {
+    const int64_t fine = ((std::max<int64_t>(rows, 1) + 511) / 512) * 512;
+    if (middle && fine > 2048 && fine <= 3072) {
+      return 3072;
+    }
+    return fine;
+  }
   return dsv4_graph_indexer_bucket(rows, middle);
 }
 
