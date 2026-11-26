@@ -12,6 +12,7 @@
 // and updates the freshly produced query in place.
 
 #include <c10/util/BFloat16.h>
+#include <glog/logging.h>
 #include <torch/torch.h>
 
 #include <cstdint>
