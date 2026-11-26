@@ -3469,11 +3469,17 @@ bool try_dsv4_swa_tc_mqa_batched(
   auto out_mat =
       output.view({batch_size, query_rows_per_sequence * num_heads, 512});
   torch::bmm_out(out_mat, probs_bf16, k_win);
-  LOG_FIRST_N(INFO, 2) << "[DSV4_SWA_TC_MQA] batch=" << batch_size
-                       << " q_rows=" << query_rows_per_sequence
-                       << " heads=" << num_heads << " window=" << window_size
-                       << " union_cap=" << union_cap
-                       << " causal=" << causal_per_query;
+  if (causal_per_query) {
+    LOG_FIRST_N(INFO, 2) << "[DSV4_SWA_TC_MQA_CAUSAL] batch=" << batch_size
+                         << " q_rows=" << query_rows_per_sequence
+                         << " heads=" << num_heads << " window=" << window_size
+                         << " union_cap=" << union_cap << " causal=1";
+  } else {
+    LOG_FIRST_N(INFO, 2) << "[DSV4_SWA_TC_MQA] batch=" << batch_size
+                         << " q_rows=" << query_rows_per_sequence
+                         << " heads=" << num_heads << " window=" << window_size
+                         << " union_cap=" << union_cap << " causal=0";
+  }
   return true;
 }
 #endif  // !defined(USE_DCU)
