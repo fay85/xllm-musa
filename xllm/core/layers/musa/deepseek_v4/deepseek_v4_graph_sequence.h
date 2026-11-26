@@ -224,11 +224,13 @@ inline std::vector<int32_t> dsv4_compact_graph_kv_lengths(
   const bool cumulative = !source.empty() && source.front() == 0;
   const bool per_sequence =
       cumulative && source.size() == static_cast<size_t>(active + 1);
+  const bool raw_per_sequence =
+      !cumulative && source.size() == static_cast<size_t>(active);
   const bool per_token =
       cumulative && source.size() == static_cast<size_t>(actual_tokens + 1);
   const bool raw_rows = source.size() == static_cast<size_t>(actual_tokens);
-  CHECK(active == 0 || physical == active || per_sequence || per_token ||
-        raw_rows)
+  CHECK(active == 0 || physical == active || per_sequence || raw_per_sequence ||
+        per_token || raw_rows)
       << "Padded DSV4 Graph requires a recognized live KV length layout";
   std::vector<int32_t> result;
   result.reserve(static_cast<size_t>(physical + 1));
@@ -237,10 +239,11 @@ inline std::vector<int32_t> dsv4_compact_graph_kv_lengths(
     int32_t length = 0;
     if (row < active) {
       const size_t last = static_cast<size_t>((row + 1) * width);
-      length = per_sequence ? source[row + 1] - source[row]
-               : per_token  ? source[last] - source[last - 1]
-               : raw_rows   ? source[last - 1]
-                            : fallback_max;
+      length = per_sequence       ? source[row + 1] - source[row]
+               : raw_per_sequence ? source[row]
+               : per_token        ? source[last] - source[last - 1]
+               : raw_rows         ? source[last - 1]
+                                  : fallback_max;
       length = std::max<int32_t>(length, 1);
     }
     result.emplace_back(result.back() + length);

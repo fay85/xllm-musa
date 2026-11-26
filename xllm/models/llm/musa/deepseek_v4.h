@@ -692,13 +692,14 @@ class DeepseekV4ModelImpl
 
     // The fused MUSA HC head and final RMSNorm reuse fixed decode storage so
     // Full Graph does not materialize the FP32 Torch expression each token.
+    // Size to 128 so C16 target verify (112) and C16 DSpark draft (96) stay fused.
     if (hc_mult_ == 4 && model_args.hidden_size() == 4096) {
       hc_head_output_workspace_ =
-          torch::empty({64, model_args.hidden_size()}, options);
+          torch::empty({128, model_args.hidden_size()}, options);
       hc_head_partial_workspace_ =
-          torch::empty({64, 32, 5}, options.dtype(torch::kFloat32));
+          torch::empty({128, 32, 5}, options.dtype(torch::kFloat32));
       final_norm_output_workspace_ =
-          torch::empty({64, model_args.hidden_size()}, options);
+          torch::empty({128, model_args.hidden_size()}, options);
     }
 
     const int64_t rope_head_dim = model_args.rope_head_dim();
@@ -1149,7 +1150,7 @@ class DeepseekV4ModelImpl
     h = hc_head(h);
     std::optional<torch::Tensor> final_norm_output = std::nullopt;
     if (h.dim() == 2 && h.size(1) == model_args_.hidden_size() &&
-        h.size(0) > 0 && h.size(0) <= 64 &&
+        h.size(0) > 0 && h.size(0) <= 128 &&
         final_norm_output_workspace_.defined()) {
       final_norm_output = final_norm_output_workspace_.narrow(0, 0, h.size(0));
     }
@@ -1783,7 +1784,7 @@ class DeepseekV4ModelImpl
 
   torch::Tensor hc_head(const torch::Tensor& x) {
     if (x.dim() == 3 && x.is_contiguous() && x.size(1) == hc_mult_ &&
-        x.size(2) == 4096 && x.size(0) > 0 && x.size(0) <= 64 &&
+        x.size(2) == 4096 && x.size(0) > 0 && x.size(0) <= 128 &&
         hc_head_output_workspace_.defined() &&
         hc_head_partial_workspace_.defined()) {
       auto output = hc_head_output_workspace_.narrow(0, 0, x.size(0));

@@ -298,6 +298,11 @@ bool s_enable_dsv4_graph_short_fullkv_eager() {
   return env == nullptr || std::string(env) == "1";
 }
 
+bool s_enable_dsv4_dspark_draft_graph() {
+  const char* env = std::getenv("XLLM_DSV4_DSPARK_DRAFT_GRAPH");
+  return env == nullptr || std::string(env) != "0";
+}
+
 uint32_t dsv4_graph_shape_key(uint32_t bucket_num_tokens,
                               uint32_t actual_num_tokens,
                               const ModelArgs& args,
@@ -1499,12 +1504,25 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       linear_state_batch_size > 0 &&
       actual_num_tokens > linear_state_batch_size &&
       actual_num_tokens % linear_state_batch_size == 0;
+  const bool compact_dsv4_dspark_draft =
+      s_enable_dsv4_dspark_draft_graph() && options_.is_draft_engine() &&
+      util::is_deepseek_v4_dspark_model_type(args_.model_type()) &&
+      params.meta.batch_forward_type.is_chunked_prefill() &&
+      options_.draft_graph_query_width() > 1 &&
+      params.meta.q_max_seq_len == options_.draft_graph_query_width() &&
+      actual_num_tokens > 0 &&
+      static_cast<int64_t>(actual_num_tokens) %
+              options_.draft_graph_query_width() ==
+          0;
   if (compact_dsv4_draft_extend) {
     compact_decode_width =
         static_cast<int64_t>(actual_num_tokens) / linear_state_batch_size;
+  } else if (compact_dsv4_dspark_draft) {
+    compact_decode_width = options_.draft_graph_query_width();
   }
-  const bool compact_dsv4_mtp_decode =
-      compact_dsv4_target_verify || compact_dsv4_draft_extend;
+  const bool compact_dsv4_mtp_decode = compact_dsv4_target_verify ||
+                                       compact_dsv4_draft_extend ||
+                                       compact_dsv4_dspark_draft;
   if (s_enable_graph_timing()) {
     LOG(INFO) << "GRAPH_TIMING compact_decode model_type=" << args_.model_type()
               << " is_draft=" << options_.is_draft_engine()
@@ -1751,7 +1769,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       params_for_capture->meta.q_max_seq_len = verify_width;
       params_for_capture->meta.kv_max_seq_len =
           std::max(params.meta.kv_max_seq_len, compact_kv_max);
-      params_for_capture->is_spec_verify = true;
+      params_for_capture->is_spec_verify =
+          compact_dsv4_target_verify || compact_dsv4_draft_extend ||
+          params.is_spec_verify;
 
       for (torch::Tensor& block_table :
            params_for_capture->multi_block_tables) {
@@ -1817,7 +1837,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
     params_for_capture->attn_metadata = attn_metadata;
     params_for_capture->is_spec_verify =
-        compact_dsv4_mtp_decode || params.is_spec_verify;
+        compact_dsv4_target_verify || compact_dsv4_draft_extend ||
+        params.is_spec_verify;
     return params_for_capture;
   };
 
@@ -2068,7 +2089,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
   } else {
     const uint32_t graph_num_sequences =
-        padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
+        compact_dsv4_mtp_decode
+            ? static_cast<uint32_t>(
+                  (padded_num_tokens + compact_decode_width - 1) /
+                  compact_decode_width)
+            : (padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens);
     persistent_block_tables_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences)
         .fill_(-1);
@@ -3724,7 +3749,9 @@ ModelInputParams MusaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
   // defined (see xllm/models/llm/qwen3_next_hybrid_base.h).
   ModelInputParams new_params = params;
   torch::Tensor input_embedding = embed_layer(tokens);
-  if (args_.model_type() == "deepseek_v4" && input_embedding.dim() == 2) {
+  if ((args_.model_type() == "deepseek_v4" ||
+       util::is_deepseek_v4_dspark_model_type(args_.model_type())) &&
+      input_embedding.dim() == 2) {
     // TorchMUSA repeat() allocates its output and is illegal while a stream is
     // capturing.  Materialize the HC lanes here; update() copies them into a
     // stable persistent tensor referenced by both capture and replay.
@@ -3842,7 +3869,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                        const ModelInputParams& params) {
   torch::NoGradGuard no_grad;
   const bool is_prefill = params.meta.batch_forward_type.is_prefill();
-  const bool is_decode = params.meta.batch_forward_type.is_decode();
+  const bool is_dspark_draft_block =
+      s_enable_dsv4_dspark_draft_graph() && options_.is_draft_engine() &&
+      util::is_deepseek_v4_dspark_model_type(args_.model_type()) &&
+      params.meta.batch_forward_type.is_chunked_prefill() &&
+      options_.draft_graph_query_width() > 1 &&
+      params.meta.q_max_seq_len == options_.draft_graph_query_width();
+  const bool is_decode =
+      params.meta.batch_forward_type.is_decode() || is_dspark_draft_block;
 
   // Diagnostic correctness mode: a captured DeepSeek graph owns model-private
   // graph metadata/state carriers. Re-capturing at each new prefill isolates
@@ -3900,7 +3934,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   // Prefill and chunked prefill replay piecewise graphs; launches that need
   // host-side batch layout run as runners between the captured segments.
   std::size_t required_prefill_free_bytes = 0;
-  if ((!has_interior_checkpoints || checkpoint_bucket_runner) &&
+  if (!is_dspark_draft_block &&
+      (!has_interior_checkpoints || checkpoint_bucket_runner) &&
       use_prefill_piecewise_graph(n_tokens,
                                   params,
                                   has_interior_checkpoints,
@@ -4196,15 +4231,17 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     return model_->forward(tokens, positions, kv_caches, eager_params);
   }
 
-  if (params.meta.batch_forward_type.is_chunked_prefill() ||
-      params.meta.batch_forward_type.is_mixed()) {
+  if (!is_dspark_draft_block &&
+      (params.meta.batch_forward_type.is_chunked_prefill() ||
+       params.meta.batch_forward_type.is_mixed())) {
     COUNTER_INC(num_model_execution_total_eager);
     auto result = model_->forward(tokens, positions, kv_caches, params);
     maybe_empty_prefill_cache();
     return result;
   }
 
-  uint32_t bucket_num_tokens = get_bucket_num_tokens(n_tokens);
+  uint32_t bucket_num_tokens =
+      is_dspark_draft_block ? n_tokens : get_bucket_num_tokens(n_tokens);
   const char* stable_multi_graph_env =
       std::getenv("XLLM_DSV4_STABLE_MULTI_GRAPH_SEQUENCES");
   const bool stable_multi_graph_sequences =
@@ -4309,8 +4346,13 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         !params.embedding.linear_state_ids.empty() &&
         static_cast<size_t>(n_tokens) >
             params.embedding.linear_state_ids.size();
-    const bool is_compact_dsv4_decode =
-        is_compact_dsv4_target || is_compact_dsv4_draft;
+    const bool is_compact_dsv4_dspark =
+        is_dspark_draft_block && n_tokens > 0 &&
+        static_cast<int64_t>(n_tokens) % options_.draft_graph_query_width() ==
+            0;
+    const bool is_compact_dsv4_decode = is_compact_dsv4_target ||
+                                        is_compact_dsv4_draft ||
+                                        is_compact_dsv4_dspark;
     int64_t compact_decode_width = 1;
     if (is_compact_dsv4_target) {
       compact_decode_width =
@@ -4321,6 +4363,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       if (state_seqs > 0 && static_cast<int64_t>(n_tokens) % state_seqs == 0) {
         compact_decode_width = static_cast<int64_t>(n_tokens) / state_seqs;
       }
+    } else if (is_compact_dsv4_dspark) {
+      compact_decode_width = options_.draft_graph_query_width();
     }
     int64_t graph_batch_size = params.meta.num_sequences;
     if (params.meta.actual_num_sequences > 0) {
