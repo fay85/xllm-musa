@@ -652,7 +652,10 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   // metadata update requires.
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
   const bool mrope_prefill_graphs =
-      execution_config.enable_prefill_piecewise_graph() &&
+      (execution_config.enable_prefill_piecewise_graph() ||
+       (args_.model_type() == "glm5_next" &&
+        options_.instance_role() == InstanceRole::DECODE &&
+        options_.num_speculative_tokens() > 0)) &&
       args_.model_type() != "glm5_next_mtp" &&
       (options_.mrope_positions() ||
        (options_.backend() == "vlm" &&
@@ -3056,14 +3059,19 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     restore_linear_attention_state(graph_state, validation_indices);
     output.hidden_states.copy_(graph_hidden);
     const auto& query_offsets = params.attention.device.q_seq_lens;
-    const torch::Tensor last_rows =
-        (query_offsets.narrow(0, 1, query_offsets.numel() - 1) - 1)
-            .to(torch::kInt64);
-    auto graph_logits = model_->logits(output.hidden_states, last_rows)
+    // A verify batch consumes logits at every proposal position.
+    const torch::Tensor compare_rows =
+        params.is_spec_verify
+            ? torch::arange(actual_num_tokens,
+                            query_offsets.options().dtype(torch::kInt64))
+            : (query_offsets.narrow(0, 1, query_offsets.numel() - 1) - 1)
+                  .to(torch::kInt64);
+    auto graph_logits = model_->logits(output.hidden_states, compare_rows)
                             .cpu()
                             .to(torch::kFloat32);
-    auto eager_logits =
-        model_->logits(reference_hidden, last_rows).cpu().to(torch::kFloat32);
+    auto eager_logits = model_->logits(reference_hidden, compare_rows)
+                            .cpu()
+                            .to(torch::kFloat32);
     CHECK(torch::isfinite(graph_logits).all().item<bool>());
     CHECK(torch::isfinite(eager_logits).all().item<bool>());
     const int64_t argmax_changes = graph_logits.argmax(-1)
@@ -3895,8 +3903,19 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
     uint32_t num_tokens,
     const ModelInputParams& params) const {
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
+  // GLM target verification uses the full-forward graph cache even when
+  // prompt prefill capture is disabled on a disaggregated decode worker.
+  const bool glm_decode_verify =
+      params.is_spec_verify && args_.model_type() == "glm5_next" &&
+      options_.instance_role() == InstanceRole::DECODE;
+  static const bool force_eager_verify =
+      util::get_bool_env("XLLM_FORCE_EAGER_SPEC_VERIFY", false);
+  if (glm_decode_verify && force_eager_verify) {
+    return false;
+  }
   if (!execution_config.enable_graph() ||
-      !execution_config.enable_prefill_piecewise_graph()) {
+      (!glm_decode_verify &&
+       !execution_config.enable_prefill_piecewise_graph())) {
     return false;
   }
   const auto& forward_type = params.meta.batch_forward_type;

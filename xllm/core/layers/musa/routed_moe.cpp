@@ -37,6 +37,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/musa/musa_fp8_linear.h"
 #include "core/layers/musa/musa_mega_moe.h"
+#include "core/util/env_var.h"
 
 namespace xllm::kernel::musa {
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
@@ -1284,10 +1285,13 @@ torch::Tensor RoutedMoeImpl::forward_with_selected_experts(
     return torch::empty_like(hidden_states);
   }
   // A CP-local shared expert needs no collective. Join it after EP combine.
-  const bool use_shared_expert_overlap = is_prefill && shared_experts_ &&
-                                         !use_prefill_cp &&
-                                         input_2d.device().is_privateuseone() &&
-                                         !kernel::musa::is_stream_capturing();
+  static const bool overlap_verify =
+      util::get_bool_env("XLLM_GLM5_VERIFY_SHARED_OVERLAP", true);
+  const bool use_shared_expert_overlap =
+      is_prefill && shared_experts_ && !use_prefill_cp &&
+      input_2d.device().is_privateuseone() &&
+      ((overlap_verify && input_params.is_spec_verify && mega_moe_) ||
+       !kernel::musa::is_stream_capturing());
   torch::Tensor shared_output;
   SharedExpertOverlapState* shared_overlap_state = nullptr;
   if (use_prefill_cp && mega_moe_ && shared_experts_) {

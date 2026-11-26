@@ -144,6 +144,21 @@ torch::Tensor load_draft_vocab_ids(const std::string& path,
   return torch::tensor(ids, torch::kLong);
 }
 
+// GLM draft proposals read one embedding per sequence. Materialize TP
+// hidden-dimension shards once so consecutive proposals need no collective.
+layer::WordEmbedding replicate_draft_embedding(
+    const layer::WordEmbedding& source,
+    const ModelContext& context) {
+  ParallelArgs parallel = context.get_parallel_args();
+  CHECK(parallel.single_rank_group_ != nullptr);
+  parallel.tp_group_ = parallel.single_rank_group_;
+  layer::WordEmbedding replica(context.with_parallel_args(parallel));
+  replica->load_replicated_weight_from(*source);
+  LOG(INFO) << "GLM MTP replicated draft embedding, bytes="
+            << replica->weight().nbytes();
+  return replica;
+}
+
 layer::LmHead make_block_fp8_draft_lm_head(const layer::LmHead& target_head,
                                            const ModelContext& draft_context,
                                            const std::string& vocab_path) {
@@ -1257,6 +1272,15 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
           draft_impl_->set_lm_head(head);
         }
         auto word_embedding = impl_->get_word_embedding();
+#if defined(USE_MUSA)
+        if (resolved_draft_model_name == "glm5_next_mtp" &&
+            options_.instance_role() == InstanceRole::DECODE &&
+            impl_->context_.get_parallel_args().tp_group_->world_size() > 1 &&
+            util::get_bool_env("XLLM_GLM5_REPLICATE_DRAFT_EMBEDDING", true)) {
+          word_embedding =
+              replicate_draft_embedding(word_embedding, impl_->context_);
+        }
+#endif
         draft_impl_->set_word_embedding(word_embedding);
 #endif
       }

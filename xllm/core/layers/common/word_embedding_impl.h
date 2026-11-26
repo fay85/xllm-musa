@@ -45,6 +45,8 @@ class WordEmbeddingImpl : public torch::nn::Module {
   // load the weight from the checkpoint
   void load_state_dict(const StateDict& state_dict);
 
+  void load_replicated_weight_from(const WordEmbeddingImpl& source);
+
   void pretty_print(std::ostream& stream) const override {
     stream << name() << " " << weight_.sizes() << " " << weight_.device();
   }

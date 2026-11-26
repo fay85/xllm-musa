@@ -261,9 +261,17 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
   CHECK_EQ(output.scalar_type(), input.scalar_type());
   CHECK_EQ(output.device(), input.device());
   CHECK(output.is_contiguous());
-  torch::Tensor local_output = partition_replicated_input
-                                   ? local_output_.narrow(0, 0, execution_rows)
-                                   : output;
+  // Stage 2 can write its owned rows directly to the TP reduction input.
+  // A partially padded shard still needs scratch for its sentinel rows.
+  torch::Tensor local_output = output;
+  const bool padded_shard = count < execution_rows;
+  if (partition_replicated_input) {
+    if (count < tokens) {
+      output.zero_();
+    }
+    local_output = padded_shard ? local_output_.narrow(0, 0, execution_rows)
+                                : output.narrow(0, start, count);
+  }
   {
     km::TvmffiStreamGuard stream_guard(input.device());
     if (!use_prefill) {
@@ -324,8 +332,7 @@ torch::Tensor MusaMegaMoe::forward(const torch::Tensor& input,
   }
   // Decode custom all-reduce exports its input through legacy MUSA IPC.
   // Use the caller's persistent allocation, outside the graph VMM pool.
-  if (partition_replicated_input) {
-    output.zero_();
+  if (partition_replicated_input && padded_shard && count > 0) {
     output.narrow(0, start, count).copy_(local_output.narrow(0, 0, count));
   }
   // The caller adds its TP-sharded shared expert, then one TP all-reduce

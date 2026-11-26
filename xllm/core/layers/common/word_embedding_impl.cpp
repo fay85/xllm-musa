@@ -13,7 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "word_embedding_impl.h"
+#include "core/layers/common/word_embedding_impl.h"
+
+#include <algorithm>
 
 namespace xllm {
 namespace layer {
@@ -60,6 +62,27 @@ void WordEmbeddingImpl::load_state_dict(const StateDict& state_dict) {
   const int64_t rank = rank_;
   const int64_t world_size = world_size_;
   LOAD_SHARDED_WEIGHT(weight, 1);
+}
+
+void WordEmbeddingImpl::load_replicated_weight_from(
+    const WordEmbeddingImpl& source) {
+  CHECK_EQ(world_size_, 1);
+  CHECK(!weight_is_loaded_);
+  CHECK(source.weight_is_loaded_);
+  CHECK_EQ(weight_.size(0), source.weight_.size(0));
+  CHECK_EQ(weight_.size(1), source.weight_.size(1) * source.world_size_);
+  torch::NoGradGuard no_grad;
+  // Bound temporary all-gather storage while loading a large vocabulary.
+  constexpr int64_t kRowsPerGather = 2048;
+  for (int64_t row = 0; row < weight_.size(0); row += kRowsPerGather) {
+    const int64_t count = std::min(kRowsPerGather, weight_.size(0) - row);
+    const torch::Tensor rows =
+        parallel_state::gather(source.weight_.narrow(0, row, count),
+                               source.parallel_args_.tp_group_,
+                               /*dim=*/1);
+    weight_.narrow(0, row, count).copy_(rows);
+  }
+  weight_is_loaded_ = true;
 }
 
 }  // namespace layer
