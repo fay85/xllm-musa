@@ -157,7 +157,7 @@ torch::Tensor deepseek_v4_hc_head(
   CHECK(residual.device() == weight.device() &&
         residual.device() == scale.device() &&
         residual.device() == base.device());
-  CHECK(residual.size(0) > 0 && residual.size(0) <= 64);
+  CHECK(residual.size(0) > 0 && residual.size(0) <= 256);
 
   torch::Tensor result =
       output.has_value()
