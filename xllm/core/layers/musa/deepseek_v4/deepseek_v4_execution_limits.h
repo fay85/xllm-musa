@@ -21,9 +21,9 @@ inline constexpr int32_t kDsv4PrefillReduceWorldSize = 8;
 inline constexpr int64_t kDsv4PrefillReduceMinRows = 4096;
 // The compact MoE path has a lower qualified minimum than ReduceScatter.
 inline constexpr int64_t kDsv4CompactPrefillMinRows = 2048;
-inline constexpr int64_t kDsv4PrefillReduceMaxRows = 16384;
+inline constexpr int64_t kDsv4PrefillReduceMaxRows = 20480;
 inline constexpr int64_t kDsv4FlashHiddenSize = 4096;
-inline constexpr int64_t kDsv4PrefillReduceWorkspaceRows = 2048;
+inline constexpr int64_t kDsv4PrefillReduceWorkspaceRows = 2560;
 inline constexpr int64_t kDsv4PrefillAllreduceWorkspaceRows = 1024;
 inline constexpr int64_t kDsv4GroupedVerifySmallRows = 77;
 inline constexpr int64_t kDsv4GroupedVerifyOptimizedMinRows = 63;

@@ -2426,7 +2426,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
                    /*dim=*/1);
     packed_projection = dsv4_musa_sp::gather_global(
         dsv4_musa_sp::pad_local(packed_projection, *sequence_parallel_context_),
-        *sequence_parallel_context_);
+        *sequence_parallel_context_,
+        dsv4_musa_sp::GatherSlot::kAuxOrMoe);
     kv_projection = packed_projection.slice(
         /*dim=*/1, /*start=*/0, /*end=*/kv_width);
     score_projection = packed_projection.slice(
@@ -2864,7 +2865,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
                    /*dim=*/1);
     packed_projection = dsv4_musa_sp::gather_global(
         dsv4_musa_sp::pad_local(packed_projection, *sequence_parallel_context_),
-        *sequence_parallel_context_);
+        *sequence_parallel_context_,
+        dsv4_musa_sp::GatherSlot::kAuxOrMoe);
     kv_projection = packed_projection.slice(
         /*dim=*/1, /*start=*/0, /*end=*/kv_width);
     score_projection = packed_projection.slice(
@@ -4497,7 +4499,9 @@ DeepseekV4AttentionImpl::forward_current_impl(
             ? pcp_context_->global_sp.value()
             : *sp_context;
     kv = dsv4_musa_sp::gather_global(
-        dsv4_musa_sp::pad_local(kv, gather_context), gather_context);
+        dsv4_musa_sp::pad_local(kv, gather_context),
+        gather_context,
+        dsv4_musa_sp::GatherSlot::kKv);
     maybe_sync_attention_stage(layer_id_, "sp_kv_all_gather", kv);
   }
 
@@ -5396,7 +5400,9 @@ DeepseekV4AttentionImpl::forward_current_impl(
             : kernel::matmul(params);
     CHECK_EQ(packed_local.size(1), 2 * main_width + 2 * indexer_width);
     auto packed_global = dsv4_musa_sp::gather_global(
-        dsv4_musa_sp::pad_local(packed_local, *sp_context), *sp_context);
+        dsv4_musa_sp::pad_local(packed_local, *sp_context),
+        *sp_context,
+        dsv4_musa_sp::GatherSlot::kAuxOrMoe);
     joint_main_kv_projection = packed_global.slice(
         /*dim=*/1, /*start=*/0, /*end=*/main_width);
     joint_main_score_projection = packed_global.slice(

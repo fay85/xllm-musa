@@ -140,6 +140,8 @@ TEST(DeepseekV4RuntimeOptionsTest, KeepsQualifiedCommunicationAndVerifyShapes) {
   EXPECT_TRUE(dsv4_pd_reduce_scatter_eligible(4096, 512, 8, true, true, false));
   EXPECT_TRUE(
       dsv4_pd_reduce_scatter_eligible(16384, 2048, 8, true, true, false));
+  EXPECT_TRUE(
+      dsv4_pd_reduce_scatter_eligible(20480, 2560, 8, true, true, false));
   EXPECT_FALSE(
       dsv4_pd_reduce_scatter_eligible(4096, 1024, 4, true, true, false));
   EXPECT_FALSE(

@@ -15,10 +15,13 @@ TEST(DeepseekV4JointBuildPolicyTest, RetainsQualifiedCachedPrefillTail) {
     EXPECT_TRUE(dsv4_compact_prefill_fp8_eligible(rows, true, true, true));
     EXPECT_TRUE(dsv4_prefill_gate_shape(rows, 4096, 256, 2, false, true));
   }
-  for (const int64_t rows : {0, 7, 2047, 16385}) {
+  EXPECT_TRUE(dsv4_compact_prefill_fp8_eligible(20480, true, true, true));
+  EXPECT_FALSE(dsv4_compact_prefill_fp8_eligible(20481, true, true, true));
+  for (const int64_t rows : {0, 7, 2047}) {
     EXPECT_FALSE(dsv4_compact_prefill_fp8_eligible(rows, true, true, true));
     EXPECT_FALSE(dsv4_prefill_gate_shape(rows, 4096, 256, 2, false, true));
   }
+  EXPECT_FALSE(dsv4_prefill_gate_shape(16385, 4096, 256, 2, false, true));
   EXPECT_FALSE(dsv4_compact_prefill_fp8_eligible(2048, false, true, true));
   EXPECT_FALSE(dsv4_compact_prefill_fp8_eligible(2048, true, false, true));
   EXPECT_FALSE(dsv4_compact_prefill_fp8_eligible(2048, true, true, false));

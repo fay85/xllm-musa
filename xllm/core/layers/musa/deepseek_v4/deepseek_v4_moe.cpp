@@ -1213,8 +1213,6 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
         false));
     CHECK_EQ(reduce_scatter_context->local_valid_tokens,
              reduce_scatter_context->local_tokens);
-    CHECK(
-        dsv4_musa_sp::long_prefill_rendezvous_enabled(*reduce_scatter_context));
     CHECK(tp_custom_allreduce_output_workspace_.defined());
     CHECK_GE(tp_custom_allreduce_output_workspace_.size(0),
              reduce_scatter_context->local_tokens);

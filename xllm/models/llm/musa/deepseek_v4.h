@@ -1006,6 +1006,12 @@ class DeepseekV4ModelImpl
       tokens = layer::dsv4_musa_pcp::shard_rows(tokens, *pcp_context);
     }
     if (sequence_parallel_context.has_value()) {
+      const auto& workspace_sp =
+          pcp_context.has_value() && pcp_context->global_sp.has_value()
+              ? pcp_context->global_sp.value()
+              : sequence_parallel_context.value();
+      layer::dsv4_musa_sp::ensure_prefill_workspaces(
+          workspace_sp, h.device(), h.scalar_type());
       h = layer::dsv4_musa_sp::local_shard(h,
                                            sequence_parallel_context.value());
       tokens = layer::dsv4_musa_sp::local_shard(

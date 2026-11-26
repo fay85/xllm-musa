@@ -272,7 +272,8 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
         pcp_context_ != nullptr && pcp_context_->global_sp.has_value()
             ? pcp_context_->global_sp.value()
             : sp;
-    ffn_input = dsv4_musa_sp::gather_global(ffn_input, gather_context);
+    ffn_input = dsv4_musa_sp::gather_global(
+        ffn_input, gather_context, dsv4_musa_sp::GatherSlot::kAuxOrMoe);
   }
   if (pcp_context_ != nullptr) {
     CHECK(!skip_sp_moe_gather);
