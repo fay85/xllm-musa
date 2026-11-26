@@ -96,6 +96,7 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
   RMSNorm attn_norm_{nullptr};
   RMSNorm ffn_norm_{nullptr};
 
+  ParallelArgs parallel_args_;
   int64_t hc_mult_ = 1;
   int64_t hc_sinkhorn_iters_ = 0;
   double hc_eps_ = 0.0;

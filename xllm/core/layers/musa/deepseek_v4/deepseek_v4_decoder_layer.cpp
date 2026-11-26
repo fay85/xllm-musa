@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "core/layers/common/dp_utils.h"
+
 #include <cstdlib>
 #include <string>
 #include <string_view>
@@ -42,6 +44,7 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   // Qwen block-FP8 keeps using the shared `weight_scale_inv` path unchanged.
   quant_args.weight_block_size().clear();
   const auto& parallel_args = context.get_parallel_args();
+  parallel_args_ = parallel_args;
   const auto& options = context.get_tensor_options();
 
   int64_t hidden_size = args.hidden_size();
@@ -55,7 +58,9 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   // The DSpark draft model is explicitly excluded from Prefill-SP in
   // DeepseekV4ModelImpl::forward. Do not allocate/load a second full-head
   // Attention and its workspaces for a lane that can never run.
-  if (args.dspark_block_size() == 0) {
+  if (args.dspark_block_size() == 0 &&
+      (parallel_args.tp_group_ == nullptr ||
+       parallel_args.tp_group_->world_size() > 1)) {
     CHECK(parallel_args.single_rank_group_ != nullptr)
         << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
            "process group for replicated attention";
@@ -328,6 +333,46 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       input_params.is_spec_verify);
   auto [topk_weights, topk_ids] =
       gate_->forward(ffn_input_2d, gate_input_ids, batch_gate_verify);
+  const bool dp_moe_gather =
+      sequence_parallel_context_ == nullptr && pcp_context_ == nullptr &&
+      need_selected_moe_dp_gather(parallel_args_);
+  bool dp_moe_uniform_graph_gather = false;
+  int64_t dp_moe_local_rows = 0;
+  int64_t dp_moe_rank = 0;
+  bool dp_moe_eager_gathered = false;
+  if (dp_moe_gather) {
+    CHECK(parallel_args_.dp_local_process_group_ != nullptr)
+        << "DeepSeek-V4 DP MoE gather requires dp_local_process_group_";
+    if (attn_metadata.dsa_metadata &&
+        attn_metadata.dsa_metadata->is_acl_graph) {
+      // Under DP8-Attention + TP8-MoE in MUSA Graph mode, G3 forces all DP
+      // ranks into the exact same padded bucket row count. Equal-size static
+      // AllGather avoids index_select and host allocations during capture.
+      dp_moe_local_rows = ffn_input_2d.size(0);
+      dp_moe_rank = parallel_args_.dp_local_process_group_->rank();
+      ffn_input = parallel_args_.dp_local_process_group_
+                      ->allgather_base_sync(ffn_input_2d.contiguous())
+                      .flatten(0, 1);
+      topk_weights = parallel_args_.dp_local_process_group_
+                         ->allgather_base_sync(topk_weights.contiguous())
+                         .flatten(0, 1);
+      topk_ids = parallel_args_.dp_local_process_group_
+                     ->allgather_base_sync(topk_ids.contiguous())
+                     .flatten(0, 1);
+      dp_moe_uniform_graph_gather = true;
+    } else {
+      SelectedMoeInputs gathered = gather_selected_moe_inputs(
+          ffn_input_2d,
+          topk_weights,
+          topk_ids,
+          input_params.parallel.dp_global_token_nums,
+          parallel_args_);
+      ffn_input = std::move(gathered.hidden_states);
+      topk_weights = std::move(gathered.topk_weights);
+      topk_ids = std::move(gathered.topk_ids);
+      dp_moe_eager_gathered = gathered.need_slice;
+    }
+  }
   std::optional<dsv4_musa_sp::DeepseekV4SPContext> global_moe_context;
   const dsv4_musa_sp::DeepseekV4SPContext* reduce_scatter_context = nullptr;
   if (sequence_parallel_context_ != nullptr && pcp_context_ == nullptr &&
@@ -389,6 +434,14 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
                                               /*output_buffer=*/{},
                                               reduce_scatter_context);
 
+  if (dp_moe_uniform_graph_gather) {
+    ffn_input = ffn_input.narrow(
+        /*dim=*/0, /*start=*/dp_moe_rank * dp_moe_local_rows,
+        /*length=*/dp_moe_local_rows);
+  } else if (dp_moe_eager_gathered) {
+    ffn_input = slice_selected_moe_output(
+        ffn_input, input_params.parallel.dp_global_token_nums, parallel_args_);
+  }
   if (pcp_context_ != nullptr && reduce_scatter_context == nullptr) {
     ffn_input = dsv4_musa_pcp::shard_rows(ffn_input, *pcp_context_);
   }

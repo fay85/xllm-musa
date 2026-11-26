@@ -181,7 +181,13 @@ bool need_dp_moe_gather(const ParallelArgs& args, bool enable_moe_all2all) {
 }
 
 bool need_selected_moe_dp_gather(const ParallelArgs& args) {
-  return args.dp_size() > 1 && args.ep_size() > 1;
+  const int32_t attn_tp =
+      args.tp_group_ != nullptr ? args.tp_group_->world_size() : 1;
+  const bool moe_tp_wider_than_attn_tp =
+      args.moe_tp_group_ != nullptr &&
+      args.moe_tp_group_->world_size() > attn_tp;
+  return args.dp_size() > 1 &&
+         (args.ep_size() > 1 || moe_tp_wider_than_attn_tp);
 }
 
 torch::Tensor gather_dp_tokens(const torch::Tensor& input,
