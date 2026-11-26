@@ -698,10 +698,12 @@ std::pair<torch::Tensor, torch::Tensor> run_segmented_gdn_prefill(
     const std::vector<int32_t>& global_offsets,
     const torch::Tensor& pre_conv_rows,
     const torch::Tensor& ssm_cache,
-    int64_t conv_state_len) {
+    int64_t conv_state_len,
+    const torch::Tensor& graph_output = {}) {
   const int64_t num_seqs_in_pack = static_cast<int64_t>(global_offsets.size());
   const torch::Device device = mate_params.q.device();
-  torch::Tensor core_attn_out = torch::empty_like(mate_params.v);
+  torch::Tensor core_attn_out =
+      graph_output.defined() ? graph_output : torch::empty_like(mate_params.v);
   std::vector<torch::Tensor> seq_final_states;
   seq_final_states.reserve(static_cast<size_t>(num_seqs_in_pack));
   for (int64_t s = 0; s < num_seqs_in_pack; ++s) {
@@ -743,6 +745,7 @@ std::pair<torch::Tensor, torch::Tensor> run_segmented_gdn_prefill(
       seg_params.beta =
           mate_params.beta.narrow(1, local_start + prev_c, seg_len);
       seg_params.scale = mate_params.scale;
+      seg_params.use_qk_l2norm_in_kernel = mate_params.use_qk_l2norm_in_kernel;
       if (xllm::kernel::musa::has_padded_piecewise_rows()) {
         torch::Tensor segment_cu = torch::zeros(
             {2}, torch::TensorOptions().dtype(torch::kInt32).device(device));
@@ -1236,6 +1239,15 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool single_checkpoint_runner =
       musa_pcp::single_checkpoint_slots() != nullptr &&
       pcp_context != nullptr && !pcp_context->is_batch;
+  // The Mate kernel processes padded rows as live tokens, so chunked prefill
+  // with an initial state uses it only when no row is padded.
+  const bool use_mate_gdn_chunked_prefill =
+      attn_metadata.is_chunked_prefill &&
+      (batch_size == 1 || use_packed_multiseq_prefill);
+  const bool use_mate_gdn_prefill =
+      kEnableMateGdnPrefill && !use_spec_verify &&
+      (attn_metadata.is_prefill || use_mate_gdn_chunked_prefill);
+  bool qk_normalized_by_conv = false;
   torch::Tensor pre_conv_rows;
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input =
@@ -1269,6 +1281,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         musa_pcp::send_prefix_rows(prefix, *pcp_context);
       }
     }
+    const int32_t qk_channels =
+        use_mate_gdn_prefill && batch_size == 1 && head_k_dim_ == 128
+            ? 2 * local_nk * head_k_dim_
+            : 0;
     mixed_qkv =
         xllm::kernel::musa::causal_conv1d_prefill(conv_input,
                                                   conv_weight,
@@ -1279,7 +1295,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                                   has_initial_state,
                                                   /*silu_activation=*/true,
                                                   conv_prefix,
-                                                  logical_read_state_indices);
+                                                  logical_read_state_indices,
+                                                  qk_channels,
+                                                  &qk_normalized_by_conv);
 
     mixed_qkv = use_packed_multiseq_prefill
                     ? mixed_qkv.unsqueeze(0)
@@ -1434,14 +1452,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
-  // The Mate kernel processes padded rows as live tokens, so chunked prefill
-  // with an initial state uses it only when no row is padded.
-  const bool use_mate_gdn_chunked_prefill =
-      attn_metadata.is_chunked_prefill &&
-      (batch_size == 1 || use_packed_multiseq_prefill);
-  const bool use_mate_gdn_prefill =
-      kEnableMateGdnPrefill && !use_spec_verify &&
-      (attn_metadata.is_prefill || use_mate_gdn_chunked_prefill);
   CHECK(pcp_context == nullptr || (use_mate_gdn_prefill && batch_size == 1))
       << "context-parallel prefill requires packed Mate GDN prefill";
   // Apply chunked or recurrent gated-delta attention and update caches.
@@ -1459,6 +1469,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
     mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens;
     mate_params.use_fixed_token_capacity = pcp_bucket;
+    mate_params.use_qk_l2norm_in_kernel = !qk_normalized_by_conv;
     if (use_packed_multiseq_prefill) {
       std::vector<int32_t> cu_host(
           static_cast<size_t>(metadata_num_seqs) + 1, 0);
@@ -1626,15 +1637,22 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                 offsets, lengths, *live_slots, conv_state_len);
             torch::Tensor values;
             torch::Tensor last_state;
+            const torch::Tensor live_output = output.narrow(1, 0, live_rows);
             if (targets.empty()) {
               std::tie(values, last_state) =
                   xllm::kernel::musa::mate_gated_delta_rule_prefill(live);
               last_state = last_state.to(ssm_cache.dtype());
+              live_output.copy_(values);
             } else {
-              std::tie(values, last_state) = run_segmented_gdn_prefill(
-                  live, targets, offsets, conv, ssm_cache, conv_state_len);
+              std::tie(values, last_state) =
+                  run_segmented_gdn_prefill(live,
+                                            targets,
+                                            offsets,
+                                            conv,
+                                            ssm_cache,
+                                            conv_state_len,
+                                            live_output);
             }
-            output.narrow(1, 0, live_rows).copy_(values);
             if (output.size(1) > live_rows) {
               output.narrow(1, live_rows, output.size(1) - live_rows).zero_();
             }
