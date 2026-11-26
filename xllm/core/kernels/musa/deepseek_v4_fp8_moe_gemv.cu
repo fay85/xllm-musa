@@ -846,15 +846,15 @@ Dsv4TritonBm16MoeState& get_b2_triton_state(const torch::Device& device) {
   }
   const XLLMOptionalDeviceGuard device_guard(device);
   const MUresult r1 = muModuleLoadData(&st.mod_w13, kDsv4MoeW13Mubin);
-  CHECK_EQ(r1, MUSA_SUCCESS) << "B2 W13 muModuleLoadData failed: " << r1;
+  CHECK((r1) == (MUSA_SUCCESS)) << "B2 W13 muModuleLoadData failed: " << r1;
   const MUresult r2 =
       muModuleGetFunction(&st.fn_w13, st.mod_w13, kDsv4MoeTritonKernelName);
-  CHECK_EQ(r2, MUSA_SUCCESS) << "B2 W13 muModuleGetFunction failed: " << r2;
+  CHECK((r2) == (MUSA_SUCCESS)) << "B2 W13 muModuleGetFunction failed: " << r2;
   const MUresult r3 = muModuleLoadData(&st.mod_w2, kDsv4MoeW2Mubin);
-  CHECK_EQ(r3, MUSA_SUCCESS) << "B2 W2 muModuleLoadData failed: " << r3;
+  CHECK((r3) == (MUSA_SUCCESS)) << "B2 W2 muModuleLoadData failed: " << r3;
   const MUresult r4 =
       muModuleGetFunction(&st.fn_w2, st.mod_w2, kDsv4MoeTritonKernelName);
-  CHECK_EQ(r4, MUSA_SUCCESS) << "B2 W2 muModuleGetFunction failed: " << r4;
+  CHECK((r4) == (MUSA_SUCCESS)) << "B2 W2 muModuleGetFunction failed: " << r4;
 
   const auto opts_fp8 =
       torch::TensorOptions().dtype(torch::kFloat8_e4m3fn).device(device);
@@ -1120,20 +1120,20 @@ torch::Tensor deepseek_v4_fp8_moe_triton_bm16_decode(
     const torch::Tensor& w2_scale,
     int64_t start_expert_id,
     double swiglu_limit) {
-  CHECK_EQ(input.dim(), 2);
-  CHECK_EQ(topk_ids.dim(), 2);
-  CHECK_EQ(topk_weights.dim(), 2);
-  CHECK_EQ(w13.dim(), 3);
-  CHECK_EQ(w2.dim(), 3);
+  CHECK((input.dim()) == (2));
+  CHECK((topk_ids.dim()) == (2));
+  CHECK((topk_weights.dim()) == (2));
+  CHECK((w13.dim()) == (3));
+  CHECK((w2.dim()) == (3));
   const int32_t num_tokens = static_cast<int32_t>(input.size(0));
   const int32_t hidden = static_cast<int32_t>(input.size(1));
   const int32_t topk = static_cast<int32_t>(topk_ids.size(1));
   const int32_t num_experts = static_cast<int32_t>(w13.size(0));
   const int32_t intermediate = static_cast<int32_t>(w2.size(2));
   CHECK(num_tokens >= 1 && num_tokens <= kB2MaxTokens);
-  CHECK_EQ(hidden, kB2Hidden);
-  CHECK_EQ(intermediate, kB2Intermediate);
-  CHECK_EQ(topk, kB2TopK);
+  CHECK((hidden) == (kB2Hidden));
+  CHECK((intermediate) == (kB2Intermediate));
+  CHECK((topk) == (kB2TopK));
   CHECK(num_experts >= 1 && num_experts <= kB2MaxExperts);
   CHECK(input.scalar_type() == torch::kBFloat16 && input.is_contiguous());
   CHECK(topk_weights.scalar_type() == torch::kFloat32 &&
@@ -1229,7 +1229,7 @@ torch::Tensor deepseek_v4_fp8_moe_triton_bm16_decode(
                                       reinterpret_cast<MUstream>(stream),
                                       args1,
                                       nullptr);
-  CHECK_EQ(lr1, MUSA_SUCCESS) << "B2 W13 muLaunchKernel failed: " << lr1;
+  CHECK((lr1) == (MUSA_SUCCESS)) << "B2 W13 muLaunchKernel failed: " << lr1;
 
   // Stage 4: fused SwiGLU + block128 FP8 quantization
   b2_swiglu_fp8_quant_kernel<<<routes, 256, 0, stream>>>(
@@ -1272,7 +1272,7 @@ torch::Tensor deepseek_v4_fp8_moe_triton_bm16_decode(
                                       reinterpret_cast<MUstream>(stream),
                                       args2,
                                       nullptr);
-  CHECK_EQ(lr2, MUSA_SUCCESS) << "B2 W2 muLaunchKernel failed: " << lr2;
+  CHECK((lr2) == (MUSA_SUCCESS)) << "B2 W2 muLaunchKernel failed: " << lr2;
 
   // Stage 6: vectorized topk=6 sum reduce with invalid-expert masking
   torch::Tensor out_slice =
