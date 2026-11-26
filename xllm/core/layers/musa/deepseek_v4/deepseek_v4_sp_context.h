@@ -289,7 +289,8 @@ inline torch::Tensor gather_global(
 
 inline GatherGlobalAsync launch_gather_global(
     const torch::Tensor& local_tensor,
-    const DeepseekV4SPContext& context) {
+    const DeepseekV4SPContext& context,
+    std::optional<GatherSlot> slot = std::nullopt) {
   CHECK(local_tensor.defined());
   CHECK_EQ(local_tensor.size(0), context.local_tokens)
       << "DeepSeek-V4 sequence parallel local tensor has unexpected rows";
@@ -297,8 +298,27 @@ inline GatherGlobalAsync launch_gather_global(
   async.local_contiguous = local_tensor.contiguous();
   auto gathered_shape = async.local_contiguous.sizes().vec();
   gathered_shape.insert(gathered_shape.begin(), context.world_size);
-  async.gathered =
-      torch::empty(gathered_shape, async.local_contiguous.options());
+  bool using_workspace = false;
+  if (slot.has_value() && async.local_contiguous.numel() > 0) {
+    const int64_t total_bytes =
+        static_cast<int64_t>(context.world_size) *
+        async.local_contiguous.numel() *
+        static_cast<int64_t>(async.local_contiguous.element_size());
+    torch::Tensor workspace = try_get_sp_gather_slot(
+        *slot, total_bytes, async.local_contiguous.device());
+    if (workspace.defined() &&
+        workspace.data_ptr() != async.local_contiguous.data_ptr()) {
+      async.gathered =
+          workspace.narrow(/*dim=*/0, /*start=*/0, /*length=*/total_bytes)
+              .view(async.local_contiguous.scalar_type())
+              .view(gathered_shape);
+      using_workspace = true;
+    }
+  }
+  if (!using_workspace) {
+    async.gathered =
+        torch::empty(gathered_shape, async.local_contiguous.options());
+  }
   begin_long_prefill_collective(context);
   async.work = context.process_group->allgather_base_async(
       async.local_contiguous, async.gathered);

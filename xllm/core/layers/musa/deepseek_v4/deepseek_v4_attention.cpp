@@ -4531,79 +4531,149 @@ DeepseekV4AttentionImpl::forward_current_impl(
                                q_overlap_state->q_stream.stream()),
                musaSuccess);
     }
-  } else {
-    compute_q_branch();
   }
 
-  if (!kv_down.defined()) {
-    if (qkv_a_weight_loaded_) {
-      kv_down = packed_qkv_a_matmul(qkv_a_weight_.slice(
-          /*dim=*/0,
-          /*start=*/q_lora_rank_,
-          /*end=*/q_lora_rank_ + head_dim_));
-    } else {
-      kv_down = kv_proj_->forward(projection_hidden_states);
+  const char* overlap_sp_env =
+      std::getenv("XLLM_DSV4_PREFILL_OVERLAP_SP_GATHER");
+  const bool overlap_sp_gather =
+      (overlap_sp_env == nullptr || std::strcmp(overlap_sp_env, "0") != 0) &&
+      !overlap_decode_q_kv && sp_context != nullptr &&
+      pcp_context_ == nullptr && (is_prefill || is_chunked_prefill) &&
+      !attn_metadata.is_acl_graph && !use_packed_qkv_a && !kv_down.defined();
+
+  auto compute_kv_branch = [&]() -> torch::Tensor {
+    if (!kv_down.defined()) {
+      if (qkv_a_weight_loaded_) {
+        kv_down = packed_qkv_a_matmul(qkv_a_weight_.slice(
+            /*dim=*/0,
+            /*start=*/q_lora_rank_,
+            /*end=*/q_lora_rank_ + head_dim_));
+      } else {
+        kv_down = kv_proj_->forward(projection_hidden_states);
+      }
     }
-  }
-  maybe_sync_attention_stage(layer_id_, "kv_proj", kv_down);
-  if (dsv4_musa_trace_enabled()) {
-    LOG(INFO) << "[DSV4_MUSA_TRACE] attention layer=" << layer_id_
-              << " after_kv_proj shape=" << kv_down.sizes();
-  }
-  auto kv = kv_down.view({-1, 1, head_dim_});
-  bool fused_kv_norm_rope = false;
-  if (deferred_kv_norm_output.defined()) {
-    auto kv_output = deferred_kv_norm_output.view({-1, 1, head_dim_});
-    fused_kv_norm_rope = head_dim_ == 512 && nope_head_dim_ == 448 &&
-                         rope_head_dim_ == 64 &&
-                         kernel::musa::deepseek_v4_weighted_rmsnorm_rope_out(
-                             kv,
-                             kv_layernorm_->weight(),
-                             active_cos,
-                             active_sin,
-                             eps_,
-                             kv_output);
+    maybe_sync_attention_stage(layer_id_, "kv_proj", kv_down);
+    if (dsv4_musa_trace_enabled()) {
+      LOG(INFO) << "[DSV4_MUSA_TRACE] attention layer=" << layer_id_
+                << " after_kv_proj shape=" << kv_down.sizes();
+    }
+    auto local_kv = kv_down.view({-1, 1, head_dim_});
+    bool fused_kv_norm_rope = false;
+    if (deferred_kv_norm_output.defined()) {
+      auto kv_output = deferred_kv_norm_output.view({-1, 1, head_dim_});
+      fused_kv_norm_rope = head_dim_ == 512 && nope_head_dim_ == 448 &&
+                           rope_head_dim_ == 64 &&
+                           kernel::musa::deepseek_v4_weighted_rmsnorm_rope_out(
+                               local_kv,
+                               kv_layernorm_->weight(),
+                               active_cos,
+                               active_sin,
+                               eps_,
+                               kv_output);
+      if (fused_kv_norm_rope) {
+        LOG_FIRST_N(INFO, 2) << "[DSV4_FUSED_KV_COPY_NORM_ROPE] rows="
+                             << local_kv.size(0)
+                             << " source_row_stride=" << local_kv.stride(0);
+      } else {
+        deferred_kv_norm_output.copy_(kv_down);
+      }
+      kv_down = deferred_kv_norm_output;
+      local_kv = kv_output;
+    }
+    if (!fused_kv_norm_rope) {
+      fused_kv_norm_rope =
+          head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
+          kernel::musa::deepseek_v4_weighted_rmsnorm_rope_inplace(
+              local_kv, kv_layernorm_->weight(), active_cos, active_sin, eps_);
+    }
     if (fused_kv_norm_rope) {
-      LOG_FIRST_N(INFO, 2) << "[DSV4_FUSED_KV_COPY_NORM_ROPE] rows="
-                           << kv.size(0)
-                           << " source_row_stride=" << kv.stride(0);
+      maybe_sync_attention_stage(layer_id_, "kv_rms_norm_rope", local_kv);
     } else {
-      deferred_kv_norm_output.copy_(kv_down);
+      local_kv =
+          std::get<0>(kv_layernorm_->forward(kv_down)).view({-1, 1, head_dim_});
+      maybe_sync_attention_stage(layer_id_, "kv_layernorm", local_kv);
+      local_kv = apply_interleaved_partial_rope(
+          local_kv, nope_head_dim_, rope_head_dim_, active_cos, active_sin);
+      maybe_sync_attention_stage(layer_id_, "kv_rope", local_kv);
     }
-    kv_down = deferred_kv_norm_output;
-    kv = kv_output;
-  }
-  if (!fused_kv_norm_rope) {
-    fused_kv_norm_rope =
-        head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
-        kernel::musa::deepseek_v4_weighted_rmsnorm_rope_inplace(
-            kv, kv_layernorm_->weight(), active_cos, active_sin, eps_);
-  }
-  if (fused_kv_norm_rope) {
-    maybe_sync_attention_stage(layer_id_, "kv_rms_norm_rope", kv);
-  } else {
-    kv = std::get<0>(kv_layernorm_->forward(kv_down)).view({-1, 1, head_dim_});
-    maybe_sync_attention_stage(layer_id_, "kv_layernorm", kv);
-    kv = apply_interleaved_partial_rope(
-        kv, nope_head_dim_, rope_head_dim_, active_cos, active_sin);
-    maybe_sync_attention_stage(layer_id_, "kv_rope", kv);
-  }
-  maybe_sync_attention_stage(layer_id_, "kv_fp8_roundtrip", kv);
-  if (sp_context != nullptr) {
+    maybe_sync_attention_stage(layer_id_, "kv_fp8_roundtrip", local_kv);
+    return local_kv;
+  };
+
+  torch::Tensor kv;
+  dsv4_musa_sp::GatherGlobalAsync early_packed_gather;
+  bool has_early_packed_gather = false;
+  if (overlap_sp_gather) {
+    kv = compute_kv_branch();
     if (zero_local_sp_shard) {
-      // q/kv projection used one dummy row to avoid zero-work kernels; only
-      // the valid KV rows may enter the replicated prefill gather.
       kv = kv.narrow(/*dim=*/0, /*start=*/0, /*length=*/0);
     }
-    const auto& gather_context =
-        pcp_context_ != nullptr && pcp_context_->global_sp.has_value()
-            ? pcp_context_->global_sp.value()
-            : *sp_context;
-    kv = dsv4_musa_sp::gather_global(
-        dsv4_musa_sp::pad_local(kv, gather_context),
-        gather_context,
+    auto kv_gather_async = dsv4_musa_sp::launch_gather_global(
+        dsv4_musa_sp::pad_local(kv, *sp_context),
+        *sp_context,
         dsv4_musa_sp::GatherSlot::kKv);
+
+    const bool early_use_compressed =
+        dsv4_musa_compress_fallback_enabled() &&
+        (compress_ratio_ == 4 || compress_ratio_ == 128) && compressor_wkv_ &&
+        compressor_wgate_ && compressor_norm_ && compressor_ape_loaded_;
+    const bool early_use_indexer =
+        early_use_compressed && compress_ratio_ == 4 &&
+        dsv4_musa_indexer_enabled() &&
+        (indexer_wq_b_ || q_indexer_b_weight_loaded_) &&
+        indexer_weights_proj_ && indexer_compressor_wkv_ &&
+        indexer_compressor_wgate_ && indexer_compressor_norm_ &&
+        indexer_compressor_ape_loaded_;
+    if (early_use_compressed && early_use_indexer &&
+        sp_joint_compressor_projection_weight_.defined()) {
+      kernel::MatmulParams params;
+      params.a = compression_hidden_states;
+      params.b = sp_joint_compressor_projection_weight_;
+      params.bias = std::nullopt;
+      auto packed_local =
+          zero_local_sp_shard
+              ? torch::zeros(
+                    {0, sp_joint_compressor_projection_weight_.size(0)},
+                    compression_hidden_states.options().dtype(
+                        sp_joint_compressor_projection_weight_.scalar_type()))
+              : kernel::matmul(params);
+      early_packed_gather = dsv4_musa_sp::launch_gather_global(
+          dsv4_musa_sp::pad_local(packed_local, *sp_context),
+          *sp_context,
+          dsv4_musa_sp::GatherSlot::kAuxOrMoe);
+      has_early_packed_gather = true;
+    }
+
+    // Overlap both SP AllGathers (kv + packed compressor projection) behind
+    // Q projection + RMSNorm + RoPE on the compute stream.
+    compute_q_branch();
+    kv = dsv4_musa_sp::finish_gather_global(std::move(kv_gather_async),
+                                            *sp_context);
     maybe_sync_attention_stage(layer_id_, "sp_kv_all_gather", kv);
+    LOG_FIRST_N(INFO, 2)
+        << "[DSV4_PREFILL_OVERLAP_SP_GATHER] layer=" << layer_id_
+        << " early_packed=" << (has_early_packed_gather ? 1 : 0);
+  } else {
+    if (!overlap_decode_q_kv) {
+      compute_q_branch();
+    }
+    kv = compute_kv_branch();
+    if (sp_context != nullptr) {
+      if (zero_local_sp_shard) {
+        // q/kv projection used one dummy row to avoid zero-work kernels; only
+        // the valid KV rows may enter the replicated prefill gather.
+        kv = kv.narrow(/*dim=*/0, /*start=*/0, /*length=*/0);
+      }
+      const auto& gather_context =
+          pcp_context_ != nullptr && pcp_context_->global_sp.has_value()
+              ? pcp_context_->global_sp.value()
+              : *sp_context;
+      kv = dsv4_musa_sp::gather_global(
+          dsv4_musa_sp::pad_local(kv, gather_context),
+          gather_context,
+          dsv4_musa_sp::GatherSlot::kKv);
+      maybe_sync_attention_stage(layer_id_, "sp_kv_all_gather", kv);
+    }
   }
 
   auto ori_kv = kv_cache.get_swa_cache();
@@ -5528,22 +5598,30 @@ DeepseekV4AttentionImpl::forward_current_impl(
   if (use_joint_sp_compressor_projection) {
     const int64_t main_width = compressor_coff_ * head_dim_;
     const int64_t indexer_width = 2 * index_head_dim_;
-    kernel::MatmulParams params;
-    params.a = compression_hidden_states;
-    params.b = sp_joint_compressor_projection_weight_;
-    params.bias = std::nullopt;
-    auto packed_local =
-        zero_local_sp_shard
-            ? torch::zeros(
-                  {0, sp_joint_compressor_projection_weight_.size(0)},
-                  compression_hidden_states.options().dtype(
-                      sp_joint_compressor_projection_weight_.scalar_type()))
-            : kernel::matmul(params);
-    CHECK_EQ(packed_local.size(1), 2 * main_width + 2 * indexer_width);
-    auto packed_global = dsv4_musa_sp::gather_global(
-        dsv4_musa_sp::pad_local(packed_local, *sp_context),
-        *sp_context,
-        dsv4_musa_sp::GatherSlot::kAuxOrMoe);
+    torch::Tensor packed_global;
+    if (has_early_packed_gather) {
+      packed_global = dsv4_musa_sp::finish_gather_global(
+          std::move(early_packed_gather), *sp_context);
+      CHECK_EQ(packed_global.size(1), 2 * main_width + 2 * indexer_width);
+      has_early_packed_gather = false;
+    } else {
+      kernel::MatmulParams params;
+      params.a = compression_hidden_states;
+      params.b = sp_joint_compressor_projection_weight_;
+      params.bias = std::nullopt;
+      auto packed_local =
+          zero_local_sp_shard
+              ? torch::zeros(
+                    {0, sp_joint_compressor_projection_weight_.size(0)},
+                    compression_hidden_states.options().dtype(
+                        sp_joint_compressor_projection_weight_.scalar_type()))
+              : kernel::matmul(params);
+      CHECK_EQ(packed_local.size(1), 2 * main_width + 2 * indexer_width);
+      packed_global = dsv4_musa_sp::gather_global(
+          dsv4_musa_sp::pad_local(packed_local, *sp_context),
+          *sp_context,
+          dsv4_musa_sp::GatherSlot::kAuxOrMoe);
+    }
     joint_main_kv_projection = packed_global.slice(
         /*dim=*/1, /*start=*/0, /*end=*/main_width);
     joint_main_score_projection = packed_global.slice(
@@ -5559,6 +5637,10 @@ DeepseekV4AttentionImpl::forward_current_impl(
     LOG_FIRST_N(INFO, 1)
         << "DeepSeek-V4 MUSA SP main/indexer compressor projections share "
            "one GEMM and one collective.";
+  } else if (has_early_packed_gather) {
+    (void)dsv4_musa_sp::finish_gather_global(std::move(early_packed_gather),
+                                             *sp_context);
+    has_early_packed_gather = false;
   }
   if (use_compressed_attention && (is_prefill || is_chunked_prefill)) {
     // A new request can enter through chunked prefill (DSpark requires the
