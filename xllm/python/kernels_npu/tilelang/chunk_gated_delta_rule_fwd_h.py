@@ -74,6 +74,16 @@ def _build_chunk_gated_delta_rule_fwd_h_kernel(
     SEM_HUPD_C2V = 4
     SEM_H_V2C = 6
 
+    @T.macro
+    def _accumulate_chunk(k_even_l1, k_odd_l1, v_l1, v_rows, accumulator, pid):
+        T.copy(v_rows, v_l1)
+        T.set_flag("mte2", "m", 4)
+        T.wait_flag("mte2", "m", 4)
+        if pid == 0:
+            T.gemm_v0(k_even_l1, v_l1, accumulator, transpose_A=True, init=True)
+        else:
+            T.gemm_v0(k_odd_l1, v_l1, accumulator, transpose_A=True, init=True)
+
     @T.prim_func
     def main(
         h: T.Tensor([1, NT_all, H, K, V], input_dtype),
@@ -114,11 +124,20 @@ def _build_chunk_gated_delta_rule_fwd_h_kernel(
             g_exp_ub_pad = T.alloc_ub([bt], accum_dtype)  # 256B aligned for compare
             g_mask_ub_pad = T.alloc_ub([bt // 8], "uint8")
 
-            k_chunk_l1 = T.alloc_L1([2, bt, K], input_dtype)
-            w_chunk_l1 = T.alloc_L1([2, bt, K], input_dtype)
+            # TileLang emits need_clear=True for a tile-base copy. Its
+            # src/tl_templates/ascend/common.h::copy_gm_to_l1 helper calls
+            # InitConstValue before a partial copy when that flag is set.
+            # k.T @ v_new reduces over all bt rows, so stale padding would
+            # corrupt the state. w @ h is row-wise: padded outputs are
+            # discarded, but use the same tile layout for clean padding.
+            k_even_l1 = T.alloc_L1([bt, K], input_dtype)
+            k_odd_l1 = T.alloc_L1([bt, K], input_dtype)
+            w_even_l1 = T.alloc_L1([bt, K], input_dtype)
+            w_odd_l1 = T.alloc_L1([bt, K], input_dtype)
             h_state_l1 = T.alloc_L1([2, K, V_half], input_dtype)
             wh_frag = T.alloc_L0C([2, bt, V_half], accum_dtype)
-            v_new_l1 = T.alloc_L1([2, bt, V_half], input_dtype)
+            v_left_l1 = T.alloc_L1([bt, V_half], input_dtype)
+            v_right_l1 = T.alloc_L1([bt, V_half], input_dtype)
             hupd_frag = T.alloc_L0C([2, K, V_half], accum_dtype)
 
             for pair_idx in T.serial(num_pairs):
@@ -137,8 +156,8 @@ def _build_chunk_gated_delta_rule_fwd_h_kernel(
                     NT_i = T.ceildiv(T_len, bt)
 
                     actual_len = T.if_then_else(T_len < bt, T_len, bt)
-                    T.copy(w[bos : bos + actual_len, i_h, :], w_chunk_l1[0, :, :])
-                    T.copy(k[bos : bos + actual_len, k_head, :], k_chunk_l1[0, :, :])
+                    T.copy(w[bos : bos + actual_len, i_h, :], w_even_l1)
+                    T.copy(k[bos : bos + actual_len, k_head, :], k_even_l1)
                     T.set_flag("mte2", "m", 0)
 
                     for i in T.serial(NT_i):
@@ -150,22 +169,12 @@ def _build_chunk_gated_delta_rule_fwd_h_kernel(
 
                         if i + 1 < NT_i:
                             next_len = T.if_then_else((i + 1) * bt + bt > T_len, T_len - (i + 1) * bt, bt)
-                            T.copy(
-                                w[
-                                    chunk_start_next : chunk_start_next + next_len,
-                                    i_h,
-                                    :,
-                                ],
-                                w_chunk_l1[next_pid, :, :],
-                            )
-                            T.copy(
-                                k[
-                                    chunk_start_next : chunk_start_next + next_len,
-                                    k_head,
-                                    :,
-                                ],
-                                k_chunk_l1[next_pid, :, :],
-                            )
+                            if next_pid == 0:
+                                T.copy(w[chunk_start_next : chunk_start_next + next_len, i_h, :], w_even_l1)
+                                T.copy(k[chunk_start_next : chunk_start_next + next_len, k_head, :], k_even_l1)
+                            else:
+                                T.copy(w[chunk_start_next : chunk_start_next + next_len, i_h, :], w_odd_l1)
+                                T.copy(k[chunk_start_next : chunk_start_next + next_len, k_head, :], k_odd_l1)
                             T.set_flag("mte2", "m", next_pid)
 
                         # w @ h
@@ -175,30 +184,36 @@ def _build_chunk_gated_delta_rule_fwd_h_kernel(
                             T.copy(ws_h[i_n, i_h, j, :, :], h_state_l1[j, :, :])
                             T.set_flag("mte2", "m", 2)
                             T.wait_flag("mte2", "m", 2)
-                            T.gemm_v0(
-                                w_chunk_l1[pid, :, :],
-                                h_state_l1[j, :, :],
-                                wh_frag[j, :, :],
-                                init=True,
-                            )
+                            if pid == 0:
+                                T.gemm_v0(w_even_l1, h_state_l1[j, :, :], wh_frag[j, :, :], init=True)
+                            else:
+                                T.gemm_v0(w_odd_l1, h_state_l1[j, :, :], wh_frag[j, :, :], init=True)
                             T.set_flag("m", "fix", 3)
                             T.wait_flag("m", "fix", 3)
                             T.copy(wh_frag[j, :, :], ws_wh[i_n, i_h, j, :, :])
                             T.set_cross_flag("FIX", SEM_WH_C2V + j)
 
-                        # k @ v_new
+                        # k.T @ v_new
                         for j in T.serial(2):
                             T.wait_cross_flag(SEM_VNEW_V2C + j)
-                            T.copy(ws_vnew[i_n, i_h, j, :chunk_len, :], v_new_l1[j, :, :])
-                            T.set_flag("mte2", "m", 4)
-                            T.wait_flag("mte2", "m", 4)
-                            T.gemm_v0(
-                                k_chunk_l1[pid, :, :],
-                                v_new_l1[j, :, :],
-                                hupd_frag[j, :, :],
-                                transpose_A=True,
-                                init=True,
-                            )
+                            if j == 0:
+                                _accumulate_chunk(
+                                    k_even_l1,
+                                    k_odd_l1,
+                                    v_left_l1,
+                                    ws_vnew[i_n, i_h, j, :chunk_len, :],
+                                    hupd_frag[j, :, :],
+                                    pid,
+                                )
+                            else:
+                                _accumulate_chunk(
+                                    k_even_l1,
+                                    k_odd_l1,
+                                    v_right_l1,
+                                    ws_vnew[i_n, i_h, j, :chunk_len, :],
+                                    hupd_frag[j, :, :],
+                                    pid,
+                                )
                             T.set_flag("m", "fix", 5)
                             T.wait_flag("m", "fix", 5)
                             T.copy(hupd_frag[j, :, :], ws_hupd[i_n, i_h, j, :, :])
