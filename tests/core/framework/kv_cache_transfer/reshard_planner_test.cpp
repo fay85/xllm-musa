@@ -2021,6 +2021,68 @@ TEST(ReshardPlannerTest, IdenticalSpanPlanFoldsContiguousRepeats) {
   }
 }
 
+TEST(ReshardPlannerTest, HeteroDpDestinationSpreadsReplicatedKvAcrossSourceTp) {
+  auto make_worker = [](const std::string& worker_id,
+                        uint64_t buffer_id,
+                        int32_t dp_size,
+                        int32_t dp_rank,
+                        int32_t tp_size,
+                        int32_t tp_rank) {
+    WorkerCacheLayoutManifest manifest;
+    manifest.worker_id = worker_id;
+    manifest.coordinates.dp_size = dp_size;
+    manifest.coordinates.dp_rank = dp_rank;
+    manifest.coordinates.tp_size = tp_size;
+    manifest.coordinates.tp_rank = tp_rank;
+    manifest.coordinates.cp_size = 1;
+    manifest.coordinates.cp_rank = 0;
+
+    CacheTensorManifest tensor;
+    tensor.cache_namespace = CacheNamespace::MAIN;
+    tensor.layer_id = 0;
+    tensor.role = CacheTensorRole::SWA_KV;
+    tensor.group_id = 1;
+    tensor.mooncake_buffer_id = static_cast<int64_t>(buffer_id);
+    tensor.resource_count = 4;
+    tensor.resource_stride_bytes = 128 * 1152;
+    tensor.buffer_bytes = 4 * 128 * 1152;
+
+    LogicalSpan span;
+    span.logical_tensor = "swa_kv";
+    span.bytes_per_region = 1152;
+    span.repeat_count = 128;
+    span.logical_stride_bytes = 1152;
+    span.physical_stride_bytes = 1152;
+    span.owner_tp_rank = 0;
+    tensor.shard.spans.push_back(span);
+    manifest.tensors.push_back(tensor);
+    return manifest;
+  };
+
+  std::vector<WorkerCacheLayoutManifest> sources;
+  for (int32_t tp_rank = 0; tp_rank < 8; ++tp_rank) {
+    sources.push_back(make_worker(
+        "p-" + std::to_string(tp_rank), 10 + tp_rank, /*dp_size=*/1, 0,
+        /*tp_size=*/8, tp_rank));
+  }
+
+  for (int32_t dp_rank = 0; dp_rank < 8; ++dp_rank) {
+    const WorkerCacheLayoutManifest dst = make_worker(
+        "d-" + std::to_string(dp_rank), 100 + dp_rank, /*dp_size=*/8, dp_rank,
+        /*tp_size=*/1, 0);
+    std::vector<size_t> selected;
+    std::vector<ReshardPlanTemplate> plans;
+    const Status status =
+        ReshardPlanner().build_incoming_plans(sources, dst, &selected, &plans);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(selected.size(), 1U);
+    EXPECT_EQ(selected[0], static_cast<size_t>(dp_rank));
+    ASSERT_EQ(plans[dp_rank].regions.size(), 1U);
+    EXPECT_EQ(plans[dp_rank].regions[0].repeat_count, 1U);
+    EXPECT_EQ(plans[dp_rank].regions[0].bytes_per_region, 128U * 1152U);
+  }
+}
+
 }  // namespace
 
 }  // namespace xllm

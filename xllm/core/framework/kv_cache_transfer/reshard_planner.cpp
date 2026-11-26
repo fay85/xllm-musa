@@ -273,6 +273,66 @@ class SpanWriters final {
     return writers;
   }
 
+  // For hetero collapsed plans targeting a DP destination (e.g. P(dp=1,tp=8)
+  // -> D(dp=8,tp=1)), spread replicated spans across source TP ranks by
+  // destination dp_rank % src.tp_size instead of funneling all DP ranks onto
+  // source tp_rank=0. Non-replicated spans keep their declared owner.
+  static SpanWriters for_collapsed_destination(
+      const std::vector<WorkerCacheLayoutManifest>& sources,
+      const WorkerCacheLayoutManifest& destination) {
+    if (sources.empty()) {
+      return declared();
+    }
+    const ParallelCoordinates& src_coords = sources.front().coordinates;
+    if (kv_split_spans_cp_and_tp(src_coords)) {
+      return everything();
+    }
+    if (destination.coordinates.dp_size <= 1 ||
+        destination.coordinates.dp_rank < 0 || src_coords.tp_size <= 1) {
+      return declared();
+    }
+    struct SpanHolders {
+      std::optional<int32_t> declared_owner;
+      bool conflicting = false;
+      std::set<int32_t> tp_ranks;
+    };
+    std::map<SpanOwnerKey, SpanHolders> holders;
+    for (const WorkerCacheLayoutManifest& source : sources) {
+      const int32_t tp_rank = source.coordinates.tp_rank;
+      for (const auto& [key, declared_owner] : manifest_spans(source)) {
+        SpanHolders& entry = holders[key];
+        entry.tp_ranks.insert(tp_rank);
+        if (declared_owner < 0) {
+          entry.conflicting = true;
+        } else if (!entry.declared_owner.has_value()) {
+          entry.declared_owner = declared_owner;
+        } else if (*entry.declared_owner != declared_owner) {
+          entry.conflicting = true;
+        }
+      }
+    }
+    SpanWriters writers;
+    writers.by_declaration_ = true;
+    const int32_t preferred_tp =
+        destination.coordinates.dp_rank % src_coords.tp_size;
+    for (const auto& [key, entry] : holders) {
+      if (entry.conflicting || entry.tp_ranks.size() <= 1) {
+        continue;
+      }
+      if (entry.tp_ranks.count(preferred_tp) > 0) {
+        writers.resolved_.emplace(key, preferred_tp);
+      } else {
+        std::vector<int32_t> sorted(entry.tp_ranks.begin(),
+                                    entry.tp_ranks.end());
+        const size_t idx =
+            static_cast<size_t>(destination.coordinates.dp_rank) %
+            sorted.size();
+        writers.resolved_.emplace(key, sorted[idx]);
+      }
+    }
+    return writers;
+  }
+
   // Whether `tp_rank` writes this span when it expands `manifest`.
   bool writes(const CacheTensorManifest& tensor,
               const LogicalSpan& span,
@@ -675,6 +735,7 @@ Status select_collapsed_writers(
     const std::vector<WorkerCacheLayoutManifest>& sources,
     const WorkerCacheLayoutManifest& destination,
     const RegionGroups& destination_groups,
+    const SpanWriters& span_writers,
     std::vector<size_t>* writers,
     std::set<CoverageKey>* required_groups) {
   using CpWorkers = std::map<int32_t, std::vector<size_t>>;
@@ -682,7 +743,6 @@ Status select_collapsed_writers(
   std::map<std::pair<int32_t, int32_t>, int32_t> cp_kv_ranks;
   const bool spans_cp_and_tp =
       kv_split_spans_cp_and_tp(sources.front().coordinates);
-  const SpanWriters span_writers = source_writers(sources.front().coordinates);
   for (size_t index = 0; index < sources.size(); ++index) {
     const ParallelCoordinates& coordinates = sources[index].coordinates;
     if (!spans_cp_and_tp) {
@@ -1261,6 +1321,7 @@ Status bind_regions(
 struct SourceSelection {
   std::vector<size_t> indices;
   SpanWriters homogeneous_writers = SpanWriters::declared();
+  SpanWriters collapsed_writers = SpanWriters::declared();
   bool collapse_partitions = false;
 };
 
@@ -1302,11 +1363,19 @@ Status select_source_writers(
   // Writers for the homogeneous branch; unused when partitions collapse, where
   // the per-partition pair rules already carry the ownership.
   SpanWriters homogeneous_writers = SpanWriters::declared();
+  SpanWriters collapsed_writers =
+      collapse_partitions
+          ? SpanWriters::for_collapsed_destination(sources, destination)
+          : SpanWriters::declared();
   std::vector<size_t> writers;
   std::set<CoverageKey> required_groups;
   if (collapse_partitions) {
-    const Status selection = select_collapsed_writers(
-        sources, destination, destination_groups, &writers, &required_groups);
+    const Status selection = select_collapsed_writers(sources,
+                                                      destination,
+                                                      destination_groups,
+                                                      collapsed_writers,
+                                                      &writers,
+                                                      &required_groups);
     if (!selection.ok()) {
       return selection;
     }
@@ -1341,8 +1410,7 @@ Status select_source_writers(
         collapse_partitions ? source.coordinates.kv_split_rank : 0;
     expand_manifest(
         source,
-        collapse_partitions ? source_writers(source.coordinates)
-                            : homogeneous_writers,
+        collapse_partitions ? collapsed_writers : homogeneous_writers,
         /*compact_uniform_series=*/false,
         &writer_regions[{source.coordinates.dp_rank, kv_partition}]);
   }
@@ -1354,6 +1422,7 @@ Status select_source_writers(
   }
   selection->indices.swap(writers);
   selection->homogeneous_writers = std::move(homogeneous_writers);
+  selection->collapsed_writers = std::move(collapsed_writers);
   selection->collapse_partitions = collapse_partitions;
   return Status();
 }
@@ -1843,7 +1912,7 @@ Status ReshardPlanner::build_incoming_plans(
         source,
         destination,
         &incoming_plans[index],
-        selection.collapse_partitions ? source_writers(source.coordinates)
+        selection.collapse_partitions ? selection.collapsed_writers
                                       : selection.homogeneous_writers,
         kCpIndexWriteModeReplicated);
     if (!plan_status.ok()) {
