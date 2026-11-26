@@ -756,8 +756,11 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   }
   // Heterogeneous TP yields per-token head-shard regions (~1 KiB each); read
   // their remote-contiguous runs through a staging buffer instead.
+  const char* staging_mode_env = std::getenv("XLLM_MUSA_PULL_STAGING_MODE");
   const std::string staging_mode =
-      util::get_string_env("XLLM_MUSA_PULL_STAGING_MODE");
+      (staging_mode_env != nullptr && staging_mode_env[0] != '\0')
+          ? std::string(staging_mode_env)
+          : std::string("auto");
   bool staged =
       logical_regions >= 4096 &&
       region_bytes / std::max<uint64_t>(logical_regions, 1) < 16384;
