@@ -1642,16 +1642,20 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
               std::tie(values, last_state) =
                   xllm::kernel::musa::mate_gated_delta_rule_prefill(live);
               last_state = last_state.to(ssm_cache.dtype());
-              live_output.copy_(values);
             } else {
-              std::tie(values, last_state) =
-                  run_segmented_gdn_prefill(live,
-                                            targets,
-                                            offsets,
-                                            conv,
-                                            ssm_cache,
-                                            conv_state_len,
-                                            live_output);
+              static const bool kReuseGraphOutput =
+                  util::get_bool_env("XLLM_GDN_FUSE_OUTPUT", false);
+              std::tie(values, last_state) = run_segmented_gdn_prefill(
+                  live,
+                  targets,
+                  offsets,
+                  conv,
+                  ssm_cache,
+                  conv_state_len,
+                  kReuseGraphOutput ? live_output : torch::Tensor());
+            }
+            if (!live_output.is_same(values)) {
+              live_output.copy_(values);
             }
             if (output.size(1) > live_rows) {
               output.narrow(1, live_rows, output.size(1) - live_rows).zero_();
