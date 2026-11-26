@@ -113,10 +113,13 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   void load_experts(const StateDict& state_dict);
   torch::Tensor apply_expert(const torch::Tensor& input,
                              int64_t local_expert_id) const;
-  torch::Tensor forward_grouped_fp8(const torch::Tensor& input,
-                                    const torch::Tensor& topk_ids,
-                                    const torch::Tensor& topk_weights,
-                                    bool compact_rows = false) const;
+  torch::Tensor forward_grouped_fp8(
+      const torch::Tensor& input,
+      const torch::Tensor& topk_ids,
+      const torch::Tensor& topk_weights,
+      bool compact_rows = false,
+      const torch::Tensor& shared_output = torch::Tensor(),
+      void* shared_ready_event = nullptr) const;
   void ensure_dense_expert_storage();
   void ensure_fp8_expert_storage();
   void ensure_packed_fp4_expert_storage();

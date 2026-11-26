@@ -794,7 +794,9 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
     const torch::Tensor& input,
     const torch::Tensor& topk_ids,
     const torch::Tensor& topk_weights,
-    bool compact_rows) const {
+    bool compact_rows,
+    const torch::Tensor& shared_output,
+    void* shared_ready_event) const {
   if (!fp8_experts_loaded()) {
     return torch::Tensor();
   }
@@ -899,6 +901,22 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
                                                       kAlignmentM);
   if (!down.defined()) {
     return torch::Tensor();
+  }
+  if (shared_output.defined()) {
+    if (shared_ready_event != nullptr) {
+      const c10::musa::MUSAStream current_stream =
+          c10::musa::getCurrentMUSAStream(input.device().index());
+      CHECK_EQ(musaStreamWaitEvent(
+                   current_stream.stream(),
+                   reinterpret_cast<musaEvent_t>(shared_ready_event),
+                   /*flags=*/0),
+               musaSuccess);
+    }
+    auto shared_2d =
+        shared_output.reshape({topk_weights.size(0), down.size(1)}).contiguous();
+    return kernel::musa::deepseek_v4_fp8_moe_restore_combine_add(
+        down, route_to_padded, topk_weights.contiguous(), /*output=*/{},
+        shared_2d);
   }
   return kernel::musa::deepseek_v4_fp8_moe_restore_combine(
       down, route_to_padded, topk_weights.contiguous(), /*output=*/{});
@@ -1099,6 +1117,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                          << " minimum=" << grouped_fp8_decode_min_tokens_
                          << " query_width=" << input_params.meta.q_max_seq_len;
   }
+  bool shared_fused_in_restore = false;
   if (!output.defined() && !input_params.meta.batch_forward_type.is_decode() &&
       fp8_experts_loaded()) {
     const bool compact_prefill =
@@ -1111,10 +1130,28 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                 num_experts_per_rank_ == num_total_experts_ &&
                 (ep_pg_ == nullptr || ep_pg_->world_size() == 1),
             fp8_experts_loaded());
+    const char* fast_epilogue_env =
+        std::getenv("XLLM_DSV4_PREFILL_FAST_MOE_EPILOGUE");
+    const bool fast_epilogue_enabled =
+        fast_epilogue_env == nullptr || std::string(fast_epilogue_env) != "0";
+    const bool fuse_shared_in_restore =
+        fast_epilogue_enabled && shared_overlap_state != nullptr &&
+        shared_output.defined() &&
+        (ep_pg_ == nullptr || ep_pg_->world_size() == 1);
     // weights_2d retains the original non-Decode BF16 conversion above. Only
     // expert-row padding changes; the existing quant/SwiGLU/restore remains.
     output = forward_grouped_fp8(
-        input_2d.contiguous(), ids_2d, weights_2d, compact_prefill);
+        input_2d.contiguous(),
+        ids_2d,
+        weights_2d,
+        compact_prefill,
+        fuse_shared_in_restore ? shared_output : torch::Tensor(),
+        fuse_shared_in_restore
+            ? reinterpret_cast<void*>(shared_overlap_state->shared_ready)
+            : nullptr);
+    if (fuse_shared_in_restore && output.defined()) {
+      shared_fused_in_restore = true;
+    }
     if (compact_prefill) {
       LOG_FIRST_N(INFO, 2) << "[DSV4_COMPACT_PREFILL_FP8] rows="
                            << input_2d.size(0)
@@ -1164,7 +1201,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     }
   }
 
-  if (shared_overlap_state != nullptr) {
+  if (shared_overlap_state != nullptr && !shared_fused_in_restore) {
     const c10::musa::MUSAStream current_stream =
         c10::musa::getCurrentMUSAStream(input_2d.device().index());
     CHECK_EQ(musaStreamWaitEvent(current_stream.stream(),

@@ -775,6 +775,13 @@ torch::Tensor deepseek_v4_fp8_moe_restore_combine(
     const torch::Tensor& topk_weights,
     const torch::Tensor& output);
 
+torch::Tensor deepseek_v4_fp8_moe_restore_combine_add(
+    const torch::Tensor& sorted_output,
+    const torch::Tensor& route_to_padded,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& output,
+    const torch::Tensor& residual);
+
 // Returns {fp8_rows, scales, src_to_dst, expert_counts}.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_moe_preprocess_fp8(const torch::Tensor& input,

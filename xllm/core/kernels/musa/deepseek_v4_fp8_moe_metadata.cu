@@ -60,6 +60,11 @@ bool prefill_fast_scatter_enabled() {
   return value == nullptr || std::string(value) != "0";
 }
 
+bool prefill_fast_moe_epilogue_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_PREFILL_FAST_MOE_EPILOGUE");
+  return value == nullptr || std::string(value) != "0";
+}
+
 __device__ __forceinline__ float fast_pow2_ceil(float raw_scale) {
   // raw_scale is finite and >= 1.0e-4f (strictly positive normal IEEE-754).
   const uint32_t bits = __float_as_uint(raw_scale);
@@ -1219,6 +1224,85 @@ __global__ void swiglu_blockwise_fp8_quant_warp_kernel(
   }
 }
 
+// P3c: Vectorized uint2 SwiGLU + blockwise FP8 quant warp kernel with bit-exact
+// pow2-ceil scaling and exact BF16/FP16 intermediate rounding point.
+template <typename scalar_t, int32_t kWarpsPerCta>
+__global__ void swiglu_blockwise_fp8_quant_warp_vec_kernel(
+    const scalar_t* __restrict__ gate_up,
+    const int32_t* __restrict__ ragged_tokens_info,
+    c10::Float8_e4m3fn* __restrict__ output,
+    float* __restrict__ scales,
+    int64_t rows,
+    int64_t hidden_size,
+    int64_t blocks_per_row,
+    float swiglu_limit) {
+  constexpr int32_t kValuesPerLane = kQuantBlock / kWarpSize;
+  static_assert(kValuesPerLane == 4);
+  static_assert(sizeof(scalar_t) == 2);
+  static_assert(sizeof(c10::Float8_e4m3fn) == 1);
+
+  const int32_t warp = threadIdx.x / kWarpSize;
+  const int32_t lane = threadIdx.x % kWarpSize;
+  const int64_t group = static_cast<int64_t>(blockIdx.x) * kWarpsPerCta + warp;
+  const int64_t total_groups = rows * blocks_per_row;
+  if (group >= total_groups) {
+    return;
+  }
+  const int64_t row = group / blocks_per_row;
+  const int64_t quant_block = group - row * blocks_per_row;
+  if (ragged_tokens_info[row] < 0) {
+    return;
+  }
+  const int64_t column_base = quant_block * kQuantBlock + lane * kValuesPerLane;
+  const int64_t input_offset = row * hidden_size * 2 + column_base;
+
+  alignas(8) scalar_t gate_raw[kValuesPerLane];
+  alignas(8) scalar_t up_raw[kValuesPerLane];
+  *reinterpret_cast<uint2*>(gate_raw) =
+      *reinterpret_cast<const uint2*>(gate_up + input_offset);
+  *reinterpret_cast<uint2*>(up_raw) =
+      *reinterpret_cast<const uint2*>(gate_up + input_offset + hidden_size);
+
+  float values[kValuesPerLane];
+  float max_abs = 0.0f;
+#pragma unroll
+  for (int32_t value_id = 0; value_id < kValuesPerLane; ++value_id) {
+    float gate = static_cast<float>(gate_raw[value_id]);
+    float up = static_cast<float>(up_raw[value_id]);
+    if (swiglu_limit > 0.0f) {
+      gate = fminf(gate, swiglu_limit);
+      up = fminf(fmaxf(up, -swiglu_limit), swiglu_limit);
+    }
+    const scalar_t rounded =
+        static_cast<scalar_t>(gate / (1.0f + expf(-gate)) * up);
+    const float value = static_cast<float>(rounded);
+    values[value_id] = value;
+    max_abs = fmaxf(max_abs, fabsf(value));
+  }
+#pragma unroll
+  for (int32_t delta = kWarpSize / 2; delta > 0; delta >>= 1) {
+    max_abs = fmaxf(max_abs, __shfl_down_sync(0xffffffffu, max_abs, delta));
+  }
+  max_abs = __shfl_sync(0xffffffffu, max_abs, 0);
+  const float raw_scale = fmaxf(max_abs / kFp8Max, 1.0e-4f);
+  const float scale = fast_pow2_ceil(raw_scale);
+  const float inverse_scale = 1.0f / scale;
+  if (lane == 0) {
+    scales[row * blocks_per_row + quant_block] = scale;
+  }
+
+  uint32_t packed = 0;
+#pragma unroll
+  for (int32_t value_id = 0; value_id < kValuesPerLane; ++value_id) {
+    const auto quantized = scaled_fp8_conversion<true, c10::Float8_e4m3fn>(
+        values[value_id], inverse_scale);
+    packed |= static_cast<uint32_t>(quantized.x) << (value_id * 8);
+  }
+  auto* output_bytes =
+      reinterpret_cast<uint8_t*>(output) + row * hidden_size + column_base;
+  *reinterpret_cast<uint32_t*>(output_bytes) = packed;
+}
+
 template <typename scalar_t>
 __global__ void restore_padded_output_kernel(
     const scalar_t* __restrict__ sorted_output,
@@ -1338,11 +1422,12 @@ __global__ void restore_combine_2d_kernel(
   }
 }
 
-template <typename Scalar, typename Weight>
+template <typename Scalar, typename Weight, bool kAddResidual>
 __global__ void restore_combine_vector8_kernel(
     const Scalar* __restrict__ sorted_output,
     const int32_t* __restrict__ route_to_padded,
     const Weight* __restrict__ topk_weights,
+    const Scalar* __restrict__ residual,
     Scalar* __restrict__ output) {
   static_assert(sizeof(Scalar) == 2);
   constexpr int32_t kHidden = 4096;
@@ -1376,37 +1461,73 @@ __global__ void restore_combine_vector8_kernel(
     }
   }
   alignas(16) Scalar result[kValues];
+  if constexpr (kAddResidual) {
+    alignas(16) Scalar shared_vals[kValues];
+    *reinterpret_cast<uint4*>(shared_vals) = *reinterpret_cast<const uint4*>(
+        residual + token * kHidden + column);
 #pragma unroll
-  for (int32_t value = 0; value < kValues; ++value) {
-    result[value] = static_cast<Scalar>(accumulators[value]);
+    for (int32_t value = 0; value < kValues; ++value) {
+      // Match BF16/FP16 rounding of routed sum followed by output.add_(shared).
+      const float routed = static_cast<float>(static_cast<Scalar>(accumulators[value]));
+      result[value] = static_cast<Scalar>(routed + static_cast<float>(shared_vals[value]));
+    }
+  } else {
+#pragma unroll
+    for (int32_t value = 0; value < kValues; ++value) {
+      result[value] = static_cast<Scalar>(accumulators[value]);
+    }
   }
   *reinterpret_cast<uint4*>(output + token * kHidden + column) =
       *reinterpret_cast<const uint4*>(result);
 }
 
 template <typename scalar_t, typename weight_t>
-void launch_restore_combine(const torch::Tensor& sorted_output,
+bool launch_restore_combine(const torch::Tensor& sorted_output,
                             const torch::Tensor& route_to_padded,
                             const torch::Tensor& topk_weights,
                             torch::Tensor& output,
+                            const torch::Tensor& residual,
                             musaStream_t stream) {
   if constexpr (sizeof(scalar_t) == 2) {
-    const char* enabled = std::getenv("XLLM_DSV4_LONG_MOE_VECTOR_RESTORE");
-    if (enabled != nullptr && std::string(enabled) == "1" &&
-        topk_weights.size(0) >= 4096 && topk_weights.size(0) <= 16384 &&
+    const char* legacy_enabled = std::getenv("XLLM_DSV4_LONG_MOE_VECTOR_RESTORE");
+    const bool fast_epilogue = prefill_fast_moe_epilogue_enabled();
+    const bool allow_vector8 =
+        (fast_epilogue && topk_weights.size(0) >= 64 &&
+         topk_weights.size(0) <= 32768) ||
+        (legacy_enabled != nullptr && std::string(legacy_enabled) == "1" &&
+         topk_weights.size(0) >= 4096 && topk_weights.size(0) <= 20480);
+    const bool residual_ready =
+        !residual.defined() ||
+        (residual.scalar_type() == sorted_output.scalar_type() &&
+         residual.is_contiguous() &&
+         reinterpret_cast<uintptr_t>(residual.data_ptr()) % 16 == 0);
+    if (allow_vector8 && residual_ready &&
         topk_weights.size(1) == 6 && sorted_output.size(1) == 4096 &&
-        sorted_output.scalar_type() == torch::kBFloat16 &&
-        topk_weights.scalar_type() == torch::kBFloat16 &&
         reinterpret_cast<uintptr_t>(sorted_output.data_ptr()) % 16 == 0 &&
         reinterpret_cast<uintptr_t>(output.data_ptr()) % 16 == 0) {
-      restore_combine_vector8_kernel<scalar_t, weight_t>
-          <<<dim3(topk_weights.size(0), 2), kMetadataBlock, 0, stream>>>(
-              sorted_output.data_ptr<scalar_t>(),
-              route_to_padded.data_ptr<int32_t>(),
-              topk_weights.data_ptr<weight_t>(), output.data_ptr<scalar_t>());
-      LOG_FIRST_N(INFO, 1) << "[DSV4_LONG_MOE_VECTOR_RESTORE] rows=" << topk_weights.size(0)
-                          << " hidden=4096 topk=6 bf16_router=1";
-      return;
+      if (residual.defined()) {
+        restore_combine_vector8_kernel<scalar_t, weight_t, true>
+            <<<dim3(topk_weights.size(0), 2), kMetadataBlock, 0, stream>>>(
+                sorted_output.data_ptr<scalar_t>(),
+                route_to_padded.data_ptr<int32_t>(),
+                topk_weights.data_ptr<weight_t>(),
+                residual.data_ptr<scalar_t>(),
+                output.data_ptr<scalar_t>());
+        LOG_FIRST_N(INFO, 1) << "[DSV4_PREFILL_FAST_MOE_EPILOGUE] restore_vector8_fused_shared=1 rows="
+                             << topk_weights.size(0) << " hidden=4096 topk=6";
+        return true;
+      } else {
+        restore_combine_vector8_kernel<scalar_t, weight_t, false>
+            <<<dim3(topk_weights.size(0), 2), kMetadataBlock, 0, stream>>>(
+                sorted_output.data_ptr<scalar_t>(),
+                route_to_padded.data_ptr<int32_t>(),
+                topk_weights.data_ptr<weight_t>(),
+                nullptr,
+                output.data_ptr<scalar_t>());
+        LOG_FIRST_N(INFO, 1) << "[DSV4_LONG_MOE_VECTOR_RESTORE] rows=" << topk_weights.size(0)
+                            << " hidden=4096 topk=6 fused_shared=0";
+        return false;
+      }
     }
   }
   constexpr int32_t kMaxTopK = 16;
@@ -1446,6 +1567,7 @@ void launch_restore_combine(const torch::Tensor& sorted_output,
             sorted_output.size(1),
             static_cast<int32_t>(topk_weights.size(1)));
   }
+  return false;
 }
 
 }  // namespace
@@ -1918,6 +2040,29 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_swiglu_quantize(
       gate_up.scalar_type(),
       "deepseek_v4_fp8_moe_swiglu_quantize",
       [&] {
+        if constexpr (sizeof(scalar_t) == 2) {
+          if (prefill_fast_moe_epilogue_enabled() && rows >= 256 &&
+              reinterpret_cast<std::uintptr_t>(gate_up.data_ptr()) % 8 == 0) {
+            constexpr int32_t kWarpsPerCta = 8;
+            const int64_t total_groups = rows * scale_cols;
+            const int64_t warp_grid =
+                (total_groups + kWarpsPerCta - 1) / kWarpsPerCta;
+            swiglu_blockwise_fp8_quant_warp_vec_kernel<scalar_t, kWarpsPerCta>
+                <<<warp_grid, kWarpsPerCta * kWarpSize, 0, stream>>>(
+                    gate_up.data_ptr<scalar_t>(),
+                    ragged_tokens_info.data_ptr<int32_t>(),
+                    output.data_ptr<c10::Float8_e4m3fn>(),
+                    scale.data_ptr<float>(),
+                    rows,
+                    hidden_size,
+                    scale_cols,
+                    limit);
+            LOG_FIRST_N(INFO, 1)
+                << "[DSV4_PREFILL_FAST_MOE_EPILOGUE] swiglu_warp_vec=1 rows="
+                << rows << " hidden=" << hidden_size;
+            return;
+          }
+        }
         if (warp_swiglu_quant_enabled() ||
             long_warp_swiglu_quant_enabled(gate_up)) {
           constexpr int32_t kWarpsPerCta = 8;
@@ -2011,11 +2156,12 @@ torch::Tensor deepseek_v4_fp8_moe_restore(
   return output;
 }
 
-torch::Tensor deepseek_v4_fp8_moe_restore_combine(
+torch::Tensor deepseek_v4_fp8_moe_restore_combine_add(
     const torch::Tensor& sorted_output,
     const torch::Tensor& route_to_padded,
     const torch::Tensor& topk_weights,
-    const torch::Tensor& output_buffer) {
+    const torch::Tensor& output_buffer,
+    const torch::Tensor& residual) {
   CHECK(sorted_output.defined() && sorted_output.dim() == 2 &&
         sorted_output.is_contiguous());
   CHECK(route_to_padded.defined() && route_to_padded.dim() == 1 &&
@@ -2029,6 +2175,13 @@ torch::Tensor deepseek_v4_fp8_moe_restore_combine(
   CHECK(sorted_output.device() == route_to_padded.device());
   CHECK(sorted_output.device() == topk_weights.device());
   CHECK(route_to_padded.numel() == topk_weights.numel());
+  if (residual.defined()) {
+    CHECK(residual.dim() == 2 && residual.is_contiguous());
+    CHECK(residual.size(0) == topk_weights.size(0));
+    CHECK(residual.size(1) == sorted_output.size(1));
+    CHECK(residual.device() == sorted_output.device());
+    CHECK(residual.scalar_type() == sorted_output.scalar_type());
+  }
 
   torch::Tensor full_output = output_buffer;
   if (!full_output.defined()) {
@@ -2056,6 +2209,7 @@ torch::Tensor deepseek_v4_fp8_moe_restore_combine(
         << "DeepSeek-V4 FP8 MoE reduce-scatter tail zero failed: "
         << musaGetErrorString(tail_status);
   }
+  bool fused_residual = false;
   AT_DISPATCH_FLOATING_TYPES_AND2(
       torch::kHalf,
       torch::kBFloat16,
@@ -2063,18 +2217,34 @@ torch::Tensor deepseek_v4_fp8_moe_restore_combine(
       "deepseek_v4_fp8_moe_restore_combine_output",
       [&] {
         if (topk_weights.scalar_type() == torch::kFloat32) {
-          launch_restore_combine<scalar_t, float>(
-              sorted_output, route_to_padded, topk_weights, output, stream);
+          fused_residual = launch_restore_combine<scalar_t, float>(
+              sorted_output, route_to_padded, topk_weights, output, residual,
+              stream);
         } else if (topk_weights.scalar_type() == torch::kFloat16) {
-          launch_restore_combine<scalar_t, c10::Half>(
-              sorted_output, route_to_padded, topk_weights, output, stream);
+          fused_residual = launch_restore_combine<scalar_t, c10::Half>(
+              sorted_output, route_to_padded, topk_weights, output, residual,
+              stream);
         } else {
-          launch_restore_combine<scalar_t, c10::BFloat16>(
-              sorted_output, route_to_padded, topk_weights, output, stream);
+          fused_residual = launch_restore_combine<scalar_t, c10::BFloat16>(
+              sorted_output, route_to_padded, topk_weights, output, residual,
+              stream);
         }
       });
   check_last_error("restore combine");
+  if (residual.defined() && !fused_residual) {
+    output.add_(residual);
+  }
   return output;
+}
+
+torch::Tensor deepseek_v4_fp8_moe_restore_combine(
+    const torch::Tensor& sorted_output,
+    const torch::Tensor& route_to_padded,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& output_buffer) {
+  return deepseek_v4_fp8_moe_restore_combine_add(
+      sorted_output, route_to_padded, topk_weights, output_buffer,
+      torch::Tensor());
 }
 
 }  // namespace xllm::kernel::musa
