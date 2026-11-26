@@ -1682,7 +1682,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       dev.paged_kv_last_page_len = persistent_paged_kv_last_page_len(
           static_cast<uint32_t>(actual_batch_size));
     } else if (decode_path && !params.is_spec_verify &&
-               !is_rec_multi_round_mode()) {
+               !compact_dsv4_mtp_decode && !is_rec_multi_round_mode()) {
       // Same contract for ordinary decode. Rows are sized to the padded
       // bucket, matching the attn_metadata built above, and the block table
       // keeps its full width so FA3 sizes split-KV for any live length.
@@ -4300,19 +4300,37 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     // Check if conditions are suitable for graph execution (replay or capture)
     const auto max_seq_len = args_.max_position_embeddings();
     const bool seq_len_supported = params.meta.kv_max_seq_len <= max_seq_len;
+    const bool is_compact_dsv4_target =
+        args_.model_type() == "deepseek_v4" &&
+        options_.enable_speculative_decode() && !options_.is_draft_engine() &&
+        params.meta.q_max_seq_len > 1;
+    const bool is_compact_dsv4_draft =
+        args_.model_type() == "deepseek_v4_mtp" && options_.is_draft_engine() &&
+        !params.embedding.linear_state_ids.empty() &&
+        static_cast<size_t>(n_tokens) >
+            params.embedding.linear_state_ids.size();
     const bool is_compact_dsv4_decode =
-        (args_.model_type() == "deepseek_v4" &&
-         options_.enable_speculative_decode() && !options_.is_draft_engine() &&
-         params.meta.q_max_seq_len > 1) ||
-        (args_.model_type() == "deepseek_v4_mtp" && options_.is_draft_engine() &&
-         !params.embedding.linear_state_ids.empty() &&
-         static_cast<size_t>(n_tokens) >
-             params.embedding.linear_state_ids.size());
+        is_compact_dsv4_target || is_compact_dsv4_draft;
+    int64_t compact_decode_width = 1;
+    if (is_compact_dsv4_target) {
+      compact_decode_width =
+          std::max<int64_t>(options_.num_decoding_tokens(), 1);
+    } else if (is_compact_dsv4_draft) {
+      const int64_t state_seqs =
+          static_cast<int64_t>(params.embedding.linear_state_ids.size());
+      if (state_seqs > 0 && static_cast<int64_t>(n_tokens) % state_seqs == 0) {
+        compact_decode_width = static_cast<int64_t>(n_tokens) / state_seqs;
+      }
+    }
     int64_t graph_batch_size = params.meta.num_sequences;
     if (params.meta.actual_num_sequences > 0) {
       graph_batch_size = params.meta.actual_num_sequences;
     } else if (!params.has_llmrec_params()) {
       graph_batch_size = static_cast<int64_t>(n_tokens);
+    }
+    if (is_compact_dsv4_decode && compact_decode_width > 1 &&
+        static_cast<int64_t>(n_tokens) % compact_decode_width == 0) {
+      graph_batch_size = static_cast<int64_t>(n_tokens) / compact_decode_width;
     }
     if (params.has_llmrec_params() &&
         params.attention.device.block_tables.defined()) {
@@ -4322,10 +4340,15 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         persistent_param_->persistent_block_tables(0).size(0);
     const uint32_t graph_token_capacity =
         static_cast<uint32_t>(persistent_param_->persistent_tokens(0).size(0));
+    const int64_t bucket_rows =
+        is_compact_dsv4_decode && compact_decode_width > 1
+            ? (static_cast<int64_t>(bucket_num_tokens) + compact_decode_width -
+               1) /
+                  compact_decode_width
+            : static_cast<int64_t>(bucket_num_tokens);
     const bool graph_capacity_supported =
         graph_batch_size <= graph_row_capacity &&
-        (is_compact_dsv4_decode ||
-         static_cast<int64_t>(bucket_num_tokens) <= graph_row_capacity) &&
+        bucket_rows <= graph_row_capacity &&
         bucket_num_tokens <= graph_token_capacity;
 
     // Early return if conditions are not suitable for graph operations
