@@ -25,10 +25,12 @@ inline int64_t deepseek_v4_hc_prefill_row_limit(int64_t hidden_dim) {
   const char* enabled = std::getenv("XLLM_DSV4_HC_LARGE_PREFILL");
   // Preserve the model-validated default. The optional 4096-wide route has
   // independent TF32-reference and exact row-partition/Graph coverage.
-  return hidden_dim == 4096 && enabled != nullptr &&
-                 std::strcmp(enabled, "1") == 0
-             ? 1024
-             : 320;
+  if (hidden_dim == 4096 && enabled != nullptr &&
+      std::strcmp(enabled, "1") == 0) {
+    const char* untiled = std::getenv("XLLM_DSV4_PREFILL_HC_UNTILED");
+    return (untiled == nullptr || std::strcmp(untiled, "0") != 0) ? 2048 : 1024;
+  }
+  return 320;
 }
 
 }  // namespace xllm::kernel::musa
