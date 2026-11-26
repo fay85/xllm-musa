@@ -1724,13 +1724,18 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                   compact_decode_width)
             : (graph_decode ? static_cast<int32_t>(padded_num_tokens)
                             : params.meta.num_sequences);
+    const bool empty_dp_graph_placeholder =
+        options_.dp_size() > 1 && params.meta.actual_num_sequences == 0 &&
+        params.attention.host.kv_seq_lens.empty();
     params_for_capture->meta.num_sequences = graph_num_sequences;
     params_for_capture->meta.actual_num_sequences =
-        compact_dsv4_mtp_decode
-            ? static_cast<int32_t>(actual_batch_size)
-            : (graph_decode ? static_cast<int32_t>(actual_num_tokens)
-                            : params.meta.num_sequences);
-    if (compact_dsv4_mtp_decode) {
+        empty_dp_graph_placeholder
+            ? 0
+            : (compact_dsv4_mtp_decode
+                   ? static_cast<int32_t>(actual_batch_size)
+                   : (graph_decode ? static_cast<int32_t>(actual_num_tokens)
+                                   : params.meta.num_sequences));
+    if (compact_dsv4_mtp_decode && !empty_dp_graph_placeholder) {
       const int32_t verify_width = static_cast<int32_t>(compact_decode_width);
       const int32_t active_sequences = std::min<int32_t>(
           static_cast<int32_t>(actual_batch_size), graph_num_sequences);
@@ -3445,6 +3450,10 @@ struct MusaGraphExecutorImpl::VmmPoolState {
   std::optional<::xllm::MusaVmmCapturePool::Snapshot> pre_capture_snapshot;
 };
 
+void MusaGraphExecutorImpl::set_dp_process_group(ProcessGroup* dp_group) {
+  dp_group_ = dp_group;
+}
+
 void MusaGraphExecutorImpl::set_model_parallel_groups(ProcessGroup* tp_group,
                                                       ProcessGroup* cp_group) {
   tp_group_ = tp_group;
@@ -3474,6 +3483,10 @@ bool MusaGraphExecutorImpl::agree_bool_across_model_group(
   reduce_in_group(tp_group_);
   if (cp_group_ != tp_group_) {
     reduce_in_group(cp_group_);
+  }
+  if (dp_group_ != nullptr && dp_group_ != tp_group_ &&
+      dp_group_ != cp_group_) {
+    reduce_in_group(dp_group_);
   }
   return agreed;
 }
@@ -3894,10 +3907,61 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     }
   }
 
-  // Dummy/empty DP shard (step_empty): skip graph capture/replay in both
-  // prefill and decode so undefined device attention tensors are not sliced
-  // into persistent graph buffers.
-  if (params.meta.q_max_seq_len == 0 || params.meta.num_sequences == 0) {
+  const uint32_t orig_n_tokens =
+      tokens.defined() ? static_cast<uint32_t>(tokens.size(/*dim=*/0)) : 0u;
+  const bool is_empty_dp_step =
+      params.meta.q_max_seq_len == 0 || params.meta.num_sequences == 0 ||
+      orig_n_tokens == 0;
+  uint32_t dp_max_tokens = 0;
+  if (options_.dp_size() > 1 && is_decode &&
+      !params.parallel.dp_global_token_nums.empty()) {
+    for (int32_t count : params.parallel.dp_global_token_nums) {
+      if (count > 0) {
+        dp_max_tokens =
+            std::max<uint32_t>(dp_max_tokens, static_cast<uint32_t>(count));
+      }
+    }
+  }
+  const bool use_dp_lockstep_decode_graph =
+      options_.dp_size() > 1 && is_decode && dp_max_tokens > 0 &&
+      (args_.model_type() == "deepseek_v4" ||
+       util::is_deepseek_v4_dspark_model_type(args_.model_type()));
+  uint32_t uniform_dp_tokens = 0;
+  torch::Tensor dp_dummy_tokens;
+  torch::Tensor dp_dummy_positions;
+  std::optional<ModelInputParams> dp_dummy_params;
+  if (use_dp_lockstep_decode_graph) {
+    const uint32_t dp_width =
+        is_dspark_draft_block
+            ? static_cast<uint32_t>(
+                  std::max<int32_t>(options_.draft_graph_query_width(), 1))
+            : (args_.model_type() == "deepseek_v4" &&
+                       options_.enable_speculative_decode() &&
+                       !options_.is_draft_engine()
+                   ? static_cast<uint32_t>(
+                         std::max<int32_t>(options_.num_decoding_tokens(), 1))
+                   : 1u);
+    const uint32_t raw_dp_tokens =
+        std::max<uint32_t>(orig_n_tokens, dp_max_tokens);
+    uniform_dp_tokens =
+        ((raw_dp_tokens + dp_width - 1) / dp_width) * dp_width;
+    if (is_empty_dp_step) {
+      const auto int_opts =
+          torch::TensorOptions().dtype(torch::kInt32).device(device_);
+      dp_dummy_tokens = torch::zeros({uniform_dp_tokens}, int_opts);
+      dp_dummy_positions = torch::zeros({uniform_dp_tokens}, int_opts);
+      dp_dummy_params.emplace(params);
+      dp_dummy_params->meta.actual_num_sequences = 0;
+      dp_dummy_params->meta.num_sequences =
+          static_cast<int32_t>(uniform_dp_tokens / dp_width);
+      dp_dummy_params->meta.q_max_seq_len = static_cast<int32_t>(dp_width);
+      dp_dummy_params->meta.kv_max_seq_len =
+          std::max<int32_t>(dp_dummy_params->meta.kv_max_seq_len, 512);
+    }
+  } else if (is_empty_dp_step) {
+    // Dummy/empty DP shard (step_empty): skip graph capture/replay in both
+    // prefill and decode so undefined device attention tensors are not sliced
+    // into persistent graph buffers.
     ModelInputParams eager_params = params;
     eager_params.enable_graph = false;
     eager_params.attn_metadata.reset();
@@ -3905,8 +3969,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     return model_->forward(tokens, positions, kv_caches, eager_params);
   }
 
-  // Get actual num_tokens from tokens shape
-  const uint32_t n_tokens = tokens.size(/*dim=*/0);
+  const torch::Tensor& run_tokens =
+      dp_dummy_params.has_value() ? dp_dummy_tokens : tokens;
+  const torch::Tensor& run_positions =
+      dp_dummy_params.has_value() ? dp_dummy_positions : positions;
+  const ModelInputParams& run_params =
+      dp_dummy_params.has_value() ? dp_dummy_params.value() : params;
+  // Get actual num_tokens from run_tokens shape
+  const uint32_t n_tokens = run_tokens.size(/*dim=*/0);
   const int64_t effective_num_sequences = params.meta.actual_num_sequences > 0
                                               ? params.meta.actual_num_sequences
                                               : params.meta.num_sequences;
@@ -4241,7 +4311,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   }
 
   uint32_t bucket_num_tokens =
-      is_dspark_draft_block ? n_tokens : get_bucket_num_tokens(n_tokens);
+      use_dp_lockstep_decode_graph
+          ? uniform_dp_tokens
+          : (is_dspark_draft_block ? n_tokens
+                                   : get_bucket_num_tokens(n_tokens));
   const char* stable_multi_graph_env =
       std::getenv("XLLM_DSV4_STABLE_MULTI_GRAPH_SEQUENCES");
   const bool stable_multi_graph_sequences =
@@ -4305,9 +4378,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       }
     }
     const bool short_fullkv_eager =
-        graph_compact_opt_in && s_enable_dsv4_graph_short_fullkv_eager() &&
+        !is_empty_dp_step && graph_compact_opt_in &&
+        s_enable_dsv4_graph_short_fullkv_eager() &&
         args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
-        params.is_spec_verify && graph_kv_len_hint > 0 &&
+        run_params.is_spec_verify && graph_kv_len_hint > 0 &&
         graph_kv_len_hint <= 2048;
     const char* multi_sequence_eager_env =
         std::getenv("XLLM_DSV4_MULTI_SEQUENCE_FORCE_EAGER");
@@ -4315,9 +4389,15 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         multi_sequence_eager_env != nullptr &&
         std::string(multi_sequence_eager_env) == "1" &&
         args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
-        params.is_spec_verify && params.meta.num_sequences > 1;
-    if (force_eager_compact_verify || default_eager_compact_verify ||
-        multi_sequence_eager || short_fullkv_eager) {
+        run_params.is_spec_verify && run_params.meta.num_sequences > 1;
+    const bool local_force_eager =
+        force_eager_compact_verify || default_eager_compact_verify ||
+        multi_sequence_eager || short_fullkv_eager;
+    const bool agreed_force_eager =
+        use_dp_lockstep_decode_graph
+            ? !agree_bool_across_model_group(!local_force_eager)
+            : local_force_eager;
+    if (agreed_force_eager) {
       LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
                    "tokens="
                 << n_tokens << " reason="
@@ -4395,8 +4475,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         bucket_rows <= graph_row_capacity &&
         bucket_num_tokens <= graph_token_capacity;
 
+    const bool local_graph_supported =
+        seq_len_supported && graph_capacity_supported;
+    const bool agreed_graph_supported =
+        use_dp_lockstep_decode_graph
+            ? agree_bool_across_model_group(local_graph_supported)
+            : local_graph_supported;
     // Early return if conditions are not suitable for graph operations
-    if (!seq_len_supported || !graph_capacity_supported) {
+    if (!agreed_graph_supported) {
       LOG(WARNING)
           << "Not suitable for MUSA graph operations (kv_max_seq_len="
           << params.meta.kv_max_seq_len << ", max_seq_len=" << max_seq_len
@@ -4419,7 +4505,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     // buffer. No-op on other platforms / non-decode forwards. See
     // maybe_precompute_embedding_for_graph() for the full rationale.
     const ModelInputParams graph_params =
-        maybe_precompute_embedding_for_graph(tokens, params);
+        maybe_precompute_embedding_for_graph(run_tokens, run_params);
     if (reuse_existing_graph) {
       const uint32_t width =
           static_cast<uint32_t>(options_.num_decoding_tokens());
@@ -4449,17 +4535,25 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     const uint32_t graph_shape_key = dsv4_graph_shape_key(
         bucket_num_tokens, n_tokens, args_, options_, graph_params);
 
-    // Check if captured graph exists for this bucket num_tokens
+    // Check if captured graph exists for this bucket num_tokens. Under DP8
+    // decode, all DP ranks must enter replay or capture in lockstep so MoE
+    // AllGather/AllReduce and custom-AR graph finalization never deadlock.
     auto it = graphs_.find(graph_shape_key);
-    if (it != graphs_.end()) {
+    const bool local_graph_hit = (it != graphs_.end());
+    const bool agreed_graph_hit =
+        use_dp_lockstep_decode_graph
+            ? agree_bool_across_model_group(local_graph_hit)
+            : local_graph_hit;
+    if (agreed_graph_hit) {
+      CHECK(it != graphs_.end());
       CHECK(!reuse_existing_graph || it->second->captured_without_padding());
       // Replay the existing graph
       VLOG(kGraphExecutorLogVerboseLevel)
           << "MusaGraphExecutorImpl::run() in decode replay mode";
-      auto result =
-          it->second->replay(tokens, positions, kv_caches, graph_params);
-      auto output =
-          attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+      auto result = it->second->replay(
+          run_tokens, run_positions, kv_caches, graph_params);
+      auto output = attach_aux_hidden_states_if_needed(
+          result.hidden_states, orig_n_tokens);
       return output;
     }
 
@@ -4467,7 +4561,13 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         s_failed_decode_keys;
     const auto decode_fail_key =
         std::make_pair(reinterpret_cast<uintptr_t>(this), graph_shape_key);
-    if (s_failed_decode_keys.contains(decode_fail_key)) {
+    const bool local_failed_key =
+        s_failed_decode_keys.contains(decode_fail_key);
+    const bool agreed_failed_key =
+        use_dp_lockstep_decode_graph
+            ? !agree_bool_across_model_group(!local_failed_key)
+            : local_failed_key;
+    if (agreed_failed_key) {
       ModelInputParams eager_params = params;
       eager_params.enable_graph = false;
       eager_params.attn_metadata.reset();
@@ -4494,8 +4594,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       capture_success = graph->capture(model_,
                                        args_,
                                        options_,
-                                       tokens,
-                                       positions,
+                                       run_tokens,
+                                       run_positions,
                                        graph_params,
                                        kv_caches,
                                        bucket_num_tokens,
@@ -4528,11 +4628,11 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       // would otherwise be reused unchanged, which is only correct in the
       // unlikely case the post-capture request happens to match exactly).
       const ModelInputParams replay_params =
-          maybe_precompute_embedding_for_graph(tokens, params);
+          maybe_precompute_embedding_for_graph(run_tokens, run_params);
       auto result = graphs_[graph_shape_key]->replay(
-          tokens, positions, kv_caches, replay_params);
-      auto output =
-          attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+          run_tokens, run_positions, kv_caches, replay_params);
+      auto output = attach_aux_hidden_states_if_needed(
+          result.hidden_states, orig_n_tokens);
       return output;
     }
 

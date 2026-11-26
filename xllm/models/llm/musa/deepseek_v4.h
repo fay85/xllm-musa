@@ -1534,13 +1534,22 @@ class DeepseekV4ModelImpl
     // See fill_empty_dp_rank_input_params: the dummy kv length must be able to
     // hold the configured sparse top-k / sliding window, otherwise the DSA
     // metadata AICPU kernels reject cmp_topk/sparse_count > kv_len.
-    const int32_t dummy_kv_len =
-        static_cast<int32_t>(std::max<int64_t>({index_topk_, window_size_, 1}));
+    const int32_t dummy_q_len =
+        std::max<int32_t>(params.meta.q_max_seq_len, 1);
+    const int32_t dummy_kv_len = static_cast<int32_t>(
+        std::max<int64_t>({index_topk_, window_size_, dummy_q_len, 1}));
     params.meta.num_sequences = static_cast<int32_t>(metadata_batch_size);
+    // Keep actual_num_sequences aligned with the dummy bucket rows on this
+    // local metadata copy so normalize_graph_metadata_input_params() does not
+    // zero out dummy_kv_len / dummy_q_len.
+    params.meta.actual_num_sequences =
+        static_cast<int32_t>(metadata_batch_size);
     params.meta.kv_max_seq_len =
         std::max<int32_t>(params.meta.kv_max_seq_len, dummy_kv_len);
-    params.meta.q_max_seq_len = 1;
-    params.meta.batch_forward_type = BatchForwardType::DECODE;
+    params.meta.q_max_seq_len = dummy_q_len;
+    if (!params.meta.batch_forward_type.is_chunked_prefill()) {
+      params.meta.batch_forward_type = BatchForwardType::DECODE;
+    }
 
     auto pad_lens_vec = [metadata_batch_size](std::vector<int32_t>& lens,
                                               int32_t fill_value) {
@@ -1550,7 +1559,7 @@ class DeepseekV4ModelImpl
       }
     };
     pad_lens_vec(params.attention.host.kv_seq_lens, dummy_kv_len);
-    pad_lens_vec(params.attention.host.q_seq_lens, 1);
+    pad_lens_vec(params.attention.host.q_seq_lens, dummy_q_len);
 
     const int32_t manager_num = static_cast<int32_t>(group_infos_.size());
     bool has_full_multi_block_tables =
@@ -1575,8 +1584,14 @@ class DeepseekV4ModelImpl
     params.multi_block_tables.clear();
     params.multi_block_tables.reserve(manager_num);
     for (int32_t manager_id = 0; manager_id < manager_num; ++manager_id) {
+      const int64_t block_size =
+          manager_id < static_cast<int32_t>(group_infos_.size())
+              ? std::max<int64_t>(group_infos_[manager_id].block_size, 1)
+              : 1;
+      const int64_t dummy_blocks =
+          std::max<int64_t>(1, (dummy_kv_len + block_size - 1) / block_size);
       params.multi_block_tables.emplace_back(
-          torch::zeros({metadata_batch_size, 1}, cpu_int_options));
+          torch::zeros({metadata_batch_size, dummy_blocks}, cpu_int_options));
     }
   }
 

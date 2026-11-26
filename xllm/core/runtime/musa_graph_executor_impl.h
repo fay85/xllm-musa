@@ -511,6 +511,8 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   ~MusaGraphExecutorImpl() override;
 
+  void set_dp_process_group(ProcessGroup* dp_group) override;
+
   void set_model_parallel_groups(ProcessGroup* tp_group,
                                  ProcessGroup* cp_group) override;
 
@@ -547,6 +549,7 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   mutable bool prefill_graphs_oom_latched_ = false;
   ProcessGroup* tp_group_ = nullptr;
   ProcessGroup* cp_group_ = nullptr;
+  ProcessGroup* dp_group_ = nullptr;
 
   bool agree_bool_across_model_group(bool local_flag) const;
 

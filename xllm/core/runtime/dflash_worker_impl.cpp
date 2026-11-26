@@ -727,7 +727,15 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
   query_input.input_params.clear_linear_attention_state();
   dflash_detail::invalidate_draft_model_geometry(query_input.input_params);
   query_input.input_params.meta.batch_forward_type = draft_batch_forward_type();
-  if (draft_impl_->context_.get_model_args().dummy_token_count() == 1) {
+  const bool is_dsv4_dspark_draft = util::is_deepseek_v4_dspark_model_type(
+      draft_impl_->context_.get_model_args().model_type());
+  if (options_.dp_size() > 1 && is_dsv4_dspark_draft && draft_width > 1) {
+    // Under DP8-Attention + TP8-MoE, preserve the active draft query width so
+    // MusaGraphExecutorImpl routes idle DP ranks into the same DSpark draft
+    // graph bucket in lockstep with active ranks (num_sequences remains 0).
+    query_input.input_params.meta.q_max_seq_len = draft_width;
+    query_input.input_params.meta.actual_num_sequences = 0;
+  } else if (draft_impl_->context_.get_model_args().dummy_token_count() == 1) {
     // The metadata builder uses zero query length to materialize a dummy row.
     query_input.input_params.meta.q_max_seq_len = 0;
   } else {
@@ -751,7 +759,17 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
   // Idle decode joins the busy ranks' target validate. Mark the same spec
   // verify flag so every rank captures one expanded graph instead of a
   // separate width-1 graph on the dummy row.
-  validate_input.input_params.is_spec_verify = target_is_hybrid_recurrent_;
+  const bool is_dsv4_dp_target_verify =
+      options_.dp_size() > 1 &&
+      impl_->context_.get_model_args().model_type() == "deepseek_v4" &&
+      options_.num_speculative_tokens() > 0;
+  validate_input.input_params.is_spec_verify =
+      target_is_hybrid_recurrent_ || is_dsv4_dp_target_verify;
+  if (is_dsv4_dp_target_verify) {
+    validate_input.input_params.meta.q_max_seq_len =
+        options_.num_speculative_tokens() + 1;
+    validate_input.input_params.meta.actual_num_sequences = 0;
+  }
   // DSpark's N-wide draft geometry must be rescaled to (N+1) for the target's
   // anchor + drafts forward.
   scale_speculative_parallel_token_counts(
