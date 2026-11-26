@@ -350,15 +350,44 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       // AllGather avoids index_select and host allocations during capture.
       dp_moe_local_rows = ffn_input_2d.size(0);
       dp_moe_rank = parallel_args_.dp_local_process_group_->rank();
-      ffn_input = parallel_args_.dp_local_process_group_
-                      ->allgather_base_sync(ffn_input_2d.contiguous())
-                      .flatten(0, 1);
-      topk_weights = parallel_args_.dp_local_process_group_
-                         ->allgather_base_sync(topk_weights.contiguous())
-                         .flatten(0, 1);
-      topk_ids = parallel_args_.dp_local_process_group_
-                     ->allgather_base_sync(topk_ids.contiguous())
-                     .flatten(0, 1);
+      const char* packed_dp_env =
+          std::getenv("XLLM_DSV4_DP_PACKED_MOE_GATHER");
+      const bool use_packed_dp_gather =
+          (packed_dp_env == nullptr || std::strcmp(packed_dp_env, "0") != 0) &&
+          ffn_input_2d.dim() == 2 && topk_weights.dim() == 2 &&
+          topk_ids.dim() == 2 && topk_weights.size(0) == dp_moe_local_rows &&
+          topk_ids.size(0) == dp_moe_local_rows &&
+          topk_weights.size(1) == topk_ids.size(1) &&
+          (ffn_input_2d.size(1) * ffn_input_2d.element_size()) % 16 == 0;
+      if (use_packed_dp_gather) {
+        auto packed_local = kernel::musa::deepseek_v4_dp_pack_moe_inputs(
+            ffn_input_2d, topk_weights, topk_ids);
+        auto packed_global = parallel_args_.dp_local_process_group_
+                                 ->allgather_base_sync(packed_local)
+                                 .flatten(0, 1);
+        std::tie(ffn_input, topk_weights, topk_ids) =
+            kernel::musa::deepseek_v4_dp_unpack_moe_inputs(
+                packed_global,
+                ffn_input_2d.size(1),
+                ffn_input_2d.scalar_type(),
+                topk_weights.size(1),
+                topk_weights.scalar_type(),
+                topk_ids.scalar_type());
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_DP_PACKED_MOE_GATHER] local_rows=" << dp_moe_local_rows
+            << " global_rows=" << ffn_input.size(0)
+            << " row_stride_bytes=" << packed_local.size(1);
+      } else {
+        ffn_input = parallel_args_.dp_local_process_group_
+                        ->allgather_base_sync(ffn_input_2d.contiguous())
+                        .flatten(0, 1);
+        topk_weights = parallel_args_.dp_local_process_group_
+                           ->allgather_base_sync(topk_weights.contiguous())
+                           .flatten(0, 1);
+        topk_ids = parallel_args_.dp_local_process_group_
+                       ->allgather_base_sync(topk_ids.contiguous())
+                       .flatten(0, 1);
+      }
       dp_moe_uniform_graph_gather = true;
     } else {
       SelectedMoeInputs gathered = gather_selected_moe_inputs(

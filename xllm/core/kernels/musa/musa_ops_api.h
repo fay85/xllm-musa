@@ -612,6 +612,19 @@ bool deepseek_v4_rope_hadamard_out(const torch::Tensor& query,
 bool deepseek_v4_hadamard_out(const torch::Tensor& input,
                               torch::Tensor& output);
 
+torch::Tensor deepseek_v4_dp_pack_moe_inputs(
+    const torch::Tensor& ffn_input,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& topk_ids);
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v4_dp_unpack_moe_inputs(const torch::Tensor& packed,
+                                 int64_t hidden_size,
+                                 at::ScalarType ffn_dtype,
+                                 int64_t topk,
+                                 at::ScalarType weights_dtype,
+                                 at::ScalarType ids_dtype);
+
 bool deepseek_v4_q_rmsnorm_rope_inplace(torch::Tensor& query,
                                         const torch::Tensor& cos,
                                         const torch::Tensor& sin,

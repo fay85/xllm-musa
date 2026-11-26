@@ -358,4 +358,166 @@ bool deepseek_v4_hadamard_out(const torch::Tensor& input,
   return true;
 }
 
+namespace {
+
+inline int64_t align16_bytes(int64_t n) { return (n + 15) & ~int64_t{15}; }
+
+__global__ void dp_pack_moe_inputs_kernel(const uint8_t* __restrict__ ffn,
+                                          const uint8_t* __restrict__ weights,
+                                          const uint8_t* __restrict__ ids,
+                                          uint8_t* __restrict__ packed,
+                                          int64_t ffn_bytes,
+                                          int64_t w_off,
+                                          int64_t w_bytes,
+                                          int64_t id_off,
+                                          int64_t id_bytes,
+                                          int64_t row_stride) {
+  const int64_t row = static_cast<int64_t>(blockIdx.x);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  const int32_t stride = static_cast<int32_t>(blockDim.x);
+  uint8_t* dst_row = packed + row * row_stride;
+
+  const uint4* ffn_src =
+      reinterpret_cast<const uint4*>(ffn + row * ffn_bytes);
+  uint4* ffn_dst = reinterpret_cast<uint4*>(dst_row);
+  const int64_t ffn_vecs = ffn_bytes / 16;
+  for (int64_t i = tid; i < ffn_vecs; i += stride) {
+    ffn_dst[i] = ffn_src[i];
+  }
+
+  const uint8_t* w_src = weights + row * w_bytes;
+  uint8_t* w_dst = dst_row + w_off;
+  for (int64_t i = tid; i < w_bytes; i += stride) {
+    w_dst[i] = w_src[i];
+  }
+
+  const uint8_t* id_src = ids + row * id_bytes;
+  uint8_t* id_dst = dst_row + id_off;
+  for (int64_t i = tid; i < id_bytes; i += stride) {
+    id_dst[i] = id_src[i];
+  }
+}
+
+__global__ void dp_unpack_moe_inputs_kernel(const uint8_t* __restrict__ packed,
+                                            uint8_t* __restrict__ ffn,
+                                            uint8_t* __restrict__ weights,
+                                            uint8_t* __restrict__ ids,
+                                            int64_t ffn_bytes,
+                                            int64_t w_off,
+                                            int64_t w_bytes,
+                                            int64_t id_off,
+                                            int64_t id_bytes,
+                                            int64_t row_stride) {
+  const int64_t row = static_cast<int64_t>(blockIdx.x);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  const int32_t stride = static_cast<int32_t>(blockDim.x);
+  const uint8_t* src_row = packed + row * row_stride;
+
+  const uint4* ffn_src = reinterpret_cast<const uint4*>(src_row);
+  uint4* ffn_dst = reinterpret_cast<uint4*>(ffn + row * ffn_bytes);
+  const int64_t ffn_vecs = ffn_bytes / 16;
+  for (int64_t i = tid; i < ffn_vecs; i += stride) {
+    ffn_dst[i] = ffn_src[i];
+  }
+
+  const uint8_t* w_src = src_row + w_off;
+  uint8_t* w_dst = weights + row * w_bytes;
+  for (int64_t i = tid; i < w_bytes; i += stride) {
+    w_dst[i] = w_src[i];
+  }
+
+  const uint8_t* id_src = src_row + id_off;
+  uint8_t* id_dst = ids + row * id_bytes;
+  for (int64_t i = tid; i < id_bytes; i += stride) {
+    id_dst[i] = id_src[i];
+  }
+}
+
+}  // namespace
+
+torch::Tensor deepseek_v4_dp_pack_moe_inputs(
+    const torch::Tensor& ffn_input,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& topk_ids) {
+  const auto ffn_c = ffn_input.is_contiguous() ? ffn_input : ffn_input.contiguous();
+  const auto w_c =
+      topk_weights.is_contiguous() ? topk_weights : topk_weights.contiguous();
+  const auto id_c = topk_ids.is_contiguous() ? topk_ids : topk_ids.contiguous();
+  const int64_t rows = ffn_c.size(0);
+  const int64_t ffn_bytes = ffn_c.size(1) * ffn_c.element_size();
+  const int64_t w_bytes = w_c.size(1) * w_c.element_size();
+  const int64_t id_bytes = id_c.size(1) * id_c.element_size();
+  CHECK_EQ(ffn_bytes % 16, 0);
+  const int64_t w_off = align16_bytes(ffn_bytes);
+  const int64_t id_off = align16_bytes(w_off + w_bytes);
+  const int64_t row_stride = align16_bytes(id_off + id_bytes);
+
+  auto packed = torch::empty(
+      {rows, row_stride}, ffn_c.options().dtype(torch::kUInt8));
+  if (rows > 0) {
+    const XLLMOptionalDeviceGuard device_guard(at::device_of(ffn_c));
+    dp_pack_moe_inputs_kernel<<<static_cast<unsigned int>(rows),
+                                256,
+                                0,
+                                current_musa_stream(ffn_c.device())>>>(
+        static_cast<const uint8_t*>(ffn_c.data_ptr()),
+        static_cast<const uint8_t*>(w_c.data_ptr()),
+        static_cast<const uint8_t*>(id_c.data_ptr()),
+        packed.data_ptr<uint8_t>(),
+        ffn_bytes,
+        w_off,
+        w_bytes,
+        id_off,
+        id_bytes,
+        row_stride);
+    check_musa_kernel_launch("DeepSeek-V4 DP pack MoE inputs");
+  }
+  return packed;
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v4_dp_unpack_moe_inputs(const torch::Tensor& packed,
+                                 int64_t hidden_size,
+                                 at::ScalarType ffn_dtype,
+                                 int64_t topk,
+                                 at::ScalarType weights_dtype,
+                                 at::ScalarType ids_dtype) {
+  const auto p_c = packed.is_contiguous() ? packed : packed.contiguous();
+  const int64_t rows = p_c.size(0);
+  const int64_t ffn_bytes =
+      hidden_size * static_cast<int64_t>(c10::elementSize(ffn_dtype));
+  const int64_t w_bytes =
+      topk * static_cast<int64_t>(c10::elementSize(weights_dtype));
+  const int64_t id_bytes =
+      topk * static_cast<int64_t>(c10::elementSize(ids_dtype));
+  const int64_t w_off = align16_bytes(ffn_bytes);
+  const int64_t id_off = align16_bytes(w_off + w_bytes);
+  const int64_t row_stride = align16_bytes(id_off + id_bytes);
+  CHECK_EQ(p_c.size(1), row_stride);
+
+  auto ffn_out =
+      torch::empty({rows, hidden_size}, p_c.options().dtype(ffn_dtype));
+  auto w_out = torch::empty({rows, topk}, p_c.options().dtype(weights_dtype));
+  auto id_out = torch::empty({rows, topk}, p_c.options().dtype(ids_dtype));
+  if (rows > 0) {
+    const XLLMOptionalDeviceGuard device_guard(at::device_of(p_c));
+    dp_unpack_moe_inputs_kernel<<<static_cast<unsigned int>(rows),
+                                  256,
+                                  0,
+                                  current_musa_stream(p_c.device())>>>(
+        p_c.data_ptr<uint8_t>(),
+        static_cast<uint8_t*>(ffn_out.data_ptr()),
+        static_cast<uint8_t*>(w_out.data_ptr()),
+        static_cast<uint8_t*>(id_out.data_ptr()),
+        ffn_bytes,
+        w_off,
+        w_bytes,
+        id_off,
+        id_bytes,
+        row_stride);
+    check_musa_kernel_launch("DeepSeek-V4 DP unpack MoE inputs");
+  }
+  return {ffn_out, w_out, id_out};
+}
+
 }  // namespace xllm::kernel::musa
