@@ -144,7 +144,7 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                             double hc_eps,
                             const std::optional<torch::Tensor>& norm_weight,
                             bool* output_is_normalized) {
-  // Large rows are opt-in; the original <=320 model-validated route remains
+  // Large rows (up to 2048 when P4f untiled is enabled) use Mate HC prenorm+big-fuse;
   // the default until the candidate also completes model-level acceptance.
   const int64_t max_prefill_tokens = deepseek_v4_hc_prefill_row_limit(x.size(2));
   const int64_t tokens = x.size(0);

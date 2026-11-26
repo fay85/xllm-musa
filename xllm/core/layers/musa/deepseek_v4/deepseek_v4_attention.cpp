@@ -4682,9 +4682,15 @@ DeepseekV4AttentionImpl::forward_current_impl(
     kv = dsv4_musa_sp::finish_gather_global(std::move(kv_gather_async),
                                             *sp_context);
     maybe_sync_attention_stage(layer_id_, "sp_kv_all_gather", kv);
-    LOG_FIRST_N(INFO, 2)
-        << "[DSV4_PREFILL_OVERLAP_SP_GATHER] layer=" << layer_id_
-        << " early_packed=" << (has_early_packed_gather ? 1 : 0);
+    if (has_early_packed_gather) {
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_PREFILL_OVERLAP_SP_GATHER] layer=" << layer_id_
+          << " early_packed=1";
+    } else {
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_PREFILL_OVERLAP_SP_GATHER] layer=" << layer_id_
+          << " early_packed=0";
+    }
   } else {
     if (!overlap_decode_q_kv) {
       compute_q_branch();
