@@ -95,10 +95,24 @@ inline torch::Tensor dsv4_batched_indexer_gemm(
             query_rows_per_sequence,
             capacity);
     if (mqa_scores.defined()) {
-      auto selected = std::get<1>(mqa_scores.topk(topk,
-                                                  /*dim=*/1,
-                                                  /*largest=*/true,
-                                                  /*sorted=*/false));
+      const char* radix_topk_env =
+          std::getenv("XLLM_DSV4_DECODE_RADIX_TOPK512");
+      const bool use_radix_topk =
+          (radix_topk_env == nullptr || std::strcmp(radix_topk_env, "0") != 0) &&
+          topk == 512;
+      torch::Tensor selected =
+          use_radix_topk
+              ? kernel::musa::deepseek_v4_indexer_decode_topk512(
+                    mqa_scores, lengths)
+              : std::get<1>(mqa_scores.topk(topk,
+                                            /*dim=*/1,
+                                            /*largest=*/true,
+                                            /*sorted=*/false));
+      if (use_radix_topk) {
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_DECODE_RADIX_TOPK512] rows=" << mqa_scores.size(0)
+            << " capacity=" << capacity;
+      }
       kernel::musa::deepseek_v4_indexer_map_outputs(selected,
                                                     lengths,
                                                     compressed_blocks,
@@ -223,10 +237,18 @@ inline torch::Tensor dsv4_batched_indexer_gemm(
   if (fused_metadata) {
     kernel::musa::deepseek_v4_indexer_mask_scores(
         scores, lengths, valid_slots, query_rows_per_sequence);
-    auto selected = std::get<1>(scores.topk(topk,
-                                            /*dim=*/1,
-                                            /*largest=*/true,
-                                            /*sorted=*/false));
+    const char* radix_topk_env =
+        std::getenv("XLLM_DSV4_DECODE_RADIX_TOPK512");
+    const bool use_radix_topk =
+        (radix_topk_env == nullptr || std::strcmp(radix_topk_env, "0") != 0) &&
+        topk == 512;
+    torch::Tensor selected =
+        use_radix_topk
+            ? kernel::musa::deepseek_v4_indexer_decode_topk512(scores, lengths)
+            : std::get<1>(scores.topk(topk,
+                                      /*dim=*/1,
+                                      /*largest=*/true,
+                                      /*sorted=*/false));
     kernel::musa::deepseek_v4_indexer_map_outputs(selected,
                                                   lengths,
                                                   compressed_blocks,

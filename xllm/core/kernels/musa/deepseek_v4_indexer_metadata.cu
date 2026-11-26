@@ -1462,7 +1462,217 @@ __global__ void indexer_extract_mask_mqa_scores_kernel(
   }
 }
 
+
+__global__ void __launch_bounds__(kPrefillTopK512)
+indexer_decode_topk512_kernel(
+    const float* __restrict__ scores,
+    const int32_t* __restrict__ lengths,
+    int32_t capacity,
+    int64_t* __restrict__ output) {
+  const int32_t row = static_cast<int32_t>(blockIdx.x);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  int64_t* out_row = output + static_cast<int64_t>(row) * kPrefillTopK512;
+
+  const int32_t live = lengths[row] > 0 ? lengths[row] : 0;
+  const int32_t valid = live / 4 < capacity ? (live / 4) : capacity;
+
+  if (valid <= kPrefillTopK512) {
+    out_row[tid] = tid < valid ? static_cast<int64_t>(tid) : int64_t{0};
+    return;
+  }
+
+  const float* row_scores = scores + static_cast<int64_t>(row) * capacity;
+
+  __shared__ uint32_t s_group_hist[kPrefillHistGroups][kPrefillRadixBins];
+  __shared__ uint32_t s_hist[kPrefillRadixBins];
+  __shared__ uint32_t s_prefix;
+  __shared__ uint32_t s_needed;
+  __shared__ uint32_t s_exact_done;
+  __shared__ uint32_t s_gt_pos;
+  __shared__ uint32_t s_eq_pos;
+
+  if (tid == 0) {
+    s_prefix = 0u;
+    s_needed = static_cast<uint32_t>(kPrefillTopK512);
+    s_exact_done = 0u;
+    s_gt_pos = 0u;
+    s_eq_pos = 0u;
+  }
+
+  const bool use_reg_cache = (valid <= kPrefillTopK512 * kPrefillMaxRegChunks);
+  uint32_t reg_keys[kPrefillMaxRegChunks];
+  if (use_reg_cache) {
+#pragma unroll
+    for (int32_t c = 0; c < kPrefillMaxRegChunks; ++c) {
+      const int32_t col = tid + c * kPrefillTopK512;
+      if (col < valid) {
+        reg_keys[c] = prefill_float_to_ordered_u32(row_scores[col]);
+      }
+    }
+  }
+
+  const int32_t hist_group = tid & (kPrefillHistGroups - 1);
+  uint32_t mask = 0u;
+
+#pragma unroll
+  for (int32_t pass = 0; pass < 4; ++pass) {
+    const int32_t shift = 24 - pass * 8;
+    s_group_hist[tid >> 8][tid & 255] = 0u;
+    s_group_hist[(tid >> 8) + 2][tid & 255] = 0u;
+    __syncthreads();
+
+    const uint32_t prefix = s_prefix;
+    if (use_reg_cache) {
+#pragma unroll
+      for (int32_t c = 0; c < kPrefillMaxRegChunks; ++c) {
+        const int32_t col = tid + c * kPrefillTopK512;
+        if (col < valid) {
+          const uint32_t k = reg_keys[c];
+          if ((k & mask) == prefix) {
+            atomicAdd(&s_group_hist[hist_group][(k >> shift) & 0xffu], 1u);
+          }
+        }
+      }
+    } else {
+      for (int32_t col = tid; col < valid; col += kPrefillTopK512) {
+        const uint32_t k = prefill_float_to_ordered_u32(row_scores[col]);
+        if ((k & mask) == prefix) {
+          atomicAdd(&s_group_hist[hist_group][(k >> shift) & 0xffu], 1u);
+        }
+      }
+    }
+    __syncthreads();
+
+    if (tid < kPrefillRadixBins) {
+      s_hist[tid] = s_group_hist[0][tid] + s_group_hist[1][tid] +
+                    s_group_hist[2][tid] + s_group_hist[3][tid];
+    }
+    __syncthreads();
+
+    if (tid == 0) {
+      uint32_t acc = 0u;
+      const uint32_t needed = s_needed;
+      uint32_t chosen_bin = 0u;
+      for (int32_t b = kPrefillRadixBins - 1; b >= 0; --b) {
+        const uint32_t cnt = s_hist[b];
+        if (acc + cnt >= needed) {
+          chosen_bin = static_cast<uint32_t>(b);
+          break;
+        }
+        acc += cnt;
+      }
+      s_prefix = prefix | (chosen_bin << shift);
+      const uint32_t remaining = needed - acc;
+      if (s_hist[chosen_bin] == remaining) {
+        s_exact_done = 1u;
+        s_needed = 0u;
+      } else {
+        s_needed = remaining;
+      }
+    }
+    __syncthreads();
+
+    if (s_exact_done != 0u) {
+      break;
+    }
+    mask |= (0xffu << shift);
+  }
+
+  if (tid == 0) {
+    s_gt_pos = 0u;
+    s_eq_pos = static_cast<uint32_t>(kPrefillTopK512) - s_needed;
+  }
+  __syncthreads();
+
+  const uint32_t threshold = s_prefix;
+  const bool exact_ge = (s_exact_done != 0u);
+
+  if (use_reg_cache) {
+#pragma unroll
+    for (int32_t c = 0; c < kPrefillMaxRegChunks; ++c) {
+      const int32_t col = tid + c * kPrefillTopK512;
+      if (col < valid) {
+        const uint32_t k = reg_keys[c];
+        if (exact_ge) {
+          if (k >= threshold) {
+            const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+            if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+              out_row[pos] = static_cast<int64_t>(col);
+            }
+          }
+        } else {
+          if (k > threshold) {
+            const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+            if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+              out_row[pos] = static_cast<int64_t>(col);
+            }
+          } else if (k == threshold) {
+            const uint32_t pos = atomicAdd(&s_eq_pos, 1u);
+            if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+              out_row[pos] = static_cast<int64_t>(col);
+            }
+          }
+        }
+      }
+    }
+  } else {
+    for (int32_t col = tid; col < valid; col += kPrefillTopK512) {
+      const uint32_t k = prefill_float_to_ordered_u32(row_scores[col]);
+      if (exact_ge) {
+        if (k >= threshold) {
+          const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+          if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+            out_row[pos] = static_cast<int64_t>(col);
+          }
+        }
+      } else {
+        if (k > threshold) {
+          const uint32_t pos = atomicAdd(&s_gt_pos, 1u);
+          if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+            out_row[pos] = static_cast<int64_t>(col);
+          }
+        } else if (k == threshold) {
+          const uint32_t pos = atomicAdd(&s_eq_pos, 1u);
+          if (pos < static_cast<uint32_t>(kPrefillTopK512)) {
+            out_row[pos] = static_cast<int64_t>(col);
+          }
+        }
+      }
+    }
+  }
+}
+
 }  // namespace
+
+
+torch::Tensor deepseek_v4_indexer_decode_topk512(
+    const torch::Tensor& scores,
+    const torch::Tensor& lengths) {
+  CHECK(scores.defined() && lengths.defined());
+  CHECK(scores.device().is_privateuseone());
+  CHECK_EQ(scores.scalar_type(), torch::kFloat32);
+  CHECK_EQ(scores.dim(), 2);
+  CHECK(scores.is_contiguous());
+  CHECK_EQ(lengths.scalar_type(), torch::kInt32);
+  CHECK(lengths.is_contiguous());
+  CHECK_EQ(lengths.numel(), scores.size(0));
+  const int64_t rows = scores.size(0);
+  const int64_t capacity = scores.size(1);
+  CHECK_GE(capacity, kPrefillTopK512);
+  auto output = torch::empty(
+      {rows, kPrefillTopK512}, scores.options().dtype(torch::kInt64));
+  const XLLMOptionalDeviceGuard guard(scores.device());
+  indexer_decode_topk512_kernel<<<static_cast<uint32_t>(rows),
+                                  kPrefillTopK512,
+                                  0,
+                                  current_musa_stream(scores.device())>>>(
+      scores.data_ptr<float>(),
+      lengths.data_ptr<int32_t>(),
+      static_cast<int32_t>(capacity),
+      output.data_ptr<int64_t>());
+  check_musa_kernel_launch("dsv4 decode indexer radix topk512");
+  return output;
+}
 
 torch::Tensor deepseek_v4_indexer_decode_fp8_mqa_scores(
     const torch::Tensor& query,

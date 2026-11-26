@@ -64,6 +64,10 @@ torch::Tensor deepseek_v4_indexer_prefill_fp8_mqa_topk512(
 // keys directly to e4m3fn + fp32 scale, quantizes query + folds weights, runs
 // MATE fp8_mqa_logits_out per sequence, and outputs masked FP32 scores
 // [batch * Q, capacity]. Returns undefined tensor to fall back if unavailable.
+torch::Tensor deepseek_v4_indexer_decode_topk512(
+    const torch::Tensor& scores,
+    const torch::Tensor& lengths);
+
 torch::Tensor deepseek_v4_indexer_decode_fp8_mqa_scores(
     const torch::Tensor& query,
     const torch::Tensor& weights,
