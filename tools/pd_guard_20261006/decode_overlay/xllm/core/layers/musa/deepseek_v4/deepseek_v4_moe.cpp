@@ -522,6 +522,14 @@ void DeepseekV4MoEImpl::ensure_fp8_expert_storage() {
                      scale_options),
         /*requires_grad=*/false);
   }
+  if (w13_fp8_.device().is_privateuseone() && hidden_size_ == 4096 &&
+      local_intermediate_size_ == 256 && topk_ == 6 &&
+      num_experts_per_rank_ > 0 && num_experts_per_rank_ <= 256) {
+    const char* triton_bm16_env = std::getenv("XLLM_DSV4_MOE_TRITON_BM16");
+    if (triton_bm16_env == nullptr || std::strcmp(triton_bm16_env, "0") != 0) {
+      kernel::musa::prepare_deepseek_v4_fp8_moe_triton_bm16(w13_fp8_.device());
+    }
+  }
 }
 
 void DeepseekV4MoEImpl::ensure_packed_fp4_expert_storage() {
@@ -1055,14 +1063,30 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
            : input_2d.size(0) > kFp8GemvWorkspaceTokens) &&
       start_expert_id_ == 0 && num_experts_per_rank_ == num_total_experts_ &&
       (ep_pg_ == nullptr || ep_pg_->world_size() == 1);
+  const char* triton_bm16_env = std::getenv("XLLM_DSV4_MOE_TRITON_BM16");
+  const bool triton_bm16_enabled =
+      triton_bm16_env == nullptr || std::strcmp(triton_bm16_env, "0") != 0;
+  const bool use_triton_bm16_moe =
+      triton_bm16_enabled && fp8_experts_loaded() &&
+      (input_params.meta.batch_forward_type.is_decode() ||
+       is_dspark_draft_step) &&
+      input_2d.size(0) >= 1 && input_2d.size(0) <= 128 &&
+      input_2d.scalar_type() == torch::kBFloat16 &&
+      weights_2d.scalar_type() == torch::kFloat32 &&
+      (ids_2d.scalar_type() == torch::kInt32 ||
+       ids_2d.scalar_type() == torch::kInt64) &&
+      topk_ == 6 && hidden_size_ == 4096 &&
+      local_intermediate_size_ == 256 && num_experts_per_rank_ > 0 &&
+      num_experts_per_rank_ <= 256;
   const bool use_fp8_gemv =
-      !disable_fp8_gemv && !grouped_fp8_verify &&
+      !use_triton_bm16_moe && !disable_fp8_gemv && !grouped_fp8_verify &&
       !dspark_draft_compact_grouped &&
       (input_params.meta.batch_forward_type.is_decode() ||
        is_dspark_draft_decode) &&
       input_2d.size(0) > 0 && input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
       fp8_experts_loaded();
-  if (!use_fp8_gemv && !grouped_fp8_verify && !dspark_draft_compact_grouped &&
+  if (!use_triton_bm16_moe && !use_fp8_gemv && !grouped_fp8_verify &&
+      !dspark_draft_compact_grouped &&
       weights_2d.scalar_type() != input_2d.scalar_type()) {
     weights_2d = weights_2d.to(input_2d.dtype());
   }
@@ -1071,7 +1095,22 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   CHECK_EQ(ids_2d.size(0), input_2d.size(0))
       << "DeepseekV4MoE topk_ids token count mismatch.";
   torch::Tensor output;
-  if (use_fp8_gemv) {
+  if (use_triton_bm16_moe) {
+    output = kernel::musa::deepseek_v4_fp8_moe_triton_bm16_decode(
+        input_2d.is_contiguous() ? input_2d : input_2d.contiguous(),
+        ids_2d.is_contiguous() ? ids_2d : ids_2d.contiguous(),
+        weights_2d.is_contiguous() ? weights_2d : weights_2d.contiguous(),
+        w13_fp8_,
+        w13_fp8_scale_,
+        w2_fp8_,
+        w2_fp8_scale_,
+        start_expert_id_,
+        swiglu_limit_);
+    LOG_FIRST_N(INFO, 2) << "[DSV4_TRITON_BM16_MOE] rows=" << input_2d.size(0)
+                         << " experts=" << num_experts_per_rank_
+                         << " topk=" << topk_;
+  }
+  if (!output.defined() && use_fp8_gemv) {
     output = forward_fp8_gemv(input_2d, ids_2d, weights_2d);
   }
 

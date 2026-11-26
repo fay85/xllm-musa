@@ -781,6 +781,19 @@ torch::Tensor deepseek_v4_fp8_moe_gemv_decode(
     const torch::Tensor& output_workspace,
     double swiglu_limit);
 
+void prepare_deepseek_v4_fp8_moe_triton_bm16(const torch::Device& device);
+
+torch::Tensor deepseek_v4_fp8_moe_triton_bm16_decode(
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& w13,
+    const torch::Tensor& w13_scale,
+    const torch::Tensor& w2,
+    const torch::Tensor& w2_scale,
+    int64_t start_expert_id,
+    double swiglu_limit);
+
 std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_swiglu_quantize(
     const torch::Tensor& gate_up,
     const torch::Tensor& ragged_tokens_info,

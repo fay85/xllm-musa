@@ -18,6 +18,7 @@ limitations under the License.
 // W2 combines all routes and their router weights in one launch. This avoids
 // padding six single-token routes to TensorCore block-M tiles.
 
+#include <musa.h>
 #include <torch/torch.h>
 
 #include <algorithm>
@@ -25,8 +26,11 @@ limitations under the License.
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <map>
+#include <mutex>
 #include <string>
 
+#include "core/kernels/musa/deepseek_v4_fp8_moe_triton_mubin.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
@@ -800,6 +804,506 @@ torch::Tensor deepseek_v4_fp8_moe_gemv_decode(
   CHECK(status == musaSuccess) << "DeepSeek-V4 FP8 MoE GEMV launch failed: "
                                << musaGetErrorString(status);
   return output_workspace;
+}
+
+namespace {
+
+constexpr int32_t kB2MaxTokens = 128;
+constexpr int32_t kB2TopK = 6;
+constexpr int32_t kB2MaxRoutes = kB2MaxTokens * kB2TopK;
+constexpr int32_t kB2MaxExperts = 256;
+constexpr int32_t kB2Hidden = 4096;
+constexpr int32_t kB2Intermediate = 256;
+constexpr int32_t kB2MaxBlocks = (kB2MaxRoutes + 15) / 16 + kB2MaxExperts;
+constexpr int32_t kB2MaxEM = kB2MaxBlocks * 16;
+
+struct Dsv4TritonBm16MoeState {
+  MUmodule mod_w13 = nullptr;
+  MUmodule mod_w2 = nullptr;
+  MUfunction fn_w13 = nullptr;
+  MUfunction fn_w2 = nullptr;
+  torch::Tensor input_fp8;
+  torch::Tensor input_scale;
+  torch::Tensor mid_bf16;
+  torch::Tensor act_fp8;
+  torch::Tensor act_scale;
+  torch::Tensor down_bf16;
+  torch::Tensor output_bf16;
+  torch::Tensor sorted_token_ids;
+  torch::Tensor expert_ids;
+  torch::Tensor num_tokens_post_padded;
+  bool initialized = false;
+};
+
+Dsv4TritonBm16MoeState& get_b2_triton_state(const torch::Device& device) {
+  static std::mutex mu;
+  static std::map<int32_t, Dsv4TritonBm16MoeState> states;
+  std::lock_guard<std::mutex> lock(mu);
+  const int32_t dev_idx = static_cast<int32_t>(device.index());
+  auto& st = states[dev_idx];
+  if (st.initialized) {
+    return st;
+  }
+  const XLLMOptionalDeviceGuard device_guard(device);
+  const MUresult r1 = muModuleLoadData(&st.mod_w13, kDsv4MoeW13Mubin);
+  CHECK_EQ(r1, MUSA_SUCCESS) << "B2 W13 muModuleLoadData failed: " << r1;
+  const MUresult r2 =
+      muModuleGetFunction(&st.fn_w13, st.mod_w13, kDsv4MoeTritonKernelName);
+  CHECK_EQ(r2, MUSA_SUCCESS) << "B2 W13 muModuleGetFunction failed: " << r2;
+  const MUresult r3 = muModuleLoadData(&st.mod_w2, kDsv4MoeW2Mubin);
+  CHECK_EQ(r3, MUSA_SUCCESS) << "B2 W2 muModuleLoadData failed: " << r3;
+  const MUresult r4 =
+      muModuleGetFunction(&st.fn_w2, st.mod_w2, kDsv4MoeTritonKernelName);
+  CHECK_EQ(r4, MUSA_SUCCESS) << "B2 W2 muModuleGetFunction failed: " << r4;
+
+  const auto opts_fp8 =
+      torch::TensorOptions().dtype(torch::kFloat8_e4m3fn).device(device);
+  const auto opts_f32 =
+      torch::TensorOptions().dtype(torch::kFloat32).device(device);
+  const auto opts_bf16 =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  const auto opts_i32 =
+      torch::TensorOptions().dtype(torch::kInt32).device(device);
+
+  st.input_fp8 = torch::empty({kB2MaxTokens, kB2Hidden}, opts_fp8);
+  st.input_scale = torch::empty({kB2MaxTokens, kB2Hidden / 128}, opts_f32);
+  st.mid_bf16 = torch::empty({kB2MaxRoutes, kB2Intermediate * 2}, opts_bf16);
+  st.act_fp8 = torch::empty({kB2MaxRoutes, kB2Intermediate}, opts_fp8);
+  st.act_scale = torch::empty({kB2MaxRoutes, kB2Intermediate / 128}, opts_f32);
+  st.down_bf16 = torch::empty({kB2MaxRoutes, kB2Hidden}, opts_bf16);
+  st.output_bf16 = torch::empty({kB2MaxTokens, kB2Hidden}, opts_bf16);
+  st.sorted_token_ids = torch::empty({kB2MaxEM}, opts_i32);
+  st.expert_ids = torch::empty({kB2MaxBlocks}, opts_i32);
+  st.num_tokens_post_padded = torch::empty({1}, opts_i32);
+  st.initialized = true;
+  return st;
+}
+
+__device__ __forceinline__ uint8_t b2_float_to_e4m3fn(float x) {
+  x = fminf(fmaxf(x, -448.0f), 448.0f);
+  const uint32_t bits = __float_as_uint(x);
+  const uint32_t sign = (bits >> 24) & 0x80u;
+  const uint32_t abs_bits = bits & 0x7fffffffu;
+  const int32_t exp = static_cast<int32_t>((abs_bits >> 23) & 0xffu) - 127;
+  const uint32_t mant = abs_bits & 0x7fffffu;
+  if (exp < -9) {
+    return static_cast<uint8_t>(sign);
+  }
+  if (exp < -6) {
+    const int32_t shift = -6 - exp;
+    const uint32_t sig = (0x800000u | mant);
+    const uint32_t rshift = static_cast<uint32_t>(20 + shift);
+    uint32_t q = sig >> rshift;
+    const uint32_t rem = sig & ((1u << rshift) - 1u);
+    const uint32_t half = 1u << (rshift - 1u);
+    if (rem > half || (rem == half && (q & 1u))) {
+      ++q;
+    }
+    return static_cast<uint8_t>(sign | q);
+  }
+  uint32_t e = static_cast<uint32_t>(exp + 7);
+  uint32_t m = mant >> 20;
+  const uint32_t rem = mant & 0xfffffu;
+  if (rem > 0x80000u || (rem == 0x80000u && (m & 1u))) {
+    ++m;
+    if (m == 8u) {
+      m = 0;
+      ++e;
+    }
+  }
+  if (e > 15u || (e == 15u && m > 6u)) {
+    e = 15u;
+    m = 6u;
+  }
+  return static_cast<uint8_t>(sign | (e << 3) | m);
+}
+
+__global__ void b2_token_fp8_quant_kernel(
+    const c10::BFloat16* __restrict__ input,
+    uint8_t* __restrict__ out_fp8,
+    float* __restrict__ out_scale,
+    int32_t num_tokens,
+    int32_t hidden,
+    int32_t blocks_per_row) {
+  const int32_t tok = static_cast<int32_t>(blockIdx.x);
+  const int32_t blk = static_cast<int32_t>(blockIdx.y);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  if (tok >= num_tokens || blk >= blocks_per_row) {
+    return;
+  }
+  const int32_t col = blk * 128 + tid;
+  const float val = musa_convert_to_float(
+      input[static_cast<int64_t>(tok) * hidden + col]);
+  float amax = fabsf(val);
+#pragma unroll
+  for (int32_t d = 16; d > 0; d >>= 1) {
+    amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, d));
+  }
+  __shared__ float smax[4];
+  if ((tid & 31) == 0) {
+    smax[tid >> 5] = amax;
+  }
+  __syncthreads();
+  const float bmax =
+      fmaxf(fmaxf(smax[0], smax[1]), fmaxf(smax[2], smax[3]));
+  const float scale = exp2f(ceilf(log2f(fmaxf(bmax / 448.0f, 1.0e-4f))));
+  if (tid == 0) {
+    out_scale[static_cast<int64_t>(tok) * blocks_per_row + blk] = scale;
+  }
+  out_fp8[static_cast<int64_t>(tok) * hidden + col] =
+      b2_float_to_e4m3fn(val / scale);
+}
+
+template <typename IdT>
+__global__ void b2_align_bm16_kernel(
+    const IdT* __restrict__ topk_ids,
+    int32_t* __restrict__ sorted_token_ids,
+    int32_t* __restrict__ expert_ids,
+    int32_t* __restrict__ num_tokens_post_padded,
+    int32_t routes,
+    int32_t start_expert_id,
+    int32_t num_experts) {
+  __shared__ int32_t s_cnt[256];
+  __shared__ int32_t s_blk[256];
+  __shared__ int32_t s_cur[256];
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  s_cnt[tid] = 0;
+  s_cur[tid] = 0;
+  __syncthreads();
+
+  for (int32_t r = tid; r < routes; r += 256) {
+    const int32_t e = static_cast<int32_t>(topk_ids[r]) - start_expert_id;
+    if (e >= 0 && e < num_experts) {
+      atomicAdd(&s_cnt[e], 1);
+    }
+  }
+  __syncthreads();
+
+  const int32_t my_cnt = (tid < num_experts) ? s_cnt[tid] : 0;
+  const int32_t my_blks = (my_cnt + 15) >> 4;
+  s_blk[tid] = my_blks;
+  __syncthreads();
+
+  for (int32_t step = 1; step < 256; step <<= 1) {
+    const int32_t v = (tid >= step) ? s_blk[tid - step] : 0;
+    __syncthreads();
+    s_blk[tid] += v;
+    __syncthreads();
+  }
+  const int32_t blk_end = s_blk[tid];
+  const int32_t blk_start = blk_end - my_blks;
+  if (tid == 255) {
+    *num_tokens_post_padded = blk_end * 16;
+  }
+
+  if (tid < num_experts && my_blks > 0) {
+    for (int32_t b = 0; b < my_blks; ++b) {
+      expert_ids[blk_start + b] = tid;
+    }
+    const int32_t total_slots = my_blks * 16;
+    for (int32_t p = my_cnt; p < total_slots; ++p) {
+      sorted_token_ids[blk_start * 16 + p] = routes;
+    }
+  }
+  __syncthreads();
+
+  s_blk[tid] = blk_start;
+  __syncthreads();
+
+  for (int32_t r = tid; r < routes; r += 256) {
+    const int32_t e = static_cast<int32_t>(topk_ids[r]) - start_expert_id;
+    if (e >= 0 && e < num_experts) {
+      const int32_t pos = atomicAdd(&s_cur[e], 1);
+      sorted_token_ids[s_blk[e] * 16 + pos] = r;
+    }
+  }
+}
+
+__global__ void b2_swiglu_fp8_quant_kernel(
+    const c10::BFloat16* __restrict__ mid,
+    uint8_t* __restrict__ act_fp8,
+    float* __restrict__ act_scale,
+    int32_t routes,
+    int32_t intermediate,
+    float swiglu_limit) {
+  const int32_t r = static_cast<int32_t>(blockIdx.x);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  if (r >= routes || tid >= intermediate) {
+    return;
+  }
+  const c10::BFloat16* row =
+      mid + static_cast<int64_t>(r) * (2 * intermediate);
+  float g = musa_convert_to_float(row[tid]);
+  float u = musa_convert_to_float(row[intermediate + tid]);
+  if (swiglu_limit > 0.0f) {
+    g = fminf(g, swiglu_limit);
+    u = fminf(fmaxf(u, -swiglu_limit), swiglu_limit);
+  }
+  const float val = (g / (1.0f + expf(-g))) * u;
+  float amax = fabsf(val);
+#pragma unroll
+  for (int32_t d = 16; d > 0; d >>= 1) {
+    amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, d));
+  }
+  __shared__ float smax[8];
+  if ((tid & 31) == 0) {
+    smax[tid >> 5] = amax;
+  }
+  __syncthreads();
+  const int32_t half = tid >> 7;
+  const float bmax =
+      fmaxf(fmaxf(smax[half * 4 + 0], smax[half * 4 + 1]),
+            fmaxf(smax[half * 4 + 2], smax[half * 4 + 3]));
+  const float scale = exp2f(ceilf(log2f(fmaxf(bmax / 448.0f, 1.0e-4f))));
+  if ((tid & 127) == 0) {
+    act_scale[static_cast<int64_t>(r) * 2 + half] = scale;
+  }
+  act_fp8[static_cast<int64_t>(r) * intermediate + tid] =
+      b2_float_to_e4m3fn(val / scale);
+}
+
+template <typename IdT>
+__global__ void b2_sum_reduce_topk6_kernel(
+    const c10::BFloat16* __restrict__ down,
+    const IdT* __restrict__ topk_ids,
+    c10::BFloat16* __restrict__ out,
+    int32_t num_tokens,
+    int32_t hidden,
+    int32_t start_expert_id,
+    int32_t num_experts) {
+  const int32_t tok = static_cast<int32_t>(blockIdx.y);
+  const int32_t col8 =
+      (static_cast<int32_t>(blockIdx.x) * static_cast<int32_t>(blockDim.x) +
+       static_cast<int32_t>(threadIdx.x)) *
+      8;
+  if (tok >= num_tokens || col8 >= hidden) {
+    return;
+  }
+  float acc[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  const int64_t base = static_cast<int64_t>(tok) * 6 * hidden + col8;
+#pragma unroll
+  for (int32_t k = 0; k < 6; ++k) {
+    const int32_t e =
+        static_cast<int32_t>(topk_ids[tok * 6 + k]) - start_expert_id;
+    if (e >= 0 && e < num_experts) {
+      c10::BFloat16 v[8];
+      *reinterpret_cast<uint4*>(v) = *reinterpret_cast<const uint4*>(
+          down + base + static_cast<int64_t>(k) * hidden);
+#pragma unroll
+      for (int32_t i = 0; i < 8; ++i) {
+        acc[i] += musa_convert_to_float(v[i]);
+      }
+    }
+  }
+  c10::BFloat16 res[8];
+#pragma unroll
+  for (int32_t i = 0; i < 8; ++i) {
+    res[i] = static_cast<c10::BFloat16>(acc[i]);
+  }
+  *reinterpret_cast<uint4*>(out + static_cast<int64_t>(tok) * hidden + col8) =
+      *reinterpret_cast<uint4*>(res);
+}
+
+}  // namespace
+
+void prepare_deepseek_v4_fp8_moe_triton_bm16(const torch::Device& device) {
+  (void)get_b2_triton_state(device);
+}
+
+torch::Tensor deepseek_v4_fp8_moe_triton_bm16_decode(
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& w13,
+    const torch::Tensor& w13_scale,
+    const torch::Tensor& w2,
+    const torch::Tensor& w2_scale,
+    int64_t start_expert_id,
+    double swiglu_limit) {
+  CHECK_EQ(input.dim(), 2);
+  CHECK_EQ(topk_ids.dim(), 2);
+  CHECK_EQ(topk_weights.dim(), 2);
+  CHECK_EQ(w13.dim(), 3);
+  CHECK_EQ(w2.dim(), 3);
+  const int32_t num_tokens = static_cast<int32_t>(input.size(0));
+  const int32_t hidden = static_cast<int32_t>(input.size(1));
+  const int32_t topk = static_cast<int32_t>(topk_ids.size(1));
+  const int32_t num_experts = static_cast<int32_t>(w13.size(0));
+  const int32_t intermediate = static_cast<int32_t>(w2.size(2));
+  CHECK(num_tokens >= 1 && num_tokens <= kB2MaxTokens);
+  CHECK_EQ(hidden, kB2Hidden);
+  CHECK_EQ(intermediate, kB2Intermediate);
+  CHECK_EQ(topk, kB2TopK);
+  CHECK(num_experts >= 1 && num_experts <= kB2MaxExperts);
+  CHECK(input.scalar_type() == torch::kBFloat16 && input.is_contiguous());
+  CHECK(topk_weights.scalar_type() == torch::kFloat32 &&
+        topk_weights.is_contiguous());
+  CHECK(topk_ids.is_contiguous() &&
+        (topk_ids.scalar_type() == torch::kInt32 ||
+         topk_ids.scalar_type() == torch::kInt64));
+  CHECK(w13.scalar_type() == torch::kFloat8_e4m3fn && w13.is_contiguous());
+  CHECK(w2.scalar_type() == torch::kFloat8_e4m3fn && w2.is_contiguous());
+  CHECK(w13_scale.scalar_type() == torch::kFloat32 &&
+        w13_scale.is_contiguous());
+  CHECK(w2_scale.scalar_type() == torch::kFloat32 && w2_scale.is_contiguous());
+
+  float limit = static_cast<float>(swiglu_limit);
+  if (!std::isfinite(limit) || limit >= 1000000.0f) {
+    limit = 0.0f;
+  }
+
+  const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
+  auto& st = get_b2_triton_state(input.device());
+  const musaStream_t stream = current_musa_stream(input.device());
+
+  const int32_t routes = num_tokens * kB2TopK;
+  const int32_t max_blocks = (routes + 15) / 16 + num_experts;
+  const int32_t EM = max_blocks * 16;
+  const int32_t start_eid = static_cast<int32_t>(start_expert_id);
+
+  // Stage 1: per-token 128-block FP8 quantization
+  b2_token_fp8_quant_kernel<<<dim3(num_tokens, hidden / 128), 128, 0, stream>>>(
+      input.data_ptr<c10::BFloat16>(),
+      static_cast<uint8_t*>(st.input_fp8.data_ptr()),
+      st.input_scale.data_ptr<float>(),
+      num_tokens,
+      hidden,
+      hidden / 128);
+
+  // Stage 2: single-CTA BM=16 route alignment
+  if (topk_ids.scalar_type() == torch::kInt32) {
+    b2_align_bm16_kernel<int32_t><<<1, 256, 0, stream>>>(
+        topk_ids.data_ptr<int32_t>(),
+        st.sorted_token_ids.data_ptr<int32_t>(),
+        st.expert_ids.data_ptr<int32_t>(),
+        st.num_tokens_post_padded.data_ptr<int32_t>(),
+        routes,
+        start_eid,
+        num_experts);
+  } else {
+    b2_align_bm16_kernel<int64_t><<<1, 256, 0, stream>>>(
+        topk_ids.data_ptr<int64_t>(),
+        st.sorted_token_ids.data_ptr<int32_t>(),
+        st.expert_ids.data_ptr<int32_t>(),
+        st.num_tokens_post_padded.data_ptr<int32_t>(),
+        routes,
+        start_eid,
+        num_experts);
+  }
+
+  // Stage 3: W13 SQMMA FP8 grouped GEMM (BM=16, BN=64, BK=128)
+  void* p_inp = st.input_fp8.data_ptr();
+  void* p_w13 = w13.data_ptr();
+  void* p_mid = st.mid_bf16.data_ptr();
+  void* p_inps = st.input_scale.data_ptr();
+  void* p_w13s = w13_scale.data_ptr();
+  void* p_rw = topk_weights.data_ptr();
+  void* p_sids = st.sorted_token_ids.data_ptr();
+  void* p_eids = st.expert_ids.data_ptr();
+  void* p_npost = st.num_tokens_post_padded.data_ptr();
+  int32_t N1 = intermediate * 2;
+  int32_t K1 = hidden;
+  int32_t EM_arg = EM;
+  int32_t routes_arg = routes;
+  int32_t s_am1 = hidden;
+  int32_t s_be1 = (intermediate * 2) * hidden;
+  int32_t s_bn1 = hidden;
+  int32_t s_cm1 = intermediate * 2;
+  int32_t s_asm1 = hidden / 128;
+  int32_t s_bse1 = ((intermediate * 2) / 128) * (hidden / 128);
+  int32_t s_bsn1 = hidden / 128;
+  void* args1[20] = {&p_inp,      &p_w13,  &p_mid,   &p_inps, &p_w13s,
+                     &p_rw,       &p_sids, &p_eids,  &p_npost, &N1,
+                     &K1,         &EM_arg, &routes_arg, &s_am1, &s_be1,
+                     &s_bn1,      &s_cm1,  &s_asm1,  &s_bse1, &s_bsn1};
+  const uint32_t g1 =
+      static_cast<uint32_t>(max_blocks * ((intermediate * 2) / kDsv4MoeW13BlockN));
+  const MUresult lr1 = muLaunchKernel(st.fn_w13,
+                                      g1,
+                                      1,
+                                      1,
+                                      kDsv4MoeW13Threads,
+                                      1,
+                                      1,
+                                      kDsv4MoeW13SharedBytes,
+                                      reinterpret_cast<MUstream>(stream),
+                                      args1,
+                                      nullptr);
+  CHECK_EQ(lr1, MUSA_SUCCESS) << "B2 W13 muLaunchKernel failed: " << lr1;
+
+  // Stage 4: fused SwiGLU + block128 FP8 quantization
+  b2_swiglu_fp8_quant_kernel<<<routes, 256, 0, stream>>>(
+      st.mid_bf16.data_ptr<c10::BFloat16>(),
+      static_cast<uint8_t*>(st.act_fp8.data_ptr()),
+      st.act_scale.data_ptr<float>(),
+      routes,
+      intermediate,
+      limit);
+
+  // Stage 5: W2 SQMMA FP8 grouped GEMM + router weight mul (BM=16, BN=128)
+  void* p_act = st.act_fp8.data_ptr();
+  void* p_w2 = w2.data_ptr();
+  void* p_down = st.down_bf16.data_ptr();
+  void* p_acts = st.act_scale.data_ptr();
+  void* p_w2s = w2_scale.data_ptr();
+  int32_t N2 = hidden;
+  int32_t K2 = intermediate;
+  int32_t s_am2 = intermediate;
+  int32_t s_be2 = hidden * intermediate;
+  int32_t s_bn2 = intermediate;
+  int32_t s_cm2 = hidden;
+  int32_t s_asm2 = intermediate / 128;
+  int32_t s_bse2 = (hidden / 128) * (intermediate / 128);
+  int32_t s_bsn2 = intermediate / 128;
+  void* args2[20] = {&p_act,      &p_w2,   &p_down,  &p_acts, &p_w2s,
+                     &p_rw,       &p_sids, &p_eids,  &p_npost, &N2,
+                     &K2,         &EM_arg, &routes_arg, &s_am2, &s_be2,
+                     &s_bn2,      &s_cm2,  &s_asm2,  &s_bse2, &s_bsn2};
+  const uint32_t g2 =
+      static_cast<uint32_t>(max_blocks * (hidden / kDsv4MoeW2BlockN));
+  const MUresult lr2 = muLaunchKernel(st.fn_w2,
+                                      g2,
+                                      1,
+                                      1,
+                                      kDsv4MoeW2Threads,
+                                      1,
+                                      1,
+                                      kDsv4MoeW2SharedBytes,
+                                      reinterpret_cast<MUstream>(stream),
+                                      args2,
+                                      nullptr);
+  CHECK_EQ(lr2, MUSA_SUCCESS) << "B2 W2 muLaunchKernel failed: " << lr2;
+
+  // Stage 6: vectorized topk=6 sum reduce with invalid-expert masking
+  torch::Tensor out_slice =
+      st.output_bf16.narrow(/*dim=*/0, /*start=*/0, /*length=*/num_tokens);
+  if (topk_ids.scalar_type() == torch::kInt32) {
+    b2_sum_reduce_topk6_kernel<int32_t>
+        <<<dim3(hidden / (8 * 128), num_tokens), 128, 0, stream>>>(
+            st.down_bf16.data_ptr<c10::BFloat16>(),
+            topk_ids.data_ptr<int32_t>(),
+            out_slice.data_ptr<c10::BFloat16>(),
+            num_tokens,
+            hidden,
+            start_eid,
+            num_experts);
+  } else {
+    b2_sum_reduce_topk6_kernel<int64_t>
+        <<<dim3(hidden / (8 * 128), num_tokens), 128, 0, stream>>>(
+            st.down_bf16.data_ptr<c10::BFloat16>(),
+            topk_ids.data_ptr<int64_t>(),
+            out_slice.data_ptr<c10::BFloat16>(),
+            num_tokens,
+            hidden,
+            start_eid,
+            num_experts);
+  }
+
+  const musaError_t status = musaGetLastError();
+  CHECK(status == musaSuccess)
+      << "DeepSeek-V4 FP8 MoE Triton BM16 launch failed: "
+      << musaGetErrorString(status);
+  return out_slice;
 }
 
 }  // namespace xllm::kernel::musa
