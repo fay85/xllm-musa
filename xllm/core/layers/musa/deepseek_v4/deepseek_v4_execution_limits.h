@@ -32,8 +32,6 @@ inline constexpr int64_t kDsv4VerifyWorkspaceRows = 1024;
 inline constexpr int64_t kDsv4VerifyQueryWidth = 7;
 
 inline bool dsv4_grouped_verify_minimum_supported(int64_t rows) {
-  return rows == kDsv4GroupedVerifyOptimizedMinRows ||
-         rows == kDsv4GroupedVerifySmallRows ||
-         rows == kDsv4GroupedVerifyLargeRows;
+  return rows >= 28 && rows <= kDsv4VerifyWorkspaceRows;
 }
 }  // namespace xllm::layer

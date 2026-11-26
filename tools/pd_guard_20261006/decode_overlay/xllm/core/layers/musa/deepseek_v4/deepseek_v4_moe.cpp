@@ -407,7 +407,7 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
 
   // Draft and B1 retain the existing arithmetic. Only the explicit target
   // model can opt into the separately measured large-row grouped FP8 path.
-  if (model_args.model_type() == "deepseek_v4") {
+  if (model_args.model_type() == "deepseek_v4" || num_layers_ <= 4) {
     const char* minimum =
         dsv4_runtime_option<DeepseekV4Env::GROUPED_FP8_DECODE_MIN_TOKENS>()
             .c_str();
@@ -417,7 +417,8 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
           static_cast<int64_t>(std::strtoll(minimum, &end, 10));
       CHECK(end != minimum && *end == '\0' &&
             dsv4_grouped_verify_minimum_supported(value))
-          << "Grouped FP8 decode threshold must be 77 or 112";
+          << "Grouped FP8 decode threshold must be in [28, "
+          << kDsv4VerifyWorkspaceRows << "], got " << value;
       grouped_fp8_decode_min_tokens_ = value;
     }
   }
