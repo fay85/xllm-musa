@@ -139,10 +139,37 @@ torch::Tensor fp8_linear_forward(
   const bool disable_bf16_cache =
       disable_bf16_cache_env != nullptr &&
       std::string(disable_bf16_cache_env) == "1";
+  const int64_t bf16_cache_max_numel = []() -> int64_t {
+    const char* env = std::getenv("XLLM_DSV4_BF16_CACHE_MAX_NUMEL");
+    if (env == nullptr || env[0] == '\0') {
+      // 16M covers all TP8 weights (<= 4096x4096) while bypassing BF16 cache
+      // on 8x-larger DP8 (tp_size=1) q_b_proj (50.3M) and o_proj (134.2M).
+      return 16777216;
+    }
+    char* end = nullptr;
+    const int64_t val = static_cast<int64_t>(std::strtoll(env, &end, 10));
+    return (end != env && *end == '\0' && val >= 0) ? val : 16777216;
+  }();
+  const bool native_blockwise =
+      input_2d.scalar_type() == torch::kBFloat16 && fp8_weight &&
+      weight_scale.scalar_type() == torch::kFloat32 &&
+      weight_scale.dim() == 2 && weight.size(1) % 128 == 0 &&
+      weight_scale.size(0) == (weight.size(0) + 127) / 128 &&
+      weight_scale.size(1) == weight.size(1) / 128 &&
+      (output_dtype == torch::kBFloat16 || output_dtype == torch::kFloat16) &&
+      reinterpret_cast<std::uintptr_t>(input_2d.data_ptr()) % 16 == 0;
+  const bool bypass_large_bf16_cache =
+      bf16_cache_max_numel > 0 && weight.numel() > bf16_cache_max_numel &&
+      native_blockwise;
+  if (bypass_large_bf16_cache) {
+    LOG_FIRST_N(INFO, 4) << "[DSV4_FP8_DIRECT_LARGE_WEIGHT] shape="
+                         << weight.sizes() << " numel=" << weight.numel()
+                         << " max_numel=" << bf16_cache_max_numel;
+  }
   if (fp8_weight && input_2d.size(0) > 0 &&
       input_2d.size(0) <= workspace_rows &&
       (output_dtype == torch::kBFloat16 || output_dtype == torch::kFloat16) &&
-      !disable_bf16_cache) {
+      !disable_bf16_cache && !bypass_large_bf16_cache) {
     auto& workspace = get_fp8_linear_workspace(weight);
     if (!workspace.dequantized_weight.defined() ||
         workspace.dequantized_weight.sizes() != weight.sizes() ||
@@ -168,14 +195,7 @@ torch::Tensor fp8_linear_forward(
     return output.view(output_shape);
   }
 
-  const bool native_blockwise =
-      input.scalar_type() == torch::kBFloat16 && fp8_weight &&
-      weight_scale.scalar_type() == torch::kFloat32 &&
-      weight_scale.dim() == 2 && weight.size(1) % 128 == 0 &&
-      weight_scale.size(0) == (weight.size(0) + 127) / 128 &&
-      weight_scale.size(1) == weight.size(1) / 128 &&
-      (output_dtype == torch::kBFloat16 || output_dtype == torch::kFloat16) &&
-      reinterpret_cast<std::uintptr_t>(input.data_ptr()) % 16 == 0;
+
   if (native_blockwise) {
     auto [quantized_input, input_group_scale] =
         kernel::musa::per_token_group_quant_fp8(input_2d, 128);
