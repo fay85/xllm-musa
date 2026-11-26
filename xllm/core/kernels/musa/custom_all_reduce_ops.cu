@@ -154,6 +154,37 @@ void all_reduce(int64_t handle,
   }
 }
 
+void all_gather(int64_t handle,
+                torch::Tensor& input,
+                torch::Tensor& output,
+                int64_t registered_buffer,
+                int64_t registered_buffer_size) {
+  auto* collective = reinterpret_cast<vllm::CustomAllreduce*>(handle);
+  const c10::cuda::CUDAGuard guard(input.device());
+  const cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
+  const int64_t input_bytes = input.numel() * input.element_size();
+  const int64_t output_bytes = output.numel() * output.element_size();
+  TORCH_CHECK(input_bytes > 0 && input_bytes % 16 == 0);
+  TORCH_CHECK(output_bytes == input_bytes * collective->world_size_);
+  void* buffer = reinterpret_cast<void*>(registered_buffer);
+  cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+  CUDACHECK(cudaStreamIsCapturing(stream, &capture_status));
+  const bool graph_capture = capture_status == cudaStreamCaptureStatusActive;
+  if (buffer != nullptr && !graph_capture) {
+    TORCH_CHECK(input_bytes <= registered_buffer_size);
+    CUDACHECK(cudaMemcpyAsync(buffer,
+                              input.data_ptr(),
+                              static_cast<size_t>(input_bytes),
+                              cudaMemcpyDeviceToDevice,
+                              stream));
+  } else if (buffer == nullptr) {
+    buffer = input.data_ptr();
+  }
+  void* collective_input = graph_capture ? input.data_ptr() : buffer;
+  collective->allgather(
+      stream, collective_input, output.data_ptr(), input_bytes);
+}
+
 void dispose(int64_t handle) {
   delete reinterpret_cast<vllm::CustomAllreduce*>(handle);
 }
@@ -195,6 +226,9 @@ TORCH_LIBRARY(_C_custom_ar, m) {
   m.def(
       "all_reduce(int fa, Tensor inp, Tensor! out, int reg_buffer, "
       "int reg_buffer_sz_bytes) -> ()");
+  m.def(
+      "all_gather(int fa, Tensor inp, Tensor! out, int reg_buffer, "
+      "int reg_buffer_sz_bytes) -> ()");
   m.def("dispose(int fa) -> ()");
   m.def("meta_size() -> int");
   m.def("register_buffer(int fa, int[] ipc_tensors) -> ()");
@@ -210,6 +244,7 @@ TORCH_LIBRARY(_C_custom_ar, m) {
 TORCH_LIBRARY_IMPL(_C_custom_ar, PrivateUse1, m) {
   m.impl("init_custom_ar", init_custom_ar);
   m.impl("all_reduce", all_reduce);
+  m.impl("all_gather", all_gather);
 }
 
 TORCH_LIBRARY_IMPL(_C_custom_ar, CPU, m) {

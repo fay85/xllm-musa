@@ -120,6 +120,22 @@ void op_dispose(int64_t custom_ar_handle) {
   op.call(custom_ar_handle);
 }
 
+void op_all_gather(int64_t custom_ar_handle,
+                   torch::Tensor& input,
+                   torch::Tensor& output,
+                   int64_t registered_buffer,
+                   int64_t registered_buffer_size) {
+  static auto op =
+      c10::Dispatcher::singleton()
+          .findSchemaOrThrow("_C_custom_ar::all_gather", "")
+          .typed<void(int64_t, torch::Tensor&, torch::Tensor&, int64_t, int64_t)>();
+  op.call(custom_ar_handle,
+          input,
+          output,
+          registered_buffer,
+          registered_buffer_size);
+}
+
 void op_free_shared_buffer(int64_t ptr) {
   static auto op =
       c10::Dispatcher::singleton()
@@ -214,6 +230,18 @@ std::optional<torch::Tensor> musa_allreduce_tp_custom(
   return musa_process_group->allreduce_tp_custom(input);
 }
 
+std::optional<torch::Tensor> musa_allgather_custom(
+    ProcessGroup* process_group,
+    torch::Tensor& input,
+    const std::optional<torch::Tensor>& output) {
+  ProcessGroupImpl* musa_process_group =
+      dynamic_cast<ProcessGroupImpl*>(process_group);
+  if (musa_process_group == nullptr) {
+    return std::nullopt;
+  }
+  return musa_process_group->allgather_custom(input, output);
+}
+
 MusaCustomAllReduce::MusaCustomAllReduce(int32_t rank,
                                          int32_t world_size,
                                          const std::string& group_name,
@@ -249,7 +277,8 @@ MusaCustomAllReduce::MusaCustomAllReduce(int32_t rank,
   // cp_group is the prefill context-parallel pair. It uses the same two-stage
   // algorithm as the world group; one-stage stays limited to non-generic TP.
   if (group_name_ != "tp_group" && group_name_ != "world_group" &&
-      group_name_ != "moe_tp_group" && group_name_ != "cp_group") {
+      group_name_ != "moe_tp_group" && group_name_ != "cp_group" &&
+      group_name_ != "dp_group") {
     return;
   }
   if (!supported_world_size(world_size_)) {
@@ -517,6 +546,34 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
         << "[DSV4_GRAPH_TP_TWO_SHOT_B16] rows=112 width=4096 bf16=1 "
            "capture_algorithm=2 restored_host_algorithm=1";
   }
+  return output;
+}
+
+std::optional<torch::Tensor> MusaCustomAllReduce::allgather(
+    torch::Tensor& input,
+    const std::optional<torch::Tensor>& output_workspace) {
+  if (!enabled_ || custom_ar_handle_ == 0 || !input.defined() ||
+      input.device() != device_ || !input.is_contiguous() ||
+      !is_16_byte_aligned(input)) {
+    return std::nullopt;
+  }
+  const int64_t bytes = static_cast<int64_t>(input.nbytes());
+  if (bytes <= 0 || bytes % 16 != 0 || bytes > max_size_bytes_) {
+    return std::nullopt;
+  }
+  auto out_shape = input.sizes().vec();
+  out_shape.insert(out_shape.begin(), world_size_);
+  torch::Tensor output = output_workspace.has_value()
+                             ? *output_workspace
+                             : torch::empty(out_shape, input.options());
+  if (!output.defined() || output.sizes() != torch::IntArrayRef(out_shape) ||
+      output.scalar_type() != input.scalar_type() ||
+      output.device() != device_ || !output.is_contiguous() ||
+      !is_16_byte_aligned(output) || output.is_alias_of(input)) {
+    return std::nullopt;
+  }
+  op_all_gather(
+      custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
   return output;
 }
 

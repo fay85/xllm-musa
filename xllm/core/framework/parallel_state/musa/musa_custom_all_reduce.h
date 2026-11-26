@@ -54,6 +54,10 @@ class MusaCustomAllReduce {
   // fixed at group initialization; unsupported tensors retain the MCCL path.
   std::optional<torch::Tensor> allreduce_tp(torch::Tensor& input);
 
+  std::optional<torch::Tensor> allgather(
+      torch::Tensor& input,
+      const std::optional<torch::Tensor>& output = std::nullopt);
+
   void finalize_graph_buffers();
   void long_prefill_host_barrier();
   friend void finalize_musa_custom_allreduce_graphs();
@@ -101,6 +105,11 @@ std::optional<torch::Tensor> musa_allreduce_custom(
 std::optional<torch::Tensor> musa_allreduce_tp_custom(
     ProcessGroup* process_group,
     torch::Tensor& input);
+
+std::optional<torch::Tensor> musa_allgather_custom(
+    ProcessGroup* process_group,
+    torch::Tensor& input,
+    const std::optional<torch::Tensor>& output = std::nullopt);
 
 std::vector<c10::DeviceIndex> musa_custom_allreduce_devices();
 

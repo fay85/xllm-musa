@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "core/layers/musa/deepseek_v4/deepseek_v4_decoder_layer.h"
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 
 #include <glog/logging.h>
 
@@ -339,9 +340,25 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       if (use_packed_dp_gather) {
         auto packed_local = kernel::musa::deepseek_v4_dp_pack_moe_inputs(
             ffn_input_2d, topk_weights, topk_ids);
-        auto packed_global = parallel_args_.dp_local_process_group_
-                                 ->allgather_base_sync(packed_local)
-                                 .flatten(0, 1);
+        const char* ipc_ag_env = std::getenv("XLLM_DSV4_DP_IPC_ALLGATHER");
+        const bool use_ipc_ag =
+            ipc_ag_env == nullptr || std::strcmp(ipc_ag_env, "0") != 0;
+        torch::Tensor packed_global;
+        if (use_ipc_ag) {
+          if (auto custom_ag = musa_allgather_custom(
+                  parallel_args_.dp_local_process_group_, packed_local)) {
+            packed_global = custom_ag->flatten(0, 1);
+            LOG_FIRST_N(INFO, 1)
+                << "[DSV4_DP_IPC_ALLGATHER] local_rows=" << dp_moe_local_rows
+                << " global_rows=" << packed_global.size(0)
+                << " row_stride_bytes=" << packed_local.size(1);
+          }
+        }
+        if (!packed_global.defined()) {
+          packed_global = parallel_args_.dp_local_process_group_
+                              ->allgather_base_sync(packed_local)
+                              .flatten(0, 1);
+        }
         std::tie(ffn_input, topk_weights, topk_ids) =
             kernel::musa::deepseek_v4_dp_unpack_moe_inputs(
                 packed_global,

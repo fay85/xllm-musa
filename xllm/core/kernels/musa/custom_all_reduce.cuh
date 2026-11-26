@@ -37,6 +37,29 @@ __global__ void __launch_bounds__(kMaxThreadsPerBlock, 1)
   barrier_at_end<ngpus, true>(sg, self_sg, rank);
 }
 
+template <int ngpus>
+__global__ void __launch_bounds__(kMaxThreadsPerBlock, 1)
+    cross_device_allgather_1stage(RankData* _dp,
+                                  RankSignals sg,
+                                  Signal* self_sg,
+                                  uint4* __restrict__ result,
+                                  int rank,
+                                  int vecs_per_rank) {
+  auto dp = *_dp;
+  barrier_at_start<ngpus>(sg, self_sg, rank);
+  const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const int stride = gridDim.x * blockDim.x;
+  for (int idx = tid; idx < vecs_per_rank; idx += stride) {
+#pragma unroll
+    for (int i = 0; i < ngpus; ++i) {
+      const int src_rank = (rank + i) % ngpus;
+      result[static_cast<size_t>(src_rank) * vecs_per_rank + idx] =
+          reinterpret_cast<const uint4*>(dp.ptrs[src_rank])[idx];
+    }
+  }
+  barrier_at_end<ngpus, true>(sg, self_sg, rank);
+}
+
 template <typename P>
 DINLINE P* get_tmp_buf(Signal* sg) {
   return (P*)(((Signal*)sg) + 1);
@@ -366,6 +389,52 @@ class CustomAllreduce {
     }
 #undef REDUCE_CASE
 #undef KL
+  }
+
+  void allgather(cudaStream_t stream,
+                 void* input,
+                 void* output,
+                 int64_t bytes_per_rank,
+                 int threads = 512,
+                 int block_limit = defaultBlockLimit) {
+    if (bytes_per_rank <= 0 || bytes_per_rank % 16 != 0) {
+      throw std::runtime_error(
+          "custom allgather requires positive 16-byte-aligned payload");
+    }
+    if (block_limit > kMaxBlocks) {
+      throw std::runtime_error("max supported block limit is " +
+                               std::to_string(kMaxBlocks));
+    }
+    RankData* ptrs;
+    cudaStreamCaptureStatus status;
+    CUDACHECK(cudaStreamIsCapturing(stream, &status));
+    if (status == cudaStreamCaptureStatusActive) {
+      ptrs = d_rank_data_base_ + graph_unreg_buffers_.size();
+      graph_unreg_buffers_.push_back(input);
+    } else {
+      auto it = buffers_.find(input);
+      if (it == buffers_.end()) {
+        throw std::runtime_error(
+            "buffer address " +
+            std::to_string(reinterpret_cast<uint64_t>(input)) +
+            " is not registered!");
+      }
+      ptrs = it->second;
+    }
+    const int vecs_per_rank = static_cast<int>(bytes_per_rank / 16);
+    const int blocks =
+        std::min(block_limit, std::max(1, (vecs_per_rank + threads - 1) / threads));
+#define AG_CASE(ngpus)                                                        case ngpus:                                                                   cross_device_allgather_1stage<ngpus><<<blocks, threads, 0, stream>>>(           ptrs, sg_, self_sg_, reinterpret_cast<uint4*>(output), rank_,               vecs_per_rank);                                                         break;
+    switch (world_size_) {
+      AG_CASE(2)
+      AG_CASE(4)
+      AG_CASE(6)
+      AG_CASE(8)
+      default:
+        throw std::runtime_error(
+            "custom allgather is only supported for world_size in {2,4,6,8}");
+    }
+#undef AG_CASE
   }
 
   void allgather(cudaStream_t stream,

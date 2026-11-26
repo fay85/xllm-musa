@@ -97,6 +97,15 @@ class ProcessGroupImpl : public ProcessGroup {
     return std::nullopt;
   }
 
+  std::optional<torch::Tensor> allgather_custom(
+      torch::Tensor& input,
+      const std::optional<torch::Tensor>& output = std::nullopt) {
+    if (custom_all_reduce_) {
+      return custom_all_reduce_->allgather(input, output);
+    }
+    return std::nullopt;
+  }
+
   bool custom_allreduce_enabled() const {
     return custom_all_reduce_ != nullptr && custom_all_reduce_->enabled();
   }
