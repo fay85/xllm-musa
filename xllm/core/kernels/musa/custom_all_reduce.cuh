@@ -304,19 +304,21 @@ class CustomAllreduce {
                                std::to_string(block_limit));
 
     RankData* ptrs;
-    cudaStreamCaptureStatus status;
-    CUDACHECK(cudaStreamIsCapturing(stream, &status));
-    if (status == cudaStreamCaptureStatusActive) {
-      ptrs = d_rank_data_base_ + graph_unreg_buffers_.size();
-      graph_unreg_buffers_.push_back(input);
+    auto reg_it = buffers_.find(input);
+    if (reg_it != buffers_.end()) {
+      ptrs = reg_it->second;
     } else {
-      auto it = buffers_.find(input);
-      if (it == buffers_.end())
+      cudaStreamCaptureStatus status;
+      CUDACHECK(cudaStreamIsCapturing(stream, &status));
+      if (status == cudaStreamCaptureStatusActive) {
+        ptrs = d_rank_data_base_ + graph_unreg_buffers_.size();
+        graph_unreg_buffers_.push_back(input);
+      } else {
         throw std::runtime_error(
             "buffer address " +
             std::to_string(reinterpret_cast<uint64_t>(input)) +
             " is not registered!");
-      ptrs = it->second;
+      }
     }
 
     size /= d;
@@ -406,20 +408,21 @@ class CustomAllreduce {
                                std::to_string(kMaxBlocks));
     }
     RankData* ptrs;
-    cudaStreamCaptureStatus status;
-    CUDACHECK(cudaStreamIsCapturing(stream, &status));
-    if (status == cudaStreamCaptureStatusActive) {
-      ptrs = d_rank_data_base_ + graph_unreg_buffers_.size();
-      graph_unreg_buffers_.push_back(input);
+    auto reg_it = buffers_.find(input);
+    if (reg_it != buffers_.end()) {
+      ptrs = reg_it->second;
     } else {
-      auto it = buffers_.find(input);
-      if (it == buffers_.end()) {
+      cudaStreamCaptureStatus status;
+      CUDACHECK(cudaStreamIsCapturing(stream, &status));
+      if (status == cudaStreamCaptureStatusActive) {
+        ptrs = d_rank_data_base_ + graph_unreg_buffers_.size();
+        graph_unreg_buffers_.push_back(input);
+      } else {
         throw std::runtime_error(
             "buffer address " +
             std::to_string(reinterpret_cast<uint64_t>(input)) +
             " is not registered!");
       }
-      ptrs = it->second;
     }
     const int vecs_per_rank = static_cast<int>(bytes_per_rank / 16);
     const int blocks =

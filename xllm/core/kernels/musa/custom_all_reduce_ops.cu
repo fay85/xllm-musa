@@ -19,6 +19,8 @@ limitations under the License.
 #include <torch/library.h>
 #include <torch/types.h>
 
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -114,7 +116,15 @@ void all_reduce(int64_t handle,
   cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
   CUDACHECK(cudaStreamIsCapturing(stream, &capture_status));
   const bool graph_capture = capture_status == cudaStreamCaptureStatusActive;
-  if (buffer != nullptr && !graph_capture) {
+  const char* static_buf_env =
+      std::getenv("XLLM_MUSA_CUSTOM_AR_STATIC_GRAPH_BUF");
+  const bool use_static_graph_buf =
+      static_buf_env == nullptr || std::strcmp(static_buf_env, "0") != 0;
+  const bool stage_to_registered =
+      buffer != nullptr &&
+      (!graph_capture ||
+       (use_static_graph_buf && input_bytes <= registered_buffer_size));
+  if (stage_to_registered) {
     TORCH_CHECK(input_bytes <= registered_buffer_size);
     CUDACHECK(cudaMemcpyAsync(buffer,
                               input.data_ptr(),
@@ -124,10 +134,10 @@ void all_reduce(int64_t handle,
   } else if (buffer == nullptr) {
     buffer = input.data_ptr();
   }
-  // During graph capture, register and reduce the real graph input directly.
-  // The graph-buffer exchange resolves its peer IPC addresses after capture, so
-  // staging the input would only add a device-to-device copy node.
-  void* collective_input = graph_capture ? input.data_ptr() : buffer;
+  // Stage into the permanently IPC-registered buffer during graph capture when
+  // enabled so asymmetric DP graph captures never couple transient graph
+  // addresses across ranks.
+  void* collective_input = stage_to_registered ? buffer : input.data_ptr();
   const int32_t numel = static_cast<int32_t>(output.numel());
   switch (output.scalar_type()) {
     case at::kFloat:
@@ -170,7 +180,15 @@ void all_gather(int64_t handle,
   cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
   CUDACHECK(cudaStreamIsCapturing(stream, &capture_status));
   const bool graph_capture = capture_status == cudaStreamCaptureStatusActive;
-  if (buffer != nullptr && !graph_capture) {
+  const char* static_buf_env =
+      std::getenv("XLLM_MUSA_CUSTOM_AR_STATIC_GRAPH_BUF");
+  const bool use_static_graph_buf =
+      static_buf_env == nullptr || std::strcmp(static_buf_env, "0") != 0;
+  const bool stage_to_registered =
+      buffer != nullptr &&
+      (!graph_capture ||
+       (use_static_graph_buf && input_bytes <= registered_buffer_size));
+  if (stage_to_registered) {
     TORCH_CHECK(input_bytes <= registered_buffer_size);
     CUDACHECK(cudaMemcpyAsync(buffer,
                               input.data_ptr(),
@@ -180,7 +198,7 @@ void all_gather(int64_t handle,
   } else if (buffer == nullptr) {
     buffer = input.data_ptr();
   }
-  void* collective_input = graph_capture ? input.data_ptr() : buffer;
+  void* collective_input = stage_to_registered ? buffer : input.data_ptr();
   collective->allgather(
       stream, collective_input, output.data_ptr(), input_bytes);
 }
