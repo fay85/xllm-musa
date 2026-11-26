@@ -128,8 +128,7 @@ class EagerRunner(BaseRunner):
                 include_prefix=is_mla,
             )
             if seq_lens is None:
-                if is_mla:
-                    raise RuntimeError("Python Context-Parallel requires host query and KV sequence lengths")
+                raise RuntimeError("Python Context-Parallel requires host query and KV sequence lengths")
             else:
                 q_seq_lens, kv_seq_lens = seq_lens
                 context_key = (tuple(q_seq_lens), tuple(kv_seq_lens), self.cp_size, self.cp_rank, self.device)

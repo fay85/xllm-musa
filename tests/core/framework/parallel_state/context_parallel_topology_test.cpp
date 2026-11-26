@@ -106,6 +106,7 @@ TEST(ContextParallelTopologyTest, SeparatesTpPcpAndFullDomainDcp) {
                                          /*dcp_size=*/4);
 
   EXPECT_EQ(topology.dp_rank(), 0);
+  EXPECT_EQ(topology.dp_group_ranks(), (std::vector<int32_t>{0, 1, 2, 3}));
   EXPECT_EQ(topology.tp_size(), 2);
   EXPECT_EQ(topology.tp_rank(), 1);
   EXPECT_EQ(topology.pcp_rank(), 1);
@@ -133,6 +134,8 @@ TEST(ContextParallelTopologyTest, PartitionsFactorDcpInsidePcpGroup) {
                                                     /*pcp_size=*/4,
                                                     /*dcp_size=*/2);
   EXPECT_EQ(second_dp_partition.dp_rank(), 1);
+  EXPECT_EQ(second_dp_partition.dp_group_ranks(),
+            (std::vector<int32_t>{8, 9, 10, 11, 12, 13, 14, 15}));
   EXPECT_EQ(second_dp_partition.pcp_group_ranks(),
             (std::vector<int32_t>{9, 11, 13, 15}));
   EXPECT_EQ(second_dp_partition.dcp_rank(), 1);

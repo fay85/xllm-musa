@@ -20,11 +20,12 @@ limitations under the License.
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "common/macros.h"
 #include "core/distributed_runtime/dist_manager.h"
+#include "core/distributed_runtime/engine.h"
 #include "core/framework/batch/batch_input_builder.h"
-#include "engine.h"
 #include "framework/batch/batch.h"
 #include "framework/block/block_manager_pool.h"
 #include "framework/quant_args.h"
@@ -151,9 +152,11 @@ class VLMEngine : public Engine {
   uint32_t dp_size_;
   uint32_t cp_size_;
   uint32_t worker_clients_num_;
-  // Full DP-local worker width includes CP; dp_local_tp_size_ is TP-only.
+  // Worker dispatch spans every CP and TP rank in a DP replica. Cache heads
+  // are partitioned only over TP; each CP rank keeps a complete token cache.
   uint32_t dp_local_size_;
-  uint32_t dp_local_tp_size_;
+  std::vector<std::vector<int32_t>> dp_worker_ranks_;
+  uint32_t dp_local_tp_size_ = 0;
 
   bool layer_forward_interrupted_ = false;
 

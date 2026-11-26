@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "vlm_engine.h"
+#include "core/distributed_runtime/vlm_engine.h"
 
 #include <absl/strings/str_format.h>
 #include <absl/time/clock.h>
@@ -42,6 +42,7 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
+#include "core/framework/parallel_state/context_parallel_topology.h"
 #include "core/framework/prefix_cache/block_hasher.h"
 #include "core/runtime/forward_shared_memory_manager.h"
 #include "framework/kv_cache/kv_cache_estimation.h"
@@ -104,13 +105,25 @@ VLMEngine::VLMEngine(const runtime::Options& options,
   CHECK_GT(options_.cp_size(), 0);
   dp_size_ = static_cast<uint32_t>(options_.dp_size());
   cp_size_ = static_cast<uint32_t>(options_.cp_size());
-  CHECK_LE(worker_clients_.size(), std::numeric_limits<uint32_t>::max());
+  CHECK_LE(worker_clients_.size(), std::numeric_limits<int32_t>::max());
   worker_clients_num_ = static_cast<uint32_t>(worker_clients_.size());
   CHECK(worker_clients_num_ > 0 || options_.node_rank() > 0);
   CHECK_EQ(worker_clients_num_ % dp_size_, 0U);
   dp_local_size_ = worker_clients_num_ / dp_size_;
-  CHECK_EQ(dp_local_size_ % cp_size_, 0U);
-  dp_local_tp_size_ = dp_local_size_ / cp_size_;
+  dp_worker_ranks_.reserve(dp_size_);
+  // Non-driver engines have no worker clients and never dispatch batches.
+  if (worker_clients_num_ > 0) {
+    for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
+      const parallel_state::ContextParallelTopology topology(
+          static_cast<int32_t>(dp_rank * dp_local_size_),
+          static_cast<int32_t>(worker_clients_num_),
+          options_.dp_size(),
+          options_.cp_size(),
+          /*dcp_size=*/1);
+      dp_worker_ranks_.emplace_back(topology.dp_group_ranks());
+    }
+    dp_local_tp_size_ = dp_local_size_ / cp_size_;
+  }
 
   process_group_test();
 
@@ -498,10 +511,11 @@ ForwardOutput VLMEngine::step(std::vector<Batch>& batch) {
       << " and actual batch size as " << batch.size() << ".";
 
   std::vector<uint64_t> limits(dp_size_, std::numeric_limits<uint64_t>::max());
-  for (uint32_t rank = 0; rank < worker_clients_num_; ++rank) {
-    const uint32_t dp_rank = rank / dp_local_size_;
-    limits[dp_rank] =
-        std::min(limits[dp_rank], worker_clients_[rank]->forward_input_limit());
+  for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
+    for (const int32_t rank : dp_worker_ranks_[dp_rank]) {
+      limits[dp_rank] = std::min(limits[dp_rank],
+                                 worker_clients_[rank]->forward_input_limit());
+    }
   }
   // Batch metadata is staged too: a rejected preview must not reorder the
   // scheduler's sequences or replace its output targets.
@@ -650,9 +664,7 @@ void VLMEngine::execute_batch(
   for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
     const uint64_t input_size =
         ForwardSharedMemoryManager::input_size(forward_inputs[dp_rank]);
-    const uint32_t first_rank = dp_rank * dp_local_size_;
-    for (uint32_t rank = first_rank; rank < first_rank + dp_local_size_;
-         ++rank) {
+    for (const int32_t rank : dp_worker_ranks_[dp_rank]) {
       if (input_size > worker_clients_[rank]->forward_input_limit()) {
         abort_execution("Forward input capacity changed after preflight");
       }
@@ -666,12 +678,12 @@ void VLMEngine::execute_batch(
   std::vector<folly::SemiFuture<std::optional<RawForwardOutput>>> futures;
   futures.reserve(worker_clients_num_);
 
-  // update dp related global parameters and then execute model
-  for (int32_t worker_rank = 0; worker_rank < worker_clients_num_;
-       ++worker_rank) {
-    int32_t dp_rank = worker_rank / dp_local_size_;
-    futures.emplace_back(worker_clients_[worker_rank]->step_remote_async(
-        forward_inputs[dp_rank]));
+  // Each DP input is sent to every CP and TP worker in that replica.
+  for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
+    for (const int32_t worker_rank : dp_worker_ranks_[dp_rank]) {
+      futures.emplace_back(worker_clients_[worker_rank]->step_remote_async(
+          forward_inputs[dp_rank]));
+    }
   }
 
   // wait for the all future to complete
@@ -690,16 +702,13 @@ void VLMEngine::execute_batch(
     }
   }
 
-  assert(dp_size_ == worker_clients_num_ / dp_local_size_);
-  size_t dp_rank = 0;
-  for (int32_t worker_rank = 0; worker_rank < worker_clients_num_;
-       worker_rank += dp_local_size_) {
+  for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
+    const int32_t worker_rank = dp_worker_ranks_[dp_rank].front();
     auto result = results[worker_rank].value();
     const bool empty_shard = batch[dp_rank].size() == 0 &&
                              (!forward_inputs[dp_rank].token_ids.defined() ||
                               forward_inputs[dp_rank].token_ids.numel() == 0);
     if (empty_shard) {
-      ++dp_rank;
       continue;
     }
     if (result.value().outputs.empty() && layer_forward_interrupted_) {
@@ -719,7 +728,6 @@ void VLMEngine::execute_batch(
     }
     // Keep Batch::sequences_ aligned with SequencesGroup after beam updates.
     batch[dp_rank].refresh_sequences_from_groups();
-    ++dp_rank;
   }
 }
 
@@ -732,13 +740,9 @@ void VLMEngine::update_last_step_result(std::vector<Batch>& last_batch) {
   // NOTE: We only need to get the output from the driver worker,
   // cause the output on other workers is the same as that on driver.
   // Under data parallelism (DP), we need to get dp_size outputs.
-  // The `stride` means the workers num we can skip.
-  const uint32_t stride = dp_local_size_;
-
-  for (int32_t worker_rank = 0; worker_rank < worker_clients_num_;
-       worker_rank += stride) {
+  for (const auto& worker_ranks : dp_worker_ranks_) {
     futures.emplace_back(
-        worker_clients_[worker_rank]->get_last_step_result_async());
+        worker_clients_[worker_ranks.front()]->get_last_step_result_async());
   }
   // wait for the all future to complete
   auto completion =
@@ -756,9 +760,8 @@ void VLMEngine::update_last_step_result(std::vector<Batch>& last_batch) {
     }
   }
 
-  for (int32_t worker_rank = 0; worker_rank < worker_clients_num_;
-       worker_rank += dp_local_size_) {
-    auto result = last_step_results[worker_rank / stride].value();
+  for (const auto& last_step_result : last_step_results) {
+    auto result = last_step_result.value();
     raw_forward_outputs.emplace_back(std::move(result.value()));
   }
 

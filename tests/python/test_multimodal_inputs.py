@@ -259,6 +259,7 @@ def test_runner_consumes_explicit_deepstack_without_leaking_to_next_step(monkeyp
     expected = torch.tensor([[3.0, 4.0]])
     expected = expected * torch.rsqrt(expected.square().mean(-1, keepdim=True) + config.rms_norm_eps)
     torch.testing.assert_close(multimodal_output, expected)
+    metadata = SimpleNamespace(is_prefill=False, is_chunked_prefill=False)
     text_output = runner.execute(torch.tensor([0]), torch.tensor([0]), metadata)
     text = torch.tensor([[1.0, 2.0]])
     expected_text = text * torch.rsqrt(text.square().mean(-1, keepdim=True) + config.rms_norm_eps)

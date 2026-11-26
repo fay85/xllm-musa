@@ -18,6 +18,7 @@ limitations under the License.
 #include "common/options.h"
 #include "distributed_runtime/master.h"
 #include "framework/config/parallel_config.h"
+#include "models/cp_capability.h"
 #include "models/model_registry.h"
 
 namespace xllm {

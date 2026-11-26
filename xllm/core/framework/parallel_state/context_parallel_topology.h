@@ -69,6 +69,9 @@ class ContextParallelTopology final {
   int32_t dcp_group_index() const { return dcp_group_index_; }
   int32_t dcp_group_count() const { return dcp_group_count_; }
 
+  // All workers handling the same DP batch, including every PCP and TP rank.
+  const std::vector<int32_t>& dp_group_ranks() const { return dp_group_ranks_; }
+
   const std::vector<int32_t>& pcp_group_ranks() const {
     return pcp_group_ranks_;
   }
@@ -86,6 +89,7 @@ class ContextParallelTopology final {
   int32_t dcp_rank_ = 0;
   int32_t dcp_group_index_ = 0;
   int32_t dcp_group_count_ = 1;
+  std::vector<int32_t> dp_group_ranks_;
   std::vector<int32_t> pcp_group_ranks_;
   std::vector<int32_t> dcp_group_ranks_;
 };

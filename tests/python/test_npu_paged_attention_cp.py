@@ -46,10 +46,133 @@ from xllm.python.attention.npu_paged_attention import (  # noqa: E402
 from xllm.python.model_executor.cp_utils import (  # noqa: E402
     build_cp_context,
     cp_index_write_mode,
+    cp_shard_rows,
 )
 from xllm.python.model_executor.runners.decode_acl_graph import (  # noqa: E402
     _StaticAttentionMetadata,
 )
+
+
+def _run_dense_cp_prefill(
+    plan: SimpleNamespace,
+    peer_rows: list[int],
+    slots: list[int],
+    expected_prefix_rows: list[int],
+) -> None:
+    """Run the real dense backend and shard/restore with CPU platform stand-ins."""
+    backend = object.__new__(NpuPagedAttentionBackend)
+    backend.num_heads, backend.num_kv_heads, backend.head_dim = 4, 2, 3
+    backend.scale = 3**-0.5
+    backend._causal_mask = torch.ones(8, 8, dtype=torch.bool).triu(1)
+    tokens = len(slots)
+    global_k = torch.arange(tokens * 6, dtype=torch.float32).view(tokens, 2, 3) + 1
+    global_v = global_k + 1000
+    global_q = torch.arange(tokens * 12, dtype=torch.float32).view(tokens, 4, 3) + 100
+    local_q = cp_shard_rows(global_q, plan)
+    # Strided K/V inputs occur when projections share a wider buffer.
+    local_k = cp_shard_rows(global_k, plan).repeat_interleave(2, dim=-1)[..., ::2]
+    local_v = cp_shard_rows(global_v, plan).repeat_interleave(2, dim=-1)[..., ::2]
+    assert not local_k.is_contiguous() and not local_v.is_contiguous()
+    peer = torch.tensor(peer_rows)
+    peer_k = global_k[peer.clamp_min(0)] * (peer >= 0)[:, None, None]
+    peer_v = global_v[peer.clamp_min(0)] * (peer >= 0)[:, None, None]
+    k_cache = torch.full((max(slots) + 2, 1, 2, 3), -1.0)
+    v_cache = torch.full_like(k_cache, -1.0)
+    slot_mapping = torch.tensor(slots)
+
+    def all_gather(value: torch.Tensor, dim: int, size: int, group: str) -> torch.Tensor:
+        assert (dim, size, group) == (0, 2, "cp")
+        assert value.is_contiguous()
+        assert value.shape == (plan.total_local, 4, 3)
+        torch.testing.assert_close(value[:, :2], local_k)
+        torch.testing.assert_close(value[:, 2:], local_v)
+        return torch.cat((torch.cat((peer_k, peer_v), dim=1), value), dim=0)
+
+    def write_cache(
+        mapping: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        key_cache: torch.Tensor,
+        value_cache: torch.Tensor,
+    ) -> None:
+        assert key.is_contiguous() and value.is_contiguous()
+        torch.testing.assert_close(mapping, slot_mapping)
+        # Full global token order, with K and V still distinct, on every rank.
+        torch.testing.assert_close(key, global_k)
+        torch.testing.assert_close(value, global_v)
+        key_cache.view(-1, 2, 3).index_copy_(0, mapping, key)
+        value_cache.view(-1, 2, 3).index_copy_(0, mapping, value)
+
+    def fia(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, **kwargs: object) -> tuple[torch.Tensor, None]:
+        assert query.is_contiguous() and key.is_contiguous() and value.is_contiguous()
+        torch.testing.assert_close(query, global_q[[2, 3, 4, 6]])
+        torch.testing.assert_close(key, global_k[expected_prefix_rows])
+        torch.testing.assert_close(value, global_v[expected_prefix_rows])
+        assert kwargs["actual_seq_lengths"] == [2, 3, 4]
+        assert kwargs["actual_seq_lengths_kv"] == [4, 9, 11]
+        assert kwargs["num_heads"] == 4 and kwargs["num_key_value_heads"] == 2
+        assert kwargs["input_layout"] == "TND" and kwargs["sparse_mode"] == 3
+        assert kwargs["atten_mask"] is backend._causal_mask
+        return query + 7, None
+
+    with (
+        patch.object(
+            npu_paged_attention_module.distributed, "all_gather", side_effect=all_gather, create=True
+        ) as gather,
+        patch.object(
+            npu_paged_attention_module.kernels, "reshape_paged_cache", side_effect=write_cache, create=True
+        ) as write,
+        patch.object(torch.ops.npu, "npu_fused_infer_attention_score", side_effect=fia, create=True) as attention,
+    ):
+        output = backend._prefill_cp(
+            local_q, local_k, local_v, SimpleNamespace(slot_mapping=slot_mapping), plan, k_cache, v_cache
+        )
+
+    assert gather.call_count == 1 and write.call_count == 1
+    assert attention.call_count == (1 if expected_prefix_rows else 0)
+    expected = torch.zeros(plan.total_local, 4, 3)
+    expected[plan.query_index] = local_q[plan.query_index] + 7
+    torch.testing.assert_close(output, expected.view(plan.total_local, 12))
+    expected_k_cache = torch.full_like(k_cache, -1.0)
+    expected_v_cache = torch.full_like(v_cache, -1.0)
+    expected_k_cache[slot_mapping, 0] = global_k
+    expected_v_cache[slot_mapping, 0] = global_v
+    torch.testing.assert_close(k_cache, expected_k_cache)
+    torch.testing.assert_close(v_cache, expected_v_cache)
+
+
+def test_dense_cp_prefill_packs_kv_and_restores_ragged_causal_prefixes() -> None:
+    # Production zigzag contract for lengths [5, 2], CP=2, rank=1.
+    # Rank 0 owns [0,1,pad,pad;5,pad], rank 1 [2,3,4,pad;6,pad].
+    # The three real segments attend seq0[:4], seq0[:5], seq1[:2].
+    plan = SimpleNamespace(
+        cp_size=2,
+        total_local=6,
+        shard_gather_index=torch.tensor([2, 3, 4, 0, 6, 0]),
+        shard_valid_mask=torch.tensor([True, True, True, False, True, False]),
+        restore_index=torch.tensor([0, 1, 6, 7, 8, 4, 10]),
+        query_index=torch.tensor([0, 1, 2, 4]),
+        q_cu_seqlens=[2, 3, 4],
+        kv_gather_index=torch.tensor([0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]),
+        kv_cu_seqlens=[4, 9, 11],
+    )
+    _run_dense_cp_prefill(plan, [0, 1, -1, -1, 5, -1], [6, 2, 8, 1, 5, 3, 7], [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6])
+
+
+def test_dense_cp_prefill_padding_rank_still_gathers_and_writes_full_cache() -> None:
+    # Production contract for lengths [1, 1], CP=2, rank=1: no real queries.
+    plan = SimpleNamespace(
+        cp_size=2,
+        total_local=4,
+        shard_gather_index=torch.zeros(4, dtype=torch.int64),
+        shard_valid_mask=torch.zeros(4, dtype=torch.bool),
+        restore_index=torch.tensor([0, 2]),
+        query_index=torch.empty(0, dtype=torch.int64),
+        q_cu_seqlens=[],
+        kv_gather_index=torch.empty(0, dtype=torch.int64),
+        kv_cu_seqlens=[],
+    )
+    _run_dense_cp_prefill(plan, [0, -1, 1, -1], [3, 1], [])
 
 
 def test_decode_prepare_does_not_require_cp_metadata_fields() -> None:

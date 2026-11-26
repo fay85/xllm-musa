@@ -75,6 +75,8 @@ ContextParallelTopology::ContextParallelTopology(int32_t global_rank,
       << "dcp_size must divide pcp_size or equal pcp_size * tp_size";
 
   const int32_t dp_group_start = dp_rank_ * dp_stride;
+  dp_group_ranks_.resize(static_cast<size_t>(dp_stride));
+  std::iota(dp_group_ranks_.begin(), dp_group_ranks_.end(), dp_group_start);
   pcp_group_ranks_.reserve(static_cast<size_t>(pcp_size_));
   for (int32_t rank = 0; rank < pcp_size_; ++rank) {
     pcp_group_ranks_.emplace_back(dp_group_start + rank * tp_size_ + tp_rank_);

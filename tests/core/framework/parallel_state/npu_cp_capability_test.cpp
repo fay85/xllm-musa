@@ -26,6 +26,7 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/parallel_state/parallel_args.h"
 #include "core/util/scope_guard.h"
+#include "models/cp_capability.h"
 #include "models/model_registry.h"
 
 namespace xllm {
@@ -83,6 +84,99 @@ TEST(NpuCpCapabilityTest, UnregisteredModelsAreNotCapable) {
             CpShardingMode::NONE);
   EXPECT_EQ(ModelRegistry::get_cp_sharding_mode("definitely_not_a_model"),
             CpShardingMode::NONE);
+}
+
+TEST(NpuCpCapabilityTest, PythonQwen3VlAdmitsFullPrefillAndRejectsUnsafeModes) {
+  ModelConfig& model_config = ModelConfig::get_instance();
+  ParallelConfig& parallel_config = ParallelConfig::get_instance();
+  SchedulerConfig& scheduler_config = SchedulerConfig::get_instance();
+  KVCacheConfig& cache_config = KVCacheConfig::get_instance();
+  const std::string original_model_impl = model_config.model_impl();
+  const int32_t original_kv_split_size = parallel_config.kv_split_size();
+  const bool original_chunked_prefill =
+      scheduler_config.enable_chunked_prefill();
+  const bool original_prefix_cache = cache_config.enable_prefix_cache();
+  ScopeGuard config_guard([&] {
+    model_config.model_impl(original_model_impl);
+    parallel_config.kv_split_size(original_kv_split_size);
+    scheduler_config.enable_chunked_prefill(original_chunked_prefill);
+    cache_config.enable_prefix_cache(original_prefix_cache);
+  });
+  model_config.model_impl("python");
+  parallel_config.kv_split_size(1);
+  scheduler_config.enable_chunked_prefill(false);
+  cache_config.enable_prefix_cache(false);
+
+  Options options;
+  options.task_type("generate")
+      .cp_size(2)
+      .dp_size(1)
+      .enable_chunked_prefill(false)
+      .enable_prefix_cache(false)
+      .enable_schedule_overlap(false)
+      .enable_graph(false);
+  const auto validate = [&](const Options& candidate, EngineType engine_type) {
+    return validate_model_cp(candidate,
+                             engine_type,
+                             "qwen3_vl",
+                             /*global_world_size=*/4);
+  };
+  // CP2 x TP2 and CP4 x TP1 both keep the full prefill and decode contract.
+  EXPECT_FALSE(validate(options, EngineType::VLM).has_value());
+  options.cp_size(4);
+  EXPECT_FALSE(validate(options, EngineType::VLM).has_value());
+  options.cp_size(2);
+
+  EXPECT_TRUE(validate(options, EngineType::VLMSSM).has_value());
+  EXPECT_TRUE(validate(options, EngineType::LLM).has_value());
+  Options unsupported = options;
+  unsupported.enable_chunked_prefill(true);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.priority_strategy("multi_slo_and_prio");
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.enable_prefix_cache(true);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  // Global configs feed Python metadata too; refuse a conflicting effective
+  // configuration even when the engine options alone appear safe.
+  scheduler_config.enable_chunked_prefill(true);
+  EXPECT_TRUE(validate(options, EngineType::VLM).has_value());
+  scheduler_config.enable_chunked_prefill(false);
+  cache_config.enable_prefix_cache(true);
+  EXPECT_TRUE(validate(options, EngineType::VLM).has_value());
+  cache_config.enable_prefix_cache(false);
+  unsupported = options;
+  unsupported.enable_schedule_overlap(true);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.enable_graph(true);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.enable_disagg_pd(true).instance_role(InstanceRole::PREFILL);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.num_speculative_tokens(1);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.dp_size(2);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  unsupported = options;
+  unsupported.cp_size(3);
+  EXPECT_TRUE(validate(unsupported, EngineType::VLM).has_value());
+  parallel_config.kv_split_size(2);
+  EXPECT_TRUE(validate(options, EngineType::VLM).has_value());
+  parallel_config.kv_split_size(1);
+  model_config.model_impl("native");
+  EXPECT_TRUE(validate(options, EngineType::VLM).has_value());
+  model_config.model_impl("python");
+  EXPECT_TRUE(validate_model_cp(options,
+                                EngineType::VLM,
+                                "qwen2_5_vl",
+                                /*global_world_size=*/4)
+                  .has_value());
+  options.cp_size(1).enable_chunked_prefill(true).enable_prefix_cache(true);
+  EXPECT_FALSE(validate(options, EngineType::VLM).has_value());
 }
 
 TEST(NpuCpCapabilityTest, PythonCpAllowsGraphEnabledAndDisabled) {
@@ -264,7 +358,7 @@ TEST(NpuCpCapabilityTest, PythonCpPreservesQwenAndRestrictsGlm) {
             std::optional<std::string>(
                 "Python model-side CP does not support "
                 "model_type=glm_moe_dsa_mtp; supported models are qwen3, "
-                "glm_moe_dsa, and glm5_next."));
+                "qwen3_vl, glm_moe_dsa, and glm5_next."));
 
   parallel_config.kv_split_size(3);
   EXPECT_EQ(validate_model_cp(options,

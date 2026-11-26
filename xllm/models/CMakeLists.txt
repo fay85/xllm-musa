@@ -12,6 +12,7 @@ cc_library(
   NAME
     models
   HDRS
+    cp_capability.h
     model_registry.h
     speech_model.h
     models.h
@@ -19,6 +20,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:dit/utils/dit_block_weight_manager.h>
     py_model_helper.h
   SRCS
+    cp_capability.cpp
     model_registry.cpp
     $<$<BOOL:${USE_MLU}>:llm/mlu/deepseek_v41_dspark_quant_args.cpp>
     dit/utils/lanczos_resample.cpp

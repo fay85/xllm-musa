@@ -2707,8 +2707,9 @@ def test_eager_runner_skips_cp_for_empty_rank() -> None:
     runner.model.assert_called_once()
 
 
-def test_eager_runner_preserves_qwen_missing_length_fallback() -> None:
+def test_eager_runner_preserves_qwen_missing_lengths_without_cp() -> None:
     runner = _make_eager_runner(is_mla=False)
+    runner.cp_size = 1
     metadata = SimpleNamespace(
         is_prefill=True,
         is_chunked_prefill=False,
@@ -2848,17 +2849,22 @@ def test_eager_runner_preserves_non_cp_fallback(
 
 
 @pytest.mark.parametrize(
-    ("q_seq_lens_host", "kv_seq_lens_host"),
+    ("is_mla", "q_seq_lens_host", "kv_seq_lens_host"),
     [
-        (None, torch.tensor([1], dtype=torch.int32)),
-        (torch.tensor([1], dtype=torch.int32), None),
+        (True, None, None),
+        (True, None, torch.tensor([1], dtype=torch.int32)),
+        (True, torch.tensor([1], dtype=torch.int32), None),
+        (False, None, torch.tensor([1], dtype=torch.int32)),
     ],
 )
 def test_eager_runner_rejects_missing_cp_lengths(
+    monkeypatch: pytest.MonkeyPatch,
+    is_mla: bool,
     q_seq_lens_host: torch.Tensor | None,
     kv_seq_lens_host: torch.Tensor | None,
 ) -> None:
     runner = _make_eager_runner()
+    monkeypatch.setattr(type(runner.attention_backend), "is_mla", property(lambda self: is_mla))
     metadata = SimpleNamespace(
         is_prefill=True,
         is_chunked_prefill=False,

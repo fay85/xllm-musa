@@ -2430,8 +2430,14 @@ class NpuPagedAttentionBackend(DsaKvOffloadMixin, KdaLinearAttentionMixin, Atten
         """
         local_tokens = q_3d.shape[0]
 
-        kv_global_k = cp_gather_kv(k_3d, cp_context)
-        kv_global_v = cp_gather_kv(v_3d, cp_context)
+        # Share one collective, then restore each half into a contiguous tensor
+        # so the cache write does not need another full K/V copy.
+        # restore_index maps global token rows to rank-major all-gather rows;
+        # packing K/V along the head dimension preserves that row order.
+        gathered_kv = distributed.all_gather(torch.cat((k_3d, v_3d), dim=1), 0, cp_context.cp_size, "cp")
+        kv_global_k = gathered_kv[:, : self.num_kv_heads].index_select(0, cp_context.restore_index)
+        kv_global_v = gathered_kv[:, self.num_kv_heads :].index_select(0, cp_context.restore_index)
+        del gathered_kv
 
         # Persist the full global-order KV into this rank's paged cache.
         kernels.reshape_paged_cache(

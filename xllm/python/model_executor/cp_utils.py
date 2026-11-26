@@ -266,8 +266,15 @@ def cp_real_query_rows(ctx: CpContext) -> torch.Tensor:
 
 
 def cp_shard_positions(positions: torch.Tensor, ctx: CpContext) -> torch.Tensor:
-    """Shard 1-D position ids; padding positions become 0."""
-    local = positions.index_select(0, ctx.shard_gather_index)
+    """Shard ``[T]`` or mRoPE ``[3, T]`` ids without rebasing positions.
+
+    The last dimension always holds tokens. Padding positions become 0 on
+    every axis, while real tokens retain their original absolute positions.
+    """
+    is_mrope = positions.dim() == 2 and positions.shape[0] == 3
+    if positions.dim() != 1 and not is_mrope:
+        raise ValueError(f"CP positions must have shape [T] or [3, T], got {tuple(positions.shape)}")
+    local = positions.index_select(-1, ctx.shard_gather_index)
     return local * ctx.shard_valid_mask.to(local.dtype)
 
 

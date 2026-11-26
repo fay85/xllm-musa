@@ -118,11 +118,6 @@ std::optional<std::string> validate_vlm_speculative_pd_transfer_mode(
     const Options& options,
     const std::string& model_type);
 
-std::optional<std::string> validate_model_cp(const Options& options,
-                                             EngineType engine_type,
-                                             const std::string& model_type,
-                                             int32_t global_world_size);
-
 std::optional<std::string> validate_qwen_dcp_topology(int32_t global_world_size,
                                                       int32_t dp_size,
                                                       int32_t kv_split_size);

@@ -42,6 +42,8 @@ from xllm.python.layers import (
     RMSNorm,
     RotaryEmbedding,
 )
+from xllm.python.model_executor.cp_utils import cp_merge_rows, cp_shard_positions, cp_shard_rows
+from xllm.python.model_executor.forward_context import ForwardContext, get_forward_context
 from xllm.python.model_loader import (
     ParallelLoadContext,
     ScopedWeightLoader,
@@ -786,6 +788,39 @@ class Qwen3VLModel(nn.Module):
         )
         self.norm = RMSNorm(cfg.hidden_size, cfg.rms_norm_eps, dtype=dtype, device=device)
 
+    def _validate_cp_inputs(
+        self,
+        context: ForwardContext,
+        hidden: torch.Tensor,
+        positions: torch.Tensor,
+        deepstack_input_embeds: tuple[torch.Tensor, ...] | None,
+    ) -> None:
+        cp_context = context.cp_context
+        metadata = context.metadata
+        if context.layer_synchronizer is not None or self.cfg.layers_to_capture:
+            raise NotImplementedError("Qwen3-VL CP does not support PD or auxiliary hidden capture")
+        # The dense runner builds its plan from query lengths only, so checking
+        # has_prefix alone would miss a cached prefix in the original metadata.
+        q_lens = metadata.q_seq_lens_host
+        kv_lens = metadata.kv_seq_lens_host
+        if q_lens is None or kv_lens is None:
+            raise ValueError("Qwen3-VL CP requires host query and KV sequence lengths")
+        q_lengths = q_lens.tolist()
+        if cp_context.has_prefix or q_lengths != kv_lens.tolist():
+            raise NotImplementedError("Qwen3-VL CP does not support an existing KV prefix")
+        total_global = cp_context.restore_index.numel()
+        if hidden.shape[0] != total_global or sum(q_lengths) != total_global:
+            raise ValueError("Qwen3-VL CP requires global, unsharded input embeddings")
+        if (
+            positions.dim() != 1 and not (positions.dim() == 2 and positions.shape[0] == 3 and self.mrope_section)
+        ) or positions.shape[-1] != total_global:
+            raise ValueError("Qwen3-VL CP positions must be global [T] or configured mRoPE [3, T]")
+        if deepstack_input_embeds is not None:
+            if len(deepstack_input_embeds) > len(self.layers):
+                raise ValueError("Qwen3-VL CP has more DeepStack levels than decoder layers")
+            if any(level.shape != hidden.shape for level in deepstack_input_embeds):
+                raise ValueError("Qwen3-VL CP DeepStack embeddings must match global text rows")
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -797,6 +832,17 @@ class Qwen3VLModel(nn.Module):
         hidden = inputs_embeds if inputs_embeds is not None else self.embed_tokens(input_ids)
 
         positions = positions.to(torch.int64).contiguous()
+        context = get_forward_context()
+        cp_context = context.cp_context
+        if cp_context is not None:
+            self._validate_cp_inputs(context, hidden, positions, deepstack_input_embeds)
+            # Fusion has already placed visual features in the global text
+            # stream. Shard every stream with the same per-forward plan here;
+            # the runner and vision tower continue to consume global inputs.
+            hidden = cp_shard_rows(hidden, cp_context)
+            positions = cp_shard_positions(positions, cp_context).contiguous()
+            if deepstack_input_embeds is not None:
+                deepstack_input_embeds = tuple(cp_shard_rows(level, cp_context) for level in deepstack_input_embeds)
         cos, sin = None, None
         mrope_sec: list[int] | None = None
         cos_sin_cache = self.rotary.cos_sin_cache
@@ -819,6 +865,8 @@ class Qwen3VLModel(nn.Module):
                 hidden = hidden + deepstack_input_embeds[i]
 
         hidden, _ = self.norm(hidden, residual)
+        if cp_context is not None:
+            hidden = cp_merge_rows(hidden, cp_context)
         return hidden
 
 
