@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "mtp_worker_impl.h"
 
+#include <absl/strings/str_join.h>
 #include <glog/logging.h>
 #if defined(USE_NPU)
 #include <acl/acl.h>
@@ -67,7 +68,9 @@ limitations under the License.
 #if defined(USE_MUSA)
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/layers/common/lm_head.h"
+#include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
 #include "core/layers/musa/qwen3_gated_delta_net_base.h"
+#include "core/runtime/glm5_draft_chain.h"
 #endif
 #include "core/platform/platform.h"
 #include "runtime/llm_worker_impl.h"
@@ -2207,7 +2210,44 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
       draft_impl_->context_.get_model_args());
   MtpTopkStatePtr mtp_topk_state;
   for (int32_t draft_idx = 0; draft_idx < num_speculative_tokens; ++draft_idx) {
-    const bool is_final_draft = draft_idx == num_speculative_tokens - 1;
+    bool is_final_draft = draft_idx == num_speculative_tokens - 1;
+#if defined(USE_MUSA)
+    static const bool chain_enabled =
+        util::get_bool_env("XLLM_GLM5_DRAFT_CHAIN_GRAPH", true);
+    static const bool check_single_graph =
+        util::get_bool_env("XLLM_GLM5_VALIDATE_GRAPH", false);
+    std::optional<Glm5DraftChain> chain;
+    const auto& params = current_draft_input.input_params;
+    const auto& sampling = current_draft_input.sampling_params;
+    const int32_t steps = num_speculative_tokens - draft_idx;
+    const auto& positions_host = current_draft_input.positions_host;
+    if (chain_enabled && !check_single_graph && draft_idx == 1 && steps > 1 &&
+        steps < 128 && options_.instance_role() == InstanceRole::DECODE &&
+        draft_impl_->context_.get_model_args().model_type() ==
+            "glm5_next_mtp" &&
+        ::xllm::ExecutionConfig::get_instance().enable_graph() &&
+        params.meta.num_sequences == 1 && parallel_args_.dp_size() == 1 &&
+        options_.cp_size() == 1 && !has_json_object_states &&
+        !use_continuous_drafts && !use_adaptive_speculative_decode &&
+        !mtp_topk_state && !options_.enable_adaptive_speculative_decode() &&
+        sampling.all_greedy_sample && !sampling.return_probs &&
+        !sampling.logprobs && !sampling.use_beam_search &&
+        !sampling.repetition_penalties.defined() &&
+        !sampling.frequency_penalties.defined() &&
+        !sampling.presence_penalties.defined() &&
+        !sampling.filter_mask.defined() && !sampling.filter_bitmask.defined() &&
+        params.multi_block_tables.empty() && positions_host.defined() &&
+        positions_host.device().is_cpu() && positions_host.numel() == 1 &&
+        positions_host.item<int64_t>() + 1 == params.meta.kv_max_seq_len &&
+        params.meta.kv_max_seq_len + steps - 1 <=
+            layer::glm5_next_graph_context_capacity(
+                params.meta.kv_max_seq_len) &&
+        params.meta.kv_max_seq_len + steps - 1 <=
+            params.attention.device.block_tables.size(1) *
+                logical_block_size()) {
+      chain.emplace(current_draft_input, steps, logical_block_size());
+    }
+#endif
     const bool static_graph_tasks_prepared =
         is_final_draft && !use_continuous_drafts &&
         prepare_static_mtp_graph_tasks_before_final_draft(input);
@@ -2233,6 +2273,20 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
       }
     }
 
+#if defined(USE_MUSA)
+    if (chain && chain->proposals.defined()) {
+      CHECK_EQ(chain->proposals.numel(), chain->steps - 1);
+      for (const auto& proposal : chain->proposals.split(1)) {
+        ForwardOutput intermediate;
+        intermediate.sample_output.next_tokens = proposal;
+        draft_outputs.emplace_back(std::move(intermediate));
+      }
+      draft_prepared.back() = std::move(draft_prepared[draft_idx]);
+      draft_idx = num_speculative_tokens - 1;
+      is_final_draft = true;
+    }
+    chain.reset();
+#endif
     if ((use_device_target_context || use_prelaunched_first_draft) &&
         !use_continuous_drafts && draft_idx == 0) {
       // The next draft forward is already queued behind target validation.
@@ -2780,10 +2834,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
 
   const int32_t batch_size = static_cast<int32_t>(per_seq_val_tokens.size());
   const int32_t max_val_tokens = num_speculative_tokens + 1;
-  const int32_t total_tokens =
-      static_cast<int32_t>(target_output.logits.size(0));
-  const int32_t vocab_size =
-      static_cast<int32_t>(target_output.logits.size(-1));
+  const int32_t total_tokens = static_cast<int32_t>(
+      target_output.logits.defined()
+          ? target_output.logits.size(0)
+          : target_output.sample_output.next_tokens.numel());
   const int64_t padded_total =
       static_cast<int64_t>(batch_size) * max_val_tokens;
 
@@ -2811,8 +2865,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
   ForwardOutput uniform_target_view;
   if (!needs_padding) {
     uniform_target_view = target_output;
-    uniform_target_view.logits =
-        target_output.logits.view({padded_total, vocab_size});
+    if (target_output.logits.defined()) {
+      uniform_target_view.logits = target_output.logits.view(
+          {padded_total, target_output.logits.size(-1)});
+    }
   }
   const ForwardOutput& target_output_for_validate =
       needs_padding ? *padded_target_output_slow : uniform_target_view;
@@ -2841,6 +2897,36 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
                           validate_input.sampling_params.filter_mask,
                           validate_input.sampling_params.filter_bitmask,
                           validate_input.json_object_invalid_draft);
+#if defined(USE_MUSA)
+    static const bool audit =
+        util::get_bool_env("XLLM_GLM5_TOKEN_AUDIT", false);
+    const auto& ids = input.input_params.embedding.request_ids;
+    if (audit && parallel_args_.rank() == 0 && ids.size() == 1 &&
+        ids.front().starts_with("width-audit-") && !pruned_prefix_lengths &&
+        input.sampling_params.all_greedy_sample) {
+      std::vector<torch::Tensor> steps;
+      steps.reserve(draft_outputs.size());
+      for (const auto& draft : draft_outputs) {
+        steps.emplace_back(draft.sample_output.next_tokens.flatten());
+      }
+      const torch::Tensor proposals =
+          to_cpu_int_tensor_for_read(torch::cat(steps));
+      const torch::Tensor targets = to_cpu_int_tensor_for_read(
+          target_output_for_validate.sample_output.next_tokens);
+      const torch::Tensor positions =
+          to_cpu_int_tensor_for_read(validate_input.positions);
+      LOG(INFO) << "GLM5_VERIFY_IDS request_id=" << ids.front()
+                << " position=" << positions.data_ptr<int32_t>()[0] << " draft="
+                << absl::StrJoin(
+                       proposals.data_ptr<int32_t>(),
+                       proposals.data_ptr<int32_t>() + proposals.numel(),
+                       ",")
+                << " target="
+                << absl::StrJoin(targets.data_ptr<int32_t>(),
+                                 targets.data_ptr<int32_t>() + targets.numel(),
+                                 ",");
+    }
+#endif
   }
   COUNTER_ADD(speculative_execution_latency_seconds_validation,
               timer.elapsed_seconds());
@@ -5059,7 +5145,8 @@ SampleOutput MTPWorkerImpl::validate(
   const int32_t num_val_tokens = num_speculative_tokens + 1;
   CHECK_EQ(num_target_tokens % num_val_tokens, 0);
   const int32_t batch_size = num_target_tokens / num_val_tokens;
-  const int32_t vocab_size = target_output.logits.size(/*dim=*/-1);
+  const int32_t vocab_size =
+      target_output.logits.defined() ? target_output.logits.size(-1) : 0;
 
   using torch::indexing::None;
   using ISlice = torch::indexing::Slice;
@@ -5084,8 +5171,10 @@ SampleOutput MTPWorkerImpl::validate(
               .contiguous();
     }
   } else {
-    target_logits =
-        target_output.logits.view({batch_size, num_val_tokens, vocab_size});
+    if (target_output.logits.defined()) {
+      target_logits =
+          target_output.logits.view({batch_size, num_val_tokens, vocab_size});
+    }
     if (target_embeddings.defined()) {
       target_embeddings = target_embeddings.view(
           {batch_size, num_val_tokens, target_embeddings.size(-1)});

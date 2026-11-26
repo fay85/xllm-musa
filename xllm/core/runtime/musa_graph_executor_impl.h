@@ -394,6 +394,7 @@ class MusaGraph final {
 
   // Prefill graphs are captured as segments separated by attention runners.
   bool is_piecewise_ = false;
+  torch::Tensor recursive_proposals_;
   bool is_glm_graph_ = false;
   bool is_glm_prefill_ = false;
 

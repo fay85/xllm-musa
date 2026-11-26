@@ -40,6 +40,9 @@ limitations under the License.
 #include "models/llm/py_causal_lm.h"
 #include "models/model_registry.h"
 #include "runtime/params_utils.h"
+#if defined(USE_MUSA)
+#include "core/runtime/glm5_greedy_head.h"
+#endif
 #include "util/threadpool.h"
 #include "util/timer.h"
 
@@ -208,6 +211,7 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
   auto& sampling_params = input.sampling_params;
   const bool has_aux_hidden_states = model_output.aux_hidden_states.defined();
   torch::Tensor logits;
+  torch::Tensor greedy_tokens;
   torch::Tensor lm_head_selected_token_idxes;
   torch::Tensor selected_hidden_from_lm_head;
   torch::Tensor selected_aux_hidden;
@@ -220,9 +224,20 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
         model_output.hidden_states.size(0),
         model_output.hidden_states.device());
     if (options_.enable_speculative_decode()) {
-      logits = model_->logits(model_output.hidden_states,
-                              lm_head_selected_token_idxes,
-                              selected_hidden_from_lm_head);
+#if defined(USE_MUSA)
+      greedy_tokens = glm5_greedy_tokens(*model_,
+                                         options_,
+                                         context_.get_model_args().model_type(),
+                                         input,
+                                         model_output.hidden_states,
+                                         lm_head_selected_token_idxes,
+                                         selected_hidden_from_lm_head);
+#endif
+      if (!greedy_tokens.defined()) {
+        logits = model_->logits(model_output.hidden_states,
+                                lm_head_selected_token_idxes,
+                                selected_hidden_from_lm_head);
+      }
       if (has_aux_hidden_states) {
         selected_aux_hidden = select_hidden_rows(model_output.aux_hidden_states,
                                                  lm_head_selected_token_idxes);
@@ -255,7 +270,9 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
   ForwardOutput output;
   if (sampling_params.selected_token_idxes.defined()) {
     output.logits = logits;
-    if (!input.skip_sampling_for_logits_only) {
+    if (greedy_tokens.defined()) {
+      output.sample_output.next_tokens = greedy_tokens;
+    } else if (!input.skip_sampling_for_logits_only) {
       output.sample_output = sampler_->forward(logits, sampling_params);
     }
     COUNTER_ADD(execution_latency_seconds_sampling, timer.elapsed_seconds());

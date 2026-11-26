@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "request.h"
 
+#include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 #include <glog/logging.h>
@@ -134,6 +135,31 @@ void Request::log_statistic(double total_latency) {
       const double generation_latency = total_latency - ttft;
       tpot = (generation_latency * 1000.0) / (gen_tokens - 1);
       gen_speed = gen_tokens / generation_latency;
+    }
+    static const bool audit =
+        util::get_bool_env("XLLM_GLM5_TOKEN_AUDIT", false);
+    if (audit && x_request_id_.starts_with("width-audit-")) {
+      const auto tokens = seq->tokens();
+      const size_t prompt_size = seq->num_prompt_tokens();
+      // FNV-1a over little-endian int32 token IDs for cross-client comparison.
+      uint64_t hash = 14695981039346656037ULL;
+      for (size_t i = 0; i < prompt_size; ++i) {
+        const uint32_t token = static_cast<uint32_t>(tokens[i]);
+        for (uint32_t shift = 0; shift < 32; shift += 8) {
+          hash ^= (token >> shift) & 0xffU;
+          hash *= 1099511628211ULL;
+        }
+      }
+      // Keep each log record below glog's maximum line length.
+      constexpr size_t kOutputChunk = 64;
+      for (size_t offset = 0; offset < gen_tokens; offset += kOutputChunk) {
+        const size_t count = std::min(kOutputChunk, gen_tokens - offset);
+        const int32_t* begin = tokens.data() + prompt_size + offset;
+        LOG(INFO) << "GLM5_OUTPUT_IDS x_request_id=" << x_request_id_
+                  << " request_id=" << request_id_ << " sequence=" << idx
+                  << " prompt_fnv64=" << hash << " offset=" << offset
+                  << " tokens=" << absl::StrJoin(begin, begin + count, ",");
+      }
     }
     std::string speculative_stats_log;
     if (speculative_token_stats_->proposed_tokens > 0) {

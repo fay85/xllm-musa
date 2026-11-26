@@ -35,6 +35,8 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#include "core/framework/sampling/sampler.h"
+#include "core/framework/speculative/spec_input_builder.h"
 #include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
@@ -52,6 +54,8 @@ limitations under the License.
 #include "core/platform/device.h"
 #include "core/platform/musa_vmm_capture_pool.h"
 #include "core/runtime/decode_graph_bucket.h"
+#include "core/runtime/glm5_draft_chain.h"
+#include "core/runtime/glm5_greedy_head.h"
 #include "core/runtime/musa/graph_memory_policy.h"
 #include "core/runtime/musa/prefill_graph_policy.h"
 #include "core/util/env_var.h"
@@ -2610,15 +2614,63 @@ bool MusaGraph::capture(CausalLM* model,
     xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
     const int num_warmup_iters =
         skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
+    auto forward = [&]() {
+      auto tokens = persistent_param_.persistent_tokens(padded_num_tokens_);
+      auto positions =
+          persistent_param_.persistent_positions(padded_num_tokens_);
+      const auto& first = graph_params_opt.value();
+      auto output = model->forward(tokens, positions, kv_cache, first);
+      const auto* chain = Glm5DraftChain::current();
+      if (chain == nullptr || args.model_type() != "glm5_next_mtp") {
+        return output;
+      }
+      CHECK_EQ(actual_num_tokens, 1);
+      auto step = first;
+      auto metadata =
+          std::make_shared<layer::AttentionMetadata>(*first.attn_metadata);
+      step.attn_metadata = metadata;
+      auto indices = torch::zeros({1}, tokens.options().dtype(torch::kLong));
+      const torch::Tensor table = metadata->block_table[0];
+      const int64_t block_size = options.block_size();
+      std::vector<torch::Tensor> proposals;
+      proposals.reserve(chain->steps - 1);
+      for (int32_t i = 1; i < chain->steps; ++i) {
+        torch::Tensor selected;
+        auto id = glm5_greedy_tokens(*model,
+                                     options,
+                                     args.model_type(),
+                                     chain->input,
+                                     output.hidden_states,
+                                     indices,
+                                     selected);
+        if (!id.defined()) {
+          auto logits = model->logits(output.hidden_states, indices);
+          id = Sampler::greedy_sample(logits);
+        }
+        proposals.emplace_back(id.clone());
+        tokens = id.to(tokens.scalar_type());
+        positions = positions + 1;
+        auto page = table.index_select(
+            0, torch::floor_divide(positions, block_size).to(torch::kLong));
+        metadata->slot_mapping =
+            (page * block_size + torch::remainder(positions, block_size))
+                .to(torch::kLong);
+        metadata->kv_cu_seq_lens =
+            torch::cat({torch::zeros_like(positions), positions + 1})
+                .to(torch::kInt);
+        step.embedding.input_embedding = output.hidden_states;
+        step.embedding.mtp_token_embedding =
+            model->get_word_embedding()(tokens);
+        output = model->forward(tokens, positions, kv_cache, step);
+      }
+      recursive_proposals_ = torch::cat(proposals);
+      return output;
+    };
     for (int warmup_iter = 0; warmup_iter < num_warmup_iters; ++warmup_iter) {
       capture_stream.synchronize();
       {
         xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
-        auto warmup_output = model->forward(
-            persistent_param_.persistent_tokens(padded_num_tokens_),
-            persistent_param_.persistent_positions(padded_num_tokens_),
-            kv_cache,
-            graph_params_opt.value());
+        auto warmup_output = forward();
         if (should_capture_graph_aux_hidden_states(args, options) &&
             warmup_output.aux_hidden_states.defined()) {
           persistent_param_.set_aux_hidden_states(
@@ -2661,11 +2713,7 @@ bool MusaGraph::capture(CausalLM* model,
       xllm::kernel::musa::begin_ffi_alloc_record();
       {
         xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
-        model->forward(
-            persistent_param_.persistent_tokens(padded_num_tokens_),
-            persistent_param_.persistent_positions(padded_num_tokens_),
-            kv_cache,
-            graph_params_opt.value());
+        forward();
       }
       xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
       if (snapshot_linear_state) {
@@ -2721,11 +2769,7 @@ bool MusaGraph::capture(CausalLM* model,
       xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
     }
     // Execute forward pass; the MUSA graph captures this work.
-    auto forward_result = model->forward(
-        persistent_param_.persistent_tokens(padded_num_tokens_),
-        persistent_param_.persistent_positions(padded_num_tokens_),
-        kv_cache,
-        graph_params_opt.value());
+    auto forward_result = forward();
 
     // Store result in persistent buffer
     persistent_param_.set_hidden_states(forward_result.hidden_states);
@@ -2795,7 +2839,10 @@ bool MusaGraph::capture(CausalLM* model,
   s_completed_musa_graph_captures.fetch_add(1, std::memory_order_release);
 
   LOG(INFO) << "MUSA graph capture end, bucket_num_tokens: "
-            << bucket_num_tokens;
+            << bucket_num_tokens << ", recursive draft steps: "
+            << (recursive_proposals_.defined()
+                    ? recursive_proposals_.numel() + 1
+                    : 0);
   return true;
 }
 
@@ -2825,10 +2872,16 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     return value != nullptr && std::string(value) == "1";
   }();
   const bool validate = validate_glm_graph && is_glm_graph_;
+  // Compare recursive proposals against the eager row builder on the very
+  // same prefix. A separate request can diverge at a near-tied target logit.
+  static const bool check_chain =
+      util::get_bool_env("XLLM_GLM5_VALIDATE_DRAFT_CHAIN", false);
+  const bool validate_chain = check_chain && recursive_proposals_.defined() &&
+                              is_glm5_width_audit(params);
   torch::Tensor reference_hidden;
   torch::Tensor validation_indices;
   std::vector<IndexedTensorSnapshot> initial_state;
-  if (validate) {
+  if (validate || validate_chain) {
     validation_indices =
         get_linear_state_snapshot_indices(params, persistent_param_.device());
     initial_state =
@@ -3028,6 +3081,72 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   // Note: aux_hidden_states handling is done in MusaGraphExecutorImpl::run()
   // since replay() doesn't have access to options
   ModelOutput output(get_hidden_states(actual_num_tokens));
+  if (recursive_proposals_.defined()) {
+    auto* chain = Glm5DraftChain::current();
+    CHECK(chain != nullptr);
+    chain->proposals = recursive_proposals_.clone();
+    if (validate_chain) {
+      auto graph_hidden = output.hidden_states.clone();
+      restore_linear_attention_state(initial_state, validation_indices);
+      const auto rows = specBuilder::make_decode_row_context(chain->input);
+      ModelInputParams eager = params;
+      torch::Tensor ids = tokens;
+      torch::Tensor pos = positions;
+      torch::Tensor hidden;
+      int64_t mismatches = 0;
+      for (int32_t step = 0; step < chain->steps; ++step) {
+        eager.attn_metadata.reset();
+        eager.embedding.mtp_token_embedding = torch::Tensor();
+        if (step > 0) {
+          specBuilder::RowSpec row;
+          row.append_token = false;
+          row.position_offset = step;
+          specBuilder::DecodeBuildBuffers buffers;
+          specBuilder::append_decode_row(rows, row, chain->block_size, buffers);
+          pos = specBuilder::make_cpu_int_tensor(buffers.out_positions)
+                    .to(positions.options());
+          specBuilder::update_input_params(eager,
+                                           buffers,
+                                           1,
+                                           params.attention.host.q_seq_lens,
+                                           params.attention.host.q_cu_seq_lens,
+                                           buffers.meta.kv_max_seq_len,
+                                           std::move(buffers.out_kv_seq_lens));
+          eager.attention.rebuild_device_buffer(tokens.device());
+          eager.embedding.input_embedding = hidden;
+        }
+        hidden = model_->forward(ids, pos, kv_cache, eager).hidden_states;
+        auto expected = Sampler::greedy_sample(model_->logits(hidden, {}));
+        auto actual =
+            step + 1 == chain->steps
+                ? Sampler::greedy_sample(model_->logits(graph_hidden, {}))
+                : chain->proposals.narrow(0, step, 1);
+        const int64_t actual_id = actual.item<int64_t>();
+        const int64_t expected_id = expected.item<int64_t>();
+        if (actual_id != expected_id) {
+          ++mismatches;
+          LOG(WARNING) << "GLM_DRAFT_CHAIN_MISMATCH request="
+                       << params.embedding.request_ids.front()
+                       << " position=" << pos.item<int64_t>()
+                       << " step=" << step << " graph=" << actual_id
+                       << " eager=" << expected_id;
+        }
+        ids = actual.to(tokens.options());
+      }
+      const double max_abs =
+          (hidden.to(torch::kFloat) - graph_hidden.to(torch::kFloat))
+              .abs()
+              .max()
+              .item<double>();
+      LOG(INFO) << "GLM_DRAFT_CHAIN_COMPARE steps=" << chain->steps
+                << " argmax_changes=" << mismatches
+                << " last_hidden_max=" << max_abs;
+      // Eager verification wrote its own K/V, pooled index and tail. Execute
+      // the production graph once from the saved tail to restore all its rows.
+      restore_linear_attention_state(initial_state, validation_indices);
+      graph_.replay();
+    }
+  }
   if (validate) {
     // Replay first: the eager reference must not populate current-token KV
     // before the captured graph has read/written it.
@@ -3810,13 +3929,18 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           });
       bucket_num_tokens = sequences * width;
     }
-    const uint32_t graph_shape_key =
+    uint32_t graph_shape_key =
         layer::uses_glm5_next_graph(args_.model_type())
             ? layer::glm5_next_graph_key(bucket_num_tokens,
                                          params.meta.kv_max_seq_len)
             : dsv4_graph_shape_key(
                   bucket_num_tokens, n_tokens, args_, options_, graph_params);
 
+    if (const auto* chain = Glm5DraftChain::current();
+        chain && args_.model_type() == "glm5_next_mtp") {
+      // The GLM key uses the lower 24 bits for token count and capacity.
+      graph_shape_key |= static_cast<uint32_t>(chain->steps) << 24;
+    }
     // Check if captured graph exists for this bucket num_tokens
     auto it = graphs_.find(graph_shape_key);
     if (it != graphs_.end()) {
@@ -3913,8 +4037,15 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   if (glm_decode_verify && force_eager_verify) {
     return false;
   }
+  static const bool capture_draft_extend =
+      util::get_bool_env("XLLM_GLM5_DRAFT_EXTEND_GRAPH", true);
+  const bool glm_draft_extend =
+      capture_draft_extend && args_.model_type() == "glm5_next_mtp" &&
+      options_.instance_role() == InstanceRole::DECODE &&
+      params.meta.batch_forward_type.is_chunked_prefill() &&
+      !params.attention.host.kpool_query_lens.empty();
   if (!execution_config.enable_graph() ||
-      (!glm_decode_verify &&
+      (!glm_decode_verify && !glm_draft_extend &&
        !execution_config.enable_prefill_piecewise_graph())) {
     return false;
   }
@@ -3995,6 +4126,15 @@ std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(
   key.emplace_back(
       static_cast<int32_t>(get_prefill_graph_num_tokens(num_tokens, params)));
   key.emplace_back(params.meta.batch_forward_type.is_chunked_prefill() ? 1 : 0);
+  if (args_.model_type() == "glm5_next_mtp" &&
+      !params.attention.host.kpool_query_lens.empty() &&
+      options_.instance_role() == InstanceRole::DECODE) {
+    key.emplace_back(-2);
+    key.emplace_back(
+        layer::glm5_next_graph_context_capacity(params.meta.kv_max_seq_len));
+    key.insert(key.end(), q_seq_lens.begin(), q_seq_lens.end());
+    return key;
+  }
   if (args_.model_type() == "glm5_next" && params.is_spec_verify) {
     // Verify uses the request's live positions and state slots. DSA sizes its
     // workspace from the page-table width, independent of the exact KV ends.

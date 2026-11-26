@@ -42,6 +42,9 @@ limitations under the License.
 #endif
 #include "models/model_registry.h"
 #include "runtime/params_utils.h"
+#if defined(USE_MUSA)
+#include "core/runtime/glm5_greedy_head.h"
+#endif
 #include "runtime/speculative_worker_utils.h"
 #include "util/env_var.h"
 #include "util/threadpool.h"
@@ -320,6 +323,7 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   }
 
   torch::Tensor logits;
+  torch::Tensor greedy_tokens;
   torch::Tensor lm_head_selected_token_idxes;
   torch::Tensor selected_hidden;
   if (sampling_params.selected_token_idxes.defined()) {
@@ -340,7 +344,16 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     const bool need_selected_hidden =
         input.return_selected_hidden ||
         (options_.cp_size() > 1 && options_.enable_speculative_decode());
-    if (need_selected_hidden) {
+#if defined(USE_MUSA)
+    greedy_tokens = glm5_greedy_tokens(*model_,
+                                       options_,
+                                       context_.get_model_args().model_type(),
+                                       input,
+                                       model_output.hidden_states,
+                                       selected_token_idxes,
+                                       selected_hidden);
+#endif
+    if (!greedy_tokens.defined() && need_selected_hidden) {
       // Emit both selected hidden and logits from a single lm_head pass so the
       // ConfidenceHead and CP speculative paths can consume hidden without a
       // second projection.
@@ -360,7 +373,7 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
         selected_hidden = model_output.hidden_states.index_select(
             /*dim=*/0, selected_token_idxes.to(torch::kLong));
       }
-    } else {
+    } else if (!greedy_tokens.defined()) {
       logits = model_->logits(model_output.hidden_states, selected_token_idxes);
     }
   }
@@ -397,7 +410,12 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     output.logprobs = sampling_params.logprobs;
     output.max_top_logprobs = sampling_params.max_top_logprobs;
     if (!input.skip_sampling_for_logits_only) {
-      auto sample_output = sampler_->forward(logits, sampling_params);
+      SampleOutput sample_output;
+      if (greedy_tokens.defined()) {
+        sample_output.next_tokens = greedy_tokens;
+      } else {
+        sample_output = sampler_->forward(logits, sampling_params);
+      }
       // Stochastic sampling under schedule overlap needs a CP-wide
       // consensus: the overlapped decode replacement
       // (update_input_by_last_step_output) resolves every rank's negative

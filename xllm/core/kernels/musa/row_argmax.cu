@@ -26,6 +26,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/sharded_argmax.h"
 
 namespace xllm::kernel::musa {
 
@@ -127,7 +128,9 @@ __global__ void __launch_bounds__(kThreads)
                         const int64_t* __restrict__ chunk_indices,
                         int32_t chunks,
                         const int64_t* __restrict__ column_ids,
-                        int64_t* __restrict__ output) {
+                        int64_t* __restrict__ output,
+                        int32_t* __restrict__ pairs,
+                        int32_t vocab_offset) {
   __shared__ float values[kThreads];
   __shared__ int64_t indices[kThreads];
   const int64_t row = blockIdx.x;
@@ -140,10 +143,38 @@ __global__ void __launch_bounds__(kThreads)
   reduce_block_best(value, index, values, indices);
   if (threadIdx.x == 0) {
     const int64_t winner = indices[0];
+    if (pairs != nullptr) {
+      pairs[2 * row] = __float_as_int(values[0]);
+      pairs[2 * row + 1] = vocab_offset + static_cast<int32_t>(winner);
+      return;
+    }
     output[row] = (column_ids != nullptr && winner != kNoIndex)
                       ? column_ids[winner]
                       : winner;
   }
+}
+
+// Each rank contributes [score bits, global id] per row in rank-major order.
+__global__ void merge_shards_kernel(const int32_t* pairs,
+                                    int64_t rows,
+                                    int32_t ranks,
+                                    int64_t* output) {
+  const int64_t row = blockIdx.x * blockDim.x + threadIdx.x;
+  if (row >= rows) {
+    return;
+  }
+  float best = -INFINITY;
+  int64_t winner = kNoIndex;
+  for (int32_t rank = 0; rank < ranks; ++rank) {
+    const int64_t offset = 2 * (rank * rows + row);
+    const float score = __int_as_float(pairs[offset]);
+    const int64_t id = pairs[offset + 1];
+    if (ranks_before(score, id, best, winner)) {
+      best = score;
+      winner = id;
+    }
+  }
+  output[row] = winner;
 }
 
 bool is_16b_aligned(const torch::Tensor& tensor) {
@@ -189,9 +220,10 @@ bool row_argmax_supported(const torch::Tensor& input) {
          input.numel() > 0 && is_16b_aligned(input);
 }
 
-torch::Tensor row_argmax(const torch::Tensor& input,
-                         const torch::Tensor& column_ids) {
-  RECORD_USER_SCOPE("kernel: row_argmax");
+namespace {
+torch::Tensor reduce_vocab(const torch::Tensor& input,
+                           const torch::Tensor& column_ids,
+                           int32_t vocab_offset) {
   CHECK(row_argmax_supported(input))
       << "unsupported row argmax input: " << input.sizes() << " "
       << input.scalar_type();
@@ -208,7 +240,9 @@ torch::Tensor row_argmax(const torch::Tensor& input,
   const std::vector<int64_t> output_sizes(input.sizes().begin(),
                                           input.sizes().end() - 1);
   torch::Tensor output =
-      torch::empty(output_sizes, input.options().dtype(torch::kLong));
+      vocab_offset >= 0
+          ? torch::empty({rows, 2}, input.options().dtype(torch::kInt32))
+          : torch::empty(output_sizes, input.options().dtype(torch::kLong));
   const int64_t vectors = cols / kBf16PerVector;
   const int64_t wanted_chunks =
       std::clamp<int64_t>(kTargetBlocks / rows, 1, kThreads);
@@ -236,7 +270,42 @@ torch::Tensor row_argmax(const torch::Tensor& input,
       chunk_indices.data_ptr<int64_t>(),
       static_cast<int32_t>(chunks),
       column_ids_ptr,
-      output.data_ptr<int64_t>());
+      vocab_offset < 0 ? output.data_ptr<int64_t>() : nullptr,
+      vocab_offset >= 0 ? output.data_ptr<int32_t>() : nullptr,
+      vocab_offset);
+  C10_CUDA_CHECK(cudaGetLastError());
+  return output;
+}
+
+}  // namespace
+
+torch::Tensor row_argmax(const torch::Tensor& input,
+                         const torch::Tensor& column_ids) {
+  RECORD_USER_SCOPE("kernel: row_argmax");
+  return reduce_vocab(input, column_ids, /*vocab_offset=*/-1);
+}
+
+torch::Tensor shard_argmax_candidates(const torch::Tensor& input,
+                                      int32_t vocab_offset) {
+  RECORD_USER_SCOPE("kernel: shard_argmax_candidates");
+  CHECK_GE(vocab_offset, 0);
+  return reduce_vocab(input, {}, vocab_offset);
+}
+
+torch::Tensor merge_shard_argmax(const torch::Tensor& gathered, int64_t rows) {
+  RECORD_USER_SCOPE("kernel: merge_shard_argmax");
+  CHECK_GT(rows, 0);
+  CHECK(gathered.is_contiguous());
+  CHECK_EQ(gathered.numel() % (2 * rows), 0);
+  const int32_t ranks = static_cast<int32_t>(gathered.numel() / (2 * rows));
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(gathered));
+  torch::Tensor output =
+      torch::empty({rows}, gathered.options().dtype(torch::kLong));
+  merge_shards_kernel<<<(rows + kThreads - 1) / kThreads,
+                        kThreads,
+                        0,
+                        at::cuda::getCurrentCUDAStream()>>>(
+      gathered.data_ptr<int32_t>(), rows, ranks, output.data_ptr<int64_t>());
   C10_CUDA_CHECK(cudaGetLastError());
   return output;
 }

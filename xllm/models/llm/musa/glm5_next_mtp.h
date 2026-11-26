@@ -215,7 +215,8 @@ class Glm5NextMtpForCausalLMImpl final
     metadata.is_chunked_prefill =
         params.meta.batch_forward_type.is_chunked_prefill();
     metadata.max_query_len = params.meta.q_max_seq_len;
-    metadata.max_seq_len = params.meta.batch_forward_type.is_decode()
+    metadata.max_seq_len = (params.meta.batch_forward_type.is_decode() ||
+                            !params.attention.host.kpool_query_lens.empty())
                                ? layer::glm5_next_graph_context_capacity(
                                      params.meta.kv_max_seq_len)
                                : params.meta.kv_max_seq_len;
