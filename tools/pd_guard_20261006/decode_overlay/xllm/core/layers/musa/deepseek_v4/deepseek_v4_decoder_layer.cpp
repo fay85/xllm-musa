@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "core/layers/common/dp_utils.h"
+
 #include <cstdlib>
 #include <string>
 #include <string_view>
@@ -33,7 +35,8 @@ namespace layer {
 
 DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
     const ModelContext& context,
-    int32_t layer_id) {
+    int32_t layer_id)
+    : parallel_args_(context.get_parallel_args()) {
   const auto& args = context.get_model_args();
   auto quant_args = context.get_quant_args();
   // DeepSeek-V4 uses `scale` aliases consumed by the private FP8 linear path;
@@ -53,7 +56,9 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   // The DSpark draft model is explicitly excluded from Prefill-SP in
   // DeepseekV4ModelImpl::forward. Do not allocate/load a second full-head
   // Attention and its workspaces for a lane that can never run.
-  if (args.dspark_block_size() == 0) {
+  if (args.dspark_block_size() == 0 &&
+      (parallel_args.tp_group_ == nullptr ||
+       parallel_args.tp_group_->world_size() > 1)) {
     CHECK(parallel_args.single_rank_group_ != nullptr)
         << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
            "process group for replicated attention";
@@ -308,9 +313,54 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       input_params.is_spec_verify);
   auto [topk_weights, topk_ids] =
       gate_->forward(ffn_input_2d, gate_input_ids, batch_gate_verify);
+  const bool dp_moe_gather =
+      sequence_parallel_context_ == nullptr && pcp_context_ == nullptr &&
+      need_selected_moe_dp_gather(parallel_args_);
+  bool dp_moe_uniform_graph_gather = false;
+  int64_t dp_moe_local_rows = 0;
+  int64_t dp_moe_rank = 0;
+  bool dp_moe_eager_gathered = false;
+  if (dp_moe_gather) {
+    CHECK(parallel_args_.dp_local_process_group_ != nullptr)
+        << "DeepSeek-V4 DP MoE gather requires dp_local_process_group_";
+    if (attn_metadata.dsa_metadata &&
+        attn_metadata.dsa_metadata->is_acl_graph) {
+      dp_moe_local_rows = ffn_input_2d.size(0);
+      dp_moe_rank = parallel_args_.dp_local_process_group_->rank();
+      ffn_input = parallel_args_.dp_local_process_group_
+                      ->allgather_base_sync(ffn_input_2d.contiguous())
+                      .flatten(0, 1);
+      topk_weights = parallel_args_.dp_local_process_group_
+                         ->allgather_base_sync(topk_weights.contiguous())
+                         .flatten(0, 1);
+      topk_ids = parallel_args_.dp_local_process_group_
+                     ->allgather_base_sync(topk_ids.contiguous())
+                     .flatten(0, 1);
+      dp_moe_uniform_graph_gather = true;
+    } else {
+      SelectedMoeInputs gathered = gather_selected_moe_inputs(
+          ffn_input_2d,
+          topk_weights,
+          topk_ids,
+          input_params.parallel.dp_global_token_nums,
+          parallel_args_);
+      ffn_input = std::move(gathered.hidden_states);
+      topk_weights = std::move(gathered.topk_weights);
+      topk_ids = std::move(gathered.topk_ids);
+      dp_moe_eager_gathered = gathered.need_slice;
+    }
+  }
   ffn_input = moe_mlp_->forward_with_selected_experts(
       ffn_input, topk_weights, topk_ids, input_params);
 
+  if (dp_moe_uniform_graph_gather) {
+    ffn_input = ffn_input.narrow(
+        /*dim=*/0, /*start=*/dp_moe_rank * dp_moe_local_rows,
+        /*length=*/dp_moe_local_rows);
+  } else if (dp_moe_eager_gathered) {
+    ffn_input = slice_selected_moe_output(
+        ffn_input, input_params.parallel.dp_global_token_nums, parallel_args_);
+  }
   if (sequence_parallel_context_ != nullptr && !skip_sp_moe_gather) {
     const dsv4_musa_sp::DeepseekV4SPContext& sp = *sequence_parallel_context_;
     ffn_input = dsv4_musa_sp::local_shard(ffn_input, sp);

@@ -4416,11 +4416,12 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
     // Check if conditions are suitable for graph execution (replay or capture)
     const auto max_seq_len = args_.max_position_embeddings();
-    const bool seq_len_supported = params.meta.kv_max_seq_len <= max_seq_len;
+    const bool seq_len_supported =
+        run_params.meta.kv_max_seq_len <= max_seq_len;
     const bool is_compact_dsv4_target =
         args_.model_type() == "deepseek_v4" &&
         options_.enable_speculative_decode() && !options_.is_draft_engine() &&
-        params.meta.q_max_seq_len > 1;
+        run_params.meta.q_max_seq_len > 1;
     const bool is_compact_dsv4_draft =
         args_.model_type() == "deepseek_v4_mtp" && options_.is_draft_engine() &&
         !params.embedding.linear_state_ids.empty() &&
@@ -4446,10 +4447,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     } else if (is_compact_dsv4_dspark) {
       compact_decode_width = options_.draft_graph_query_width();
     }
-    int64_t graph_batch_size = params.meta.num_sequences;
-    if (params.meta.actual_num_sequences > 0) {
-      graph_batch_size = params.meta.actual_num_sequences;
-    } else if (!params.has_llmrec_params()) {
+    int64_t graph_batch_size = run_params.meta.num_sequences;
+    if (run_params.meta.actual_num_sequences > 0) {
+      graph_batch_size = run_params.meta.actual_num_sequences;
+    } else if (!run_params.has_llmrec_params()) {
       graph_batch_size = static_cast<int64_t>(n_tokens);
     }
     if (is_compact_dsv4_decode && compact_decode_width > 1 &&
@@ -4552,8 +4553,15 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           << "MusaGraphExecutorImpl::run() in decode replay mode";
       auto result = it->second->replay(
           run_tokens, run_positions, kv_caches, graph_params);
-      auto output = attach_aux_hidden_states_if_needed(
-          result.hidden_states, orig_n_tokens);
+      torch::Tensor out_hidden =
+          result.hidden_states.defined() &&
+                  orig_n_tokens <
+                      static_cast<uint32_t>(result.hidden_states.size(0))
+              ? result.hidden_states.narrow(
+                    /*dim=*/0, /*start=*/0, /*length=*/orig_n_tokens)
+              : result.hidden_states;
+      auto output =
+          attach_aux_hidden_states_if_needed(out_hidden, orig_n_tokens);
       return output;
     }
 
@@ -4631,8 +4639,15 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           maybe_precompute_embedding_for_graph(run_tokens, run_params);
       auto result = graphs_[graph_shape_key]->replay(
           run_tokens, run_positions, kv_caches, replay_params);
-      auto output = attach_aux_hidden_states_if_needed(
-          result.hidden_states, orig_n_tokens);
+      torch::Tensor out_hidden =
+          result.hidden_states.defined() &&
+                  orig_n_tokens <
+                      static_cast<uint32_t>(result.hidden_states.size(0))
+              ? result.hidden_states.narrow(
+                    /*dim=*/0, /*start=*/0, /*length=*/orig_n_tokens)
+              : result.hidden_states;
+      auto output =
+          attach_aux_hidden_states_if_needed(out_hidden, orig_n_tokens);
       return output;
     }
 

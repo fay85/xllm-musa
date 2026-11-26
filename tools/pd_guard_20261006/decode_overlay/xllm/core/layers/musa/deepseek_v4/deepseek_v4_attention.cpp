@@ -1380,6 +1380,25 @@ DeepseekV4AttentionImpl::build_query_ranges(const DSAMetadata& attn_metadata,
   // q-width segment per request.  Do not fall through to one range per token:
   // the cache/block tables still have one row per request, not one row per
   // draft/target token.  The old fallback produced seq_idx=16 for B16/q7.
+  // DSpark block draft in MUSA Graph lays out one contiguous query_width
+  // segment per sequence (q_width = dspark_block_size_, typically 6) across
+  // C1..C16. Emit exact per-sequence ranges so batched paged SAS runs in-graph.
+  if (attn_metadata.is_acl_graph && dspark_block_size_ > 0) {
+    const int64_t query_width =
+        attn_metadata.max_query_len > 1
+            ? static_cast<int64_t>(attn_metadata.max_query_len)
+            : dspark_block_size_;
+    if (query_width > 1 && total_tokens > 0 &&
+        total_tokens % query_width == 0) {
+      const int64_t sequence_count = total_tokens / query_width;
+      ranges.reserve(static_cast<size_t>(sequence_count));
+      for (int64_t sequence = 0; sequence < sequence_count; ++sequence) {
+        const int64_t start = sequence * query_width;
+        ranges.emplace_back(start, start + query_width);
+      }
+      return ranges;
+    }
+  }
   if (attn_metadata.is_acl_graph && attn_metadata.num_speculative_tokens > 0) {
     const int64_t query_width =
         static_cast<int64_t>(attn_metadata.num_speculative_tokens) + 1;
@@ -5885,22 +5904,27 @@ DeepseekV4AttentionImpl::forward_current_impl(
   torch::Tensor batched_sas_output;
   const auto sas_lengths_it =
       attn_metadata.cp_input_dict.find(kDsv4BatchedSasKvLengths);
-  if (dspark_block_size_ > 0 && query_ranges.size() > 1 &&
-      query_ranges.size() <= 16 && !(is_prefill && !is_chunked_prefill) &&
-      !attn_metadata.is_acl_graph && decode_spec_attention_output_.defined() &&
-      ori_kv.defined() && swa_block_table.defined() &&
-      sas_lengths_it != attn_metadata.cp_input_dict.end() && [] {
-        const char* batched =
-            dsv4_runtime_option<DeepseekV4Env::BATCH_PAGED_SAS>().c_str();
-        const char* scalar =
-            dsv4_runtime_option<DeepseekV4Env::FUSED_PAGED_SAS>().c_str();
-        return dsv4_runtime_option<DeepseekV4Env::BATCH_PAGED_SAS>().is_one() &&
-               dsv4_runtime_option<DeepseekV4Env::FUSED_PAGED_SAS>().is_one();
-      }()) {
+  const bool allow_graph_batched_sas =
+      attn_metadata.is_acl_graph && dspark_block_size_ > 0 &&
+      query_ranges.size() >= 1 && query_ranges.size() <= 16 &&
+      !(is_prefill && !is_chunked_prefill) && ori_kv.defined() &&
+      swa_block_table.defined() && attn_metadata.seq_lens.defined();
+  const bool allow_eager_batched_sas =
+      !attn_metadata.is_acl_graph && dspark_block_size_ > 0 &&
+      query_ranges.size() > 1 && query_ranges.size() <= 16 &&
+      !(is_prefill && !is_chunked_prefill) &&
+      decode_spec_attention_output_.defined() && ori_kv.defined() &&
+      swa_block_table.defined() &&
+      sas_lengths_it != attn_metadata.cp_input_dict.end() &&
+      dsv4_runtime_option<DeepseekV4Env::BATCH_PAGED_SAS>().is_one() &&
+      dsv4_runtime_option<DeepseekV4Env::FUSED_PAGED_SAS>().is_one();
+  if (allow_graph_batched_sas || allow_eager_batched_sas) {
     const int64_t sequences = static_cast<int64_t>(query_ranges.size());
     const int64_t query_width =
         query_ranges.front().second - query_ranges.front().first;
-    const torch::Tensor& live_lengths = sas_lengths_it->second;
+    const torch::Tensor& live_lengths =
+        allow_graph_batched_sas ? attn_metadata.seq_lens
+                                : sas_lengths_it->second;
     bool fixed_ranges = query_width >= 5 && query_width <= 7 &&
                         query_width <= decode_workspace_tokens_ &&
                         sequences * query_width == q.size(0) &&
@@ -5938,6 +5962,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
       LOG_FIRST_N(INFO, 3) << "[DSV4_BATCH_PAGED_SAS] layer=" << layer_id_
                            << " sequences=" << sequences
                            << " query_width=" << query_width
+                           << " is_graph=" << attn_metadata.is_acl_graph
                            << " draft_noncausal=1 device_lengths_reused=1";
       if (sequences == 16) {
         LOG_FIRST_N(INFO, 1)
@@ -5989,7 +6014,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
               ? kv.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end).squeeze(1)
               : kv.squeeze(1);
     } else if (!use_paged_decode_attention && !defer_swa_gather_for_mate &&
-               !use_fused_paged_sas) {
+               !use_fused_paged_sas && !batched_sas_output.defined()) {
       kv_seq = gather_cache(ori_kv,
                             swa_block_table,
                             static_cast<int64_t>(seq_idx),
@@ -6929,7 +6954,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
       CHECK_EQ(compress_ratio_, 1);
       const int64_t visible_rows = window_size_ + q_seq.size(0);
       if (batched_sas_output.defined()) {
-        CHECK(use_fused_paged_sas);
+        CHECK(use_fused_paged_sas || attn_metadata.is_acl_graph);
         seq_output = batched_sas_output.narrow(0, q_start, q_end - q_start);
       } else if (use_fused_paged_sas) {
         // Every diffusion-block row sees the SAME context+block, not a

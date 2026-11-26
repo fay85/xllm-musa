@@ -37,14 +37,14 @@ namespace layer {
 
 DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
     const ModelContext& context,
-    int32_t layer_id) {
+    int32_t layer_id)
+    : parallel_args_(context.get_parallel_args()) {
   const auto& args = context.get_model_args();
   auto quant_args = context.get_quant_args();
   // DeepSeek-V4 uses `scale` aliases consumed by the private FP8 linear path;
   // Qwen block-FP8 keeps using the shared `weight_scale_inv` path unchanged.
   quant_args.weight_block_size().clear();
   const auto& parallel_args = context.get_parallel_args();
-  parallel_args_ = parallel_args;
   const auto& options = context.get_tensor_options();
 
   int64_t hidden_size = args.hidden_size();
