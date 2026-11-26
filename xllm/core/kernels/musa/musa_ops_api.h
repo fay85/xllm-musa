@@ -640,6 +640,13 @@ bool deepseek_v4_partial_rope(const torch::Tensor& input,
                               bool inverse,
                               torch::Tensor& output);
 
+bool deepseek_v4_partial_rope_inplace(torch::Tensor& input,
+                                      const torch::Tensor& cos,
+                                      const torch::Tensor& sin,
+                                      int64_t rope_start_dim,
+                                      int64_t rope_head_dim,
+                                      bool inverse);
+
 bool deepseek_v4_fp8_quantize_dequantize(torch::Tensor& tensor,
                                          int64_t quant_dim,
                                          int64_t block_size);
