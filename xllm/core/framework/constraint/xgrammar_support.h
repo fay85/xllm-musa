@@ -89,10 +89,6 @@ struct XGrammarSupportInputs final {
   bool enable_pd_ooc = false;
   bool enable_service_routing = false;
   bool enable_prefix_cache = false;
-  // Speculative decoding is supported only for the algorithms migrated to the
-  // unified constraint channel (MTP / DFlash / DSpark / DFlash2); suffix-style
-  // proposers never read the channel, so they stay gated. schedule_overlap is
-  // supported (single-advance through the channel view) and needs no input.
   int32_t num_speculative_tokens = 0;
   std::string speculative_algorithm = "MTP";
 };

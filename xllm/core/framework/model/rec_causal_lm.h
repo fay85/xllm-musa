@@ -101,27 +101,11 @@ class RecCausalLMImpl : public RecCausalLM {
     }
   }
 
-  void set_npu_lm_head(layer::NpuLmHead& head) override {
-    if constexpr (detail::has_set_npu_lm_head<Model>::value) {
-      model_->set_npu_lm_head(head);
-    } else {
-      RecCausalLM::set_npu_lm_head(head);
-    }
-  }
-
   layer::NpuWordEmbedding get_npu_word_embedding() override {
     if constexpr (detail::has_get_npu_word_embedding<Model>::value) {
       return model_->get_npu_word_embedding();
     } else {
       return RecCausalLM::get_npu_word_embedding();
-    }
-  }
-
-  void set_npu_word_embedding(layer::NpuWordEmbedding& embedding) override {
-    if constexpr (detail::has_set_npu_word_embedding<Model>::value) {
-      model_->set_npu_word_embedding(embedding);
-    } else {
-      RecCausalLM::set_npu_word_embedding(embedding);
     }
   }
 
@@ -153,27 +137,11 @@ class RecCausalLMImpl : public RecCausalLM {
     }
   }
 
-  void set_lm_head(layer::LmHead& head) override {
-    if constexpr (detail::has_set_lm_head<Model>::value) {
-      model_->set_lm_head(head);
-    } else {
-      RecCausalLM::set_lm_head(head);
-    }
-  }
-
   layer::WordEmbedding get_word_embedding() override {
     if constexpr (detail::has_get_word_embedding<Model>::value) {
       return model_->get_word_embedding();
     } else {
       return RecCausalLM::get_word_embedding();
-    }
-  }
-
-  void set_word_embedding(layer::WordEmbedding& embedding) override {
-    if constexpr (detail::has_set_word_embedding<Model>::value) {
-      model_->set_word_embedding(embedding);
-    } else {
-      RecCausalLM::set_word_embedding(embedding);
     }
   }
 

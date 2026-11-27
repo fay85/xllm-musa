@@ -32,7 +32,7 @@ namespace {
 
 GraphPlannerConfig qwen_config() {
   GraphPlannerConfig config;
-  config.options.block_size(16).num_decoding_tokens(1);
+  config.options.block_size(/*value=*/16);
   config.capabilities.graph_cache_pad_slot = -1;
   config.max_tokens = 64;
   return config;
@@ -162,7 +162,9 @@ TEST(MluGraphPlannerTest, AcceptsBackendIndependentTopkGraphContract) {
 
 TEST(MluGraphPlannerTest, DFlash2AdmitsOnlyCompleteProposalBlocks) {
   GraphPlannerConfig config = topk_reuse_config();
-  config.options.speculative_algorithm("DFlash2").draft_graph_query_width(6);
+  config.options.speculative_algorithm(/*value=*/"DFlash2")
+      .num_speculative_tokens(
+          /*num_speculative_tokens=*/5);
   ModelInputParams params = grouped_input();
   params.meta.batch_forward_type = BatchForwardType::CHUNKED_PREFILL;
   params.meta.q_max_seq_len = 6;
@@ -376,7 +378,7 @@ TEST(MluGraphPlannerTest, FlatVerifyBucketsPreserveWholeRequests) {
     const MluGraphPlanner planner(config);
     for (const int64_t requests : {3, 8}) {
       ModelInputParams params = model_managed_input(requests * 6);
-      params.meta.spec_verify_width = 6;
+      params.meta.num_speculative_tokens = 5;
       const auto decision = planner.plan({requests * 6, params});
       ASSERT_TRUE(std::holds_alternative<GraphPlan>(decision));
       const auto& plan = std::get<GraphPlan>(decision);
@@ -394,11 +396,11 @@ TEST(MluGraphPlannerTest, FlatVerifyBucketsPreserveWholeRequests) {
   }
   const MluGraphPlanner planner(config);
   ModelInputParams partial = model_managed_input(6);
-  partial.meta.spec_verify_width = 6;
+  partial.meta.num_speculative_tokens = 5;
   partial.multi_block_tables[0] = partial.multi_block_tables[0].slice(0, 0, 5);
   expect_eager(planner, 6, partial, EagerReason::INVALID_LAYOUT);
   partial = model_managed_input(5);
-  partial.meta.spec_verify_width = 6;
+  partial.meta.num_speculative_tokens = 5;
   expect_eager(planner, 5, partial, EagerReason::INVALID_LAYOUT);
 }
 
@@ -529,7 +531,7 @@ TEST(MluGraphPlannerTest, Dflash2VerifyPreservesB16GroupsAt64kHistory) {
   GraphPlannerConfig config = qwen_config();
   config.options.enable_speculative_decode(true)
       .speculative_algorithm("DFlash2")
-      .num_decoding_tokens(4)
+      .num_speculative_tokens(/*num_speculative_tokens=*/3)
       .cp_size(4)
       .world_size(8);
   config.capabilities.supports_grouped_mtp_graph = true;

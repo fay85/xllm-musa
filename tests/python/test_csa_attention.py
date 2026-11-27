@@ -36,8 +36,6 @@ from xllm.python.attention.backend import LayerCache
 from xllm.python.attention.csa_attention import (
     CsaAttentionBackend,
     DsaAttentionBackend,
-    _build_dspark_swa_indices,
-    _deepseek_v4_ori_window_left,
     _get_layer_cache_tensor,
     _scatter_by_slot,
 )
@@ -74,81 +72,6 @@ def _bound_dummy_caches() -> list[LayerCache]:
         LayerCache(key=torch.zeros((4, 512, 1, 512), dtype=torch.bfloat16), value=None, swa=swa()),
         LayerCache(key=torch.zeros((1, 16, 1, 512), dtype=torch.bfloat16), value=None, swa=swa()),
     ]
-
-
-def test_dspark_native_sas_window_matches_cpp_contract() -> None:
-    assert _deepseek_v4_ori_window_left(128, 5, False) == 127
-    assert _deepseek_v4_ori_window_left(128, 0, True) == 127
-    assert _deepseek_v4_ori_window_left(128, 5, True) == 132
-
-
-def test_dspark_native_swa_indices_are_shared_by_query_rows() -> None:
-    indices = _build_dspark_swa_indices(
-        torch.tensor([[10, 11, 12]], dtype=torch.int32),
-        torch.tensor([0, 3], dtype=torch.int32),
-        torch.tensor([6], dtype=torch.int32),
-        window_size=4,
-        dspark_block_size=3,
-        cache_block_size=4,
-    )
-
-    assert indices.shape == (3, 1, 128)
-    expected = torch.full((128,), -1, dtype=torch.int32)
-    expected[:6] = torch.tensor([40, 41, 42, 43, 44, 45], dtype=torch.int32)
-    for row in range(3):
-        torch.testing.assert_close(indices[row, 0], expected, rtol=0, atol=0)
-
-
-def test_dspark_native_swa_indices_wrap_ring_buffer() -> None:
-    indices = _build_dspark_swa_indices(
-        torch.tensor([[20, 37, 22]], dtype=torch.int32),
-        torch.tensor([0, 1], dtype=torch.int32),
-        torch.tensor([10], dtype=torch.int32),
-        window_size=4,
-        dspark_block_size=3,
-        cache_block_size=2,
-    )
-
-    assert indices.shape == (1, 1, 128)
-    expected = torch.full((128,), -1, dtype=torch.int32)
-    expected[:5] = torch.tensor([45, 40, 41, 74, 75], dtype=torch.int32)
-    torch.testing.assert_close(indices[0, 0], expected, rtol=0, atol=0)
-
-
-def test_dspark_native_swa_indices_map_expanded_metadata_ring() -> None:
-    backend = CsaAttentionBackend(
-        compress_ratios=[1],
-        window_size=4,
-        n_layers=1,
-        num_heads=2,
-        attn_head_dim=4,
-        index_topk=0,
-        index_n_heads=2,
-        index_head_dim=4,
-        rope_head_dim=2,
-        device=torch.device("cpu"),
-        dtype=torch.float32,
-        dspark_block_size=3,
-        dspark_use_native_sas=True,
-    )
-    compressed_metadata = backend._builder.build(
-        multi_block_tables=[torch.tensor([[20, 37]], dtype=torch.int32)],
-        kv_seq_lens=[130],
-        q_seq_lens=[2],
-        positions=torch.tensor([128, 129], dtype=torch.int64),
-        dsa_cos_sin=None,
-        is_prefill=False,
-        is_chunked_prefill=False,
-    )
-
-    assert backend.page_size == 128
-    assert compressed_metadata.block_tables[0][0].tolist() == [[20, 37]]
-    backend._build_dspark_swa_metadata(compressed_metadata)
-
-    expected = torch.full((128,), -1, dtype=torch.int32)
-    expected[:6] = torch.tensor([2684, 2685, 2686, 2687, 4736, 4737], dtype=torch.int32)
-    for row in range(2):
-        torch.testing.assert_close(compressed_metadata.explicit_swa_indices[row, 0], expected, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize(
@@ -564,7 +487,8 @@ def test_decode_precomputed_metadata_matches_cpp_contract(monkeypatch: pytest.Mo
                 assert value.untyped_storage().data_ptr() in owned_storage
 
 
-def test_dspark_native_decode_metadata_uses_expanded_window(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dspark_routes_to_supported_native_attention(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Select the sparse kernel and consume the matching SWA metadata."""
     backend = CsaAttentionBackend(
         compress_ratios=[1],
         window_size=128,
@@ -576,166 +500,60 @@ def test_dspark_native_decode_metadata_uses_expanded_window(monkeypatch: pytest.
         index_head_dim=128,
         rope_head_dim=64,
         device=torch.device("cpu"),
-        dtype=torch.bfloat16,
-        dspark_block_size=5,
-        dspark_use_native_sas=True,
-    )
-    sparse_calls: list[dict] = []
-
-    monkeypatch.setattr(
-        kernels,
-        "sparse_attn_sharedkv_metadata",
-        lambda **kwargs: sparse_calls.append(kwargs) or torch.tensor([kwargs["cmp_ratio"]]),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        kernels,
-        "quant_lightning_indexer_metadata",
-        lambda **_kwargs: torch.tensor([4]),
-        raising=False,
-    )
-    compressed_metadata = backend._builder.build(
-        [torch.tensor([[1]], dtype=torch.int32)], [10], [5], torch.arange(5, 10, dtype=torch.int64), None, False, False
-    )
-    metadata = SimpleNamespace(
-        is_prefill=False,
-        is_chunked_prefill=False,
-        max_query_len=5,
-        max_seq_len=10,
-        q_seq_lens_host=torch.tensor([5], dtype=torch.int32),
-        kv_seq_lens_host=torch.tensor([10], dtype=torch.int32),
-    )
-
-    backend._build_precomputed_metadata(compressed_metadata, metadata)
-
-    assert all(call["cu_seqlens_ori_kv"].numel() == 0 for call in sparse_calls)
-    assert all(call["ori_win_left"] == 132 for call in sparse_calls)
-    assert compressed_metadata.sparse_metadata_ori_win_left == 132
-    assert compressed_metadata.explicit_swa_indices.shape == (5, 1, 256)
-    expected = torch.full((256,), -1, dtype=torch.int32)
-    expected[:10] = torch.arange(128, 138, dtype=torch.int32)
-    for row in range(5):
-        torch.testing.assert_close(compressed_metadata.explicit_swa_indices[row, 0], expected, rtol=0, atol=0)
-
-
-def test_dspark_native_attention_uses_explicit_swa_indices(monkeypatch: pytest.MonkeyPatch) -> None:
-    backend = CsaAttentionBackend(
-        compress_ratios=[1],
-        window_size=4,
-        n_layers=1,
-        num_heads=2,
-        attn_head_dim=4,
-        index_topk=0,
-        index_n_heads=2,
-        index_head_dim=4,
-        rope_head_dim=2,
-        device=torch.device("cpu"),
         dtype=torch.float32,
-        dspark_block_size=3,
-        dspark_use_native_sas=True,
+        num_speculative_tokens=5,
     )
-    swa = torch.zeros(3, 128, 1, 4)
+    swa = torch.zeros(2, 128, 1, 512)
     backend.bind_kv_caches([LayerCache(key=None, value=None, swa=swa)])
-    compressed_metadata = backend._builder.build(
-        multi_block_tables=[torch.tensor([[0, 1, 2]], dtype=torch.int32)],
-        kv_seq_lens=[6],
-        q_seq_lens=[3],
-        positions=torch.tensor([3, 4, 5], dtype=torch.int64),
+    dsa = backend._builder.build(
+        multi_block_tables=[torch.tensor([[1]], dtype=torch.int32)],
+        kv_seq_lens=[2],
+        q_seq_lens=[1],
+        positions=torch.tensor([1]),
         dsa_cos_sin=None,
         is_prefill=False,
         is_chunked_prefill=False,
     )
-    backend._build_dspark_swa_metadata(compressed_metadata)
-    compressed_metadata.c1_metadata = torch.zeros(1, dtype=torch.int32)
-    compressed_metadata.sparse_metadata_ori_win_left = 6
-    backend._metadata = SimpleNamespace(
-        dsa_metadata=compressed_metadata,
-        is_prefill=False,
-        is_chunked_prefill=False,
-    )
-    calls: list[dict] = []
+    indices = torch.tensor([[[0, 1]]], dtype=torch.int32)
+    lengths = torch.tensor([[2]], dtype=torch.int32)
+    tiling = torch.zeros(1024, dtype=torch.int32)
 
-    def fake_sparse_attn(**kwargs: Any) -> tuple[torch.Tensor, torch.Tensor]:
-        calls.append(kwargs)
-        return kwargs["q"].clone(), torch.empty(0)
+    def reject_sharedkv(**_kwargs: object) -> None:
+        pytest.fail("DSpark selected SharedKV with native sparse attention available")
 
-    monkeypatch.setattr(csa_attention_module, "_sparse_attn_sharedkv", fake_sparse_attn)
-    layer = SimpleNamespace(layer_id=0, attn_sink=None, attn_sink_loaded=False)
-    query = torch.zeros(3, 2, 4)
-    kv = torch.arange(12, dtype=torch.float32).view(3, 1, 4)
+    def run_native(
+        q: torch.Tensor,
+        _kv: torch.Tensor,
+        _table: torch.Tensor,
+        _cu: torch.Tensor,
+        _lens: torch.Tensor,
+        actual_indices: torch.Tensor,
+        actual_lengths: torch.Tensor,
+        _sinks: torch.Tensor | None,
+        actual_tiling: torch.Tensor,
+    ) -> torch.Tensor:
+        assert actual_indices is indices
+        assert actual_lengths is lengths
+        assert actual_tiling is tiling
+        return q + 1
 
-    backend.execute(query, kv, kv, layer)
-
-    assert len(calls) == 1
-    assert calls[0]["ori_sparse_indices"] is compressed_metadata.explicit_swa_indices
-    assert calls[0]["ori_sparse_indices"].shape == (3, 1, 128)
-    assert calls[0]["ori_win_left"] == 6
-    assert calls[0]["cu_seqlens_ori_kv"] is None
-    torch.testing.assert_close(swa.view(-1, 4)[3:6], kv.view(3, 4), rtol=0, atol=0)
-
-
-@pytest.mark.parametrize("compress_ratio", [4, 128])
-def test_dspark_native_mixed_ratio_decode_uses_expanded_window(
-    monkeypatch: pytest.MonkeyPatch, compress_ratio: int
-) -> None:
-    backend = CsaAttentionBackend(
-        compress_ratios=[compress_ratio],
-        window_size=4,
-        n_layers=1,
-        num_heads=2,
-        attn_head_dim=4,
-        index_topk=2,
-        index_n_heads=2,
-        index_head_dim=4,
-        rope_head_dim=2,
-        device=torch.device("cpu"),
-        dtype=torch.float32,
-        dspark_block_size=3,
-        dspark_use_native_sas=True,
-    )
-    cmp_cache = torch.zeros((1, 512 if compress_ratio == 4 else 16, 1, 4))
-    backend.bind_kv_caches([LayerCache(key=cmp_cache, value=None, swa=torch.zeros(2, 128, 1, 4))])
-    metadata_tables = [torch.tensor([[0, 1]], dtype=torch.int32), torch.tensor([[0]], dtype=torch.int32)]
-    compressed_metadata = backend._builder.build(
-        metadata_tables, [128], [3], torch.arange(125, 128, dtype=torch.int64), None, False, False
-    )
-    backend.attach_compressor(lambda *_args: torch.full((1, 1, 4), 5.0))
-    backend.attach_indexer(
-        lambda *_args: torch.tensor([0, 1], dtype=torch.int32).view(1, 1, 2).expand(3, -1, -1).contiguous()
-    )
-    metadata = SimpleNamespace(
-        dsa_metadata=compressed_metadata,
-        is_prefill=False,
-        is_chunked_prefill=False,
-        max_query_len=3,
-        max_seq_len=128,
-        q_seq_lens_host=torch.tensor([3], dtype=torch.int32),
-        kv_seq_lens_host=torch.tensor([128], dtype=torch.int32),
-    )
-    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(kernels, "supports_sparse_flash_mla_swa", lambda: True, raising=False)
     monkeypatch.setattr(
-        kernels, "sparse_attn_sharedkv_metadata", lambda **kwargs: torch.tensor([kwargs["cmp_ratio"]]), raising=False
+        kernels, "sparse_flash_mla_swa_metadata", lambda *_args, **_kwargs: (indices, lengths, tiling), raising=False
     )
-    monkeypatch.setattr(kernels, "quant_lightning_indexer_metadata", lambda **_kwargs: torch.tensor([4]), raising=False)
-    monkeypatch.setattr(
-        csa_attention_module,
-        "_sparse_attn_sharedkv",
-        lambda **kwargs: (calls.append(kwargs) or kwargs["q"].clone(), torch.empty(0)),
-    )
-    backend._build_precomputed_metadata(compressed_metadata, metadata)
+    monkeypatch.setattr(kernels, "sparse_flash_mla_swa", run_native, raising=False)
+    monkeypatch.setattr(kernels, "sparse_attn_sharedkv_metadata", reject_sharedkv, raising=False)
+    monkeypatch.setattr(kernels, "sparse_attn_sharedkv", reject_sharedkv, raising=False)
+    metadata = SimpleNamespace(dsa_metadata=dsa, is_prefill=False, is_chunked_prefill=False)
+    with monkeypatch.context() as build_context:
+        build_context.setattr(backend, "device", SimpleNamespace(type="npu"))
+        backend._build_precomputed_metadata(dsa, metadata)
+
+    dsa.cos_table = dsa.sin_table = dsa.c4_cos = dsa.c128_cos = torch.empty(0)
     backend._metadata = metadata
-    backend.execute(
-        torch.zeros(3, 2, 4),
-        torch.ones(3, 1, 4),
-        torch.ones(3, 1, 4),
-        SimpleNamespace(layer_id=0, attn_sink=None, attn_sink_loaded=False),
-    )
-    assert len(calls) == 1
-    assert compressed_metadata.sparse_metadata_ori_win_left == 6
-    assert calls[0]["ori_win_left"] == 6
-    assert calls[0]["ori_sparse_indices"] is None
-    row = 31 if compress_ratio == 4 else 0
-    torch.testing.assert_close(cmp_cache.view(-1, 4)[row], torch.full((4,), 5.0), rtol=0, atol=0)
+    q, kv = torch.zeros(1, 8, 512), torch.ones(1, 1, 512)
+    layer: Any = SimpleNamespace(layer_id=0, attn_sink_loaded=False)
+    torch.testing.assert_close(backend.execute(q, kv, kv, layer), torch.ones_like(q))
 
 
 def test_csa_execute_requires_model_compressor(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -820,7 +638,7 @@ def test_forward_rope_state_is_owned_by_each_metadata(monkeypatch: pytest.Monkey
         metadata=decode,
     )
 
-    backend.prepare_csa_metadata_for_forward(prefill)
+    backend.prepare_dsa_metadata_for_forward(prefill)
 
     assert prefill.dsa_metadata.input_positions.numel() == 84
     assert decode.dsa_positions.numel() == 1
@@ -898,74 +716,6 @@ def test_cp_localization_keeps_runtime_metadata_read_only(monkeypatch: pytest.Mo
     torch.testing.assert_close(dsa.input_rope_by_ratio[1][0], metadata.dsa_cos_sin[:2, :64], rtol=0, atol=0)
 
 
-def test_cp_prefill_localization_clears_dspark_native_swa_indices(monkeypatch: pytest.MonkeyPatch) -> None:
-    backend = CsaAttentionBackend(
-        compress_ratios=[1],
-        window_size=4,
-        n_layers=1,
-        num_heads=2,
-        attn_head_dim=4,
-        index_topk=0,
-        index_n_heads=2,
-        index_head_dim=4,
-        rope_head_dim=2,
-        device=torch.device("cpu"),
-        dtype=torch.float32,
-        dspark_block_size=3,
-        dspark_use_native_sas=True,
-    )
-    dsa = backend._builder.build(
-        multi_block_tables=[torch.tensor([[0]], dtype=torch.int32)],
-        kv_seq_lens=[4],
-        q_seq_lens=[4],
-        positions=torch.arange(4, dtype=torch.int64),
-        dsa_cos_sin=None,
-        is_prefill=True,
-        is_chunked_prefill=False,
-    )
-    backend._build_dspark_swa_metadata(dsa)
-    assert dsa.explicit_swa_indices.shape[0] == 4
-
-    monkeypatch.setattr(
-        kernels,
-        "sparse_attn_sharedkv_metadata",
-        lambda **kwargs: torch.tensor([kwargs["cmp_ratio"]]),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        kernels,
-        "quant_lightning_indexer_metadata",
-        lambda **_kwargs: torch.tensor([4]),
-        raising=False,
-    )
-    metadata = SimpleNamespace(
-        dsa_metadata=dsa,
-        dp_execution_token_counts=(4,),
-        is_prefill=True,
-        is_chunked_prefill=False,
-        q_seq_lens_host=torch.tensor([4], dtype=torch.int32),
-        kv_seq_lens_host=torch.tensor([4], dtype=torch.int32),
-        max_query_len=4,
-        max_seq_len=4,
-        dsa_cos_sin=torch.arange(16, dtype=torch.float32).view(4, 4),
-        dsa_c4_cos_sin=torch.arange(16, dtype=torch.float32).view(4, 4),
-        dsa_c128_cos_sin=torch.arange(16, dtype=torch.float32).view(4, 4),
-    )
-    cp_context = build_deepseek_v4_cp_context(
-        2,
-        0,
-        [4],
-        [4],
-        torch.arange(4, dtype=torch.int64),
-    )
-
-    backend.localize_dsa_metadata_for_cp(cp_context, metadata)
-
-    assert dsa.actual_seq_lengths_query.tolist() == [0, 2]
-    assert dsa.actual_seq_lengths_kv.tolist() == [2]
-    assert dsa.explicit_swa_indices is None
-
-
 def test_graph_dsa_refresh_preserves_tensor_addresses() -> None:
     def make_metadata(value: int, seq_rows: int) -> SimpleNamespace:
         return SimpleNamespace(
@@ -978,7 +728,7 @@ def test_graph_dsa_refresh_preserves_tensor_addresses() -> None:
                     torch.full((2, 2), value, dtype=torch.float32),
                 )
             },
-            explicit_swa_indices=torch.full((seq_rows, 1, 128), value, dtype=torch.int32),
+            ori_sparse_indices=torch.full((seq_rows, 1, 128), value, dtype=torch.int32),
             sparse_metadata_ori_win_left=value,
             max_query_len=value,
             max_seq_len=value,
@@ -991,7 +741,7 @@ def test_graph_dsa_refresh_preserves_tensor_addresses() -> None:
     seq_lens_ptr = persistent.seq_lens.data_ptr()
     block_table_ptr = persistent.block_tables[0][0].data_ptr()
     slot_ptr = persistent.slot_mappings[0][0].data_ptr()
-    swa_indices_ptr = persistent.explicit_swa_indices.data_ptr()
+    swa_indices_ptr = persistent.ori_sparse_indices.data_ptr()
     rope_ptr = persistent.input_rope_by_ratio[1][0].data_ptr()
 
     CsaAttentionBackend._copy_graph_dsa_metadata(persistent, refreshed)
@@ -1002,10 +752,10 @@ def test_graph_dsa_refresh_preserves_tensor_addresses() -> None:
     assert persistent.block_tables[0][0].tolist() == [[7, 7], [7, 7], [-1, -1], [-1, -1]]
     assert persistent.slot_mappings[0][0].tolist() == [7, 7, -1, -1]
     assert persistent.slot_mappings[0][0].data_ptr() == slot_ptr
-    assert persistent.explicit_swa_indices.data_ptr() == swa_indices_ptr
+    assert persistent.ori_sparse_indices.data_ptr() == swa_indices_ptr
     expected_swa = torch.full((4, 1, 128), -1, dtype=torch.int32)
     expected_swa[:2] = 7
-    torch.testing.assert_close(persistent.explicit_swa_indices, expected_swa, rtol=0, atol=0)
+    torch.testing.assert_close(persistent.ori_sparse_indices, expected_swa, rtol=0, atol=0)
     assert persistent.input_rope_by_ratio[1][0].data_ptr() == rope_ptr
     assert persistent.input_rope_by_ratio[1][0].tolist() == [[7.0, 7.0], [7.0, 7.0]]
     assert persistent.max_query_len == 7
@@ -1051,8 +801,7 @@ def test_prefill_and_dummy_decode_metadata_stay_in_sync_with_execute(
         rope_head_dim=64,
         device=torch.device("cpu"),
         dtype=torch.bfloat16,
-        dspark_block_size=5,
-        dspark_use_native_sas=True,
+        num_speculative_tokens=5,
     )
     swa = torch.zeros(2, 128, 1, 512, dtype=torch.bfloat16)
     backend.bind_kv_caches([LayerCache(key=None, value=None, swa=swa)])
@@ -1098,33 +847,34 @@ def test_prefill_and_dummy_decode_metadata_stay_in_sync_with_execute(
         backend.prepare_dsa_metadata_for_forward(metadata)
         return metadata.dsa_metadata
 
+    window_left = 127
     prefill_metadata = prepare_step(kv_len=2, q_len=2, is_prefill=True)
-    assert prefill_metadata.explicit_swa_indices is None
-    assert prefill_metadata.sparse_metadata_ori_win_left == 127
+    assert prefill_metadata.ori_sparse_indices is None
+    assert prefill_metadata.sparse_metadata_ori_win_left == window_left
     prefill_kv = torch.arange(2 * 512, dtype=torch.bfloat16).view(2, 1, 512)
     backend.execute(torch.zeros(2, 8, 512, dtype=torch.bfloat16), prefill_kv, prefill_kv, layer)
     assert torch.equal(swa[1, :2], prefill_kv)
     assert calls[-1]["ori_sparse_indices"] is None
-    assert calls[-1]["ori_win_left"] == 127
+    assert calls[-1]["ori_win_left"] == window_left
 
     decode_metadata = prepare_step(kv_len=3, q_len=1, is_prefill=False)
-    assert decode_metadata.explicit_swa_indices is not None
-    assert decode_metadata.sparse_metadata_ori_win_left == 132
+    assert decode_metadata.ori_sparse_indices is None
+    assert decode_metadata.sparse_metadata_ori_win_left == window_left
     decode_kv = torch.full((1, 1, 512), 7.0, dtype=torch.bfloat16)
     backend.execute(torch.zeros(1, 8, 512, dtype=torch.bfloat16), decode_kv, decode_kv, layer)
     assert torch.equal(swa[1, 2], decode_kv[0])
     assert calls[-1]["cu_seqlens_ori_kv"] is None
-    assert calls[-1]["ori_sparse_indices"] is not None
-    assert calls[-1]["ori_win_left"] == 132
+    assert calls[-1]["ori_sparse_indices"] is None
+    assert calls[-1]["ori_win_left"] == window_left
     assert calls[-1]["sinks"] is None
 
     dummy_metadata = prepare_step(kv_len=3, q_len=1, is_prefill=True, is_dummy=True)
-    assert dummy_metadata.explicit_swa_indices is not None
-    assert dummy_metadata.sparse_metadata_ori_win_left == 132
+    assert dummy_metadata.ori_sparse_indices is None
+    assert dummy_metadata.sparse_metadata_ori_win_left == window_left
     backend.execute(torch.zeros(1, 8, 512, dtype=torch.bfloat16), decode_kv, decode_kv, layer)
     assert calls[-1]["cu_seqlens_ori_kv"] is None
-    assert calls[-1]["ori_sparse_indices"] is not None
-    assert calls[-1]["ori_win_left"] == 132
+    assert calls[-1]["ori_sparse_indices"] is None
+    assert calls[-1]["ori_win_left"] == window_left
 
     chunked_dummy_metadata = prepare_step(
         kv_len=3,
@@ -1133,12 +883,12 @@ def test_prefill_and_dummy_decode_metadata_stay_in_sync_with_execute(
         is_chunked_prefill=True,
         is_dummy=True,
     )
-    assert chunked_dummy_metadata.explicit_swa_indices is None
-    assert chunked_dummy_metadata.sparse_metadata_ori_win_left == 127
+    assert chunked_dummy_metadata.ori_sparse_indices is None
+    assert chunked_dummy_metadata.sparse_metadata_ori_win_left == window_left
     backend.execute(torch.zeros(1, 8, 512, dtype=torch.bfloat16), decode_kv, decode_kv, layer)
     assert calls[-1]["cu_seqlens_ori_kv"] is not None
     assert calls[-1]["ori_sparse_indices"] is None
-    assert calls[-1]["ori_win_left"] == 127
+    assert calls[-1]["ori_win_left"] == window_left
 
     layer.attn_sink_loaded = True
     prepare_step(kv_len=3, q_len=1, is_prefill=False)
@@ -1242,7 +992,7 @@ def _make_metadata(persistent_seed: int, refreshed_seed: int) -> tuple[SimpleNam
     ]
 
     meta = SimpleNamespace(
-        explicit_swa_indices=torch.full((_PERSISTENT_ROWS, 1, 128), persistent_seed, dtype=torch.int32),
+        ori_sparse_indices=torch.full((_PERSISTENT_ROWS, 1, 128), persistent_seed, dtype=torch.int32),
         # New list objects per layer, but the *same* tensor object per group --
         # exactly the alias relation produced by ``dsa_metadata.py``:553-564.
         block_tables=[[p_block[group] for group in range(_GROUPS)] for _ in range(_N_LAYERS)],
@@ -1263,7 +1013,7 @@ def _make_metadata(persistent_seed: int, refreshed_seed: int) -> tuple[SimpleNam
     # Attach the refreshed side under distinct names for readability; the copy
     # helpers only read the fields listed above, so we stage a second namespace.
     refreshed = SimpleNamespace(
-        explicit_swa_indices=torch.full((_REFRESHED_ROWS, 1, 128), refreshed_seed, dtype=torch.int32),
+        ori_sparse_indices=torch.full((_REFRESHED_ROWS, 1, 128), refreshed_seed, dtype=torch.int32),
         block_tables=[[r_block[group] for group in range(_GROUPS)] for _ in range(_N_LAYERS)],
         slot_mappings=[[r_slots[group] for group in range(_GROUPS)] for _ in range(_N_LAYERS)],
         input_rope_by_ratio={
@@ -1447,7 +1197,7 @@ def _run_swa(
 
 def test_alias_dedup_preserves_values_and_owned_storage() -> None:
     persistent, refreshed = _make_metadata(persistent_seed=1, refreshed_seed=7)
-    fields_before = {name: getattr(persistent, name).data_ptr() for name in _TENSOR_FIELDS + ("explicit_swa_indices",)}
+    fields_before = {name: getattr(persistent, name).data_ptr() for name in _TENSOR_FIELDS + ("ori_sparse_indices",)}
     block_before = [[tensor.data_ptr() for tensor in layer] for layer in persistent.block_tables]
     slot_before = [[tensor.data_ptr() for tensor in layer] for layer in persistent.slot_mappings]
     rope_before = persistent.input_rope_by_ratio[1][0].data_ptr()
@@ -1463,8 +1213,8 @@ def test_alias_dedup_preserves_values_and_owned_storage() -> None:
         torch.testing.assert_close(tensor, expected, rtol=0, atol=0)
     expected_indices = torch.full((_PERSISTENT_ROWS, 1, 128), -1, dtype=torch.int32)
     expected_indices[:_REFRESHED_ROWS] = 7
-    assert persistent.explicit_swa_indices.data_ptr() == fields_before["explicit_swa_indices"]
-    torch.testing.assert_close(persistent.explicit_swa_indices, expected_indices, rtol=0, atol=0)
+    assert persistent.ori_sparse_indices.data_ptr() == fields_before["ori_sparse_indices"]
+    torch.testing.assert_close(persistent.ori_sparse_indices, expected_indices, rtol=0, atol=0)
     for layer_id in range(_N_LAYERS):
         for group in range(_GROUPS):
             table = persistent.block_tables[layer_id][group]
@@ -2105,7 +1855,7 @@ def test_fused_rotary_dispatch_preserves_inplace_inputs(
 
 
 def test_inverse_guard_matrix(monkeypatch: Any) -> None:
-    monkeypatch.setattr(csa2, "_get_partial_rotary_op", lambda: (lambda *a, **k: None))
+    monkeypatch.setattr(csa2, "_get_partial_rotary_op", lambda: lambda *_a, **_k: None)
     monkeypatch.setattr(csa2, "_rope_fused_device_supported", lambda x: True)
 
     cache = _build_cache(64, 64)

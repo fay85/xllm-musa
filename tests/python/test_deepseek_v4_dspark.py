@@ -68,10 +68,9 @@ _DSPARK_CONFIG = {
     "first_k_dense_replace": 0,
     "tie_word_embeddings": False,
     "dspark_target_layer_ids": [40, 41, 42],
-    "dspark_block_size": 5,
     "dspark_noise_token_id": 15,
     "dspark_markov_rank": 2,
-    "draft_query_width": 3,
+    "num_speculative_tokens": 3,
     "tp_size": 1,
     "tp_rank": 0,
     "moe_tp_size": 1,
@@ -132,7 +131,6 @@ def test_dspark_config_builds_only_draft_layers() -> None:
     assert model.cfg.n_layers == 3
     assert model.cfg.n_hash_layers == 0
     assert model.cfg.compress_ratios == [1, 1, 1]
-    assert model.cfg.dspark_use_native_sas is False
     assert len(model.model.backbone.layers) == 3
     assert model.model.backbone.main_proj.in_features == 24
     assert model.model.backbone.main_proj.out_features == 8
@@ -143,20 +141,11 @@ def test_pipeline_uses_runtime_query_width(query_width: int) -> None:
     model = DeepseekV4DSparkForCausalLM(
         {
             **_DSPARK_CONFIG,
-            "draft_query_width": query_width,
-            "num_speculative_tokens": 16,
+            "num_speculative_tokens": query_width,
         }
     )
 
     assert model.model._query_width == query_width
-
-
-def test_pipeline_requires_runtime_query_width() -> None:
-    config = {**_DSPARK_CONFIG, "num_speculative_tokens": 16}
-    del config["draft_query_width"]
-
-    with pytest.raises(KeyError, match="draft_query_width"):
-        DeepseekV4DSparkForCausalLM(config)
 
 
 def test_dspark_requires_draft_layers_and_markov_rank() -> None:

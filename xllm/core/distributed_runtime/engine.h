@@ -19,7 +19,6 @@ limitations under the License.
 
 #include <unordered_map>
 
-#include "core/framework/speculative/speculative_profile_registry.h"
 #include "framework/batch/batch.h"
 #include "framework/block/block_manager_pool.h"
 #include "framework/config/kv_cache_config.h"
@@ -62,11 +61,6 @@ class Engine {
 
   // return the model args
   virtual const ModelArgs& model_args() const { return args_; }
-
-  virtual bool set_speculative_validate_time_predictor(
-      const SpeculativeProfileRegistry::ValidateTimePredictor&) {
-    return false;
-  }
 
   virtual runtime::DecodeGraphWarmupConfig decode_graph_warmup_config() const {
     return {};

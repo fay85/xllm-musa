@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <absl/functional/function_ref.h>
 #include <folly/futures/Future.h>
 #include <sys/mman.h>
 #include <torch/torch.h>
@@ -81,6 +82,12 @@ class WorkerImpl {
   virtual bool init_model(const std::string& model_weights_path,
                           int32_t random_seed,
                           MasterStatus master_status);
+
+  bool init_model_from_path(
+      const std::string& model_weights_path,
+      int32_t random_seed,
+      MasterStatus master_status,
+      absl::FunctionRef<void(ModelArgs&, ModelLoader&)> configure_model);
 
   virtual void load_model(std::unique_ptr<ModelLoader> loader);
 
@@ -286,10 +293,6 @@ class WorkerImpl {
     return model_->get_npu_lm_head();
   }
 
-  virtual void set_npu_lm_head(layer::NpuLmHead& head) {
-    model_->set_npu_lm_head(head);
-  }
-
   virtual layer::NpuWordEmbedding get_npu_word_embedding() {
     return model_->get_npu_word_embedding();
   }
@@ -298,14 +301,6 @@ class WorkerImpl {
     return model_->has_restored_npu_word_embedding();
   }
 
-  virtual void set_npu_word_embedding(layer::NpuWordEmbedding& embedding) {
-    model_->set_npu_word_embedding(embedding);
-  }
-
-  virtual void set_restored_npu_word_embedding(
-      layer::NpuWordEmbedding& embedding) {
-    model_->set_restored_npu_word_embedding(embedding);
-  }
 #endif
 
   // Optional prompt proposals for speculative drafting, collected from the
@@ -316,23 +311,11 @@ class WorkerImpl {
 
   virtual layer::LmHead get_lm_head() { return model_->get_lm_head(); }
 
-  virtual void set_lm_head(layer::LmHead& head) { model_->set_lm_head(head); }
-
   virtual layer::WordEmbedding get_word_embedding() {
     return model_->get_word_embedding();
   }
 
-  virtual void set_word_embedding(layer::WordEmbedding& embedding) {
-    model_->set_word_embedding(embedding);
-  }
-
-  bool share_weights_from(WorkerImpl& source) {
-    return model_->share_weights_from(*source.model_);
-  }
-
-  std::optional<bool> loaded_vocab_weights() {
-    return model_->loaded_vocab_weights();
-  }
+  CausalLM* get_causal_lm() const;
 
   bool enable_schedule_overlap() const {
     return options_.enable_schedule_overlap_;
@@ -515,8 +498,6 @@ class WorkerImpl {
   mutable std::mutex json_object_grammar_mutex_;
 
   std::unique_ptr<Executor> model_executor_;
-
-  std::unique_ptr<Sampler> sampler_;
 
   std::unique_ptr<EplbExecutor> eplb_executor_;
 

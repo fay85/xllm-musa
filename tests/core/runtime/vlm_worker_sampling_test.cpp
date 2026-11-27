@@ -117,8 +117,8 @@ ForwardInput make_input(const torch::Device& device) {
       input.sampling_params.selected_token_idxes;
   input.sampling_params.do_sample =
       torch::ones({kBatchSize}, ints.dtype(torch::kBool));
-  input.sampling_params.all_random_sample = true;
-  input.sampling_params.all_greedy_sample = false;
+  input.sampling_params.sampling_mode = SamplingMode::RANDOM;
+
   return input;
 }
 
@@ -180,8 +180,7 @@ int32_t run_sampling_rank(int32_t rank, const std::array<int32_t, 5>& ports) {
   perturb_rng(device, rank);
   torch::Tensor logits = torch::zeros({kBatchSize, kVocabSize},
                                       torch::TensorOptions().device(device));
-  const SampleOutput local_sample =
-      Sampler().forward(logits, input.sampling_params);
+  const SampleOutput local_sample = sample(logits, input.sampling_params);
   std::vector<torch::Tensor> local_samples;
   local_samples.reserve(kWorldSize);
   for (int32_t peer = 0; peer < kWorldSize; ++peer) {
@@ -258,8 +257,8 @@ TEST(VlmWorkerSamplingTest, GreedyOverlapAndNonOverlapNeedNoSamplingGroups) {
                 .enable_schedule_overlap(overlap);
             SamplingVlmWorker worker(parallel, device, options);
             ForwardInput input = make_input(device);
-            input.sampling_params.all_greedy_sample = overlap;
-            input.sampling_params.all_random_sample = !overlap;
+            input.sampling_params.sampling_mode =
+                overlap ? SamplingMode::GREEDY : SamplingMode::RANDOM;
             input.sampling_params.do_sample.fill_(!overlap);
             const auto output = worker.step(input);
             CHECK(output.has_value());

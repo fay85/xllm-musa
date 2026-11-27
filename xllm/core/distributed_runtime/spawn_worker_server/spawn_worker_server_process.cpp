@@ -40,7 +40,6 @@ limitations under the License.
 // @global_rank
 // @world_size
 // @device_idx
-// @num_decoding_tokens
 // @block_size
 // @max_tokens_per_batch
 // @max_seqs_per_batch
@@ -71,7 +70,7 @@ limitations under the License.
 // @indexer_cache_dtype
 // @enable_mtp_draft_body_tp1
 // @text_encoder_tp_size
-// @draft_sampling_mode
+// @enable_probabilistic_draft
 // @kv_split_size
 // @comm_buffer_offset
 // @model_impl
@@ -112,39 +111,38 @@ int main(int argc, char* argv[]) {
   // here, on the main thread.
   xllm::npu::initialize_python_runtime(device_idx);
 #endif
-  int32_t num_decoding_tokens = static_cast<int32_t>(atoi(argv[6]));
-  int32_t block_size = static_cast<int32_t>(atoi(argv[7]));
-  int32_t max_tokens_per_batch = static_cast<int32_t>(atoi(argv[8]));
-  int32_t max_seqs_per_batch = static_cast<int32_t>(atoi(argv[9]));
-  int32_t enable_shm = static_cast<int32_t>(atoi(argv[10]));
-  int32_t is_local = static_cast<int32_t>(atoi(argv[11]));
-  std::string task_type = std::string(argv[12]);
-  std::string worker_type = std::string(argv[13]);
-  int32_t enable_speculative_decode = static_cast<int32_t>(atoi(argv[14]));
-  int32_t num_speculative_tokens = static_cast<int32_t>(atoi(argv[15]));
-  std::string speculative_algorithm = std::string(argv[16]);
-  uint64_t input_shm_size = static_cast<uint64_t>(atoll(argv[17]));
-  uint64_t output_shm_size = static_cast<uint64_t>(atoll(argv[18]));
-  std::string communication_backend = std::string(argv[19]);
-  std::string npu_kernel_backend = std::string(argv[20]);
-  std::string rank_tablefile = std::string(argv[21]);
-  bool enable_graph = static_cast<int32_t>(atoi(argv[22])) > 0;
+  int32_t block_size = static_cast<int32_t>(atoi(argv[6]));
+  int32_t max_tokens_per_batch = static_cast<int32_t>(atoi(argv[7]));
+  int32_t max_seqs_per_batch = static_cast<int32_t>(atoi(argv[8]));
+  int32_t enable_shm = static_cast<int32_t>(atoi(argv[9]));
+  int32_t is_local = static_cast<int32_t>(atoi(argv[10]));
+  std::string task_type = std::string(argv[11]);
+  std::string worker_type = std::string(argv[12]);
+  int32_t enable_speculative_decode = static_cast<int32_t>(atoi(argv[13]));
+  int32_t num_speculative_tokens = static_cast<int32_t>(atoi(argv[14]));
+  std::string speculative_algorithm = std::string(argv[15]);
+  uint64_t input_shm_size = static_cast<uint64_t>(atoll(argv[16]));
+  uint64_t output_shm_size = static_cast<uint64_t>(atoll(argv[17]));
+  std::string communication_backend = std::string(argv[18]);
+  std::string npu_kernel_backend = std::string(argv[19]);
+  std::string rank_tablefile = std::string(argv[20]);
+  bool enable_graph = static_cast<int32_t>(atoi(argv[21])) > 0;
   bool enable_graph_mode_decode_no_padding =
-      static_cast<int32_t>(atoi(argv[23])) > 0;
+      static_cast<int32_t>(atoi(argv[22])) > 0;
   bool enable_prefill_piecewise_graph =
-      static_cast<int32_t>(atoi(argv[24])) > 0;
-  int32_t max_tokens_for_graph_mode = static_cast<int32_t>(atoi(argv[25]));
-  int64_t max_encoder_cache_size = static_cast<int64_t>(atoll(argv[26]));
-  int32_t dp_size = static_cast<int32_t>(atoi(argv[27]));
-  int32_t tp_size = static_cast<int32_t>(atoi(argv[28]));
-  int32_t sp_size = static_cast<int32_t>(atoi(argv[29]));
-  int32_t cfg_size = static_cast<int32_t>(atoi(argv[30]));
-  int32_t cp_size = static_cast<int32_t>(atoi(argv[31]));
-  int32_t ep_size = static_cast<int32_t>(atoi(argv[32]));
-  std::string instance_role_str = std::string(argv[33]);
+      static_cast<int32_t>(atoi(argv[23])) > 0;
+  int32_t max_tokens_for_graph_mode = static_cast<int32_t>(atoi(argv[24]));
+  int64_t max_encoder_cache_size = static_cast<int64_t>(atoll(argv[25]));
+  int32_t dp_size = static_cast<int32_t>(atoi(argv[26]));
+  int32_t tp_size = static_cast<int32_t>(atoi(argv[27]));
+  int32_t sp_size = static_cast<int32_t>(atoi(argv[28]));
+  int32_t cfg_size = static_cast<int32_t>(atoi(argv[29]));
+  int32_t cp_size = static_cast<int32_t>(atoi(argv[30]));
+  int32_t ep_size = static_cast<int32_t>(atoi(argv[31]));
+  std::string instance_role_str = std::string(argv[32]);
   const std::string& indexer_cache_dtype = parsed_indexer_cache_dtype.value();
-  const std::string draft_sampling_mode =
-      xllm::spawn_worker_protocol::parse_draft_sampling_mode(argc, argv);
+  const bool enable_probabilistic_draft =
+      xllm::spawn_worker_protocol::parse_enable_probabilistic_draft(argc, argv);
   const bool enable_mtp_draft_body_tp1 =
       argc > xllm::spawn_worker_protocol::kEnableMtpDraftBodyTp1ArgumentIndex &&
       static_cast<int32_t>(
@@ -198,9 +196,7 @@ int main(int argc, char* argv[]) {
       << "Spawn worker: "
       << "master_node_addr = " << master_node_addr
       << ", local_rank = " << local_rank << ", world_size = " << world_size
-      << ", device_idx = " << device_idx
-      << ", num_decoding_tokens = " << num_decoding_tokens
-      << ", block_size = " << block_size
+      << ", device_idx = " << device_idx << ", block_size = " << block_size
       << ", max_tokens_per_batch = " << max_tokens_per_batch
       << ", max_seqs_per_batch = " << max_seqs_per_batch
       << ", enable_shm = " << (enable_shm > 0)
@@ -228,7 +224,7 @@ int main(int argc, char* argv[]) {
       << ", text_encoder_tp_size = " << text_encoder_tp_size
       << ", indexer_cache_dtype = " << indexer_cache_dtype
       << ", enable_mtp_draft_body_tp1 = " << enable_mtp_draft_body_tp1
-      << ", draft_sampling_mode = " << draft_sampling_mode
+      << ", enable_probabilistic_draft = " << enable_probabilistic_draft
       << ", kv_split_size = " << kv_split_size << "\n";
 
   xllm::SpawnWorkerServer worker(master_node_addr,
@@ -236,7 +232,6 @@ int main(int argc, char* argv[]) {
                                  global_rank,
                                  world_size,
                                  device_idx,
-                                 num_decoding_tokens,
                                  block_size,
                                  indexer_cache_dtype,
                                  max_tokens_per_batch,
@@ -267,7 +262,7 @@ int main(int argc, char* argv[]) {
                                  ep_size,
                                  instance_role,
                                  enable_mtp_draft_body_tp1,
-                                 draft_sampling_mode,
+                                 enable_probabilistic_draft,
                                  kv_split_size,
                                  vae_size,
                                  comm_buffer_offset);

@@ -232,3 +232,9 @@ def sparse_attn_sharedkv_metadata(
         has_ori_kv,
         has_cmp_kv,
     )
+
+
+# Runtime-guarded DSpark SWA operators.
+supports_sparse_flash_mla_swa = torch.ops.xllm_ops.supports_sparse_flash_mla_swa
+sparse_flash_mla_swa_metadata = torch.ops.xllm_ops.sparse_flash_mla_swa_metadata
+sparse_flash_mla_swa = torch.ops.xllm_ops.sparse_flash_mla_swa

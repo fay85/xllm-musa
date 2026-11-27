@@ -80,21 +80,25 @@ struct InputMetricsSnapshot {
   int64_t transfer_count = HISTOGRAM_mm_transfer_latency_milliseconds.count();
   int64_t processor_count = HISTOGRAM_mm_processor_latency_milliseconds.count();
   double template_seconds = COUNTER_VALUE(chat_template_latency_seconds);
-  double transfer_failures =
-      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer");
-  double processor_failures =
-      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "processor");
+  double transfer_failures = MULTI_COUNTER_mm_input_stage_failures_total
+                                 .get_stats(/*labels=*/{"transfer"})
+                                 ->get_value();
+  double processor_failures = MULTI_COUNTER_mm_input_stage_failures_total
+                                  .get_stats(/*labels=*/{"processor"})
+                                  ->get_value();
 };
 
 void expect_input_stage_failures(const InputMetricsSnapshot& before,
                                  int64_t transfer = 0,
                                  int64_t processor = 0) {
-  EXPECT_DOUBLE_EQ(
-      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer"),
-      before.transfer_failures + transfer);
-  EXPECT_DOUBLE_EQ(
-      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "processor"),
-      before.processor_failures + processor);
+  EXPECT_DOUBLE_EQ(MULTI_COUNTER_mm_input_stage_failures_total
+                       .get_stats(/*labels=*/{"transfer"})
+                       ->get_value(),
+                   before.transfer_failures + transfer);
+  EXPECT_DOUBLE_EQ(MULTI_COUNTER_mm_input_stage_failures_total
+                       .get_stats(/*labels=*/{"processor"})
+                       ->get_value(),
+                   before.processor_failures + processor);
 }
 
 // Deterministic tokenizer used for factory tests. It counts vocabulary lookups

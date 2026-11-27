@@ -58,7 +58,6 @@ runtime::Options build_draft_engine_options(const runtime::Options& options,
   draft_options.model_path(options.draft_model_path().value_or(""))
       .devices(options.draft_devices())
       .backend("llm")
-      .num_decoding_tokens(1)
       .enable_speculative_decode(/*enable_speculative_decode=*/false)
       .enable_graph(/*enable_graph=*/false)
       .is_draft_engine(true);
@@ -82,7 +81,6 @@ runtime::Options build_draft_engine_options(const runtime::Options& options,
 runtime::DecodeGraphWarmupConfig build_decode_graph_warmup_config(
     const runtime::Options& options) {
   runtime::DecodeGraphWarmupConfig warmup_config;
-  warmup_config.num_decoding_tokens = options.num_decoding_tokens();
   warmup_config.num_speculative_tokens = options.num_speculative_tokens();
   warmup_config.enable_graph_mode_decode_no_padding =
       options.enable_graph_mode_decode_no_padding();
@@ -94,7 +92,7 @@ runtime::DecodeGraphWarmupConfig build_decode_graph_warmup_config(
   warmup_config.max_graph_batch_size =
       execution_config.acl_graph_decode_batch_size_limit();
   warmup_config.graph_capture_sizes = runtime::get_decode_graph_capture_sizes(
-      options, options.num_decoding_tokens());
+      options, static_cast<int64_t>(options.num_speculative_tokens()) + 1);
   return warmup_config;
 }
 

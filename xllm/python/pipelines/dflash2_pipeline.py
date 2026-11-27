@@ -52,11 +52,12 @@ class DFlash2ExecutionPipeline(ExecutionPipeline):
         if len(sampling_builders) != 1:
             raise ValueError("DFlash2 execution requires exactly one sampling metadata builder")
         self._sampling_builder = sampling_builders[0]
+        tokens_per_sequence = self._sampling_builder.num_speculative_tokens + 1
         super().__init__(
-            DFlash2DecoderModel(model, self._sampling_builder.query_width),
+            DFlash2DecoderModel(model, tokens_per_sequence),
             (
                 *(builder for builder in builders if builder not in sampling_builders),
-                DFlashDecoderMetadataBuilder(self._sampling_builder.query_width),
+                DFlashDecoderMetadataBuilder(tokens_per_sequence),
             ),
             runner_config,
             attention_backend=attention_backend,
@@ -72,7 +73,7 @@ class DFlash2ExecutionPipeline(ExecutionPipeline):
     def execute(self, inputs: ModelInput) -> ModelExecutionOutput:
         batch = inputs.input_batch
         has_proposal = batch is not None and not batch.is_dummy and batch.sampling is not None
-        width = self._sampling_builder.query_width
+        width = self._sampling_builder.num_speculative_tokens + 1
         if has_proposal and (
             batch.num_tokens != batch.num_reqs * width or any(count != width for count in batch.num_scheduled_tokens)
         ):
@@ -89,8 +90,8 @@ class DFlash2ExecutionPipeline(ExecutionPipeline):
 
     def _prepare_proposal_inputs(self, inputs: ModelInput, candidates: DraftCandidates) -> ModelInput:
         batch = inputs.input_batch
-        width = self._sampling_builder.query_width
-        steps = self._sampling_builder.num_steps
+        steps = self._sampling_builder.num_speculative_tokens
+        width = steps + 1
         requests = batch.num_reqs
         input_ids = inputs.input_ids.view(requests, width)[:, :-1].reshape(-1)
         positions = inputs.positions.view(requests, width)[:, 1:].reshape(-1)

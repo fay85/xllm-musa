@@ -624,7 +624,7 @@ void check_replays_updated_inputs_and_advances_state_exactly_once() {
   runtime::Options options;
   options.block_size(16)
       .block_table_token_span(/*value=*/64)
-      .num_decoding_tokens(4)
+      .num_speculative_tokens(/*num_speculative_tokens=*/3)
       .dp_size(1)
       .cp_size(4)
       .world_size(8)
@@ -706,8 +706,7 @@ void check_dflash2_b16_refreshes_accepted_state_and_aux_at64k() {
       .max_position_embeddings(73728);
   runtime::Options options;
   options.block_size(16)
-      .num_decoding_tokens(4)
-      .num_speculative_tokens(3)
+      .num_speculative_tokens(/*num_speculative_tokens=*/3)
       .dp_size(1)
       .cp_size(4)
       .world_size(8)
@@ -852,7 +851,7 @@ class MluGraphExecutorTest : public ::testing::Test {
     model_args_.max_position_embeddings(2048);
 
     const uint32_t block_size = 16;
-    options_.num_decoding_tokens(1);
+
     options_.block_size(block_size);
 
     model_ = std::make_unique<MockCausalLM>(tensor_options_);
@@ -2668,7 +2667,7 @@ TEST(MluSpecVerifyGraphTest,
     eager_model.copy_from(graph_model);
     runtime::Options runtime_options;
     runtime_options.block_size(16)
-        .num_decoding_tokens(width)
+        .num_speculative_tokens(width - 1)
         .enable_graph_mode_decode_no_padding(false)
         .enable_speculative_decode(verify || draft)
         .speculative_algorithm("MTP")

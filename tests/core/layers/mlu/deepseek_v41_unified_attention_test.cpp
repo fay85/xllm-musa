@@ -300,7 +300,7 @@ TEST_P(DeepseekV41UnifiedAttentionTest,
       .index_topk(4)
       .compress_ratios({ratio, ratio})
       .kv_source_layer_ids({0})
-      .dspark_block_size(5);
+      .num_speculative_tokens(/*value=*/5);
   test::MockProcessGroup group(device);
   ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
   parallel.tp_group_ = &group;

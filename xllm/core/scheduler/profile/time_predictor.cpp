@@ -92,60 +92,6 @@ void TimePredictor::fit_for_decode(
   check_coefficients_non_neg(n);
 }
 
-void TimePredictor::fit_for_speculative_validate(
-    const std::vector<std::tuple<int32_t, int32_t, int32_t, double>>&
-        time_profiling_data) {
-  if (time_profiling_data.empty()) {
-    return;
-  }
-  trained_ = true;
-
-  // Design matrix columns: [1, batch*query, batch*query*prefix]. A standalone
-  // batch term was tried and dropped: it is pruning-invariant (does not depend
-  // on prefix) and only steals variance from the marginal query terms that
-  // drive pruning.
-  const int32_t m = static_cast<int32_t>(time_profiling_data.size());
-  const int32_t n = 3;
-  Eigen::MatrixXd matrix(m, n);
-  Eigen::VectorXd target(m);
-  for (int32_t i = 0; i < m; ++i) {
-    const double batch =
-        static_cast<double>(std::get<0>(time_profiling_data[i]));
-    const double query =
-        static_cast<double>(std::get<1>(time_profiling_data[i]));
-    const double prefix =
-        static_cast<double>(std::get<2>(time_profiling_data[i]));
-    matrix(i, 0) = 1.0;
-    matrix(i, 1) = batch * query;
-    matrix(i, 2) = batch * query * prefix;
-    target(i) = std::get<3>(time_profiling_data[i]);
-  }
-
-  coefficients_ = matrix.colPivHouseholderQr().solve(target);
-
-  double sum_abs_error = 0.0;
-  double sum_percentage_error = 0.0;
-  for (int32_t i = 0; i < m; ++i) {
-    const double actual = std::get<3>(time_profiling_data[i]);
-    const double prediction = matrix.row(i).dot(coefficients_);
-    const double abs_error = std::abs(prediction - actual);
-    sum_abs_error += abs_error;
-    if (actual > 0.0) {
-      sum_percentage_error += abs_error / actual;
-    }
-  }
-  const double mae = sum_abs_error / static_cast<double>(m);
-  const double mape = sum_percentage_error / static_cast<double>(m) * 100.0;
-
-  LOG(INFO) << "Fitted speculative validate equation: time = "
-            << coefficients_(1) << " * batch_size * query_len + "
-            << coefficients_(2) << " * batch_size * query_len * prefix_len + "
-            << coefficients_(0);
-  LOG(INFO) << "MAE: " << mae << ", MAPE: " << mape << "%";
-
-  check_coefficients_non_neg(n);
-}
-
 void TimePredictor::fit_for_prefill(
     const std::vector<std::pair<int32_t, double>>& time_profiling_data) {
   // construct Vandermonde matrix

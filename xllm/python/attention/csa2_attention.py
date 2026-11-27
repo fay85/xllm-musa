@@ -1241,7 +1241,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             max_model_len=int(config.get("max_position_embeddings", 0) or 0),
             quant_mode=quant_mode,
             acl_graph_enabled=acl_graph_enabled,
-            block_query_width=int(config.get("draft_query_width", 1))
+            block_query_width=int(config["num_speculative_tokens"])
             if config.get("model_type") == "deepseek_v41_dspark"
             else 0,
         )

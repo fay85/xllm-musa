@@ -103,7 +103,7 @@ class Qwen3DSparkForCausalLM(DSparkForCausalLMBase):
         super().__init__(
             backbone=Qwen3DSparkModel(cfg, dtype, device),
             lm_head=None,
-            query_width=int(config["draft_query_width"]),
+            query_width=cfg.num_speculative_tokens,
             vocab_size=cfg.vocab_size,
             draft_vocab_size=cfg.draft_vocab_size,
             markov_rank=cfg.markov_rank,

@@ -259,7 +259,7 @@ TEST_F(DeepseekV41MluModelTest, RejectsOversizedDraftAtConstruction) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   args_.model_type("deepseek_v41_dspark")
       .dspark_num_layers(1)
-      .dspark_block_size(6)
+      .num_speculative_tokens(/*value=*/6)
       .markov_rank(8);
   EXPECT_DEATH(create_llm_model(make_context()),
                "MLU DSpark supports 1 to 5 proposals per request, got 6");
@@ -271,7 +271,7 @@ TEST_F(DeepseekV41MluModelTest, LoadsQuantizedDraftFromShards) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   args_.model_type("deepseek_v41_dspark")
       .dspark_num_layers(1)
-      .dspark_block_size(5)
+      .num_speculative_tokens(/*value=*/5)
       .markov_rank(8)
       .n_shared_experts(1);
   QuantArgs quant;
@@ -904,7 +904,6 @@ TEST_P(DeepseekV41HashPlacementTest,
   runtime::Options executor_options;
   executor_options.block_size(128)
       .dp_size(1)
-      .num_decoding_tokens(kWidth)
       .num_speculative_tokens(kWidth - 1)
       .enable_speculative_decode(true)
       .speculative_algorithm("DSpark")
@@ -995,7 +994,7 @@ TEST_P(DeepseekV41HashPlacementTest,
     const int32_t count = begins.size();
     flat.meta.num_sequences = count * kWidth;
     flat.meta.actual_num_sequences = count * kWidth;
-    flat.meta.spec_verify_width = kWidth;
+    flat.meta.num_speculative_tokens = kWidth - 1;
     flat.execution_batch.num_reqs = count;
     flat.execution_batch.query_start_loc = grouped.attention.host.q_seq_lens;
     flat.meta.q_max_seq_len = 1;
@@ -1198,7 +1197,7 @@ TEST_F(DeepseekV41MluModelTest, VerifyGroupsBlockTablesByActualRequestWidth) {
   mlu::model::DeepseekV41GraphState graph;
   ModelInputParams input;
   input.meta.batch_forward_type = BatchForwardType::DECODE;
-  input.meta.spec_verify_width = 3;
+  input.meta.num_speculative_tokens = 2;
   input.meta.num_sequences = 8;
   input.execution_batch.num_reqs = 3;
   input.attention.host.kv_seq_lens = {0, 1, 3, 6, 10, 15, 21, 21, 21};

@@ -289,15 +289,6 @@ void set_multi_gauge_value(
     }                                                             \
   } while (false)
 
-// read a labeled counter's current value (0.0 when the label has no stats yet);
-// the multi-dimension analogue of COUNTER_VALUE
-#define MULTI_COUNTER_VALUE(name, key)                                    \
-  ([&]() -> double {                                                      \
-    bvar::Adder<double>* counter_##name =                                 \
-        MULTI_COUNTER_##name.get_stats({(key)});                          \
-    return counter_##name != nullptr ? counter_##name->get_value() : 0.0; \
-  }())
-
 // define multi gauge (using bvar::MultiDimension for labeled settable values)
 #define DEFINE_MULTI_GAUGE(name, label, desc)                          \
   bvar::MultiDimension<bvar::Status<double>> MULTI_GAUGE_##name(#name, \
@@ -456,13 +447,10 @@ DECLARE_HISTOGRAM(json_object_mask_batch_build_latency_microseconds);
 DECLARE_HISTOGRAM(json_object_mask_device_copy_latency_microseconds);
 DECLARE_HISTOGRAM(json_object_mask_transfer_submission_latency_microseconds);
 DECLARE_COUNTER(json_object_mask_build_calls_normal_total);
-DECLARE_COUNTER(json_object_mask_build_calls_draft_total);
 DECLARE_COUNTER(json_object_mask_build_calls_target_total);
 DECLARE_COUNTER(json_object_mask_build_rows_normal_total);
-DECLARE_COUNTER(json_object_mask_build_rows_draft_total);
 DECLARE_COUNTER(json_object_mask_build_rows_target_total);
 DECLARE_COUNTER(json_object_mask_build_constrained_rows_normal_total);
-DECLARE_COUNTER(json_object_mask_build_constrained_rows_draft_total);
 DECLARE_COUNTER(json_object_mask_build_constrained_rows_target_total);
 
 DECLARE_GAUGE(num_pending_requests);
@@ -554,15 +542,6 @@ DECLARE_COUNTER(speculative_num_draft_tokens_total);
 DECLARE_COUNTER(speculative_num_committed_tokens_total);
 DECLARE_MULTI_COUNTER(speculative_num_accepted_tokens_per_pos);
 DECLARE_GAUGE(speculative_mean_acceptance_length);
-DECLARE_MULTI_GAUGE(speculative_conditional_acceptance_rate_per_pos);
-DECLARE_HISTOGRAM(speculative_draft_token_d2h_latency_microseconds);
-DECLARE_MULTI_HISTOGRAM(
-    speculative_draft_token_copy_submission_latency_microseconds);
-DECLARE_MULTI_HISTOGRAM(
-    speculative_draft_token_ready_wait_latency_microseconds);
-DECLARE_MULTI_HISTOGRAM(speculative_draft_token_bulk_read_latency_microseconds);
-DECLARE_MULTI_HISTOGRAM(speculative_draft_token_handoff_latency_microseconds);
-DECLARE_COUNTER(speculative_draft_token_handoff_fallback_total);
 DECLARE_COUNTER(speculative_num_accepted_tokens_constrained_total);
 DECLARE_COUNTER(speculative_num_accepted_tokens_plain_total);
 DECLARE_COUNTER(speculative_num_draft_tokens_constrained_total);

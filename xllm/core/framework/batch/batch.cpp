@@ -758,6 +758,9 @@ void Batch::process_sample_output(const RawForwardOutput& raw_output,
       if (target.from_sample_slot) {
         append_token_for_sequence(
             seq, make_empty_logprob_placeholder(*seq), 0, replace_fake_token);
+      } else if (batch_forward_type_.is_decode()) {
+        seq->fail(Status(/*code=*/StatusCode::UNAVAILABLE,
+                         /*msg=*/"Decode forward returned no sampled token"));
       }
       continue;
     }

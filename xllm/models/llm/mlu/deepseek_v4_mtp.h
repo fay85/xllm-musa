@@ -359,14 +359,6 @@ inline void load_deepseek_v4_mtp_model_args(const JsonReader& json,
 
 REGISTER_CAUSAL_MODEL(deepseek_v4_mtp, DeepseekV4MtpForCausalLM);
 
-const bool deepseek_v4_mtp_capabilities_registered = []() {
-  MtpModelCapabilities capabilities;
-  capabilities.native_draft_owns_embedding_and_lm_head = true;
-  capabilities.python_draft_owns_embedding_and_lm_head = true;
-  ModelRegistry::register_mtp_capabilities("deepseek_v4_mtp", capabilities);
-  return true;
-}();
-
 REGISTER_MODEL_ARGS(deepseek_v4_mtp, [&] {
   const DeepseekV4ArgsPolicy args_policy = build_deepseek_v4_args_policy();
   load_deepseek_v4_mtp_model_args(json, args);

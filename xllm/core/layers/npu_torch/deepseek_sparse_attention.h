@@ -40,31 +40,12 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
-inline int64_t deepseek_v4_ori_window_left(int64_t window_size,
-                                           int64_t dspark_block_size,
-                                           bool use_native_dspark_sas) {
-  if (use_native_dspark_sas && dspark_block_size > 0) {
-    return std::max<int64_t>(window_size + dspark_block_size - 1, 0);
-  }
-  // The compatibility fallback accepted by CANN 9.0 uses window_size - 1
-  // (127 for DSV4). DSpark block visibility is encoded by expanding the block
-  // into q_len=1 rows that share the same kv end.
-  return std::max<int64_t>(window_size - 1, 0);
-}
-
-inline bool deepseek_v4_use_native_sas(int64_t dspark_block_size,
-                                       bool dspark_use_native_sas,
-                                       bool use_prefill_attention) {
-  return dspark_use_native_sas && dspark_block_size > 0 &&
-         !use_prefill_attention;
-}
-
-torch::Tensor build_dspark_swa_indices(const torch::Tensor& block_table,
-                                       const torch::Tensor& query_cu_seq_lens,
-                                       const torch::Tensor& seq_lens,
-                                       int64_t window_size,
-                                       int64_t dspark_block_size,
-                                       int64_t cache_block_size);
+bool build_dspark_sparse_flash_mla_metadata(DSAMetadata& dsa,
+                                            const torch::Tensor& block_tables,
+                                            int64_t max_kv_len,
+                                            int64_t num_heads,
+                                            int64_t page_size,
+                                            int64_t visible_window);
 
 // DSA kv state aligned with Python:
 // (ori_kv, compressor_kv_state, compressor_score_state,
@@ -133,8 +114,6 @@ class DSAttentionImpl : public torch::nn::Module {
   int64_t index_n_heads_ = 0;
   int64_t index_head_dim_ = 0;
   int64_t index_topk_ = 0;
-  int64_t dspark_block_size_ = 0;
-  bool dspark_use_native_sas_ = false;
 
   double rope_theta_ = 10000.0;
   double compress_rope_theta_ = 40000.0;

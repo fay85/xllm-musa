@@ -25,20 +25,22 @@ std::tuple<torch::Tensor, torch::Tensor> sample_path_dispatch(
     const torch::Tensor& edge_log_probs,
     const torch::Tensor& gumbel_noise,
     const torch::Tensor& do_sample,
-    bool all_random_sample) {
-  auto result =
-      xllm::kernel::mlu::bangc::sample_dflash2_paths(candidate_ids,
-                                                     edge_log_probs,
-                                                     gumbel_noise,
-                                                     do_sample,
-                                                     all_random_sample);
+    bool use_random_sampling_for_batch) {
+  auto result = xllm::kernel::mlu::bangc::sample_dflash2_paths(
+      candidate_ids,
+      edge_log_probs,
+      gumbel_noise,
+      do_sample,
+      use_random_sampling_for_batch);
   return {std::move(result.first), std::move(result.second)};
 }
 }  // namespace
 TORCH_LIBRARY_FRAGMENT(xllm_mlu, m) {
   m.def(
+      /*schema=*/
       "sample_dflash2_paths(Tensor candidate_ids, Tensor edge_log_probs, "
-      "Tensor gumbel_noise, Tensor do_sample, bool all_random_sample) -> "
+      "Tensor gumbel_noise, Tensor do_sample, bool "
+      "use_random_sampling_for_batch) -> "
       "(Tensor, Tensor)");
 }
 TORCH_LIBRARY_IMPL(xllm_mlu, PrivateUse1, m) {

@@ -36,7 +36,7 @@ std::pair<torch::Tensor, torch::Tensor> reference_sparse_paths(
     const torch::Tensor& log_probs,
     const torch::Tensor& noise,
     const torch::Tensor& do_sample,
-    bool all_random_sample) {
+    bool use_random_sampling_for_batch) {
   const int64_t batch = ids.size(0);
   const int64_t steps = ids.size(1);
   const int64_t top_k = ids.size(2);
@@ -55,13 +55,15 @@ std::pair<torch::Tensor, torch::Tensor> reference_sparse_paths(
         .copy_(ids.select(/*dim=*/1, /*index=*/step)
                    .gather(/*dim=*/1, selected.view({-1, 1}))
                    .view({-1}));
-    torch::Tensor step_probs = row.exp();
-    if (!all_random_sample) {
-      torch::Tensor onehot = torch::zeros_like(step_probs);
-      onehot.scatter_(/*dim=*/1, selected.view({-1, 1}), /*value=*/1.0);
-      step_probs = torch::where(do_sample.view({batch, 1}), step_probs, onehot);
+    torch::Tensor step_logits = row;
+    if (!use_random_sampling_for_batch) {
+      torch::Tensor onehot = torch::full_like(
+          step_logits, /*fill_value=*/-std::numeric_limits<float>::infinity());
+      onehot.scatter_(/*dim=*/1, selected.unsqueeze(/*dim=*/1), /*value=*/0.0);
+      step_logits =
+          torch::where(do_sample.view({batch, 1}), step_logits, onehot);
     }
-    probs.select(/*dim=*/1, /*index=*/step).copy_(step_probs);
+    probs.select(/*dim=*/1, /*index=*/step).copy_(step_logits);
     previous = selected;
   }
   return {std::move(tokens), std::move(probs)};
@@ -74,7 +76,8 @@ class MluDFlash2SamplingGuardTest : public ::testing::Test {
     device_.init_device_context();
     inputs_ = {
         torch::arange(12, torch::kLong).view({1, 3, 4}).to(device_.unwrap()),
-        torch::full({1, 3, 4, 4}, -std::log(4.0F)).to(device_.unwrap()),
+        torch::full(/*size=*/{1, 3, 4, 4}, /*fill_value=*/-std::log(/*x=*/4.0F))
+            .to(device_.unwrap()),
         torch::zeros({1, 3, 4}).to(device_.unwrap()),
         torch::ones({1}, torch::kBool).to(device_.unwrap())};
   }
@@ -87,13 +90,13 @@ class MluDFlash2SamplingGuardTest : public ::testing::Test {
       }
       original[i] = inputs[i].cpu().clone();
     }
-    EXPECT_FALSE(
-        kernel::mlu::supports_dflash2_sampling(inputs[0],
-                                               inputs[1],
-                                               inputs[2],
-                                               inputs[3],
-                                               /*all_random_sample=*/false,
-                                               /*all_greedy_sample=*/false));
+    EXPECT_FALSE(kernel::mlu::supports_dflash2_sampling(
+        inputs[0],
+        inputs[1],
+        inputs[2],
+        inputs[3],
+        /*use_random_sampling_for_batch=*/false,
+        /*greedy_only=*/false));
     for (size_t i = 0; i < inputs.size(); ++i) {
       if (!inputs[i].defined()) {
         continue;
@@ -123,23 +126,25 @@ TEST_F(MluDFlash2SamplingGuardTest, MissingOrHostInputsAreRejected) {
 
 TEST_F(MluDFlash2SamplingGuardTest, RandomSamplingDoesNotRequireDeviceMask) {
   for (const torch::Tensor& mask : {torch::Tensor(), inputs_[3].cpu()}) {
-    ASSERT_TRUE(
-        kernel::mlu::supports_dflash2_sampling(inputs_[0],
-                                               inputs_[1],
-                                               inputs_[2],
-                                               mask,
-                                               /*all_random_sample=*/true,
-                                               /*all_greedy_sample=*/false));
-    auto result = kernel::mlu::sample_dflash2_paths(inputs_[0],
-                                                    inputs_[1],
-                                                    inputs_[2],
-                                                    mask,
-                                                    /*all_random_sample=*/true);
+    ASSERT_TRUE(kernel::mlu::supports_dflash2_sampling(
+        inputs_[0],
+        inputs_[1],
+        inputs_[2],
+        mask,
+        /*use_random_sampling_for_batch=*/true,
+        /*greedy_only=*/false));
+    auto result = kernel::mlu::sample_dflash2_paths(
+        inputs_[0],
+        inputs_[1],
+        inputs_[2],
+        mask,
+        /*use_random_sampling_for_batch=*/true);
     EXPECT_TRUE(
         torch::equal(result.first.cpu(),
                      torch::tensor({0, 4, 8}, torch::kLong).view({1, 3})));
-    EXPECT_TRUE(
-        torch::allclose(result.second.cpu(), torch::full({1, 3, 4}, 0.25F)));
+    EXPECT_TRUE(torch::allclose(
+        result.second.cpu(),
+        torch::full(/*size=*/{1, 3, 4}, /*fill_value=*/-std::log(/*x=*/4.0F))));
   }
 }
 
@@ -176,11 +181,11 @@ TEST(MluDFlash2RandomPathKernelTest,
   using ISlice = torch::indexing::Slice;
   for (const Shape& shape : shapes) {
     for (torch::ScalarType id_type : id_types) {
-      for (bool all_random_sample : modes) {
+      for (bool use_random_sampling_for_batch : modes) {
         SCOPED_TRACE(::testing::Message()
                      << "B=" << shape.batch << " S=" << shape.steps
                      << " K=" << shape.candidates << " dtype=" << id_type
-                     << " random=" << all_random_sample);
+                     << " random=" << use_random_sampling_for_batch);
         torch::Tensor ids =
             torch::arange(shape.batch * shape.steps * shape.candidates * 2,
                           torch::TensorOptions().dtype(id_type))
@@ -211,15 +216,16 @@ TEST(MluDFlash2RandomPathKernelTest,
             (torch::arange(shape.batch * 2, torch::kLong) % 4 == 0)
                 .to(device.unwrap())
                 .index({ISlice(0, torch::indexing::None, 2)});
-        torch::Tensor input_mask = all_random_sample ? torch::Tensor() : mask;
+        torch::Tensor input_mask =
+            use_random_sampling_for_batch ? torch::Tensor() : mask;
         auto expected = reference_sparse_paths(
-            ids, log_probs, noise, input_mask, all_random_sample);
+            ids, log_probs, noise, input_mask, use_random_sampling_for_batch);
         auto result = kernel::mlu::sample_dflash2_paths(
-            ids, log_probs, noise, input_mask, all_random_sample);
+            ids, log_probs, noise, input_mask, use_random_sampling_for_batch);
         EXPECT_EQ(result.first.scalar_type(), id_type);
         EXPECT_TRUE(torch::equal(result.first.cpu(), expected.first.cpu()));
         EXPECT_TRUE(torch::equal(result.second.cpu(), expected.second.cpu()));
-        EXPECT_TRUE(torch::allclose(result.second.sum(/*dim=*/-1).cpu(),
+        EXPECT_TRUE(torch::allclose(result.second.exp().sum(/*dim=*/-1).cpu(),
                                     torch::ones({shape.batch, shape.steps}),
                                     /*rtol=*/1e-5,
                                     /*atol=*/1e-6));
@@ -282,11 +288,11 @@ TEST(MluDFlash2RandomPathKernelTest, FirstTieNanAndInfinityMatchTorch) {
   torch::Tensor mask =
       torch::tensor({true, false, true, false}).to(device.unwrap());
   const std::vector<bool> modes = {true, false};
-  for (bool all_random_sample : modes) {
-    auto expected =
-        reference_sparse_paths(ids, scores, noise, mask, all_random_sample);
+  for (bool use_random_sampling_for_batch : modes) {
+    auto expected = reference_sparse_paths(
+        ids, scores, noise, mask, use_random_sampling_for_batch);
     auto result = kernel::mlu::sample_dflash2_paths(
-        ids, scores, noise, mask, all_random_sample);
+        ids, scores, noise, mask, use_random_sampling_for_batch);
     EXPECT_TRUE(torch::equal(result.first.cpu(), expected.first.cpu()));
     EXPECT_TRUE(torch::allclose(result.second.cpu(),
                                 expected.second.cpu(),

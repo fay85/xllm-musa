@@ -13,11 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/runtime/dflash/dflash2_worker_impl.h"
+#include "core/runtime/dflash2_worker_impl.h"
 
 namespace xllm {
 
-std::optional<DFlash2WorkerImpl::BlockSampleOutput>
+std::optional<std::pair<torch::Tensor, torch::Tensor>>
 DFlash2WorkerImpl::fused_sample(const torch::Tensor& /*candidate_ids*/,
                                 const torch::Tensor& /*edge_log_probs*/,
                                 const torch::Tensor& /*gumbel_noise*/,

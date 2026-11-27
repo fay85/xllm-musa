@@ -1553,29 +1553,6 @@ class DeepseekV4ModelImpl
     return *std::max_element(values.begin(), values.end());
   }
 
-  void build_dspark_swa_metadata(layer::DSAMetadata& dsa) const {
-    if (!model_args_.dspark_use_native_sas() ||
-        model_args_.dspark_block_size() <= 0) {
-      return;
-    }
-    CHECK_GE(dspark_swa_layer_, 0)
-        << "Native DeepSeek-V4 DSpark requires an SWA block table.";
-    const size_t layer_id = static_cast<size_t>(dspark_swa_layer_);
-    const size_t cache_id = static_cast<size_t>(dspark_swa_cache_);
-    if (layer_id >= dsa.block_tables.size() ||
-        cache_id >= dsa.block_tables[layer_id].size() ||
-        !dsa.block_tables[layer_id][cache_id].defined()) {
-      return;
-    }
-    dsa.explicit_swa_indices =
-        layer::build_dspark_swa_indices(dsa.block_tables[layer_id][cache_id],
-                                        dsa.actual_seq_lengths_query,
-                                        dsa.actual_seq_lengths_kv,
-                                        window_size_,
-                                        model_args_.dspark_block_size(),
-                                        dspark_swa_block_size_);
-  }
-
   // cu_seqlens_ori_kv_override, when defined, replaces the query cumsum the
   // prefill sparse metadata normally uses to describe ori_kv. Only prefill CP
   // passes it: there the kv window is longer than this rank's query block, so
@@ -1591,7 +1568,8 @@ class DeepseekV4ModelImpl
     dsa.c128_metadata = torch::Tensor();
     dsa.qli_metadata = torch::Tensor();
     dsa.sparse_metadata_ori_win_left = -1;
-    dsa.explicit_swa_indices = torch::Tensor();
+    dsa.ori_sparse_indices_ = torch::Tensor();
+    dsa.ori_topk_length_ = torch::Tensor();
 
     torch::Device metadata_device(torch::kCPU);
     if (dsa.input_positions.defined()) {
@@ -1625,27 +1603,20 @@ class DeepseekV4ModelImpl
     const int64_t max_seqlen_kv = std::max<int64_t>(
         params.meta.kv_max_seq_len,
         vector_max_or_zero(params.attention.host.kv_seq_lens));
-    // The batch type, not q_max_seq_len, is the authoritative metadata
-    // selector: native DSpark decode may use a gamma-wide query, while the
-    // compatibility fallback uses q_len=1 with CHUNKED_PREFILL semantics.
     const bool is_prefill = params.meta.batch_forward_type.no_decode();
-    const bool use_native_sas =
-        layer::deepseek_v4_use_native_sas(model_args_.dspark_block_size(),
-                                          model_args_.dspark_use_native_sas(),
-                                          is_prefill);
-    // Explicit SWA indices use decode geometry and address the persistent ring
-    // buffer. Prefill needs per-query windows, and full prefill does not
-    // populate that buffer until after attention. All draft layers share the
-    // same SWA manager, so build the indices once for decode only.
-    if (use_native_sas) {
-      build_dspark_swa_metadata(dsa);
+    if (util::is_deepseek_v4_dspark_model_type(model_args_.model_type()) &&
+        model_args_.num_speculative_tokens() > 0 && !is_prefill &&
+        max_seqlen_q == 1 && head_dim_ == 512 && dspark_swa_layer_ >= 0 &&
+        layer::build_dspark_sparse_flash_mla_metadata(
+            dsa,
+            dsa.block_tables[dspark_swa_layer_][dspark_swa_cache_],
+            max_seqlen_kv,
+            tp_num_heads_,
+            dspark_swa_block_size_,
+            window_size_ + model_args_.num_speculative_tokens())) {
+      return;
     }
-
-    // Keep the opaque tiling metadata identical to the arguments passed by
-    // DSAttentionImpl::forward. Native DSpark decode expands the window; the
-    // prefill and compatibility paths keep the DSV4 window.
-    const int64_t ori_win_left = layer::deepseek_v4_ori_window_left(
-        window_size_, model_args_.dspark_block_size(), use_native_sas);
+    const int64_t ori_win_left = window_size_ - 1;
     dsa.sparse_metadata_ori_win_left = ori_win_left;
     const int64_t sparse_topk = std::max<int64_t>(index_topk_, 1);
 
@@ -2019,8 +1990,6 @@ inline void load_deepseek_v4_model_args(const JsonReader& json,
       json.value_or<std::vector<int32_t>>("dspark_target_layer_ids",
                                           std::vector<int32_t>{})
           .size());
-  // Don't arm dspark_block_size on the shared target (enables non-causal DSpark
-  // attention there); the draft worker sets it from the checkpoint.
 
   // Token ids
   LOAD_ARG_OR(bos_token_id, "bos_token_id", 0);

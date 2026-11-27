@@ -222,12 +222,6 @@ block geometry and is out of the trained distribution; use it only after an
 acceptance/performance evaluation. Context parallelism (`cp_size > 1`) is not
 supported on this path yet.
 
-On NPU, xLLM supports two SAS modes. The default compatibility mode works with
-CANN 9.0 and needs no extra option. If the installed SAS operator accepts a
-non-empty `ori_sparse_indices`, set `--enable_dspark_native_sas=true` to use
-the complete DSpark SWA window. Older operators terminate during tiling, so
-xLLM cannot safely detect this capability automatically.
-
 Use the per-position counters to inspect DSpark acceptance:
 
 ```bash
@@ -247,9 +241,7 @@ position `i` is accepted given the prefix reached it. The marginal form
 (`... / speculative_num_drafts_total`) decays even for a uniformly-good draft
 because of prefix survivorship, conflating draft quality with reach
 probability, whereas the conditional isolates per-position quality and is what
-to use when choosing the speculative depth. xLLM exposes it directly as the
-gauge `speculative_conditional_acceptance_rate_per_pos{position}` (computed
-from the counters above), so no manual derivation is needed.
+to use when choosing the speculative depth.
 
 `speculative_mean_acceptance_length` is the cumulative acceptance length: the
 mean number of tokens emitted per proposal sequence (accepted drafts plus the

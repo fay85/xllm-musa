@@ -54,7 +54,7 @@ def _config_dict(**overrides) -> dict:
         "vocab_size": 8,
         "draft_vocab_size": 8,
         "markov_rank": 2,
-        "draft_query_width": 3,
+        "num_speculative_tokens": 3,
         "tp_size": 1,
         "tp_rank": 0,
         "dp_size": 1,
@@ -84,17 +84,9 @@ def test_config_requires_positive_markov_rank() -> None:
 
 @pytest.mark.parametrize("query_width", [1, 3, 15])
 def test_pipeline_uses_runtime_query_width(query_width: int) -> None:
-    model = Qwen3DSparkForCausalLM(_config_dict(draft_query_width=query_width, num_speculative_tokens=16))
+    model = Qwen3DSparkForCausalLM(_config_dict(num_speculative_tokens=query_width))
 
     assert model.model._query_width == query_width
-
-
-def test_pipeline_requires_runtime_query_width() -> None:
-    config = _config_dict(num_speculative_tokens=16)
-    del config["draft_query_width"]
-
-    with pytest.raises(KeyError, match="draft_query_width"):
-        Qwen3DSparkForCausalLM(config)
 
 
 @pytest.mark.parametrize("is_ascend_a3", [False, True])

@@ -218,11 +218,6 @@ DeepSeek-V4-Flash-0731 权重目录即可：
 `dspark_block_size=5` 训练。改用其他 gamma 会改变扩散块几何，超出训练分布，
 需要重新验证接受率和性能。当前路径暂不支持 `cp_size > 1`。
 
-在 NPU 上，xLLM 支持两种 SAS 模式。默认兼容模式适配 CANN 9.0，无需增加参数；
-若当前 SAS 算子支持非空 `ori_sparse_indices`，可设置
-`--enable_dspark_native_sas=true`，使用完整的 DSpark SWA 窗口。旧版算子会在
-tiling 阶段直接终止进程，因此无法安全地自动探测该能力。
-
 可通过逐位置计数观察 DSpark 接受率：
 
 ```bash
@@ -236,7 +231,7 @@ conditional_acceptance[i] =
   speculative_num_accepted_tokens_per_pos{i-1}   # i = 0 时分母用 speculative_num_drafts_total
 ```
 
-`speculative_num_accepted_tokens_per_pos` 是原始 counter（充分统计量）；逐位置优先看上式的**条件**接受率——“已到第 i 位、这一位能过”的概率。marginal 口径（`… / speculative_num_drafts_total`）因前缀存活偏差、即使 draft 每位一样好也会一路衰减，把 draft 质量和“能否走到”混在一起；条件率隔离每位质量，是选投机深度时该看的。xLLM 已把它直接暴露为 gauge `speculative_conditional_acceptance_rate_per_pos{position}`（由上面的 counter 算出），无需手动推导。
+`speculative_num_accepted_tokens_per_pos` 是原始 counter（充分统计量）；逐位置优先看上式的**条件**接受率——“已到第 i 位、这一位能过”的概率。marginal 口径（`… / speculative_num_drafts_total`）因前缀存活偏差、即使 draft 每位一样好也会一路衰减，把 draft 质量和“能否走到”混在一起；条件率隔离每位质量，是选投机深度时该看的。
 
 指标 `speculative_mean_acceptance_length` 是累计 acceptance length：每个 proposal
 序列平均产出的 token 数（接受的草稿 + 1 个 target bonus），即

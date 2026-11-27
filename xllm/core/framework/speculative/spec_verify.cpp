@@ -17,49 +17,64 @@ limitations under the License.
 
 #include <glog/logging.h>
 
-#include <memory>
+#include "core/framework/sampling/sampling_params.h"
+#include "core/framework/speculative/rejection_sampler.h"
+#include "core/runtime/forward_params.h"
 
-#include "framework/sampling/rejection_sampler.h"
-#include "runtime/forward_params.h"
+namespace xllm {
 
-namespace xllm::spec_verify {
-
-void check_target_masks(const ForwardOutput& target_output,
-                        const torch::Tensor& filter_mask,
-                        const torch::Tensor& filter_bitmask) {
-  if (filter_bitmask.defined()) {
-    CHECK(target_output.filter_bitmask_applied_to_logits)
-        << "packed target logits must be filtered by the target sampler";
-  } else if (filter_mask.defined()) {
-    CHECK(target_output.filter_mask_applied_to_logits)
-        << "dense target logits must be filtered by the target sampler";
-  }
-}
-
-SampleOutput run_rejection_sampling(const SamplerPolicy& policy,
-                                    const DraftProposal& draft_proposal,
+SampleOutput run_rejection_sampling(const SamplingParameters& sampling_params,
+                                    const torch::Tensor& draft_token_ids,
+                                    const torch::Tensor& draft_logits,
                                     const torch::Tensor& target_logits,
-                                    const ForwardOutput& target_output,
-                                    const torch::Tensor& bonus_token_ids,
-                                    bool enable_fused_kernel) {
-  auto rejection_sampler =
-      std::make_unique<RejectionSampler>(policy.do_sample,
-                                         policy.all_random_sample,
-                                         policy.all_greedy_sample,
-                                         target_output.logprobs,
-                                         target_output.max_top_logprobs,
-                                         enable_fused_kernel);
+                                    const torch::Tensor& target_hidden_states) {
+  SampleOutput sample_output = rejection_sample(
+      sampling_params, draft_token_ids, draft_logits, target_logits);
 
-  SampleOutput sample_output =
-      rejection_sampler->forward(draft_proposal.coerce_to(bonus_token_ids),
-                                 target_logits,
-                                 bonus_token_ids,
-                                 /*mask_out_rejected_tokens=*/true);
-
-  const torch::Tensor& embeddings = target_output.sample_output.embeddings;
-  sample_output.embeddings = embeddings.view(
-      {target_logits.size(0), target_logits.size(1), embeddings.size(-1)});
+  if (target_hidden_states.defined()) {
+    const torch::Tensor& next_tokens = sample_output.next_tokens;
+    sample_output.embeddings =
+        target_hidden_states.view({next_tokens.size(/*dim=*/0),
+                                   next_tokens.size(/*dim=*/1),
+                                   target_hidden_states.size(/*dim=*/-1)});
+  }
   return sample_output;
 }
 
-}  // namespace xllm::spec_verify
+namespace spec_verify {
+
+void expand_verify_sampling_params(SamplingParameters& sampling_params,
+                                   const int32_t num_val_tokens,
+                                   const int32_t total_num_val_tokens,
+                                   const torch::Device& device,
+                                   bool repeat_unique_history) {
+  // Build indices on-device to avoid a CPU construction and host-to-device
+  // copy on every validation step.
+  sampling_params.selected_token_idxes =
+      torch::arange(total_num_val_tokens,
+                    torch::dtype(/*dtype=*/torch::kLong).device(device));
+  sampling_params.sample_idxes = sampling_params.selected_token_idxes;
+
+  const auto repeat = [num_val_tokens](torch::Tensor& tensor) {
+    if (tensor.defined()) {
+      tensor = tensor.repeat_interleave(num_val_tokens, /*dim=*/0);
+    }
+  };
+  repeat(sampling_params.frequency_penalties);
+  repeat(sampling_params.presence_penalties);
+  repeat(sampling_params.repetition_penalties);
+  repeat(sampling_params.temperatures);
+  repeat(sampling_params.top_p);
+  repeat(sampling_params.top_k);
+  if (repeat_unique_history) {
+    repeat(sampling_params.unique_token_ids);
+    repeat(sampling_params.unique_token_counts);
+    repeat(sampling_params.unique_token_ids_lens);
+  }
+  repeat(sampling_params.filter_mask);
+  repeat(sampling_params.filter_bitmask);
+}
+
+}  // namespace spec_verify
+
+}  // namespace xllm

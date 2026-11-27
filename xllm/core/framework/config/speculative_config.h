@@ -25,7 +25,6 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/option_category.h"
 #include "core/framework/model/model_args.h"
-#include "core/framework/sampling/draft_sampling_mode.h"
 
 namespace xllm {
 
@@ -40,6 +39,14 @@ class SpeculativeConfig final {
 
   static SpeculativeConfig& get_instance();
 
+  static bool is_eagle3_algorithm(std::string_view algorithm);
+
+  static bool is_suffix_algorithm(std::string_view algorithm);
+
+  static bool uses_ssm_engine(std::string_view draft_model_path,
+                              std::string_view algorithm,
+                              int32_t num_speculative_tokens);
+
   // Whether a speculative algorithm requires the target model to capture
   // intermediate-layer aux hidden states to drive the draft (Eagle3 and
   // DFlash). Centralizes the algorithm-string classification in one place. The
@@ -48,10 +55,7 @@ class SpeculativeConfig final {
   // algorithm string. Takes the algorithm explicitly so a spawned worker
   // process, which reads its own Options rather than this global config, can
   // classify without an initialized singleton.
-  static bool requires_aux_hidden_capture(std::string_view algorithm) {
-    return algorithm == "Eagle3" || algorithm == "DFlash" ||
-           is_dflash2_algorithm(algorithm) || is_dspark_algorithm(algorithm);
-  }
+  static bool requires_aux_hidden_capture(std::string_view algorithm);
 
   // Whether the speculative worker builds the draft paged cache from the
   // draft ModelArgs instead of reusing the target KVCacheShape. DFlash,
@@ -123,17 +127,8 @@ class SpeculativeConfig final {
     return boost::iequals(algorithm, "MTP");
   }
 
-  // Whether this speculative algorithm advances the unified constraint
-  // channel one position per draft token, which is what structured output
-  // requires. MTP and the block-diffusion drafters (DFlash/DFlash2/DSpark)
-  // do; Eagle3 uses a reduced draft vocabulary and suffix-style proposers
-  // never read the channel, so those stay rejected. Shared by the LLM and
-  // VLM request factories and the xgrammar startup gate so the admission
-  // rule cannot drift.
-  static bool drives_constraint_channel(std::string_view algorithm) {
-    return is_mtp_algorithm(algorithm) ||
-           is_block_diffusion_algorithm(algorithm);
-  }
+  // Structured output requires one grammar state per target verify position.
+  static bool drives_constraint_channel(std::string_view algorithm);
 
   // Qwen3.8-27B reports qwen3_5 as its target model_type.
   static bool is_qwen3_5_mtp_or_dflash2(std::string_view model_type,
@@ -201,11 +196,7 @@ class SpeculativeConfig final {
   // prune. Case-insensitive so it matches however the flag was cased. MTP is
   // classified separately via is_mtp_algorithm; callers that also accept MTP
   // must OR the two.
-  static bool is_block_diffusion_algorithm(std::string_view algorithm) {
-    return boost::iequals(algorithm, "dflash") ||
-           is_dflash2_algorithm(algorithm) ||
-           boost::iequals(algorithm, "dspark");
-  }
+  static bool is_block_diffusion_algorithm(std::string_view algorithm);
 
   // Standalone drafters own a full-attention KV pool built from their own
   // architecture instead of running inside the target's KV. GLM-5.3-Flash's
@@ -215,10 +206,7 @@ class SpeculativeConfig final {
   //
   // Drafters that share the target's architecture (MTP, Eagle3, DeepSeek-V4
   // DSpark) inherit the target's sharding and must return false here.
-  static bool owns_replicated_kv_cache(std::string_view algorithm) {
-    return boost::iequals(algorithm, "DFlash") ||
-           is_dflash2_algorithm(algorithm);
-  }
+  static bool owns_replicated_kv_cache(std::string_view algorithm);
 
   // Physical pages one logical block occupies in the drafter's KV pool. 1
   // means the draft follows the target's kv_split sharding.
@@ -229,23 +217,9 @@ class SpeculativeConfig final {
                : 1;
   }
 
-  static bool supports_host_kv_cache(std::string_view algorithm) {
-    return is_mtp_algorithm(algorithm) ||
-           is_block_diffusion_algorithm(algorithm) ||
-           boost::iequals(algorithm, "Eagle3");
-  }
-
-  // True for the algorithms whose draft path can emit dense per-token
-  // probabilities for probabilistic rejection sampling; greedy acceptance is
-  // always available, so DFlash/Suffix are gated out here. DFlash2 samples
-  // selector paths from a temperature-softmax distribution and always carries
-  // the dense proposal, so it is probabilistic-capable.
-  static bool is_probabilistic_draft_sampling_supported(
-      std::string_view algorithm) {
-    return is_mtp_algorithm(algorithm) || boost::iequals(algorithm, "DSpark") ||
-           is_dflash2_algorithm(algorithm) ||
-           boost::iequals(algorithm, "Eagle3");
-  }
+  // MTP and Eagle3 resume their draft from the target hidden state.
+  static bool requires_bootstrap_hidden(std::string_view algorithm);
+  static bool supports_host_kv_cache(std::string_view algorithm);
 
   void from_flags();
   void from_json(const JsonReader& json);
@@ -253,25 +227,7 @@ class SpeculativeConfig final {
   void initialize();
   void validate() const;
 
-  [[nodiscard]] static const OptionCategory& option_category() {
-    static const OptionCategory kOptionCategory = {
-        "SPECULATIVE OPTIONS",
-        {"draft_model",
-         "num_speculative_tokens",
-         "speculative_algorithm",
-         "speculative_suffix_cache_max_depth",
-         "speculative_suffix_max_spec_factor",
-         "speculative_suffix_max_spec_offset",
-         "speculative_suffix_min_token_prob",
-         "speculative_suffix_max_cached_requests",
-         "speculative_suffix_use_tree_spec",
-         "draft_sampling_mode",
-         "enable_mtp_draft_body_tp1",
-         "enable_atb_spec_kernel",
-         "enable_adaptive_speculative_decode",
-         "adaptive_speculative_min_gain"}};
-    return kOptionCategory;
-  }
+  [[nodiscard]] static const OptionCategory& option_category();
 
   PROPERTY(std::string, draft_model);
 
@@ -281,25 +237,11 @@ class SpeculativeConfig final {
 
   PROPERTY(int32_t, speculative_suffix_cache_max_depth) = 64;
 
-  PROPERTY(double, speculative_suffix_max_spec_factor) = 1.0;
-
-  PROPERTY(double, speculative_suffix_max_spec_offset) = 0.0;
-
-  PROPERTY(double, speculative_suffix_min_token_prob) = 0.1;
-
   PROPERTY(int32_t, speculative_suffix_max_cached_requests) = -1;
 
-  PROPERTY(bool, speculative_suffix_use_tree_spec) = false;
-
-  PROPERTY(std::string, draft_sampling_mode) = "greedy";
+  PROPERTY(bool, enable_probabilistic_draft) = false;
 
   PROPERTY(bool, enable_mtp_draft_body_tp1) = false;
-
-  PROPERTY(bool, enable_atb_spec_kernel) = false;
-
-  PROPERTY(bool, enable_adaptive_speculative_decode) = false;
-
-  PROPERTY(double, adaptive_speculative_min_gain) = 0.0;
 };
 
 }  // namespace xllm

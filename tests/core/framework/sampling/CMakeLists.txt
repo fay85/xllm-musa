@@ -5,7 +5,6 @@ cc_test(
     sampler_test
   SRCS
     rejection_sampler_test.cpp
-    "${PROJECT_SOURCE_DIR}/xllm/core/framework/sampling/rejection_sampler.cpp"
     sampling_params_test.cpp
   DEPS
     absl::strings
@@ -34,6 +33,7 @@ cc_test(
   SRCS
     json_object_grammar_test.cpp
   DEPS
+    :sampler
     :json_object_grammar
     :constraint
     GTest::gtest_main

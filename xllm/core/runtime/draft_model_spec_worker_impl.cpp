@@ -22,6 +22,8 @@ limitations under the License.
 #include <tuple>
 
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/model_config.h"
+#include "core/framework/config/speculative_config.h"
 #include "core/framework/kv_cache/kv_cache_capacity.h"
 #include "core/framework/kv_cache/kv_cache_estimation.h"
 #include "core/framework/kv_cache/kv_cache_shape.h"
@@ -31,9 +33,9 @@ limitations under the License.
 #endif
 #include "core/framework/model/model_args.h"
 #include "core/framework/model/model_input_params.h"
+#include "core/framework/model_loader.h"
 #include "core/framework/parallel_state/process_group.h"
 #include "core/framework/sampling/sampling_params.h"
-#include "core/framework/speculative/adaptive_speculative_controller.h"
 #include "core/framework/speculative/embedding_cache.h"
 #include "runtime/llm_worker_impl.h"
 #include "util/hash_util.h"
@@ -197,9 +199,7 @@ DraftModelSpecWorkerImpl::DraftModelSpecWorkerImpl(
                             device,
                             options,
                             target_options,
-                            worker_type),
-      draft_sampling_mode_(
-          parse_draft_sampling_mode(options.draft_sampling_mode())) {
+                            worker_type) {
   CHECK(draft_factory) << "Draft worker factory must not be empty.";
   draft_impl_ = draft_factory();
   CHECK(draft_impl_ != nullptr) << "Draft worker factory must return a worker.";
@@ -211,6 +211,55 @@ DraftModelSpecWorkerImpl::~DraftModelSpecWorkerImpl() {
   if (hierarchy_kv_cache_transfer_ != nullptr) {
     hierarchy_kv_cache_transfer_->shutdown();
   }
+}
+
+bool DraftModelSpecWorkerImpl::init_model(const std::string& model_weights_path,
+                                          int32_t random_seed,
+                                          MasterStatus master_status) {
+  if (impl_->get_status() == WorkerImpl::Status::UNINITIALIZED) {
+    if (!SpeculativeWorkerImpl::init_model(
+            model_weights_path, random_seed, master_status)) {
+      return false;
+    }
+    context_ = impl_->context_;
+    on_target_model_loaded();
+    return true;
+  }
+
+  CHECK_EQ(draft_impl_->get_status(), WorkerImpl::Status::UNINITIALIZED);
+  if (!draft_impl_->init_model_from_path(model_weights_path,
+                                         random_seed,
+                                         master_status,
+                                         [this](ModelArgs& args, ModelLoader&) {
+                                           apply_draft_model_overrides(args);
+                                         })) {
+    return false;
+  }
+  auto& draft_model = *draft_impl_->get_causal_lm();
+  auto& target_model = *impl_->get_causal_lm();
+  const auto& draft_context = draft_impl_->context_;
+  const auto& draft_args = draft_context.get_model_args();
+  if (!SpeculativeConfig::is_dspark_algorithm(
+          options_.speculative_algorithm()) ||
+      !ModelConfig::is_python_model_impl(draft_context.get_model_impl())) {
+    draft_vocab_ = DraftVocabMapping(draft_model.d2t(),
+                                     draft_args.draft_vocab_size(),
+                                     context_.get_model_args().vocab_size(),
+                                     device_);
+  }
+  const auto& draft_model_type = draft_args.model_type();
+  if (!util::is_deepseek_v4_dspark_model_type(draft_model_type) &&
+      !draft_model.loaded_vocab_weights().value_or(false) &&
+      !(options_.enable_mtp_draft_body_tp1() &&
+        is_qwen3_5_mtp_model_type(draft_model_type))) {
+    if (!SpeculativeConfig::is_eagle3_algorithm(
+            options_.speculative_algorithm())) {
+      draft_model.share_lm_head(target_model);
+    }
+    draft_model.share_embed_tokens(target_model);
+  }
+  on_draft_model_loaded(model_weights_path);
+  return true;
 }
 
 KVCacheShape DraftModelSpecWorkerImpl::draft_kv_cache_shape(
@@ -236,9 +285,7 @@ KVCacheShape DraftModelSpecWorkerImpl::build_draft_kv_cache_shape(
 }
 
 std::tuple<int64_t, int64_t>
-DraftModelSpecWorkerImpl::estimate_kv_cache_capacity_with_draft(
-    const runtime::Options& target_options,
-    const runtime::Options& draft_options) {
+DraftModelSpecWorkerImpl::estimate_kv_cache_capacity() {
   const std::tuple<int64_t, int64_t> target_memory =
       impl_->estimate_kv_cache_capacity();
   const std::tuple<int64_t, int64_t> draft_memory =
@@ -256,13 +303,13 @@ DraftModelSpecWorkerImpl::estimate_kv_cache_capacity_with_draft(
   const ModelArgs& draft_model_args = draft_impl_->context_.get_model_args();
   KVCacheEstimateOptions target_estimate_options =
       make_kv_cache_estimate_options(target_model_args,
-                                     target_options,
+                                     impl_->get_options(),
                                      parallel_args_,
                                      dtype_,
                                      cache_size_in_bytes);
   const KVCacheEstimateOptions draft_estimate_options =
       make_kv_cache_estimate_options(draft_model_args,
-                                     draft_options,
+                                     draft_impl_->get_options(),
                                      draft_impl_->get_parallel_args(),
                                      dtype_,
                                      cache_size_in_bytes);
@@ -367,10 +414,6 @@ bool DraftModelSpecWorkerImpl::allocate_pools(
 
 bool DraftModelSpecWorkerImpl::allocate_kv_cache(
     const KVCacheShape& kv_cache_shape) {
-  CHECK(impl_ != nullptr);
-  CHECK(draft_impl_ != nullptr);
-  // MTP must fix its context policy before either pool or transfer is created.
-  static_cast<void>(requires_full_target_replay());
   prepare_hierarchy_kv_cache_transfers();
 
   return allocate_pools(kv_cache_shape,
@@ -382,9 +425,6 @@ bool DraftModelSpecWorkerImpl::allocate_kv_cache(
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 bool DraftModelSpecWorkerImpl::allocate_kv_cache_with_transfer(
     const KVCacheShape& kv_cache_shape) {
-  CHECK(impl_ != nullptr);
-  CHECK(draft_impl_ != nullptr);
-  static_cast<void>(requires_full_target_replay());
   prepare_hierarchy_kv_cache_transfers();
 
   if (kv_cache_transfer_ == nullptr) {
@@ -411,11 +451,18 @@ void DraftModelSpecWorkerImpl::force_greedy_draft_sampling(
   if (sampling_params.do_sample.defined()) {
     sampling_params.do_sample = torch::zeros_like(sampling_params.do_sample);
   }
-  sampling_params.all_random_sample = false;
-  sampling_params.all_greedy_sample = true;
+  sampling_params.temperatures = torch::Tensor();
+  sampling_params.top_k = torch::Tensor();
+  sampling_params.top_p = torch::Tensor();
+  sampling_params.frequency_penalties = torch::Tensor();
+  sampling_params.presence_penalties = torch::Tensor();
+  sampling_params.repetition_penalties = torch::Tensor();
+  sampling_params.filter_mask = torch::Tensor();
+  sampling_params.filter_bitmask = torch::Tensor();
+
+  sampling_params.sampling_mode = SamplingMode::GREEDY;
   sampling_params.logprobs = false;
   sampling_params.max_top_logprobs = 0;
-  sampling_params.return_probs = false;
 }
 
 ForwardInput DraftModelSpecWorkerImpl::update_input_by_last_step_output(
@@ -423,73 +470,8 @@ ForwardInput DraftModelSpecWorkerImpl::update_input_by_last_step_output(
   return inputs;
 }
 
-void DraftModelSpecWorkerImpl::sync_dp_global_token_nums_after_prune(
-    ModelInputParams& input_params,
-    int32_t local_total_val_tokens) {
-  // Only the adaptive controller makes the per-rank validate token count
-  // data-dependent. When it is inactive the dense path already keeps
-  // dp_global_token_nums identical across ranks (constant width multiplier), so
-  // skip the collective entirely and leave static behavior byte-unchanged.
-  if (adaptive_spec_controller_ == nullptr ||
-      !adaptive_spec_controller_->enabled()) {
-    return;
-  }
-  ProcessGroup* dp_group = parallel_args_.dp_local_process_group_;
-  if (dp_group == nullptr || dp_group->world_size() <= 1) {
-    return;
-  }
-  const int32_t dp_size = static_cast<int32_t>(dp_group->world_size());
-  // Gather each DP peer's true post-pruning validate token count. The engine
-  // pre-populates dp_global_token_nums assuming a uniform per-seq width; after
-  // per-seq pruning that assumption is stale, so the padded and raw vectors are
-  // both rewritten with the gathered per-rank counts. Every DP rank runs this,
-  // including ranks that did not prune this step, so the collective matches.
-  torch::Tensor local = torch::tensor(
-      {local_total_val_tokens},
-      torch::TensorOptions().dtype(torch::kInt32).device(device_.unwrap()));
-  torch::Tensor gathered = dp_group->allgather_base_sync(local);
-  torch::Tensor gathered_cpu =
-      safe_to(gathered.view({dp_size}), torch::kCPU).contiguous();
-  const int32_t* gathered_data = gathered_cpu.data_ptr<int32_t>();
-
-  std::vector<int32_t>& token_nums = input_params.parallel.dp_global_token_nums;
-  std::vector<int32_t>& raw_token_nums =
-      input_params.parallel.raw_dp_global_token_nums;
-  CHECK_EQ(static_cast<int32_t>(token_nums.size()), dp_size)
-      << "dp_global_token_nums size must match DP group world size";
-  for (int32_t dp_rank = 0; dp_rank < dp_size; ++dp_rank) {
-    token_nums[static_cast<size_t>(dp_rank)] = gathered_data[dp_rank];
-  }
-  if (!raw_token_nums.empty()) {
-    CHECK_EQ(static_cast<int32_t>(raw_token_nums.size()), dp_size)
-        << "raw_dp_global_token_nums size must match DP group world size";
-    for (int32_t dp_rank = 0; dp_rank < dp_size; ++dp_rank) {
-      raw_token_nums[static_cast<size_t>(dp_rank)] = gathered_data[dp_rank];
-    }
-  }
-}
-
-void DraftModelSpecWorkerImpl::sync_dp_global_token_nums_for_idle_rank(
-    ModelInputParams& input_params) {
-  if (adaptive_spec_controller_ == nullptr ||
-      !adaptive_spec_controller_->enabled()) {
-    return;
-  }
-  ProcessGroup* dp_group = parallel_args_.dp_local_process_group_;
-  if (dp_group == nullptr || dp_group->world_size() <= 1) {
-    return;
-  }
-  // The idle rank's own validate width is already materialized in its
-  // dp_global_token_nums entry (scaled to the uniform N+1 width by the caller).
-  // Contribute exactly that so the gathered vector stays consistent with the
-  // busy peers, which pass their pruned Σ per_seq_val_tokens.
-  const int32_t dp_rank = static_cast<int32_t>(dp_group->rank());
-  const std::vector<int32_t>& token_nums =
-      input_params.parallel.dp_global_token_nums;
-  CHECK_LT(dp_rank, static_cast<int32_t>(token_nums.size()))
-      << "DP rank out of range for dp_global_token_nums";
-  sync_dp_global_token_nums_after_prune(
-      input_params, token_nums[static_cast<size_t>(dp_rank)]);
+bool DraftModelSpecWorkerImpl::requires_full_target_replay() const {
+  return false;
 }
 
 }  // namespace xllm

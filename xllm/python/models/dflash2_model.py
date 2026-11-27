@@ -27,7 +27,8 @@ from xllm.python.model_executor.execution_context import can_execute_graph
 from xllm.python.model_executor.forward_context import get_execution_context
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftCandidates, DraftDecoderOutput, DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import DraftCandidates, DraftDecoderOutput, ModelOutput
+from xllm.python.model_executor.sampling_metadata import ModelSamplingInput, SamplingMode
 from xllm.python.models.dflash_model import DFlashDecoderMetadata
 
 if TYPE_CHECKING:
@@ -40,34 +41,34 @@ class DFlash2SamplingMetadata:
     noise: torch.Tensor
     temperatures: torch.Tensor | None
     do_sample: torch.Tensor | None
-    all_greedy_sample: bool
-    all_random_sample: bool
+    sampling_mode: SamplingMode
 
 
 class DFlash2SamplingMetadataBuilder:
     """Own candidate and sampling inputs; noise is already agreed across TP."""
 
-    metadata_type = DFlash2SamplingMetadata
+    metadata_type: type[object] = DFlash2SamplingMetadata
 
-    def __init__(self, query_width: int, top_k: int) -> None:
-        if query_width <= 1 or top_k <= 0:
-            raise ValueError("DFlash2 requires an anchor, proposal positions, and positive selector top_k")
-        self.query_width = query_width
-        self.num_steps = query_width - 1
+    def __init__(self, num_speculative_tokens: int, top_k: int) -> None:
+        if top_k <= 0:
+            raise ValueError("DFlash2 requires a positive selector top_k")
+        self.num_speculative_tokens = num_speculative_tokens
         self.top_k = top_k
 
     @classmethod
     def from_config(cls, config: Mapping[str, object]) -> DFlash2SamplingMetadataBuilder:
-        return cls(int(config["draft_query_width"]), int(config["dflash2_selector_top_k"]))
+        return cls(cast("int", config["num_speculative_tokens"]), cast("int", config["dflash2_selector_top_k"]))
 
     def can_execute_graph(self, input_batch: InputBatch) -> bool:
         # TODO: Support random/mixed and temperature-scaled graphs with mode-aware
         # graph keys and persistent temperature/do_sample buffers. Keep eager
         # fallback until capture variants and metadata updates are implemented.
+        sampling = input_batch.sampling
         return (
-            self._has_valid_inputs(input_batch)
-            and input_batch.sampling.parameters.all_greedy_sample
-            and input_batch.sampling.parameters.temperatures is None
+            sampling is not None
+            and self._has_valid_inputs(input_batch)
+            and sampling.parameters.sampling_mode == SamplingMode.GREEDY
+            and sampling.parameters.temperatures is None
         )
 
     def _has_valid_inputs(self, input_batch: InputBatch) -> bool:
@@ -77,18 +78,18 @@ class DFlash2SamplingMetadataBuilder:
             return False
         noise = sampling.gumbel_noise
         requests = input_batch.num_reqs
-        if input_batch.num_tokens != requests * self.num_steps:
+        if input_batch.num_tokens != requests * self.num_speculative_tokens:
             return False
-        if any(count != self.num_steps for count in input_batch.num_scheduled_tokens):
+        if any(count != self.num_speculative_tokens for count in input_batch.num_scheduled_tokens):
             return False
         if candidates.shape != (input_batch.num_tokens, self.top_k):
             return False
-        if noise.shape != (requests, self.num_steps, self.top_k):
+        if noise.shape != (requests, self.num_speculative_tokens, self.top_k):
             return False
         if any(tensor.device != input_batch.input_ids.device for tensor in (noise, candidates)):
             return False
         parameters = sampling.parameters
-        if not parameters.all_greedy_sample and parameters.do_sample is None:
+        if parameters.sampling_mode == SamplingMode.MIXED and parameters.do_sample is None:
             return False
         return all(
             tensor is None or tensor.shape == (requests,) for tensor in (parameters.temperatures, parameters.do_sample)
@@ -105,7 +106,7 @@ class DFlash2SamplingMetadataBuilder:
         )
         do_sample = (
             None
-            if parameters.all_greedy_sample or parameters.all_random_sample
+            if parameters.sampling_mode != SamplingMode.MIXED
             else parameters.do_sample.to(device=device, dtype=torch.bool)
         )
         return DFlash2SamplingMetadata(
@@ -113,32 +114,32 @@ class DFlash2SamplingMetadataBuilder:
             sampling.gumbel_noise,
             temperatures,
             do_sample,
-            parameters.all_greedy_sample,
-            parameters.all_random_sample,
+            parameters.sampling_mode,
         )
 
     def allocate_persistent(self, input_batch: InputBatch, metadata: AttentionMetadata) -> DFlash2SamplingMetadata:
-        requests, remainder = divmod(input_batch.num_tokens_after_padding, self.num_steps)
+        requests, remainder = divmod(input_batch.num_tokens_after_padding, self.num_speculative_tokens)
         if remainder:
             raise ValueError("DFlash2 graph padding must preserve complete candidate blocks")
         device = input_batch.input_ids.device
         return DFlash2SamplingMetadata(
             input_batch.hidden_states.new_zeros((input_batch.num_tokens_after_padding, self.top_k)),
-            torch.zeros((requests, self.num_steps, self.top_k), device=device, dtype=torch.float32),
+            torch.zeros((requests, self.num_speculative_tokens, self.top_k), device=device, dtype=torch.float32),
             None,
             None,
-            True,
-            False,
+            SamplingMode.GREEDY,
         )
 
     def update_persistent(
-        self, persistent_metadata: DFlash2SamplingMetadata, input_batch: InputBatch, metadata: AttentionMetadata
+        self, persistent_metadata: object, input_batch: InputBatch, metadata: AttentionMetadata
     ) -> None:
         if not self.can_execute_graph(input_batch):
             raise ValueError("DFlash2 sampling graph requires greedy sampling without temperature scaling")
+        stored = cast("DFlash2SamplingMetadata", persistent_metadata)
+        sampling = cast("ModelSamplingInput", input_batch.sampling)
         for destination, value, count in (
-            (persistent_metadata.candidate_ids, input_batch.hidden_states, input_batch.num_tokens),
-            (persistent_metadata.noise, input_batch.sampling.gumbel_noise, input_batch.num_reqs),
+            (stored.candidate_ids, input_batch.hidden_states, input_batch.num_tokens),
+            (stored.noise, sampling.gumbel_noise, input_batch.num_reqs),
         ):
             if value.device.type == "npu":
                 value.record_stream(torch.npu.current_stream(value.device))
@@ -219,37 +220,38 @@ class DFlash2ProposalModel(nn.Module):
         sampling = get_execution_context(DFlash2SamplingMetadata)
         if sampling is None or input_embedding is None:
             raise RuntimeError("DFlash2 proposal requires selector edges and sampling metadata")
-        steps = self._builder.num_steps
+        steps = self._builder.num_speculative_tokens
         requests = input_ids.numel() // steps
         top_k = self._builder.top_k
         candidate_ids = sampling.candidate_ids.view(requests, steps, top_k)
-        edge_log_probs = input_embedding.view(requests, steps, top_k, top_k).float()
+        edge_logits = input_embedding.view(requests, steps, top_k, top_k).float()
         if sampling.temperatures is not None:
             temperatures = sampling.temperatures.to(self._logits_dtype).float()
             temperatures = temperatures.masked_fill(temperatures == 0, 1).view(requests, 1, 1, 1)
-            edge_log_probs.div_(temperatures)
-        edge_log_probs = torch.log_softmax(edge_log_probs, dim=-1)
-        edge_rows = edge_log_probs.view(-1, top_k)
+            edge_logits = edge_logits / temperatures
+        edge_rows = edge_logits.view(-1, top_k)
         previous_indices = torch.zeros(requests, dtype=torch.long, device=input_ids.device)
         batch_offsets = torch.arange(requests, device=input_ids.device) * (steps * top_k)
         tokens = torch.empty((requests, steps), dtype=candidate_ids.dtype, device=input_ids.device)
-        candidate_probs = torch.empty((requests, steps, top_k), dtype=torch.float32, device=input_ids.device)
+        return_draft_logits = sampling.sampling_mode != SamplingMode.GREEDY
+        candidate_logits = (
+            torch.empty((requests, steps, top_k), dtype=torch.float32, device=input_ids.device)
+            if return_draft_logits
+            else None
+        )
         for step in range(steps):
-            row_log_probs = edge_rows.index_select(0, previous_indices + batch_offsets + step * top_k)
-            sampled = (row_log_probs + sampling.noise[:, step]).argmax(dim=-1)
+            transition_logits = edge_rows.index_select(0, previous_indices + batch_offsets + step * top_k)
+            sampled = (transition_logits + sampling.noise[:, step]).argmax(dim=-1)
             tokens[:, step] = candidate_ids[:, step].gather(1, sampled[:, None]).squeeze(1)
-            if sampling.all_random_sample:
-                step_probs = row_log_probs.exp()
-            else:
-                greedy_probs = torch.zeros_like(row_log_probs).scatter_(1, sampled[:, None], 1.0)
-                step_probs = (
-                    greedy_probs
-                    if sampling.all_greedy_sample
-                    else torch.where(sampling.do_sample[:, None], row_log_probs.exp(), greedy_probs)
-                )
-            candidate_probs[:, step] = step_probs
+            if candidate_logits is not None:
+                if sampling.do_sample is not None:
+                    greedy_logits = torch.full_like(transition_logits, float("-inf")).scatter_(1, sampled[:, None], 0.0)
+                    transition_logits = torch.where(sampling.do_sample[:, None], transition_logits, greedy_logits)
+                candidate_logits[:, step] = transition_logits
             previous_indices = sampled
-        dense_probs = torch.zeros(
-            (requests, steps, self._vocab_size), dtype=torch.float32, device=input_ids.device
-        ).scatter_(-1, candidate_ids, candidate_probs)
-        return ModelOutput(draft_proposal=DraftProposal(tokens, dense_probs))
+        draft_logits = None
+        if candidate_logits is not None:
+            draft_logits = torch.full(
+                (requests, steps, self._vocab_size), float("-inf"), dtype=torch.float32, device=input_ids.device
+            ).scatter_(-1, candidate_ids, candidate_logits)
+        return ModelOutput(draft_token_ids=tokens, draft_logits=draft_logits)

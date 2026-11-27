@@ -398,8 +398,6 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/npu_layers.links" "${{links}}")
             "npu_dp_ep_padding_test",
             "npu_cp_capability_test",
             "cache_layout_builder_test",
-            "adaptive_speculative_controller_test",
-            "speculative_profile_registry_test",
             "draft_validation_test",
             "eplb_options_test",
             "eplb_utils_test",
@@ -458,7 +456,7 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/npu_layers.links" "${{links}}")
             "batch_test",
             "kv_cache_test",
             "scheduler_test",
-            "spec_input_builder_test",
+            "decode_input_builder_test",
             "mtp_async_state_test",
             "mtp_async_input_builder_test",
             "eplb_executor_test",
@@ -484,11 +482,7 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/npu_layers.links" "${{links}}")
             (source / "tests").mkdir()
             (source / "tests/npu_test_environment.cpp").touch()
             for relative_source in (
-                "sampling/rejection_sampler.cpp",
-                "speculative/spec_input_builder.cpp",
                 "speculative/mtp_async_state.cpp",
-                "speculative/adaptive_speculative_controller.cpp",
-                "speculative/speculative_profile_registry.cpp",
                 "speculative/speculative_cache_utils.cpp",
                 "speculative/mtp_execution_policy.cpp",
                 "speculative/dflash_async_input_builder.cpp",

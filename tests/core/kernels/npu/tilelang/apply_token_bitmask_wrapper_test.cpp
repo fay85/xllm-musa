@@ -22,7 +22,7 @@ limitations under the License.
 #include <vector>
 
 #include "acl/acl.h"
-#include "core/framework/sampling/json_object_grammar.h"
+#include "core/framework/sampling/logits_processor.h"
 #include "core/kernels/npu/tilelang/tilelang_ops_api.h"
 
 namespace xllm::kernel::npu::tilelang {

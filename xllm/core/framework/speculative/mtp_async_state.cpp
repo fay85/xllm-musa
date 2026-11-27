@@ -69,18 +69,6 @@ TargetSpecVerifyMode classify_target_spec_verify_mode(
   return TargetSpecVerifyMode::GENERIC;
 }
 
-bool requires_uniform_spec_verify(std::string_view model_type,
-                                  bool is_python_model,
-                                  bool graph_enabled,
-                                  bool requires_eager_execution) {
-  if (model_type == "glm_moe_dsa") {
-    return is_python_model && graph_enabled && !requires_eager_execution;
-  }
-  return is_qwen3_5_target_model_type(model_type) ||
-         is_glm5_next_target_model_type(model_type) ||
-         model_type == "glm5_next_text";
-}
-
 bool supports_native_spec_verify_replay_update(TargetSpecVerifyMode mode,
                                                bool is_python_model) {
   return !is_python_model && mode == TargetSpecVerifyMode::EXPANDED_VERIFY;

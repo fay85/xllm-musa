@@ -43,8 +43,6 @@ class Executor final {
 
   void set_dp_process_group(ProcessGroup* group);
 
-  ForwardInput prepare_inputs(Batch& batch);
-
   // tokens: vector size is dp_size, each element is [num_tokens/dp_size]
   // positions: vector size is dp_size, each element is [num_tokens/dp_size]
   // token pos in the sequence returns: ModelOutput

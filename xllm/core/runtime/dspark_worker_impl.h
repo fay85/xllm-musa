@@ -18,7 +18,7 @@ limitations under the License.
 #include <optional>
 #include <vector>
 
-#include "runtime/dflash/dflash_worker_impl.h"
+#include "core/runtime/dflash_worker_impl.h"
 
 namespace xllm {
 
@@ -37,21 +37,16 @@ class DSparkWorkerImpl final : public DFlashWorkerImpl {
 
   ~DSparkWorkerImpl() override;
 
-  // Load the draft weights, then (for reduced-vocabulary drafts) precompute the
-  // draft-to-target id map from the checkpoint's ``d2t`` table.
-  bool init_model(const std::string& model_weights_path,
-                  int32_t random_seed,
-                  MasterStatus master_status) override;
-
  protected:
+  void on_draft_model_loaded(const std::string& model_weights_path) override;
   // N-wide query block: anchor (slot 0) carries the last real token and
   // predicts the first draft token; every position is a prediction. DFlash's
   // prepare_query_inputs reads this hook to pick the block layout.
   bool sample_from_anchor() const override { return true; }
 
   // Build the DSpark query and produce the complete proposal block.
-  DraftBlock run_decode_draft(const ForwardInput& input,
-                              ForwardInput& validate_input) override;
+  ForwardOutput run_decode_draft(const ForwardInput& input,
+                                 ForwardInput& validate_input) override;
 
   std::optional<ForwardOutput> step_decode(const ForwardInput& input) override;
   std::optional<ForwardOutput> step_prefill(const ForwardInput& input) override;
@@ -61,34 +56,24 @@ class DSparkWorkerImpl final : public DFlashWorkerImpl {
 
  private:
   bool can_prelaunch_draft_for_init(bool supports_device_inputs) const;
-  bool can_prelaunch_draft_for_this_step(const ForwardInput& input) const;
-  DraftBlock run_decode_draft_from_pending(const ForwardInput& input,
-                                           const std::vector<int64_t>& rows);
-  DraftBlock execute_draft_query(const ForwardInput& input,
-                                 ForwardInput query,
-                                 bool prepared,
-                                 ForwardInput* validate_input = nullptr);
+  ForwardOutput run_decode_draft_from_pending(
+      const ForwardInput& input,
+      const std::vector<int64_t>& rows) override;
+  ForwardOutput execute_draft_query(const ForwardInput& input,
+                                    ForwardInput query,
+                                    bool prepared,
+                                    ForwardInput* validate_input = nullptr);
 
-  struct BlockSample {
-    DraftProposal proposal;
-    torch::Tensor confidence_probs;
-  };
-
-  BlockSample sample_block(const torch::Tensor& base_logits,
-                           const torch::Tensor& last_hidden,
-                           const torch::Tensor& anchor_token_ids,
-                           const SamplingParameters& sampling_params) const;
+  std::pair<torch::Tensor, torch::Tensor> sample_block(
+      const torch::Tensor& base_logits,
+      const torch::Tensor& anchor_token_ids,
+      const SamplingParameters& sampling_params) const;
 
   void synchronize_sampled_token_ids(
       torch::Tensor& sampled_token_ids,
       const SamplingParameters& sampling_params) const;
 
   ProcessGroup* sampling_process_group_ = nullptr;
-
-  // draft-id -> target-id map (hot_token_id[i] = d2t[i] + i), precomputed from
-  // the checkpoint's ``d2t`` table. Undefined for full-vocabulary drafts, in
-  // which case no remapping is applied.
-  torch::Tensor hot_token_id_;
 };
 
 }  // namespace xllm

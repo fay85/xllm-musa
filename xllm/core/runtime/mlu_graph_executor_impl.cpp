@@ -805,11 +805,6 @@ void MluGraphExecutorImpl::set_dp_process_group(ProcessGroup* group) {
   dp_group_ = group;
 }
 
-ForwardInput MluGraphExecutorImpl::prepare_inputs(Batch& batch) {
-  return batch.prepare_forward_input(
-      options_.num_decoding_tokens(), 0, args_, options_.cp_size());
-}
-
 ModelOutput MluGraphExecutorImpl::run_eager(const torch::Tensor& tokens,
                                             const torch::Tensor& positions,
                                             std::vector<KVCache>& kv_caches,

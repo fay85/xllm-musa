@@ -241,10 +241,10 @@ def test_v41_executor_preserves_csa2_dispatch_after_main_integration(
             dp_size,
             0,
             4,
-            num_decoding_tokens=1,
+            num_speculative_tokens=0,
             enable_mega_moe_token_mask=False,
             is_spec_draft=False,
-            draft_query_width=1,
+            model_type="",
             capture_sizes=(),
         )
         executor.decode_graph_runner.bind_execution_metadata_builders.assert_called_once_with(())
@@ -268,7 +268,6 @@ def test_v41_backend_keeps_checkpoint_specific_graph_capability(
             "weight_quant_method": quant_method,
             "quantization_config": {"quant_method": quant_method},
         },
-        num_decoding_tokens=1,
         acl_graph_enabled=True,
     )
     assert isinstance(backend, Csa2AttentionBackend)
@@ -584,7 +583,11 @@ class TestCreateAttentionBackend:
                 _make_attention_layer(num_kv_heads=1, head_dim=128),
                 MagicMock(type="npu", index=0),
                 torch.bfloat16,
-                {"dflash2_block_size": proposal_width, "dflash_xfia_enabled": True},
+                {
+                    "model_type": "DFlash2DraftModel" if proposal_width else "",
+                    "num_speculative_tokens": max(proposal_width - 1, 0),
+                    "dflash_xfia_enabled": True,
+                },
             )
         assert backend.init_kwargs["use_xfia_decode"] == (is_ascend_a3 and proposal_width > 0)
         assert backend.init_kwargs["xfia_query_width"] == max(proposal_width, 1)
@@ -594,42 +597,11 @@ class TestCreateAttentionBackend:
         else:
             native_query.assert_not_called()
 
-    @pytest.mark.parametrize("is_ascend_a3", [False, True])
-    @pytest.mark.parametrize("proposal_width", [0, 8, 15])
-    def test_dflash2_xfia_uses_draft_query_width(self, is_ascend_a3: bool, proposal_width: int) -> None:
-        native_query = MagicMock(return_value=is_ascend_a3)
-        runtime = types.ModuleType("xllm_runtime")
-        runtime.is_ascend_a3 = native_query
-        with (
-            patch.dict(sys.modules, {"xllm_runtime": runtime}),
-            patch("xllm.python.model_executor.executor.current_platform.is_npu", return_value=True),
-            patch("xllm.python.attention.npu_paged_attention.NpuPagedAttentionBackend", StubAttentionBackend),
-        ):
-            backend = _create_attention_backend(
-                _make_attention_layer(num_kv_heads=1, head_dim=128),
-                MagicMock(type="npu", index=0),
-                torch.bfloat16,
-                {
-                    "draft_query_width": proposal_width,
-                    "dflash2_block_size": 16,
-                    "dflash_xfia_enabled": True,
-                },
-            )
-        assert backend.init_kwargs["use_xfia_decode"] == (is_ascend_a3 and proposal_width > 0)
-        assert backend.init_kwargs["xfia_query_width"] == max(proposal_width, 1)
-        if proposal_width > 0:
-            native_query.assert_called_once_with()
-        else:
-            native_query.assert_not_called()
-
-    @pytest.mark.parametrize("draft_query_width", [None, 15])
-    def test_dflash2_xfia_stays_off_without_prelaunch_gate(self, draft_query_width: int | None) -> None:
+    def test_dflash2_xfia_stays_off_without_prelaunch_gate(self) -> None:
         native_query = MagicMock(return_value=True)
         runtime = types.ModuleType("xllm_runtime")
         runtime.is_ascend_a3 = native_query
-        config = {"dflash2_block_size": 8, "dflash_xfia_enabled": False}
-        if draft_query_width is not None:
-            config["draft_query_width"] = draft_query_width
+        config = {"model_type": "DFlash2DraftModel", "num_speculative_tokens": 7, "dflash_xfia_enabled": False}
         with (
             patch.dict(sys.modules, {"xllm_runtime": runtime}),
             patch("xllm.python.model_executor.executor.current_platform.is_npu", return_value=True),
@@ -658,7 +630,8 @@ class TestCreateAttentionBackend:
         attention = _make_attention_layer(num_kv_heads=1, head_dim=128)
         attention.attention_window = (7, 3)
         device = torch.device("cpu")
-        query_width = 4
+        num_speculative_tokens = 3
+        query_width = num_speculative_tokens + 1
         with (
             patch("xllm.python.model_executor.executor.current_platform.is_npu", return_value=True),
             patch("xllm.python.model_executor.executor.distributed.dcp_group", return_value=dcp_group),
@@ -667,7 +640,7 @@ class TestCreateAttentionBackend:
                 attention,
                 device,
                 torch.bfloat16,
-                {"is_draft_engine": True, "draft_query_width": query_width, "model_type": model_type},
+                {"is_draft_engine": True, "num_speculative_tokens": num_speculative_tokens, "model_type": model_type},
                 block_query_graph_metadata=True,
             )
         cache = torch.empty(1, 128, 1, 128, dtype=torch.bfloat16, device=device)
@@ -679,7 +652,8 @@ class TestCreateAttentionBackend:
             max_batch=1,
             max_model_len=128,
             is_spec_draft=True,
-            draft_query_width=query_width,
+            num_speculative_tokens=num_speculative_tokens,
+            model_type=model_type,
         )
         metadata = SimpleNamespace(
             is_prefill=False,
@@ -724,9 +698,8 @@ class TestCreateAttentionBackend:
                 MagicMock(type="npu", index=0),
                 torch.bfloat16,
                 {
-                    "speculative_algorithm": "DSpark",
-                    "draft_query_width": 15,
-                    "dflash2_block_size": 0,
+                    "model_type": "DSparkDraftModel",
+                    "num_speculative_tokens": 15,
                     "dflash_xfia_enabled": dflash_xfia_enabled,
                 },
                 block_query_graph_metadata=block_query_graph_metadata,
@@ -734,7 +707,8 @@ class TestCreateAttentionBackend:
         assert backend.init_kwargs["use_xfia_decode"] == (
             is_ascend_a3 and dflash_xfia_enabled and not block_query_graph_metadata
         )
-        assert backend.init_kwargs["xfia_query_width"] == (15 if dflash_xfia_enabled else 1)
+        assert isinstance(backend, StubAttentionBackend)
+        assert backend.init_kwargs["xfia_query_width"] == 15
         if dflash_xfia_enabled and not block_query_graph_metadata:
             native_query.assert_called_once_with()
         else:
@@ -763,8 +737,7 @@ class TestCreateAttentionBackend:
 
         assert isinstance(backend, StubAttentionBackend)
         assert backend.init_kwargs["attn_head_dim"] == 512
-        assert backend.init_kwargs["dspark_block_size"] == 0
-        assert backend.init_kwargs["dspark_use_native_sas"] is False
+        assert backend.init_kwargs["num_speculative_tokens"] == 0
         assert backend.init_kwargs["n_layers"] == 3
         assert backend.init_kwargs["compress_ratios"] == [1, 4, 128]
 
@@ -772,7 +745,9 @@ class TestCreateAttentionBackend:
         "xllm.python.model_executor.executor.current_platform.is_npu",
         return_value=True,
     )
-    def test_deepseek_v4_dspark_passes_native_sas_config(self, _mock_is_npu: MagicMock) -> None:
+    def test_deepseek_v4_dspark_passes_block_size(self, mock_is_npu: MagicMock) -> None:
+        """The DSpark model keeps its configured query width."""
+        mock_is_npu.assert_not_called()
         attn = _make_attention_layer(head_dim=512)
         module = types.ModuleType("xllm.python.attention.dsa_attention")
         module.DsaAttentionBackend = StubAttentionBackend
@@ -781,15 +756,14 @@ class TestCreateAttentionBackend:
             "compress_ratios": [1, 1, 1],
             "n_layers": 3,
             "window_size": 128,
-            "dspark_block_size": 5,
-            "dspark_use_native_sas": True,
+            "num_speculative_tokens": 5,
         }
 
         with patch.dict(sys.modules, {module.__name__: module}):
             backend = _create_attention_backend(attn, MagicMock(type="npu", index=0), torch.bfloat16, config)
 
-        assert backend.init_kwargs["dspark_block_size"] == 5
-        assert backend.init_kwargs["dspark_use_native_sas"] is True
+        assert isinstance(backend, StubAttentionBackend)
+        assert backend.init_kwargs["num_speculative_tokens"] == 5
 
     @patch(
         "xllm.python.model_executor.executor.current_platform.is_npu",
@@ -840,6 +814,7 @@ class TestCreateAttentionBackend:
         module.Csa2AttentionBackend = _Csa2StubAttentionBackend
         config = {
             "model_type": "deepseek_v41_dspark",
+            "num_speculative_tokens": 3,
             "compress_ratios": [0, 0, 0],
             "n_layers": 3,
             "window_size": 128,
@@ -923,8 +898,7 @@ class TestCreateAttentionBackend:
             attn,
             MagicMock(type="npu", index=0),
             torch.float16,
-            {"enable_mla": False},
-            num_decoding_tokens=num_decoding_tokens,
+            {"num_speculative_tokens": num_decoding_tokens - 1, "enable_mla": False},
         )
         assert isinstance(backend, StubAttentionBackend)
         assert backend.init_kwargs["num_heads"] == 8
@@ -1177,9 +1151,8 @@ class TestCreateAttentionBackend:
                 attn,
                 MagicMock(type="npu", index=0),
                 torch.float16,
-                {"cp_size": 1, "enable_mla": True},
+                {"num_speculative_tokens": 3, "cp_size": 1, "enable_mla": True},
                 max_num_reqs=3,
-                num_decoding_tokens=4,
             )
 
         assert isinstance(backend, StubAttentionBackend)
@@ -1211,21 +1184,6 @@ class TestCreateAttentionBackend:
 
 
 class TestModelExecutorConstruction:
-    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
-    def test_acl_graph_rejects_query_geometry_divergence(self) -> None:
-        with pytest.raises(ValueError, match="matching native and Python decode query widths"):
-            ModelExecutor(
-                _FakeModel(num_layers=1),
-                {
-                    "max_position_embeddings": 128,
-                    "enable_graph": True,
-                    "graph_capture_sizes": [3, 6, 9],
-                    "num_speculative_tokens": 2,
-                },
-                max_seqs_per_batch=16,
-                num_decoding_tokens=1,
-            )
-
     @pytest.mark.parametrize(
         ("model_type", "jev_prompt_attention", "use_xfia_decode"),
         [
@@ -1265,10 +1223,10 @@ class TestModelExecutorConstruction:
         monkeypatch.setattr(
             sys.modules[ModelExecutor.__module__], "_create_attention_backend", lambda *args, **kwargs: backend
         )
-        config = {"model_type": model_type, "enable_graph": False}
+        config = {"model_type": model_type, "enable_graph": False, "is_draft_engine": True}
         if jev_prompt_attention is not None:
             config["jev_prompt_attention"] = jev_prompt_attention
-        executor = ModelExecutor(model, config, max_seqs_per_batch=1, is_spec_draft=True)
+        executor = ModelExecutor(model, config, max_seqs_per_batch=1)
 
         assert executor.attention_backend is backend
         assert executor.eager_runner.attention_backend is backend
@@ -1382,8 +1340,8 @@ class TestModelExecutorConstruction:
             NpuPagedAttentionBackend._validate_prefix_bidir(metadata)
 
     @pytest.mark.parametrize(
-        ("enable_graph", "explicit_width", "config_depth", "expected_width"),
-        [(False, 1, 0, 1), (True, 1, 3, 4), (True, 4, 1, 4)],
+        ("enable_graph", "config_depth"),
+        [(False, 0), (True, 3)],
     )
     @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
@@ -1393,9 +1351,7 @@ class TestModelExecutorConstruction:
         mock_create: MagicMock,
         mock_graph_runner: MagicMock,
         enable_graph: bool,
-        explicit_width: int,
         config_depth: int,
-        expected_width: int,
     ) -> None:
         mock_create.return_value = StubAttentionBackend()
         ModelExecutor(
@@ -1406,12 +1362,10 @@ class TestModelExecutorConstruction:
                 "max_position_embeddings": 128,
             },
             max_seqs_per_batch=4,
-            num_decoding_tokens=explicit_width,
         )
 
-        assert mock_create.call_args.kwargs["num_decoding_tokens"] == expected_width
         if enable_graph:
-            assert mock_graph_runner.call_args.kwargs["num_decoding_tokens"] == expected_width
+            assert mock_graph_runner.call_args.kwargs["num_speculative_tokens"] == config_depth
         else:
             mock_graph_runner.assert_not_called()
 
@@ -1430,20 +1384,18 @@ class TestModelExecutorConstruction:
         executor = ModelExecutor(
             model,
             {
+                "is_draft_engine": True,
                 "enable_graph": enable_graph,
                 "num_speculative_tokens": 15,
-                "draft_query_width": 15,
+                "model_type": "DSparkDraftModel",
                 "max_position_embeddings": 128,
             },
             max_seqs_per_batch=4,
-            num_decoding_tokens=1,
-            is_spec_draft=True,
         )
-        assert mock_create.call_args.kwargs["num_decoding_tokens"] == 1
         assert executor.eager_runner.model is model.model
         if enable_graph:
             assert mock_graph_runner.call_args.args[0] is model.model
-            assert mock_graph_runner.call_args.kwargs["num_decoding_tokens"] == 1
+            assert mock_graph_runner.call_args.kwargs["num_speculative_tokens"] == 15
 
     @patch(
         "xllm.python.model_executor.executor._create_attention_backend",
@@ -1554,7 +1506,6 @@ class TestModelExecutorConstruction:
                     "enable_graph": False,
                 },
                 max_seqs_per_batch=4,
-                num_decoding_tokens=1,
             )
 
         backend = executor.attention_backend
@@ -1569,34 +1520,6 @@ class TestModelExecutorConstruction:
         assert backend.init_kwargs["head_dim"] == 512
         assert backend.init_kwargs["max_num_reqs"] == 4
         assert backend.init_kwargs["num_decoding_tokens"] == 1
-
-    @patch(
-        "xllm.python.model_executor.executor._create_attention_backend",
-        return_value=StubAttentionBackend(),
-    )
-    def test_glm_next_kda_rejects_adaptive_speculative_decode(self, _mock_backend: MagicMock) -> None:
-        class _KdaAttention(Attention):
-            is_glm_next_kda = True
-
-        model = _FakeModel(num_layers=0)
-        model.kda = _KdaAttention(
-            num_heads=16,
-            num_kv_heads=16,
-            head_dim=64,
-            scale=0.125,
-            sliding_window=0,
-            layer_id=0,
-        )
-
-        with pytest.raises(ValueError, match="GLM5 KDA does not support adaptive speculative decode"):
-            ModelExecutor(
-                model,
-                {
-                    "enable_graph": False,
-                    "runtime_adaptive_speculative_decode_enabled": True,
-                },
-                max_seqs_per_batch=4,
-            )
 
     @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: False)
     @patch("xllm.python.model_executor.executor.current_platform.is_cuda", new=lambda: True)
@@ -1643,13 +1566,13 @@ class TestModelExecutorConstruction:
         ModelExecutor(
             model,
             {
+                "is_draft_engine": is_spec_draft,
+                "num_speculative_tokens": 3,
                 "max_position_embeddings": 128,
                 "enable_graph": True,
             },
             max_seqs_per_batch=256,
-            num_decoding_tokens=4,
             acl_graph_decode_batch_size_limit=16,
-            is_spec_draft=is_spec_draft,
         )
 
         # PR3 passes max_seqs_per_batch (sequences) directly as the runner's
@@ -1665,10 +1588,10 @@ class TestModelExecutorConstruction:
             1,
             0,
             16,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
             enable_mega_moe_token_mask=False,
             is_spec_draft=is_spec_draft,
-            draft_query_width=1,
+            model_type="",
             capture_sizes=(),
         )
 
@@ -1772,7 +1695,7 @@ class TestModelExecutorConstruction:
             max_seqs_per_batch=128,
         )
         assert mock_graph_runner.call_args.kwargs["eplv2_graph_token_limit"] == mc2_capacity * tp_size
-        assert mock_graph_runner.call_args.kwargs["num_decoding_tokens"] == speculative_tokens + 1
+        assert mock_graph_runner.call_args.kwargs["num_speculative_tokens"] == speculative_tokens
 
     @pytest.mark.parametrize("mc2_capacity", [8])
     @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
@@ -1814,6 +1737,7 @@ class TestModelExecutorConstruction:
         ModelExecutor(
             model,
             {
+                "num_speculative_tokens": 3,
                 "dp_size": 16,
                 "dp_rank": 0,
                 "enable_mega_moe": True,
@@ -1822,7 +1746,6 @@ class TestModelExecutorConstruction:
                 "enable_graph": True,
             },
             max_seqs_per_batch=17,
-            num_decoding_tokens=4,
         )
 
         # PR3 passes max_seqs_per_batch (sequences) directly as the runner's
@@ -1838,10 +1761,10 @@ class TestModelExecutorConstruction:
             16,
             0,
             None,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
             enable_mega_moe_token_mask=True,
             is_spec_draft=False,
-            draft_query_width=1,
+            model_type="",
             capture_sizes=(),
         )
 
@@ -1859,15 +1782,17 @@ class TestModelExecutorConstruction:
         ModelExecutor(
             model,
             {
+                "is_draft_engine": True,
                 "max_position_embeddings": 128,
                 "enable_graph": True,
-                "draft_query_width": 8,
+                "model_type": "DFlash2DraftModel",
+                "num_speculative_tokens": 7,
+                "dflash2_selector_top_k": 4,
             },
             max_seqs_per_batch=8,
-            is_spec_draft=True,
         )
 
-        assert mock_graph_runner.call_args.kwargs["draft_query_width"] == 8
+        assert mock_graph_runner.call_args.kwargs["num_speculative_tokens"] == 7
 
 
 class TestDecodeCudaGraphDataParallelKeys:
@@ -2179,7 +2104,7 @@ class TestDecodeAclGraphSpeculativeMetadata:
             max_batch=64,
             max_model_len=8,
             decode_batch_size_limit=16,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         # 8 logical sequences x 4 verify rows (mtp3) = 32 token rows. The
         # graph admits on the SEQUENCE count (8, bucket 8 <= limit 16) while
@@ -3039,9 +2964,8 @@ class TestExecuteRouting:
         mock_create.return_value = StubAttentionBackend()
         executor = ModelExecutor(
             _FakeModel(num_layers=1),
-            {},
+            {"is_draft_engine": True},
             max_seqs_per_batch=4,
-            is_spec_draft=True,
         )
         executor.bind_kv_caches([(torch.zeros(1), torch.zeros(1))])
         executor.eager_runner = MagicMock()

@@ -357,7 +357,7 @@ native sampler，保留 penalty 和 mask，而不是一律替换成 argmax。仅
 有约束时只回退 sampling，不连带关闭 decoder graph。这里没有 candidate selector、Markov 采样循环和
 dense draft probabilities；target 请求仍可随机采样，普通 DFlash 仍不支持 probabilistic draft sampling。
 
-NPU Python DFlash 在 overlap 开启且未启用 adaptive speculation 时使用异步输出。DFlash 的 prelaunch 要求
+NPU Python DFlash 在 overlap 开启时使用异步输出。DFlash 的 prelaunch 要求
 A3、target 的有效 KV split 为 1、fused 或 PD decode，并保留 pending 请求身份校验和保守的 lookahead 容量检查。
 host restore、KV 搬运、结构化约束及依赖历史的 draft penalty 阻止 prelaunch，
 不连带关闭异步输出或独立满足条件的图。native DFlash 保留原同步路径；target backbone 的图边界和验证语义不变。
@@ -369,7 +369,7 @@ C++ worker：构造本轮 query、准备并跨 TP 同步 Gumbel noise
   → Python ExecutionPipeline
       → decoder Runner：backbone → lm_head → candidate selector
       → proposal Runner：path sampling
-  → ModelOutput.draft_proposal → C++ target verify / context 收尾
+  → ModelOutput.draft_token_ids / draft_logits → C++ target verify / context 收尾
 ```
 
 DFlash2 的 query 包含一个 anchor 和 N 个 proposal 位置。`DFlash2DecoderModel` 在同一个 forward 中

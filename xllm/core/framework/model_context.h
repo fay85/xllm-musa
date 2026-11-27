@@ -39,7 +39,6 @@ namespace xllm {
 // not set directly by users.
 struct OptimizationConfig {
   // Enable use of fused computation kernels.
-  bool enable_fused_spec_kernel = false;
   bool enable_fused_mla_kernel = false;
   bool enable_fused_indexer_qk = false;
 
@@ -56,9 +55,6 @@ struct OptimizationConfig {
 // from the checkpoint's ModelArgs alone.
 struct SpeculativeRuntimeConfig {
   bool is_draft_engine = false;
-  bool adaptive_enabled = false;
-  // Rows per draft sequence. 1 keeps draft graph admission in token units.
-  int32_t draft_query_width = 1;
   // Draft engine may use XFIA for DFlash2 proposal blocks.
   bool dflash_xfia_enabled = false;
 };

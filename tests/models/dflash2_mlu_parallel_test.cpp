@@ -30,7 +30,7 @@ limitations under the License.
 #include "core/layers/mlu/deepseek_v32/multi_device_test_utils.h"
 #include "core/layers/mlu/dflash2_decoder_layer.h"
 #include "core/platform/device.h"
-#include "core/runtime/dflash/dflash2_worker_impl.h"
+#include "core/runtime/dflash2_worker_impl.h"
 #include "models/model_registry.h"
 
 namespace xllm {
@@ -52,7 +52,7 @@ ModelArgs make_args() {
       .rope_theta(10000)
       .rms_norm_eps(1e-5)
       .sliding_window(16)
-      .dflash2_block_size(4)
+      .num_speculative_tokens(/*value=*/3)
       .dflash2_conv_group_size(16)
       .dflash2_conv_kernel_size(2);
   return args;
@@ -275,7 +275,6 @@ TEST(DFlash2MluParallelTest, ValidationTokensAgreeAcrossFormerCpRanks) {
         .ep_size(8)
         .speculative_algorithm("DFlash2")
         .num_speculative_tokens(3)
-        .num_decoding_tokens(4)
         .enable_speculative_decode(true)
         .block_size(16)
         .max_seqs_per_batch(2)

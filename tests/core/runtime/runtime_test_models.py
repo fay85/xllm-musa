@@ -24,7 +24,7 @@ from unittest.mock import patch
 import torch
 from torch import nn
 
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import ModelOutput
 
 
 @dataclass
@@ -57,13 +57,15 @@ class RuntimeTestModel(nn.Module):
                 aux_hidden_states=positions.float().unsqueeze(1).expand(-1, 4).contiguous(),
             )
         _TRACE.draft_tokens.append(tokens.clone())
-        anchors = tokens.view(-1, int(self.config["draft_query_width"]))[:, 0]
+        num_speculative_tokens = int(self.config["num_speculative_tokens"])
+        tokens_per_sequence = num_speculative_tokens + (self.config["model_type"] != "DSparkDraftModel")
+        anchors = tokens.view(-1, tokens_per_sequence)[:, 0]
         proposal = torch.stack((anchors + 1, anchors + 2), dim=1).long()
         if self.config.get("model_type") == "DFlashDraftModel":
-            return ModelOutput(draft_proposal=DraftProposal(proposal))
-        probabilities = torch.zeros((*proposal.shape, 64), device=tokens.device)
-        probabilities.scatter_(2, proposal.unsqueeze(2), 1.0)
-        return ModelOutput(draft_proposal=DraftProposal(proposal, probabilities))
+            return ModelOutput(draft_token_ids=proposal)
+        draft_logits = torch.full((*proposal.shape, 64), float("-inf"), device=tokens.device)
+        draft_logits.scatter_(2, proposal.unsqueeze(2), 0.0)
+        return ModelOutput(draft_token_ids=proposal, draft_logits=draft_logits)
 
     def compute_logits(self, hidden: torch.Tensor, selected: torch.Tensor | None = None) -> torch.Tensor:
         if selected is not None:
@@ -95,8 +97,11 @@ class RuntimeTestModel(nn.Module):
     def adapt_weights_for_reference_model(self, path: str) -> None:
         del path
 
-    def share_weights_from(self, source: nn.Module) -> None:
-        del source
+    def share_lm_head(self, target_model: nn.Module) -> None:
+        del target_model
+
+    def share_embed_tokens(self, target_model: nn.Module) -> None:
+        del target_model
 
     def has_dspark_confidence_head(self) -> bool:
         return False

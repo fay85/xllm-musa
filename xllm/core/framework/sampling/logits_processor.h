@@ -14,35 +14,33 @@ limitations under the License.
 ==============================================================================*/
 
 #pragma once
-#include <torch/torch.h>
+#include <torch/types.h>
 
-#include <memory>
-#include <vector>
-
-#if defined(USE_NPU)
-#include "kernels/npu/xllm_ops/xllm_ops_api.h"
-#endif
-#include "kernels/ops_api.h"
+#include "core/framework/sampling/sampling_params.h"
 
 namespace xllm {
 
-void apply_frequency_presence_penalties(
-    torch::Tensor& logits,
-    const torch::Tensor& unique_token_ids,
-    const torch::Tensor& unique_token_counts,
-    const torch::Tensor& frequency_penalties,
-    const torch::Tensor& presence_penalties);
+void apply_token_bitmask_inplace(torch::Tensor& logits,
+                                 const torch::Tensor& bitmask);
 
-void apply_repetition_penalties(torch::Tensor& logits,
-                                const torch::Tensor& unique_token_ids,
-                                const torch::Tensor& penalties);
+void apply_sampling_penalties(torch::Tensor& logits,
+                              const SamplingParameters& params);
 
 void apply_temperatures(torch::Tensor& logits,
                         const torch::Tensor& temperatures);
 
 void apply_top_k_top_p(torch::Tensor& logits,
-                       const torch::Tensor& temperatures,
                        const torch::Tensor& top_k,
                        const torch::Tensor& top_p);
+
+void apply_logits_transforms(torch::Tensor& logits,
+                             const torch::Tensor& temperatures,
+                             const torch::Tensor& top_k,
+                             const torch::Tensor& top_p);
+
+torch::Tensor process_logits(
+    torch::Tensor& logits,
+    const SamplingParameters& params,
+    const torch::Tensor& filter_mask = torch::Tensor());
 
 }  // namespace xllm

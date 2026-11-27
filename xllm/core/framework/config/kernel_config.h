@@ -50,7 +50,6 @@ class KernelConfig final {
          "enable_aclnn_matmul",
          "enable_aclnn_swiglu",
          "enable_mega_moe",
-         "enable_dspark_native_sas",
          "enable_flashcomm1",
          "enable_quantized_all_reduce",
          "quantized_all_reduce_min_numel",
@@ -82,8 +81,6 @@ class KernelConfig final {
   PROPERTY(bool, enable_aclnn_swiglu) = false;
 
   PROPERTY(bool, enable_mega_moe) = false;
-
-  PROPERTY(bool, enable_dspark_native_sas) = false;
 
   PROPERTY(bool, enable_flashcomm1) = false;
 

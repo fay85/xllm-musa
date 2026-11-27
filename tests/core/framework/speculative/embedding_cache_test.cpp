@@ -20,7 +20,6 @@ limitations under the License.
 #include <array>
 
 #include "core/framework/speculative/mtp_async_replay_builder.h"
-#include "core/framework/speculative/spec_input_builder.h"
 #include "core/runtime/forward_params.h"
 
 namespace xllm {
@@ -315,8 +314,8 @@ ForwardInput make_replay_input(const std::vector<int32_t>& tokens,
       torch::tensor({{2, 5, 9, 10}}, torch::kInt)
           .repeat({static_cast<int64_t>(tokens.size()), 1});
   for (int32_t position : positions) {
-    specBuilder::append_seq_len_by_layout(
-        input.input_params.attention.host.kv_seq_lens, position + 1);
+    append_seq_len_by_layout(input.input_params.attention.host.kv_seq_lens,
+                             position + 1);
   }
   return input;
 }
@@ -345,10 +344,10 @@ TEST(EmbeddingCacheTest,
     // The last emitted token is at position 4 + span. Its target hidden,
     // and hence the last draft KV entry, belongs at the preceding position.
     auto input = make_replay_input({40 + span}, {4 + span});
-    const auto replay = specBuilder::build_mtp_replay_inputs(
-        specBuilder::make_decode_row_context(input),
+    const auto replay = mtp_async::build_draft_replay_input_plan(
+        make_decode_batch_context(input),
         states,
-        torch::zeros({2}),
+        torch::zeros(/*size=*/{2}),
         /*block_size=*/4);
     const std::vector<int32_t> all_tokens = {41, 42, 43, 44};
     const std::vector<int32_t> all_positions = {4, 5, 6, 7};
@@ -390,7 +389,7 @@ TEST(EmbeddingCacheTest, BuildsDraftReplayInputPlanWithoutRuntimeState) {
   const auto plan =
       mtp_async::build_draft_replay_input_plan(input,
                                                states,
-                                               torch::zeros({2}),
+                                               torch::zeros(/*size=*/{2}),
                                                /*block_size=*/4,
                                                /*uniform_width=*/3,
                                                /*graph_warmup=*/false,
@@ -418,11 +417,11 @@ TEST(EmbeddingCacheTest,
   hidden.fill_(999);
   auto states = cache.read_decode_states({0, 1}, {"prefill", "bootstrap"});
   auto input = make_replay_input({40, 50}, {4, 4});
-  const auto replay = specBuilder::build_mtp_replay_inputs(
-      specBuilder::make_decode_row_context(input),
-      states,
-      torch::zeros({2}),
-      /*block_size=*/4);
+  const auto replay =
+      mtp_async::build_draft_replay_input_plan(make_decode_batch_context(input),
+                                               states,
+                                               torch::zeros(/*size=*/{2}),
+                                               /*block_size=*/4);
   EXPECT_EQ(replay.rows.out_positions, std::vector<int32_t>({3, 3}));
   EXPECT_EQ(replay.rows.out_new_cache_slots, std::vector<int32_t>({11, 11}));
   EXPECT_EQ(replay.rows.out_token_ids, std::vector<int32_t>({40, 50}));
@@ -445,12 +444,12 @@ TEST(EmbeddingCacheTest, PrefillReplayKeepsDistinctRotaryAxes) {
   const auto states = cache.read_decode_states({0}, {"vlm"});
   auto input = make_replay_input({42}, {7});
   input.positions_host = torch::tensor({{7}, {7}, {7}}, torch::kInt);
-  const auto replay = specBuilder::build_mtp_replay_inputs(
-      specBuilder::make_decode_row_context(input),
-      states,
-      torch::zeros({2}),
-      /*block_size=*/4,
-      /*uniform_width=*/1);
+  const auto replay =
+      mtp_async::build_draft_replay_input_plan(make_decode_batch_context(input),
+                                               states,
+                                               torch::zeros(/*size=*/{2}),
+                                               /*block_size=*/4,
+                                               /*uniform_width=*/1);
 
   EXPECT_EQ(replay.rows.out_positions, std::vector<int32_t>({6}));
   const std::vector<std::array<int32_t, 3>> expected_rotary = {{6, 11, 21}};
@@ -469,16 +468,20 @@ TEST(EmbeddingCacheTest, ReplayFollowsRequestOrderAndPadsOnlyReservedSlots) {
       /*num_speculative_tokens=*/3);
   const auto states = cache.read_decode_states({1, 0}, {"long", "short"});
   auto input = make_replay_input({43, 99}, {7, 9});
-  const auto ctx = specBuilder::make_decode_row_context(input);
-  const auto compact = specBuilder::build_mtp_replay_inputs(
-      ctx, states, torch::zeros({2}), /*block_size=*/4);
+  const auto ctx = make_decode_batch_context(input);
+  const auto compact = mtp_async::build_draft_replay_input_plan(
+      ctx, states, torch::zeros(/*size=*/{2}), /*block_size=*/4);
   EXPECT_EQ(compact.rows.out_token_ids, std::vector<int32_t>({41, 42, 43, 99}));
   EXPECT_EQ(compact.rows.out_positions, std::vector<int32_t>({4, 5, 6, 8}));
   EXPECT_EQ(compact.rows.out_new_cache_slots,
             std::vector<int32_t>({20, 21, 22, 36}));
   EXPECT_EQ(compact.selected_rows, std::vector<int32_t>({2, 3}));
-  const auto padded = specBuilder::build_mtp_replay_inputs(
-      ctx, states, torch::zeros({2}), /*block_size=*/4, /*uniform_width=*/4);
+  const auto padded =
+      mtp_async::build_draft_replay_input_plan(ctx,
+                                               states,
+                                               torch::zeros(/*size=*/{2}),
+                                               /*block_size=*/4,
+                                               /*uniform_width=*/4);
   EXPECT_EQ(padded.rows.out_positions,
             std::vector<int32_t>({0, 4, 5, 6, 0, 0, 0, 8}));
   EXPECT_EQ(padded.rows.out_new_cache_slots,
@@ -494,18 +497,18 @@ TEST(EmbeddingCacheTest, ReplayFollowsRequestOrderAndPadsOnlyReservedSlots) {
 
 TEST(EmbeddingCacheTest, ReplayRejectsMissingContextOutsideGraphWarmup) {
   auto input = make_replay_input({0}, {0});
-  const auto ctx = specBuilder::make_decode_row_context(input);
+  const auto ctx = make_decode_batch_context(input);
   std::vector<EmbeddingCache::DecodeState> states(1);
-  EXPECT_DEATH(specBuilder::build_mtp_replay_inputs(
-                   ctx, states, torch::zeros({2}), /*block_size=*/4),
+  EXPECT_DEATH(mtp_async::build_draft_replay_input_plan(
+                   ctx, states, torch::zeros(/*size=*/{2}), /*block_size=*/4),
                "requires target context");
   const auto warmup =
-      specBuilder::build_mtp_replay_inputs(ctx,
-                                           states,
-                                           torch::zeros({2}),
-                                           /*block_size=*/4,
-                                           /*uniform_width=*/0,
-                                           /*is_graph_warmup=*/true);
+      mtp_async::build_draft_replay_input_plan(ctx,
+                                               states,
+                                               torch::zeros(/*size=*/{2}),
+                                               /*block_size=*/4,
+                                               /*uniform_width=*/0,
+                                               /*is_graph_warmup=*/true);
   EXPECT_EQ(warmup.rows.out_positions, std::vector<int32_t>({0}));
   EXPECT_EQ(warmup.rows.out_new_cache_slots, std::vector<int32_t>({0}));
   EXPECT_EQ(warmup.selected_rows, std::vector<int32_t>({0}));

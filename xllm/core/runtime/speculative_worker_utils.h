@@ -31,6 +31,9 @@ namespace speculative_worker {
 
 ProcessGroup* sampling_process_group(const ParallelArgs& parallel_args);
 
+void broadcast_speculative_token_ids(torch::Tensor& tokens,
+                                     const ParallelArgs& parallel_args);
+
 // The caller selects the group(s) and whether consensus is required.
 void broadcast_tokens_in_group(torch::Tensor& tokens,
                                ProcessGroup* process_group,

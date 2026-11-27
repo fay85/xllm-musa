@@ -159,6 +159,7 @@ def _check_dspark_target_aclgraph_width(width: int, dp_rank: int | None = None) 
         "vocab_size": 128,
         "max_position_embeddings": 128,
         "layers_to_capture": [0, 1],
+        "num_speculative_tokens": width - 1,
         "device": str(_DEVICE),
         "dtype": "bfloat16",
         "dp_size": 1 if dp_rank is None else 2,
@@ -181,8 +182,8 @@ def _check_dspark_target_aclgraph_width(width: int, dp_rank: int | None = None) 
         LayerCache(None, None, conv=conv.clone(), ssm=ssm.clone()),
         LayerCache(key.clone(), value.clone()),
     ]
-    graph = ModelExecutor(model, {**config, "enable_graph": True}, 32, width)
-    eager = ModelExecutor(model, {**config, "enable_graph": False}, 32, width)
+    graph = ModelExecutor(model, {**config, "enable_graph": True}, 32)
+    eager = ModelExecutor(model, {**config, "enable_graph": False}, 32)
     graph.bind_kv_caches(caches)
     eager.bind_kv_caches(eager_caches)
     assert graph.decode_graph_runner is not None

@@ -57,8 +57,6 @@ class ExecutorImpl {
 
   virtual void set_dp_process_group(ProcessGroup* /*group*/) {}
 
-  virtual ForwardInput prepare_inputs(Batch& batch) = 0;
-
   // tokens: vector size is dp_size, each element is [num_tokens/dp_size]
   // positions: vector size is dp_size, each element is [num_tokens/dp_size]
   // token pos in the sequence returns: ModelOutput

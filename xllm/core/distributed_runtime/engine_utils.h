@@ -32,7 +32,7 @@ class Engine;
 class WorkerClient;
 
 namespace runtime {
-struct Options;
+class Options;
 struct DecodeGraphWarmupConfig;
 }  // namespace runtime
 

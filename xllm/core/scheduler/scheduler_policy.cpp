@@ -1790,7 +1790,7 @@ void SchedulerPolicy::cache_in_batch_prefix(
 void SchedulerPolicy::clear_mtp_bootstrap(Request* request,
                                           const SchedulerState& state) {
   if (!state.options.enable_disagg_pd() ||
-      state.options.num_speculative_tokens() <= 0 || request == nullptr ||
+      state.options.num_speculative_tokens() == 0 || request == nullptr ||
       request->sequences().empty()) {
     return;
   }

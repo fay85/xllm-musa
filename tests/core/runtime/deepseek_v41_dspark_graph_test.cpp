@@ -47,7 +47,7 @@ TEST(DeepseekV41DSparkGraphTest,
       .vocab_size(128)
       .n_layers(1)
       .dspark_num_layers(1)
-      .dspark_block_size(5)
+      .num_speculative_tokens(/*value=*/5)
       .markov_rank(8)
       .n_heads(8)
       .n_kv_heads(1)

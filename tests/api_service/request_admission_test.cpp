@@ -114,7 +114,8 @@ TEST_F(EmbeddingsEntryMetricsTest, NoServiceEarlyExitsCountOnce) {
     const double successes = COUNTER_VALUE(server_request_total_ok);
     const double failures = COUNTER_VALUE(server_request_total_fail);
     const double classified =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, outcome);
+        MULTI_COUNTER_api_request_terminal_total.get_stats({outcome})
+            ->get_value();
 
     service.EmbeddingsHttp(&controller, &request, &response, &done);
 
@@ -124,7 +125,8 @@ TEST_F(EmbeddingsEntryMetricsTest, NoServiceEarlyExitsCountOnce) {
     EXPECT_EQ(COUNTER_VALUE(server_request_in_total), incoming + 1);
     EXPECT_EQ(COUNTER_VALUE(server_request_total_ok), successes);
     EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failures + 1);
-    EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, outcome),
+    EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total.get_stats({outcome})
+                  ->get_value(),
               classified + 1);
   }
 }
@@ -139,8 +141,9 @@ TEST(ApiTerminalMetricsTest, SuccessfulHandoffCountsOnceAfterGuardDestruction) {
   std::shared_ptr<RequestTiming> timing;
   const double successes = COUNTER_VALUE(server_request_total_ok);
   const double failures = COUNTER_VALUE(server_request_total_fail);
-  const double terminal_successes =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "success");
+  const double terminal_successes = MULTI_COUNTER_api_request_terminal_total
+                                        .get_stats(/*labels=*/{"success"})
+                                        ->get_value();
   {
     ClosureGuard guard(
         &done,
@@ -158,7 +161,9 @@ TEST(ApiTerminalMetricsTest, SuccessfulHandoffCountsOnceAfterGuardDestruction) {
       timing->mark_pd_local();
       timing->update_from_output();
       ASSERT_TRUE(call.write_and_finish(response));
-      EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "success"),
+      EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                    .get_stats(/*labels=*/{"success"})
+                    ->get_value(),
                 terminal_successes);
     }
     EXPECT_EQ(done.count(), 1);
@@ -167,25 +172,33 @@ TEST(ApiTerminalMetricsTest, SuccessfulHandoffCountsOnceAfterGuardDestruction) {
   EXPECT_FALSE(timing->snapshot().terminal);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_ok), successes + 1);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failures);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "success"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"success"})
+                ->get_value(),
             terminal_successes + 1);
 }
 
 TEST(ApiTerminalMetricsTest, DisconnectedStreamRetainsTransportOutcome) {
   const Status status(StatusCode::DEADLINE_EXCEEDED);
-  const double cancelled =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "cancelled");
-  const double timeouts =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "timeout");
+  const double cancelled = MULTI_COUNTER_api_request_terminal_total
+                               .get_stats(/*labels=*/{"cancelled"})
+                               ->get_value();
+  const double timeouts = MULTI_COUNTER_api_request_terminal_total
+                              .get_stats(/*labels=*/{"timeout"})
+                              ->get_value();
   record_api_request_terminal(nullptr,
                               /*response_complete=*/false,
                               &status,
                               /*stream_disconnected=*/true,
                               "disconnected-error-stream",
                               /*controller_released=*/true);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "cancelled"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"cancelled"})
+                ->get_value(),
             cancelled + 1);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "timeout"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"timeout"})
+                ->get_value(),
             timeouts);
 }
 
@@ -225,7 +238,8 @@ TEST(ApiTerminalMetricsTest, ClassifiesExplicitFailuresWithoutHttpState) {
   for (const FailureCase& test_case : cases) {
     SCOPED_TRACE(test_case.outcome);
     const double before =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, test_case.outcome);
+        MULTI_COUNTER_api_request_terminal_total.get_stats({test_case.outcome})
+            ->get_value();
     // After SSE handoff the controller may already have been destroyed.
     record_api_request_terminal(nullptr,
                                 /*response_complete=*/false,
@@ -234,7 +248,8 @@ TEST(ApiTerminalMetricsTest, ClassifiesExplicitFailuresWithoutHttpState) {
                                 "released-error-stream",
                                 /*controller_released=*/true);
     EXPECT_EQ(
-        MULTI_COUNTER_VALUE(api_request_terminal_total, test_case.outcome),
+        MULTI_COUNTER_api_request_terminal_total.get_stats({test_case.outcome})
+            ->get_value(),
         before + 1);
   }
 }
@@ -258,18 +273,21 @@ TEST(ApiTerminalMetricsTest, UnknownPublicCodeRetainsHttpClassification) {
     controller.http_response().set_status_code(test_case.status_code);
     controller.http_response().SetHeader("X-Xllm-Error-Code", "future_code");
     const double before =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, test_case.outcome);
+        MULTI_COUNTER_api_request_terminal_total.get_stats({test_case.outcome})
+            ->get_value();
     // A committed HTTP error must win over cancellation at teardown.
     request_out_metric(&controller);
     EXPECT_EQ(
-        MULTI_COUNTER_VALUE(api_request_terminal_total, test_case.outcome),
+        MULTI_COUNTER_api_request_terminal_total.get_stats({test_case.outcome})
+            ->get_value(),
         before + 1);
   }
 }
 
 TEST(ApiTerminalMetricsTest, UnclassifiedResourceExhaustionIsInternalError) {
-  const double before =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "internal_error");
+  const double before = MULTI_COUNTER_api_request_terminal_total
+                            .get_stats(/*labels=*/{"internal_error"})
+                            ->get_value();
   brpc::Controller controller;
   proto::CompletionRequest request;
   proto::CompletionResponse response;
@@ -293,13 +311,16 @@ TEST(ApiTerminalMetricsTest, UnclassifiedResourceExhaustionIsInternalError) {
     EXPECT_FALSE(sample.queued_time.milliseconds.has_value());
   }
   EXPECT_EQ(done.count(), 1);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "internal_error"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"internal_error"})
+                ->get_value(),
             before + 1);
 }
 
 TEST(ApiTerminalMetricsTest, NonStreamCancellationWinsOverBrpcFailure) {
-  const double before =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "cancelled");
+  const double before = MULTI_COUNTER_api_request_terminal_total
+                            .get_stats(/*labels=*/{"cancelled"})
+                            ->get_value();
   CanceledController controller;
   controller.SetFailed("client disconnected");
   ASSERT_TRUE(controller.Failed());
@@ -324,7 +345,9 @@ TEST(ApiTerminalMetricsTest, NonStreamCancellationWinsOverBrpcFailure) {
   EXPECT_TRUE(timing->snapshot().queued_time.partial);
   EXPECT_FALSE(timing->snapshot().decode_time.milliseconds.has_value());
   EXPECT_EQ(done.count(), 1);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "cancelled"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"cancelled"})
+                ->get_value(),
             before + 1);
 }
 
@@ -332,7 +355,8 @@ TEST(ApiTerminalMetricsTest, StreamExitDoesNotReadReleasedController) {
   for (bool disconnected : {false, true}) {
     const char* outcome = disconnected ? "cancelled" : "success";
     const double before =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, outcome);
+        MULTI_COUNTER_api_request_terminal_total.get_stats({outcome})
+            ->get_value();
     brpc::Controller controller;
     controller.http_request().SetHeader("x-request-id", "released-stream");
     proto::CompletionRequest request;
@@ -358,7 +382,8 @@ TEST(ApiTerminalMetricsTest, StreamExitDoesNotReadReleasedController) {
     EXPECT_TRUE(timing->snapshot().terminal);
     EXPECT_EQ(timing->snapshot().decode_time.valid, !disconnected);
     EXPECT_EQ(done.count(), 1);
-    EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, outcome),
+    EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total.get_stats({outcome})
+                  ->get_value(),
               before + 1);
   }
 }
@@ -385,8 +410,9 @@ class RateLimitMetricsTest : public testing::Test {
     const double limited_before = COUNTER_VALUE(server_request_total_limit);
     const double failed_before = COUNTER_VALUE(server_request_total_fail);
     const double ok_before = COUNTER_VALUE(server_request_total_ok);
-    const double terminal_before =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, "rate_limited");
+    const double terminal_before = MULTI_COUNTER_api_request_terminal_total
+                                       .get_stats(/*labels=*/{"rate_limited"})
+                                       ->get_value();
     ClosureGuard guard(
         &done,
         [](void* context) { request_in_metric(context); },
@@ -415,7 +441,9 @@ class RateLimitMetricsTest : public testing::Test {
     EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failed_before + 1);
     EXPECT_EQ(COUNTER_VALUE(server_request_total_ok), ok_before);
     if (status.reason() == FailureReason::CONCURRENCY_LIMIT_REACHED) {
-      EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "rate_limited"),
+      EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                    .get_stats(/*labels=*/{"rate_limited"})
+                    ->get_value(),
                 terminal_before + 1);
     }
   }
@@ -619,8 +647,9 @@ TEST_F(RateLimitMetricsTest, EarlyHttp429WithoutCallCountsOnce) {
   CountingClosure done;
   const double limited_before = COUNTER_VALUE(server_request_total_limit);
   const double failed_before = COUNTER_VALUE(server_request_total_fail);
-  const double terminal_before =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "rate_limited");
+  const double terminal_before = MULTI_COUNTER_api_request_terminal_total
+                                     .get_stats(/*labels=*/{"rate_limited"})
+                                     ->get_value();
   {
     ClosureGuard guard(
         &done,
@@ -635,7 +664,9 @@ TEST_F(RateLimitMetricsTest, EarlyHttp429WithoutCallCountsOnce) {
   EXPECT_EQ(done.count(), 1);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_limit), limited_before + 1);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failed_before + 1);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "rate_limited"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"rate_limited"})
+                ->get_value(),
             terminal_before + 1);
 }
 
@@ -648,7 +679,8 @@ TEST(RequestAdmissionTest, EarlyHttpErrorsHaveOneClassifiedApiTerminal) {
     brpc::Controller controller;
     CountingClosure done;
     const double before =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, outcome);
+        MULTI_COUNTER_api_request_terminal_total.get_stats({outcome})
+            ->get_value();
     {
       ClosureGuard guard(
           &done,
@@ -663,7 +695,8 @@ TEST(RequestAdmissionTest, EarlyHttpErrorsHaveOneClassifiedApiTerminal) {
       }
     }
     EXPECT_EQ(done.count(), 1);
-    EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, outcome),
+    EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total.get_stats({outcome})
+                  ->get_value(),
               before + 1);
     EXPECT_NE(controller.http_response().GetHeader("x-request-id"), nullptr);
   }

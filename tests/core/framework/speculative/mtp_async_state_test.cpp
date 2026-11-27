@@ -68,27 +68,6 @@ TEST(MtpAsyncStateTest, ClassifiesClosedTargetSpecVerifyPolicy) {
   }
 }
 
-TEST(MtpAsyncStateTest, RequiresUniformVerifyWidthsForRecurrentTargets) {
-  for (std::string_view model_type : {"qwen3_5",
-                                      "qwen3_5_moe",
-                                      "qwen3_5_text",
-                                      "qwen3_5_moe_text",
-                                      "glm5_next",
-                                      "glm5_3_flash",
-                                      "glm5_next_text"}) {
-    EXPECT_TRUE(requires_uniform_spec_verify(model_type)) << model_type;
-  }
-  for (std::string_view model_type : {"deepseek_v32",
-                                      "deepseek_v4",
-                                      "glm_moe_dsa",
-                                      "mimo",
-                                      "glm5_next_mtp",
-                                      "qwen3_5_mtp",
-                                      "unknown_model"}) {
-    EXPECT_FALSE(requires_uniform_spec_verify(model_type)) << model_type;
-  }
-}
-
 TEST(MtpAsyncStateTest, RestrictsFusedVerifyTokenUpdateToNativeExecutors) {
   for (TargetSpecVerifyMode mode :
        {TargetSpecVerifyMode::GENERIC,
@@ -443,64 +422,49 @@ TEST(MtpAsyncStateTest, MatchesNativeReplayContractsByVerifyMode) {
                                 /*target_capable=*/true,
                                 /*draft_capable=*/true,
                                 /*is_python_target=*/false,
-                                /*is_python_draft=*/false,
-                                /*uses_embedded_eagle3=*/false));
+                                /*is_python_draft=*/false));
   EXPECT_TRUE(replay_compatible(TargetSpecVerifyMode::CAUSAL_CHUNKED_PREFILL,
                                 DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                 /*target_capable=*/true,
                                 /*draft_capable=*/true,
                                 /*is_python_target=*/false,
-                                /*is_python_draft=*/false,
-                                /*uses_embedded_eagle3=*/false));
+                                /*is_python_draft=*/false));
   EXPECT_FALSE(replay_compatible(TargetSpecVerifyMode::EXPANDED_VERIFY,
                                  DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                  /*target_capable=*/false,
                                  /*draft_capable=*/true,
                                  /*is_python_target=*/false,
-                                 /*is_python_draft=*/false,
-                                 /*uses_embedded_eagle3=*/false));
+                                 /*is_python_draft=*/false));
   EXPECT_FALSE(replay_compatible(TargetSpecVerifyMode::EXPANDED_VERIFY,
                                  DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                  /*target_capable=*/true,
                                  /*draft_capable=*/false,
                                  /*is_python_target=*/false,
-                                 /*is_python_draft=*/false,
-                                 /*uses_embedded_eagle3=*/false));
+                                 /*is_python_draft=*/false));
   EXPECT_FALSE(replay_compatible(TargetSpecVerifyMode::EXPANDED_VERIFY,
                                  DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                  /*target_capable=*/true,
                                  /*draft_capable=*/true,
                                  /*is_python_target=*/true,
-                                 /*is_python_draft=*/false,
-                                 /*uses_embedded_eagle3=*/false));
+                                 /*is_python_draft=*/false));
   EXPECT_FALSE(replay_compatible(TargetSpecVerifyMode::EXPANDED_VERIFY,
                                  DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                  /*target_capable=*/true,
                                  /*draft_capable=*/true,
                                  /*is_python_target=*/false,
-                                 /*is_python_draft=*/false,
-                                 /*uses_embedded_eagle3=*/true));
-  EXPECT_FALSE(replay_compatible(TargetSpecVerifyMode::EXPANDED_VERIFY,
-                                 DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
-                                 /*target_capable=*/true,
-                                 /*draft_capable=*/true,
-                                 /*is_python_target=*/false,
-                                 /*is_python_draft=*/true,
-                                 /*uses_embedded_eagle3=*/false));
+                                 /*is_python_draft=*/true));
   EXPECT_FALSE(replay_compatible(TargetSpecVerifyMode::GENERIC,
                                  DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                  /*target_capable=*/true,
                                  /*draft_capable=*/true,
                                  /*is_python_target=*/false,
-                                 /*is_python_draft=*/false,
-                                 /*uses_embedded_eagle3=*/false));
+                                 /*is_python_draft=*/false));
   EXPECT_FALSE(replay_compatible(static_cast<TargetSpecVerifyMode>(-1),
                                  DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                  /*target_capable=*/true,
                                  /*draft_capable=*/true,
                                  /*is_python_target=*/false,
-                                 /*is_python_draft=*/false,
-                                 /*uses_embedded_eagle3=*/false));
+                                 /*is_python_draft=*/false));
 }
 
 TEST(MtpAsyncStateTest, KeepsTailExtensionAvailableWithoutReplayCapabilities) {
@@ -513,8 +477,7 @@ TEST(MtpAsyncStateTest, KeepsTailExtensionAvailableWithoutReplayCapabilities) {
                                   /*target_capable=*/false,
                                   /*draft_capable=*/false,
                                   /*is_python_target=*/true,
-                                  /*is_python_draft=*/true,
-                                  /*uses_embedded_eagle3=*/true));
+                                  /*is_python_draft=*/true));
   }
 }
 

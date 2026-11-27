@@ -42,7 +42,7 @@ pre-injected context rows.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -181,8 +181,10 @@ class DeepseekV41DSparkConfig(DeepseekV41Config):
     draft_vocab_size: int = 0
 
     @classmethod
-    def from_dict(cls, d: dict) -> DeepseekV41DSparkConfig:
+    def from_dict(cls, d: dict[str, Any]) -> DeepseekV41DSparkConfig:
         base = DeepseekV41Config.from_dict(d)
+        if "num_speculative_tokens" not in d:
+            base.num_speculative_tokens = int(d.get("dspark_block_size", 5))
         markov_rank = d.get("markov_rank")
         if markov_rank is None:
             markov_rank = base.dspark_markov_rank
@@ -195,8 +197,8 @@ class DeepseekV41DSparkConfig(DeepseekV41Config):
         )
 
     def validate(self) -> None:
-        if self.dspark_block_size <= 0:
-            raise ValueError("DeepSeek-V4.1 DSpark requires a positive block size")
+        if self.num_speculative_tokens == 0:
+            raise ValueError("DeepSeek-V4.1 DSpark requires a positive num_speculative_tokens")
         if self.markov_rank <= 0:
             raise ValueError("DeepSeek-V4.1 DSpark requires markov_rank > 0")
         if self.draft_vocab_size != self.vocab_size:
@@ -394,7 +396,7 @@ class DeepseekV41DSparkModel(nn.Module):
 
     @property
     def block_size(self) -> int:
-        return self.cfg.dspark_block_size
+        return self.cfg.num_speculative_tokens
 
     @property
     def noise_token_id(self) -> int:
@@ -512,7 +514,6 @@ class DeepseekV41DSparkForCausalLM(DSparkForCausalLMBase):
 
     def __init__(self, config: dict) -> None:
         cfg = DeepseekV41DSparkConfig.from_dict(config)
-        cfg = replace(cfg, dspark_block_size=int(config.get("draft_query_width", cfg.dspark_block_size)))
         cfg.validate()
         if int(config.get("cp_size", 1)) != 1:
             raise ValueError("DeepSeek-V4.1 DSpark block attention requires CP=1")
@@ -523,7 +524,7 @@ class DeepseekV41DSparkForCausalLM(DSparkForCausalLMBase):
         super().__init__(
             backbone=backbone,
             lm_head=None,
-            query_width=cfg.dspark_block_size,
+            query_width=cfg.num_speculative_tokens,
             vocab_size=cfg.vocab_size,
             draft_vocab_size=cfg.draft_vocab_size,
             markov_rank=cfg.markov_rank,

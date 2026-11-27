@@ -83,7 +83,7 @@ void prepare_warmup_decode_sequence(Sequence* sequence,
                                     int64_t embedding_width,
                                     int32_t num_speculative_tokens) {
   CHECK(sequence != nullptr);
-  if (num_speculative_tokens <= 0) {
+  if (num_speculative_tokens == 0) {
     return;
   }
 

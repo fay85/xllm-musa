@@ -133,7 +133,7 @@ class PyAttentionMetadataView final {
   // Rows per logical sequence of a NON-expanded spec-verify batch (1 = plain
   // decode / expanded verify). Exported so the graph runner can key and admit
   // a verify pack without guessing from the token-row count.
-  int32_t spec_verify_width() const;
+  int32_t num_speculative_tokens() const;
 
  private:
   static torch::Tensor make_host_int32_view(
@@ -162,7 +162,7 @@ class PyAttentionMetadataView final {
   std::vector<int32_t> raw_dp_execution_token_counts_;
   std::vector<int32_t> dp_global_kv_max_seq_lens_;
   std::vector<int32_t> dp_is_decode_;
-  int32_t spec_verify_width_ = 1;
+  int32_t num_speculative_tokens_ = 0;
   std::shared_ptr<void> dsa_metadata_holder_;
   torch::Tensor dsa_positions_;
   torch::Tensor dsa_cos_sin_;

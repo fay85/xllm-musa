@@ -497,74 +497,27 @@ AttentionMetadata build_indexer_attention_metadata(
 
 }  // namespace
 
-torch::Tensor build_dspark_swa_indices(const torch::Tensor& block_table,
-                                       const torch::Tensor& query_cu_seq_lens,
-                                       const torch::Tensor& seq_lens,
-                                       int64_t window_size,
-                                       int64_t dspark_block_size,
-                                       int64_t cache_block_size) {
-  // Native DSpark SAS addresses the trailing SWA prefix plus the whole current
-  // diffusion block explicitly. The compatibility fallback never calls it
-  // because CANN 9.0 rejects a non-empty ori_sparse_indices argument.
-  CHECK(block_table.defined() && query_cu_seq_lens.defined() &&
-        seq_lens.defined());
-  CHECK_GT(block_table.size(1), 0);
-  CHECK_GT(cache_block_size, 0);
-
-  const torch::Device device = block_table.device();
-  torch::Tensor q_cu = query_cu_seq_lens.to(device, torch::kLong);
-  torch::Tensor kv_lens = seq_lens.to(device, torch::kLong);
-  torch::Tensor q_lens = q_cu.slice(0, 1) - q_cu.slice(0, 0, q_cu.size(0) - 1);
-  CHECK_EQ(q_lens.numel(), block_table.size(0));
-  CHECK_EQ(kv_lens.numel(), block_table.size(0));
-
-  torch::Tensor prefix_lens = kv_lens - q_lens;
-  torch::Tensor start_pos = (prefix_lens - window_size).clamp_min(0);
-  torch::Tensor visible_lens = kv_lens - start_pos;
-  constexpr int64_t kIndexAlignment = 128;
-  const int64_t min_width = window_size + dspark_block_size;
-  const int64_t index_width = util::align_up(min_width, kIndexAlignment);
-
-  torch::Tensor columns = torch::arange(
-      index_width, torch::TensorOptions().dtype(torch::kLong).device(device));
-  torch::Tensor valid = columns.unsqueeze(0) < visible_lens.unsqueeze(1);
-  torch::Tensor positions = start_pos.unsqueeze(1) + columns.unsqueeze(0);
-  torch::Tensor logical_block_columns =
-      torch::floor_divide(positions, cache_block_size);
-
-  // DSAMetadataBuilder expands an SWA ring into logical block-table columns
-  // and right-aligns the retained physical blocks. Positions just before the
-  // retained range still wrap into those blocks, so taking modulo by the
-  // expanded table width would incorrectly select its -1 padding.
-  torch::Tensor valid_block_counts =
-      block_table.ge(0).sum(/*dim=*/1).to(torch::kLong);
-  torch::Tensor safe_block_counts = valid_block_counts.clamp_min(1);
-  torch::Tensor logical_block_counts =
-      torch::floor_divide(kv_lens + cache_block_size - 1, cache_block_size);
-  torch::Tensor first_retained_columns =
-      (logical_block_counts - valid_block_counts).clamp_min(0);
-  torch::Tensor expanded_block_columns =
-      first_retained_columns.unsqueeze(1) +
-      (logical_block_columns - first_retained_columns.unsqueeze(1))
-          .remainder(safe_block_counts.unsqueeze(1));
-  torch::Tensor raw_block_columns =
-      logical_block_columns.remainder(safe_block_counts.unsqueeze(1));
-  torch::Tensor uses_expanded_layout =
-      logical_block_counts.le(block_table.size(1));
-  torch::Tensor block_columns =
-      torch::where(uses_expanded_layout.unsqueeze(1),
-                   expanded_block_columns,
-                   raw_block_columns)
-          .clamp(/*min=*/0, /*max=*/block_table.size(1) - 1);
-  torch::Tensor block_ids =
-      block_table.to(torch::kLong).gather(/*dim=*/1, block_columns);
-  torch::Tensor slot_ids =
-      block_ids * cache_block_size + positions.remainder(cache_block_size);
-  slot_ids = torch::where(
-      valid & block_ids.ge(0), slot_ids, torch::full_like(slot_ids, -1));
-  return torch::repeat_interleave(slot_ids, q_lens, /*dim=*/0)
-      .to(torch::kInt32)
-      .unsqueeze(1);
+bool build_dspark_sparse_flash_mla_metadata(DSAMetadata& dsa,
+                                            const torch::Tensor& block_tables,
+                                            int64_t max_kv_len,
+                                            int64_t num_heads,
+                                            int64_t page_size,
+                                            int64_t visible_window) {
+  if (!block_tables.defined() ||
+      block_tables.size(/*dim=*/0) != dsa.actual_seq_lengths_kv.numel() ||
+      dsa.actual_seq_lengths_query.device().type() != torch::kPrivateUse1 ||
+      !kernel::npu::supports_sparse_flash_mla_swa()) {
+    return false;
+  }
+  std::tie(dsa.ori_sparse_indices_, dsa.ori_topk_length_, dsa.c1_metadata) =
+      kernel::npu::sparse_flash_mla_swa_metadata(dsa.actual_seq_lengths_query,
+                                                 dsa.actual_seq_lengths_kv,
+                                                 block_tables,
+                                                 max_kv_len,
+                                                 num_heads,
+                                                 page_size,
+                                                 visible_window);
+  return true;
 }
 
 DSAttentionImpl::DSAttentionImpl(const ModelContext& context, int32_t layer_id)
@@ -593,9 +546,7 @@ DSAttentionImpl::DSAttentionImpl(const ModelArgs& args,
       eps_(args.rms_norm_eps()),
       index_n_heads_(args.index_n_heads()),
       index_head_dim_(args.index_head_dim()),
-      index_topk_(args.index_topk()),
-      dspark_block_size_(args.dspark_block_size()),
-      dspark_use_native_sas_(args.dspark_use_native_sas()) {
+      index_topk_(args.index_topk()) {
   const auto& compress_ratios = args.compress_ratios();
   CHECK(!compress_ratios.empty())
       << "DSAttention requires non-empty compress_ratios for DeepSeek V4";
@@ -1003,48 +954,51 @@ DSAttentionImpl::forward(const DSAMetadata& attn_metadata,
                    : as_optional(attn_metadata.actual_seq_lengths_query);
   }
 
-  const bool use_native_sas = deepseek_v4_use_native_sas(
-      dspark_block_size_, dspark_use_native_sas_, use_prefill_attn);
-  std::optional<torch::Tensor> ori_sparse_indices = std::nullopt;
-  if (use_native_sas && compress_ratio_i == 1) {
-    CHECK(attn_metadata.explicit_swa_indices.defined())
-        << "Native DeepSeek-V4 DSpark requires precomputed SWA indices.";
-    ori_sparse_indices = as_optional(attn_metadata.explicit_swa_indices);
+  const int64_t ori_win_left = window_size_ - 1;
+  torch::Tensor attn_output;
+  torch::Tensor output_lse;
+  if (compress_ratio_i == 1 && attn_metadata.ori_topk_length_.defined()) {
+    attn_output = kernel::npu::sparse_flash_mla_swa(
+        q,
+        ori_kv_for_attn,
+        ori_block_table_for_attn,
+        attn_metadata.actual_seq_lengths_query,
+        attn_metadata.actual_seq_lengths_kv,
+        attn_metadata.ori_sparse_indices_,
+        attn_metadata.ori_topk_length_,
+        attn_sink_loaded_ ? as_optional(attn_sink_) : std::nullopt,
+        *sparse_metadata);
+  } else {
+    CHECK_EQ(attn_metadata.sparse_metadata_ori_win_left, ori_win_left)
+        << "DSAttention sparse metadata belongs to incompatible model geometry";
+    std::tie(attn_output, output_lse) = kernel::npu::sparse_attn_sharedkv(
+        /*q=*/q,
+        /*ori_kv=*/as_optional(ori_kv_for_attn),
+        /*cmp_kv=*/compress_ratio_i > 1 ? as_optional(cmp_kv_for_attn)
+                                        : std::nullopt,
+        /*ori_sparse_indices=*/std::nullopt,
+        /*cmp_sparse_indices=*/
+        compress_ratio_i == 4 ? as_optional(compress_topk_idxs) : std::nullopt,
+        /*ori_block_table=*/as_optional(ori_block_table_for_attn),
+        /*cmp_block_table=*/
+        compress_ratio_i > 1 ? as_optional(cmp_block_table) : std::nullopt,
+        /*cu_seqlens_q=*/as_optional(attn_metadata.actual_seq_lengths_query),
+        /*cu_seqlens_ori_kv=*/cu_seqlens_ori_kv_for_attn,
+        /*cu_seqlens_cmp_kv=*/std::nullopt,
+        /*seqused_q=*/std::nullopt,
+        /*seqused_kv=*/as_optional(attn_metadata.actual_seq_lengths_kv),
+        /*sinks=*/attn_sink_loaded_ ? as_optional(attn_sink_) : std::nullopt,
+        /*metadata=*/sparse_metadata,
+        /*softmax_scale=*/softmax_scale_,
+        /*cmp_ratio=*/compress_ratio_i,
+        /*ori_mask_mode=*/4,
+        /*cmp_mask_mode=*/3,
+        /*ori_win_left=*/ori_win_left,
+        /*ori_win_right=*/0,
+        /*layout_q=*/"TND",
+        /*layout_kv=*/ori_kv_layout,
+        /*return_softmax_lse=*/false);
   }
-
-  const int64_t ori_win_left = deepseek_v4_ori_window_left(
-      window_size_, dspark_block_size_, use_native_sas);
-  CHECK_EQ(attn_metadata.sparse_metadata_ori_win_left, ori_win_left)
-      << "DSAttention sparse metadata belongs to incompatible model geometry; "
-      << "rebuild attention metadata at the target/draft boundary.";
-
-  auto [attn_output, output_lse] = xllm::kernel::npu::sparse_attn_sharedkv(
-      /*q=*/q,
-      /*ori_kv=*/as_optional(ori_kv_for_attn),
-      /*cmp_kv=*/compress_ratio_i > 1 ? as_optional(cmp_kv_for_attn)
-                                      : std::nullopt,
-      /*ori_sparse_indices=*/ori_sparse_indices,
-      /*cmp_sparse_indices=*/
-      compress_ratio_i == 4 ? as_optional(compress_topk_idxs) : std::nullopt,
-      /*ori_block_table=*/as_optional(ori_block_table_for_attn),
-      /*cmp_block_table=*/
-      compress_ratio_i > 1 ? as_optional(cmp_block_table) : std::nullopt,
-      /*cu_seqlens_q=*/as_optional(attn_metadata.actual_seq_lengths_query),
-      /*cu_seqlens_ori_kv=*/cu_seqlens_ori_kv_for_attn,
-      /*cu_seqlens_cmp_kv=*/std::nullopt,
-      /*seqused_q=*/std::nullopt,
-      /*seqused_kv=*/as_optional(attn_metadata.actual_seq_lengths_kv),
-      /*sinks=*/attn_sink_loaded_ ? as_optional(attn_sink_) : std::nullopt,
-      /*metadata=*/sparse_metadata,
-      /*softmax_scale=*/softmax_scale_,
-      /*cmp_ratio=*/compress_ratio_i,
-      /*ori_mask_mode=*/4,
-      /*cmp_mask_mode=*/3,
-      /*ori_win_left=*/ori_win_left,
-      /*ori_win_right=*/0,
-      /*layout_q=*/"TND",
-      /*layout_kv=*/ori_kv_layout,
-      /*return_softmax_lse=*/false);
 
   // 8) Deferred cache write for full prefill.
   if (use_temporary_prefill_kv) {

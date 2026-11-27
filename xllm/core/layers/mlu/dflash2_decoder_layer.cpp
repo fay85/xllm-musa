@@ -52,20 +52,20 @@ DFlash2DecoderLayerImpl::DFlash2DecoderLayerImpl(const ModelContext& context,
                                      options,
                                      mlp_module_prefix));
 
-  attention_conv_ =
-      register_module("attention_conv",
-                      DFlash2GroupedConv(model_args.hidden_size(),
-                                         model_args.dflash2_conv_kernel_size(),
-                                         model_args.dflash2_conv_group_size(),
-                                         model_args.dflash2_block_size(),
-                                         options));
-  mlp_conv_ =
-      register_module("mlp_conv",
-                      DFlash2GroupedConv(model_args.hidden_size(),
-                                         model_args.dflash2_conv_kernel_size(),
-                                         model_args.dflash2_conv_group_size(),
-                                         model_args.dflash2_block_size(),
-                                         options));
+  attention_conv_ = register_module(
+      /*name=*/"attention_conv",
+      DFlash2GroupedConv(model_args.hidden_size(),
+                         model_args.dflash2_conv_kernel_size(),
+                         model_args.dflash2_conv_group_size(),
+                         model_args.num_speculative_tokens() + 1,
+                         options));
+  mlp_conv_ = register_module(
+      /*name=*/"mlp_conv",
+      DFlash2GroupedConv(model_args.hidden_size(),
+                         model_args.dflash2_conv_kernel_size(),
+                         model_args.dflash2_conv_group_size(),
+                         model_args.num_speculative_tokens() + 1,
+                         options));
 }
 
 void DFlash2DecoderLayerImpl::load_state_dict(const StateDict& state_dict) {

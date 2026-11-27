@@ -138,7 +138,8 @@ inline bool is_aligned_for_cuda_zero_copy(const void* ptr) {
 // v11: removes the redundant destination origin; derive each step's origin
 // from remote_shared_num and local_block_start instead.
 // v12: DiT forward inputs store a length-prefixed list of LoRA adapter IDs.
-constexpr uint64_t kRawInputFormatTag = 0x584C4C4D0000000CULL;
+// v13: sampling mode replaces the two boolean sampling flags.
+constexpr uint64_t kRawInputFormatTag = 0x584C4C4D0000000DULL;
 
 // The forward output payload is also a hard-coded field list with no length
 // self-description. Tag its head and carry the payload length so a reader
@@ -367,8 +368,8 @@ size_t get_sampling_params_size(const SamplingParameters& params) {
   total += get_tensor_size(params.sample_idxes);
   total += get_tensor_size(params.do_sample);
   total += get_tensor_size(params.acc_logprob);
-  total += type_size<bool> * 5    // all_random_sample + all_greedy_sample +
-                                  // logprobs + is_embeddings + use_beam_search
+  total += type_size<SamplingMode> +
+           type_size<bool> * 3    // logprobs, is_embeddings, use_beam_search
            + type_size<int64_t>   // max_top_logprobs
            + type_size<int32_t>;  // num_return_sequences
   return total;
@@ -2807,8 +2808,7 @@ inline void deserialize_forward_input_payload(
     read_tensor(context, sampling_params.unique_token_ids_lens, stream);
     read_tensor(context, sampling_params.sample_idxes, stream);
     read_tensor(context, sampling_params.do_sample, stream);
-    read_data(context, sampling_params.all_random_sample);
-    read_data(context, sampling_params.all_greedy_sample);
+    read_data(context, sampling_params.sampling_mode);
     read_data(context, sampling_params.logprobs);
     read_data(context, sampling_params.is_embeddings);
     read_data(context, sampling_params.max_top_logprobs);
@@ -3310,8 +3310,7 @@ inline void serialize_forward_input_sections(
     write_tensor(context, sampling_params.unique_token_ids_lens);
     write_tensor(context, sampling_params.sample_idxes);
     write_tensor(context, sampling_params.do_sample);
-    write_data(context.descriptor, sampling_params.all_random_sample);
-    write_data(context.descriptor, sampling_params.all_greedy_sample);
+    write_data(context.descriptor, sampling_params.sampling_mode);
     write_data(context.descriptor, sampling_params.logprobs);
     write_data(context.descriptor, sampling_params.is_embeddings);
     write_data(context.descriptor, sampling_params.max_top_logprobs);

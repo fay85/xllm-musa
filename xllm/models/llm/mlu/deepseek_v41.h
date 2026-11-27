@@ -246,7 +246,7 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     std::optional<layer::mlu_v4_cp::DeepseekV4CpContext> cp_context;
     if (cp_size_ > 1 && !input.enable_graph &&
         !input.use_dflash_proposal_attention && !input.is_spec_verify &&
-        input.meta.spec_verify_width <= 1 &&
+        input.meta.num_speculative_tokens == 0 &&
         input.meta.batch_forward_type.no_decode()) {
       cp_context = layer::mlu_v4_cp::build_cp_context(
           cp_size_,
@@ -372,7 +372,7 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
   // Generic verify expands each request into independent decode rows. V4.1
   // compression and Engram need the original contiguous request chunks.
   static bool has_verify_rows(const ModelInputParams& input) {
-    return input.meta.spec_verify_width > 1 ||
+    return input.meta.num_speculative_tokens > 0 ||
            (!input.use_dflash_proposal_attention &&
             input.meta.batch_forward_type.is_decode() &&
             input.meta.q_max_seq_len == 1 &&
@@ -388,7 +388,7 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     CHECK_EQ(prefix.front(), 0);
     CHECK_LE(prefix.back(), input.meta.num_sequences);
     const int32_t padding = input.meta.num_sequences - prefix.back();
-    const int32_t width = std::max(1, input.meta.spec_verify_width);
+    const int32_t width = input.meta.num_speculative_tokens + 1;
     grouped.meta.num_sequences = real + (padding + width - 1) / width;
     grouped.meta.actual_num_sequences = real;
     grouped.meta.q_max_seq_len = 1;

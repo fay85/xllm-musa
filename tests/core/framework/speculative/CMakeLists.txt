@@ -26,11 +26,12 @@ endif()
 
 cc_test(
   NAME
-    spec_input_builder_test
+    decode_input_builder_test
   SRCS
-    spec_input_builder_test.cpp
-    "${PROJECT_SOURCE_DIR}/xllm/core/framework/speculative/spec_input_builder.cpp"
+    decode_input_builder_test.cpp
   DEPS
+    :decode_input_builder
+    :speculative
     :multimodal
     :parallel_state
     :request
@@ -69,33 +70,6 @@ cc_test(
   DEPS
     :constraint
     :json_object_grammar
-    GTest::gtest_main
-)
-
-cc_test(
-  NAME
-    adaptive_speculative_controller_test
-  CPU_ONLY
-  SRCS
-    adaptive_speculative_controller_test.cpp
-    "${PROJECT_SOURCE_DIR}/xllm/core/framework/speculative/adaptive_speculative_controller.cpp"
-    "${PROJECT_SOURCE_DIR}/xllm/core/framework/speculative/speculative_profile_registry.cpp"
-  DEPS
-    torch
-    glog::glog
-    proto::xllm_proto
-    GTest::gtest_main
-)
-
-cc_test(
-  NAME
-    speculative_profile_registry_test
-  CPU_ONLY
-  SRCS
-    speculative_profile_registry_test.cpp
-    "${PROJECT_SOURCE_DIR}/xllm/core/framework/speculative/speculative_profile_registry.cpp"
-  DEPS
-    glog::glog
     GTest::gtest_main
 )
 

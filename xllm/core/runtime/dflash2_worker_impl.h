@@ -17,7 +17,7 @@ limitations under the License.
 
 #include <optional>
 
-#include "runtime/dflash/dflash_worker_impl.h"
+#include "core/runtime/dflash_worker_impl.h"
 
 namespace xllm {
 
@@ -31,36 +31,32 @@ class DFlash2WorkerImpl final : public DFlashWorkerImpl {
                     WorkerType worker_type);
 
  protected:
-  DraftBlock run_decode_draft(const ForwardInput& input,
-                              ForwardInput& validate_input) override;
-  DraftBlock run_decode_draft_from_pending(
+  ForwardOutput run_decode_draft(const ForwardInput& input,
+                                 ForwardInput& validate_input) override;
+  ForwardOutput run_decode_draft_from_pending(
       const ForwardInput& input,
       const std::vector<int64_t>& rows) override;
 
  private:
   torch::Tensor prepare_draft_noise(const ForwardInput& input) const;
-  DraftBlock execute_draft_query(const ForwardInput& input,
-                                 ForwardInput query_input,
-                                 const torch::Tensor& anchor_token_ids,
-                                 const torch::Tensor& gumbel_noise,
-                                 bool prepared);
+  ForwardOutput execute_draft_query(const ForwardInput& input,
+                                    ForwardInput query_input,
+                                    const torch::Tensor& anchor_token_ids,
+                                    const torch::Tensor& gumbel_noise,
+                                    bool prepared);
 
-  struct BlockSampleOutput {
-    torch::Tensor token_ids;
-    torch::Tensor dense_probs;
-  };
-
-  static std::optional<BlockSampleOutput> fused_sample(
+  static std::optional<std::pair<torch::Tensor, torch::Tensor>> fused_sample(
       const torch::Tensor& candidate_ids,
       const torch::Tensor& edge_log_probs,
       const torch::Tensor& gumbel_noise,
       const SamplingParameters& sampling_params,
       int64_t vocab_size);
 
-  BlockSampleOutput sample_path(const DFlash2CandidateOutput& candidates,
-                                const SamplingParameters& sampling_params,
-                                const torch::Tensor& gumbel_noise,
-                                int64_t vocab_size) const;
+  std::pair<torch::Tensor, torch::Tensor> sample_path(
+      const DFlash2CandidateOutput& candidates,
+      const SamplingParameters& sampling_params,
+      const torch::Tensor& gumbel_noise,
+      int64_t vocab_size) const;
 
   ProcessGroup* sampling_process_group_ = nullptr;
 };

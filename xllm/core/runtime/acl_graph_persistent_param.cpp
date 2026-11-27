@@ -32,7 +32,6 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/parallel_config.h"
-#include "core/framework/config/speculative_config.h"
 #include "core/framework/speculative/mtp_async_state.h"
 #include "core/kernels/npu/tilelang/tilelang_ops_api.h"
 #include "core/layers/common/expanded_decode_metadata_builder.h"
@@ -53,26 +52,15 @@ namespace xllm::npu {
 namespace {
 constexpr int32_t kMlaGraphKvLenBucket = 2048;
 
-int64_t get_decode_graph_capacity(const runtime::Options& options) {
-  CHECK_GT(options.num_decoding_tokens(), 0)
-      << "num_decoding_tokens must be > 0 for graph capacity";
-  return options.max_seqs_per_batch();
-}
-
 int64_t get_decode_graph_token_capacity(const runtime::Options& options,
                                         int32_t capture_token_limit) {
-  CHECK_GT(options.num_decoding_tokens(), 0)
-      << "num_decoding_tokens must be > 0 for graph token capacity";
   if (capture_token_limit > 0) {
     return capture_token_limit;
   }
   int64_t token_capacity = options.max_seqs_per_batch();
-  if (::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel()) {
-    return runtime::get_decode_graph_token_bucket(
-        token_capacity, options.enable_graph_mode_decode_no_padding());
-  }
   if (options.enable_speculative_decode() && !options.is_draft_engine()) {
-    token_capacity *= options.num_decoding_tokens();
+    token_capacity *=
+        static_cast<int64_t>(options.num_speculative_tokens()) + 1;
   }
   return runtime::get_decode_graph_token_bucket(
       token_capacity, options.enable_graph_mode_decode_no_padding());
@@ -89,19 +77,20 @@ bool graph_mode_decode_no_padding_enabled() {
 
 int64_t get_hybrid_metadata_capacity(const runtime::Options& options,
                                      int32_t capture_token_limit) {
-  const int64_t seq_capacity = get_decode_graph_capacity(options);
-  const int64_t num_decoding_tokens = options.num_decoding_tokens();
+  const int64_t seq_capacity = options.max_seqs_per_batch();
+  const int64_t query_width =
+      options.is_draft_engine()
+          ? 1
+          : static_cast<int64_t>(options.num_speculative_tokens()) + 1;
   if (capture_token_limit > 0) {
-    return (capture_token_limit + num_decoding_tokens - 1) /
-           num_decoding_tokens;
+    return (capture_token_limit + query_width - 1) / query_width;
   }
   // Bucket padding rows still consume sequence-scoped metadata:
   // 4 seqs x 5 tokens = 20 rows -> bucket 32 -> 7 metadata rows.
   const int64_t bucketed_tokens = runtime::get_decode_graph_token_bucket(
-      seq_capacity * num_decoding_tokens,
-      graph_mode_decode_no_padding_enabled());
+      seq_capacity * query_width, graph_mode_decode_no_padding_enabled());
   const int64_t padded_seq_capacity =
-      (bucketed_tokens + num_decoding_tokens - 1) / num_decoding_tokens;
+      (bucketed_tokens + query_width - 1) / query_width;
   return std::max(seq_capacity, padded_seq_capacity);
 }
 
@@ -222,28 +211,13 @@ bool can_skip_unused_qwen3_5_decode_mask(const ModelInputParams& params,
   return is_hybrid_linear_attention &&
          is_qwen3_5_target_model_type(args.model_type()) &&
          !options.is_draft_engine() && !options.enable_speculative_decode() &&
-         options.num_decoding_tokens() == 1 && options.dp_size() == 1 &&
+         options.num_speculative_tokens() == 0 && options.dp_size() == 1 &&
          options.cp_size() == 1 &&
          ParallelConfig::get_instance().kv_split_size_effective() == 1 &&
          !params.is_spec_verify && params.meta.batch_forward_type.is_decode() &&
          params.meta.q_max_seq_len == 1 &&
          KernelConfig::get_instance().npu_kernel_backend() == "TORCH" &&
          ExecutionConfig::get_instance().enable_fia_decode();
-}
-
-int64_t get_spec_verify_width(const ModelInputParams& params) {
-  CHECK(params.graph.input_tokens_override.defined())
-      << "speculative verify graph update requires token inputs";
-  CHECK_EQ(params.graph.input_tokens_override.dim(), 1)
-      << "speculative verify token inputs must be flat";
-  const int64_t spec_width = params.meta.q_max_seq_len;
-  CHECK_GT(spec_width, 0) << "speculative verify width must be positive";
-  CHECK_GT(params.meta.num_sequences, 0)
-      << "speculative verify batch size must be positive";
-  CHECK_EQ(params.graph.input_tokens_override.numel(),
-           static_cast<int64_t>(params.meta.num_sequences) * spec_width)
-      << "speculative verify tokens must use compact [batch, width] layout";
-  return spec_width;
 }
 
 }  // namespace
@@ -915,7 +889,6 @@ void GraphPersistentParam::update_tokens(const torch::Tensor& tokens,
 }
 
 void GraphPersistentParam::update_spec_verify_inputs(
-    const torch::Tensor& tokens,
     const torch::Tensor& positions,
     const ModelInputParams& params,
     uint32_t padded_num_tokens,
@@ -925,18 +898,15 @@ void GraphPersistentParam::update_spec_verify_inputs(
   CHECK(params.is_spec_verify &&
         params.meta.batch_forward_type.is_chunked_prefill())
       << "graph input update only supports spec-verify chunked prefill";
-  const torch::Tensor& graph_tokens =
-      params.graph.input_tokens_override.defined()
-          ? params.graph.input_tokens_override
-          : tokens;
-  const int64_t spec_width = get_spec_verify_width(params);
+  const auto& graph_tokens = params.graph.input_tokens_override;
+  CHECK_EQ(graph_tokens.dim(), 1);
+  const int64_t spec_width = params.meta.q_max_seq_len;
   const int64_t batch_size = params.meta.num_sequences;
   const int64_t total_tokens = graph_tokens.numel();
   CHECK_EQ(total_tokens, batch_size * spec_width);
   CHECK_EQ(padded_num_tokens, total_tokens);
 
   const bool fused_token_update =
-      params.graph.input_tokens_override.defined() &&
       params.graph.spec_verify_draft_token_sources.size() + 1 ==
           static_cast<size_t>(spec_width) &&
       std::all_of(params.graph.spec_verify_draft_token_sources.begin(),
@@ -948,7 +918,7 @@ void GraphPersistentParam::update_spec_verify_inputs(
           spec_width);
   if (fused_token_update) {
     kernel::npu::tilelang::spec_verify_token_update(
-        params.graph.input_tokens_override,
+        graph_tokens,
         params.graph.spec_verify_draft_token_sources,
         persistent_tokens_,
         spec_width);
@@ -1041,7 +1011,9 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
       << "ACL graph persistent param only supports decode or hybrid "
          "spec-verify chunked prefill";
   const int64_t decode_tokens =
-      is_decode ? std::max<int64_t>(options_.num_decoding_tokens(), 1) : 1;
+      is_decode && !options_.is_draft_engine()
+          ? static_cast<int64_t>(options_.num_speculative_tokens()) + 1
+          : 1;
   int64_t actual_batch_size = infer_actual_batch_size(params);
   if (is_chunked_prefill && params.meta.num_sequences > 0) {
     actual_batch_size = params.meta.num_sequences;

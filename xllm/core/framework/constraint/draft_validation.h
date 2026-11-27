@@ -43,20 +43,6 @@ struct JsonAcceptedTokenMismatch final {
   uint64_t state_fingerprint = 0;
 };
 
-inline std::vector<int32_t> copy_json_draft_token_ids(const int64_t* token_ids,
-                                                      size_t token_count) {
-  std::vector<int32_t> result(token_count);
-  if (token_count == 0) {
-    return result;
-  }
-  CHECK(token_ids != nullptr) << "JSON draft token buffer must be defined";
-  std::transform(
-      token_ids, token_ids + token_count, result.begin(), [](int64_t token_id) {
-        return static_cast<int32_t>(token_id);
-      });
-  return result;
-}
-
 inline bool advance_json_draft_step(
     std::vector<ConstraintState>& current_states,
     std::vector<uint8_t>& invalid_suffix,

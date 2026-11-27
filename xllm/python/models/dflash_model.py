@@ -26,10 +26,11 @@ from xllm.python.model_executor.execution_context import can_execute_graph
 from xllm.python.model_executor.forward_context import get_execution_context
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.sampling_metadata import (
     ModelSamplingMetadata,
     ModelSamplingMetadataBuilder,
+    SamplingMode,
     prepare_sampling_input,
     sample_logits,
 )
@@ -46,7 +47,7 @@ class DFlashDecoderMetadata:
 class DFlashDecoderMetadataBuilder:
     """Capture complete query blocks even when warmup does not request sampling."""
 
-    metadata_type = DFlashDecoderMetadata
+    metadata_type: type[object] = DFlashDecoderMetadata
 
     def __init__(self, query_width: int) -> None:
         if query_width <= 1:
@@ -62,7 +63,7 @@ class DFlashDecoderMetadataBuilder:
         return DFlashDecoderMetadata(0 if remainder else requests)
 
     def update_persistent(
-        self, persistent_metadata: DFlashDecoderMetadata, input_batch: InputBatch, metadata: AttentionMetadata
+        self, persistent_metadata: object, input_batch: InputBatch, metadata: AttentionMetadata
     ) -> None:
         return None
 
@@ -120,8 +121,8 @@ class DFlashProposalModel(nn.Module):
         metadata = get_execution_context(ModelSamplingMetadata)
         if metadata is None or metadata.sampling is None or input_embedding is None:
             raise RuntimeError("DFlash proposal requires logits and sampling metadata")
-        if not metadata.sampling.parameters.all_greedy_sample or metadata.sampling.return_probs:
+        if metadata.sampling.parameters.sampling_mode != SamplingMode.GREEDY or metadata.sampling.return_draft_logits:
             raise ValueError("DFlash draft sampling must remain greedy without draft probabilities")
         sampling = prepare_sampling_input(metadata.sampling, input_embedding)
         tokens, _ = sample_logits(input_embedding, sampling, tp_size=metadata.tp_size)
-        return ModelOutput(draft_proposal=DraftProposal(tokens.view(-1, self._num_steps)))
+        return ModelOutput(draft_token_ids=tokens.view(-1, self._num_steps))

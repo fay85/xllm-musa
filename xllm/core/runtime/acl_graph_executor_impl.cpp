@@ -28,6 +28,7 @@ limitations under the License.
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kernel_config.h"
+#include "core/framework/config/speculative_config.h"
 #ifdef TORCH_HIGHER_THAN_PTA6
 #include <torch_npu/csrc/framework/OpCommand.h>
 #else
@@ -107,7 +108,7 @@ bool is_qwen3_5_dp_graph_step_supported(const ModelArgs& args,
     return false;
   }
   if (!params.is_spec_verify && params.meta.batch_forward_type.is_decode() &&
-      options.num_decoding_tokens() == 1) {
+      (options.is_draft_engine() || options.num_speculative_tokens() == 0)) {
     return true;
   }
   if (params.is_spec_verify &&
@@ -396,7 +397,8 @@ bool is_mla_graph_eagle3_target(const CausalLM* model,
                                 const runtime::Options& options) {
   return model->supports_mla_graph_kv_bucketing() &&
          options.enable_speculative_decode() && !options.is_draft_engine() &&
-         options.speculative_algorithm() == "Eagle3";
+         SpeculativeConfig::is_eagle3_algorithm(
+             options.speculative_algorithm());
 }
 
 void hash_graph_key_value(uint64_t& hash, uint64_t value) {
@@ -474,7 +476,6 @@ bool AclGraph::capture(CausalLM* model,
                                                /*for_capture=*/true);
   if (update_spec_verify_tokens) {
     persistent_param_.update_spec_verify_inputs(
-        tokens,
         positions,
         params,
         num_tokens_,
@@ -1009,11 +1010,10 @@ ModelOutput AclGraph::replay(CausalLM* model,
     }
     // Raw TileLang launches require an explicit metadata refresh.
     persistent_param_.update_spec_verify_inputs(
-        tokens,
         positions,
         params,
         num_tokens_,
-        SpecVerifyInputUpdateScope::ALL_INPUTS);
+        /*scope=*/SpecVerifyInputUpdateScope::ALL_INPUTS);
     update_spec_verify_attention_tiling(params);
     // Explicit producer-stream updates have populated the persistent graph
     // inputs. Host-only task parameters remain current and are consumed by
@@ -1185,11 +1185,14 @@ AclGraphExecutorImpl::AclGraphExecutorImpl(CausalLM* model,
   const auto& raw_sizes =
       ::xllm::ExecutionConfig::get_instance().graph_capture_sizes();
   if (!raw_sizes.empty()) {
-    graph_capture_sizes_ = runtime::get_decode_graph_capture_sizes(
-        options_, options_.num_decoding_tokens());
+    const int64_t query_width =
+        options_.is_draft_engine()
+            ? 1
+            : static_cast<int64_t>(options_.num_speculative_tokens()) + 1;
+    graph_capture_sizes_ =
+        runtime::get_decode_graph_capture_sizes(options_, query_width);
     LOG(INFO) << "ACL graph effective capture token rows="
-              << graph_capture_sizes_
-              << ", query_width=" << options_.num_decoding_tokens();
+              << graph_capture_sizes_ << ", query_width=" << query_width;
   }
   const bool need_update_attn_mask = model->is_hybrid_linear_attention();
   const bool is_hybrid_linear_attn = model->is_hybrid_linear_attention();
@@ -1249,12 +1252,6 @@ size_t AclGraphExecutorImpl::get_graph_capture_stream_count() const {
     }
   }
   return stream_ids.size();
-}
-
-ForwardInput AclGraphExecutorImpl::prepare_inputs(Batch& batch) {
-  // Prepare inputs for workers
-  return batch.prepare_forward_input(
-      options_.num_decoding_tokens(), 0, args_, options_.cp_size());
 }
 
 // Main execution method with graph optimization for decode phase
@@ -1382,9 +1379,12 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
   }
   // Keep actual n_tokens for replay output slicing.
   const uint32_t n_tokens = tokens_tensor.size(/*dim=*/0);
-  const uint32_t local_batch_size = n_tokens / options_.num_decoding_tokens();
-  const uint32_t max_local_batch_size =
-      max_local_num_tokens / options_.num_decoding_tokens();
+  const uint32_t query_width =
+      static_cast<uint32_t>(
+          options_.is_draft_engine() ? 0 : options_.num_speculative_tokens()) +
+      1;
+  const uint32_t local_batch_size = n_tokens / query_width;
+  const uint32_t max_local_batch_size = max_local_num_tokens / query_width;
 
   // Large decode batches create too many/too large ACL graphs and may OOM.
   // Fall back to eager mode when batch size exceeds the safety threshold.
@@ -1430,7 +1430,7 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
       ExecutionConfig::get_instance().enable_graph_mode_decode_no_padding()) {
     if (!is_acl_graph_decode_token_capture_allowed(
             max_local_num_tokens,
-            static_cast<uint32_t>(options_.num_decoding_tokens()),
+            query_width,
             options_.max_seqs_per_batch(),
             ExecutionConfig::get_instance().acl_graph_decode_batch_size_limit(),
             options_.dp_size(),
@@ -1554,7 +1554,7 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
                                .enable_graph_mode_decode_no_padding()) {
     if (!is_acl_graph_decode_token_capture_allowed(
             max_local_num_tokens,
-            static_cast<uint32_t>(options_.num_decoding_tokens()),
+            query_width,
             options_.max_seqs_per_batch(),
             ExecutionConfig::get_instance().acl_graph_decode_batch_size_limit(),
             options_.dp_size(),

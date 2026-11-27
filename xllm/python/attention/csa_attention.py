@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from scripts.logger import logger
+from xllm.python import kernels
 from xllm.python.attention.backend import (
     AttentionBackend,
     CsaIndexContext,
@@ -68,7 +69,7 @@ HEAVILY_COMPRESSED_ATTENTION = "heavily_compressed_attention"
 # Sparse mask modes used by C++ DSAttentionImpl (rightDownCausal variants).
 _MASK_MODE_RIGHT_DOWN_CAUSAL = 3
 _MASK_MODE_COMPRESS = 4
-_DSPARK_SWA_INDEX_ALIGNMENT = 128
+_DSV4_HEAD_DIM = 512
 
 # One-time diagnostic latch for the ACL-graph replay alias dedup in
 # :meth:`DsaAttentionBackend._copy_graph_dsa_metadata`.
@@ -139,85 +140,6 @@ def _uses_prefill_attention(metadata: AttentionMetadata) -> bool:
     is_chunked_prefill = bool(getattr(metadata, "is_chunked_prefill", False))
     is_dummy = bool(getattr(metadata, "is_dummy", False))
     return is_chunked_prefill or (is_prefill and not is_dummy)
-
-
-def _deepseek_v4_ori_window_left(
-    window_size: int,
-    dspark_block_size: int,
-    use_native_dspark_sas: bool,
-) -> int:
-    if use_native_dspark_sas and dspark_block_size > 0:
-        return max(window_size + dspark_block_size - 1, 0)
-    return max(window_size - 1, 0)
-
-
-def _build_dspark_swa_indices(
-    block_table: torch.Tensor,
-    query_cu_seq_lens: torch.Tensor,
-    seq_lens: torch.Tensor,
-    window_size: int,
-    dspark_block_size: int,
-    cache_block_size: int,
-) -> torch.Tensor:
-    """Build the explicit ring-buffer slots consumed by native DSpark SAS."""
-    if block_table.dim() != 2 or block_table.size(1) <= 0:
-        raise ValueError("Native DSpark SAS requires a non-empty two-dimensional block table")
-    if query_cu_seq_lens.dim() != 1 or query_cu_seq_lens.numel() < 2:
-        raise ValueError("Native DSpark SAS requires cumulative query lengths")
-    if cache_block_size <= 0:
-        raise ValueError("Native DSpark SAS requires cache_block_size > 0")
-
-    device = block_table.device
-    query_cu_seq_lens = query_cu_seq_lens.to(device=device, dtype=torch.int64)
-    seq_lens = seq_lens.to(device=device, dtype=torch.int64)
-    query_lens = query_cu_seq_lens[1:] - query_cu_seq_lens[:-1]
-    if query_lens.numel() != block_table.size(0) or seq_lens.numel() != block_table.size(0):
-        raise ValueError("Native DSpark SAS sequence metadata batch size mismatch")
-
-    prefix_lens = seq_lens - query_lens
-    start_positions = (prefix_lens - window_size).clamp_min(0)
-    visible_lens = seq_lens - start_positions
-    minimum_width = window_size + dspark_block_size
-    index_width = (minimum_width + _DSPARK_SWA_INDEX_ALIGNMENT - 1) // _DSPARK_SWA_INDEX_ALIGNMENT
-    index_width *= _DSPARK_SWA_INDEX_ALIGNMENT
-
-    columns = torch.arange(index_width, dtype=torch.int64, device=device)
-    valid = columns.unsqueeze(0) < visible_lens.unsqueeze(1)
-    positions = start_positions.unsqueeze(1) + columns.unsqueeze(0)
-    logical_block_columns = torch.div(positions, cache_block_size, rounding_mode="floor")
-
-    # DsaMetadataBuilder's default SWA read-side layout is right-aligned: only
-    # the last `min(semantic_cols, dst_lens)` block-table columns carry the
-    # retained ring blocks and the rest stay `-1`. This compensation shifts a
-    # reader's logical column back into that retained tail --
-    # `valid_block_counts` is the filled tail width, `first_retained_columns`
-    # the leading `-1` prefix, and `expanded_block_columns` folds the logical
-    # index into the tail -- so it is the active path for the shared (DSV4 /
-    # V4-dspark) layout. DeepSeek-V4.1 instead requests the "ring" layout, in
-    # which every column is valid; its readers address columns absolutely and
-    # need no compensation (this code then degenerates to identity).
-    valid_block_counts = block_table.ge(0).sum(dim=1, dtype=torch.int64)
-    safe_block_counts = valid_block_counts.clamp_min(1)
-    logical_block_counts = torch.div(
-        seq_lens + cache_block_size - 1,
-        cache_block_size,
-        rounding_mode="floor",
-    )
-    first_retained_columns = (logical_block_counts - valid_block_counts).clamp_min(0)
-    expanded_block_columns = first_retained_columns.unsqueeze(1) + (
-        logical_block_columns - first_retained_columns.unsqueeze(1)
-    ).remainder(safe_block_counts.unsqueeze(1))
-    raw_block_columns = logical_block_columns.remainder(safe_block_counts.unsqueeze(1))
-    uses_expanded_layout = logical_block_counts <= block_table.size(1)
-    block_columns = torch.where(
-        uses_expanded_layout.unsqueeze(1),
-        expanded_block_columns,
-        raw_block_columns,
-    ).clamp(max=block_table.size(1) - 1)
-    block_ids = block_table.to(torch.int64).gather(1, block_columns)
-    slot_ids = block_ids * cache_block_size + positions.remainder(cache_block_size)
-    slot_ids = torch.where(valid & block_ids.ge(0), slot_ids, torch.full_like(slot_ids, -1))
-    return torch.repeat_interleave(slot_ids, query_lens, dim=0).to(torch.int32).unsqueeze(1)
 
 
 def _attention_type_for_compress_ratio(compress_ratio: int) -> str:
@@ -329,8 +251,7 @@ class DsaAttentionBackend(AttentionBackend):
         rope_head_dim: int,
         device: torch.device,
         dtype: torch.dtype,
-        dspark_block_size: int = 0,
-        dspark_use_native_sas: bool = False,
+        num_speculative_tokens: int = 0,
     ) -> None:
         self.caches_info, self.group_infos = build_cache_specs(
             compress_ratios,
@@ -348,8 +269,7 @@ class DsaAttentionBackend(AttentionBackend):
         self.device = device
         self.dtype = dtype
         self.scale = attn_head_dim**-0.5
-        self.dspark_block_size = dspark_block_size
-        self.dspark_use_native_sas = dspark_use_native_sas
+        self.num_speculative_tokens = num_speculative_tokens
         self._dspark_swa_location: tuple[int, int, int] | None = None
         for layer_id, layer_caches in enumerate(self.caches_info):
             for cache_id, cache_info in enumerate(layer_caches):
@@ -362,9 +282,6 @@ class DsaAttentionBackend(AttentionBackend):
         self._kv_caches: list[LayerCache] = []
         self._metadata: AttentionMetadata | None = None
         self._metadata_staging: dict[tuple[torch.device, torch.dtype, torch.Size], list[tuple[torch.Tensor, Any]]] = {}
-
-    def _use_native_sas(self, use_prefill: bool) -> bool:
-        return self.dspark_use_native_sas and self.dspark_block_size > 0 and not use_prefill
 
     # -- AttentionBackend interface -----------------------------------------
 
@@ -698,17 +615,15 @@ class DsaAttentionBackend(AttentionBackend):
                     getattr(refreshed, field_name, None),
                     field_name,
                 )
-        # ``explicit_swa_indices`` is never in-place: it is a derived native-SAS
-        # kernel output (``_build_dspark_swa_metadata``), not part of
-        # ``_DSA_INPLACE_TENSOR_FIELDS``, so the builder cannot write it into the
-        # captured buffer. It therefore always takes the historical copy path
-        # (and is ``None`` on the production V4.1/csa2 graph path).
-        cls._copy_graph_tensor(
-            getattr(persistent, "explicit_swa_indices", None),
-            getattr(refreshed, "explicit_swa_indices", None),
-            "explicit_swa_indices",
-            pad_value=-1,
-        )
+        for field_name, pad_value in (("ori_sparse_indices", -1), ("ori_topk_length", 0)):
+            cls._copy_graph_tensor(
+                getattr(persistent, field_name, None),
+                getattr(refreshed, field_name, None),
+                field_name,
+                pad_value=pad_value,
+            )
+
+        persistent.sparse_metadata_ori_win_left = getattr(refreshed, "sparse_metadata_ori_win_left", -1)
 
         if len(persistent.block_tables) != len(refreshed.block_tables):
             raise RuntimeError("ACL graph DSA block-table layer count changed")
@@ -758,7 +673,6 @@ class DsaAttentionBackend(AttentionBackend):
 
         persistent.max_query_len = refreshed.max_query_len
         persistent.max_seq_len = refreshed.max_seq_len
-        persistent.sparse_metadata_ori_win_left = getattr(refreshed, "sparse_metadata_ori_win_left", -1)
         persistent.is_acl_graph = refreshed.is_acl_graph
         # The capture-time capacity bound is re-derived from the same static
         # entry metadata, so this is a no-op unless the entry changed buckets.
@@ -942,13 +856,6 @@ class DsaAttentionBackend(AttentionBackend):
             max_query_len_override=local_q_max,
             max_seq_len_override=local_kv_max,
         )
-
-    def prepare_csa_metadata_for_forward(
-        self,
-        metadata: AttentionMetadata | None = None,
-    ) -> None:
-        """Backward-compatible alias for the canonical DSA API."""
-        self.prepare_dsa_metadata_for_forward(metadata)
 
     def select_dsa_layer_rope(
         self,
@@ -1250,49 +1157,49 @@ class DsaAttentionBackend(AttentionBackend):
         sinks = getattr(layer, "attn_sink", None) if getattr(layer, "attn_sink_loaded", False) else None
         if sinks is not None:
             sinks = sinks.to(q.device, dtype=torch.float32).contiguous()
-        use_native_sas = self._use_native_sas(use_prefill_attn)
-        ori_win_left = _deepseek_v4_ori_window_left(
-            self.window_size,
-            self.dspark_block_size,
-            use_native_sas,
-        )
-        metadata_ori_win_left = getattr(compressed_metadata, "sparse_metadata_ori_win_left", ori_win_left)
-        if metadata_ori_win_left != ori_win_left:
-            raise RuntimeError("DeepSeek-V4 sparse metadata belongs to incompatible model geometry")
-        ori_sparse_indices = None
-        if use_native_sas and compress_ratio == 1:
-            ori_sparse_indices = getattr(compressed_metadata, "explicit_swa_indices", None)
-            if ori_sparse_indices is None:
-                raise RuntimeError("Native DeepSeek-V4 DSpark requires precomputed SWA indices")
-        out, _lse = _sparse_attn_sharedkv(
-            q=q,
-            ori_kv=ori_kv_for_attn,
-            cmp_kv=cmp_kv if compress_ratio > 1 else None,
-            ori_sparse_indices=ori_sparse_indices,
-            cmp_sparse_indices=compress_topk_idxs,
-            ori_block_table=ori_block_table_for_kernel,
-            cmp_block_table=cmp_block_table_for_kernel if compress_ratio > 1 else None,
-            cu_seqlens_q=seq_q,
-            cu_seqlens_ori_kv=cu_seqlens_ori_kv_for_attn,
-            # C++ passes nullopt for compressed KV cu-seqlens; cmp_kv is PA_ND
-            # and addressed through cmp_block_table/topk.
-            cu_seqlens_cmp_kv=None,
-            seqused_q=None,
-            seqused_kv=seq_kv,
-            # sinks: the attention sink parameter (attn_sink) is required by the
-            # sparse_attn_sharedkv kernel (C++ :949 passes attn_sink_ when loaded).
-            sinks=sinks,
-            metadata=sparse_meta_for_kernel,
-            softmax_scale=self.scale,
-            cmp_ratio=compress_ratio,
-            ori_mask_mode=_MASK_MODE_COMPRESS,
-            cmp_mask_mode=_MASK_MODE_RIGHT_DOWN_CAUSAL,
-            ori_win_left=ori_win_left,
-            ori_win_right=0,
-            layout_q="TND",
-            layout_kv="PA_ND",
-            return_softmax_lse=False,
-        )
+        ori_win_left = self.window_size - 1
+        if compress_ratio == 1 and getattr(compressed_metadata, "ori_topk_length", None) is not None:
+            out = kernels.sparse_flash_mla_swa(
+                q,
+                ori_kv_for_attn,
+                ori_block_table_for_kernel,
+                seq_q,
+                seq_kv,
+                compressed_metadata.ori_sparse_indices,
+                compressed_metadata.ori_topk_length,
+                sinks,
+                sparse_meta_for_kernel,
+            )
+        else:
+            out, _lse = _sparse_attn_sharedkv(
+                q=q,
+                ori_kv=ori_kv_for_attn,
+                cmp_kv=cmp_kv if compress_ratio > 1 else None,
+                ori_sparse_indices=None,
+                cmp_sparse_indices=compress_topk_idxs,
+                ori_block_table=ori_block_table_for_kernel,
+                cmp_block_table=cmp_block_table_for_kernel if compress_ratio > 1 else None,
+                cu_seqlens_q=seq_q,
+                cu_seqlens_ori_kv=cu_seqlens_ori_kv_for_attn,
+                # C++ passes nullopt for compressed KV cu-seqlens; cmp_kv is PA_ND
+                # and addressed through cmp_block_table/topk.
+                cu_seqlens_cmp_kv=None,
+                seqused_q=None,
+                seqused_kv=seq_kv,
+                # sinks: the attention sink parameter (attn_sink) is required by the
+                # sparse_attn_sharedkv kernel (C++ :949 passes attn_sink_ when loaded).
+                sinks=sinks,
+                metadata=sparse_meta_for_kernel,
+                softmax_scale=self.scale,
+                cmp_ratio=compress_ratio,
+                ori_mask_mode=_MASK_MODE_COMPRESS,
+                cmp_mask_mode=_MASK_MODE_RIGHT_DOWN_CAUSAL,
+                ori_win_left=ori_win_left,
+                ori_win_right=0,
+                layout_q="TND",
+                layout_kv="PA_ND",
+                return_softmax_lse=False,
+            )
         # Full prefill reads a temporary PA_ND cache so attention does not
         # depend on the persistent SWA cache. Match C++ step 8 by writing the
         # projected KV into the persistent cache only after that attention
@@ -1414,30 +1321,6 @@ class DsaAttentionBackend(AttentionBackend):
             mapping.index_score_state_cache_idx = swa_indices[4]
         return mapping
 
-    def _build_dspark_swa_metadata(self, compressed_metadata: DsaMetadata) -> None:
-        compressed_metadata.explicit_swa_indices = None
-        if not self._use_native_sas(use_prefill=False):
-            return
-        if self._dspark_swa_location is None:
-            raise RuntimeError("Native DeepSeek-V4 DSpark requires an SWA block table")
-        layer_id, cache_id, cache_block_size = self._dspark_swa_location
-        if layer_id >= len(compressed_metadata.block_tables):
-            return
-        layer_block_tables = compressed_metadata.block_tables[layer_id]
-        if cache_id >= len(layer_block_tables):
-            return
-        block_table = layer_block_tables[cache_id]
-        if block_table is None or block_table.numel() == 0:
-            return
-        compressed_metadata.explicit_swa_indices = _build_dspark_swa_indices(
-            block_table,
-            compressed_metadata.actual_seq_lengths_query,
-            compressed_metadata.actual_seq_lengths_kv,
-            self.window_size,
-            self.dspark_block_size,
-            cache_block_size,
-        )
-
     def _build_precomputed_metadata(
         self,
         compressed_metadata: DsaMetadata,
@@ -1461,10 +1344,34 @@ class DsaAttentionBackend(AttentionBackend):
         max_q = forward_meta.q_max_seq_len if max_query_len_override is None else max_query_len_override
         max_kv = forward_meta.kv_max_seq_len if max_seq_len_override is None else max_seq_len_override
         is_prefill = _uses_prefill_attention(metadata)
-        if is_prefill:
-            compressed_metadata.explicit_swa_indices = None
-        else:
-            self._build_dspark_swa_metadata(compressed_metadata)
+        compressed_metadata.ori_sparse_indices = None
+        compressed_metadata.ori_topk_length = None
+        if (
+            self.num_speculative_tokens > 0
+            and not is_prefill
+            and max_q == 1
+            and self.head_dim == _DSV4_HEAD_DIM
+            and self.device.type in ("npu", "privateuseone")
+            and kernels.supports_sparse_flash_mla_swa()
+            and self._dspark_swa_location is not None
+        ):
+            layer_id, cache_id, page_size = self._dspark_swa_location
+            block_table = compressed_metadata.block_tables[layer_id][cache_id]
+            if block_table.shape[0] == seq_kv.numel():
+                (
+                    compressed_metadata.ori_sparse_indices,
+                    compressed_metadata.ori_topk_length,
+                    compressed_metadata.c1_metadata,
+                ) = kernels.sparse_flash_mla_swa_metadata(
+                    seq_q,
+                    seq_kv,
+                    block_table,
+                    max_kv,
+                    self.num_heads,
+                    page_size,
+                    self.window_size + self.num_speculative_tokens,
+                )
+                return
         empty_int32 = torch.empty(0, dtype=torch.int32, device=self.device)
         cu_seqlens_ori_kv = empty_int32
         if is_prefill:
@@ -1477,11 +1384,7 @@ class DsaAttentionBackend(AttentionBackend):
         compressed_metadata.precomputed_metadata_inputs = tuple(
             (seq_q, seq_kv, cu_seqlens_ori_kv, cu_seqlens_cmp_kv, seqused_q, seqused_kv)
         )
-        ori_win_left = _deepseek_v4_ori_window_left(
-            self.window_size,
-            self.dspark_block_size,
-            self._use_native_sas(is_prefill),
-        )
+        ori_win_left = self.window_size - 1
         compressed_metadata.sparse_metadata_ori_win_left = ori_win_left
         for ratio in (1, 4, 128):
             has_cmp = ratio > 1
@@ -1787,7 +1690,7 @@ def _scatter_by_slot(
     )
 
 
-def _sparse_attn_sharedkv(**kwargs):
+def _sparse_attn_sharedkv(**kwargs: Any) -> tuple[torch.Tensor, torch.Tensor]:
     """Thin indirection so the backend can be unit-tested without the kernel."""
     from xllm.python import kernels
 

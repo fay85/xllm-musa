@@ -46,7 +46,7 @@ class DFlashExecutionPipeline(ExecutionPipeline):
         sampling_builders = tuple(builder for builder in builders if isinstance(builder, ModelSamplingMetadataBuilder))
         if len(sampling_builders) != 1:
             raise ValueError("DFlash execution requires exactly one sampling metadata builder")
-        self._query_width = model.draft_query_width
+        self._query_width = model.cfg.num_speculative_tokens + 1
         super().__init__(
             DFlashDecoderModel(model, self._query_width),
             (

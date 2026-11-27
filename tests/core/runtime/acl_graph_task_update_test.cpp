@@ -441,11 +441,9 @@ class HybridConv1dMockLM final : public CausalLM {
   layer::NpuLmHead get_npu_lm_head() override {
     return layer::NpuLmHead(nullptr);
   }
-  void set_npu_lm_head(layer::NpuLmHead&) override {}
   layer::NpuWordEmbedding get_npu_word_embedding() override {
     return layer::NpuWordEmbedding(nullptr);
   }
-  void set_npu_word_embedding(layer::NpuWordEmbedding&) override {}
 
  private:
   ModelArgs args_;
@@ -503,7 +501,7 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
     model_args_.layer_types({"linear_attention", "full_attention"});
 
     device_ = std::make_unique<torch::Device>("npu:0");
-    options_.num_decoding_tokens(1);
+
     options_.block_size(kBlockSize);
     options_.max_seqs_per_batch(32);
 
@@ -681,7 +679,9 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
     auto capture_batch =
         create_decode_batch_with_prompts(capture_prompts, /*token_seed=*/100);
     auto capture_fi = capture_batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+        options_.num_speculative_tokens() + 1,
+        /*min_decoding_bach_size=*/0,
+        model_args_);
     capture_fi = capture_fi.to(*device_, kDtype);
     populate_query_start_loc(capture_fi.input_params);
 
@@ -701,7 +701,9 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
     auto replay_batch =
         create_decode_batch_with_prompts(replay_prompts, /*token_seed=*/300);
     auto replay_fi = replay_batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+        options_.num_speculative_tokens() + 1,
+        /*min_decoding_bach_size=*/0,
+        model_args_);
     replay_fi = replay_fi.to(*device_, kDtype);
     populate_query_start_loc(replay_fi.input_params);
 
@@ -746,8 +748,10 @@ class AclGraphTaskUpdateTest : public ::testing::Test {
     const int32_t num_sequences = spec_verify ? 1 : 3;
     constexpr int32_t kNumSpecTokens = 4;
     auto batch = create_decode_batch(/*batch_size=*/num_sequences);
-    auto input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     input = input.to(*device_, kDtype);
     if (spec_verify) {
       setup_spec_verify_input(input, num_sequences, kNumSpecTokens);
@@ -1060,8 +1064,10 @@ TEST_F(AclGraphTaskUpdateTest, Qwen35DpPrepareRespectsDecodeGraphAdmission) {
 
   constexpr int32_t kLocalBatchSize = 3;
   auto batch = create_decode_batch(/*batch_size=*/kLocalBatchSize);
-  auto input = batch->prepare_forward_input(
-      options_.num_decoding_tokens(), 0, model_args_);
+  auto input =
+      batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                   /*min_decoding_bach_size=*/0,
+                                   model_args_);
   input = input.to(*device_, kDtype);
   populate_query_start_loc(input.input_params);
 
@@ -1139,8 +1145,10 @@ TEST_F(AclGraphTaskUpdateTest,
   for (uint32_t batch_size : {3, 3, 5, 5}) {
     reset_sequences();
     auto batch = create_decode_batch(batch_size);
-    auto input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     input = input.to(*device_, kDtype);
     populate_query_start_loc(input.input_params);
     executor.run(
@@ -1160,8 +1168,10 @@ TEST_F(AclGraphTaskUpdateTest,
     }
     auto batch =
         create_decode_batch_with_prompts(prompts, /*token_seed=*/100 + step);
-    auto input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     input = input.to(*device_, kDtype);
     populate_query_start_loc(input.input_params);
     input.input_params.meta.batch_id = 0;
@@ -1218,8 +1228,10 @@ TEST_F(AclGraphTaskUpdateTest, DcpReplayUpdatesZeroShardAcrossBlockBoundary) {
   auto make_input = [&](size_t prompt_size, int32_t token_seed) {
     auto batch = create_decode_batch_with_prompts(
         {std::vector<int32_t>(prompt_size, token_seed)}, token_seed);
-    auto input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     input = input.to(*device_, kDtype);
     populate_query_start_loc(input.input_params);
     return input;
@@ -1263,8 +1275,10 @@ TEST_F(AclGraphTaskUpdateTest,
   auto batch = create_decode_batch(/*batch_size=*/2);
   ASSERT_FALSE(batch->empty());
 
-  auto forward_input = batch->prepare_forward_input(
-      options_.num_decoding_tokens(), 0, model_args_);
+  auto forward_input =
+      batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                   /*min_decoding_bach_size=*/0,
+                                   model_args_);
   forward_input = forward_input.to(*device_, kDtype);
   populate_query_start_loc(forward_input.input_params);
 
@@ -1324,8 +1338,10 @@ TEST_F(AclGraphTaskUpdateTest,
 
   auto batch = create_decode_batch(/*batch_size=*/2);
   ASSERT_FALSE(batch->empty());
-  auto forward_input = batch->prepare_forward_input(
-      options_.num_decoding_tokens(), 0, non_qwen_args);
+  auto forward_input =
+      batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                   /*min_decoding_bach_size=*/0,
+                                   non_qwen_args);
   forward_input = forward_input.to(*device_, kDtype);
   populate_query_start_loc(forward_input.input_params);
 
@@ -1378,8 +1394,10 @@ TEST_F(AclGraphTaskUpdateTest, PlainPagedAttentionReusesPreparedDecodeInputs) {
     auto make_input = [&](uint32_t batch_size, int32_t context_length) {
       reset_sequences();
       auto batch = create_decode_batch(batch_size);
-      ForwardInput input = batch->prepare_forward_input(
-          options_.num_decoding_tokens(), 0, plain_args);
+      ForwardInput input =
+          batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                       /*min_decoding_bach_size=*/0,
+                                       plain_args);
       input = input.to(*device_, kDtype);
       torch::Tensor blocks =
           input.input_params.attention.device.block_tables.to(torch::kCPU)
@@ -1460,8 +1478,10 @@ TEST_F(AclGraphTaskUpdateTest,
 
   auto batch = create_decode_batch(/*batch_size=*/kNumSequences);
   ASSERT_FALSE(batch->empty());
-  auto forward_input = batch->prepare_forward_input(
-      options_.num_decoding_tokens(), 0, model_args_);
+  auto forward_input =
+      batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                   /*min_decoding_bach_size=*/0,
+                                   model_args_);
   forward_input = forward_input.to(*device_, kDtype);
   setup_spec_verify_input(forward_input, kNumSequences, kNumSpecTokens);
 
@@ -1501,8 +1521,10 @@ TEST_F(AclGraphTaskUpdateTest,
     auto pa_model = std::make_unique<HybridConv1dMockLM>(
         model_args_, *device_, /*enable_fia_decode=*/false);
     auto batch = create_decode_batch(/*batch_size=*/1);
-    auto input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     input = input.to(*device_, kDtype);
     input.input_params.attention.host.block_tables =
         torch::tensor({{0, 1}}, torch::kInt32);
@@ -1602,8 +1624,10 @@ TEST_F(AclGraphTaskUpdateTest,
     auto batch = create_decode_batch(/*batch_size=*/1);
     ASSERT_FALSE(batch->empty());
 
-    auto forward_input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto forward_input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     forward_input = forward_input.to(*device_, kDtype);
     setup_spec_verify_input(forward_input, /*num_sequences=*/1, spec_width);
     forward_input.input_params.graph.input_tokens_override =
@@ -1672,9 +1696,10 @@ TEST_F(AclGraphTaskUpdateTest,
       model_args_, *device_, /*enable_fia_decode=*/false);
   constexpr int32_t kSpecWidth = 5;
   auto batch = create_decode_batch(/*batch_size=*/1);
-  auto input = batch->prepare_forward_input(options_.num_decoding_tokens(),
-                                            /*min_decoding_bach_size=*/0,
-                                            model_args_);
+  auto input =
+      batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                   /*min_decoding_bach_size=*/0,
+                                   model_args_);
   input = input.to(*device_, kDtype);
   setup_spec_verify_input(input, /*num_sequences=*/1, kSpecWidth);
   input.input_params.graph.input_tokens_override = input.token_ids;
@@ -1760,8 +1785,10 @@ TEST_F(AclGraphTaskUpdateTest, StaticMtpPrepareRejectsUnsupportedWidth) {
   model_ = std::make_unique<HybridConv1dMockLM>(
       model_args_, *device_, /*enable_fia_decode=*/false);
   auto batch = create_decode_batch(/*batch_size=*/1);
-  auto input = batch->prepare_forward_input(
-      options_.num_decoding_tokens(), 0, model_args_);
+  auto input =
+      batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                   /*min_decoding_bach_size=*/0,
+                                   model_args_);
   input = input.to(*device_, kDtype);
   setup_spec_verify_input(input, /*num_sequences=*/1, /*num_spec_tokens=*/3);
   input.input_params.graph.input_tokens_override = input.token_ids;
@@ -1811,8 +1838,10 @@ TEST_F(AclGraphTaskUpdateTest, AtbWorkspaceReusesBucketsAndIsolatesSlots) {
     SCOPED_TRACE(step);
     reset_sequences();
     auto batch = create_decode_batch(batch_size, /*token_seed=*/100 + step);
-    auto input = batch->prepare_forward_input(
-        options_.num_decoding_tokens(), 0, model_args_);
+    auto input =
+        batch->prepare_forward_input(options_.num_speculative_tokens() + 1,
+                                     /*min_decoding_bach_size=*/0,
+                                     model_args_);
     input = input.to(*device_, kDtype);
     populate_query_start_loc(input.input_params);
     auto kv_eager = clone_kv_caches(kv_graph);

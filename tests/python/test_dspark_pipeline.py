@@ -28,13 +28,14 @@ from xllm.python import distributed
 from xllm.python.model_executor.executor import ModelExecutor
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.runner import RunnerConfig
 from xllm.python.model_executor.runners.base import BaseRunner
 from xllm.python.model_executor.runners.decode_cuda_graph import DecodeCudaGraphRunner
 from xllm.python.model_executor.sampling_metadata import (
     ModelSamplingInput,
     ModelSamplingMetadataBuilder,
+    SamplingMode,
     prepare_sampling_input,
     sample_logits,
 )
@@ -114,7 +115,7 @@ class _DraftModel(PyModelBase):
 
 @dataclass
 class _SamplingParameters:
-    all_greedy_sample: bool = True
+    sampling_mode: SamplingMode = SamplingMode.GREEDY
     selected_token_idxes: torch.Tensor | None = None
     sample_idxes: torch.Tensor | None = None
     logprobs: bool = False
@@ -124,7 +125,7 @@ class _SamplingParameters:
 
 @dataclass
 class _SamplingInput:
-    return_probs: bool = False
+    return_draft_logits: bool = False
     return_confidence: bool = False
     is_unconstrained_greedy: bool = True
     parameters: _SamplingParameters = field(default_factory=_SamplingParameters)
@@ -145,8 +146,8 @@ def _sample_logits(
     logits: torch.Tensor,
     sampling_input: _SamplingInput,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
-    probabilities = logits.softmax(-1) if sampling_input.return_probs else None
-    return logits.argmax(-1), probabilities
+    draft_logits = logits if sampling_input.return_draft_logits else None
+    return logits.argmax(-1), draft_logits
 
 
 @pytest.fixture(autouse=True)
@@ -243,9 +244,9 @@ def test_sampling_sync_uses_python_group_and_preserves_probabilities(
     sampling_runtime.sample_logits.side_effect = None
     sampling_runtime.sample_logits.return_value = (local_tokens, probabilities)
     sampling = _SamplingInput(
-        return_probs=not unconstrained,
+        return_draft_logits=not unconstrained,
         is_unconstrained_greedy=unconstrained,
-        parameters=_SamplingParameters(all_greedy_sample=all_greedy),
+        parameters=_SamplingParameters(sampling_mode=SamplingMode.GREEDY if all_greedy else SamplingMode.RANDOM),
     )
     logits = torch.zeros(2, 7)
     broadcast = Mock(side_effect=lambda tokens, **kwargs: tokens.fill_(5))
@@ -276,9 +277,9 @@ def test_pipeline_syncs_each_sample_before_remapping_and_markov_feedback(
     model = _DraftModel(vocab_size=3, width=3)
     model.model.hot_token_ids = torch.tensor([1, 4, 6])
     sampling = _SamplingInput(
-        return_probs=True,
+        return_draft_logits=True,
         is_unconstrained_greedy=False,
-        parameters=_SamplingParameters(all_greedy_sample=False),
+        parameters=_SamplingParameters(sampling_mode=SamplingMode.RANDOM),
     )
     input_ids = torch.tensor([2, 0, 0, 5, 0, 0])
     positions = torch.arange(6)
@@ -296,7 +297,7 @@ def test_pipeline_syncs_each_sample_before_remapping_and_markov_feedback(
 
     assert sync.call_count == 3
     assert sampling_runtime.sample_logits.call_count == 3
-    torch.testing.assert_close(output.draft_proposal.token_ids, torch.tensor([[4, 6, 1], [4, 6, 1]]))
+    torch.testing.assert_close(output.draft_token_ids, torch.tensor([[4, 6, 1], [4, 6, 1]]))
     expected_feedback = [torch.tensor([2, 5]), torch.tensor([4, 4]), torch.tensor([6, 6])]
     assert len(model.previous_tokens) == len(expected_feedback)
     for actual, expected in zip(model.previous_tokens, expected_feedback):
@@ -321,23 +322,21 @@ def _reference(
     for step in range(width):
         step_logits = logits[:, step] + pipeline.markov_head.bias(previous)
         next_tokens = step_logits.argmax(-1)
-        probabilities = step_logits.softmax(-1) if sampling.return_probs else None
+        sampled_logits = step_logits if sampling.return_draft_logits else None
         if model.model.hot_token_ids is not None:
             next_tokens = model.model.hot_token_ids[next_tokens]
-            if probabilities is not None:
-                full_probs = probabilities.new_zeros((batch_size, model.model.target_vocab_size))
-                full_probs[:, model.model.hot_token_ids] = probabilities
-                probabilities = full_probs
+            if sampled_logits is not None:
+                full_logits = sampled_logits.new_full((batch_size, model.model.target_vocab_size), float("-inf"))
+                full_logits[:, model.model.hot_token_ids] = sampled_logits
+                sampled_logits = full_logits
         tokens[:, step] = next_tokens
-        if probabilities is not None:
-            distributions.append(probabilities)
+        if sampled_logits is not None:
+            distributions.append(sampled_logits)
         previous = next_tokens
     previous_matrix = torch.cat((anchors[:, None], tokens[:, :-1]), dim=1)
     return ModelOutput(
-        draft_proposal=DraftProposal(
-            token_ids=tokens,
-            draft_probs=torch.stack(distributions, dim=1) if distributions else None,
-        ),
+        draft_token_ids=tokens,
+        draft_logits=torch.stack(distributions, dim=1) if distributions else None,
         draft_confidence_probs=pipeline.confidence_probs(hidden.reshape(batch_size, width, -1), previous_matrix),
     )
 
@@ -345,20 +344,20 @@ def _reference(
 @pytest.mark.parametrize("width", [1, 3, 5, 15])
 @pytest.mark.parametrize("batch_size", [1, 2])
 @pytest.mark.parametrize("reduced_vocab", [False, True])
-@pytest.mark.parametrize("return_probs", [False, True])
+@pytest.mark.parametrize("return_draft_logits", [False, True])
 def test_pipeline_matches_separate_draft_head_and_markov(
     width: int,
     batch_size: int,
     reduced_vocab: bool,
-    return_probs: bool,
+    return_draft_logits: bool,
     sampling_runtime: ModuleType,
 ) -> None:
     model = _DraftModel(3 if reduced_vocab else 7, width)
     model.model.hot_token_ids = torch.tensor([1, 4, 6]) if reduced_vocab else None
     sampling = _SamplingInput(
-        return_probs=return_probs,
+        return_draft_logits=return_draft_logits,
         return_confidence=True,
-        is_unconstrained_greedy=not return_probs,
+        is_unconstrained_greedy=not return_draft_logits,
     )
     input_ids = torch.zeros(batch_size * width, dtype=torch.long)
     input_ids[::width] = torch.arange(batch_size) + 1
@@ -380,16 +379,18 @@ def test_pipeline_matches_separate_draft_head_and_markov(
     prepared_sampling = sampling_runtime.sample_logits.call_args_list[0].args[1]
     assert prepared_sampling is not sampling
     assert prepared_sampling.parameters is not sampling.parameters
-    assert prepared_sampling.return_probs == sampling.return_probs
+    assert prepared_sampling.return_draft_logits == sampling.return_draft_logits
     assert prepared_sampling.return_confidence == sampling.return_confidence
     assert all(call.args[1] is prepared_sampling for call in sampling_runtime.sample_logits.call_args_list)
-    assert torch.equal(output.draft_proposal.token_ids, expected.draft_proposal.token_ids)
+    assert expected.draft_token_ids is not None
+    assert output.draft_token_ids is not None
+    assert torch.equal(output.draft_token_ids, expected.draft_token_ids)
     assert torch.equal(output.draft_confidence_probs, expected.draft_confidence_probs)
     assert all(torch.equal(actual, expected) for actual, expected in zip(model.previous_tokens, expected_feedback))
-    if return_probs:
-        torch.testing.assert_close(output.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
+    if return_draft_logits:
+        torch.testing.assert_close(output.draft_logits, expected.draft_logits)
     else:
-        assert output.draft_proposal.draft_probs is None
+        assert output.draft_logits is None
 
 
 @pytest.mark.parametrize("padding_tokens", [0, 1, 2])
@@ -401,7 +402,7 @@ def test_pipeline_excludes_decoder_graph_padding_from_later_stages(
     width = 3
     input_ids = torch.tensor([1, 0, 0, 4, 0, 0])
     positions = torch.arange(input_ids.numel())
-    sampling = _SamplingInput(return_probs=True, return_confidence=True)
+    sampling = _SamplingInput(return_draft_logits=True, return_confidence=True)
     expected = _reference(model, input_ids, positions, width, sampling)
     expected_hidden = model.model.backbone(input_ids, positions)
     padded_hidden = torch.cat((expected_hidden, expected_hidden.new_full((padding_tokens, 2), 2)))
@@ -420,10 +421,13 @@ def test_pipeline_excludes_decoder_graph_padding_from_later_stages(
     graph.execute.assert_called_once()
     lm_head_forward.assert_called_once()
     assert torch.equal(lm_head_forward.call_args.args[0], padded_hidden)
-    assert output.draft_proposal.token_ids.shape == (2, width)
-    assert torch.equal(output.draft_proposal.token_ids, expected.draft_proposal.token_ids)
+    assert isinstance(output, ModelOutput)
+    assert output.draft_token_ids is not None
+    assert output.draft_token_ids.shape == (2, width)
+    assert expected.draft_token_ids is not None
+    assert torch.equal(output.draft_token_ids, expected.draft_token_ids)
     assert torch.equal(output.draft_confidence_probs, expected.draft_confidence_probs)
-    torch.testing.assert_close(output.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
+    torch.testing.assert_close(output.draft_logits, expected.draft_logits)
 
 
 def test_prepare_sampling_input_adapts_only_the_owned_copy(sampling_runtime: ModuleType) -> None:
@@ -437,7 +441,7 @@ def test_prepare_sampling_input_adapts_only_the_owned_copy(sampling_runtime: Mod
         use_beam_search=True,
     )
     sampling = _SamplingInput(
-        return_probs=True,
+        return_draft_logits=True,
         return_confidence=True,
         is_unconstrained_greedy=False,
         parameters=source_parameters,
@@ -450,7 +454,7 @@ def test_prepare_sampling_input_adapts_only_the_owned_copy(sampling_runtime: Mod
     sampling_runtime.sampling_parameters_to.assert_called_once_with(source_parameters, logits)
     assert prepared is not sampling
     assert prepared.parameters is not source_parameters
-    assert prepared.return_probs
+    assert prepared.return_draft_logits
     assert prepared.return_confidence
     parameters = prepared.parameters
     assert parameters.selected_token_idxes.shape == (0,)
@@ -488,8 +492,12 @@ def test_pipeline_uses_current_anchor_tokens_without_storing_request_state() -> 
     first = pipeline.execute(_pipeline_inputs(torch.tensor([1, 0, 0]), positions, _SamplingInput()))
     second = pipeline.execute(_pipeline_inputs(torch.tensor([4, 0, 0]), positions, _SamplingInput()))
     raw = model.model.backbone(torch.tensor([1]), torch.tensor([0]))
-    assert first.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
-    assert second.draft_proposal.token_ids.tolist() == [[5, 6, 0]]
+    assert isinstance(first, ModelOutput)
+    assert first.draft_token_ids is not None
+    assert first.draft_token_ids.tolist() == [[2, 3, 4]]
+    assert isinstance(second, ModelOutput)
+    assert second.draft_token_ids is not None
+    assert second.draft_token_ids.tolist() == [[5, 6, 0]]
     assert isinstance(raw, torch.Tensor)
     assert type(model.model) is DSparkModel
     assert not hasattr(model.model, "model")
@@ -529,10 +537,11 @@ def test_runner_preserves_output_structure(output_kind: str, clone: bool) -> Non
     if output_kind == "pipeline":
         output = ModelOutput(hidden_states=hidden, residual=hidden + 2, aux_hidden_states=hidden + 1)
         sliced = BaseRunner._slice_output(output, 2, clone=clone)
+        assert isinstance(sliced, ModelOutput)
         assert torch.equal(sliced.hidden_states, hidden[:2])
         assert torch.equal(sliced.residual, hidden[:2] + 2)
         assert torch.equal(sliced.aux_hidden_states, hidden[:2] + 1)
-        assert sliced.draft_proposal is None
+        assert sliced.draft_token_ids is None
         assert sliced.draft_confidence_probs is None
         sliced_hidden = sliced.hidden_states
     elif output_kind == "tuple":
@@ -547,7 +556,7 @@ def test_runner_preserves_output_structure(output_kind: str, clone: bool) -> Non
 
 
 @pytest.mark.parametrize(
-    "num_tokens,num_reqs,return_probs,return_confidence,clone",
+    "num_tokens,num_reqs,return_draft_logits,return_confidence,clone",
     [
         (1, 1, False, False, False),
         (6, 2, True, True, False),
@@ -558,14 +567,15 @@ def test_runner_preserves_output_structure(output_kind: str, clone: bool) -> Non
     ],
 )
 def test_runner_trims_pipeline_output_with_independent_token_and_request_counts(
-    num_tokens: int, num_reqs: int, return_probs: bool, return_confidence: bool, clone: bool
+    num_tokens: int, num_reqs: int, return_draft_logits: bool, return_confidence: bool, clone: bool
 ) -> None:
     hidden = torch.arange(60).reshape(12, 5)
     token_ids = torch.arange(12).reshape(4, 3)
-    probabilities = torch.arange(36).reshape(4, 3, 3) if return_probs else None
+    probabilities = torch.arange(36).reshape(4, 3, 3) if return_draft_logits else None
     confidence = torch.ones(4, 3) if return_confidence else None
     output = ModelOutput(
-        draft_proposal=DraftProposal(token_ids, probabilities),
+        draft_token_ids=token_ids,
+        draft_logits=probabilities,
         draft_confidence_probs=confidence,
         hidden_states=hidden,
         residual=hidden + 1,
@@ -577,14 +587,18 @@ def test_runner_trims_pipeline_output_with_independent_token_and_request_counts(
         actual = getattr(sliced, name)
         assert torch.equal(actual, original[:num_tokens])
         assert (actual.data_ptr() != original.data_ptr()) == clone
-    assert torch.equal(sliced.draft_proposal.token_ids, token_ids[:num_reqs])
-    assert (sliced.draft_proposal.token_ids.data_ptr() != token_ids.data_ptr()) == clone
-    assert output.draft_proposal.token_ids.shape == (4, 3)
-    if return_probs:
-        assert torch.equal(sliced.draft_proposal.draft_probs, probabilities[:num_reqs])
-        assert (sliced.draft_proposal.draft_probs.data_ptr() != probabilities.data_ptr()) == clone
+    assert isinstance(sliced, ModelOutput)
+    assert sliced.draft_token_ids is not None
+    assert torch.equal(sliced.draft_token_ids, token_ids[:num_reqs])
+    assert (sliced.draft_token_ids.data_ptr() != token_ids.data_ptr()) == clone
+    assert output.draft_token_ids is not None
+    assert output.draft_token_ids.shape == (4, 3)
+    if probabilities is not None:
+        assert sliced.draft_logits is not None
+        assert torch.equal(sliced.draft_logits, probabilities[:num_reqs])
+        assert (sliced.draft_logits.data_ptr() != probabilities.data_ptr()) == clone
     else:
-        assert sliced.draft_proposal.draft_probs is None
+        assert sliced.draft_logits is None
     if return_confidence:
         assert torch.equal(sliced.draft_confidence_probs, confidence[:num_reqs])
         assert (sliced.draft_confidence_probs.data_ptr() != confidence.data_ptr()) == clone
@@ -595,7 +609,7 @@ def test_runner_trims_pipeline_output_with_independent_token_and_request_counts(
 @pytest.mark.parametrize("with_proposal", [False, True])
 def test_runner_requires_request_count_for_request_scoped_output(with_proposal: bool) -> None:
     output = ModelOutput(
-        draft_proposal=DraftProposal(torch.ones(2, 3, dtype=torch.long)) if with_proposal else None,
+        draft_token_ids=torch.ones(2, 3, dtype=torch.long) if with_proposal else None,
         draft_confidence_probs=None if with_proposal else torch.ones(2, 3),
     )
     with pytest.raises(ValueError, match="requires num_reqs"):
@@ -606,7 +620,8 @@ def test_runner_trims_confidence_without_proposal() -> None:
     confidence = torch.arange(9).reshape(3, 3)
     output = ModelOutput(draft_confidence_probs=confidence)
     sliced = BaseRunner._slice_output(output, 5, num_reqs=2)
-    assert sliced.draft_proposal is None
+    assert isinstance(sliced, ModelOutput)
+    assert sliced.draft_token_ids is None
     assert sliced.hidden_states is None
     assert torch.equal(sliced.draft_confidence_probs, confidence[:2])
 
@@ -614,14 +629,18 @@ def test_runner_trims_confidence_without_proposal() -> None:
 @pytest.mark.parametrize("clone", [False, True])
 def test_runner_trims_pipeline_output_to_empty_batch(clone: bool) -> None:
     output = ModelOutput(
-        draft_proposal=DraftProposal(torch.ones(2, 3, dtype=torch.long), torch.ones(2, 3, 7)),
+        draft_token_ids=torch.ones(2, 3, dtype=torch.long),
+        draft_logits=torch.ones(2, 3, 7),
         draft_confidence_probs=torch.ones(2, 3),
         hidden_states=torch.ones(6, 5),
     )
     sliced = BaseRunner._slice_output(output, 0, num_reqs=0, clone=clone)
     assert sliced.hidden_states.shape == (0, 5)
-    assert sliced.draft_proposal.token_ids.shape == (0, 3)
-    assert sliced.draft_proposal.draft_probs.shape == (0, 3, 7)
+    assert isinstance(sliced, ModelOutput)
+    assert sliced.draft_token_ids is not None
+    assert sliced.draft_token_ids.shape == (0, 3)
+    assert sliced.draft_logits is not None
+    assert sliced.draft_logits.shape == (0, 3, 7)
     assert sliced.draft_confidence_probs.shape == (0, 3)
 
 
@@ -641,7 +660,7 @@ def test_cuda_runner_slices_replay_output_with_input_batch_counts(
         source = (hidden, hidden + 1)
     elif output_kind == "pipeline":
         source = ModelOutput(
-            draft_proposal=DraftProposal(torch.arange(15).reshape(5, 3)),
+            draft_token_ids=torch.arange(15).reshape(5, 3),
             draft_confidence_probs=torch.ones(5, 3),
         )
     backend = SimpleNamespace(prepare=Mock())
@@ -663,8 +682,12 @@ def test_cuda_runner_slices_replay_output_with_input_batch_counts(
 
     entry.graph.replay.assert_called_once()
     if output_kind == "pipeline":
-        assert torch.equal(output.draft_proposal.token_ids, source.draft_proposal.token_ids[: batch.num_reqs])
-        assert output.draft_proposal.token_ids.data_ptr() != source.draft_proposal.token_ids.data_ptr()
+        assert isinstance(output, ModelOutput)
+        assert output.draft_token_ids is not None
+        assert isinstance(source, ModelOutput)
+        assert source.draft_token_ids is not None
+        assert torch.equal(output.draft_token_ids, source.draft_token_ids[: batch.num_reqs])
+        assert output.draft_token_ids.data_ptr() != source.draft_token_ids.data_ptr()
         assert torch.equal(output.draft_confidence_probs, source.draft_confidence_probs[: batch.num_reqs])
         assert output.hidden_states is None
     elif output_kind == "tuple":
@@ -681,7 +704,7 @@ def test_cuda_runner_slices_replay_output_with_input_batch_counts(
     [
         _SamplingInput(),
         _SamplingInput(is_unconstrained_greedy=False),
-        _SamplingInput(return_probs=True),
+        _SamplingInput(return_draft_logits=True),
         _SamplingInput(return_confidence=True),
         None,
     ],
@@ -755,7 +778,9 @@ def test_executor_uses_original_execute_interface(
             layer_load_synchronizer=synchronizer,
             draft_load_event_index=3,
         )
-        assert output.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
+        assert isinstance(output, ModelOutput)
+        assert output.draft_token_ids is not None
+        assert output.draft_token_ids.tolist() == [[2, 3, 4]]
     if batch_metadata is None:
         materialize_batch.assert_not_called()
         synchronizer.synchronize_layer.assert_not_called()
@@ -817,7 +842,7 @@ def test_eager_pipeline_uses_batch_carrier_without_host_cached_counts(
 
     output = pipeline.execute(ModelInput(input_ids, positions, metadata, input_batch=input_batch))
 
-    assert output.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
+    assert output.draft_token_ids.tolist() == [[2, 3, 4]]
     backend.prepare.assert_called_once_with(metadata)
     if with_batch_builder:
         batch_builder.build.assert_called_once_with(input_batch, metadata)
@@ -841,7 +866,7 @@ def test_persistent_sampling_metadata_refreshes_greedy_inputs() -> None:
     "sampling",
     [
         None,
-        _SamplingInput(return_probs=True),
+        _SamplingInput(return_draft_logits=True),
         _SamplingInput(return_confidence=True),
         _SamplingInput(is_unconstrained_greedy=False),
     ],
@@ -951,7 +976,7 @@ def test_sampling_native_tp_sync_uses_root_tokens(
     monkeypatch.setattr(distributed, "broadcast_", broadcast)
     sampling = _SamplingInput(
         is_unconstrained_greedy=all_greedy,
-        parameters=_SamplingParameters(all_greedy_sample=all_greedy),
+        parameters=_SamplingParameters(sampling_mode=SamplingMode.GREEDY if all_greedy else SamplingMode.RANDOM),
     )
     actual, probabilities = sample_logits(torch.zeros(2, 7), sampling, tp_size=tp_size, use_native_tp=True)
     expected_sync = not all_greedy and tp_size > 1
@@ -967,7 +992,7 @@ def test_sampling_native_tp_rejects_wrong_native_group_shape(sampling_runtime: M
     sampling_runtime.tp_all_gather = Mock(return_value=tokens)
     sampling = _SamplingInput(
         is_unconstrained_greedy=False,
-        parameters=_SamplingParameters(all_greedy_sample=False),
+        parameters=_SamplingParameters(sampling_mode=SamplingMode.RANDOM),
     )
     with pytest.raises(RuntimeError, match="Native sampling TP gather"):
         sample_logits(torch.zeros(2, 7), sampling, tp_size=4, use_native_tp=True)
@@ -985,7 +1010,7 @@ def test_sampling_native_tp_falls_back_to_python_broadcast(
     monkeypatch.setattr(distributed, "broadcast_", broadcast)
     sampling = _SamplingInput(
         is_unconstrained_greedy=False,
-        parameters=_SamplingParameters(all_greedy_sample=False),
+        parameters=_SamplingParameters(sampling_mode=SamplingMode.RANDOM),
     )
     actual, probabilities = sample_logits(torch.zeros(2, 7), sampling, tp_size=4, use_native_tp=True)
     broadcast.assert_called_once_with(tokens, src=0, group_name="tp")
@@ -1003,10 +1028,12 @@ def test_pipeline_carries_native_tp_sampling_backend(
     monkeypatch.setattr(distributed, "broadcast_", broadcast)
     sampling = _SamplingInput(
         is_unconstrained_greedy=False,
-        parameters=_SamplingParameters(all_greedy_sample=False),
+        parameters=_SamplingParameters(sampling_mode=SamplingMode.RANDOM),
     )
     pipeline = _make_eager_pipeline(model.model, tp_size=4, use_native_tp=True)
     output = pipeline.execute(_pipeline_inputs(torch.tensor([1, 0, 0]), torch.arange(3), sampling))
-    assert output.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
+    assert isinstance(output, ModelOutput)
+    assert output.draft_token_ids is not None
+    assert output.draft_token_ids.tolist() == [[2, 3, 4]]
     assert sampling_runtime.tp_all_gather.call_count == 3
     broadcast.assert_not_called()

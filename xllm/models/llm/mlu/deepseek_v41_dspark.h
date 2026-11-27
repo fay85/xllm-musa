@@ -45,7 +45,7 @@ class DeepseekV41DSparkModelImpl final : public DeepseekV41ModelImpl {
         markov_head_(context.get_tensor_options(),
                      context.get_model_args().markov_rank()) {
     const ModelArgs& args = context.get_model_args();
-    const int32_t draft_width = args.dspark_block_size();
+    const int32_t draft_width = args.num_speculative_tokens();
     using kernel::mlu::bangc::kDeepseekV41MaxDraftWidth;
     CHECK(draft_width >= 1 && draft_width <= kDeepseekV41MaxDraftWidth)
         << "DeepSeek-V4.1 MLU DSpark supports 1 to "

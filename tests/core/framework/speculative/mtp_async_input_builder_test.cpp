@@ -633,46 +633,5 @@ TEST(MtpAsyncInputBuilderTest, PybindViewDecodeStepStaysKvShardFree) {
                    shard->local_slot_mapping));
 }
 
-TEST(MtpAsyncInputBuilderTest, SharedModulesPointToTargetModel) {
-  py::gil_scoped_acquire gil;
-  prepend_python_model_path();
-  py::module_ nn = py::module_::import("torch.nn");
-  py::object model_class =
-      py::module_::import("xllm.python.models.base").attr("PyModelBase");
-  py::object target_lm_head = nn.attr("Linear")(py::arg("in_features") = 2,
-                                                py::arg("out_features") = 2);
-  py::object target_embedding = nn.attr("Embedding")(
-      py::arg("num_embeddings") = 4, py::arg("embedding_dim") = 2);
-  py::object target_body = nn.attr("Module")();
-  target_body.attr("embed_tokens") = target_embedding;
-  py::object target_model = model_class();
-  target_model.attr("lm_head") = target_lm_head;
-  target_model.attr("model") = target_body;
-  py::object draft_body = nn.attr("Module")();
-  draft_body.attr("embed_tokens") = py::none();
-  py::object draft_model = model_class();
-  draft_model.attr("lm_head") = py::none();
-  draft_model.attr("model") = draft_body;
-
-  ::xllm::detail::share_python_model_weights(draft_model, target_model);
-
-  py::object draft_lm_head = draft_model.attr("lm_head");
-  py::object draft_embedding = draft_model.attr("model").attr("embed_tokens");
-  EXPECT_TRUE(draft_lm_head.is(target_lm_head));
-  EXPECT_TRUE(draft_embedding.is(target_embedding));
-  py::object owned_lm_head = nn.attr("Linear")(py::arg("in_features") = 2,
-                                               py::arg("out_features") = 2);
-  py::object owned_embedding = nn.attr("Embedding")(
-      py::arg("num_embeddings") = 4, py::arg("embedding_dim") = 2);
-  draft_model.attr("lm_head") = owned_lm_head;
-  draft_model.attr("model").attr("embed_tokens") = owned_embedding;
-  ::xllm::detail::share_python_model_weights(draft_model, target_model);
-  py::object retained_lm_head = draft_model.attr("lm_head");
-  py::object retained_embedding =
-      draft_model.attr("model").attr("embed_tokens");
-  EXPECT_TRUE(retained_lm_head.is(owned_lm_head));
-  EXPECT_TRUE(retained_embedding.is(owned_embedding));
-}
-
 }  // namespace
 }  // namespace xllm::mtp_async

@@ -51,7 +51,7 @@ def _decode_metadata(is_dummy: bool, accepted: int | None = None) -> SimpleNames
     )
 
 
-def _linear_runner(num_decoding_tokens: int = 4, linear: bool = True) -> DecodeAclGraphRunner:
+def _linear_runner(num_speculative_tokens: int = 3, linear: bool = True) -> DecodeAclGraphRunner:
     runner = DecodeAclGraphRunner(
         nn.Identity(),
         SimpleNamespace(page_size=4, is_mla=False),
@@ -59,7 +59,7 @@ def _linear_runner(num_decoding_tokens: int = 4, linear: bool = True) -> DecodeA
         max_batch=8,
         max_model_len=8,
         dp_size=2,
-        num_decoding_tokens=num_decoding_tokens,
+        num_speculative_tokens=num_speculative_tokens,
     )
     if linear:
         runner.bind_layer_caches([LayerCache(None, None, conv=torch.zeros(8, 1, 3), ssm=torch.zeros(8, 1, 1, 1))])
@@ -103,12 +103,12 @@ def test_speculative_linear_graph_rejects_missing_acceptance_on_first_real_batch
         runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=1, input_embedding=None)
 
 
-@pytest.mark.parametrize("num_decoding_tokens,linear", [(1, True), (4, False), (8, False)])
+@pytest.mark.parametrize("num_speculative_tokens,linear", [(0, True), (3, False), (7, False)])
 @pytest.mark.parametrize("starts_empty", [True, False])
 def test_non_recurrent_or_non_speculative_graph_does_not_require_acceptance_across_dp_transitions(
-    num_decoding_tokens: int, linear: bool, starts_empty: bool
+    num_speculative_tokens: int, linear: bool, starts_empty: bool
 ) -> None:
-    runner = _linear_runner(num_decoding_tokens, linear)
+    runner = _linear_runner(num_speculative_tokens, linear)
     input_ids = torch.ones(1, dtype=torch.int32)
     metadata = _decode_metadata(starts_empty)
     entry = runner._allocate_entry(4, input_ids, input_ids, metadata)
@@ -391,7 +391,8 @@ def test_dspark_empty_dp_keeps_native_proposal_rows_and_graph_plan() -> None:
         max_batch=4,
         max_model_len=512,
         is_spec_draft=True,
-        draft_query_width=3,
+        num_speculative_tokens=3,
+        model_type="DSparkDraftModel",
     )
     runner.dp_size = 2
     active = _dsa_metadata()

@@ -70,6 +70,7 @@ class WorkerService : public proto::DistributeWorker {
                        proto::Status* response,
                        ::google::protobuf::Closure* done) override;
 
+  // Preserve the wire method for workers started by pre-upgrade masters.
   void SetSpeculativeValidateTimePredictor(
       ::google::protobuf::RpcController* controller,
       const proto::SpeculativeValidateTimePredictor* request,
@@ -199,10 +200,8 @@ class WorkerService : public proto::DistributeWorker {
             std::vector<std::string>& unsafe_request_ids,
             std::vector<MMDict>& mm_dict_vec);
   std::vector<SpeculativeTokenStats> record_speculative_metrics_from_output(
-      const torch::Tensor& next_tokens,
-      const std::vector<SpeculativeTokenStats>& output_stats,
-      bool is_graph_warmup,
-      bool defer_block_metrics = false);
+      const ForwardOutput& output,
+      const torch::Tensor& next_tokens);
   DISALLOW_COPY_AND_ASSIGN(WorkerService);
 
  private:

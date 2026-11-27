@@ -82,14 +82,6 @@ class LLMWorkerImpl : public WorkerImpl {
     return model_->dspark_markov_bias(previous_token_ids);
   }
 
-  torch::Tensor dspark_confidence_probs(const torch::Tensor& hidden_all,
-                                        const torch::Tensor& prev_matrix) {
-    return model_->dspark_confidence_probs(hidden_all, prev_matrix);
-  }
-  bool has_dspark_confidence_head() const {
-    return model_->has_dspark_confidence_head();
-  }
-
   bool supports_device_only_decode_inputs() const {
     return model_executor_->supports_device_only_decode_inputs();
   }

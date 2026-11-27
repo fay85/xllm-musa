@@ -31,7 +31,7 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
     const torch::Tensor& edge_log_probs,
     const torch::Tensor& gumbel_noise,
     const torch::Tensor& do_sample,
-    bool all_random_sample) {
+    bool use_random_sampling_for_batch) {
   CHECK(detail::check_tensor(candidate_ids,
                              std::nullopt,
                              std::nullopt,
@@ -63,7 +63,7 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
            torch::IntArrayRef({batch, steps, top_k, top_k}));
   CHECK_EQ(gumbel_noise.sizes(), torch::IntArrayRef({batch, steps, top_k}));
   int64_t mask_stride = 0;
-  if (!all_random_sample) {
+  if (!use_random_sampling_for_batch) {
     CHECK(detail::check_tensor(do_sample,
                                torch::kBool,
                                device,
@@ -94,21 +94,20 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
                                      gumbel_noise.stride(2),
                                      mask_stride};
   cnrtQueue_t queue = torch_mlu::getCurMLUStream();
-  launch_dflash2_sample_path(
-      static_cast<void*>(queue),
-      candidate_ids.const_data_ptr(),
-      edge_log_probs.const_data_ptr<float>(),
-      gumbel_noise.const_data_ptr<float>(),
-      all_random_sample ? nullptr : do_sample.const_data_ptr<bool>(),
-      tokens.mutable_data_ptr(),
-      proposal_log_probs.mutable_data_ptr<float>(),
-      &shape,
-      candidate_ids.scalar_type() == torch::kLong,
-      all_random_sample);
+  launch_dflash2_sample_path(static_cast<void*>(queue),
+                             candidate_ids.const_data_ptr(),
+                             edge_log_probs.const_data_ptr<float>(),
+                             gumbel_noise.const_data_ptr<float>(),
+                             use_random_sampling_for_batch
+                                 ? nullptr
+                                 : do_sample.const_data_ptr<bool>(),
+                             tokens.mutable_data_ptr(),
+                             proposal_log_probs.mutable_data_ptr<float>(),
+                             &shape,
+                             candidate_ids.scalar_type() == torch::kLong,
+                             use_random_sampling_for_batch);
   CHECK_EQ(cnrtSuccess, cnrtGetLastError());
-  // Use the same device exp implementation as the original sampler. Mixed
-  // greedy rows have log q=0/-inf, so exp produces exact one-hot probabilities.
-  return {std::move(tokens), proposal_log_probs.exp()};
+  return {std::move(tokens), std::move(proposal_log_probs)};
 }
 
 }  // namespace xllm::kernel::mlu::bangc

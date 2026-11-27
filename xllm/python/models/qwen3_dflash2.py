@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -47,14 +47,13 @@ from xllm.python.models.qwen3_dflash import (
 
 @dataclass
 class DFlash2Qwen3Config(DFlashQwen3Config):
-    dflash2_block_size: int = 0
     dflash2_conv_group_size: int = 0
     dflash2_conv_kernel_size: int = 0
     dflash2_selector_rank: int = 0
     dflash2_selector_top_k: int = 0
 
     @classmethod
-    def from_dict(cls, d: dict) -> DFlash2Qwen3Config:
+    def from_dict(cls, d: dict[str, Any]) -> DFlash2Qwen3Config:
         # Community DFlash2 checkpoints (incoai/GLM-5.3-DFlash2 and the
         # GLM-5.3-Flash pairing) nest the geometry under "dflash_config"
         # (block_size, conv_group_size, ...); our own exports use flat
@@ -72,9 +71,11 @@ class DFlash2Qwen3Config(DFlashQwen3Config):
                 return int(d[flat_key])
             return int(nested.get(nested_key, 0))
 
+        if "num_speculative_tokens" not in d:
+            base.num_speculative_tokens = max(pick("dflash2_block_size", "block_size") - 1, 0)
+
         return cls(
             **base.__dict__,
-            dflash2_block_size=pick("dflash2_block_size", "block_size"),
             dflash2_conv_group_size=pick("dflash2_conv_group_size", "conv_group_size"),
             dflash2_conv_kernel_size=pick("dflash2_conv_kernel_size", "conv_kernel_size"),
             dflash2_selector_rank=pick("dflash2_selector_rank", "selector_rank"),
@@ -92,8 +93,8 @@ class DFlash2Qwen3Config(DFlashQwen3Config):
             )
         if self.sliding_window <= 0:
             raise ValueError("DFlash2 requires sliding_window > 0")
-        if self.dflash2_block_size <= 0:
-            raise ValueError("DFlash2 requires dflash2_block_size > 0")
+        if self.num_speculative_tokens == 0:
+            raise ValueError("DFlash2 requires num_speculative_tokens > 0")
         if self.dflash2_selector_rank <= 0:
             raise ValueError("DFlash2 requires dflash2_selector_rank > 0")
         if self.dflash2_selector_top_k <= 0:
@@ -105,10 +106,10 @@ class DFlash2Qwen3Config(DFlashQwen3Config):
             )
         if self.dflash2_conv_kernel_size <= 0:
             raise ValueError("DFlash2 requires dflash2_conv_kernel_size > 0")
-        if self.dflash2_conv_kernel_size > self.dflash2_block_size:
+        if self.dflash2_conv_kernel_size > (self.num_speculative_tokens + 1):
             raise ValueError(
-                "dflash2_conv_kernel_size must not exceed dflash2_block_size "
-                f"(got taps={self.dflash2_conv_kernel_size}, block_size={self.dflash2_block_size})"
+                "dflash2_conv_kernel_size must fit the draft query "
+                f"(got taps={self.dflash2_conv_kernel_size}, block_size={(self.num_speculative_tokens + 1)})"
             )
         if self.dflash2_conv_group_size <= 0 or self.hidden_size % self.dflash2_conv_group_size:
             raise ValueError("dflash2_conv_group_size must divide hidden_size")
@@ -258,7 +259,7 @@ class DFlash2DecoderLayer(Qwen3DecoderLayer):
         )
         self.self_attn.attn.attention_window = (
             cfg.sliding_window - 1,
-            cfg.dflash2_block_size - 1,
+            cfg.num_speculative_tokens,
         )
 
         def _make_conv() -> DFlash2GroupedConv:
@@ -266,7 +267,7 @@ class DFlash2DecoderLayer(Qwen3DecoderLayer):
                 cfg.hidden_size,
                 cfg.dflash2_conv_kernel_size,
                 cfg.dflash2_conv_group_size,
-                cfg.dflash2_block_size,
+                cfg.num_speculative_tokens + 1,
                 dtype,
                 device,
             )
@@ -332,10 +333,9 @@ class DFlash2Qwen3ForCausalLM(DFlashQwen3ForCausalLM):
     model_cls = DFlash2Qwen3Model
 
     def supports_device_only_decode_inputs(self, kv_page_size: int) -> bool:
-        window = (self.cfg.sliding_window - 1, self.draft_query_width - 1)
+        window = (self.cfg.sliding_window - 1, self.cfg.num_speculative_tokens)
         return (
             type(self) is DFlash2Qwen3ForCausalLM
-            and self.draft_query_width == self.cfg.dflash2_block_size
             and self._supports_device_only_decode_geometry(kv_page_size)
             and all(
                 not layer.self_attn.attn.causal

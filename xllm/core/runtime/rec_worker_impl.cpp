@@ -34,6 +34,7 @@ limitations under the License.
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/rec_config.h"
+#include "core/framework/sampling/sampler.h"
 #include "framework/kv_cache_transfer/kv_transfer_completion.h"
 #include "framework/model/model_input_params.h"
 #include "util/rec_model_utils.h"
@@ -570,7 +571,7 @@ std::optional<ForwardOutput> RecWorkerImpl::RecWorkPipeline::step(
   // driver prepare model output
   SampleOutput sample_output;
   if (sampling_params.selected_token_idxes.defined()) {
-    sample_output = runtime_.worker.sampler_->forward(logits, sampling_params);
+    sample_output = sample(logits, sampling_params);
     output.logits = logits;
 
     // beam search kernel
@@ -664,7 +665,8 @@ ForwardInput RecWorkerImpl::OneRecWorkPipeline::prepare_inputs(Batch& batch) {
           : nullptr;
 
   return batch.prepare_rec_forward_input(
-      runtime_.worker.options_.num_decoding_tokens(),
+      static_cast<uint32_t>(runtime_.worker.options_.num_speculative_tokens()) +
+          1,
       /*min_decoding_batch_size=*/0,
       runtime_.context->get_model_args(),
       thread_pool);
@@ -966,8 +968,7 @@ bool RecWorkerImpl::OneRecXAttentionWorkPipeline::can_use_device_constraints(
          sampling_params.selected_token_idxes.numel() ==
              sampling_params.sample_idxes.numel() &&
          sampling_params.do_sample.defined() &&
-         sampling_params.all_greedy_sample &&
-         !sampling_params.all_random_sample &&
+         sampling_params.sampling_mode == SamplingMode::GREEDY &&
          sampling_params.use_beam_search && sampling_params.logprobs &&
          sampling_params.max_top_logprobs > 0 &&
          sampling_params.max_top_logprobs == beam_width &&
@@ -1169,7 +1170,8 @@ ForwardInput RecWorkerImpl::OneRecXAttentionWorkPipeline::prepare_inputs(
           : nullptr;
 
   return batch.prepare_rec_forward_input(
-      runtime_.worker.options_.num_decoding_tokens(),
+      static_cast<uint32_t>(runtime_.worker.options_.num_speculative_tokens()) +
+          1,
       /*min_decoding_batch_size=*/0,
       runtime_.context->get_model_args(),
       thread_pool);
@@ -1426,8 +1428,8 @@ std::optional<ForwardOutput> RecWorkerImpl::OneRecXAttentionWorkPipeline::step(
                   ? sampling_params.sample_idxes.numel()
                   : 0)
           << ", do_sample_defined=" << sampling_params.do_sample.defined()
-          << ", all_greedy_sample=" << sampling_params.all_greedy_sample
-          << ", all_random_sample=" << sampling_params.all_random_sample
+          << ", sampling_mode="
+          << static_cast<int>(sampling_params.sampling_mode)
           << ", has_frequency_penalties="
           << sampling_params.frequency_penalties.defined()
           << ", has_presence_penalties="
@@ -1990,7 +1992,8 @@ ForwardInput RecWorkerImpl::LlmRecMultiRoundPipeline::prepare_inputs(
           : nullptr;
 
   return batch.prepare_rec_forward_input(
-      runtime_.worker.options_.num_decoding_tokens(),
+      static_cast<uint32_t>(runtime_.worker.options_.num_speculative_tokens()) +
+          1,
       /*min_decoding_batch_size=*/0,
       runtime_.context->get_model_args(),
       thread_pool);

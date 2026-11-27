@@ -182,7 +182,9 @@ class SessionHarness final {
 
 TEST(WorkerPrefetchSessionTest, ReportsShortFinalBatchAndEmptyTail) {
   const double completed_before =
-      MULTI_COUNTER_VALUE(store_prefetch_worker_sessions_total, "completed");
+      MULTI_COUNTER_store_prefetch_worker_sessions_total
+          .get_stats(/*labels=*/{"completed"})
+          ->get_value();
   const uint64_t bytes_before =
       COUNTER_VALUE(store_prefetch_worker_read_bytes_total);
   bvar::Adder<uint64_t>* memory_bytes =
@@ -230,9 +232,10 @@ TEST(WorkerPrefetchSessionTest, ReportsShortFinalBatchAndEmptyTail) {
   EXPECT_EQ(harness.probe_calls, 0);
   EXPECT_EQ(harness.writes.back(),
             std::vector<uint8_t>({1, 0, 0, 0, 1, 0, 0, 0}));
-  EXPECT_EQ(
-      MULTI_COUNTER_VALUE(store_prefetch_worker_sessions_total, "completed"),
-      completed_before + 1);
+  EXPECT_EQ(MULTI_COUNTER_store_prefetch_worker_sessions_total
+                .get_stats(/*labels=*/{"completed"})
+                ->get_value(),
+            completed_before + 1);
   EXPECT_EQ(COUNTER_VALUE(store_prefetch_worker_read_bytes_total),
             bytes_before + 500);
   EXPECT_EQ(memory_bytes->get_value(), memory_before + 500);
@@ -272,8 +275,10 @@ TEST(WorkerPrefetchSessionTest, ProbesReadHitsAfterGatedMiss) {
 }
 
 TEST(WorkerPrefetchSessionTest, InvalidProbeRetainsReadStatistics) {
-  const double invalid_before = MULTI_COUNTER_VALUE(
-      store_prefetch_worker_probe_sessions_total, "invalid");
+  const double invalid_before =
+      MULTI_COUNTER_store_prefetch_worker_probe_sessions_total
+          .get_stats(/*labels=*/{"invalid"})
+          ->get_value();
   const double present_before =
       COUNTER_VALUE(store_prefetch_worker_probed_present_units_total);
   SessionHarness harness;
@@ -287,8 +292,9 @@ TEST(WorkerPrefetchSessionTest, InvalidProbeRetainsReadStatistics) {
   EXPECT_FALSE(harness.reports.front().failed);
   EXPECT_EQ(harness.reports.front().stats.get.read_bytes, 400U);
   EXPECT_FALSE(harness.reports.front().probed_present_units.has_value());
-  EXPECT_EQ(MULTI_COUNTER_VALUE(store_prefetch_worker_probe_sessions_total,
-                                "invalid"),
+  EXPECT_EQ(MULTI_COUNTER_store_prefetch_worker_probe_sessions_total
+                .get_stats(/*labels=*/{"invalid"})
+                ->get_value(),
             invalid_before + 1);
   EXPECT_EQ(COUNTER_VALUE(store_prefetch_worker_probed_present_units_total),
             present_before);
@@ -296,7 +302,9 @@ TEST(WorkerPrefetchSessionTest, InvalidProbeRetainsReadStatistics) {
 
 TEST(WorkerPrefetchSessionTest, FailureWhileWaitingReportsOnceWithoutProbe) {
   const double failed_before =
-      MULTI_COUNTER_VALUE(store_prefetch_worker_sessions_total, "failed");
+      MULTI_COUNTER_store_prefetch_worker_sessions_total
+          .get_stats(/*labels=*/{"failed"})
+          ->get_value();
   const uint64_t bytes_before =
       COUNTER_VALUE(store_prefetch_worker_read_bytes_total);
   SessionHarness harness;
@@ -311,7 +319,9 @@ TEST(WorkerPrefetchSessionTest, FailureWhileWaitingReportsOnceWithoutProbe) {
   EXPECT_EQ(harness.reports.front().stats.get.read_bytes, 400U);
   EXPECT_FALSE(harness.reports.front().probed_present_units.has_value());
   EXPECT_EQ(harness.probe_calls, 0);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(store_prefetch_worker_sessions_total, "failed"),
+  EXPECT_EQ(MULTI_COUNTER_store_prefetch_worker_sessions_total
+                .get_stats(/*labels=*/{"failed"})
+                ->get_value(),
             failed_before + 1);
   EXPECT_EQ(COUNTER_VALUE(store_prefetch_worker_read_bytes_total),
             bytes_before + 400);
@@ -382,7 +392,9 @@ TEST(WorkerPrefetchSessionTest, RemoteCloseDuringGetRetainsStatistics) {
   for (const bool enabled : {false, true}) {
     SCOPED_TRACE(enabled);
     const double failed_before =
-        MULTI_COUNTER_VALUE(store_prefetch_worker_sessions_total, "failed");
+        MULTI_COUNTER_store_prefetch_worker_sessions_total
+            .get_stats(/*labels=*/{"failed"})
+            ->get_value();
     const double executed_before =
         COUNTER_VALUE(store_prefetch_worker_executed_units_total);
     std::promise<void> entered;
@@ -415,9 +427,10 @@ TEST(WorkerPrefetchSessionTest, RemoteCloseDuringGetRetainsStatistics) {
       EXPECT_TRUE(harness.reports.empty());
     }
     harness.session->on_closed(/*id=*/1);
-    EXPECT_EQ(
-        MULTI_COUNTER_VALUE(store_prefetch_worker_sessions_total, "failed"),
-        failed_before + 1);
+    EXPECT_EQ(MULTI_COUNTER_store_prefetch_worker_sessions_total
+                  .get_stats(/*labels=*/{"failed"})
+                  ->get_value(),
+              failed_before + 1);
     EXPECT_EQ(COUNTER_VALUE(store_prefetch_worker_executed_units_total),
               executed_before + 4);
     EXPECT_EQ(harness.get_calls, 1);

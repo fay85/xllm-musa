@@ -108,28 +108,6 @@ TEST(GraphCaptureConfigTest, RejectsNoPaddingCombination) {
   EXPECT_DEATH(config.validate(), "cannot be combined");
 }
 
-TEST(GraphCaptureConfigTest, ValidatesSpeculativeCombinationsAtStartup) {
-  auto& execution = ExecutionConfig::get_instance();
-  auto& model = ModelConfig::get_instance();
-  const ExecutionConfig saved_execution = execution;
-  const ModelConfig saved_model = model;
-  execution.graph_capture_sizes({3, 7, 10});
-  model.model_impl("native");
-  SpeculativeConfig config;
-  config.num_speculative_tokens(2);
-  EXPECT_NO_FATAL_FAILURE(config.validate());
-  config.enable_adaptive_speculative_decode(true);
-  EXPECT_DEATH(config.validate(), "does not support adaptive");
-  config.enable_adaptive_speculative_decode(false).enable_atb_spec_kernel(true);
-  EXPECT_DEATH(config.validate(), "does not support packed ATB");
-  model.model_impl("python");
-  EXPECT_NO_FATAL_FAILURE(config.validate());
-  model.model_impl("native");
-  config.num_speculative_tokens(0);
-  EXPECT_NO_FATAL_FAILURE(config.validate());
-  execution = saved_execution;
-  model = saved_model;
-}
 #else
 TEST(GraphCaptureConfigTest, RejectsUnsupportedPlatform) {
   ExecutionConfig config;
@@ -189,46 +167,9 @@ TEST(SpeculativeConfigValidationTest,
     SCOPED_TRACE(algorithm);
     SpeculativeConfig config;
     config.speculative_algorithm(algorithm);
-    config.draft_sampling_mode("probabilistic");
+    config.enable_probabilistic_draft(/*enable_probabilistic_draft=*/true);
     EXPECT_NO_FATAL_FAILURE(config.validate());
   }
-}
-
-TEST(SpeculativeConfigValidationTest, AllowsDisabledAdaptiveDecode) {
-  google::FlagSaver flag_saver;
-  google::SetCommandLineOption("enable_adaptive_speculative_decode", "false");
-  SpeculativeConfig config;
-  EXPECT_NO_FATAL_FAILURE(config.initialize());
-  EXPECT_FALSE(config.enable_adaptive_speculative_decode());
-}
-
-TEST(SpeculativeConfigValidationTest, ValidatesAdaptiveDecodeFromFlags) {
-  google::FlagSaver flag_saver;
-  google::SetCommandLineOption("enable_adaptive_speculative_decode", "true");
-  SpeculativeConfig config;
-#if defined(USE_MLU)
-  EXPECT_DEATH(config.initialize(),
-               "Adaptive speculative decoding is currently disabled on MLU.*"
-               "Set enable_adaptive_speculative_decode=false");
-#else
-  EXPECT_NO_FATAL_FAILURE(config.initialize());
-  EXPECT_TRUE(config.enable_adaptive_speculative_decode());
-#endif
-}
-
-TEST(SpeculativeConfigValidationTest, ValidatesAdaptiveDecodeFromJson) {
-  google::FlagSaver flag_saver;
-  SpeculativeConfig config;
-  config.from_json(config::parse_json_string(
-      R"json({"enable_adaptive_speculative_decode":true})json"));
-  ASSERT_TRUE(config.enable_adaptive_speculative_decode());
-#if defined(USE_MLU)
-  EXPECT_DEATH(config.validate(),
-               "Adaptive speculative decoding is currently disabled on MLU.*"
-               "Set enable_adaptive_speculative_decode=false");
-#else
-  EXPECT_NO_FATAL_FAILURE(config.validate());
-#endif
 }
 
 inline constexpr std::string_view kInlineConfig = R"json({
@@ -299,13 +240,6 @@ TEST(KernelConfigTest, DsaCpJsonRoundTrip) {
       option_names.end());
 }
 #else
-TEST(KernelConfigTest, RejectsNpuOnlyDsparkNativeSas) {
-  JsonReader json_config =
-      config::parse_json_string(R"json({"enable_dspark_native_sas":true})json");
-  KernelConfig kernel_config;
-  EXPECT_DEATH(kernel_config.from_json(json_config),
-               "enable_dspark_native_sas is only supported on NPU");
-}
 TEST(KernelConfigTest, RejectsNpuOnlyDsaCp) {
   JsonReader json_config =
       config::parse_json_string(R"json({"enable_dsa_cp":true})json");

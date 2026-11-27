@@ -81,8 +81,7 @@ calls requires reevaluating the whole target's bootstrap requirements.
 
 The common host utilities, rank topology, communicator-selection policy,
 CPU-configured DP/EP padding and model CP-capability checks use `CPU_ONLY` too.
-The cache-layout builder, adaptive speculative controller, speculative profile
-registry and MTP JSON-object state cases only exercise host state or CPU tensors.
+The cache-layout builder and MTP JSON-object state cases only exercise host state or CPU tensors.
 EPLB options, rank utilities, CPU load aggregation, shared-memory buffers and
 manager tests use CPU data and a recording policy, without a device executor.
 In contrast, scheduler and speculative input/state builders retain bootstrap

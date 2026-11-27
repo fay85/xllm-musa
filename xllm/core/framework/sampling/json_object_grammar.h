@@ -43,11 +43,10 @@ class JsonObjectGrammar;
 
 enum class JsonObjectMaskBuildPhase : uint8_t {
   NORMAL = 0,
-  DRAFT = 1,
   TARGET = 2,
 };
 
-struct SamplingParameters;
+class SamplingParameters;
 
 struct JsonObjectGrammarSnapshot final {
   bool enabled = false;
@@ -284,10 +283,5 @@ void install_filter_bitmask(
     const torch::Device& device = torch::kCPU,
     JsonObjectMaskBuildPhase phase = JsonObjectMaskBuildPhase::NORMAL,
     std::vector<size_t>* width_denied_rows = nullptr);
-
-// Apply a [batch, ceil(vocab/32)] int32 bitmask in-place on logits [batch,
-// vocab].
-void apply_token_bitmask_inplace(torch::Tensor& logits,
-                                 const torch::Tensor& bitmask);
 
 }  // namespace xllm

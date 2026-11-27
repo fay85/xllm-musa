@@ -262,7 +262,7 @@ int64_t linear_cache_speculative_tokens(const ModelArgs& model_args,
                                         const KVCacheEstimateOptions& options) {
   const int64_t num_speculative_tokens =
       effective_num_speculative_tokens(options);
-  if (num_speculative_tokens <= 0 || options.is_draft_engine) {
+  if (num_speculative_tokens == 0 || options.is_draft_engine) {
     return 0;
   }
   return (is_qwen3_5_target_model_type(model_args.model_type()) ||
@@ -905,7 +905,6 @@ KVCacheCapacity estimate_kv_cache_capacity(
     CHECK_EQ(options.block_size % model_args.index_kpool(), 0);
     const int64_t num_speculative_tokens =
         effective_num_speculative_tokens(options);
-    CHECK_GE(num_speculative_tokens, 0);
     if (uses_npu_compressed_kpool_tail(model_args)) {
       // Preserve one complete pool plus speculative rows that may be rejected.
       // The verify base token advances the committed sequence and is already

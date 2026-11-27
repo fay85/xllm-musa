@@ -1783,7 +1783,7 @@ class KdaLinearAttentionMixin:
                 layout="TND",
                 scale=scale,
                 output_final_state=True,
-                inplace_final_state=False,
+                inplace_final_state=True,
                 use_qk_l2norm_in_kernel=True,
                 use_beta_sigmoid_in_kernel=True,
                 state_v_first=True,

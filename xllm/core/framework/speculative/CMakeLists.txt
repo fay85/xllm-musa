@@ -4,35 +4,38 @@ cc_library(
   NAME
     speculative
   HDRS
-    adaptive_speculative_controller.h
-    speculative_profile_registry.h
-    adaptive_pruning_helpers.h
-    spec_input_builder.h
     speculative_cache_utils.h
     mtp_async_input_builder.h
     mtp_async_replay_builder.h
     mtp_async_state.h
     dflash_async_input_builder.h
     mtp_execution_policy.h
+    draft_vocab_mapping.h
     embedding_cache.h
+    rejection_sampler.h
     spec_verify.h
+    speculative_token_stats.h
+    suffix_decoding_cache.h
+    suffix_tree.h
   SRCS
-    adaptive_speculative_controller.cpp
-    speculative_profile_registry.cpp
-    adaptive_pruning_helpers.cpp
-    spec_input_builder.cpp
     speculative_cache_utils.cpp
     mtp_async_input_builder.cpp
     mtp_async_replay_builder.cpp
     mtp_async_state.cpp
     dflash_async_input_builder.cpp
     mtp_execution_policy.cpp
+    draft_vocab_mapping.cpp
     embedding_cache.cpp
+    rejection_sampler.cpp
     spec_verify.cpp
+    speculative_token_stats.cpp
+    suffix_decoding_cache.cpp
+    suffix_tree.cpp
   DEPS
     torch
     $<$<BOOL:${USE_NPU}>:torch_npu>
     :common
+    :decode_input_builder
     :util
     :sampler
     :json_object_grammar

@@ -24,14 +24,12 @@ bool replay_compatible(TargetSpecVerifyMode target_mode,
                        bool target_capable,
                        bool draft_capable,
                        bool is_python_target,
-                       bool is_python_draft,
-                       bool uses_embedded_eagle3) {
+                       bool is_python_draft) {
   if (update == DraftContextUpdate::TAIL_EXTEND) {
     return true;
   }
   return update == DraftContextUpdate::ACCEPTED_SPAN_REPLAY && target_capable &&
          draft_capable && !is_python_target && !is_python_draft &&
-         !uses_embedded_eagle3 &&
          (target_mode == TargetSpecVerifyMode::CAUSAL_CHUNKED_PREFILL ||
           target_mode == TargetSpecVerifyMode::EXPANDED_VERIFY);
 }
@@ -39,7 +37,7 @@ bool replay_compatible(TargetSpecVerifyMode target_mode,
 DraftContextReplaySemantics draft_context_replay_semantics(
     DraftContextUpdate update,
     int32_t num_speculative_tokens) {
-  CHECK_GT(num_speculative_tokens, 0);
+  CHECK_NE(num_speculative_tokens, /*disabled=*/0);
   switch (update) {
     case DraftContextUpdate::TAIL_EXTEND:
       return {/*full_target_replay=*/false,

@@ -213,9 +213,14 @@ void SamplingParameters::init(
   this->max_top_logprobs = max_top_logprobs;
   this->is_embeddings = is_embeddings;
   this->num_return_sequences = num_return_sequences;
-  if (this->do_sample.defined()) {
-    this->all_random_sample = this->do_sample.all().item<bool>();
-    this->all_greedy_sample = !this->do_sample.any().item<bool>();
+  const auto num_random_sequences =
+      std::count(do_sample.begin(), do_sample.end(), /*value=*/1);
+  if (num_random_sequences == 0) {
+    sampling_mode = SamplingMode::GREEDY;
+  } else if (static_cast<size_t>(num_random_sequences) == do_sample.size()) {
+    sampling_mode = SamplingMode::RANDOM;
+  } else {
+    sampling_mode = SamplingMode::MIXED;
   }
 }
 
@@ -272,10 +277,8 @@ SamplingParameters SamplingParameters::to(const torch::Device& device,
   params.do_sample = safe_to(do_sample, device, true);
   params.logprob_token_ids = safe_to(logprob_token_ids, device, true);
   params.acc_logprob = safe_to(acc_logprob, device, true);
-  params.all_random_sample = all_random_sample;
-  params.all_greedy_sample = all_greedy_sample;
+  params.sampling_mode = sampling_mode;
   params.logprobs = logprobs;
-  params.return_probs = return_probs;
   params.max_top_logprobs = max_top_logprobs;
   params.is_embeddings = is_embeddings;
   params.num_return_sequences = num_return_sequences;
@@ -389,7 +392,6 @@ void SamplingParameters::concat(const SamplingParameters& param) {
             : torch::cat({unconstrained_rows, param.filter_bitmask}, 0);
   }
   this->logprobs = this->logprobs || param.logprobs;
-  this->return_probs = this->return_probs || param.return_probs;
   this->is_embeddings = this->is_embeddings || param.is_embeddings;
   this->use_beam_search = this->use_beam_search || param.use_beam_search;
   this->max_top_logprobs =

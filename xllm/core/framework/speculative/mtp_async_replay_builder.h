@@ -21,8 +21,8 @@ limitations under the License.
 #include <cstdint>
 #include <vector>
 
+#include "core/framework/batch/decode_input_builder.h"
 #include "core/framework/speculative/embedding_cache.h"
-#include "core/framework/speculative/spec_input_builder.h"
 
 namespace xllm {
 
@@ -31,7 +31,7 @@ struct ForwardInput;
 namespace mtp_async {
 
 struct DraftReplayInputPlan final {
-  specBuilder::DecodeBuildBuffers rows;
+  DecodeBuildBuffers rows;
   std::vector<torch::Tensor> embeddings;
   std::vector<int32_t> selected_rows;
   std::vector<int32_t> source_sequences;
@@ -39,6 +39,16 @@ struct DraftReplayInputPlan final {
   std::vector<std::array<int32_t, 3>> mrope_positions;
   std::vector<int32_t> kpool_query_lens;
 };
+
+// Replays committed target tokens at the preceding target-hidden positions.
+DraftReplayInputPlan build_draft_replay_input_plan(
+    const DecodeBatchContext& context,
+    const std::vector<EmbeddingCache::DecodeState>& states,
+    const torch::Tensor& embedding_placeholder,
+    int32_t block_size,
+    int32_t uniform_width = 0,
+    bool is_graph_warmup = false,
+    int32_t pad_cache_slot = 0);
 
 DraftReplayInputPlan build_draft_replay_input_plan(
     const ForwardInput& base_input,

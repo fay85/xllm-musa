@@ -28,7 +28,7 @@ from xllm.python.model_executor.execution_pipeline import ExecutionPipeline
 from xllm.python.model_executor.forward_context import get_execution_context
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.runner import RunnerConfig
 from xllm.python.model_executor.sampling_metadata import (
     ModelSamplingMetadata,
@@ -48,6 +48,8 @@ class DSparkModel(PyModelBase):
     Execution belongs to DSparkExecutionPipeline, not this weight container.
     Module ownership preserves checkpoint and shared-weight paths.
     """
+
+    hot_token_ids: torch.Tensor | None
 
     def __init__(
         self,
@@ -101,11 +103,9 @@ class DSparkModel(PyModelBase):
     def get_token_embedding(self) -> nn.Module | None:
         return self.backbone.embed_tokens
 
-    def share_weights_from(self, source: PyModelBase) -> None:
-        if self.lm_head is None:
-            self.lm_head = source.get_lm_head()
-        if self.backbone.embed_tokens is None:
-            self.backbone.embed_tokens = source.get_token_embedding()
+    def share_embed_tokens(self, target_model: PyModelBase) -> None:
+        if self.get_token_embedding() is None and (embed_tokens := target_model.get_token_embedding()) is not None:
+            self.backbone.embed_tokens = embed_tokens
 
     def confidence_probs(
         self,
@@ -213,11 +213,11 @@ class DSparkProposalModel(nn.Module):
         prepared_sampling = prepare_sampling_input(sampling_metadata.sampling, logits)
         previous_tokens = anchor_tokens
         sampled_steps: list[torch.Tensor] = []
-        probability_steps: list[torch.Tensor] = []
+        draft_logits_steps: list[torch.Tensor] = []
         for token_index in range(query_width):
             markov_bias = model.markov_head.bias(previous_tokens)
             step_logits = logits[:, token_index, :] + markov_bias
-            sampled_tokens, probabilities = sample_logits(
+            sampled_tokens, sampled_logits = sample_logits(
                 step_logits,
                 prepared_sampling,
                 tp_size=sampling_metadata.tp_size,
@@ -225,15 +225,15 @@ class DSparkProposalModel(nn.Module):
             )
             if model.hot_token_ids is not None:
                 sampled_tokens = model.hot_token_ids.index_select(0, sampled_tokens)
-                if probabilities is not None:
-                    full_probs = probabilities.new_zeros((num_sequences, model.target_vocab_size))
-                    full_probs[:, model.hot_token_ids] = probabilities
-                    probabilities = full_probs
+                if sampled_logits is not None:
+                    full_logits = sampled_logits.new_full((num_sequences, model.target_vocab_size), float("-inf"))
+                    full_logits[:, model.hot_token_ids] = sampled_logits
+                    sampled_logits = full_logits
             sampled_steps.append(sampled_tokens)
-            if prepared_sampling.return_probs:
-                if probabilities is None:
-                    raise RuntimeError("Draft sampling did not return the required probabilities")
-                probability_steps.append(probabilities)
+            if prepared_sampling.return_draft_logits:
+                if sampled_logits is None:
+                    raise RuntimeError("Draft sampling did not return logits")
+                draft_logits_steps.append(sampled_logits)
             previous_tokens = sampled_tokens
         token_ids = torch.stack(sampled_steps, dim=1)
         confidence = None
@@ -244,9 +244,7 @@ class DSparkProposalModel(nn.Module):
             hidden = inputs.hidden_states.reshape(num_sequences, query_width, inputs.hidden_states.shape[-1])
             confidence = model.confidence_probs(hidden, previous_matrix)
         return ModelOutput(
-            draft_proposal=DraftProposal(
-                token_ids=token_ids,
-                draft_probs=torch.stack(probability_steps, dim=1) if prepared_sampling.return_probs else None,
-            ),
+            draft_token_ids=token_ids,
+            draft_logits=torch.stack(draft_logits_steps, dim=1) if prepared_sampling.return_draft_logits else None,
             draft_confidence_probs=confidence,
         )

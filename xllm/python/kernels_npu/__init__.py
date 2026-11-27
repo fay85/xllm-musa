@@ -24,7 +24,10 @@ importable by build tooling without initializing this semantic API.
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .dsa import sparse_flash_mla_swa, sparse_flash_mla_swa_metadata, supports_sparse_flash_mla_swa
 
 _EXPORTS = {
     "activation": ("silu_and_mul",),
@@ -145,6 +148,9 @@ _EXPORTS = {
         "has_stable_rope_resident_slots",
     ),
     "dsa": (
+        "supports_sparse_flash_mla_swa",
+        "sparse_flash_mla_swa",
+        "sparse_flash_mla_swa_metadata",
         "compressor",
         "hc_post",
         "hc_pre",
@@ -242,6 +248,9 @@ __all__ = [
     "hc_pre_fused",
     "hc_post",
     "moe_gating_top_k_hash",
+    "sparse_flash_mla_swa_metadata",
+    "sparse_flash_mla_swa",
+    "supports_sparse_flash_mla_swa",
     "sparse_attn_sharedkv",
     "sparse_attn_sharedkv_metadata",
     "causal_conv1d_qkv_prefill",

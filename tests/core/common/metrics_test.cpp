@@ -99,8 +99,9 @@ TEST(MultimodalMetricsTest, AccumulatesConcurrentUpdates) {
       MULTI_COUNTER_mm_input_items_total.get_stats({"image", "raw", "success"});
   ASSERT_NE(lookups, nullptr);
   ASSERT_NE(items, nullptr);
-  const double failures_before =
-      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer");
+  const double failures_before = MULTI_COUNTER_mm_input_stage_failures_total
+                                     .get_stats(/*labels=*/{"transfer"})
+                                     ->get_value();
   const double lookups_before = lookups->get_value();
   const double items_before = items->get_value();
   std::vector<std::thread> threads;
@@ -119,7 +120,9 @@ TEST(MultimodalMetricsTest, AccumulatesConcurrentUpdates) {
     thread.join();
   }
   const double updates = static_cast<double>(kThreadCount * kUpdatesPerThread);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer"),
+  EXPECT_EQ(MULTI_COUNTER_mm_input_stage_failures_total
+                .get_stats(/*labels=*/{"transfer"})
+                ->get_value(),
             failures_before + 2 * updates);
   EXPECT_EQ(lookups->get_value(), lookups_before + updates);
   EXPECT_EQ(items->get_value(), items_before + updates);

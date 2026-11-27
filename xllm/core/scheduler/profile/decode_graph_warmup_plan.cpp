@@ -82,9 +82,10 @@ DecodeGraphWarmupPlan build_decode_graph_warmup_plan(
                                    : DecodeGraphWarmupPlan{};
   plan.warmup_config = warmup_config;
 
+  const int64_t verify_width =
+      static_cast<int64_t>(warmup_config.num_speculative_tokens) + 1;
   if (!warmup_config.graph_capture_sizes.empty()) {
-    if (max_global_batch_size <= 0 || dp_size <= 0 ||
-        warmup_config.num_decoding_tokens <= 0) {
+    if (max_global_batch_size <= 0 || dp_size <= 0) {
       return plan;
     }
     int64_t max_local_batch_size =
@@ -100,11 +101,10 @@ DecodeGraphWarmupPlan build_decode_graph_warmup_plan(
       // so division is exact before the local batch capacity is applied.
       // Use the largest reachable batch selecting this effective token shape.
       const int64_t local_batch_size =
-          std::min(max_local_batch_size,
-                   capture_size / warmup_config.num_decoding_tokens);
+          std::min(max_local_batch_size, capture_size / verify_width);
       if (local_batch_size <= 0 ||
           runtime::get_decode_graph_token_bucket(
-              local_batch_size * warmup_config.num_decoding_tokens,
+              local_batch_size * verify_width,
               false,
               warmup_config.graph_capture_sizes) != capture_size) {
         continue;
@@ -127,8 +127,7 @@ DecodeGraphWarmupPlan build_decode_graph_warmup_plan(
   }
 
   const bool use_mtp_batches =
-      warmup_config.num_decoding_tokens > 1 &&
-      max_global_batch_size >= dp_size && dp_size > 0 &&
+      verify_width > 1 && max_global_batch_size >= dp_size && dp_size > 0 &&
       (!warmup_config.enable_graph_mode_decode_no_padding ||
        warmup_config.max_graph_batch_size > 0);
   if (!use_mtp_batches) {
@@ -151,13 +150,12 @@ DecodeGraphWarmupPlan build_decode_graph_warmup_plan(
     std::vector<int32_t> graph_batch_sizes;
     int64_t current_token_bucket = 0;
     const int64_t max_graph_token_count =
-        static_cast<int64_t>(max_graph_local_batch_size) *
-        warmup_config.num_decoding_tokens;
+        static_cast<int64_t>(max_graph_local_batch_size) * verify_width;
     for (int32_t local_batch_size = 1;
          local_batch_size <= max_graph_local_batch_size;
          ++local_batch_size) {
-      const int64_t num_tokens = static_cast<int64_t>(local_batch_size) *
-                                 warmup_config.num_decoding_tokens;
+      const int64_t num_tokens =
+          static_cast<int64_t>(local_batch_size) * verify_width;
       const int64_t token_bucket = runtime::get_decode_graph_token_bucket(
           num_tokens, warmup_config.enable_graph_mode_decode_no_padding);
       if (warmup_config.enable_graph_mode_decode_no_padding &&
@@ -197,8 +195,8 @@ DecodeGraphWarmupPlan build_decode_graph_warmup_plan(
   int64_t last_token_bucket = 0;
   for (int32_t local_batch_size = 1; local_batch_size <= max_local_batch_size;
        ++local_batch_size) {
-    const int64_t num_tokens = static_cast<int64_t>(local_batch_size) *
-                               warmup_config.num_decoding_tokens;
+    const int64_t num_tokens =
+        static_cast<int64_t>(local_batch_size) * verify_width;
     const int64_t token_bucket = runtime::get_decode_graph_token_bucket(
         num_tokens, warmup_config.enable_graph_mode_decode_no_padding);
     if (batch_sizes.empty() || token_bucket != last_token_bucket) {

@@ -24,78 +24,62 @@ limitations under the License.
 
 #include "common/global_flags.h"
 #include "core/framework/config/model_config.h"
-#include "core/framework/sampling/json_object_grammar.h"
-#include "logits_utils.h"
+#include "core/framework/sampling/logits_processor.h"
 #include "sampling_params.h"
 
 namespace xllm {
-void Sampler::publish_logits(torch::Tensor& logits,
-                             const torch::Tensor& sample_logits,
-                             const torch::Tensor& sample_idxes,
-                             bool use_sample_indices) {
-  if (!use_sample_indices) {
+
+torch::Tensor gumbel_noise(const SamplingParameters& params,
+                           torch::IntArrayRef sizes,
+                           const torch::Device& device) {
+  const auto options =
+      torch::TensorOptions().dtype(/*dtype=*/torch::kFloat32).device(device);
+  if (params.sampling_mode == SamplingMode::GREEDY) {
+    return torch::zeros(sizes, options);
+  }
+  auto noise = torch::empty(sizes, options);
+  noise.exponential_(/*lambd=*/1.0)
+      .clamp_min_(std::numeric_limits<float>::min())
+      .log_();
+  if (params.sampling_mode == SamplingMode::MIXED) {
+    c10::SmallVector<int64_t, 4> shape(sizes.size(), 1);
+    shape.front() = sizes.front();
+    noise.masked_fill_(params.do_sample.to(device).logical_not().view(shape),
+                       /*value=*/0.0);
+  }
+  return noise;
+}
+
+torch::Tensor gumbel_argmax(const torch::Tensor& logits,
+                            torch::Tensor gumbel_noise) {
+  torch::sub_out(gumbel_noise, logits, gumbel_noise);
+  return gumbel_noise.argmax(/*dim=*/-1);
+}
+
+torch::Tensor gumbel_sample(const torch::Tensor& logits) {
+  auto noise = torch::empty_like(
+      logits, logits.options().dtype(/*dtype=*/torch::kFloat32));
+  noise.exponential_(/*lambd=*/1.0)
+      .clamp_min_(std::numeric_limits<float>::min())
+      .log_();
+  return gumbel_argmax(logits, std::move(noise));
+}
+
+void publish_logits(torch::Tensor& logits,
+                    const torch::Tensor& sample_logits,
+                    const SamplingParameters& params) {
+  if (params.selected_token_idxes.numel() == params.sample_idxes.numel()) {
     logits = sample_logits;
     return;
   }
   logits = logits.to(sample_logits.scalar_type());
-  logits.index_copy_(/*dim=*/0, sample_idxes.to(torch::kLong), sample_logits);
+  logits.index_copy_(
+      /*dim=*/0, params.sample_idxes.to(/*dtype=*/torch::kLong), sample_logits);
 }
 
-torch::Tensor Sampler::apply_logits_processors(
-    torch::Tensor& logits,
-    const SamplingParameters& params,
-    const torch::Tensor& filter_mask) {
-  const torch::Tensor& effective_filter_mask =
-      filter_mask.defined() ? filter_mask : params.filter_mask;
-  // apply frequency and presence penalties
-  if (params.frequency_penalties.defined()) {
-    apply_frequency_presence_penalties(logits,
-                                       params.unique_token_ids,
-                                       params.unique_token_counts,
-                                       params.frequency_penalties,
-                                       params.presence_penalties);
-  }
-
-  // apply repetition penalties
-  if (params.repetition_penalties.defined()) {
-    apply_repetition_penalties(
-        logits, params.unique_token_ids, params.repetition_penalties);
-  }
-
-  torch::Tensor sample_logits = logits;
-  torch::Tensor sample_filter_bitmask = params.filter_bitmask;
-  const bool use_sample_indices =
-      params.selected_token_idxes.numel() != params.sample_idxes.numel();
-  if (use_sample_indices) {
-    sample_logits = logits.index_select(/*dim=*/0, params.sample_idxes);
-    if (sample_filter_bitmask.defined()) {
-      sample_filter_bitmask =
-          sample_filter_bitmask.index_select(/*dim=*/0, params.sample_idxes);
-    }
-  }
-
-  if (sample_filter_bitmask.defined()) {
-    apply_token_bitmask_inplace(sample_logits, sample_filter_bitmask);
-  } else if (effective_filter_mask.defined()) {
-    CHECK_EQ(effective_filter_mask.dim(), 2)
-        << "filter_mask must be 2-D, dim=" << effective_filter_mask.dim();
-    CHECK_EQ(effective_filter_mask.size(0), sample_logits.size(0))
-        << "filter_mask batch mismatch, filter_mask.size(0)="
-        << effective_filter_mask.size(0)
-        << ", sample_logits.size(0)=" << sample_logits.size(0);
-    CHECK_EQ(effective_filter_mask.size(1), sample_logits.size(1))
-        << "filter_mask vocab mismatch, filter_mask.size(1)="
-        << effective_filter_mask.size(1)
-        << ", sample_logits.size(1)=" << sample_logits.size(1);
-    sample_logits = sample_logits + effective_filter_mask;
-  }
-  return sample_logits;
-}
-
-SampleOutput Sampler::forward(torch::Tensor& logits,
-                              const SamplingParameters& params,
-                              const torch::Tensor& filter_mask) const {
-  const torch::ScalarType prob_dtype = logits.scalar_type();
+SampleOutput sample(torch::Tensor& logits,
+                    const SamplingParameters& params,
+                    const torch::Tensor& filter_mask) {
   SampleOutput output;
   torch::Tensor queried_logprobs;
   torch::Tensor query_ids;
@@ -115,8 +99,7 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
           original_rows, /*dim=*/-1, /*dtype=*/torch::kFloat32);
     }
   }
-  torch::Tensor sample_logits =
-      apply_logits_processors(logits, params, filter_mask);
+  torch::Tensor sample_logits = process_logits(logits, params, filter_mask);
 
   torch::Tensor sample_temperatures = params.temperatures;
   torch::Tensor sample_top_k = params.top_k;
@@ -136,60 +119,29 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     }
   }
 
-  if (params.all_greedy_sample && !params.logprobs && !params.return_probs &&
+  if (params.sampling_mode == SamplingMode::GREEDY && !params.logprobs &&
       !use_sample_indices && !filter_mask.defined()) {
     output.next_tokens = greedy_sample(sample_logits).to(torch::kLong);
-    publish_logits(
-        logits, sample_logits, params.sample_idxes, use_sample_indices);
-    return output;
-  }
-
-  if (params.all_greedy_sample && !params.logprobs && params.return_probs &&
-      !use_sample_indices && !filter_mask.defined()) {
-    torch::Tensor sample_indices =
-        greedy_sample(sample_logits).to(torch::kLong);
-    torch::Tensor selected_logits =
-        sample_logits.gather(/*dim=*/-1, sample_indices.view({-1, 1}))
-            .to(torch::kFloat32);
-    torch::Tensor log_probs =
-        selected_logits - torch::logsumexp(sample_logits,
-                                           /*dim=*/-1,
-                                           /*keepdim=*/true);
-    output.next_tokens = sample_indices;
-    output.probs = log_probs.exp().view({-1}).to(prob_dtype);
-    publish_logits(
-        logits, sample_logits, params.sample_idxes, use_sample_indices);
+    publish_logits(logits, sample_logits, params);
     return output;
   }
 
   // apply temperatures, top-k and top-p
-  apply_top_k_top_p(
+  apply_logits_transforms(
       sample_logits, sample_temperatures, sample_top_k, sample_top_p);
-  publish_logits(
-      logits, sample_logits, params.sample_idxes, use_sample_indices);
+  publish_logits(logits, sample_logits, params);
 
-  CHECK(params.do_sample.defined()) << "params.do_sample must be defined";
-  CHECK_EQ(params.do_sample.dim(), 1)
-      << "params.do_sample must be 1D [num_seqs], got "
-      << params.do_sample.sizes();
-  // same batch size
-  CHECK_EQ(sample_logits.size(0), params.do_sample.size(0));
-
-  auto probs =
-      torch::softmax(sample_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
-  torch::Tensor samples;
-  if (params.all_random_sample) {
-    samples = random_sample(probs);
-  } else if (params.all_greedy_sample) {
-    samples = greedy_sample(probs);
+  torch::Tensor sample_indices;
+  if (params.sampling_mode == SamplingMode::GREEDY) {
+    sample_indices = greedy_sample(sample_logits);
   } else {
-    // mixed sample, sample both then choose based on do_sample
-    auto random = random_sample(probs);
-    auto greedy = greedy_sample(probs);
-    samples = torch::where(params.do_sample, random, greedy);
+    sample_indices = params.sampling_mode == SamplingMode::RANDOM
+                         ? gumbel_sample(sample_logits)
+                         : gumbel_argmax(sample_logits,
+                                         gumbel_noise(params,
+                                                      sample_logits.sizes(),
+                                                      sample_logits.device()));
   }
-  auto sample_indices = samples.to(torch::kLong);
-  output.probs = probs.to(prob_dtype);
   output.next_tokens = sample_indices;
 
   if (params.logprobs) {
@@ -197,7 +149,8 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
       int32_t false_id = 2152;  // "no"
       int32_t true_id = 9693;   // "yes"
       auto indices =
-          torch::tensor({false_id, true_id}, torch::kLong).to(samples.device());
+          torch::tensor({false_id, true_id}, /*options=*/torch::kLong)
+              .to(sample_indices.device());
       sample_logits = sample_logits.index_select(/*dim=*/1, indices);
       auto logprobs = torch::log_softmax(
           sample_logits, /*dim=*/1, /*dtype=*/torch::kFloat32);
@@ -253,28 +206,8 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
   return output;
 }
 
-torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
-  return probs.argmax(/*dim=*/-1);
-}
-
-torch::Tensor Sampler::random_sample(const torch::Tensor& probs) {
-#if defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
-  xllm::kernel::RandomSampleParams params;
-  params.logits = probs;
-  return xllm::kernel::random_sample(params);
-#endif
-  if (probs.dim() == 3) {
-    auto batch_size = probs.size(0);
-    auto seq_len = probs.size(1);
-    auto vocab_size = probs.size(2);
-    auto flat_probs = probs.reshape({-1, vocab_size});
-    auto sampled =
-        flat_probs.multinomial(/*num_samples=*/1, /*replacement=*/false);
-    return sampled.reshape({batch_size, seq_len});
-  } else {
-    return probs.multinomial(/*num_samples=*/1, /*replacement=*/false)
-        .flatten();
-  }
+torch::Tensor greedy_sample(const torch::Tensor& logits) {
+  return logits.argmax(/*dim=*/-1);
 }
 
 }  // namespace xllm

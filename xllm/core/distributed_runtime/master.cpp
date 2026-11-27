@@ -584,14 +584,12 @@ Master::Master(const Options& options, EngineType type)
           << "VLM speculative service routing does not support model_type="
           << model_type << ", speculative_algorithm=" << algorithm
           << ", platform=" << Platform::type_str();
-      CHECK(!options_.enable_adaptive_speculative_decode())
-          << "VLM speculative decoding does not support adaptive speculative "
-             "decode";
     }
     // create a speculative engine if draft model path is provided
     const std::string draft_model_path =
         options_.draft_model_path().value_or("");
-    const bool use_suffix_spec = options_.speculative_algorithm() == "Suffix";
+    const bool use_suffix_spec = SpeculativeConfig::is_suffix_algorithm(
+        options_.speculative_algorithm());
     CHECK(use_suffix_spec || !draft_model_path.empty())
         << "draft model path is required unless --speculative_algorithm=Suffix";
     // Draft model shares the same devices as the target model.
@@ -613,23 +611,12 @@ Master::Master(const Options& options, EngineType type)
         .max_linear_state_cache_slots(options_.max_linear_state_cache_slots())
         .num_speculative_tokens(options_.num_speculative_tokens())
         .speculative_algorithm(options_.speculative_algorithm())
-        .draft_sampling_mode(options_.draft_sampling_mode())
+        .enable_probabilistic_draft(options_.enable_probabilistic_draft())
         .enable_mtp_draft_body_tp1(options_.enable_mtp_draft_body_tp1())
         .speculative_suffix_cache_max_depth(
             options_.speculative_suffix_cache_max_depth())
-        .speculative_suffix_max_spec_factor(
-            options_.speculative_suffix_max_spec_factor())
-        .speculative_suffix_max_spec_offset(
-            options_.speculative_suffix_max_spec_offset())
-        .speculative_suffix_min_token_prob(
-            options_.speculative_suffix_min_token_prob())
         .speculative_suffix_max_cached_requests(
             options_.speculative_suffix_max_cached_requests())
-        .speculative_suffix_use_tree_spec(
-            options_.speculative_suffix_use_tree_spec())
-        .enable_adaptive_speculative_decode(
-            options_.enable_adaptive_speculative_decode())
-        .adaptive_speculative_min_gain(options_.adaptive_speculative_min_gain())
         .task_type(options_.task_type())
         .enable_mla(options_.enable_mla())
         .npu_kernel_backend(options_.npu_kernel_backend())
@@ -670,20 +657,12 @@ Master::Master(const Options& options, EngineType type)
         .max_tokens_for_graph_mode(options_.max_tokens_for_graph_mode());
     apply_runtime_kv_cache_options(options_, spec_options);
 
-    if (use_suffix_spec) {
-      if (type == EngineType::VLMSSM) {
-        engine_ = std::make_unique<SuffixVLMSpeculativeEngine>(spec_options);
-      } else {
-        engine_ = std::make_unique<SuffixSpeculativeEngine>(spec_options);
-      }
+    if (type == EngineType::VLMSSM) {
+      engine_ =
+          std::make_unique<SpeculativeEngineBase<VLMEngine>>(spec_options);
     } else {
-      if (type == EngineType::VLMSSM) {
-        engine_ =
-            std::make_unique<SpeculativeEngineBase<VLMEngine>>(spec_options);
-      } else {
-        engine_ =
-            std::make_unique<SpeculativeEngineBase<LLMEngine>>(spec_options);
-      }
+      engine_ =
+          std::make_unique<SpeculativeEngineBase<LLMEngine>>(spec_options);
     }
   } else if (type == EngineType::LLM) {
     if (options_.task_type() == "embed" || options.task_type() == "mm_embed") {

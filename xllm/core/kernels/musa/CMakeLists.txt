@@ -120,8 +120,6 @@ set(_TORCH_MUSA_KERNEL_SRCS
   ../cuda/reshape_paged_cache.cu
   musa_ops_library.cpp
   ../cuda/moe/moe_fused_topk.cu
-  random_sample.cpp
-  rejection_sample.cu
   replace_token.cu
   fused_qknorm_rope.cu
   # Block-wise FP8 GEMM through the source-built MATE BMM operator.

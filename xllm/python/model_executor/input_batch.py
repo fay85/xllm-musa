@@ -46,8 +46,8 @@ class InputBatch:
     speculative query blocks.
     num_computed_tokens counts the logical cached prefix before each request's query.
     An empty tuple means these cached-prefix counts are not available on host.
-    graph_spec_verify_width is set for verification graphs, including on
-    DP ranks with no active requests. Ordinary decode leaves it unset.
+    num_speculative_tokens includes the draft count for verification graphs,
+    including on DP ranks with no active requests.
     hidden_states optionally carries an upstream stage's output, with num_tokens
     rows on the input device. It remains unpadded when binding graph inputs;
     the consuming module's builder owns its metadata and persistent storage.
@@ -66,7 +66,7 @@ class InputBatch:
     is_dummy: bool
     sampling: ModelSamplingInput | None = None
     hidden_states: torch.Tensor | None = None
-    graph_spec_verify_width: int | None = None
+    num_speculative_tokens: int | None = None
 
     @classmethod
     def from_runtime(
@@ -117,7 +117,7 @@ class InputBatch:
         positions: torch.Tensor,
         is_padding: torch.Tensor,
         *,
-        spec_verify_width: int | None = None,
+        num_speculative_tokens: int | None = None,
     ) -> InputBatch:
         """Bind this batch to a graph bucket's persistent input addresses."""
         token_capacity = input_ids.shape[0]
@@ -146,7 +146,7 @@ class InputBatch:
             is_dummy=self.is_dummy,
             sampling=self.sampling,
             hidden_states=self.hidden_states,
-            graph_spec_verify_width=spec_verify_width,
+            num_speculative_tokens=num_speculative_tokens,
         )
 
     @classmethod

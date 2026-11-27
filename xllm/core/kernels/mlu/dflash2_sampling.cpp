@@ -25,15 +25,16 @@ bool supports_dflash2_sampling(const torch::Tensor& candidate_ids,
                                const torch::Tensor& edge_log_probs,
                                const torch::Tensor& gumbel_noise,
                                const torch::Tensor& do_sample,
-                               bool all_random_sample,
-                               bool all_greedy_sample) {
-  if (all_greedy_sample || !candidate_ids.defined() ||
-      !edge_log_probs.defined() || !gumbel_noise.defined() ||
-      candidate_ids.dim() != 3 || !candidate_ids.device().is_privateuseone() ||
+                               bool use_random_sampling_for_batch,
+                               bool greedy_only) {
+  if (greedy_only || !candidate_ids.defined() || !edge_log_probs.defined() ||
+      !gumbel_noise.defined() || candidate_ids.dim() != 3 ||
+      !candidate_ids.device().is_privateuseone() ||
       candidate_ids.device() != edge_log_probs.device() ||
       candidate_ids.device() != gumbel_noise.device() ||
-      (!all_random_sample && (!do_sample.defined() ||
-                              do_sample.device() != candidate_ids.device()))) {
+      (!use_random_sampling_for_batch &&
+       (!do_sample.defined() ||
+        do_sample.device() != candidate_ids.device()))) {
     return false;
   }
   const int64_t top_k = candidate_ids.size(2);
@@ -49,11 +50,11 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
     const torch::Tensor& edge_log_probs,
     const torch::Tensor& gumbel_noise,
     const torch::Tensor& do_sample,
-    bool all_random_sample) {
+    bool use_random_sampling_for_batch) {
   return bangc::sample_dflash2_paths(candidate_ids,
                                      edge_log_probs,
                                      gumbel_noise,
                                      do_sample,
-                                     all_random_sample);
+                                     use_random_sampling_for_batch);
 }
 }  // namespace xllm::kernel::mlu

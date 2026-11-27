@@ -18,33 +18,28 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <cstdint>
+#include <vector>
 
 namespace xllm {
 
-class DraftProposal;
 struct SampleOutput;
-struct ForwardOutput;
+class SamplingParameters;
 
 namespace spec_verify {
 
-struct SamplerPolicy {
-  torch::Tensor do_sample;
-  bool all_random_sample = false;
-  bool all_greedy_sample = false;
-};
-
-// Enforces that validation consumes masks already published by the sampler.
-void check_target_masks(const ForwardOutput& target_output,
-                        const torch::Tensor& filter_mask,
-                        const torch::Tensor& filter_bitmask);
-
-SampleOutput run_rejection_sampling(const SamplerPolicy& policy,
-                                    const DraftProposal& draft_proposal,
-                                    const torch::Tensor& target_logits,
-                                    const ForwardOutput& target_output,
-                                    const torch::Tensor& bonus_token_ids,
-                                    bool enable_fused_kernel);
+void expand_verify_sampling_params(SamplingParameters& sampling_params,
+                                   int32_t num_val_tokens,
+                                   int32_t total_num_val_tokens,
+                                   const torch::Device& device,
+                                   bool repeat_unique_history = true);
 
 }  // namespace spec_verify
+
+// Verifies request-major target rows and samples accepted tokens from logits.
+SampleOutput run_rejection_sampling(const SamplingParameters& sampling_params,
+                                    const torch::Tensor& draft_token_ids,
+                                    const torch::Tensor& draft_logits,
+                                    const torch::Tensor& target_logits,
+                                    const torch::Tensor& target_hidden_states);
 
 }  // namespace xllm

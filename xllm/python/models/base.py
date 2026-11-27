@@ -69,12 +69,13 @@ class PyModelBase(nn.Module):
     def get_token_embedding(self) -> nn.Module | None:
         return self.model.embed_tokens
 
-    def share_weights_from(self, source: PyModelBase) -> None:
-        """Borrow only missing vocabulary modules, preserving draft-owned weights."""
+    def share_lm_head(self, target_model: PyModelBase) -> None:
         if self.lm_head is None:
-            self.lm_head = source.get_lm_head()
-        if self.model.embed_tokens is None:
-            self.model.embed_tokens = source.get_token_embedding()
+            self.lm_head = target_model.get_lm_head()
+
+    def share_embed_tokens(self, target_model: PyModelBase) -> None:
+        if self.get_token_embedding() is None and (embed_tokens := target_model.get_token_embedding()) is not None:
+            self.model.embed_tokens = embed_tokens
 
     # -- weight loading -------------------------------------------------------
     def load_weights(

@@ -21,15 +21,15 @@ limitations under the License.
 #include <optional>
 
 #include "core/framework/model/mtp_topk_state.h"
-#include "framework/sampling/draft_proposal.h"
 
 namespace xllm {
 struct ModelOutput {
   // A complete draft proposal lets callers skip LM-head projection and
   // sampling; hidden_states may be undefined. Otherwise, use the existing
   // hidden-state path.
-  std::optional<DraftProposal> draft_proposal;
-  // Optional confidence-head probabilities for adaptive draft-prefix pruning.
+  torch::Tensor draft_token_ids;
+  torch::Tensor draft_logits;
+  // Optional probabilities emitted by a draft model's confidence head.
   torch::Tensor draft_confidence_probs;
   // [num_tokens, hidden_size]
   torch::Tensor hidden_states;

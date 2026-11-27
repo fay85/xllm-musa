@@ -24,7 +24,6 @@ limitations under the License.
 #include <tuple>
 #include <vector>
 
-#include "core/framework/config/kernel_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/model/model_args.h"
 #include "core/runtime/options.h"
@@ -37,18 +36,17 @@ namespace {
 TEST(DraftModelConfigTest, ShortensDFlash2BlockBeforeModelConstruction) {
   ModelArgs args;
   args.model_type("qwen3")
-      .dflash2_block_size(8)
+      .num_speculative_tokens(/*value=*/7)
       .dflash2_conv_kernel_size(4)
       .layers_to_capture({1, 3});
   runtime::Options options;
-  options.is_draft_engine(true)
-      .speculative_algorithm("DFlash2")
-      .draft_graph_query_width(6);
+  options.speculative_algorithm(/*value=*/"DFlash2")
+      .num_speculative_tokens(
+          /*num_speculative_tokens=*/5);
 
-  configure_block_diffusion_model(args, options);
+  configure_block_diffusion_draft(args, options);
 
   EXPECT_EQ(args.model_type(), "DFlash2DraftModel");
-  EXPECT_EQ(args.dflash2_block_size(), 6);
   EXPECT_EQ(args.num_speculative_tokens(), 5);
   EXPECT_EQ(args.dummy_token_count(), 6);
   EXPECT_EQ(args.dflash2_conv_kernel_size(), 4);
@@ -59,13 +57,13 @@ TEST(DraftModelConfigTest, ShortensDFlash2BlockBeforeModelConstruction) {
 TEST(DraftModelConfigTest, AcceptsFullBlockAndConvolutionBoundary) {
   for (const int32_t width : {8, 4}) {
     ModelArgs args;
-    args.model_type("qwen3").dflash2_block_size(8).dflash2_conv_kernel_size(4);
+    args.model_type(/*value=*/"qwen3")
+        .num_speculative_tokens(/*value=*/7)
+        .dflash2_conv_kernel_size(/*value=*/4);
     runtime::Options options;
-    options.is_draft_engine(true)
-        .speculative_algorithm("DFlash2")
-        .draft_graph_query_width(width);
-    configure_block_diffusion_model(args, options);
-    EXPECT_EQ(args.dflash2_block_size(), width);
+    options.speculative_algorithm(/*value=*/"DFlash2")
+        .num_speculative_tokens(width - 1);
+    configure_block_diffusion_draft(args, options);
     EXPECT_EQ(args.dummy_token_count(), width);
     EXPECT_EQ(args.num_speculative_tokens(), width == 8 ? 7 : 3);
   }
@@ -81,33 +79,24 @@ TEST(DraftModelConfigDeathTest, RejectsInvalidRuntimeGeometry) {
       {8, 1, "requires candidate tokens"},
       {8, 9, "must not exceed"},
       {8, 3, "must cover the convolution kernel"},
-      {0, 4, "trained_block_size > 0"},
-      {-1, 4, "trained_block_size > 0"}};
+      {0, 4, "positive checkpoint token budget"},
+      {-1, 4, "positive checkpoint token budget"}};
   for (const Geometry& geometry : geometries) {
     SCOPED_TRACE(geometry.trained);
     SCOPED_TRACE(geometry.runtime);
     ModelArgs args;
     args.model_type("qwen3")
-        .dflash2_block_size(geometry.trained)
+        .num_speculative_tokens(geometry.trained - 1)
         .dflash2_conv_kernel_size(4);
     runtime::Options options;
-    options.is_draft_engine(true)
-        .speculative_algorithm("DFlash2")
-        .draft_graph_query_width(geometry.runtime);
-    EXPECT_DEATH(configure_block_diffusion_model(args, options),
+    options.speculative_algorithm(/*value=*/"DFlash2")
+        .num_speculative_tokens(geometry.runtime - 1);
+    EXPECT_DEATH(configure_block_diffusion_draft(args, options),
                  geometry.error);
   }
 }
 
 TEST(DraftModelConfigTest, ConfiguresNativeV41DSparkGeometry) {
-  char path[] = "/tmp/xllm-v41-dspark-config-XXXXXX";
-  ASSERT_NE(mkdtemp(path), nullptr);
-  const std::string model_path(path);
-  {
-    std::ofstream config(model_path + "/config.json");
-    config << R"({"dspark_block_size":5})";
-    ASSERT_TRUE(config.good());
-  }
   ModelArgs args;
   args.model_type("deepseek_v41")
       .n_layers(2)
@@ -120,27 +109,23 @@ TEST(DraftModelConfigTest, ConfiguresNativeV41DSparkGeometry) {
       .engram_layer_ids({1})
       .layers_to_capture({0, 1});
   runtime::Options options;
-  options.is_draft_engine(true)
-      .speculative_algorithm("DSpark")
-      .model_path(model_path)
-      .num_speculative_tokens(5);
-  configure_block_diffusion_model(args, options);
+  options.speculative_algorithm(/*value=*/"DSpark")
+      .num_speculative_tokens(/*num_speculative_tokens=*/5);
+  configure_block_diffusion_draft(args, options);
   EXPECT_EQ(args.model_type(), "deepseek_v41_dspark");
   EXPECT_EQ(args.n_layers(), 3);
   EXPECT_EQ(args.n_routed_experts(), 128);
   EXPECT_EQ(args.num_experts_per_tok(), 3);
   EXPECT_EQ(args.n_activated_experts(), 3);
   EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{0, 0, 0}));
-  EXPECT_EQ(args.dspark_block_size(), 5);
+  EXPECT_EQ(args.num_speculative_tokens(), 5);
   EXPECT_EQ(args.dummy_token_count(), 5);
   EXPECT_FALSE(args.requires_eager_execution());
-  EXPECT_TRUE(args.dspark_use_native_sas());
   EXPECT_TRUE(args.draft_query_uses_decode());
   EXPECT_TRUE(args.layers_to_capture().empty());
   EXPECT_TRUE(args.kv_source_layer_ids().empty());
   EXPECT_TRUE(args.index_source_layer_ids().empty());
   EXPECT_TRUE(args.engram_layer_ids().empty());
-  std::filesystem::remove_all(model_path);
 }
 
 TEST(DraftModelConfigDeathTest, RejectsUnsupportedDraftAlgorithmsOnMlu) {
@@ -148,8 +133,8 @@ TEST(DraftModelConfigDeathTest, RejectsUnsupportedDraftAlgorithmsOnMlu) {
     ModelArgs args;
     args.model_type("qwen3");
     runtime::Options options;
-    options.is_draft_engine(true).speculative_algorithm(algorithm);
-    EXPECT_DEATH(configure_block_diffusion_model(args, options),
+    options.speculative_algorithm(algorithm);
+    EXPECT_DEATH(configure_block_diffusion_draft(args, options),
                  "not supported on mlu");
   }
 }
@@ -180,16 +165,13 @@ TEST_F(DraftCaptureConfigTest, ConfiguresTargetWithoutChangingModelGeometry) {
   ModelArgs args;
   args.model_type("glm_moe_dsa")
       .n_layers(8)
-      .dflash2_block_size(8)
-      .num_speculative_tokens(5);
+      .num_speculative_tokens(/*value=*/5);
   runtime::Options options;
-  options.is_draft_engine(false)
-      .speculative_algorithm("DFlash2")
+  options.speculative_algorithm(/*value=*/"DFlash2")
       .draft_model_path(model_path_);
-  configure_block_diffusion_model(args, options);
+  configure_block_diffusion_target(args, options);
   EXPECT_EQ(args.layers_to_capture(), (std::vector<int32_t>{1, 3}));
   EXPECT_EQ(args.model_type(), "glm_moe_dsa");
-  EXPECT_EQ(args.dflash2_block_size(), 8);
   EXPECT_EQ(args.num_speculative_tokens(), 5);
 }
 
@@ -230,8 +212,8 @@ TEST_F(DraftCaptureConfigTest, RejectsInvalidTargetCaptureLayers) {
     ModelArgs args;
     args.n_layers(8);
     runtime::Options options;
-    options.is_draft_engine(false).draft_model_path(model_path_);
-    EXPECT_DEATH(configure_block_diffusion_model(args, options),
+    options.draft_model_path(model_path_);
+    EXPECT_DEATH(configure_block_diffusion_target(args, options),
                  "Invalid target capture layer|out of range|Duplicate target "
                  "capture layer");
   }
@@ -240,8 +222,7 @@ TEST_F(DraftCaptureConfigTest, RejectsInvalidTargetCaptureLayers) {
 TEST(DraftModelConfigDeathTest, RequiresDraftPathForTargetCapture) {
   ModelArgs args;
   runtime::Options options;
-  options.is_draft_engine(false);
-  EXPECT_DEATH(configure_block_diffusion_model(args, options),
+  EXPECT_DEATH(configure_block_diffusion_target(args, options),
                "requires --draft_model");
 }
 
@@ -265,7 +246,6 @@ TEST_F(DraftCaptureConfigTest, MaskMissingEverywhereReturnsInvalid) {
   JsonReader reader;
   ASSERT_TRUE(reader.parse(model_path_ + "/config.json"));
   EXPECT_EQ(read_mask_token_id(reader), -1);
-  EXPECT_EQ(read_block_size(model_path_), 0);
 }
 
 TEST_F(DraftCaptureConfigTest, MaskRootAliasesKeepTheirPrecedence) {
@@ -280,17 +260,6 @@ TEST_F(DraftCaptureConfigTest, MaskRootAliasesKeepTheirPrecedence) {
   EXPECT_EQ(read_mask_token_id(reader), 2);
 }
 
-TEST_F(DraftCaptureConfigTest, BlockSizeRootKeyWinsOverTheTextConfigValue) {
-  write_config(R"({"dspark_block_size": 5,
-                    "text_config": {"dspark_block_size": 7}})");
-  EXPECT_EQ(read_block_size(model_path_), 5);
-}
-
-TEST_F(DraftCaptureConfigTest, BlockSizeTextConfigFallbackResolves) {
-  write_config(R"({"text_config": {"dspark_block_size": 5}})");
-  EXPECT_EQ(read_block_size(model_path_), 5);
-}
-
 #if defined(USE_NPU)
 TEST(DraftModelConfigTest,
      AllowsPythonPipelineGraphsWithoutChangingOtherDrafts) {
@@ -302,14 +271,15 @@ TEST(DraftModelConfigTest,
       SCOPED_TRACE(model_impl);
       SCOPED_TRACE(algorithm);
       ModelArgs args;
-      args.model_type("qwen3").dflash2_block_size(8);
+      args.model_type(/*value=*/"qwen3").num_speculative_tokens(/*value=*/7);
+      if (algorithm == "DFlash2") {
+        args.dflash2_conv_kernel_size(/*value=*/4);
+      }
       runtime::Options options;
-      options.is_draft_engine(true)
-          .speculative_algorithm(algorithm)
-          .draft_graph_query_width(algorithm == "DFlash" ? 7 : 0)
-          .num_speculative_tokens(6);
+      options.speculative_algorithm(algorithm).num_speculative_tokens(
+          /*num_speculative_tokens=*/algorithm == "DFlash2" ? 7 : 6);
 
-      configure_block_diffusion_model(args, options);
+      configure_block_diffusion_draft(args, options);
 
       EXPECT_EQ(args.requires_eager_execution(), model_impl != "python");
       EXPECT_FALSE(args.draft_query_uses_decode());
@@ -325,83 +295,65 @@ TEST(DraftModelConfigTest,
   model_config.model_impl(original_model_impl);
 }
 
-TEST(DraftModelConfigTest, DFlashDummyGeometryUsesDraftQueryWidth) {
+TEST(DraftModelConfigTest, DFlashDummyGeometryUsesSpeculativeTokenCount) {
   auto& model_config = ModelConfig::get_instance();
   const std::string original_model_impl = model_config.model_impl();
   model_config.model_impl("python");
   ModelArgs args;
   args.model_type("qwen3");
   runtime::Options options;
-  options.is_draft_engine(true)
-      .speculative_algorithm("DFlash")
-      .num_speculative_tokens(0)
-      .draft_graph_query_width(8);
-  configure_block_diffusion_model(args, options);
+  options.speculative_algorithm(/*value=*/"DFlash")
+      .num_speculative_tokens(
+          /*num_speculative_tokens=*/7);
+  configure_block_diffusion_draft(args, options);
   EXPECT_EQ(args.dummy_token_count(), 8);
   EXPECT_FALSE(args.requires_eager_execution());
   model_config.model_impl(original_model_impl);
 }
 
-TEST_F(DraftCaptureConfigTest, PythonV41UsesBlockRowsAndCompleteDummyQueries) {
-  write_config(R"({"dspark_block_size":3})");
+TEST(DraftModelConfigTest, PythonV41UsesBlockRowsAndCompleteDummyQueries) {
   auto& model_config = ModelConfig::get_instance();
-  auto& kernel_config = KernelConfig::get_instance();
   const std::string original_model_impl = model_config.model_impl();
-  const bool original_native_sas = kernel_config.enable_dspark_native_sas();
   model_config.model_impl("python");
-  kernel_config.enable_dspark_native_sas(true);
   ModelArgs args;
   args.model_type("deepseek_v41").n_layers(4).dspark_num_layers(2);
   runtime::Options options;
-  options.is_draft_engine(true)
-      .speculative_algorithm("DSpark")
-      .num_speculative_tokens(3)
-      .model_path(model_path_);
-  configure_block_diffusion_model(args, options);
+  options.speculative_algorithm(/*value=*/"DSpark")
+      .num_speculative_tokens(
+          /*num_speculative_tokens=*/3);
+  configure_block_diffusion_draft(args, options);
   EXPECT_EQ(args.model_type(), "deepseek_v41_dspark");
   EXPECT_EQ(args.dummy_token_count(), 3);
   EXPECT_EQ(args.n_layers(), 2);
   EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{0, 0}));
   EXPECT_FALSE(args.requires_eager_execution());
-  EXPECT_FALSE(args.dspark_use_native_sas());
   EXPECT_TRUE(args.draft_query_uses_decode());
   model_config.model_impl(original_model_impl);
-  kernel_config.enable_dspark_native_sas(original_native_sas);
 }
 
 class DraftQueryInputConfigTest
     : public DraftCaptureConfigTest,
       public ::testing::WithParamInterface<
-          std::tuple<std::string, std::string, bool, bool>> {};
+          std::tuple<std::string, std::string, bool>> {};
 
 TEST_P(DraftQueryInputConfigTest, PreservesInputContractAcrossGraphModes) {
-  const auto& [model_type, model_impl, native_sas, enable_graph] = GetParam();
-  write_config(R"({"dspark_block_size":3})");
+  const auto& [model_type, model_impl, enable_graph] = GetParam();
   auto& model_config = ModelConfig::get_instance();
-  auto& kernel_config = KernelConfig::get_instance();
   const std::string original_model_impl = model_config.model_impl();
-  const bool original_native_sas = kernel_config.enable_dspark_native_sas();
   model_config.model_impl(model_impl);
-  kernel_config.enable_dspark_native_sas(native_sas);
   for (bool graph_mode : {enable_graph, !enable_graph}) {
     ModelArgs args;
     args.model_type(model_type).n_layers(4).dspark_num_layers(2);
     runtime::Options options;
-    options.is_draft_engine(true)
-        .speculative_algorithm("DSpark")
+    options.speculative_algorithm(/*value=*/"DSpark")
         .num_speculative_tokens(3)
-        .model_path(model_path_)
         .enable_graph(graph_mode);
 
-    configure_block_diffusion_model(args, options);
+    configure_block_diffusion_draft(args, options);
 
-    const bool python_v41_draft =
-        model_type == "deepseek_v41" && model_impl == "python";
-    EXPECT_EQ(args.dspark_use_native_sas(), native_sas && !python_v41_draft);
-    EXPECT_EQ(args.draft_query_uses_decode(), native_sas || python_v41_draft);
+    EXPECT_TRUE(args.draft_query_uses_decode());
   }
   model_config.model_impl(original_model_impl);
-  kernel_config.enable_dspark_native_sas(original_native_sas);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -409,54 +361,33 @@ INSTANTIATE_TEST_SUITE_P(
     DraftQueryInputConfigTest,
     ::testing::Values(std::make_tuple(std::string("deepseek_v4"),
                                       std::string("native"),
-                                      false,
                                       false),
                       std::make_tuple(std::string("deepseek_v4"),
                                       std::string("python"),
-                                      true,
                                       true),
                       std::make_tuple(std::string("deepseek_v41"),
                                       std::string("native"),
-                                      true,
                                       false),
                       std::make_tuple(std::string("deepseek_v41"),
                                       std::string("python"),
-                                      false,
                                       true)));
 
 TEST(DraftModelConfigTest, PreservesNpuCheckpointBlockGeometry) {
   ModelArgs args;
   args.model_type("qwen3")
-      .dflash2_block_size(8)
-      .dflash2_conv_kernel_size(4)
-      .num_speculative_tokens(7);
+      .num_speculative_tokens(/*value=*/7)
+      .dflash2_conv_kernel_size(/*value=*/4);
   runtime::Options options;
-  options.is_draft_engine(true)
-      .speculative_algorithm("DFlash2")
-      .draft_graph_query_width(6);
-  configure_block_diffusion_model(args, options);
-  EXPECT_EQ(args.dflash2_block_size(), 8);
+  options.speculative_algorithm(/*value=*/"DFlash2")
+      .num_speculative_tokens(
+          /*num_speculative_tokens=*/7);
+  configure_block_diffusion_draft(args, options);
   EXPECT_EQ(args.num_speculative_tokens(), 7);
   EXPECT_EQ(args.dummy_token_count(), 8);
   EXPECT_EQ(args.model_type(), "DFlash2DraftModel");
 }
 
 namespace {
-
-// A small mixed decoder prefix plus three zero-encoded draft entries.
-bool write_v4_dspark_config(const std::string& model_path) {
-  std::ofstream file(model_path + "/config.json");
-  if (!file.is_open()) {
-    return false;
-  }
-  file << R"json({
-    "model_type": "deepseek_v4",
-    "num_hidden_layers": 4,
-    "compress_ratios": [1, 4, 128, 4, 0, 0, 0],
-    "dspark_block_size": 5
-  })json";
-  return file.good();
-}
 
 // Restore the public model implementation setting even after a failed test.
 class ModelImplGuard final {
@@ -481,19 +412,16 @@ class ModelImplGuard final {
 
 // V4 kernels use ratio 1 for the checkpoint's zero-encoded SWA tail.
 TEST_F(DraftCaptureConfigTest, NormalizesV4DraftTailZeroCompressRatios) {
-  const std::string model_path = model_path_;
-  ASSERT_TRUE(write_v4_dspark_config(model_path));
-
   ModelArgs args;
   args.model_type("deepseek_v4")
       .n_layers(4)
       .dspark_num_layers(3)
       .compress_ratios({1, 4, 128, 4, 0, 0, 0});
   runtime::Options options;
-  options.is_draft_engine(true).speculative_algorithm("DSpark").model_path(
-      model_path);
+  options.speculative_algorithm(/*value=*/"DSpark")
+      .num_speculative_tokens(/*num_speculative_tokens=*/5);
 
-  configure_block_diffusion_model(args, options);
+  configure_block_diffusion_draft(args, options);
 
   EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{1, 1, 1}))
       << "V4.1-style 0 draft tail must normalize to pure-SWA ratio 1 for the "
@@ -504,8 +432,6 @@ TEST_F(DraftCaptureConfigTest, NormalizesV4DraftTailZeroCompressRatios) {
 // Python V4.1 preserves the distinct zero-encoded SWA group.
 TEST_F(DraftCaptureConfigTest, PreservesV41DraftTailZeroCompressRatios) {
   const ModelImplGuard model_impl_guard("python");
-  const std::string model_path = model_path_;
-  ASSERT_TRUE(write_v4_dspark_config(model_path));
 
   ModelArgs args;
   args.model_type("deepseek_v41")
@@ -513,10 +439,10 @@ TEST_F(DraftCaptureConfigTest, PreservesV41DraftTailZeroCompressRatios) {
       .dspark_num_layers(3)
       .compress_ratios({1, 4, 128, 4, 0, 0, 0});
   runtime::Options options;
-  options.is_draft_engine(true).speculative_algorithm("DSpark").model_path(
-      model_path);
+  options.speculative_algorithm(/*value=*/"DSpark")
+      .num_speculative_tokens(/*num_speculative_tokens=*/5);
 
-  configure_block_diffusion_model(args, options);
+  configure_block_diffusion_draft(args, options);
 
   EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{0, 0, 0}))
       << "V4.1 draft keeps the checkpoint's 0 pure-SWA encoding verbatim";
@@ -526,8 +452,6 @@ TEST_F(DraftCaptureConfigTest, PreservesV41DraftTailZeroCompressRatios) {
 // A native V4.1 checkpoint selects the V4 draft and its ratio-1 encoding.
 TEST_F(DraftCaptureConfigTest, NormalizesV41DraftTailForNativeImpl) {
   const ModelImplGuard model_impl_guard("native");
-  const std::string model_path = model_path_;
-  ASSERT_TRUE(write_v4_dspark_config(model_path));
 
   ModelArgs args;
   args.model_type("deepseek_v41")
@@ -535,10 +459,10 @@ TEST_F(DraftCaptureConfigTest, NormalizesV41DraftTailForNativeImpl) {
       .dspark_num_layers(3)
       .compress_ratios({1, 4, 128, 4, 0, 0, 0});
   runtime::Options options;
-  options.is_draft_engine(true).speculative_algorithm("DSpark").model_path(
-      model_path);
+  options.speculative_algorithm(/*value=*/"DSpark")
+      .num_speculative_tokens(/*num_speculative_tokens=*/5);
 
-  configure_block_diffusion_model(args, options);
+  configure_block_diffusion_draft(args, options);
 
   EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{1, 1, 1}))
       << "A V4.1 checkpoint on the native impl takes the C++ V4 draft, whose "

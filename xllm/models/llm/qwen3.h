@@ -336,11 +336,17 @@ REGISTER_MODEL_ARGS(qwen3, [&] {
 
   LOAD_ARG_OR(markov_rank, "markov_rank", 0);
   LOAD_ARG_OR(draft_vocab_size, "draft_vocab_size", 0);
-  LOAD_ARG_OR(enable_confidence_head, "enable_confidence_head", false);
-  LOAD_ARG_OR(
-      confidence_head_with_markov, "confidence_head_with_markov", false);
   LOAD_ARG(layer_types, "layer_types");
-  LOAD_ARG_OR(dflash2_block_size, "dflash_config.block_size", 0);
+  LOAD_ARG_OR_FUNC(
+      num_speculative_tokens,
+      /*key=*/"dflash_config.num_speculative_tokens",
+      [&] {
+        return std::max<int64_t>(
+            json.value_or<int64_t>(/*key=*/"dflash_config.block_size",
+                                   /*default_value=*/0) -
+                1,
+            /*minimum=*/0);
+      });
   LOAD_ARG_OR(dflash2_conv_group_size, "dflash_config.conv_group_size", 0);
   LOAD_ARG_OR(dflash2_conv_kernel_size, "dflash_config.conv_kernel_size", 0);
   LOAD_ARG_OR(dflash2_selector_rank, "dflash_config.selector_rank", 0);

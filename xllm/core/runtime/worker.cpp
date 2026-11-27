@@ -27,11 +27,11 @@ limitations under the License.
 
 #include "common/metrics.h"
 #include "core/framework/config/speculative_config.h"
+#include "core/runtime/dflash2_worker_impl.h"
+#include "core/runtime/dflash_worker_impl.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
-#include "runtime/dflash/dflash2_worker_impl.h"
-#include "runtime/dflash/dflash_worker_impl.h"
 #include "runtime/dit_worker_impl.h"
 #include "runtime/dspark_worker_impl.h"
 #include "runtime/eagle3_worker_impl.h"
@@ -53,9 +53,9 @@ Worker::Worker(const ParallelArgs& parallel_args,
   if (options.enable_speculative_decode()) {
     const std::string& algorithm = options.speculative_algorithm();
     LOG(INFO) << "Speculative decode is enabled, algorithm: " << algorithm;
-    if (algorithm == "Eagle3") {
+    if (SpeculativeConfig::is_eagle3_algorithm(algorithm)) {
       impl_ = new Eagle3WorkerImpl(parallel_args, device, options, worker_type);
-    } else if (algorithm == "DFlash") {
+    } else if (SpeculativeConfig::is_dflash_algorithm(algorithm)) {
       impl_ = new DFlashWorkerImpl(parallel_args, device, options, worker_type);
     } else if (SpeculativeConfig::is_dflash2_algorithm(algorithm)) {
 #if !defined(USE_NPU) && !defined(USE_MLU)
@@ -66,7 +66,7 @@ Worker::Worker(const ParallelArgs& parallel_args,
           new DFlash2WorkerImpl(parallel_args, device, options, worker_type);
     } else if (SpeculativeConfig::is_dspark_algorithm(algorithm)) {
       impl_ = new DSparkWorkerImpl(parallel_args, device, options, worker_type);
-    } else if (algorithm == "Suffix") {
+    } else if (SpeculativeConfig::is_suffix_algorithm(algorithm)) {
       impl_ = new SuffixWorkerImpl(parallel_args, device, options, worker_type);
     } else if (SpeculativeConfig::is_mtp_algorithm(algorithm)) {
       impl_ = new MTPWorkerImpl(parallel_args, device, options, worker_type);
@@ -102,13 +102,6 @@ bool Worker::init_model(const std::string& model_weights_path,
 
 bool Worker::allocate_kv_cache(const KVCacheShape& kv_cache_shape) {
   return impl_->allocate_kv_cache(kv_cache_shape);
-}
-
-bool Worker::set_speculative_validate_time_predictor(
-    const SpeculativeProfileRegistry::ValidateTimePredictor& predictor) {
-  SpeculativeProfileRegistry::get_instance().set_validate_time_predictor(
-      predictor);
-  return true;
 }
 
 void Worker::get_cache_info(uint64_t& cluster_id,

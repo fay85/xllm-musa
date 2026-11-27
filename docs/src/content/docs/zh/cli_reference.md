@@ -191,13 +191,8 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | `num_speculative_tokens` | `int32` | `0` | 每轮 speculative decoding 生成的 speculative token 数。 |
 | `speculative_algorithm` | `string` | `"MTP"` | Speculative decoding 算法，支持 `MTP`、`Eagle3`、`Suffix`、`DFlash`、`DSpark`。 |
 | `speculative_suffix_cache_max_depth` | `int32` | `64` | Suffix speculative decoding 的后缀树最大深度。 |
-| `speculative_suffix_max_spec_factor` | `double` | `1.0` | Suffix speculation 相对于匹配长度的最大 token 系数。 |
-| `speculative_suffix_max_spec_offset` | `double` | `0.0` | Suffix speculation 的最大 token 加性偏移。 |
-| `speculative_suffix_min_token_prob` | `double` | `0.1` | Suffix speculation 使用的最小 token 概率。 |
 | `speculative_suffix_max_cached_requests` | `int32` | `-1` | Suffix speculation 全局最大缓存请求数；`-1` 表示不限，`0` 表示禁用。 |
-| `speculative_suffix_use_tree_spec` | `bool` | `false` | 是否使用 tree-based suffix speculation，而不是 path speculation。 |
-| `draft_sampling_mode` | `string` | `"greedy"` | draft 模型生成 proposal token 的采样方式：`greedy`、`probabilistic`。仅 `MTP`、`DSpark`、`Eagle3` 支持 `probabilistic`。 |
-| `enable_atb_spec_kernel` | `bool` | `false` | 是否使用 ATB speculative kernel。 |
+| `enable_probabilistic_draft` | `bool` | `false` | MTP、DSpark、DFlash2 和 Eagle3 的 draft 按概率分布采样。 |
 
 ## ProfileConfig
 
@@ -258,7 +253,6 @@ V4.1 W8A8 MC2 decode 按 routed 阶段安排共享专家的量化、Gate-Up、�
 | `enable_split_rmsnorm_rope_prefill` | `bool` | `false` | 是否在 Qwen3 MoE decoder layer 的 prefill 阶段也走 fused split rmsnorm rope 路径。仅在 `enable_split_rmsnorm_rope` 启用时生效；decode 阶段在启用后始终走融合路径。 |
 | `enable_aclnn_matmul` | `bool` | `false` | 是否为支持的 NPU ATB layer 启用 ACLNN matmul 后端。 |
 | `enable_aclnn_swiglu` | `bool` | `false` | 是否为支持的 NPU ATB layer 启用 ACLNN SwiGLU 后端。 |
-| `enable_dspark_native_sas` | `bool` | `false` | 启用 NPU DSpark 原生 SparseAttnSharedkv 语义。旧版算子若不接受非空 `ori_sparse_indices`，可能在 tiling 阶段终止进程；请保持关闭以使用 q_len=1 兼容模式。 |
 | `enable_dsa_cp` | `bool` | `false` | 为 NPU 上的 Python DeepSeek-V4.1 主模型启用 DSA query 并行。Prefill、chunked-prefill、prefill/decode 混合批次和 decode 均在现有 TP 组内切分 query，保留完整 KV，并通过 all-to-all 恢复本 rank 的 TP heads。Decode DSA CP 支持 ACL 图，回放时使用实时设备 KV 长度。要求 `cp_size=1`；TP=1 时无操作。 |
 
 使用 `--enable_dsa_cp=true`，也可在配置 JSON 中设置 `"enable_dsa_cp": true`。

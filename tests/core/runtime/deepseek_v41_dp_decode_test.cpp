@@ -22,8 +22,6 @@ limitations under the License.
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -50,23 +48,6 @@ constexpr int32_t kTpSize = 4;
 constexpr int32_t kLayers = 3;
 constexpr int32_t kExperts = 128;
 constexpr int32_t kSkip = 77;
-class DraftConfigDirectory final {
- public:
-  DraftConfigDirectory() {
-    char pattern[] = "/tmp/xllm-dp-dspark-config-XXXXXX";
-    const char* path = mkdtemp(pattern);
-    CHECK(path != nullptr);
-    path_ = path;
-    std::ofstream config(path_ + "/config.json");
-    config << R"({"dspark_block_size":5})";
-    CHECK(config.good());
-  }
-  ~DraftConfigDirectory() { std::filesystem::remove_all(path_); }
-  const std::string& path() const { return path_; }
-
- private:
-  std::string path_;
-};
 
 StateDict draft_weights(const ModelArgs& args,
                         const torch::TensorOptions& options) {
@@ -95,9 +76,7 @@ StateDict draft_weights(const ModelArgs& args,
   return weights;
 }
 
-int32_t run_rank(int32_t rank,
-                 const std::array<int32_t, 15>& ports,
-                 const std::string& config_path) {
+int32_t run_rank(int32_t rank, const std::array<int32_t, 15>& ports) {
   if (Platform::device_count() < kWorldSize) {
     return kSkip;
   }
@@ -165,7 +144,7 @@ int32_t run_rank(int32_t rank,
       .vocab_size(128)
       .n_layers(kLayers)
       .dspark_num_layers(kLayers)
-      .dspark_block_size(5)
+      .num_speculative_tokens(/*value=*/5)
       .markov_rank(8)
       .n_heads(heads)
       .n_kv_heads(1)
@@ -204,10 +183,9 @@ int32_t run_rank(int32_t rank,
       .num_speculative_tokens(5)
       .block_size(128)
       .dp_size(2)
-      .world_size(kWorldSize)
-      .model_path(config_path);
+      .world_size(kWorldSize);
   ModelConfig::get_instance().model_impl("native");
-  configure_block_diffusion_model(args, runtime_options);
+  configure_block_diffusion_draft(args, runtime_options);
   CHECK_EQ(args.dummy_token_count(), 5);
   const ModelContext context(parallel, args, QuantArgs(), options);
   auto model = create_llm_model(context);
@@ -317,7 +295,6 @@ int32_t run_rank(int32_t rank,
 }
 
 TEST(DeepseekV41DpDecodeTest, IdleShardPreservesProposalAndGraphReplay) {
-  const DraftConfigDirectory config;
   std::array<int32_t, 15> ports{};
   for (int32_t& port : ports) {
     int32_t candidate = net::get_local_free_port();
@@ -332,7 +309,7 @@ TEST(DeepseekV41DpDecodeTest, IdleShardPreservesProposalAndGraphReplay) {
       ports[0],
       {{"IdleShardPreservesProposalAndGraphReplay",
         [&ports, &config](int32_t rank, int32_t /*unused*/) {
-          return run_rank(rank, ports, config.path());
+          return run_rank(rank, ports);
         }}},
       /*cleanup=*/{},
       /*timeout=*/std::chrono::seconds(90));

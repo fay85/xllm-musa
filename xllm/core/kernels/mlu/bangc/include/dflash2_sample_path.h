@@ -23,5 +23,5 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
     const torch::Tensor& edge_log_probs,
     const torch::Tensor& gumbel_noise,
     const torch::Tensor& do_sample,
-    bool all_random_sample);
+    bool use_random_sampling_for_batch);
 }

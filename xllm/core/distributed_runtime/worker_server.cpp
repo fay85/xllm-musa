@@ -283,9 +283,6 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
   const char* world_size_ptr = world_size_str.c_str();
   std::string device_idx_str = std::to_string(d.index());
   const char* device_idx_ptr = device_idx_str.c_str();
-  std::string num_decoding_tokens_str =
-      std::to_string(options.num_decoding_tokens());
-  const char* num_decoding_tokens_ptr = num_decoding_tokens_str.c_str();
   std::string block_size_str = std::to_string(options.block_size());
   const char* block_size_ptr = block_size_str.c_str();
   std::string max_tokens_per_batch_str =
@@ -361,8 +358,10 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
       std::to_string(options.enable_mtp_draft_body_tp1());
   const char* enable_mtp_draft_body_tp1_ptr =
       enable_mtp_draft_body_tp1_str.c_str();
-  std::string draft_sampling_mode_str = options.draft_sampling_mode();
-  const char* draft_sampling_mode_ptr = draft_sampling_mode_str.c_str();
+  std::string enable_probabilistic_draft_str =
+      std::to_string(options.enable_probabilistic_draft());
+  const char* enable_probabilistic_draft_ptr =
+      enable_probabilistic_draft_str.c_str();
   const std::string comm_buffer_offset_str =
       std::to_string(options.comm_buffer_offset());
   const std::string& model_impl = ModelConfig::get_instance().model_impl();
@@ -394,7 +393,6 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
                         global_rank_ptr,
                         world_size_ptr,
                         device_idx_ptr,
-                        num_decoding_tokens_ptr,
                         block_size_ptr,
                         max_tokens_per_batch_ptr,
                         max_seqs_per_batch_ptr,
@@ -425,7 +423,7 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
                         indexer_cache_dtype_ptr,
                         enable_mtp_draft_body_tp1_ptr,
                         text_encoder_tp_size_ptr,
-                        draft_sampling_mode_ptr,
+                        enable_probabilistic_draft_ptr,
                         kv_split_size_ptr,
                         comm_buffer_offset_str.c_str(),
                         model_impl.c_str(),

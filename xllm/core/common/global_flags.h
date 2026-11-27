@@ -96,24 +96,13 @@ DECLARE_int32(num_speculative_tokens);
 
 DECLARE_string(speculative_algorithm);
 
-DECLARE_string(draft_sampling_mode);
+DECLARE_bool(enable_probabilistic_draft);
 
 DECLARE_bool(enable_mtp_draft_body_tp1);
-DECLARE_bool(enable_adaptive_speculative_decode);
-
-DECLARE_double(adaptive_speculative_min_gain);
 
 DECLARE_int32(speculative_suffix_cache_max_depth);
 
-DECLARE_double(speculative_suffix_max_spec_factor);
-
-DECLARE_double(speculative_suffix_max_spec_offset);
-
-DECLARE_double(speculative_suffix_min_token_prob);
-
 DECLARE_int32(speculative_suffix_max_cached_requests);
-
-DECLARE_bool(speculative_suffix_use_tree_spec);
 
 DECLARE_int32(num_request_handling_threads);
 
@@ -223,8 +212,6 @@ DECLARE_double(prefill_scheduling_memory_usage_threshold);
 DECLARE_int32(max_reconnect_count);
 
 DECLARE_bool(enable_atb_comm_multiprocess);
-
-DECLARE_bool(enable_atb_spec_kernel);
 
 DECLARE_string(etcd_addr);
 
@@ -451,8 +438,6 @@ DECLARE_bool(enable_split_rmsnorm_rope_prefill);
 DECLARE_bool(enable_aclnn_matmul);
 
 DECLARE_bool(enable_aclnn_swiglu);
-
-DECLARE_bool(enable_dspark_native_sas);
 
 DECLARE_bool(enable_flashcomm1);
 

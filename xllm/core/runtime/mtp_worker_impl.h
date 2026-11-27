@@ -22,7 +22,6 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "core/framework/constraint/draft_validation.h"
 #include "core/framework/speculative/embedding_cache.h"
 #include "core/framework/speculative/mtp_async_state.h"
 #include "core/framework/speculative/mtp_execution_policy.h"
@@ -30,12 +29,6 @@ limitations under the License.
 #include "runtime/draft_model_spec_worker_impl.h"
 
 namespace xllm {
-
-#if defined(USE_NPU)
-namespace detail {
-class NpuJsonDraftTokenHandoff;
-}  // namespace detail
-#endif
 
 // MTP (Multi-Token Prediction) speculative worker.
 // Uses a draft model to generate proposals, then validates with target model.
@@ -59,22 +52,18 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
                 const runtime::Options& options,
                 const runtime::Options& target_options,
                 const runtime::Options& draft_options,
-                WorkerType worker_type,
-                bool enable_adaptive_speculative_decode = false);
+                WorkerType worker_type);
 
  public:
-  bool init_model(const std::string& model_weights_path,
-                  int32_t random_seed,
-                  MasterStatus master_status) override;
-
-  std::tuple<int64_t, int64_t> estimate_kv_cache_capacity() override;
-
-  ForwardInput update_input_by_last_step_output_for_schedule_overlap(
-      ForwardInput& inputs) override;
   void prepare_work_before_execute(const ForwardInput& inputs,
                                    ForwardInput& processed_inputs) override;
 
  protected:
+  void apply_target_model_overrides(ModelArgs& args) const override;
+  void apply_draft_model_overrides(ModelArgs& args) const override;
+  void on_target_model_loaded() override;
+  void on_draft_model_loaded(const std::string& model_weights_path) override;
+
   // MTP composite: leaves own model-specific NPU input preparation.
   bool owns_npu_parallel_input_prepare() const override;
 
@@ -86,68 +75,27 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
       const ForwardInput& input,
       const std::vector<ForwardOutput>& draft_outputs,
       ForwardInput& validate_input,
-      const std::vector<int32_t>& per_seq_val_tokens,
-      const detail::JsonDraftValidationScratch* json_scratch,
       Stream& compute_stream);
-  // Adaptive pruning path: compute per-seq prefix lengths, truncate draft
-  // outputs, and run variable-length validate.
-  std::optional<ForwardOutput> run_adaptive_validate(
-      const ForwardInput& input,
-      const std::vector<ForwardOutput>& draft_outputs,
-      ForwardInput& validate_input,
-      int32_t num_speculative_tokens);
   std::optional<ForwardOutput> run_validate(
       const ForwardInput& input,
       const std::vector<ForwardOutput>& draft_outputs,
-      ForwardInput& validate_input,
-      int32_t num_speculative_tokens,
-      const std::vector<int32_t>* pruned_prefix_lengths,
-      const detail::JsonDraftValidationScratch* json_scratch);
-  std::optional<ForwardOutput> run_validate(
-      const ForwardInput& input,
-      const std::vector<ForwardOutput>& draft_outputs,
-      ForwardInput& validate_input,
-      int32_t num_speculative_tokens,
-      const std::vector<int32_t>& per_seq_val_tokens,
-      const std::vector<int32_t>* pruned_prefix_lengths,
-      const detail::JsonDraftValidationScratch* json_scratch);
+      ForwardInput& validate_input);
 
-  virtual SampleOutput validate(
-      const SamplingParameters& sampling_params,
-      const std::vector<ForwardOutput>& draft_outputs,
-      const ForwardOutput& target_output,
-      int32_t num_speculative_tokens,
-      // No default: Google Style bans default args on virtuals — they resolve
-      // statically from the declared base type, so an override changing the
-      // default would silently diverge when called through a base reference.
-      // Callers must pass nullptr explicitly for the static path.
-      const std::vector<int32_t>* pruned_prefix_lengths,
-      const torch::Tensor& target_filter_mask,
-      const torch::Tensor& target_filter_bitmask,
-      const std::vector<uint8_t>& invalid_draft);
+  SampleOutput validate(const SamplingParameters& sampling_params,
+                        const SamplingParameters& verify_sampling_params,
+                        const std::vector<ForwardOutput>& draft_outputs,
+                        ForwardOutput& target_output,
+                        const std::vector<uint8_t>& invalid_draft);
 
   // Hook for algorithm-specific draft output post-processing during decode.
-  virtual void process_draft_sample_output(SampleOutput& sample_output);
 
   virtual void check_draft_input_embedding(const torch::Tensor& /*embedding*/,
                                            const std::string& /*phase*/) const {
   }
-  virtual bool share_target_lm_head_with_draft() const { return true; }
-
-  SampleOutput validate(
-      const SamplingParameters& sampling_params,
-      const DraftProposal& draft_proposal,
-      const ForwardOutput& target_output,
-      int32_t num_speculative_tokens,
-      const std::vector<int32_t>* pruned_prefix_lengths = nullptr,
-      const torch::Tensor& target_filter_mask = torch::Tensor(),
-      const torch::Tensor& target_filter_bitmask = torch::Tensor(),
-      const std::vector<uint8_t>& invalid_draft = {});
 
   // PD separation: placeholder size for empty embedding slot. Default: 1x
   // hidden_size. Eagle3 overrides to 3 * target_hidden_size.
   int64_t get_embedding_placeholder_size() const override;
-  bool should_use_separate_draft_kv_cache_shape() const;
   KVCacheShape draft_kv_cache_shape(
       const KVCacheShape& target_kv_cache_shape) const override;
 
@@ -164,11 +112,6 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   // the batch. Other paths accept per-seq variable widths.
   // Kept separate from supports_explicit_spec_verify_replay_update() so the
   // two capabilities can diverge for future targets.
-  bool requires_uniform_validate_width() const;
-  static int32_t preserve_checkpoint_validate_width(
-      int32_t effective_speculative_tokens,
-      const std::vector<int32_t>& accepted_prefix_lengths,
-      int32_t num_speculative_tokens);
   int64_t spec_verify_block_table_width(
       const torch::Tensor& block_tables) const;
   int64_t active_spec_verify_block_table_width(
@@ -187,17 +130,9 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   bool uses_speculative_linear_state_checkpoints() const;
   void init_draft_context_policy();
   bool requires_full_target_replay() const override;
-  bool uses_embedded_eagle3_draft() const;
   // Multiaxis RoPE positions can include a prompt-dependent offset and do not
   // identify the corresponding KV cache length.
   bool positions_are_decoupled_from_kv_length() const;
-  bool requires_probability_based_validation() const;
-  bool uses_step_major_validate_layout() const;
-  void synchronize_embedded_eagle3_forward();
-  std::optional<ForwardOutput> run_worker_no_sync(
-      WorkerImpl& worker,
-      const ForwardInput& input,
-      ForwardInput& processed_input);
   void prepare_empty_validate_inputs(const ForwardInput& inputs,
                                      ForwardInput& validate_inputs);
   // Prepare target validate input from cached target context.
@@ -206,9 +141,6 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
                                bool static_graph_tasks_prepared = false,
                                bool record_ready_event = true,
                                bool defer_expanded_paging = false);
-  void prepare_validate_inputs(const ForwardInput& inputs,
-                               ForwardInput& validate_inputs,
-                               const std::vector<int32_t>& per_seq_val_tokens);
   bool prepare_static_mtp_graph_tasks_before_final_draft(
       const ForwardInput& input);
 
@@ -295,15 +227,6 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
                                   ForwardInput draft_input);
   bool pending_draft_context_matches(const ForwardInput& input) const;
 
-  void write_target_context_to_cache(const ForwardInput& input,
-                                     const SampleOutput& validate_output,
-                                     int32_t num_speculative_tokens);
-  void record_validate_metrics(
-      SampleOutput& validate_output,
-      int32_t num_speculative_tokens,
-      const std::vector<int32_t>* pruned_prefix_lengths = nullptr) const;
-  bool adaptive_enabled() const;
-
  protected:
   // Rejection sampling produces accepted state on the compute stream.  Keep
   // that state device-resident so the next overlap task can be fully enqueued
@@ -356,7 +279,6 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   // topology, and are rebuilt only when that width changes.
   torch::Tensor mtp_validate_greedy_indices_;
   torch::Tensor mtp_validate_greedy_do_sample_;
-  std::unique_ptr<detail::NpuJsonDraftTokenHandoff> json_draft_token_handoff_;
 #endif
 };
 }  // namespace xllm

@@ -183,7 +183,6 @@ void EmbeddingCache::write_target_context(
       << "accepted embedding batch mismatch";
   CHECK_EQ(accepted_tokens.size(1), accepted_embeddings.size(1))
       << "accepted token/embedding width mismatch";
-  CHECK_GE(num_speculative_tokens, 0) << "invalid speculative token count";
 
   torch::Tensor accepted_tokens_cpu = to_cpu_int64_contiguous(accepted_tokens);
   const int64_t* accepted_tokens_data =

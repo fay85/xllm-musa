@@ -32,7 +32,6 @@ class SpawnWorkerServer final {
                              int32_t global_rank,
                              int32_t world_size,
                              int32_t device_idx,
-                             int32_t num_decoding_tokens,
                              int32_t block_size,
                              const std::string& indexer_cache_dtype,
                              int32_t max_tokens_per_batch,
@@ -63,7 +62,7 @@ class SpawnWorkerServer final {
                              int32_t ep_size,
                              const InstanceRole& instance_role,
                              bool enable_mtp_draft_body_tp1,
-                             const std::string& draft_sampling_mode,
+                             bool enable_probabilistic_draft,
                              int32_t kv_split_size,
                              int32_t vae_size,
                              int32_t comm_buffer_offset = 0);

@@ -30,7 +30,6 @@ limitations under the License.
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/kv_cache/kv_cache_estimation.h"
 #include "core/runtime/prefill_layerwise_eligibility.h"
-#include "framework/model/mtp_utils.h"
 #include "llm_engine.h"
 #include "util/utils.h"
 #include "vlm_engine.h"
@@ -38,33 +37,23 @@ limitations under the License.
 namespace xllm {
 
 template <typename TargetEngine>
-SpeculativeEngineBase<TargetEngine>::SpeculativeEngineBase(
-    const runtime::Options& options)
-    : SpeculativeEngineBase(options, /*use_draft_engine=*/true) {}
-
-template <typename TargetEngine>
 SpeculativeEngineBase<TargetEngine>::~SpeculativeEngineBase() = default;
 
 template <typename TargetEngine>
 SpeculativeEngineBase<TargetEngine>::SpeculativeEngineBase(
-    const runtime::Options& options,
-    bool use_draft_engine)
-    : options_(options), use_draft_engine_(use_draft_engine) {
-  CHECK_GT(options.num_speculative_tokens(), 0)
+    const runtime::Options& options)
+    : options_(options) {
+  CHECK_GT(options.num_speculative_tokens(), /*value=*/0)
       << "speculative tokens should not be zero";
 
   runtime::Options dist_options = options;
-  dist_options.num_decoding_tokens(options.num_speculative_tokens() + 1);
   dist_options.enable_speculative_decode(true);
   dist_manager_ = std::make_shared<DistManager>(dist_options);
 
-  runtime::Options target_engine_options = options_;
-  target_engine_options.num_decoding_tokens(options.num_speculative_tokens() +
-                                            1);
-  engine_ =
-      std::make_unique<TargetEngine>(target_engine_options, dist_manager_);
+  engine_ = std::make_unique<TargetEngine>(options_, dist_manager_);
 
-  if (use_draft_engine_) {
+  if (!SpeculativeConfig::is_suffix_algorithm(
+          options_.speculative_algorithm())) {
     // draft engine
     // In vlm mtp case, we'd like to use llm backend instead of vlm backend for
     // draft engine.
@@ -79,17 +68,8 @@ SpeculativeEngineBase<TargetEngine>::SpeculativeEngineBase(
       LOG(FATAL) << "Current only support target and draft engine using the "
                     "same devices";
     }
-    share_device_ = true;
   }
 }
-
-SuffixSpeculativeEngine::SuffixSpeculativeEngine(
-    const runtime::Options& options)
-    : SpeculativeEngineBase<LLMEngine>(options, /*use_draft_engine=*/false) {}
-
-SuffixVLMSpeculativeEngine::SuffixVLMSpeculativeEngine(
-    const runtime::Options& options)
-    : SpeculativeEngineBase<VLMEngine>(options, /*use_draft_engine=*/false) {}
 
 template <typename TargetEngine>
 runtime::DecodeGraphWarmupConfig
@@ -119,7 +99,7 @@ bool SpeculativeEngineBase<TargetEngine>::init_model(
 
   model_args_ = engine_->model_args();
 
-  if (use_draft_engine_) {
+  if (draft_engine_ != nullptr) {
     if (!draft_engine_->init_model()) {
       return false;
     }
@@ -162,14 +142,7 @@ bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
         << "DeepSeek-V4.1 speculative decoding requires DSpark.";
   }
 
-  if (!use_draft_engine_) {
-    return engine_->allocate_kv_cache(target_kv_cache_cap);
-  }
-
-  // Some MLA Eagle3 targets keep the draft worker inside the target engine and
-  // allocate its full-attention KV cache with a separate shape. Do not compare
-  // that shape with the target MLA cache or allocate the external draft here.
-  if (should_skip_external_draft_kv_cache()) {
+  if (draft_engine_ == nullptr) {
     return engine_->allocate_kv_cache(target_kv_cache_cap);
   }
 
@@ -217,7 +190,7 @@ bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
            draft_engine_->allocate_kv_cache(draft_kv_cache_cap);
   }
 
-  if (share_device_ && target_kv_cache_cap.kpool_tail_slot_size() > 0 &&
+  if (target_kv_cache_cap.kpool_tail_slot_size() > 0 &&
       draft_kv_cache_cap.kpool_tail_slot_size() > 0) {
     const SharedKPoolPlan plan =
         plan_shared_kpool(std::move(target_kv_cache_cap),
@@ -231,16 +204,8 @@ bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
       std::min(target_kv_cache_cap.cache_size_in_bytes(),
                draft_kv_cache_cap.cache_size_in_bytes());
 
-  int64_t n_blocks = 0;
-  // check if llm and ssm are using same device
-  if (share_device_) {
-    // on the same device, use the smaller kv cache size
-    n_blocks = calculate_kv_cache(target_kv_cache_cap, draft_kv_cache_cap);
-  } else {
-    // on different devices, use the smaller number of blocks
-    n_blocks =
-        std::min(target_kv_cache_cap.n_blocks(), draft_kv_cache_cap.n_blocks());
-  }
+  const int64_t n_blocks =
+      calculate_kv_cache(target_kv_cache_cap, draft_kv_cache_cap);
   CHECK_GT(n_blocks, 0) << "no memory for kv cache";
 
   // allocate kv cache
@@ -250,23 +215,6 @@ bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
   draft_kv_cache_cap.cache_size_in_bytes() = kv_cache_size;
   return engine_->allocate_kv_cache(target_kv_cache_cap) &&
          draft_engine_->allocate_kv_cache(draft_kv_cache_cap);
-}
-
-template <typename TargetEngine>
-bool SpeculativeEngineBase<TargetEngine>::should_skip_external_draft_kv_cache()
-    const {
-  if (!use_draft_engine_ || draft_engine_ == nullptr) {
-    return false;
-  }
-  return uses_embedded_eagle3_draft(options_.speculative_algorithm(),
-                                    model_args_);
-}
-
-template <typename TargetEngine>
-bool SpeculativeEngineBase<TargetEngine>::
-    set_speculative_validate_time_predictor(
-        const SpeculativeProfileRegistry::ValidateTimePredictor& predictor) {
-  return engine_->set_speculative_validate_time_predictor(predictor);
 }
 
 // TODO: support dp batches later

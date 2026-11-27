@@ -17,8 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "core/runtime/draft_model_config.h"
 #include "framework/model/aux_hidden_capture.h"
-#include "framework/model_loader.h"
 #include "runtime/llm_worker_impl.h"
 
 namespace xllm {
@@ -37,7 +37,6 @@ runtime::Options eagle3_draft_options(const runtime::Options& options) {
   auto opts = options;
   opts.enable_schedule_overlap(false)
       .is_draft_engine(true)
-      .num_decoding_tokens(1)
       .num_speculative_tokens(0)
       .enable_graph(false)
       .enable_graph_mode_decode_no_padding(false)
@@ -58,80 +57,36 @@ Eagle3WorkerImpl::Eagle3WorkerImpl(const ParallelArgs& parallel_args,
                     options,
                     eagle3_main_options(options),
                     eagle3_draft_options(options),
-                    worker_type,
-                    /*enable_adaptive_speculative_decode=*/false) {
+                    worker_type) {
   // Context parallelism does not expose the auxiliary hidden states.
   CHECK_LE(parallel_args.cp_size(), 1)
       << "EAGLE-3 speculative decoding does not support context parallelism "
          "(cp_size > 1).";
 }
 
-bool Eagle3WorkerImpl::init_model(const std::string& model_weights_path,
-                                  int32_t random_seed,
-                                  MasterStatus master_status) {
-  // Call parent's init_model first
-  bool result =
-      MTPWorkerImpl::init_model(model_weights_path, random_seed, master_status);
-
-  // Load hot_token_id_ directly from state_dict (EAGLE-3 specific)
-  // This should be done after draft model is loaded
-  if (draft_impl_->get_status() == WorkerImpl::Status::LOADED) {
-    use_draft_token_mapping_ = !uses_embedded_eagle3_draft();
-    if (!use_draft_token_mapping_) {
-      hot_token_id_ = torch::Tensor();
-      return result;
-    }
-
-    // d2t stores diffs between draft id and target id
-    // hot_token_id = d2t + arange(d2t.size(0))
-    auto model_loader = ModelLoader::create(model_weights_path);
-    auto& state_dicts = model_loader->get_state_dicts();
-    for (const auto& state_dict : state_dicts) {
-      torch::Tensor d2t_tensor = state_dict->get_tensor("d2t");
-      if (d2t_tensor.defined()) {
-        auto arange_tensor = torch::arange(d2t_tensor.size(0));
-        hot_token_id_ = (d2t_tensor + arange_tensor).to(device_, torch::kLong);
-        LOG(INFO) << "Eagle3WorkerImpl: Loaded d2t tensor from state_dict, "
-                     "hot_token_id size: "
-                  << hot_token_id_.size(0);
-        break;
-      }
-    }
+void Eagle3WorkerImpl::apply_target_model_overrides(ModelArgs& args) const {
+  MTPWorkerImpl::apply_target_model_overrides(args);
+#if defined(USE_NPU)
+  if (!args.layers_to_capture().empty()) {
+    return;
   }
-
-  return result;
+  std::vector<int32_t> capture_layer_ids;
+  if (options_.draft_model_path().has_value()) {
+    // Eagle3.1 pins capture layers in the draft config. Legacy drafts may
+    // omit the field and use the target's default capture layers.
+    capture_layer_ids = read_capture_layer_ids(*options_.draft_model_path(),
+                                               /*required=*/false);
+  }
+  if (capture_layer_ids.empty()) {
+    capture_layer_ids = AuxHiddenCapture::legacy_default_capture_layer_ids(
+        static_cast<int32_t>(args.n_layers()));
+  }
+  args.layers_to_capture(std::move(capture_layer_ids));
+#endif
 }
 
 int64_t Eagle3WorkerImpl::get_embedding_placeholder_size() const {
   return AuxHiddenCapture::aux_hidden_dim(context_.get_model_args());
-}
-
-void Eagle3WorkerImpl::process_draft_sample_output(
-    SampleOutput& sample_output) {
-  // Keep probability compression behavior fully aligned with MTP.
-  MTPWorkerImpl::process_draft_sample_output(sample_output);
-
-  // EAGLE-3 specific: map draft token IDs to target token IDs.
-  if (!use_draft_token_mapping_ || !hot_token_id_.defined() ||
-      !sample_output.next_tokens.defined() ||
-      sample_output.next_tokens.numel() == 0) {
-    return;
-  }
-
-  // Scatter q so the (p-q)+ residual keeps full target mass where the draft
-  // cannot propose (q=0), letting rejection sampling align q with p.
-  if (sample_output.probs.defined()) {
-    const int64_t target_vocab_size = context_.get_model_args().vocab_size();
-    torch::Tensor full_vocab_probs =
-        torch::zeros({sample_output.probs.size(0), target_vocab_size},
-                     sample_output.probs.options());
-    full_vocab_probs.index_put_({torch::indexing::Slice(), hot_token_id_},
-                                sample_output.probs);
-    sample_output.probs = full_vocab_probs;
-  }
-
-  sample_output.next_tokens =
-      hot_token_id_.index_select(0, sample_output.next_tokens);
 }
 
 void Eagle3WorkerImpl::check_draft_input_embedding(

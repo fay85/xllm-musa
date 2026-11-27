@@ -918,8 +918,6 @@ TEST(HFModelLoaderTest, Qwen3DSparkFieldsFromTorchConfig) {
     {
       "model_type": "qwen3",
       "markov_rank": 256,
-      "enable_confidence_head": true,
-      "confidence_head_with_markov": true,
       "dflash_config": {"use_swa": true, "swa_window_size": 2048, "causal": false},
       "layer_types": ["sliding_attention"]
     }
@@ -928,8 +926,6 @@ TEST(HFModelLoaderTest, Qwen3DSparkFieldsFromTorchConfig) {
   ModelArgs args;
   ASSERT_TRUE(loader(reader, &args));
   EXPECT_EQ(args.markov_rank(), 256);
-  EXPECT_TRUE(args.enable_confidence_head());
-  EXPECT_TRUE(args.confidence_head_with_markov());
   EXPECT_TRUE(args.use_sliding_window());
   EXPECT_TRUE(args.sliding_window_non_causal());
   EXPECT_EQ(args.sliding_window(), 2048);
@@ -968,7 +964,7 @@ TEST(HFModelLoaderTest, DeepseekV4DSparkModelArgsFrom0731Config) {
   EXPECT_EQ(args.dspark_num_layers(), 3);
   // Base loader leaves this 0; applied later in
   // configure_deepseek_v4_dspark_args.
-  EXPECT_EQ(args.dspark_block_size(), 0);
+  EXPECT_EQ(args.num_speculative_tokens(), 0);
   EXPECT_EQ(args.markov_rank(), 256);
   ASSERT_EQ(args.compress_ratios().size(), 43);
 }
@@ -1135,7 +1131,7 @@ TEST(HFModelLoaderTest, Qwen3DFlash2DraftModelArgsFromOrnithConfig) {
   EXPECT_EQ(args.model_type(), "qwen3");
   EXPECT_EQ(args.n_layers(), 6);
   EXPECT_EQ(args.hidden_size(), 2048);
-  EXPECT_EQ(args.dflash2_block_size(), 16);
+  EXPECT_EQ(args.num_speculative_tokens(), 15);
   EXPECT_EQ(args.dflash2_target_layer_ids(),
             (std::vector<int32_t>{1, 6, 11, 16, 22, 27, 32, 37}));
 }

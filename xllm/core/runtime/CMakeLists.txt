@@ -60,14 +60,15 @@ cc_library(
     worker_client.h
     xservice_client.h
     draft_model_spec_worker_impl.h
+    json_object_decode_adapter.h
     speculative_worker_impl.h
     speculative_worker_utils.h
     mtp_worker_impl.h
     suffix_worker_impl.h
     eagle3_worker_impl.h
-    dflash/dflash_worker_impl.h
+    dflash_worker_impl.h
     draft_model_config.h
-    dflash/dflash2_worker_impl.h
+    dflash2_worker_impl.h
     dspark_worker_impl.h
     forward_shared_memory_manager.h
     worker_rendezvous.h
@@ -109,13 +110,14 @@ cc_library(
     params_utils.cpp
     prefill_layerwise_eligibility.cpp
     draft_model_spec_worker_impl.cpp
+    json_object_decode_adapter.cpp
     speculative_worker_impl.cpp
     speculative_worker_utils.cpp
     mtp_worker_impl.cpp
     suffix_worker_impl.cpp
     eagle3_worker_impl.cpp
-    dflash/dflash_worker_impl.cpp
-    dflash/dflash2_worker_impl.cpp
+    dflash_worker_impl.cpp
+    dflash2_worker_impl.cpp
     $<$<BOOL:${USE_MLU}>:dflash/mlu_fused_sampling.cpp>
     $<$<NOT:$<BOOL:${USE_MLU}>>:dflash/default_fused_sampling.cpp>
     dspark_worker_impl.cpp
@@ -128,6 +130,7 @@ cc_library(
     :model_context
     :request
     :speculative
+    :decode_input_builder
     :constraint
     :encoder_cache
     :multimodal

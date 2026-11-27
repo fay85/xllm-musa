@@ -23,7 +23,7 @@ limitations under the License.
 
 #include "core/framework/constraint/xgrammar_machine.h"
 #include "core/framework/sampling/json_object_grammar.h"
-#include "core/framework/sampling/logits_utils.h"
+#include "core/framework/sampling/logits_processor.h"
 #include "core/framework/sampling/rec_sampler.h"
 #include "core/framework/sampling/sampler.h"
 #include "core/framework/sampling/xgrammar_constraint.h"
@@ -38,8 +38,8 @@ SamplingParameters make_greedy_params(int64_t batch_size) {
   params.sample_idxes =
       torch::arange(batch_size, torch::TensorOptions().dtype(torch::kInt));
   params.do_sample = torch::zeros({batch_size}, torch::kBool);
-  params.all_greedy_sample = true;
-  params.all_random_sample = false;
+  params.sampling_mode = SamplingMode::GREEDY;
+
   return params;
 }
 
@@ -72,7 +72,7 @@ TEST(SamplerFilterMaskTest, TokenLookupUsesOriginalLogitsInMixedBatch) {
   params = params.to(device, torch::kFloat32);
   logits = logits.to(device);
 
-  const SampleOutput output = Sampler().forward(logits, params);
+  const SampleOutput output = sample(logits, params);
   const torch::Tensor expected = original.log_softmax(/*dim=*/-1);
   const torch::Tensor next_tokens = output.next_tokens.to(torch::kCPU);
   const torch::Tensor top_tokens = output.top_tokens.to(torch::kCPU);
@@ -110,7 +110,7 @@ TEST(SamplerFilterMaskTest, TokenLookupUsesSampleIndicesBeforeMaskMutation) {
   const torch::Tensor expected =
       logits.index_select(/*dim=*/0, params.sample_idxes).log_softmax(-1);
 
-  const SampleOutput output = Sampler().forward(logits, params);
+  const SampleOutput output = sample(logits, params);
   EXPECT_TRUE(
       torch::equal(output.next_tokens, torch::tensor({1, 0}, torch::kLong)));
   EXPECT_TRUE(torch::equal(output.top_tokens,
@@ -145,7 +145,7 @@ TEST(SamplerFilterMaskTest,
     expected.index_put_({1, 1}, original_logprobs[1][3]);
     expected.index_put_({1, 2}, original_logprobs[1][1]);
 
-    const SampleOutput output = Sampler().forward(logits, params);
+    const SampleOutput output = sample(logits, params);
 
     EXPECT_EQ(output.top_logprobs.scalar_type(), torch::kFloat32);
     EXPECT_TRUE(torch::allclose(output.top_logprobs, expected));
@@ -167,13 +167,12 @@ TEST(SamplerFilterMaskTest,
   params.filter_mask = torch::tensor({{-10.F, 0.F, 0.F}, {0.F, -10.F, 0.F}});
   torch::Tensor logits = torch::tensor({{5.F, 4.F, 1.F}, {1.F, 5.F, 2.F}});
   torch::Tensor normal_logits = logits.clone();
-  const SampleOutput normal_output = Sampler().forward(normal_logits, params);
+  const SampleOutput normal_output = sample(normal_logits, params);
   params.logprob_token_ids = torch::full({2, 2}, -1, torch::kInt);
 
-  const SampleOutput output = Sampler().forward(logits, params);
+  const SampleOutput output = sample(logits, params);
 
   EXPECT_TRUE(torch::equal(output.next_tokens, normal_output.next_tokens));
-  EXPECT_TRUE(torch::equal(output.probs, normal_output.probs));
   EXPECT_TRUE(torch::equal(output.logprobs, normal_output.logprobs));
   EXPECT_TRUE(torch::equal(output.top_tokens, normal_output.top_tokens));
   EXPECT_TRUE(torch::equal(output.top_logprobs, normal_output.top_logprobs));
@@ -201,12 +200,12 @@ TEST(SamplerFilterMaskTest,
                                         {2.F, 4.F, 3.F}});
   const torch::Tensor original_logprobs = logits.log_softmax(/*dim=*/-1);
   torch::Tensor normal_logits = logits.clone();
-  const SampleOutput normal_output = Sampler().forward(normal_logits, params);
+  const SampleOutput normal_output = sample(normal_logits, params);
   params.logprob_token_ids =
       torch::tensor({{-1, -1}, {2, 0}, {1, -1}}, torch::kInt);
   const torch::Tensor logits_alias = logits;
 
-  const SampleOutput output = Sampler().forward(logits, params);
+  const SampleOutput output = sample(logits, params);
 
   torch::Tensor expected_values = torch::full({3, 3}, neg_inf);
   expected_values[0].copy_(normal_output.top_logprobs[0]);
@@ -219,7 +218,6 @@ TEST(SamplerFilterMaskTest,
   EXPECT_TRUE(torch::allclose(output.top_logprobs, expected_values));
   EXPECT_TRUE(torch::equal(output.top_tokens, expected_tokens));
   EXPECT_TRUE(torch::equal(output.next_tokens, normal_output.next_tokens));
-  EXPECT_TRUE(torch::equal(output.probs, normal_output.probs));
   EXPECT_TRUE(torch::equal(output.logprobs, normal_output.logprobs));
   const torch::Tensor expected_logits = torch::tensor({{4.F, 3.F, 1.F},
                                                        {1.F, 2.5F, 0.5F},
@@ -238,8 +236,7 @@ TEST(SamplerFilterMaskTest, GreedySamplingHonorsMixedRows) {
   torch::Tensor logits =
       torch::tensor({{1.0F, 100.0F, 2.0F}, {1.0F, 2.0F, 100.0F}});
 
-  Sampler sampler;
-  SampleOutput output = sampler.forward(logits, params);
+  SampleOutput output = sample(logits, params);
 
   EXPECT_EQ(output.next_tokens.index({0}).item<int64_t>(), 2);
   EXPECT_EQ(output.next_tokens.index({1}).item<int64_t>(), 1);
@@ -289,7 +286,7 @@ TEST(SamplerFilterMaskTest, XGrammarMasksConstrainNpuSampling) {
           logits.index_put_({1, 'x'}, 100.0F);
         }
         logits = logits.to(device, dtype);
-        const SampleOutput output = Sampler().forward(logits, params);
+        const SampleOutput output = sample(logits, params);
         const torch::Tensor tokens = output.next_tokens.to(torch::kCPU);
         EXPECT_EQ(tokens[0].item<int32_t>(), expected);
         if (batch_size == 2) {
@@ -310,8 +307,8 @@ TEST(SamplerFilterMaskTest, RandomSamplingCannotSelectDisallowedToken) {
 
   SamplingParameters params = make_greedy_params(/*batch_size=*/1);
   params.do_sample = torch::ones({1}, torch::kBool);
-  params.all_greedy_sample = false;
-  params.all_random_sample = true;
+
+  params.sampling_mode = SamplingMode::RANDOM;
   params.filter_mask = torch::tensor({{-1.0e9F, 0.0F, -1.0e9F}});
   torch::Tensor logits = torch::tensor({{100.0F, 1.0F, 100.0F}});
 
@@ -319,8 +316,7 @@ TEST(SamplerFilterMaskTest, RandomSamplingCannotSelectDisallowedToken) {
   params = params.to(device, torch::kFloat32);
   logits = logits.to(device);
 
-  Sampler sampler;
-  SampleOutput output = sampler.forward(logits, params);
+  SampleOutput output = sample(logits, params);
 
   EXPECT_EQ(output.next_tokens.index({0}).item<int64_t>(), 1);
 }
@@ -332,8 +328,7 @@ TEST(SamplerFilterMaskTest, PackedMaskFiltersCallerLogitsInPlace) {
                     torch::TensorOptions().dtype(torch::kInt32));
   torch::Tensor logits = torch::tensor({{1.0F, 100.0F, 2.0F, 100.0F}});
 
-  Sampler sampler;
-  SampleOutput output = sampler.forward(logits, params);
+  SampleOutput output = sample(logits, params);
 
   EXPECT_EQ(output.next_tokens.index({0}).item<int64_t>(), 2);
   EXPECT_EQ(logits.index({0, 0}).item<float>(), 1.0F);
@@ -349,34 +344,30 @@ TEST(SamplerFilterMaskTest, TopKSamplingPublishesDistribution) {
   const torch::Device device = get_random_sample_device();
   SamplingParameters params = make_greedy_params(/*batch_size=*/2);
   params.do_sample = torch::ones({2}, torch::kBool);
-  params.all_greedy_sample = false;
-  params.all_random_sample = true;
+
+  params.sampling_mode = SamplingMode::RANDOM;
   params.top_k = torch::ones({2}, torch::kLong);
   params.top_p = torch::ones({2});
   params = params.to(device, torch::kFloat32);
   torch::Tensor logits =
       torch::tensor({{3.0F, 2.0F, 1.0F}, {1.0F, 3.0F, 2.0F}}).to(device);
 
-  const SampleOutput output = Sampler().forward(logits, params);
+  const SampleOutput output = sample(logits, params);
   const torch::Tensor expected =
       torch::tensor({{1.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}}).to(device);
-  EXPECT_TRUE(torch::equal(output.probs, expected));
-  EXPECT_TRUE(torch::equal(logits.softmax(-1), expected));
+  EXPECT_TRUE(torch::equal(logits.softmax(/*dim=*/-1), expected));
+  EXPECT_TRUE(torch::equal(output.next_tokens, expected.argmax(/*dim=*/-1)));
 }
 
 TEST(SamplerFilterMaskTest, GreedySamplingPublishesDenseMask) {
-  for (bool return_probs : {false, true}) {
-    SCOPED_TRACE(return_probs);
-    SamplingParameters params = make_greedy_params(/*batch_size=*/1);
-    params.return_probs = return_probs;
-    params.filter_mask = torch::tensor({{-20.0F, 0.0F, 0.0F}});
-    torch::Tensor logits = torch::tensor({{10.0F, 2.0F, 1.0F}});
+  SamplingParameters params = make_greedy_params(/*batch_size=*/1);
+  params.filter_mask = torch::tensor({{-20.0F, 0.0F, 0.0F}});
+  torch::Tensor logits = torch::tensor({{10.0F, 2.0F, 1.0F}});
 
-    const SampleOutput output = Sampler().forward(logits, params);
+  const SampleOutput output = sample(logits, params);
 
-    EXPECT_EQ(output.next_tokens.item<int64_t>(), 1);
-    EXPECT_TRUE(torch::equal(logits, torch::tensor({{-10.0F, 2.0F, 1.0F}})));
-  }
+  EXPECT_EQ(output.next_tokens.item<int64_t>(), 1);
+  EXPECT_TRUE(torch::equal(logits, torch::tensor({{-10.0F, 2.0F, 1.0F}})));
 }
 
 TEST(SamplerFilterMaskTest, SubsetSamplingPreservesOtherRows) {
@@ -392,8 +383,8 @@ TEST(SamplerFilterMaskTest, SubsetSamplingPreservesOtherRows) {
       SamplingParameters params = make_greedy_params(/*batch_size=*/3);
       params.sample_idxes = torch::tensor({2, 0}, torch::kLong);
       params.do_sample = torch::ones({2}, torch::kBool);
-      params.all_greedy_sample = false;
-      params.all_random_sample = true;
+
+      params.sampling_mode = SamplingMode::RANDOM;
       params.top_k = torch::tensor({1, 1, 2}, torch::kLong);
       params.top_p = torch::ones({3});
       if (packed_mask) {
@@ -408,7 +399,7 @@ TEST(SamplerFilterMaskTest, SubsetSamplingPreservesOtherRows) {
                                             {1.0F, 2.0F, 4.0F, 3.0F}})
                                  .to(device, dtype);
 
-      const SampleOutput output = Sampler().forward(logits, params);
+      const SampleOutput output = sample(logits, params);
 
       const torch::Tensor expected =
           torch::tensor({{4.0F, neg_inf, neg_inf, neg_inf},
@@ -416,32 +407,26 @@ TEST(SamplerFilterMaskTest, SubsetSamplingPreservesOtherRows) {
                          {neg_inf, neg_inf, 4.0F, 3.0F}})
               .to(device);
       EXPECT_EQ(logits.scalar_type(), torch::kFloat32);
-      EXPECT_EQ(output.probs.scalar_type(), dtype);
       EXPECT_TRUE(torch::equal(logits, expected));
-      EXPECT_TRUE(torch::equal(
-          output.probs,
-          expected.index_select(0, params.sample_idxes).softmax(-1).to(dtype)));
       EXPECT_EQ(output.next_tokens[1].item<int64_t>(), 0);
     }
   }
 }
 
 TEST(SamplerFilterMaskTest, FullRowsKeepOrderWithSparseSelection) {
-  for (bool return_probs : {false, true}) {
-    for (bool logprobs : {false, true}) {
-      SamplingParameters params = make_greedy_params(/*batch_size=*/3);
-      params.selected_token_idxes = torch::tensor({2, 5, 9}, torch::kLong);
-      params.return_probs = return_probs;
-      params.logprobs = logprobs;
-      params.filter_mask = torch::tensor(
-          {{0.F, -10.F, 0.F}, {0.F, 0.F, -10.F}, {-10.F, 0.F, 0.F}});
-      torch::Tensor logits =
-          torch::tensor({{1.F, 3.F, 2.F}, {3.F, 2.F, 1.F}, {2.F, 3.F, 1.F}});
-      const torch::Tensor expected = logits + params.filter_mask;
-      const SampleOutput output = Sampler().forward(logits, params);
-      EXPECT_TRUE(torch::equal(logits, expected));
-      EXPECT_TRUE(torch::equal(output.next_tokens, expected.argmax(-1)));
-    }
+  for (bool logprobs : {false, true}) {
+    SamplingParameters params = make_greedy_params(/*batch_size=*/3);
+    params.selected_token_idxes =
+        torch::tensor(/*values=*/{2, 5, 9}, /*options=*/torch::kLong);
+    params.logprobs = logprobs;
+    params.filter_mask = torch::tensor(
+        {{0.F, -10.F, 0.F}, {0.F, 0.F, -10.F}, {-10.F, 0.F, 0.F}});
+    torch::Tensor logits =
+        torch::tensor({{1.F, 3.F, 2.F}, {3.F, 2.F, 1.F}, {2.F, 3.F, 1.F}});
+    const torch::Tensor expected = logits + params.filter_mask;
+    const SampleOutput output = sample(logits, params);
+    EXPECT_TRUE(torch::equal(logits, expected));
+    EXPECT_TRUE(torch::equal(output.next_tokens, expected.argmax(/*dim=*/-1)));
   }
 }
 
@@ -450,7 +435,7 @@ TEST(SamplerFilterMaskTest, DenseProcessorReturnsSelectedRows) {
   params.sample_idxes = torch::tensor({2, 0}, torch::kLong);
   params.filter_mask = torch::tensor({{-10.F, 0.F}, {0.F, -10.F}});
   torch::Tensor logits = torch::tensor({{1.F, 2.F}, {3.F, 4.F}, {5.F, 6.F}});
-  const torch::Tensor scores = Sampler::apply_logits_processors(logits, params);
+  const torch::Tensor scores = process_logits(logits, params);
   EXPECT_TRUE(torch::equal(scores, torch::tensor({{-5.F, 6.F}, {1.F, -8.F}})));
 }
 
@@ -460,8 +445,8 @@ TEST(SamplerFilterMaskTest, OneRecPublishesFullAndSubsetRows) {
   for (bool subset : {false, true}) {
     for (torch::ScalarType dtype : {torch::kFloat32, torch::kBFloat16}) {
       SamplingParameters params = make_greedy_params(/*batch_size=*/3);
-      params.all_greedy_sample = false;
-      params.all_random_sample = true;
+
+      params.sampling_mode = SamplingMode::RANDOM;
       params.use_beam_search = true;
       params.logprobs = true;
       params.max_top_logprobs = 1;
@@ -483,13 +468,14 @@ TEST(SamplerFilterMaskTest, OneRecPublishesFullAndSubsetRows) {
               ? torch::tensor({{10.F, neg_inf}, {0.F, 10.F}, {neg_inf, 10.F}})
               : torch::tensor(
                     {{10.F, neg_inf}, {neg_inf, 10.F}, {neg_inf, 10.F}});
-      const torch::Tensor expected_probs =
-          subset ? torch::tensor({{0.F, 1.F}, {1.F, 0.F}})
-                 : torch::tensor({{1.F, 0.F}, {0.F, 1.F}, {0.F, 1.F}});
+      const auto expected_tokens =
+          subset
+              ? torch::tensor(/*values=*/{1, 0}, /*options=*/torch::kLong)
+              : torch::tensor(/*values=*/{0, 1, 1}, /*options=*/torch::kLong);
       EXPECT_TRUE(
           torch::equal(logits, expected_logits.to(logits.scalar_type())));
-      EXPECT_TRUE(torch::equal(output.probs, expected_probs.to(dtype)));
-      EXPECT_EQ(output.probs.scalar_type(), dtype);
+      EXPECT_TRUE(torch::equal(output.top_tokens.select(/*dim=*/1, /*index=*/0),
+                               expected_tokens));
     }
   }
 }
@@ -520,7 +506,7 @@ void check_request_filters(int64_t top_k,
       params.init({&first, &second}, {0, 1}, {0, 1}, {}, {}, {});
       EXPECT_EQ(params.top_k.defined(), top_k > 0 || mixed);
       EXPECT_EQ(params.top_p.defined(), top_p != 1.F);
-      ASSERT_TRUE(params.all_random_sample);
+      ASSERT_TRUE(params.sampling_mode == SamplingMode::RANDOM);
       torch::Tensor original = torch::full({2, vocab_size}, -100.F);
       const torch::Tensor scores = -torch::arange(32, torch::kFloat32) * 0.2F;
       const torch::Tensor indices =
@@ -549,21 +535,15 @@ void check_request_filters(int64_t top_k,
       }
       torch::Tensor logits = original.to(device, dtype);
       params = params.to(device, torch::kFloat32);
-      const SampleOutput output = Sampler().forward(logits, params);
+      const SampleOutput output = sample(logits, params);
       const torch::Tensor actual = logits.to(torch::kCPU);
       const torch::Tensor expected_probs = expected.softmax(/*dim=*/-1);
       EXPECT_EQ(logits.scalar_type(), torch::kFloat32);
-      EXPECT_EQ(output.probs.scalar_type(), dtype);
       EXPECT_TRUE(torch::equal(actual.isneginf(), expected.isneginf()));
       EXPECT_TRUE(torch::allclose(actual.softmax(/*dim=*/-1),
                                   expected_probs,
                                   /*rtol=*/1e-5,
                                   /*atol=*/1e-7));
-      EXPECT_TRUE(
-          torch::allclose(output.probs.to(torch::kCPU).to(torch::kFloat32),
-                          expected_probs.to(dtype).to(torch::kFloat32),
-                          /*rtol=*/1e-5,
-                          /*atol=*/1e-7));
       const torch::Tensor tokens = output.next_tokens.to(torch::kCPU);
       EXPECT_TRUE(expected_probs.gather(/*dim=*/1, tokens.view({2, 1}))
                       .gt(0)
@@ -621,7 +601,6 @@ TEST(SamplerFilterMaskTest, JointFiltersPreserveCrossingTokenAndDisabledTopK) {
   const torch::Tensor original = logits.clone();
   const torch::Tensor alias = logits;
   apply_top_k_top_p(logits,
-                    torch::Tensor(),
                     torch::tensor({2, -1, 0}, torch::kLong),
                     torch::tensor({0.8F, 0.75F, 1.F}));
   const torch::Tensor kept =
@@ -640,9 +619,8 @@ TEST(SamplerFilterMaskTest, BFloat16TopPUsesFloat32Probabilities) {
       torch::tensor({{0.F, -2.953125F, -10.F}}).to(torch::kBFloat16);
   const torch::Tensor alias = logits;
   apply_top_k_top_p(logits,
-                    torch::Tensor(),
-                    torch::tensor({2}, torch::kLong),
-                    torch::tensor({0.95F}));
+                    torch::tensor(/*values=*/{2}, /*options=*/torch::kLong),
+                    torch::tensor(/*values=*/{0.95F}));
   const torch::Tensor expected =
       torch::tensor({{0.F,
                       -std::numeric_limits<float>::infinity(),
@@ -659,14 +637,13 @@ TEST(SamplerFilterMaskTest, TopPFilteringPublishesTargetDistribution) {
 
   SamplingParameters params = make_greedy_params(/*batch_size=*/1);
   params.do_sample = torch::ones({1}, torch::kBool);
-  params.all_greedy_sample = false;
-  params.all_random_sample = true;
+
+  params.sampling_mode = SamplingMode::RANDOM;
   params.top_p = torch::tensor({0.95F});
   const torch::Device device = get_random_sample_device();
   params = params.to(device, torch::kFloat32);
   torch::Tensor logits = torch::tensor({{3.0F, 2.0F, 1.0F, 0.0F}}).to(device);
-  Sampler sampler;
-  SampleOutput output = sampler.forward(logits, params);
+  SampleOutput output = sample(logits, params);
 
   const torch::Tensor target_logits = logits;
   const torch::Tensor target_probs = target_logits.softmax(/*dim=*/-1);
@@ -676,8 +653,7 @@ TEST(SamplerFilterMaskTest, TopPFilteringPublishesTargetDistribution) {
           .to(device)
           .softmax(/*dim=*/-1);
   EXPECT_TRUE(torch::allclose(target_probs, expected_probs));
-  EXPECT_TRUE(torch::allclose(output.probs, target_probs));
-  EXPECT_EQ(target_probs.index({0, 3}).item<float>(), 0.0F);
+  EXPECT_LT(output.next_tokens.item<int64_t>(), 3);
 }
 
 }  // namespace

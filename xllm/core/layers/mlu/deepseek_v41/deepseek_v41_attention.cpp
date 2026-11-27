@@ -338,7 +338,7 @@ torch::Tensor DeepseekV41AttentionImpl::forward(
   Stage stage = Stage::PREFILL;
   if (input.use_dflash_proposal_attention) {
     stage = Stage::DRAFT;
-  } else if (input.is_spec_verify || input.meta.spec_verify_width > 1 ||
+  } else if (input.is_spec_verify || input.meta.num_speculative_tokens > 0 ||
              (input.meta.batch_forward_type.is_decode() &&
               input.meta.q_max_seq_len > 1)) {
     stage = Stage::VERIFY;

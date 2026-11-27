@@ -110,8 +110,7 @@ TEST(BatchTransportTest, PackedMediaIdentity) {
   uint64_t tag = 0;
   ASSERT_GE(packed.payload().size(), sizeof(tag));
   std::memcpy(&tag, packed.payload().data(), sizeof(tag));
-  // v12 adds the LoRA adapter ID list to DiT forward inputs.
-  EXPECT_EQ(tag, 0x584C4C4D0000000CULL);
+  EXPECT_EQ(tag, 0x584C4C4D0000000DULL);
   proto::ForwardInput envelope;
   *envelope.mutable_packed_input() = packed;
   proto::ForwardInput received;

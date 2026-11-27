@@ -1093,8 +1093,9 @@ TEST_F(StreamHttpTest, SocketResetAfterSseIsDetectedWithoutWrites) {
 TEST_F(StreamHttpTest, SuccessfulStreamStillEndsWithDone) {
   const double successes = COUNTER_VALUE(server_request_total_ok);
   const double failures = COUNTER_VALUE(server_request_total_fail);
-  const double terminal_successes =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "success");
+  const double terminal_successes = MULTI_COUNTER_api_request_terminal_total
+                                        .get_stats(/*labels=*/{"success"})
+                                        ->get_value();
   brpc::Controller controller;
   send(&controller);
 
@@ -1108,7 +1109,9 @@ TEST_F(StreamHttpTest, SuccessfulStreamStillEndsWithDone) {
   EXPECT_EQ(body.find("rate_limit_exceeded"), std::string::npos);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_ok), successes + 1);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failures);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "success"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"success"})
+                ->get_value(),
             terminal_successes + 1);
 }
 
@@ -1131,7 +1134,9 @@ TEST_F(StreamHttpTest, ErrorPreservesResponseCommitState) {
     const double successes = COUNTER_VALUE(server_request_total_ok);
     const double failures = COUNTER_VALUE(server_request_total_fail);
     const double invalid_requests =
-        MULTI_COUNTER_VALUE(api_request_terminal_total, "invalid_request");
+        MULTI_COUNTER_api_request_terminal_total
+            .get_stats(/*labels=*/{"invalid_request"})
+            ->get_value();
     brpc::Controller controller;
     controller.request_attachment().append(mode);
     send(&controller);
@@ -1144,9 +1149,10 @@ TEST_F(StreamHttpTest, ErrorPreservesResponseCommitState) {
     EXPECT_EQ(body.find("data: [DONE]") != std::string::npos, started);
     EXPECT_EQ(COUNTER_VALUE(server_request_total_ok), successes);
     EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failures + 1);
-    EXPECT_EQ(
-        MULTI_COUNTER_VALUE(api_request_terminal_total, "invalid_request"),
-        invalid_requests + 1);
+    EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                  .get_stats(/*labels=*/{"invalid_request"})
+                  ->get_value(),
+              invalid_requests + 1);
   }
 }
 
@@ -1157,8 +1163,9 @@ TEST(RequestMetricsTest, HandoffDoesNotCountAsCompletion) {
   NoopClosure done;
   const double successes = COUNTER_VALUE(server_request_total_ok);
   const double failures = COUNTER_VALUE(server_request_total_fail);
-  const double unavailable =
-      MULTI_COUNTER_VALUE(api_request_terminal_total, "unavailable");
+  const double unavailable = MULTI_COUNTER_api_request_terminal_total
+                                 .get_stats(/*labels=*/{"unavailable"})
+                                 ->get_value();
   {
     ClosureGuard guard(
         &done,
@@ -1175,7 +1182,9 @@ TEST(RequestMetricsTest, HandoffDoesNotCountAsCompletion) {
   }
   EXPECT_EQ(COUNTER_VALUE(server_request_total_ok), successes);
   EXPECT_EQ(COUNTER_VALUE(server_request_total_fail), failures + 1);
-  EXPECT_EQ(MULTI_COUNTER_VALUE(api_request_terminal_total, "unavailable"),
+  EXPECT_EQ(MULTI_COUNTER_api_request_terminal_total
+                .get_stats(/*labels=*/{"unavailable"})
+                ->get_value(),
             unavailable + 1);
 }
 

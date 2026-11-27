@@ -191,13 +191,8 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | `num_speculative_tokens` | `int32` | `0` | Number of speculative tokens generated per speculative decoding step. |
 | `speculative_algorithm` | `string` | `"MTP"` | Speculative decoding algorithm. Supported values: `MTP`, `Eagle3`, `Suffix`, `DFlash`, `DSpark`. |
 | `speculative_suffix_cache_max_depth` | `int32` | `64` | Maximum suffix-tree depth for suffix speculative decoding. |
-| `speculative_suffix_max_spec_factor` | `double` | `1.0` | Maximum suffix speculation token factor relative to match length. |
-| `speculative_suffix_max_spec_offset` | `double` | `0.0` | Maximum additive token offset for suffix speculation. |
-| `speculative_suffix_min_token_prob` | `double` | `0.1` | Minimum token probability used in suffix speculation. |
 | `speculative_suffix_max_cached_requests` | `int32` | `-1` | Maximum number of globally cached requests for suffix speculation. `-1` means unlimited; `0` disables it. |
-| `speculative_suffix_use_tree_spec` | `bool` | `false` | Whether to use tree-based suffix speculation instead of path speculation. |
-| `draft_sampling_mode` | `string` | `"greedy"` | How the draft model samples proposal tokens: `greedy`, `probabilistic`. Only `MTP`, `DSpark`, `Eagle3` accept `probabilistic`. |
-| `enable_atb_spec_kernel` | `bool` | `false` | Whether to use the ATB speculative kernel. |
+| `enable_probabilistic_draft` | `bool` | `false` | Sample draft tokens from their distribution for MTP, DSpark, DFlash2, and Eagle3. |
 
 ## ProfileConfig
 
@@ -260,7 +255,6 @@ retain serial execution.
 | `enable_split_rmsnorm_rope_prefill` | `bool` | `false` | Whether to also take the fused split rmsnorm rope path on prefill in the Qwen3 MoE decoder layer. Only read when `enable_split_rmsnorm_rope` is enabled; decode always uses the fused path once it is. |
 | `enable_aclnn_matmul` | `bool` | `false` | Whether to enable the ACLNN matmul backend for supported NPU ATB layers. |
 | `enable_aclnn_swiglu` | `bool` | `false` | Whether to enable the ACLNN SwiGLU backend for supported NPU ATB layers. |
-| `enable_dspark_native_sas` | `bool` | `false` | Enable native NPU DSpark SparseAttnSharedkv semantics. Older operators that reject non-empty `ori_sparse_indices` may terminate during tiling; keep this disabled to use q_len=1 compatibility mode. |
 | `enable_dsa_cp` | `bool` | `false` | Enable DSA query parallelism for the main Python DeepSeek-V4.1 model on NPU. Prefill, chunked prefill, mixed prefill/decode batches and decode split queries across the existing TP group, retaining replicated KV and restoring local TP heads with all-to-all. Decode DSA CP supports ACL graphs with live device KV lengths. Requires `cp_size=1`; TP=1 is a no-op. |
 
 Use `--enable_dsa_cp=true` (or `"enable_dsa_cp": true` in the config JSON).

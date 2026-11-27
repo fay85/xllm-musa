@@ -61,9 +61,12 @@ TEST(DecodeGraphCaptureSizesTest, WarmupUsesLocalRowsAndPartialDpBatches) {
             (std::vector<int32_t>{4, 12, 28, 30}));
   EXPECT_EQ(build_decode_graph_warmup_plan(config, 10, 1).batch_sizes,
             (std::vector<int32_t>{1, 3, 7, 10}));
-  config.num_decoding_tokens = 3;
+  config.num_speculative_tokens = 2;
   config.graph_capture_sizes = runtime::normalize_decode_graph_capture_sizes(
-      {1, 3, 5, 7, 10, 12}, config.num_decoding_tokens, 128, 4);
+      /*raw_sizes=*/{1, 3, 5, 7, 10, 12},
+      config.num_speculative_tokens + 1,
+      /*max_tokens=*/128,
+      /*max_sequences=*/4);
   EXPECT_EQ(build_decode_graph_warmup_plan(config, 13, 4).batch_sizes,
             (std::vector<int32_t>{4, 8, 12, 13}));
   EXPECT_EQ(build_decode_graph_warmup_plan(config, 65, 32).batch_sizes,

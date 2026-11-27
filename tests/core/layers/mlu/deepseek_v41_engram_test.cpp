@@ -1005,7 +1005,7 @@ TEST_F(DeepseekV41EngramTest,
       input_.meta.batch_forward_type = BatchForwardType::CHUNKED_PREFILL;
       input_.enable_graph = round == 5;
       input_.is_spec_verify = round == 6;
-      input_.meta.spec_verify_width = round == 7 ? 6 : 1;
+      input_.meta.num_speculative_tokens = round == 7 ? 5 : 0;
       input_.use_dflash_proposal_attention = round == 8;
       if (round == 0) {
         input_.meta.batch_forward_type = BatchForwardType::PREFILL;

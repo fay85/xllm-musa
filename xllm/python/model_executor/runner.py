@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.nn as nn
@@ -34,15 +34,21 @@ if TYPE_CHECKING:
     from xllm.python.model_executor.static_kernel import StaticKernelWorker
 
 
+def draft_tokens_per_sequence(model_type: str, num_speculative_tokens: int) -> int:
+    if model_type in ("DSparkDraftModel", "deepseek_v4_dspark", "deepseek_v41_dspark"):
+        return num_speculative_tokens
+    if model_type in ("DFlashDraftModel", "DFlash2DraftModel"):
+        return num_speculative_tokens + 1
+    return 1
+
+
 @dataclass(frozen=True)
 class RunnerConfig:
     device: torch.device
-    model_config: dict = field(default_factory=dict)
+    model_config: dict[str, Any] = field(default_factory=dict[str, Any])
     enable_graph: bool = False
     max_seqs_per_batch: int = 1
-    num_decoding_tokens: int = 1
     acl_graph_decode_batch_size_limit: int | None = None
-    is_spec_draft: bool = False
 
 
 class Runner:
@@ -130,6 +136,7 @@ class Runner:
                 and int(config.get("expert_parallel_degree", 0)) == 2
                 and int(config.get("ep_size", 1)) > 1
             )
+            is_spec_draft = bool(config.get("is_draft_engine", False))
             return DecodeAclGraphRunner(
                 self.model,
                 attention_backend,
@@ -139,10 +146,10 @@ class Runner:
                 dp_size,
                 dp_rank,
                 options.acl_graph_decode_batch_size_limit,
-                num_decoding_tokens=options.num_decoding_tokens,
+                num_speculative_tokens=int(config.get("num_speculative_tokens", 0)),
                 enable_mega_moe_token_mask=bool(config.get("enable_mega_moe", False) and not glm_eplv2),
-                is_spec_draft=options.is_spec_draft,
-                draft_query_width=int(config.get("draft_query_width", 1) or 1),
+                is_spec_draft=is_spec_draft,
+                model_type=str(config.get("model_type", "")) if is_spec_draft else "",
                 capture_sizes=config.get("graph_capture_sizes", ()),
                 **eplv2_graph_kwargs,
             )

@@ -39,6 +39,7 @@ limitations under the License.
 #include <vector>
 
 #include "common/macros.h"
+#include "core/framework/config/kernel_config.h"
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/model_loader.h"
 #include "core/framework/quant_args.h"
@@ -163,23 +164,16 @@ class CausalLM : public torch::nn::Module {
   virtual const torch::TensorOptions& options() const = 0;
 
 #if defined(USE_NPU)
+  virtual bool has_npu_lm_head() const { return false; }
   virtual layer::NpuLmHead get_npu_lm_head() {
     NOT_IMPLEMENTED();
     return nullptr;
   }
-  virtual void set_npu_lm_head(layer::NpuLmHead& head) { NOT_IMPLEMENTED(); }
   virtual layer::NpuWordEmbedding get_npu_word_embedding() {
     NOT_IMPLEMENTED();
     return nullptr;
   }
   virtual bool has_restored_npu_word_embedding() { return false; }
-  virtual void set_npu_word_embedding(layer::NpuWordEmbedding& embedding) {
-    NOT_IMPLEMENTED();
-  }
-  virtual void set_restored_npu_word_embedding(
-      layer::NpuWordEmbedding& embedding) {
-    set_npu_word_embedding(embedding);
-  }
 
   virtual bool init_or_refresh_rolling_runtime(Stream* load_stream,
                                                Stream* compute_stream,
@@ -195,17 +189,15 @@ class CausalLM : public torch::nn::Module {
     NOT_IMPLEMENTED();
     return nullptr;
   }
-  virtual void set_lm_head(layer::LmHead& head) { NOT_IMPLEMENTED(); }
   virtual layer::WordEmbedding get_word_embedding() {
     NOT_IMPLEMENTED();
     return nullptr;
   }
 
-  virtual void set_word_embedding(layer::WordEmbedding& embedding) {
-    NOT_IMPLEMENTED();
-  }
+  const torch::Tensor& d2t() const { return d2t_; }
 
-  virtual bool share_weights_from(CausalLM& /*source*/) { return false; }
+  virtual void share_lm_head(CausalLM&) {}
+  virtual void share_embed_tokens(CausalLM&) {}
 
   virtual std::optional<bool> loaded_vocab_weights() { return std::nullopt; }
 
@@ -240,19 +232,6 @@ class CausalLM : public torch::nn::Module {
     return {};
   }
 
-  // DSpark ConfidenceHead: acceptance-prob estimate for adaptive-speculative
-  // pruning over the whole draft block. hidden_all [num_reqs, num_spec, H],
-  // prev_matrix [num_reqs, num_spec]; returns [num_reqs, num_spec] fp32 in
-  // [0, 1]. When the confidence head is absent (not built or feature disabled),
-  // returns an undefined tensor; the worker falls back to the sampler-gathered
-  // draft prob.
-  virtual torch::Tensor dspark_confidence_probs(
-      const torch::Tensor& hidden_all,
-      const torch::Tensor& prev_matrix) {
-    return {};
-  }
-  virtual bool has_dspark_confidence_head() const { return false; }
-
   virtual void lazy_load_model(std::unique_ptr<ModelLoader> loader) {
     NOT_IMPLEMENTED();
   }
@@ -262,6 +241,21 @@ class CausalLM : public torch::nn::Module {
   virtual void reload_model_weights() { NOT_IMPLEMENTED(); }
 
   virtual void reload_model_weights_from_device() { NOT_IMPLEMENTED(); }
+
+ protected:
+  void load_d2t(const std::vector<std::unique_ptr<StateDict>>& state_dicts) {
+    for (const auto& state_dict : state_dicts) {
+      const auto offsets = state_dict->get_tensor(/*tensor_name=*/"d2t");
+      if (offsets.defined()) {
+        d2t_ = offsets.clone();
+        return;
+      }
+    }
+    d2t_ = torch::Tensor();
+  }
+
+ private:
+  torch::Tensor d2t_;
 };
 
 template <typename Model>
@@ -368,6 +362,7 @@ class CausalLMImpl : public CausalLM {
   }
 
   void load_model(std::unique_ptr<ModelLoader> loader) override {
+    load_d2t(loader->get_state_dicts());
     model_->load_model(std::move(loader));
   }
 
@@ -411,24 +406,9 @@ class CausalLMImpl : public CausalLM {
     return CausalLM::dspark_markov_bias(previous_token_ids);
   }
 
-  torch::Tensor dspark_confidence_probs(
-      const torch::Tensor& hidden_all,
-      const torch::Tensor& prev_matrix) override {
-    if constexpr (detail::has_dspark_confidence_probs<Model>::value) {
-      return model_->dspark_confidence_probs(hidden_all, prev_matrix);
-    }
-    return CausalLM::dspark_confidence_probs(hidden_all, prev_matrix);
-  }
-
-  bool has_dspark_confidence_head() const override {
-    if constexpr (detail::has_has_dspark_confidence_head<Model>::value) {
-      return model_->has_dspark_confidence_head();
-    }
-    return false;
-  }
-
   void lazy_load_model(std::unique_ptr<ModelLoader> loader) override {
     if constexpr (detail::has_lazy_load_model<Model>::value) {
+      load_d2t(loader->get_state_dicts());
       model_->lazy_load_model(std::move(loader));
     } else {
       CausalLM::lazy_load_model(std::move(loader));
@@ -483,19 +463,15 @@ class CausalLMImpl : public CausalLM {
   }
 
 #if defined(USE_NPU)
+  bool has_npu_lm_head() const override {
+    return detail::has_get_npu_lm_head<Model>::value;
+  }
+
   layer::NpuLmHead get_npu_lm_head() override {
     if constexpr (detail::has_get_npu_lm_head<Model>::value) {
       return model_->get_npu_lm_head();
     } else {
       return CausalLM::get_npu_lm_head();
-    }
-  }
-
-  void set_npu_lm_head(layer::NpuLmHead& head) override {
-    if constexpr (detail::has_set_npu_lm_head<Model>::value) {
-      model_->set_npu_lm_head(head);
-    } else {
-      CausalLM::set_npu_lm_head(head);
     }
   }
 
@@ -512,23 +488,6 @@ class CausalLMImpl : public CausalLM {
       return model_->has_restored_npu_word_embedding();
     } else {
       return CausalLM::has_restored_npu_word_embedding();
-    }
-  }
-
-  void set_npu_word_embedding(layer::NpuWordEmbedding& embedding) override {
-    if constexpr (detail::has_set_npu_word_embedding<Model>::value) {
-      model_->set_npu_word_embedding(embedding);
-    } else {
-      CausalLM::set_npu_word_embedding(embedding);
-    }
-  }
-
-  void set_restored_npu_word_embedding(
-      layer::NpuWordEmbedding& embedding) override {
-    if constexpr (detail::has_set_restored_npu_word_embedding<Model>::value) {
-      model_->set_restored_npu_word_embedding(embedding);
-    } else {
-      CausalLM::set_restored_npu_word_embedding(embedding);
     }
   }
 
@@ -560,14 +519,6 @@ class CausalLMImpl : public CausalLM {
     }
   }
 
-  void set_lm_head(layer::LmHead& head) override {
-    if constexpr (detail::has_set_lm_head<Model>::value) {
-      model_->set_lm_head(head);
-    } else {
-      CausalLM::set_lm_head(head);
-    }
-  }
-
   layer::WordEmbedding get_word_embedding() override {
     if constexpr (detail::has_get_word_embedding<Model>::value) {
       return model_->get_word_embedding();
@@ -576,11 +527,44 @@ class CausalLMImpl : public CausalLM {
     }
   }
 
-  void set_word_embedding(layer::WordEmbedding& embedding) override {
+  void share_lm_head(CausalLM& target_model) override {
+#if defined(USE_NPU)
+    if constexpr (detail::has_set_npu_lm_head<Model>::value) {
+      if (target_model.has_npu_lm_head() &&
+          (!detail::has_get_npu_lm_head<Model>::value ||
+           KernelConfig::get_instance().npu_kernel_backend() != "TORCH")) {
+        auto head = target_model.get_npu_lm_head();
+        model_->set_npu_lm_head(head);
+        return;
+      }
+    }
+#endif
+    if constexpr (detail::has_set_lm_head<Model>::value) {
+      auto head = target_model.get_lm_head();
+      model_->set_lm_head(head);
+    }
+  }
+
+  void share_embed_tokens(CausalLM& target_model) override {
+#if defined(USE_NPU)
+    if constexpr (detail::has_set_npu_word_embedding<Model>::value) {
+      if (KernelConfig::get_instance().npu_kernel_backend() != "TORCH") {
+        auto embedding = target_model.get_npu_word_embedding();
+        if constexpr (detail::has_set_restored_npu_word_embedding<
+                          Model>::value) {
+          if (target_model.has_restored_npu_word_embedding()) {
+            model_->set_restored_npu_word_embedding(embedding);
+            return;
+          }
+        }
+        model_->set_npu_word_embedding(embedding);
+        return;
+      }
+    }
+#endif
     if constexpr (detail::has_set_word_embedding<Model>::value) {
+      auto embedding = target_model.get_word_embedding();
       model_->set_word_embedding(embedding);
-    } else {
-      CausalLM::set_word_embedding(embedding);
     }
   }
 

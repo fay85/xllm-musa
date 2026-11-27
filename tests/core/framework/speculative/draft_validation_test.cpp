@@ -63,7 +63,7 @@ TEST(MtpJsonObjectStateTest, BuildsSequenceMajorRowsForMixedAcceptedDrafts) {
     EXPECT_FALSE(validation_states[row].initialized());
   }
   EXPECT_EQ(invalid_draft, std::vector<uint8_t>({0, 0, 0, 0, 0, 0}));
-  EXPECT_EQ(initial_states[0].snapshot().token_ids, std::vector<int32_t>({}));
+  EXPECT_TRUE(initial_states[0].snapshot().token_ids.empty());
 
   // Keep one sequence invalid across all draft columns while the uninitialized
   // second sequence remains valid; invalid flags are flattened sequence-major.
@@ -115,7 +115,7 @@ TEST(MtpJsonObjectStateTest, PrelaunchedStaleFirstTokenIsRejectedNotCommitted) {
   EXPECT_FALSE(current_states[1].initialized());
   EXPECT_EQ(invalid_suffix[0], 1);
   EXPECT_EQ(invalid_suffix[1], 0);
-  EXPECT_EQ(initial_states[0].snapshot().token_ids, std::vector<int32_t>({}));
+  EXPECT_TRUE(initial_states[0].snapshot().token_ids.empty());
 }
 
 TEST(MtpJsonObjectStateTest, FrozenSuffixRowsKeepTheCommittedVerifyMask) {
@@ -348,14 +348,6 @@ TEST(MtpJsonObjectStateTest, AcceptedOutputOnlyUsesMinusOneAsPadding) {
       detail::verify_json_accepted_rows(
           initial_states, accepted_tokens, /*num_rows=*/1, /*row_width=*/2),
       "padding must use -1");
-}
-
-TEST(MtpJsonObjectStateTest, CopiesContiguousHostDraftTokensInBulk) {
-  const int64_t token_ids[] = {0, 4, -1, 5};
-
-  EXPECT_EQ(detail::copy_json_draft_token_ids(token_ids, 4),
-            std::vector<int32_t>({0, 4, -1, 5}));
-  EXPECT_TRUE(detail::copy_json_draft_token_ids(nullptr, 0).empty());
 }
 
 // DFlash drafts the whole block in one forward and replays it position by

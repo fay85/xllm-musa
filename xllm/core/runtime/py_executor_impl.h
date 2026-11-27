@@ -47,8 +47,6 @@ class __attribute__((visibility("hidden"))) PyExecutorImpl final
   bool supports_device_only_decode_inputs() const override;
   void set_device_only_decode_inputs(bool enabled) override;
 
-  ForwardInput prepare_inputs(Batch& batch) override;
-
   ModelOutput run(const torch::Tensor& tokens,
                   const torch::Tensor& positions,
                   std::vector<KVCache>& kv_caches,

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/framework/speculative/spec_input_builder.h"
+#include "core/framework/batch/decode_input_builder.h"
 
 #include <gtest/gtest.h>
 
@@ -21,13 +21,13 @@ limitations under the License.
 #include <numeric>
 #include <vector>
 
-#include "framework/model/model_input_params.h"
+#include "core/framework/model/model_input_params.h"
+#include "core/framework/speculative/mtp_async_input_builder.h"
+#include "core/runtime/forward_params.h"
 #include "models/llm/mlu/mtp_topk_state.h"
 #include "models/llm/npu/mtp_topk_state.h"
-#include "runtime/forward_params.h"
 
 namespace xllm {
-namespace specBuilder {
 namespace {
 
 Slice<int32_t> to_slice(std::vector<int32_t>& vec) {
@@ -91,7 +91,7 @@ ForwardInput make_multiblock_forward_input(
   return input;
 }
 
-TEST(SpecInputBuilderTest,
+TEST(MtpFirstDraftInputTest,
      AdvancesFirstDraftHostTemplateWithoutChangingSource) {
   constexpr int32_t kNumDraftTokens = 3;
   constexpr int32_t kPageSize = 128;
@@ -111,7 +111,7 @@ TEST(SpecInputBuilderTest,
 
   ForwardInput metadata_template = input;
   const std::vector<EmbeddingCache::DecodeState> template_states =
-      advance_first_draft_template(
+      mtp_async::advance_first_draft_template(
           metadata_template, placeholder, kNumDraftTokens);
 
   ASSERT_EQ(template_states.size(), 2u);
@@ -163,7 +163,7 @@ TEST(SpecInputBuilderTest,
   EXPECT_EQ(template_states[1].token_id, 19);
 }
 
-TEST(SpecInputBuilderTest, FirstDraftMultiAxisAnchorsFeedTailDecodeRows) {
+TEST(MtpFirstDraftInputTest, FirstDraftMultiAxisAnchorsFeedTailDecodeRows) {
   constexpr int32_t kNumDraftTokens = 3;
   constexpr int32_t kPageSize = 128;
   struct TestCase {
@@ -193,25 +193,25 @@ TEST(SpecInputBuilderTest, FirstDraftMultiAxisAnchorsFeedTailDecodeRows) {
         torch::tensor(pages, torch::kInt32).reshape({2, 32});
 
     ForwardInput metadata_template = input;
-    const auto states = advance_first_draft_template(
+    const auto states = mtp_async::advance_first_draft_template(
         metadata_template, torch::Tensor(), kNumDraftTokens);
     ASSERT_EQ(states.size(), 2u);
     EXPECT_EQ(tensor_to_vec_int32(metadata_template.positions_host),
               (std::vector<int32_t>{2048, 2204, 2044, 2200, 2044, 2200}));
-    const auto ctx = make_decode_row_context(metadata_template);
-    ASSERT_EQ(ctx.position_axes, 3);
+    const auto ctx = make_decode_batch_context(metadata_template);
+    ASSERT_EQ(ctx.num_rope_axes, 3);
     DecodeBuildBuffers rows;
     // Match tail-extend's repair/current rows. It rebuilds 1D positions from
     // the advanced anchors, rather than consuming the remaining rotary axes.
     for (int32_t seq = 0; seq < 2; ++seq) {
       for (const int32_t offset : {-1, 0}) {
-        RowSpec row;
-        row.seq_id = seq;
+        DecodeTokenInput row;
+        row.req_id = seq;
         row.token_id = states[seq].token_id;
         row.position_offset = offset;
         row.append_kv_len = true;
         row.append_block_table = true;
-        append_decode_row(ctx, row, kPageSize, rows);
+        append_decode_token(ctx, row, kPageSize, rows);
       }
     }
     EXPECT_EQ(rows.out_positions,
@@ -230,25 +230,21 @@ TEST(SpecInputBuilderTest, FirstDraftMultiAxisAnchorsFeedTailDecodeRows) {
   }
 }
 
-TEST(SpecInputBuilderTest, RejectsUndefinedFirstDraftHostInputs) {
+TEST(MtpFirstDraftInputTest, RejectsUndefinedFirstDraftHostInputs) {
   ForwardInput input;
-  EXPECT_DEATH(static_cast<void>(
-                   advance_first_draft_template(input, torch::Tensor(), 0)),
-               "num_speculative_tokens > 0");
-  EXPECT_DEATH(static_cast<void>(
-                   advance_first_draft_template(input, torch::Tensor(), 3)),
+  EXPECT_DEATH(static_cast<void>(mtp_async::advance_first_draft_template(
+                   input, torch::Tensor(), /*num_speculative_tokens=*/3)),
                "first-draft host tensor must be defined");
 }
 
-TEST(SpecDecodeInputBuilderTest,
-     LookaheadAcceptsBlockZeroAndRejectsMissingPages) {
+TEST(DecodeInputBuilderTest, LookaheadAcceptsBlockZeroAndRejectsMissingPages) {
   ForwardInput input =
       make_forward_input(torch::tensor({11, 22}, torch::kInt),
                          torch::tensor({120, 120}, torch::kInt),
                          torch::tensor({{5, 0}, {6, 7}}, torch::kInt),
                          {121, 121});
   auto has_capacity = [&input]() {
-    return has_decode_lookahead_capacity(make_decode_row_context(input),
+    return has_decode_lookahead_capacity(make_decode_batch_context(input),
                                          /*num_tokens=*/16,
                                          /*block_size=*/128,
                                          /*max_position_embeddings=*/4096);
@@ -265,7 +261,7 @@ TEST(SpecDecodeInputBuilderTest,
   EXPECT_FALSE(has_capacity());
 }
 
-TEST(SpecDecodeInputBuilderTest, DraftInputsSingleRowPerSeq) {
+TEST(DecodeInputBuilderTest, DraftInputsSingleRowPerSeq) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
@@ -275,54 +271,41 @@ TEST(SpecDecodeInputBuilderTest, DraftInputsSingleRowPerSeq) {
       torch::tensor({{0, 1, 2}, {3, 4, 5}}, torch::kInt);
   ForwardInput input =
       make_forward_input(torch::Tensor(), positions, block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   DecodeBuildBuffers buf;
   for (int32_t seq_id = 0; seq_id < params.meta.num_sequences; ++seq_id) {
-    RowSpec row;
-    row.seq_id = seq_id;
+    DecodeTokenInput row;
+    row.req_id = seq_id;
     row.position_offset = 1;
     row.append_token = false;
-    append_decode_row(ctx, row, /*block_size=*/4, buf);
+    append_decode_token(ctx, row, /*block_size=*/4, buf);
   }
 
   EXPECT_TRUE(buf.out_token_ids.empty());
   expect_position_ids(buf, {5, 9});
   EXPECT_EQ(buf.out_new_cache_slots, std::vector<int32_t>({5, 21}));
-  EXPECT_EQ(buf.out_kv_seq_lens, to_layout_seq_lens({6, 10}));
+  EXPECT_EQ(buf.out_kv_seq_lens, to_layout_seq_lens(/*lens=*/{6, 10}));
 }
 
-TEST(SpecDecodeInputBuilderTest, ValidateInputsNonAtbExpansion) {
+TEST(DecodeInputBuilderTest, ValidateInputsNonAtbExpansion) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
   const int32_t num_speculative_tokens = 2;
   const int32_t num_val_tokens = num_speculative_tokens + 1;
-  std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
-
-  torch::Tensor token_ids = torch::tensor({10, 20}, torch::kInt);
-  torch::Tensor positions = torch::tensor({4, 8}, torch::kInt);
-  torch::Tensor block_tables =
-      torch::tensor({{0, 1, 2}, {3, 4, 5}}, torch::kInt);
-  ForwardInput input =
+  const auto kv_seq_lens = to_layout_seq_lens(/*lengths=*/{6, 10});
+  const auto token_ids =
+      torch::tensor(/*tensor_data=*/{10, 20}, /*options=*/torch::kInt);
+  const auto positions =
+      torch::tensor(/*tensor_data=*/{5, 9}, /*options=*/torch::kInt);
+  const auto block_tables = torch::tensor(
+      /*tensor_data=*/{{0, 1, 2}, {3, 4, 5}}, /*options=*/torch::kInt);
+  const auto input =
       make_forward_input(token_ids, positions, block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
-
-  DecodeBuildBuffers buf;
-  for (int32_t seq_id = 0; seq_id < params.meta.num_sequences; ++seq_id) {
-    for (int32_t val_idx = 0; val_idx < num_val_tokens; ++val_idx) {
-      RowSpec row;
-      row.seq_id = seq_id;
-      if (val_idx == 0) {
-        row.use_input_token = true;
-      } else {
-        row.token_id = -1 * val_idx;
-      }
-      row.position_offset = 1 + val_idx;
-      row.append_q_len_one = true;
-      row.append_block_table = true;
-      append_decode_row(ctx, row, /*block_size=*/4, buf);
-    }
-  }
+  DecodeExpansionOptions options;
+  options.num_speculative_tokens = num_val_tokens - 1;
+  options.block_size = 4;
+  auto buf = expand_decode_inputs(make_decode_batch_context(input), options);
 
   EXPECT_EQ(buf.out_token_ids, std::vector<int32_t>({10, -1, -2, 20, -1, -2}));
   expect_position_ids(buf, {5, 6, 7, 9, 10, 11});
@@ -333,14 +316,14 @@ TEST(SpecDecodeInputBuilderTest, ValidateInputsNonAtbExpansion) {
   ASSERT_EQ(buf.out_block_table_rows, 6);
   ASSERT_EQ(buf.out_block_tables.size(), 18);
 
-  update_input_params(params,
-                      buf,
-                      /*q_max_seq_len=*/1,
-                      std::move(buf.out_q_seq_lens),
-                      std::move(buf.out_q_cu_seq_lens),
-                      buf.meta.kv_max_seq_len,
-                      std::move(buf.out_kv_seq_lens),
-                      /*update_block_tables=*/true);
+  update_decode_attention_metadata(params,
+                                   buf,
+                                   /*q_max_seq_len=*/1,
+                                   std::move(buf.out_q_seq_lens),
+                                   std::move(buf.out_q_cu_seq_lens),
+                                   buf.meta.kv_max_seq_len,
+                                   std::move(buf.out_kv_seq_lens),
+                                   /*update_block_tables=*/true);
   EXPECT_EQ(tensor_to_vec_int32(params.attention.device.paged_kv_indptr),
             std::vector<int32_t>({0, 2, 4, 6, 9, 12, 15}));
   EXPECT_EQ(
@@ -350,8 +333,7 @@ TEST(SpecDecodeInputBuilderTest, ValidateInputsNonAtbExpansion) {
             std::vector<int32_t>({2, 3, 4, 2, 3, 4}));
 }
 
-TEST(SpecDecodeInputBuilderTest,
-     UpdatesVariableValidateExecutionBatchMetadata) {
+TEST(DecodeInputBuilderTest, UpdatesVariableValidateExecutionBatchMetadata) {
   ModelInputParams params;
   params.execution_batch.num_reqs = 3;
   params.execution_batch.num_tokens = 3;
@@ -374,7 +356,7 @@ TEST(SpecDecodeInputBuilderTest,
             std::vector<uint8_t>({0, 0, 0}));
 }
 
-TEST(SpecDecodeInputBuilderTest,
+TEST(DecodeInputBuilderTest,
      DraftExecutionRowsUseDecodeSemanticsIndependentOfAttentionMode) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
@@ -406,7 +388,7 @@ TEST(SpecDecodeInputBuilderTest,
       "int32 range");
 }
 
-TEST(SpecDecodeInputBuilderTest, AppendDecodeRowUsesInputBlockTableLayout) {
+TEST(DecodeInputBuilderTest, AppendDecodeRowUsesInputBlockTableLayout) {
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
   torch::Tensor token_ids = torch::tensor({10, 20}, torch::kInt);
   torch::Tensor positions = torch::tensor({4, 8}, torch::kInt);
@@ -414,13 +396,13 @@ TEST(SpecDecodeInputBuilderTest, AppendDecodeRowUsesInputBlockTableLayout) {
       torch::tensor({{0, 1, 2, 0}, {3, 4, 5, 0}}, torch::kInt);
   ForwardInput input =
       make_forward_input(token_ids, positions, block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   DecodeBuildBuffers buf;
-  append_decode_row(ctx,
-                    {.seq_id = 1, .token_id = 99, .position_offset = 2},
-                    /*block_size=*/4,
-                    buf);
+  append_decode_token(ctx,
+                      {.req_id = 1, .token_id = 99, .position_offset = 2},
+                      /*block_size=*/4,
+                      buf);
 
   expect_position_ids(buf, {10});
   EXPECT_EQ(buf.out_token_ids, std::vector<int32_t>({99}));
@@ -428,7 +410,7 @@ TEST(SpecDecodeInputBuilderTest, AppendDecodeRowUsesInputBlockTableLayout) {
   EXPECT_TRUE(buf.out_block_tables.empty());
 }
 
-TEST(SpecDecodeInputBuilderTest, ValidateRowsStartFromCorrectedCurrentView) {
+TEST(DecodeInputBuilderTest, ValidateRowsStartFromCorrectedCurrentView) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
   std::vector<int32_t> token_ids = {31, 41};
@@ -440,21 +422,21 @@ TEST(SpecDecodeInputBuilderTest, ValidateRowsStartFromCorrectedCurrentView) {
       torch::tensor(positions, torch::kInt),
       torch::tensor({{0, 1, 2, 0}, {3, 4, 5, 0}}, torch::kInt),
       kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   DecodeBuildBuffers buf;
-  append_decode_row(
+  append_decode_token(
       ctx,
-      {.seq_id = 0, .token_id = token_ids[0], .position_offset = 0},
+      {.req_id = 0, .token_id = token_ids[0], .position_offset = 0},
       /*block_size=*/4,
       buf);
-  append_decode_row(ctx,
-                    {.seq_id = 0, .token_id = -1, .position_offset = 1},
-                    /*block_size=*/4,
-                    buf);
-  append_decode_row(
+  append_decode_token(ctx,
+                      {.req_id = 0, .token_id = -1, .position_offset = 1},
+                      /*block_size=*/4,
+                      buf);
+  append_decode_token(
       ctx,
-      {.seq_id = 1, .token_id = token_ids[1], .position_offset = 0},
+      {.req_id = 1, .token_id = token_ids[1], .position_offset = 0},
       /*block_size=*/4,
       buf);
 
@@ -464,7 +446,7 @@ TEST(SpecDecodeInputBuilderTest, ValidateRowsStartFromCorrectedCurrentView) {
   EXPECT_EQ(buf.out_kv_seq_lens, to_layout_seq_lens({7, 8, 10}));
 }
 
-TEST(SpecDecodeInputBuilderTest, ValidateInputsAtbChunkedPrefillShape) {
+TEST(DecodeInputBuilderTest, ValidateInputsAtbChunkedPrefillShape) {
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
   std::vector<int32_t> atb_kv_seq_lens;
   std::vector<int32_t> atb_q_seq_lens;
@@ -485,7 +467,7 @@ TEST(SpecDecodeInputBuilderTest, ValidateInputsAtbChunkedPrefillShape) {
   EXPECT_EQ(atb_kv_max_seq_len, 12);
 }
 
-TEST(SpecDecodeInputBuilderTest, FirstDecodeInputsFixAndNonFixMix) {
+TEST(DecodeInputBuilderTest, FirstDecodeInputsFixAndNonFixMix) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({6, 9});
@@ -496,19 +478,19 @@ TEST(SpecDecodeInputBuilderTest, FirstDecodeInputsFixAndNonFixMix) {
       torch::tensor({{0, 1, 2}, {3, 4, 5}}, torch::kInt);
   ForwardInput input =
       make_forward_input(token_ids, positions, block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   DecodeBuildBuffers buf;
   std::vector<int32_t> select_row_idx(2, 0);
   auto emit_row =
       [&](int32_t seq_id, int32_t token_id, int32_t position_offset) {
-        RowSpec row;
-        row.seq_id = seq_id;
+        DecodeTokenInput row;
+        row.req_id = seq_id;
         row.token_id = token_id;
         row.position_offset = position_offset;
         row.append_q_len_one = true;
         row.append_block_table = true;
-        append_decode_row(ctx, row, /*block_size=*/4, buf);
+        append_decode_token(ctx, row, /*block_size=*/4, buf);
       };
 
   emit_row(/*seq_id=*/0, /*token_id=*/90, /*position_offset=*/-1);
@@ -528,7 +510,7 @@ TEST(SpecDecodeInputBuilderTest, FirstDecodeInputsFixAndNonFixMix) {
   ASSERT_EQ(buf.out_block_tables.size(), 9);
 }
 
-TEST(SpecDecodeInputBuilderTest, AppendDecodeRowWithInputTokenSource) {
+TEST(DecodeInputBuilderTest, AppendDecodeRowWithInputTokenSource) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
@@ -539,25 +521,25 @@ TEST(SpecDecodeInputBuilderTest, AppendDecodeRowWithInputTokenSource) {
       torch::tensor({{0, 1, 2}, {3, 4, 5}}, torch::kInt);
   ForwardInput input =
       make_forward_input(token_ids, positions, block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   DecodeBuildBuffers buf;
-  append_decode_row(ctx,
-                    {.seq_id = 0,
-                     .use_input_token = true,
-                     .position_offset = 1,
-                     .append_q_len_one = true,
-                     .append_block_table = true},
-                    /*block_size=*/4,
-                    buf);
-  append_decode_row(ctx,
-                    {.seq_id = 1,
-                     .token_id = -2,
-                     .position_offset = 2,
-                     .append_q_len_one = true,
-                     .append_block_table = true},
-                    /*block_size=*/4,
-                    buf);
+  append_decode_token(ctx,
+                      {.req_id = 0,
+                       .token_id = ctx.token_ids[0],
+                       .position_offset = 1,
+                       .append_q_len_one = true,
+                       .append_block_table = true},
+                      /*block_size=*/4,
+                      buf);
+  append_decode_token(ctx,
+                      {.req_id = 1,
+                       .token_id = -2,
+                       .position_offset = 2,
+                       .append_q_len_one = true,
+                       .append_block_table = true},
+                      /*block_size=*/4,
+                      buf);
 
   EXPECT_EQ(buf.out_token_ids, std::vector<int32_t>({10, -2}));
   expect_position_ids(buf, {5, 10});
@@ -568,37 +550,37 @@ TEST(SpecDecodeInputBuilderTest, AppendDecodeRowWithInputTokenSource) {
   ASSERT_EQ(buf.out_block_tables.size(), 6);
 }
 
-TEST(SpecDecodeInputBuilderTest, ResolveTokenWithPositionOffset) {
+TEST(DecodeInputBuilderTest, ResolveTokenWithPositionOffset) {
   std::vector<int64_t> last_step_tokens = {11, -1, 13, -1, -1, -1};
   Slice<int64_t> last_step_slice = {
       last_step_tokens.data(), static_cast<size_t>(last_step_tokens.size())};
 
-  TokenWithOffset direct =
+  const auto [direct_token, direct_offset] =
       resolve_token_with_position_offset(/*input_token_id=*/20,
-                                         /*seq_id=*/0,
+
                                          last_step_slice,
                                          /*last_step_decode_num=*/3);
-  EXPECT_EQ(direct.token_id, 20);
-  EXPECT_EQ(direct.position_offset, 0);
+  EXPECT_EQ(direct_token, 20);
+  EXPECT_EQ(direct_offset, 0);
 
-  TokenWithOffset resolved =
+  const auto [resolved_token, resolved_offset] =
       resolve_token_with_position_offset(/*input_token_id=*/-1,
-                                         /*seq_id=*/0,
-                                         last_step_slice,
-                                         /*last_step_decode_num=*/3);
-  EXPECT_EQ(resolved.token_id, 13);
-  EXPECT_EQ(resolved.position_offset, 1);
 
-  TokenWithOffset no_accept =
-      resolve_token_with_position_offset(/*input_token_id=*/-2,
-                                         /*seq_id=*/1,
                                          last_step_slice,
                                          /*last_step_decode_num=*/3);
-  EXPECT_EQ(no_accept.token_id, 0);
-  EXPECT_EQ(no_accept.position_offset, -1);
+  EXPECT_EQ(resolved_token, 13);
+  EXPECT_EQ(resolved_offset, 1);
+
+  const auto [no_accept_token, no_accept_offset] =
+      resolve_token_with_position_offset(/*input_token_id=*/-2,
+
+                                         last_step_slice,
+                                         /*last_step_decode_num=*/3);
+  EXPECT_EQ(no_accept_token, 0);
+  EXPECT_EQ(no_accept_offset, -1);
 }
 
-TEST(SpecDecodeInputBuilderTest, AppendDecodeRowFromLastStep) {
+TEST(DecodeInputBuilderTest, AppendResolvedDecodeTokens) {
   ModelInputParams params;
   params.meta.num_sequences = 2;
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({6, 9});
@@ -609,27 +591,22 @@ TEST(SpecDecodeInputBuilderTest, AppendDecodeRowFromLastStep) {
       torch::tensor({{0, 1, 2}, {3, 4, 5}}, torch::kInt);
   ForwardInput input =
       make_forward_input(token_ids, positions, block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   std::vector<int64_t> last_step_tokens = {201, 202};
   Slice<int64_t> last_step_slice = {
       last_step_tokens.data(), static_cast<size_t>(last_step_tokens.size())};
 
   DecodeBuildBuffers buf;
-  append_decode_row_from_last_step(ctx,
-                                   /*seq_id=*/0,
-                                   /*input_token_id=*/100,
-                                   last_step_slice,
-                                   /*last_step_decode_num=*/2,
-                                   /*block_size=*/4,
-                                   buf);
-  append_decode_row_from_last_step(ctx,
-                                   /*seq_id=*/1,
-                                   /*input_token_id=*/-1,
-                                   last_step_slice,
-                                   /*last_step_decode_num=*/2,
-                                   /*block_size=*/4,
-                                   buf);
+  for (int32_t req_id = 0; req_id < ctx.num_requests; ++req_id) {
+    const auto [token_id, offset] = resolve_token_with_position_offset(
+        ctx.token_ids[req_id], last_step_slice, /*last_step_decode_num=*/2);
+    append_decode_token(
+        ctx,
+        {.req_id = req_id, .token_id = token_id, .position_offset = offset},
+        /*block_size=*/4,
+        buf);
+  }
 
   EXPECT_EQ(buf.out_token_ids, std::vector<int32_t>({100, 202}));
   expect_position_ids(buf, {5, 9});
@@ -641,7 +618,7 @@ TEST(SpecDecodeInputBuilderTest, AppendDecodeRowFromLastStep) {
 // block of 128 tokens spans 512 tokens, so position 200 stays in column 0 and
 // 513 is the first position of column 1. Reading the table with the physical
 // block size instead would move 200 into the second logical block.
-TEST(SpecDecodeInputBuilderTest, CalcSlotIdCrossesOneColumnPerLogicalBlock) {
+TEST(DecodeInputBuilderTest, CalcSlotIdCrossesOneColumnPerLogicalBlock) {
   std::vector<int32_t> block_table = {7, 9};
 
   EXPECT_EQ(calc_slot_id(/*position=*/200,
@@ -670,7 +647,7 @@ TEST(SpecDecodeInputBuilderTest, CalcSlotIdCrossesOneColumnPerLogicalBlock) {
                "block table index out of range");
 }
 
-TEST(SpecDecodeInputBuilderTest, CalcRingSlotIdWrapsSlidingWindowBlocks) {
+TEST(DecodeInputBuilderTest, CalcRingSlotIdWrapsSlidingWindowBlocks) {
   std::vector<int32_t> block_table = {7, 9};
 
   EXPECT_EQ(calc_ring_slot_id(
@@ -687,7 +664,7 @@ TEST(SpecDecodeInputBuilderTest, CalcRingSlotIdWrapsSlidingWindowBlocks) {
             37);
 }
 
-TEST(SpecDecodeInputBuilderTest, MultiBlockDraftSingleRowPerSeq) {
+TEST(DecodeInputBuilderTest, MultiBlockDraftSingleRowPerSeq) {
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
   torch::Tensor positions = torch::tensor({4, 8}, torch::kInt);
   std::vector<torch::Tensor> multi_block_tables = {
@@ -695,7 +672,7 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockDraftSingleRowPerSeq) {
       torch::tensor({{10, 11, 12}, {13, 14, 15}}, torch::kInt)};
   ForwardInput input = make_multiblock_forward_input(
       torch::Tensor(), positions, multi_block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   EXPECT_TRUE(ctx.model_managed_multiblock);
   EXPECT_EQ(ctx.multi_block_tables.size(), 2);
@@ -705,12 +682,12 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockDraftSingleRowPerSeq) {
   DecodeBuildBuffers buf;
   for (int32_t seq_id = 0; seq_id < input.input_params.meta.num_sequences;
        ++seq_id) {
-    RowSpec row;
-    row.seq_id = seq_id;
+    DecodeTokenInput row;
+    row.req_id = seq_id;
     row.position_offset = 1;
     row.append_token = false;
     row.append_block_table = true;
-    append_decode_row(ctx, row, /*block_size=*/4, buf);
+    append_decode_token(ctx, row, /*block_size=*/4, buf);
   }
 
   EXPECT_TRUE(buf.out_token_ids.empty());
@@ -729,7 +706,7 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockDraftSingleRowPerSeq) {
             std::vector<int32_t>({13, 14, 15}));
 }
 
-TEST(SpecDecodeInputBuilderTest, ExportsRowPagingForWrappedMultiBlockQueries) {
+TEST(DecodeInputBuilderTest, ExportsRowPagingForWrappedMultiBlockQueries) {
   constexpr int32_t kQueryWidth = 4;
   constexpr int32_t kBlockSize = 128;
   ForwardInput input =
@@ -737,17 +714,17 @@ TEST(SpecDecodeInputBuilderTest, ExportsRowPagingForWrappedMultiBlockQueries) {
                                     torch::tensor({1020}, torch::kInt),
                                     {torch::tensor({{2, 5}}, torch::kInt)},
                                     to_layout_seq_lens({1021}));
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
   DecodeBuildBuffers buf;
   for (int32_t token = 0; token < kQueryWidth; ++token) {
-    RowSpec row;
-    row.seq_id = 0;
+    DecodeTokenInput row;
+    row.req_id = 0;
     row.position_offset = token;
     row.kv_len_offset = kQueryWidth - 1;
     row.append_token = false;
     row.append_q_len_one = true;
     row.append_block_table = true;
-    append_decode_row(ctx, row, kBlockSize, buf);
+    append_decode_token(ctx, row, kBlockSize, buf);
   }
 
   std::vector<int32_t> expected_pages;
@@ -761,14 +738,14 @@ TEST(SpecDecodeInputBuilderTest, ExportsRowPagingForWrappedMultiBlockQueries) {
   EXPECT_EQ(buf.out_new_cache_slots,
             std::vector<int32_t>({764, 765, 766, 767}));
 
-  update_input_params(input.input_params,
-                      buf,
-                      1,
-                      std::move(buf.out_q_seq_lens),
-                      std::move(buf.out_q_cu_seq_lens),
-                      buf.meta.kv_max_seq_len,
-                      std::move(buf.out_kv_seq_lens),
-                      true);
+  update_decode_attention_metadata(input.input_params,
+                                   buf,
+                                   /*q_max_seq_len=*/1,
+                                   std::move(buf.out_q_seq_lens),
+                                   std::move(buf.out_q_cu_seq_lens),
+                                   buf.meta.kv_max_seq_len,
+                                   std::move(buf.out_kv_seq_lens),
+                                   /*update_block_tables=*/true);
   const auto& params = input.input_params;
   EXPECT_FALSE(params.attention.host.block_tables.defined());
   ASSERT_EQ(params.multi_block_tables.size(), 1);
@@ -782,7 +759,7 @@ TEST(SpecDecodeInputBuilderTest, ExportsRowPagingForWrappedMultiBlockQueries) {
             std::vector<int32_t>(kQueryWidth, kBlockSize));
 }
 
-TEST(SpecDecodeInputBuilderTest, GroupedPrefillBuildsSwaRingSlots) {
+TEST(DecodeInputBuilderTest, GroupedPrefillBuildsSwaRingSlots) {
   ForwardInput input;
   input.input_params.meta.num_sequences = 2;
   input.positions_host = torch::tensor({2, 3, 4, 6, 7}, torch::kInt);
@@ -795,7 +772,7 @@ TEST(SpecDecodeInputBuilderTest, GroupedPrefillBuildsSwaRingSlots) {
             std::vector<int32_t>({42, 43, 44, 86, 87}));
 }
 
-TEST(SpecDecodeInputBuilderTest, GroupedPrefillSwaSlotsWrapRing) {
+TEST(DecodeInputBuilderTest, GroupedPrefillSwaSlotsWrapRing) {
   ForwardInput input;
   input.input_params.meta.num_sequences = 1;
   input.positions_host = torch::tensor({8, 9, 10}, torch::kInt);
@@ -808,7 +785,7 @@ TEST(SpecDecodeInputBuilderTest, GroupedPrefillSwaSlotsWrapRing) {
             std::vector<int32_t>({40, 41, 42}));
 }
 
-TEST(SpecDecodeInputBuilderTest, GroupedPrefillKeepsSkippedSwaSlotsAligned) {
+TEST(DecodeInputBuilderTest, GroupedPrefillKeepsSkippedSwaSlotsAligned) {
   ForwardInput input;
   input.input_params.meta.num_sequences = 2;
   input.positions_host = torch::tensor({3, 4, 5, 8}, torch::kInt);
@@ -821,24 +798,24 @@ TEST(SpecDecodeInputBuilderTest, GroupedPrefillKeepsSkippedSwaSlotsAligned) {
             std::vector<int32_t>({-1, 84, 85, 132}));
 }
 
-TEST(SpecDecodeInputBuilderTest, MultiBlockKeepsSparseAbsoluteRows) {
+TEST(DecodeInputBuilderTest, MultiBlockKeepsSparseAbsoluteRows) {
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({24, 20});
   torch::Tensor positions = torch::tensor({23, 19}, torch::kInt);
   std::vector<torch::Tensor> multi_block_tables = {torch::tensor(
       {{-1, -1, -1, -1, -1, 50}, {-1, -1, -1, -1, 60, -1}}, torch::kInt)};
   ForwardInput input = make_multiblock_forward_input(
       torch::Tensor(), positions, multi_block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   DecodeBuildBuffers buf;
   for (int32_t seq_id = 0; seq_id < input.input_params.meta.num_sequences;
        ++seq_id) {
-    RowSpec row;
-    row.seq_id = seq_id;
+    DecodeTokenInput row;
+    row.req_id = seq_id;
     row.position_offset = 0;
     row.append_token = false;
     row.append_block_table = true;
-    append_decode_row(ctx, row, /*block_size=*/4, buf);
+    append_decode_token(ctx, row, /*block_size=*/4, buf);
   }
 
   ASSERT_EQ(buf.out_multi_block_tables.size(), 1);
@@ -849,7 +826,7 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockKeepsSparseAbsoluteRows) {
             std::vector<int32_t>({-1, -1, -1, -1, 60, -1}));
 }
 
-TEST(SpecDecodeInputBuilderTest, MultiBlockParallelRowsShareFullKvLength) {
+TEST(DecodeInputBuilderTest, MultiBlockParallelRowsShareFullKvLength) {
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
   torch::Tensor token_ids = torch::tensor({10, 20}, torch::kInt);
   torch::Tensor positions = torch::tensor({4, 8}, torch::kInt);
@@ -857,7 +834,7 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockParallelRowsShareFullKvLength) {
       torch::tensor({{0, 1, 2}, {3, 4, 5}}, torch::kInt)};
   ForwardInput input = make_multiblock_forward_input(
       token_ids, positions, multi_block_tables, kv_seq_lens);
-  DecodeRowContext ctx = make_decode_row_context(input);
+  DecodeBatchContext ctx = make_decode_batch_context(input);
 
   EXPECT_TRUE(ctx.model_managed_multiblock);
   const int32_t num_val_tokens = 3;
@@ -867,10 +844,10 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockParallelRowsShareFullKvLength) {
   for (int32_t seq_id = 0; seq_id < input.input_params.meta.num_sequences;
        ++seq_id) {
     for (int32_t val_idx = 0; val_idx < num_val_tokens; ++val_idx) {
-      RowSpec row;
-      row.seq_id = seq_id;
+      DecodeTokenInput row;
+      row.req_id = seq_id;
       if (val_idx == 0) {
-        row.use_input_token = true;
+        row.token_id = ctx.token_ids[seq_id];
       } else {
         row.token_id = -1 * val_idx;
       }
@@ -879,7 +856,7 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockParallelRowsShareFullKvLength) {
       row.append_q_len_one = true;
       row.append_block_table = true;
       row.append_kv_len = true;
-      append_decode_row(ctx, row, /*block_size=*/4, buf);
+      append_decode_token(ctx, row, /*block_size=*/4, buf);
     }
   }
 
@@ -898,7 +875,7 @@ TEST(SpecDecodeInputBuilderTest, MultiBlockParallelRowsShareFullKvLength) {
   EXPECT_EQ(buf.out_multi_block_tables[0][3], std::vector<int32_t>({3, 4, 5}));
 }
 
-TEST(SpecDecodeInputBuilderTest, MakeDecodeRowContextRejectsEmptyBlockTables) {
+TEST(DecodeInputBuilderTest, MakeDecodeBatchContextRejectsEmptyBlockTables) {
   std::vector<int32_t> kv_seq_lens = to_layout_seq_lens({5, 9});
   torch::Tensor positions = torch::tensor({4, 8}, torch::kInt);
   ForwardInput input;
@@ -907,11 +884,11 @@ TEST(SpecDecodeInputBuilderTest, MakeDecodeRowContextRejectsEmptyBlockTables) {
   input.positions_host = positions;
   input.input_params.attention.host.kv_seq_lens = kv_seq_lens;
 
-  EXPECT_DEATH(make_decode_row_context(input),
+  EXPECT_DEATH(make_decode_batch_context(input),
                "host block_tables must be defined");
 }
 
-TEST(SpecMtpTopkInputBuilderTest, SelectsSampledRowsForNextDraftStep) {
+TEST(MtpTopkInputBuilderTest, SelectsSampledRowsForNextDraftStep) {
   const torch::Tensor topk_indices =
       torch::tensor({{0, 1}, {2, 3}, {4, 5}, {6, 7}}, torch::kInt32);
   const MtpTopkStatePtr state =
@@ -920,7 +897,7 @@ TEST(SpecMtpTopkInputBuilderTest, SelectsSampledRowsForNextDraftStep) {
   sampling_params.selected_token_idxes = torch::tensor({1, 3}, torch::kInt32);
 
   const MtpTopkStatePtr selected =
-      select_mtp_topk_state_for_next_step(state, sampling_params);
+      mtp_async::select_mtp_topk_state_for_next_step(state, sampling_params);
 
   const auto npu_state =
       std::dynamic_pointer_cast<const npu::model::NpuMtpTopkState>(selected);
@@ -929,7 +906,7 @@ TEST(SpecMtpTopkInputBuilderTest, SelectsSampledRowsForNextDraftStep) {
   EXPECT_TRUE(torch::equal(npu_state->topk_indices(), expected));
 }
 
-TEST(SpecMtpTopkInputBuilderTest, KeepsRowsWhenAlreadyMatchedToDraftBatch) {
+TEST(MtpTopkInputBuilderTest, KeepsRowsWhenAlreadyMatchedToDraftBatch) {
   const torch::Tensor topk_indices =
       torch::tensor({{0, 1}, {2, 3}}, torch::kInt32);
   const MtpTopkStatePtr state =
@@ -938,22 +915,23 @@ TEST(SpecMtpTopkInputBuilderTest, KeepsRowsWhenAlreadyMatchedToDraftBatch) {
   sampling_params.selected_token_idxes = torch::tensor({0, 1}, torch::kInt32);
 
   const MtpTopkStatePtr selected =
-      select_mtp_topk_state_for_next_step(state, sampling_params);
+      mtp_async::select_mtp_topk_state_for_next_step(state, sampling_params);
 
   EXPECT_EQ(selected.get(), state.get());
 }
 
-TEST(SpecMtpTopkInputBuilderTest, KeepsUndefinedStateUndefined) {
+TEST(MtpTopkInputBuilderTest, KeepsUndefinedStateUndefined) {
   SamplingParameters sampling_params;
   sampling_params.selected_token_idxes = torch::tensor({0}, torch::kInt32);
 
   const MtpTopkStatePtr selected =
-      select_mtp_topk_state_for_next_step(nullptr, sampling_params);
+      mtp_async::select_mtp_topk_state_for_next_step(/*state=*/nullptr,
+                                                     sampling_params);
 
   EXPECT_EQ(selected, nullptr);
 }
 
-TEST(SpecMtpTopkInputBuilderTest, SelectsMluRowsWithoutMixingLayerState) {
+TEST(MtpTopkInputBuilderTest, SelectsMluRowsWithoutMixingLayerState) {
   mlu::model::MluMtpTopkState::LayerStates states;
   states.emplace_back(layer::DsaTopkState(
       torch::tensor({{0, 1}, {2, 3}, {4, 5}}, torch::kInt32),
@@ -968,7 +946,7 @@ TEST(SpecMtpTopkInputBuilderTest, SelectsMluRowsWithoutMixingLayerState) {
   sampling_params.selected_token_idxes = torch::tensor({2, 0}, torch::kInt32);
 
   const MtpTopkStatePtr selected =
-      select_mtp_topk_state_for_next_step(state, sampling_params);
+      mtp_async::select_mtp_topk_state_for_next_step(state, sampling_params);
 
   const auto mlu_state =
       std::dynamic_pointer_cast<const mlu::model::MluMtpTopkState>(selected);
@@ -988,7 +966,7 @@ TEST(SpecMtpTopkInputBuilderTest, SelectsMluRowsWithoutMixingLayerState) {
                            torch::tensor({60, 40}, torch::kInt32)));
 }
 
-TEST(SpecMtpTopkInputBuilderTest, KeepsMluStateWhenRowsAlreadyMatchDraftBatch) {
+TEST(MtpTopkInputBuilderTest, KeepsMluStateWhenRowsAlreadyMatchDraftBatch) {
   mlu::model::MluMtpTopkState::LayerStates states;
   states.emplace_back(
       layer::DsaTopkState(torch::tensor({{0, 1}, {2, 3}}, torch::kInt32),
@@ -999,12 +977,12 @@ TEST(SpecMtpTopkInputBuilderTest, KeepsMluStateWhenRowsAlreadyMatchDraftBatch) {
   sampling_params.selected_token_idxes = torch::tensor({0, 1}, torch::kInt32);
 
   const MtpTopkStatePtr selected =
-      select_mtp_topk_state_for_next_step(state, sampling_params);
+      mtp_async::select_mtp_topk_state_for_next_step(state, sampling_params);
 
   EXPECT_EQ(selected.get(), state.get());
 }
 
-TEST(SpecMtpTopkInputBuilderTest, MovesNpuStateWithModelInputParams) {
+TEST(MtpTopkInputBuilderTest, MovesNpuStateWithModelInputParams) {
   ModelInputParams params;
   const torch::Tensor topk_indices =
       torch::tensor({{0, 1}, {2, 3}}, torch::kInt32);
@@ -1025,7 +1003,7 @@ TEST(SpecMtpTopkInputBuilderTest, MovesNpuStateWithModelInputParams) {
   EXPECT_TRUE(topk_indices.device().is_cpu());
 }
 
-TEST(SpecMtpTopkInputBuilderTest, MovesMluStateWithModelInputParams) {
+TEST(MtpTopkInputBuilderTest, MovesMluStateWithModelInputParams) {
   ModelInputParams params;
   mlu::model::MluMtpTopkState::LayerStates states;
   states.emplace_back(
@@ -1052,5 +1030,4 @@ TEST(SpecMtpTopkInputBuilderTest, MovesMluStateWithModelInputParams) {
 }
 
 }  // namespace
-}  // namespace specBuilder
 }  // namespace xllm

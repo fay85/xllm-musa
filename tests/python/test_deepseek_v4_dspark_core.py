@@ -37,8 +37,7 @@ def test_dspark_config_narrows_target_layers() -> None:
             "dspark_num_layers": 2,
             "dspark_target_layer_ids": [7, 19],
             "dspark_markov_rank": 4,
-            "dspark_block_size": 5,
-            "dspark_use_native_sas": True,
+            "num_speculative_tokens": 5,
         }
     )
 
@@ -48,7 +47,6 @@ def test_dspark_config_narrows_target_layers() -> None:
     assert config.n_hash_layers == 0
     assert config.compress_ratios == [1, 1]
     assert config.dspark_target_layer_ids == (7, 19)
-    assert config.dspark_use_native_sas
 
 
 @pytest.mark.parametrize(
@@ -99,7 +97,7 @@ def test_dspark_context_kv_writes_real_decoder_layer_cache(
             "dspark_num_layers": 1,
             "dspark_target_layer_ids": [7],
             "dspark_markov_rank": 4,
-            "dspark_block_size": 5,
+            "num_speculative_tokens": 5,
         }
     )
     config.validate()

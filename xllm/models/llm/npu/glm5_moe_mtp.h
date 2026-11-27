@@ -190,7 +190,6 @@ const bool glm5_moe_mtp_args_registered = []() {
   MtpModelCapabilities capabilities;
   // The Python draft shares the target's embed_tokens/lm_head
   // (share_python_model_weights) instead of loading its own copies.
-  capabilities.python_draft_owns_embedding_and_lm_head = false;
   ModelRegistry::register_mtp_capabilities("glm_moe_dsa_mtp", capabilities);
   return true;
 }();

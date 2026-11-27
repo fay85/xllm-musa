@@ -40,9 +40,9 @@ limitations under the License.
 #include "core/framework/parallel_state/parallel_args.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/layers/npu_torch/tests_utils.h"
+#include "core/runtime/dflash2_worker_impl.h"
 #include "models/py_model_helper.h"
 #include "platform/device.h"
-#include "runtime/dflash/dflash2_worker_impl.h"
 #include "runtime/dspark_worker_impl.h"
 #include "runtime/mtp_worker_impl.h"
 #include "runtime/params_utils.h"
@@ -136,12 +136,7 @@ TEST(MTPDecodeStepTest, CacheCorrectionSurvivesPackedInputMaterialization) {
             scheduler.input_params.execution_batch.num_computed_tokens);
 }
 
-// A JSON grammar halt pads the unexecuted draft steps with -1. The validate
-// input is an embedding-table operand, so the fill must map that
-// proposal-domain sentinel to a valid vocab index instead of leaking it into
-// the target forward. The original draft tensors keep -1: greedy rejection
-// relies on the sentinel never matching a target sample.
-TEST(MTPDecodeStepTest, JsonHaltPaddingNeverReachesTheTargetEmbeddingInput) {
+TEST(MTPDecodeStepTest, FillsTargetWithRequestMajorDraftTokens) {
   Device device(0);
   device.set_device();
   device.init_device_context();
@@ -156,7 +151,7 @@ TEST(MTPDecodeStepTest, JsonHaltPaddingNeverReachesTheTargetEmbeddingInput) {
       parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
 
   ForwardInput input;
-  input.json_object_states = {ConstraintState(), ConstraintState()};
+  input.input_params.meta.num_sequences = 2;
 
   ForwardInput validate_input;
   const torch::TensorOptions token_options =
@@ -169,27 +164,14 @@ TEST(MTPDecodeStepTest, JsonHaltPaddingNeverReachesTheTargetEmbeddingInput) {
   draft_outputs[0].sample_output.next_tokens =
       torch::tensor({11, 12}, draft_token_options);
   draft_outputs[1].sample_output.next_tokens =
-      torch::full({2}, /*fill_value=*/-1, draft_token_options);
+      torch::tensor(/*values=*/{21, 22}, draft_token_options);
 
-  detail::JsonDraftValidationScratch json_scratch;
-  json_scratch.states_after = {{ConstraintState(), ConstraintState()},
-                               {ConstraintState(), ConstraintState()}};
-  json_scratch.invalid_draft_step_major = {0, 0, 1, 1};
-
-  worker.fill_validate_input_from_draft_outputs(input,
-                                                draft_outputs,
-                                                validate_input,
-                                                /*per_seq_val_tokens=*/{3, 3},
-                                                &json_scratch,
-                                                *worker.compute_stream_);
+  worker.fill_validate_input_from_draft_outputs(
+      input, draft_outputs, validate_input, *worker.compute_stream_);
 
   EXPECT_TRUE(torch::equal(validate_input.token_ids.cpu(),
-                           torch::tensor({5, 11, 0, 5, 12, 0}, torch::kInt32)))
-      << "halt-padded draft slots must reach the target as token 0";
-  EXPECT_TRUE(torch::equal(draft_outputs[1].sample_output.next_tokens.cpu(),
-                           torch::full({2}, /*fill_value=*/-1, torch::kInt64)))
-      << "the proposal-domain sentinel must stay in the original draft "
-         "tensors";
+                           torch::tensor(/*values=*/{5, 11, 21, 5, 12, 22},
+                                         /*options=*/torch::kInt32)));
 }
 
 class BlockDiffusionDecodeTest : public ::testing::Test {
@@ -341,7 +323,7 @@ fixture = module._create_fixture()
     execution.num_computed_tokens = {positions[0], positions[1]};
     execution.query_start_loc = {0, 1, 2};
     execution.is_prefilling = {0, 0};
-    input.sampling_params.all_greedy_sample = true;
+    input.sampling_params.sampling_mode = SamplingMode::GREEDY;
     input.sampling_params.do_sample =
         torch::zeros({2}, input.token_ids.options().dtype(torch::kBool));
     input.metadata_ready_event = device_.current_stream()->record_event();
@@ -350,7 +332,7 @@ fixture = module._create_fixture()
 
   std::unique_ptr<DFlashWorkerImpl> make_worker(
       const std::string& speculative_algorithm,
-      const std::string& draft_sampling_mode = "greedy") {
+      bool enable_probabilistic_draft = false) {
     ParallelArgs parallel_args(0, 1, process_group_.get());
     parallel_args.tp_group_ = process_group_.get();
     parallel_args.moe_tp_group_ = process_group_.get();
@@ -365,7 +347,7 @@ fixture = module._create_fixture()
         .enable_schedule_overlap(true)
         .enable_speculative_decode(true)
         .speculative_algorithm(speculative_algorithm)
-        .draft_sampling_mode(draft_sampling_mode)
+        .enable_probabilistic_draft(enable_probabilistic_draft)
         .num_speculative_tokens(2)
         .block_size(4);
     std::unique_ptr<DFlashWorkerImpl> worker;
@@ -460,7 +442,8 @@ TEST_F(BlockDiffusionDecodeTest, ExpandedValidationStatesSkipSequenceRestore) {
 TEST_F(BlockDiffusionDecodeTest, AsyncOutputDoesNotRequireDraftPrelaunch) {
   // Probabilistic draft sampling disables device-input prelaunch at init,
   // while schedule overlap still enables asynchronous target output.
-  auto worker = make_worker("DSpark", "probabilistic");
+  auto worker =
+      make_worker(/*algorithm=*/"DSpark", /*enable_probabilistic_draft=*/true);
   ForwardInput input = make_input({2, 12}, {2, 10});
   auto output = worker->step(input);
   ASSERT_TRUE(output.has_value());
@@ -559,7 +542,7 @@ TEST_P(BlockDiffusionDecodeExecutionTest,
   if (speculative_algorithm == "DFlash2") {
     // DFlash2 startup requires this field through the full HF loader path.
     auto loader = ModelLoader::create(model_path_.string());
-    ASSERT_EQ(loader->model_args().dflash2_block_size(), 3)
+    ASSERT_EQ(loader->model_args().num_speculative_tokens(), 2)
         << "generated config must provide DFlash2 block size";
   }
   auto worker = make_worker(speculative_algorithm);

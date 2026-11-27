@@ -32,6 +32,7 @@ limitations under the License.
 #include "core/framework/config/load_config.h"
 #include "core/framework/kv_cache_transfer/kv_transfer_completion.h"
 #include "core/framework/multimodal/mm_visitor.h"
+#include "core/framework/sampling/sampler.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
@@ -53,11 +54,7 @@ void wait_input_ready_events(const ForwardInput& input, const Stream& stream) {
 
 StreamEventPtr record_current_stream_event(const Device& device) {
   std::unique_ptr<Stream> stream = device.current_stream();
-  StreamEventPtr event = stream->record_event();
-  if (event == nullptr) {
-    stream->synchronize();
-  }
-  return event;
+  return stream->record_event_or_sync();
 }
 
 torch::Tensor select_hidden_rows(const torch::Tensor& hidden_states,
@@ -346,14 +343,9 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
   ForwardOutput output;
   if (sampling_params.selected_token_idxes.defined()) {
     if (!input.skip_sampling_for_logits_only) {
-      output.sample_output = sampler_->forward(logits, sampling_params);
+      output.sample_output = sample(logits, sampling_params);
       synchronize_sampled_tokens_for_schedule_overlap(
           output.sample_output.next_tokens, sampling_params);
-      output.filter_bitmask_applied_to_logits =
-          sampling_params.filter_bitmask.defined();
-      output.filter_mask_applied_to_logits =
-          !sampling_params.filter_bitmask.defined() &&
-          sampling_params.filter_mask.defined();
     }
     output.logits = logits;
     COUNTER_ADD(execution_latency_seconds_sampling, timer.elapsed_seconds());

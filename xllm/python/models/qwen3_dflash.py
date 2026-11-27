@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -63,6 +64,7 @@ def _load_reference_quarot_rotation(
 @dataclass
 class DFlashQwen3Config(Qwen3Config):
     draft_vocab_size: int = 0
+    num_speculative_tokens: int = 0
     world_size: int = 1
     use_sliding_window: bool = False
     layer_types: tuple[str, ...] = ()
@@ -85,7 +87,7 @@ class DFlashQwen3Config(Qwen3Config):
         return values
 
     @classmethod
-    def from_dict(cls, d: dict) -> DFlashQwen3Config:
+    def from_dict(cls, d: dict[str, Any]) -> DFlashQwen3Config:
         normalized_config = dict(d)
         rope_parameters = d.get("rope_parameters") or {}
         if normalized_config.get("rope_theta") is None:
@@ -97,6 +99,7 @@ class DFlashQwen3Config(Qwen3Config):
         return cls(
             **base.__dict__,
             draft_vocab_size=draft_vocab_size,
+            num_speculative_tokens=int(d.get("num_speculative_tokens", 0)),
             world_size=int(d.get("world_size", base.tp_size * base.dp_size * cp_size)),
             use_sliding_window=bool(d.get("use_sliding_window", False)),
             layer_types=tuple(d.get("layer_types") or ()),
@@ -394,7 +397,6 @@ class DFlashQwen3ForCausalLM(PyModelBase):
         self.cfg.validate()
         self.dtype = self.resolve_dtype(config.get("dtype") or config.get("torch_dtype"))
         self.device = torch.device(config.get("device", "npu"))
-        self.draft_query_width = int(config.get("draft_query_width", 1))
         self.model = self.model_cls(self.cfg, self.dtype, self.device)  # pyright: ignore[reportIncompatibleVariableOverride]
         self.lm_head: nn.Module | None = None  # pyright: ignore[reportIncompatibleVariableOverride]
 

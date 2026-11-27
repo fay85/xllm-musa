@@ -421,7 +421,7 @@ argmax. Only unconstrained greedy sampling is graph-capturable; constrained samp
 decoder. There is no candidate selector, Markov sampling loop, or dense draft-probability output. Target request sampling
 may still be random, but ordinary DFlash does not support probabilistic draft sampling.
 
-NPU Python DFlash enables asynchronous output with schedule overlap when adaptive speculation is off. Prelaunch reuses
+NPU Python DFlash enables asynchronous output with schedule overlap. Prelaunch reuses
 the DFlash2 proposal-attention limits (A3, CP1, effective KV split1, fused or PD decode), pending-request identity checks,
 and conservative lookahead capacity. Host restoration, KV movement, structured constraints, and history-dependent draft
 penalties prevent prelaunch without disabling asynchronous output or independently eligible graphs. Native DFlash paths
@@ -434,7 +434,7 @@ C++ worker: prepare the current query and TP-agreed Gumbel noise
   -> Python ExecutionPipeline
        -> decoder Runner: backbone -> lm_head -> candidate selector
        -> proposal Runner: path sampling
-  -> ModelOutput.draft_proposal -> C++ target verification / context finalization
+  -> ModelOutput.draft_token_ids / draft_logits -> C++ target verification / context finalization
 ```
 
 The query contains one anchor and N proposal positions. `DFlash2DecoderModel` executes the backbone, selects proposal

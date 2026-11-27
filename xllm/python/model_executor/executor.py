@@ -46,7 +46,7 @@ from xllm.python.model_executor.input_batch import (
 from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.mtp_topk import MtpTopkReuse
-from xllm.python.model_executor.runner import RunnerConfig
+from xllm.python.model_executor.runner import RunnerConfig, draft_tokens_per_sequence
 from xllm.python.model_executor.runners.base import BaseRunner, ModelExecutionOutput
 from xllm.python.model_executor.runners.eager import EagerRunner
 from xllm.python.model_executor.sampling_metadata import ModelSamplingInput
@@ -108,14 +108,14 @@ def _create_attention_backend(
     first_attention: Attention,
     device: torch.device,
     dtype: torch.dtype,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     max_num_reqs: int = 1,
-    num_decoding_tokens: int = 1,
     acl_graph_enabled: bool = False,
     block_query_graph_metadata: bool = False,
 ) -> AttentionBackend:
     config = config or {}
     model_type = config.get("model_type", "")
+    num_decoding_tokens = 1 if config.get("is_draft_engine") else int(config.get("num_speculative_tokens", 0)) + 1
     # DeepSeek-V4.1 is NPU-only: reject on any other platform before the generic
     # CUDA/NPU backend selection can return a backend it must not run on.
     if model_type == "deepseek_v41" and not current_platform.is_npu():
@@ -154,8 +154,9 @@ def _create_attention_backend(
             rope_head_dim=int(config.get("qk_rope_head_dim", 64)),
             device=device,
             dtype=dtype,
-            dspark_block_size=int(config.get("dspark_block_size", 0)),
-            dspark_use_native_sas=bool(config.get("dspark_use_native_sas", False)),
+            num_speculative_tokens=int(config.get("num_speculative_tokens", 0))
+            if model_type == "deepseek_v4_dspark"
+            else 0,
         )
     if current_platform.is_npu():
         dcp_group = distributed.dcp_group(device)
@@ -182,7 +183,7 @@ def _create_attention_backend(
                     device=device,
                     dtype=dtype,
                     dcp_group=dcp_group,
-                    num_decoding_tokens=max(num_decoding_tokens, 1),
+                    num_decoding_tokens=num_decoding_tokens,
                 )
             # Only an MLA model has a latent KV for the DCP backend to shard.
             # The DFlash2 draft is GQA: it is not sharded at all but keeps a
@@ -208,7 +209,7 @@ def _create_attention_backend(
                     dcp_group=dcp_group,
                     index_topk=index_topk,
                     max_num_reqs=max(max_num_reqs, 1),
-                    num_decoding_tokens=max(num_decoding_tokens, 1),
+                    num_decoding_tokens=num_decoding_tokens,
                 )
             if not bool(config.get("is_draft_engine", False)):
                 raise NotImplementedError(f"Dense DCP attention is not supported for model type '{model_type}'")
@@ -216,12 +217,14 @@ def _create_attention_backend(
             NpuPagedAttentionBackend,
         )
 
-        proposal_width = int(config.get("dflash2_block_size", 0))
+        tokens_per_sequence = draft_tokens_per_sequence(model_type, int(config.get("num_speculative_tokens", 0)))
         dflash_xfia_enabled = bool(config.get("dflash_xfia_enabled", False))
-        if dflash_xfia_enabled:
-            proposal_width = int(config.get("draft_query_width", proposal_width))
         use_xfia_decode = False
-        if proposal_width > 0 and dflash_xfia_enabled and not block_query_graph_metadata:
+        if (
+            model_type in ("DFlashDraftModel", "DFlash2DraftModel", "DSparkDraftModel")
+            and dflash_xfia_enabled
+            and not block_query_graph_metadata
+        ):
             import xllm_runtime
 
             # C++ enable_dflash_proposal_xfia already applied the prelaunch gate.
@@ -232,7 +235,7 @@ def _create_attention_backend(
         if block_query_graph_metadata:
             window = first_attention.attention_window
             draft_graph_options = {
-                "draft_query_width": int(config.get("draft_query_width", 1)),
+                "draft_query_width": tokens_per_sequence,
                 "draft_graph_window_size": window if isinstance(window, int) else None,
             }
         return NpuPagedAttentionBackend(
@@ -245,7 +248,7 @@ def _create_attention_backend(
             device=device,
             dtype=dtype,
             num_decoding_tokens=num_decoding_tokens,
-            xfia_query_width=max(proposal_width, 1),
+            xfia_query_width=tokens_per_sequence,
             use_xfia_decode=use_xfia_decode,
             **draft_graph_options,
         )
@@ -268,20 +271,19 @@ class ModelExecutor:
     def __init__(
         self,
         model: nn.Module,
-        config: dict,
+        config: dict[str, Any],
         max_seqs_per_batch: int,
-        num_decoding_tokens: int = 1,
         acl_graph_decode_batch_size_limit: int | None = None,
-        *,
-        is_spec_draft: bool = False,
     ) -> None:
         self.model = model
         # The model's Engram restore capability is fixed after construction;
         # cache it so non-V4.1 models avoid an exception-based probe per step.
         self._restore_engram_history = self._resolve_engram_restore(self.model)
         self._kv_bound = False
+        is_spec_draft = bool(config.get("is_draft_engine", False))
         self._is_spec_draft = is_spec_draft
-        self._draft_query_width = max(1, int(config.get("draft_query_width", 1) or 1))
+        model_type = str(config.get("model_type", ""))
+        self._draft_query_width = draft_tokens_per_sequence(model_type, int(config.get("num_speculative_tokens", 0)))
         self._requires_framework_kpool_tail = bool(config.get("requires_framework_kpool_tail", False))
 
         attention_layers = [module for module in model.modules() if isinstance(module, Attention)]
@@ -307,12 +309,6 @@ class ModelExecutor:
                 if any(self._attention_config(layer) != expected_config for layer in dsa_layers[1:]):
                     raise ValueError("Attention backend requires identical MLA configuration across hybrid layers")
         has_kda_layers = any(getattr(layer, "is_glm_next_kda", False) for layer in attention_layers)
-        is_draft_engine = bool(config.get("is_draft_engine", False))
-        adaptive_speculative_decode_enabled = bool(config.get("runtime_adaptive_speculative_decode_enabled", False))
-        if has_kda_layers and not is_draft_engine and adaptive_speculative_decode_enabled:
-            raise ValueError(
-                "GLM5 KDA does not support adaptive speculative decode; disable adaptive speculative decoding."
-            )
         if dsa_layers:
             first_attention = dsa_layers[0]
         else:
@@ -325,13 +321,6 @@ class ModelExecutor:
         first_parameter = next(model.parameters())
         device = first_parameter.device
         self._num_attention_layers = len(attention_layers)
-        requested_query_width = int(num_decoding_tokens)
-        num_decoding_tokens = max(
-            requested_query_width,
-            1 if is_spec_draft and self._draft_query_width > 1 else int(config.get("num_speculative_tokens", 0)) + 1,
-        )
-        if config.get("graph_capture_sizes") and not is_spec_draft and num_decoding_tokens != requested_query_width:
-            raise ValueError("effective graph_capture_sizes requires matching native and Python decode query widths")
         if "python_graph_backend" in config:
             logger.warning(
                 "python_graph_backend has been removed and is ignored. Set "
@@ -347,14 +336,12 @@ class ModelExecutor:
             first_parameter.dtype,
             config,
             max_seqs_per_batch,
-            num_decoding_tokens=num_decoding_tokens,
             acl_graph_enabled=graph_enabled and current_platform.is_npu(),
             block_query_graph_metadata=is_spec_draft and bool(getattr(model, "uses_block_query_graph_metadata", False)),
         )
 
         self._configure_bidirectional_prompt_attention(config, device)
 
-        model_type = str(config.get("model_type", ""))
         execution_metadata_builders = tuple(
             builder
             for builder_class in get_execution_metadata_builder_classes(model_type)
@@ -379,9 +366,7 @@ class ModelExecutor:
             model_config=config,
             enable_graph=graph_enabled,
             max_seqs_per_batch=max_seqs_per_batch,
-            num_decoding_tokens=num_decoding_tokens,
             acl_graph_decode_batch_size_limit=acl_graph_decode_batch_size_limit,
-            is_spec_draft=is_spec_draft,
         )
         restore_history = (
             partial(self._restore_engram_history, self.attention_backend)

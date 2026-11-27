@@ -20,11 +20,31 @@ limitations under the License.
 #include <cstdint>
 #include <vector>
 
+#include "core/framework/model/mtp_topk_state.h"
+#include "core/framework/speculative/embedding_cache.h"
+
 namespace xllm {
 
 struct ForwardInput;
+class SamplingParameters;
 
 namespace mtp_async {
+
+// Advance a temporary combined-first-draft Host template for tail-row planning.
+// Clone its CPU int32 token/position tensors to preserve source tensor storage.
+// The first num_sequences entries are decode anchors used by the tail-row
+// builder to rebuild 1-D positions. This is not a full rotary-axis update;
+// the resulting template must not be used directly as replay position input.
+std::vector<EmbeddingCache::DecodeState> advance_first_draft_template(
+    ForwardInput& metadata_template,
+    torch::Tensor embedding_placeholder,
+    int32_t num_speculative_tokens);
+
+// Reuses the NPU MTP draft-step row-selection flow for every backend. Backend
+// state implementations only interpret index_select_rows() for their payload.
+MtpTopkStatePtr select_mtp_topk_state_for_next_step(
+    const MtpTopkStatePtr& state,
+    const SamplingParameters& sampling_params);
 
 // Applies accepted target state to the fixed [repair, current] draft layout.
 // The NPU path uses one fused preparation kernel when possible and otherwise

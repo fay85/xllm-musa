@@ -87,7 +87,6 @@ limitations under the License.
 #include "core/runtime/acl_graph_bucket_policy.h"
 #endif
 #include "core/runtime/decode_graph_bucket.h"
-#include "core/runtime/draft_model_config.h"
 #include "core/runtime/prefill_layerwise_eligibility.h"
 #include "core/runtime/py_runtime_module.h"
 #include "core/runtime/worker_rendezvous.h"
@@ -96,7 +95,6 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/kv_cache/layerwise_split_layout.h"
 #include "framework/kv_cache/linear_state_restore.h"
-#include "framework/model/aux_hidden_capture.h"
 #include "framework/model/model_input_params.h"
 #include "framework/model_loader.h"
 #include "framework/parallel_state/linear_attention_parallel.h"
@@ -403,8 +401,7 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
                        const torch::Device& device,
                        const runtime::Options& options)
     : options_(options), device_(device), parallel_args_(parallel_args) {
-  if (options_.enable_speculative_decode() &&
-      options_.num_decoding_tokens() == 1) {
+  if (options_.enable_speculative_decode() && options_.is_draft_engine()) {
     is_spec_draft_ = true;
   }
 
@@ -420,7 +417,6 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
   threadpool_.schedule([this]() mutable { device_.set_device(); });
   prepare_stream_ = device_.get_stream_from_pool();
   compute_stream_ = device_.current_stream();
-  sampler_ = std::make_unique<Sampler>();
 
   if constexpr (!Platform::is_npu() && !Platform::is_cuda() &&
                 !Platform::is_musa() && !Platform::is_dcu()) {
@@ -438,7 +434,7 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
     // Get effective shapes once, not on every decode step; match the target
     // executor's query width and capacities.
     target_graph_capture_sizes_ = runtime::get_decode_graph_capture_sizes(
-        options_, options_.num_decoding_tokens());
+        options_, static_cast<int64_t>(options_.num_speculative_tokens()) + 1);
   }
   if (::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
     if (!weight_transfer_) {
@@ -461,6 +457,8 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
   worker_rendezvous_ = std::make_unique<WorkerRendezvous>(kv_cache_transfer_);
 #endif
 }
+
+CausalLM* WorkerImpl::get_causal_lm() const { return model_.get(); }
 
 WorkerImpl::~WorkerImpl() = default;
 
@@ -811,7 +809,14 @@ void WorkerImpl::process_group_test() {
 }
 
 ForwardInput WorkerImpl::prepare_inputs(Batch& batch) {
-  return model_executor_->prepare_inputs(batch);
+  const uint32_t query_width =
+      options_.is_draft_engine()
+          ? 1
+          : static_cast<uint32_t>(options_.num_speculative_tokens()) + 1;
+  return batch.prepare_forward_input(query_width,
+                                     /*min_decoding_bach_size=*/0,
+                                     context_.get_model_args(),
+                                     options_.cp_size());
 }
 
 bool WorkerImpl::can_prepare_npu_graph_decode_input(
@@ -870,7 +875,7 @@ void WorkerImpl::synchronize_sampled_tokens_for_schedule_overlap(
     const SamplingParameters& sampling_params) {
   if (!enable_schedule_overlap() || options_.cp_size() <= 1 ||
       options_.enable_speculative_decode() ||
-      sampling_params.all_greedy_sample) {
+      sampling_params.sampling_mode == SamplingMode::GREEDY) {
     return;
   }
 
@@ -1335,7 +1340,7 @@ void WorkerImpl::prepare_dp_ep_padding(ModelInputParams& input_params) {
     const bool no_padding =
         execution_config.enable_graph_mode_decode_no_padding();
     const uint32_t query_width =
-        static_cast<uint32_t>(options_.num_decoding_tokens());
+        static_cast<uint32_t>(options_.num_speculative_tokens()) + 1;
     const uint32_t max_local_batch_size =
         static_cast<uint32_t>(max_token_size) / query_width;
     const uint32_t batch_limit = static_cast<uint32_t>(std::max<int32_t>(
@@ -1444,7 +1449,8 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
     bool record_ready_event,
     bool wait_for_compute,
     bool restore_request_state) {
-  if (!input.json_object_state_snapshots.empty()) {
+  const bool is_draft_worker = options_.is_draft_engine() || is_spec_draft_;
+  if (!is_draft_worker && !input.json_object_state_snapshots.empty()) {
     // Only enabled snapshots (restorable to fresh machines) need the copy +
     // restore round-trip. Pure non-builtin batches carry only disabled
     // entries because their rows ride the live channel, so skip the per-step
@@ -1458,8 +1464,7 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
                     [](const JsonObjectGrammarSnapshot& snapshot) {
                       return snapshot.enabled;
                     });
-    if (options_.is_draft_engine() || has_enabled_snapshot ||
-        expanded_speculative_validation(input) ||
+    if (has_enabled_snapshot || expanded_speculative_validation(input) ||
         input.json_object_states.empty()) {
       ForwardInput restored_input = input;
       restore_json_object_states(restored_input);
@@ -1533,10 +1538,20 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
 #else
     processed_input = input.to(device_, dtype_);
 #endif
-    // Packed RPC/SHM inputs deserialize JSON snapshots inside ForwardInput::to.
-    // Restore them before speculative dispatch so MTP sees the grammar rows.
-    if (processed_input.json_object_states.empty() &&
-        !processed_input.json_object_state_snapshots.empty()) {
+    if (is_draft_worker) {
+      processed_input.json_object_states.clear();
+      processed_input.json_object_state_snapshots.clear();
+      processed_input.json_object_invalid_draft.clear();
+      processed_input.sampling_params.filter_mask = torch::Tensor();
+      processed_input.sampling_params.filter_bitmask = torch::Tensor();
+      if (processed_input.input_params.sampling.has_value()) {
+        auto& draft_sampling_params =
+            processed_input.input_params.sampling->parameters;
+        draft_sampling_params.filter_mask = torch::Tensor();
+        draft_sampling_params.filter_bitmask = torch::Tensor();
+      }
+    } else if (processed_input.json_object_states.empty() &&
+               !processed_input.json_object_state_snapshots.empty()) {
       restore_json_object_states(processed_input);
     }
     ensure_forward_input_device_tensors(processed_input, device_);
@@ -1575,7 +1590,8 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
 #endif
       input_params.embedding.linear_state_indices =
           torch::zeros({1}, token_options.dtype(torch::kInt32).device(device_));
-      if (options_.num_decoding_tokens() > 1 &&
+      if (!options_.is_draft_engine() &&
+          options_.num_speculative_tokens() > 0 &&
           has_linear_attention_layers(context_.get_model_args())) {
         input_params.num_accepted_tokens_host = {1};
         input_params.num_accepted_tokens =
@@ -1703,10 +1719,7 @@ void WorkerImpl::restore_json_object_states(ForwardInput& input) {
   if (input.json_object_state_snapshots.empty()) {
     return;
   }
-  // DFlash2/DSpark draft workers intentionally have no tokenizer: drafts
-  // propose unconstrained candidates and target verify rows enforce grammar.
-  // Consume, but do not restore, snapshots on draft workers.
-  if (options_.is_draft_engine()) {
+  if (options_.is_draft_engine() || is_spec_draft_) {
     input.json_object_state_snapshots.clear();
     return;
   }
@@ -2057,11 +2070,13 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
 
     // run the model on the given input in working thread
     if (!enable_schedule_overlap()) {
-      auto output = this->step(input);
-      if (output.has_value()) {
-        output->is_graph_warmup = input.input_params.meta.is_graph_warmup;
-      }
-      promise.setValue(std::move(output));
+      promise.setTry(folly::makeTryWith([&] {
+        auto output = this->step(input);
+        if (output.has_value()) {
+          output->is_graph_warmup = input.input_params.meta.is_graph_warmup;
+        }
+        return output;
+      }));
     } else {
       if (input.token_ids.numel() > 0 &&
           input.input_params.meta.batch_forward_type.has_decode()) {
@@ -2482,6 +2497,17 @@ bool WorkerImpl::wakeup_from_remote_weights(const WakeupOptions& options) {
 bool WorkerImpl::init_model(const std::string& model_weights_path,
                             int32_t random_seed,
                             MasterStatus master_status) {
+  return init_model_from_path(model_weights_path,
+                              random_seed,
+                              master_status,
+                              [](ModelArgs&, ModelLoader&) {});
+}
+
+bool WorkerImpl::init_model_from_path(
+    const std::string& model_weights_path,
+    int32_t random_seed,
+    MasterStatus master_status,
+    absl::FunctionRef<void(ModelArgs&, ModelLoader&)> configure_model) {
   // set same random seed for all worker
   ::xllm::ExecutionConfig::get_instance().random_seed(random_seed);
   device_.set_seed(random_seed);
@@ -2537,104 +2563,7 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
   }
   tokenizer_ = std::move(tokenizer);
 
-  const std::string& speculative_algorithm = options_.speculative_algorithm();
-  const bool is_block_diffusion =
-      SpeculativeConfig::is_block_diffusion_algorithm(speculative_algorithm);
-
-#if defined(USE_NPU)
-  if (options_.enable_speculative_decode() &&
-      SpeculativeConfig::is_mtp_algorithm(speculative_algorithm) &&
-      (util::is_deepseek_v4_model_type(args.model_type()) ||
-       is_glm5_next_target_model(args))) {
-    args.num_speculative_tokens(options_.num_speculative_tokens());
-  }
-  // Block-diffusion targets (DFlash2/DSpark) run spec-verify batches of
-  // (num_speculative_tokens + 1) rows per sequence. ModelArgs must carry the
-  // live width even for non-MTP algorithms: the Python MegaMoE capacity
-  // formula reads ModelArgs, not the runtime options, and a stale 0 caps
-  // the communication buffer below the real spec-verify width (glm_moe_dsa
-  // hits "token count exceeds the communication cap: 8 > 4"). C++ KV cache
-  // sizing reads the runtime options and is unaffected by this sync.
-  if (options_.enable_speculative_decode() && is_block_diffusion &&
-      !options_.is_draft_engine()) {
-    args.num_speculative_tokens(options_.num_speculative_tokens());
-  }
-  if (is_block_diffusion) {
-    configure_block_diffusion_model(args, options_);
-  } else if (options_.enable_speculative_decode() &&
-             ::xllm::SpeculativeConfig::get_instance()
-                 .enable_atb_spec_kernel()) {
-    args.num_speculative_tokens(options_.num_speculative_tokens());
-  } else if (options_.enable_speculative_decode() &&
-             options_.num_speculative_tokens() == 0 &&
-             args.num_nextn_predict_layers() != 0) {
-    const std::string& current_type = args.model_type();
-    const char* mtp_model_type = nullptr;
-    if (current_type == "qwen3_5_text" || current_type == "qwen3_5") {
-      mtp_model_type = "qwen3_5_mtp";
-    } else if (current_type == "qwen3_5_moe_text" ||
-               current_type == "qwen3_5_moe") {
-      mtp_model_type = "qwen3_5_moe_mtp";
-    }
-    if (mtp_model_type != nullptr) {
-      LOG(INFO) << "Overriding draft model_type from " << current_type << " to "
-                << mtp_model_type << " for speculative decoding";
-      args.model_type(mtp_model_type);
-    }
-  }
-  if (options_.enable_speculative_decode() && !options_.is_draft_engine() &&
-      SpeculativeConfig::requires_aux_hidden_capture(speculative_algorithm) &&
-      args.layers_to_capture().empty()) {
-    std::vector<int32_t> capture_layer_ids;
-    if (speculative_algorithm == "Eagle3" &&
-        options_.draft_model_path().has_value()) {
-      // Eagle3.1 drafts pin their aux capture layers in the draft config;
-      // legacy eagle3 configs omit them and fall back to the default below.
-      capture_layer_ids = read_capture_layer_ids(*options_.draft_model_path(),
-                                                 /*required=*/false);
-    }
-    if (capture_layer_ids.empty()) {
-      const int32_t num_layers = static_cast<int32_t>(args.n_layers());
-      capture_layer_ids =
-          AuxHiddenCapture::legacy_default_capture_layer_ids(num_layers);
-    }
-    args.layers_to_capture(std::move(capture_layer_ids));
-  }
-#else
-  if (options_.enable_speculative_decode()) {
-    args.num_speculative_tokens(options_.num_speculative_tokens());
-    if (is_block_diffusion) {
-      configure_block_diffusion_model(args, options_);
-    }
-    // When running speculative decoding, the draft worker reuses the same
-    // checkpoint as the target model. The draft worker needs to instantiate
-    // the MTP variant, so override the model_type here without mutating the
-    // original config.
-    if (!is_block_diffusion && options_.num_speculative_tokens() == 0 &&
-        args.num_nextn_predict_layers() != 0) {
-      static const std::unordered_map<std::string, std::string>
-          kModelTypeToMtpType = {
-              {"deepseek_v3", "deepseek_v3_mtp"},
-              {"deepseek_v32", "deepseek_v32_mtp"},
-              {"deepseek_v4", "deepseek_v4_mtp"},
-              {"glm_moe_dsa", "glm_moe_dsa_mtp"},
-              {"joyai_llm_flash", "joyai_llm_flash_mtp"},
-              {"mimo", "mimo_mtp"},
-              {"qwen3_5", "qwen3_5_mtp"},
-              {"qwen3_5_moe", "qwen3_5_moe_mtp"},
-              {"qwen3_5_text", "qwen3_5_mtp"},
-              {"qwen3_5_moe_text", "qwen3_5_moe_mtp"},
-          };
-      const std::string& current_type = args.model_type();
-      auto it = kModelTypeToMtpType.find(current_type);
-      if (it != kModelTypeToMtpType.end()) {
-        LOG(INFO) << "Overriding draft model_type from " << current_type
-                  << " to " << it->second << " for speculative decoding";
-        args.model_type(it->second);
-      }
-    }
-  }
-#endif
+  configure_model(args, *model_loader);
 
   if (ModelConfig::get_instance().capture_hidden_state_layer() >= 0) {
     args.layers_to_capture(
@@ -2674,10 +2603,6 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
   context_.set_model_id(options_.model_id());
   SpeculativeRuntimeConfig speculative_runtime_config;
   speculative_runtime_config.is_draft_engine = options_.is_draft_engine();
-  speculative_runtime_config.adaptive_enabled =
-      options_.enable_adaptive_speculative_decode();
-  speculative_runtime_config.draft_query_width =
-      std::max<int32_t>(1, options_.draft_graph_query_width());
   speculative_runtime_config.dflash_xfia_enabled =
       options_.enable_dflash_xfia();
   context_.set_speculative_runtime_config(speculative_runtime_config);

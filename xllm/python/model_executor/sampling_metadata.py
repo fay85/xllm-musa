@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from enum import IntEnum
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import torch
 
@@ -27,9 +28,16 @@ if TYPE_CHECKING:
     from xllm.python.model_executor.input_batch import InputBatch
 
 
+class SamplingMode(IntEnum):
+    """Keep values in sync with the C++ sampling mode."""
+
+    GREEDY = 0
+    RANDOM = 1
+    MIXED = 2
+
+
 class SamplingParameters(Protocol):
-    all_greedy_sample: bool
-    all_random_sample: bool
+    sampling_mode: SamplingMode
     do_sample: torch.Tensor | None
     temperatures: torch.Tensor | None
     selected_token_idxes: torch.Tensor | None
@@ -41,7 +49,7 @@ class SamplingParameters(Protocol):
 
 class ModelSamplingInput(Protocol):
     parameters: SamplingParameters
-    return_probs: bool
+    return_draft_logits: bool
     return_confidence: bool
     is_unconstrained_greedy: bool
     gumbel_noise: torch.Tensor | None
@@ -77,13 +85,16 @@ def sample_logits(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     import xllm_runtime
 
-    tokens, probabilities = xllm_runtime.sample_logits(logits, sampling_input)
-    if not sampling_input.parameters.all_greedy_sample and tp_size > 1:
+    runtime = cast(Any, xllm_runtime)
+    tokens, draft_logits = cast(
+        "tuple[torch.Tensor, torch.Tensor | None]", runtime.sample_logits(logits, sampling_input)
+    )
+    if sampling_input.parameters.sampling_mode != SamplingMode.GREEDY and tp_size > 1:
         tokens = tokens.contiguous()
         if use_native_tp:
             # Reuse the native TP group and select TP rank 0's slice, matching
             # broadcast(src=0) without creating a second Python process group.
-            gathered_tokens = xllm_runtime.tp_all_gather(tokens, 0)
+            gathered_tokens = cast("torch.Tensor | None", runtime.tp_all_gather(tokens, 0))
             if gathered_tokens is None:
                 # No native group owns this thread: fall back to the Python TP
                 # group, exactly like the non-native branch below.
@@ -97,7 +108,7 @@ def sample_logits(
                 tokens = gathered_tokens.narrow(0, 0, tokens.shape[0])
         else:
             distributed.broadcast_(tokens, src=0, group_name="tp")
-    return tokens, probabilities
+    return tokens, draft_logits
 
 
 @dataclass
@@ -122,7 +133,7 @@ class ModelSamplingMetadataBuilder:
         return (
             sampling is not None
             and sampling.is_unconstrained_greedy
-            and not sampling.return_probs
+            and not sampling.return_draft_logits
             and not sampling.return_confidence
         )
 

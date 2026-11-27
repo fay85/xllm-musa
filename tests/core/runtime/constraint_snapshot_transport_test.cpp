@@ -226,7 +226,7 @@ TEST_F(ConstraintSnapshotTransportTest,
   uint64_t tag = 0;
   ASSERT_GE(packed.payload().size(), sizeof(tag));
   std::memcpy(&tag, packed.payload().data(), sizeof(tag));
-  EXPECT_EQ(tag, 0x584C4C4D0000000CULL);
+  EXPECT_EQ(tag, 0x584C4C4D0000000DULL);
   ForwardInput lazy = stage_packed_input_on_cpu(packed);
   ForwardInput unpacked;
   ASSERT_TRUE(detail::unpack_from_input_host_buffer(

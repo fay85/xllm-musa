@@ -38,8 +38,8 @@ limitations under the License.
 #include "core/framework/parallel_state/parallel_args.h"
 #include "core/platform/device.h"
 #include "core/platform/platform.h"
-#include "core/runtime/dflash/dflash2_worker_impl.h"
-#include "core/runtime/dflash/dflash_worker_impl.h"
+#include "core/runtime/dflash2_worker_impl.h"
+#include "core/runtime/dflash_worker_impl.h"
 #include "core/runtime/dspark_worker_impl.h"
 #include "core/runtime/llm_worker_impl.h"
 #include "core/runtime/mtp_worker_impl.h"
@@ -313,14 +313,6 @@ class TestMTPWorker final : public MTPWorkerImpl {
     draft_impl_ = std::move(draft);
   }
 
-  void set_validation_context(ModelContext context) {
-    context_ = std::move(context);
-  }
-
-  bool requires_uniform_width() const {
-    return requires_uniform_validate_width();
-  }
-
   void prepare_hierarchy_transfers() { prepare_hierarchy_kv_cache_transfers(); }
 
   void finalize_hierarchy_transfers() {
@@ -346,15 +338,6 @@ class TestMTPWorker final : public MTPWorkerImpl {
       started->set_value();
       release.wait();
     });
-  }
-
-  static int32_t preserve_checkpoint_width(
-      int32_t effective_speculative_tokens,
-      const std::vector<int32_t>& accepted_prefix_lengths,
-      int32_t num_speculative_tokens) {
-    return preserve_checkpoint_validate_width(effective_speculative_tokens,
-                                              accepted_prefix_lengths,
-                                              num_speculative_tokens);
   }
 
  private:
@@ -397,70 +380,12 @@ class MTPHostOffloadTest : public ::testing::Test {
   }
 };
 
-TEST_F(MTPHostOffloadTest, GlmUniformWidthIsScopedToPythonGraphs) {
-  Device device(/*device_index=*/0);
-  device.set_device();
-  device.init_device_context();
-  const ParallelArgs parallel_args(/*rank=*/0,
-                                   /*world_size=*/1,
-                                   /*dp_size=*/1,
-                                   /*cp_size=*/1,
-                                   /*process_group=*/nullptr,
-                                   /*ep_size=*/1);
-  const runtime::Options options = make_runtime_options(0.0);
-  const ModelArgs model_args =
-      make_model_args("glm_moe_dsa", /*layer_count=*/1, /*head_dim=*/2);
-  auto target = std::make_unique<HierarchyTransferTestWorker>(
-      parallel_args, device.unwrap(), options, model_args);
-  target->mark_loaded();
-  auto draft = std::make_unique<HierarchyTransferTestWorker>(
-      parallel_args, device.unwrap(), options, model_args);
-  TestMTPWorker worker(parallel_args, device.unwrap(), options);
-  worker.replace_transfer_workers(std::move(target), std::move(draft));
-
-  const bool previous_graph = ExecutionConfig::get_instance().enable_graph();
-  const ScopeGuard graph_guard([previous_graph]() {
-    ExecutionConfig::get_instance().enable_graph(previous_graph);
-  });
-  struct TestCase {
-    std::string model_impl;
-    bool graph_enabled;
-    bool uniform_expected;
-  };
-  const TestCase cases[] = {{"native", true, false},
-                            {"python", true, true},
-                            {"python", false, false}};
-  for (const TestCase& test_case : cases) {
-    SCOPED_TRACE(test_case.model_impl);
-    SCOPED_TRACE(test_case.graph_enabled);
-    ModelContext context(
-        parallel_args,
-        model_args,
-        QuantArgs(),
-        torch::TensorOptions().dtype(torch::kFloat32).device(device.unwrap()));
-    context.set_model_impl(test_case.model_impl);
-    worker.set_validation_context(std::move(context));
-    ExecutionConfig::get_instance().enable_graph(test_case.graph_enabled);
-    EXPECT_EQ(worker.requires_uniform_width(), test_case.uniform_expected);
-  }
-}
-
-TEST(MTPAdaptiveValidateWidthTest, PreservesWidthForPreviousAcceptedTokens) {
-  EXPECT_EQ(TestMTPWorker::preserve_checkpoint_width(
-                /*effective_speculative_tokens=*/1,
-                /*accepted_prefix_lengths=*/{4, 1},
-                /*num_speculative_tokens=*/3),
-            3);
-}
-
 // Replace model construction and weight I/O, keeping the real worker loading
 // lifecycle, policy validation, KV allocation and embedding cache.
 class ContextPolicyModel final : public CausalLM {
  public:
   explicit ContextPolicyModel(torch::TensorOptions options)
       : options_(std::move(options)) {}
-
-  bool share_weights_from(CausalLM& /*source*/) override { return true; }
 
   ModelOutput forward(const torch::Tensor& /*tokens*/,
                       const torch::Tensor& /*positions*/,
@@ -603,7 +528,6 @@ class MTPContextPolicyTest : public MTPHostOffloadTest {
       DraftContextUpdate update,
       const std::string& target_type = "glm5_next",
       const std::string& target_impl = "native",
-      bool embedded_eagle3 = false,
       bool target_ready = false,
       const std::string& draft_type = "glm5_next_mtp",
       const std::string& draft_impl = "native") {
@@ -611,10 +535,10 @@ class MTPContextPolicyTest : public MTPHostOffloadTest {
     const ParallelArgs parallel_args(
         /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
     runtime::Options options = make_runtime_options(/*host_blocks_factor=*/0);
-    options.speculative_algorithm(embedded_eagle3 ? "Eagle3" : "MTP");
+    options.speculative_algorithm(/*speculative_algorithm=*/"MTP");
     ModelArgs args =
         make_model_args(target_type, /*layer_count=*/1, /*head_dim=*/2);
-    args.hidden_size(2).enable_embedded_eagle3_draft(embedded_eagle3);
+    args.hidden_size(/*hidden_size=*/2);
     auto target = std::make_unique<ContextLoadingWorker>(
         parallel_args, device, options, args);
     target->load_target(target_impl);
@@ -727,7 +651,6 @@ TEST_F(MTPContextPolicyTest, QwenNativePairRetainsAcceptedSpan) {
   auto worker = make_worker(DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                             /*target_type=*/"qwen3_5",
                             /*target_impl=*/"native",
-                            /*embedded_eagle3=*/false,
                             /*target_ready=*/false,
                             /*draft_type=*/"qwen3_5_mtp");
   ASSERT_TRUE(worker->init_model(
@@ -747,7 +670,6 @@ TEST_F(MTPContextPolicyTest, QwenPythonTargetKeepsTailContext) {
   auto worker = make_worker(DraftContextUpdate::TAIL_EXTEND,
                             /*target_type=*/"qwen3_5",
                             /*target_impl=*/"python",
-                            /*embedded_eagle3=*/false,
                             /*target_ready=*/false,
                             /*draft_type=*/"qwen3_5_mtp");
   ASSERT_TRUE(worker->init_model(
@@ -779,7 +701,6 @@ TEST_F(MTPContextPolicyTest,
   auto worker = make_worker(DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                             /*target_type=*/"glm5_next",
                             /*target_impl=*/"native",
-                            /*embedded_eagle3=*/false,
                             /*target_ready=*/true);
   ASSERT_TRUE(worker->init_model(
       model_path_.string(), /*random_seed=*/0, MasterStatus::WAKEUP));
@@ -821,7 +742,6 @@ TEST_F(MTPContextPolicyTest, RejectsMixedNativeReplayFamilies) {
         auto worker = make_worker(DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                   /*target_type=*/"glm5_next",
                                   /*target_impl=*/"native",
-                                  /*embedded_eagle3=*/false,
                                   /*target_ready=*/false,
                                   /*draft_type=*/"qwen3_5_mtp");
         worker->init_model(
@@ -849,7 +769,6 @@ TEST_F(MTPContextPolicyTest, RejectsReplayForPythonDraft) {
         auto worker = make_worker(DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
                                   /*target_type=*/"glm5_next",
                                   /*target_impl=*/"native",
-                                  /*embedded_eagle3=*/false,
                                   /*target_ready=*/false,
                                   /*draft_type=*/"glm5_next_mtp",
                                   /*draft_impl=*/"python");
@@ -877,28 +796,6 @@ TEST_F(MTPContextPolicyTest, PythonTargetKeepsTailUpdatesAndRejectsReplay) {
             model_path_.string(), /*random_seed=*/0, MasterStatus::WAKEUP);
       },
       "Incompatible draft context update.*target=glm5_next");
-}
-
-TEST_F(MTPContextPolicyTest, EmbeddedEagleKeepsTailUpdatesAndRejectsReplay) {
-  auto worker = make_worker(DraftContextUpdate::TAIL_EXTEND,
-                            /*target_type=*/"glm5_next",
-                            /*target_impl=*/"native",
-                            /*embedded_eagle3=*/true);
-  ASSERT_TRUE(worker->init_model(
-      model_path_.string(), /*random_seed=*/0, MasterStatus::WAKEUP));
-  ASSERT_TRUE(worker->allocate_kv_cache(cache_shape()));
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(
-      {
-        auto replay_worker =
-            make_worker(DraftContextUpdate::ACCEPTED_SPAN_REPLAY,
-                        /*target_type=*/"glm5_next",
-                        /*target_impl=*/"native",
-                        /*embedded_eagle3=*/true);
-        replay_worker->init_model(
-            model_path_.string(), /*random_seed=*/0, MasterStatus::WAKEUP);
-      },
-      "Incompatible draft context update");
 }
 
 TEST(SpeculativeDraftKVCacheShapeTest, ReusesGroupedTargetPoolCounts) {

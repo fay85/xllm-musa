@@ -37,15 +37,6 @@ class TimePredictor final {
   void fit_for_decode(const std::vector<std::tuple<int32_t, int32_t, double>>&
                           time_profiling_data);
 
-  // Fit the speculative validate-time model
-  //   T = c0 + c1 * (batch * query) + c2 * (batch * query * prefix)
-  // from (batch_size, query_len, prefix_len, latency_ms) samples. Used by the
-  // adaptive speculative controller to weigh the marginal cost of admitting a
-  // draft token. Coefficients are sanitized (non-finite / negative -> 0).
-  void fit_for_speculative_validate(
-      const std::vector<std::tuple<int32_t, int32_t, int32_t, double>>&
-          time_profiling_data);
-
   ~TimePredictor() = default;
 
   double predict_time(int32_t length,

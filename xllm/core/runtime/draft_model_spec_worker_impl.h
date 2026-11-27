@@ -23,12 +23,11 @@ limitations under the License.
 #include <string>
 #include <tuple>
 
-#include "framework/sampling/draft_sampling_mode.h"
+#include "core/framework/speculative/draft_vocab_mapping.h"
 #include "runtime/speculative_worker_impl.h"
 
 namespace xllm {
 
-class AdaptiveSpeculativeController;
 class EmbeddingCache;
 class LLMWorkerImpl;
 class ModelArgs;
@@ -52,6 +51,12 @@ class DraftModelSpecWorkerImpl : public SpeculativeWorkerImpl {
  public:
   ~DraftModelSpecWorkerImpl() override;
 
+  bool init_model(const std::string& model_weights_path,
+                  int32_t random_seed,
+                  MasterStatus master_status) final;
+
+  std::tuple<int64_t, int64_t> estimate_kv_cache_capacity() override;
+
   bool allocate_kv_cache(const KVCacheShape& kv_cache_shape) override;
 
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
@@ -72,6 +77,10 @@ class DraftModelSpecWorkerImpl : public SpeculativeWorkerImpl {
       WorkerType worker_type,
       const std::function<std::unique_ptr<LLMWorkerImpl>()>& draft_factory);
 
+  virtual void apply_draft_model_overrides(ModelArgs& args) const = 0;
+  virtual void on_target_model_loaded() = 0;
+  virtual void on_draft_model_loaded(const std::string& model_weights_path) = 0;
+
   virtual KVCacheShape draft_kv_cache_shape(
       const KVCacheShape& target_kv_cache_shape) const;
   // Reuse grouped target pool counts; otherwise build the draft shape from the
@@ -89,7 +98,7 @@ class DraftModelSpecWorkerImpl : public SpeculativeWorkerImpl {
 
   // Some drafts replay every verified KV position, so retain the full
   // accepted span when allocating their embedding cache.
-  virtual bool requires_full_target_replay() const { return false; }
+  virtual bool requires_full_target_replay() const;
 
   // Physical pages one logical block owns in the draft pool. 1 (default) keeps
   // the draft on the target's kv_split sharding; > 1 replicates the whole
@@ -133,38 +142,11 @@ class DraftModelSpecWorkerImpl : public SpeculativeWorkerImpl {
   bool allocate_pools(const KVCacheShape& kv_cache_shape,
                       const AllocateFn& allocate);
 
-  // Target-side cache budget after reserving storage for the colocated draft.
-  // DeepSeek-V4's fixed SWA pools require both geometries to participate.
-  std::tuple<int64_t, int64_t> estimate_kv_cache_capacity_with_draft(
-      const runtime::Options& target_options,
-      const runtime::Options& draft_options);
-
   static void force_greedy_draft_sampling(SamplingParameters& sampling_params);
 
-  // Overwrite dp_global_token_nums / raw_dp_global_token_nums with the true
-  // post-pruning validate token count of every DP peer, gathered over the DP
-  // group. Adaptive pruning makes each rank's validate token count
-  // data-dependent, so the engine-supplied global vector (which assumes a
-  // uniform per-seq width) no longer matches; DpEpPadding needs the real
-  // per-rank counts to compute matching MoE all-to-all pads. No-op when the DP
-  // group spans a single rank. MUST be called on every DP rank each validate
-  // step (both the pruned and the unpruned branch) so the collective stays in
-  // lockstep and does not deadlock.
-  void sync_dp_global_token_nums_after_prune(ModelInputParams& input_params,
-                                             int32_t local_total_val_tokens);
-
-  // Idle-rank counterpart: a DP rank whose shard is empty still runs the target
-  // validate forward (fake input) while busy peers run the pruned forward.
-  // Both must join the same DP allgather. This variant contributes the idle
-  // rank's own current dp_global_token_nums entry (already scaled to the
-  // uniform validate width) so it stays symmetric with the busy peers.
-  void sync_dp_global_token_nums_for_idle_rank(ModelInputParams& input_params);
-
   std::unique_ptr<LLMWorkerImpl> draft_impl_;
+  DraftVocabMapping draft_vocab_;
   std::shared_ptr<EmbeddingCache> embedding_cache_;
-  std::unique_ptr<AdaptiveSpeculativeController> adaptive_spec_controller_;
-
-  DraftSamplingMode draft_sampling_mode_ = DraftSamplingMode::GREEDY;
 };
 
 }  // namespace xllm

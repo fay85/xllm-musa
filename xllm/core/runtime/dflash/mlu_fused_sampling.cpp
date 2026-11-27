@@ -13,12 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <limits>
+
 #include "core/kernels/mlu/dflash2_sampling.h"
-#include "core/runtime/dflash/dflash2_worker_impl.h"
+#include "core/runtime/dflash2_worker_impl.h"
 
 namespace xllm {
 
-std::optional<DFlash2WorkerImpl::BlockSampleOutput>
+std::optional<std::pair<torch::Tensor, torch::Tensor>>
 DFlash2WorkerImpl::fused_sample(const torch::Tensor& candidate_ids,
                                 const torch::Tensor& edge_log_probs,
                                 const torch::Tensor& gumbel_noise,
@@ -29,22 +31,24 @@ DFlash2WorkerImpl::fused_sample(const torch::Tensor& candidate_ids,
           edge_log_probs,
           gumbel_noise,
           sampling_params.do_sample,
-          sampling_params.all_random_sample,
-          sampling_params.all_greedy_sample)) {
+          sampling_params.sampling_mode == SamplingMode::RANDOM,
+          sampling_params.sampling_mode == SamplingMode::GREEDY)) {
     return std::nullopt;
   }
-  auto sampled =
-      kernel::mlu::sample_dflash2_paths(candidate_ids,
-                                        edge_log_probs,
-                                        gumbel_noise,
-                                        sampling_params.do_sample,
-                                        sampling_params.all_random_sample);
-  torch::Tensor dense_probs =
-      torch::zeros({candidate_ids.size(0), candidate_ids.size(1), vocab_size},
-                   edge_log_probs.options().dtype(torch::kFloat32));
-  dense_probs.scatter_(/*dim=*/-1, candidate_ids, sampled.second);
-  return BlockSampleOutput{.token_ids = std::move(sampled.first),
-                           .dense_probs = std::move(dense_probs)};
+  auto [draft_token_ids, candidate_logits] = kernel::mlu::sample_dflash2_paths(
+      candidate_ids,
+      edge_log_probs,
+      gumbel_noise,
+      sampling_params.do_sample,
+      sampling_params.sampling_mode == SamplingMode::RANDOM);
+  torch::Tensor draft_logits =
+      torch::full({candidate_ids.size(/*dim=*/0),
+                   candidate_ids.size(/*dim=*/1),
+                   vocab_size},
+                  -std::numeric_limits<float>::infinity(),
+                  edge_log_probs.options());
+  draft_logits.scatter_(/*dim=*/-1, candidate_ids, candidate_logits);
+  return std::make_pair(std::move(draft_token_ids), std::move(draft_logits));
 }
 
 }  // namespace xllm

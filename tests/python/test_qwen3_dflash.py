@@ -346,14 +346,14 @@ def test_dflash2_nested_dflash_config_geometry_is_parsed() -> None:
     nested_cfg = DFlash2Qwen3Config.from_dict(nested)
     flat_cfg = DFlash2Qwen3Config.from_dict(flat)
     for key in (
-        "dflash2_block_size",
+        "num_speculative_tokens",
         "dflash2_conv_group_size",
         "dflash2_conv_kernel_size",
         "dflash2_selector_rank",
         "dflash2_selector_top_k",
     ):
         assert getattr(nested_cfg, key) == getattr(flat_cfg, key), key
-    assert nested_cfg.dflash2_block_size == 8
+    assert nested_cfg.num_speculative_tokens == 7
     assert nested_cfg.dflash2_conv_group_size == 16
     assert nested_cfg.dflash2_conv_kernel_size == 2
     assert nested_cfg.dflash2_selector_rank == 256
@@ -381,7 +381,7 @@ def test_dflash2_flat_keys_take_precedence_over_nested_geometry() -> None:
     cfg_dict["use_sliding_window"] = False
     cfg_dict["dflash_config"].update(use_swa=True, swa_window_size=1024)
     cfg = DFlash2Qwen3Config.from_dict(cfg_dict)
-    assert cfg.dflash2_block_size == 4
+    assert cfg.num_speculative_tokens == 3
     assert cfg.dflash2_selector_rank == 256
     assert cfg.sliding_window == 2048
     assert not cfg.use_sliding_window
@@ -469,6 +469,7 @@ def test_sliding_draft_accepts_target_context_parallelism(dflash2: bool) -> None
     assert config.cp_size == 2
     assert config.layer_types == ("sliding_attention",)
 
+
 @pytest.mark.parametrize(
     "variant,expected",
     [
@@ -479,7 +480,6 @@ def test_sliding_draft_accepts_target_context_parallelism(dflash2: bool) -> None
         ("mixed", False),
         ("dflash2", True),
         ("dflash2-cp2", True),
-        ("dflash2-width", False),
     ],
 )
 def test_device_only_decode_admits_only_matching_attention(
@@ -495,7 +495,7 @@ def test_device_only_decode_admits_only_matching_attention(
         num_attention_heads=2,
         num_key_value_heads=2,
         num_hidden_layers=2,
-        draft_query_width=4,
+        num_speculative_tokens=3,
     )
     model_cls = DFlashQwen3ForCausalLM
     if variant.startswith("dflash2"):
@@ -520,8 +520,6 @@ def test_device_only_decode_admits_only_matching_attention(
     if variant.endswith("-cp2"):
         config.update(cp_size=2, world_size=2)
     model = model_cls(config)
-    if variant == "dflash2-width":
-        model.draft_query_width = 3
     assert model.supports_device_only_decode_inputs(128) is expected
     assert not model.supports_device_only_decode_inputs(64)
     runtime.is_ascend_a3 = lambda: False

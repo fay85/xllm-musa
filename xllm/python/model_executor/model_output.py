@@ -20,12 +20,6 @@ import torch
 
 
 @dataclass
-class DraftProposal:
-    token_ids: torch.Tensor
-    draft_probs: torch.Tensor | None = None
-
-
-@dataclass
 class DraftCandidates:
     """Request-major candidate IDs and transition scores before path sampling."""
 
@@ -43,7 +37,8 @@ class DraftDecoderOutput:
 
 @dataclass
 class ModelOutput:
-    draft_proposal: DraftProposal | None = None
+    draft_token_ids: torch.Tensor | None = None
+    draft_logits: torch.Tensor | None = None
     draft_confidence_probs: torch.Tensor | None = None
     hidden_states: torch.Tensor | None = None
     residual: torch.Tensor | None = None

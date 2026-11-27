@@ -101,8 +101,7 @@ class GraphPersistentParam final {
   // Update persistent graph inputs from speculative-verify source tensors on
   // the current producer stream. TileLang fusion is an optional specialization
   // hidden behind this interface.
-  void update_spec_verify_inputs(const torch::Tensor& tokens,
-                                 const torch::Tensor& positions,
+  void update_spec_verify_inputs(const torch::Tensor& positions,
                                  const ModelInputParams& params,
                                  uint32_t padded_num_tokens,
                                  SpecVerifyInputUpdateScope scope);

@@ -93,12 +93,10 @@ class DeepseekV4DSparkConfig(DeepseekV4Config):
 
     dspark_num_layers: int = 0
     dspark_target_layer_ids: tuple[int, ...] = ()
-    dspark_block_size: int = 0
     dspark_noise_token_id: int = 0
     markov_rank: int = 0
     enable_confidence_head: bool = False
     confidence_head_with_markov: bool = True
-    dspark_use_native_sas: bool = False
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]) -> DeepseekV4DSparkConfig:
@@ -113,12 +111,10 @@ class DeepseekV4DSparkConfig(DeepseekV4Config):
             compress_ratios=[1] * num_layers,
             dspark_num_layers=num_layers,
             dspark_target_layer_ids=target_layer_ids,
-            dspark_block_size=int(config.get("dspark_block_size", 0)),
             dspark_noise_token_id=int(config.get("dspark_noise_token_id", 0)),
             markov_rank=int(config.get("markov_rank", config.get("dspark_markov_rank", 0))),
             enable_confidence_head=bool(config.get("enable_confidence_head", False)),
             confidence_head_with_markov=bool(config.get("confidence_head_with_markov", True)),
-            dspark_use_native_sas=bool(config.get("dspark_use_native_sas", False)),
         )
         return cls(**values)
 
@@ -229,7 +225,7 @@ class DeepseekV4DSparkForCausalLM(
                 dtype=dtype,
                 device=device,
             ),
-            query_width=int(config["draft_query_width"]),
+            query_width=cfg.num_speculative_tokens,
             vocab_size=cfg.vocab_size,
             draft_vocab_size=cfg.vocab_size,
             markov_rank=cfg.markov_rank,

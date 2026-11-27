@@ -139,7 +139,7 @@ class DFlash2Qwen3ModelImpl final
         context_kv_(context) {
     const ModelArgs& args = context.get_model_args();
     const auto& tensor_options = context.get_tensor_options();
-    block_size_ = args.dflash2_block_size();
+    num_speculative_tokens_ = args.num_speculative_tokens();
 
     const int64_t num_fused_target_layers =
         static_cast<int64_t>(args.dflash2_target_layer_ids().size());
@@ -221,7 +221,7 @@ class DFlash2Qwen3ModelImpl final
     layer::AttentionMetadata metadata = Base::get_attention_metadata(params, h);
     // DFlash2 jointly denoises a complete proposal block within the
     // checkpoint's sliding window.
-    metadata.non_causal_window_right = block_size_ - 1;
+    metadata.non_causal_window_right = num_speculative_tokens_;
     return metadata;
   }
 
@@ -231,11 +231,11 @@ class DFlash2Qwen3ModelImpl final
     CHECK_GT(args.n_layers(), 0);
     CHECK_GT(args.hidden_size(), 0);
     CHECK_GT(args.sliding_window(), 0);
-    CHECK_GT(args.dflash2_block_size(), 1);
     CHECK_GT(args.dflash2_conv_group_size(), 0);
     CHECK_EQ(args.hidden_size() % args.dflash2_conv_group_size(), 0);
     CHECK_GT(args.dflash2_conv_kernel_size(), 0);
-    CHECK_LE(args.dflash2_conv_kernel_size(), args.dflash2_block_size());
+    CHECK_LE(args.dflash2_conv_kernel_size(),
+             args.num_speculative_tokens() + 1);
     CHECK_GT(args.dflash2_selector_rank(), 0);
     CHECK_GT(args.dflash2_selector_top_k(), 0);
     CHECK_LE(args.dflash2_selector_top_k(), args.vocab_size());
@@ -246,7 +246,7 @@ class DFlash2Qwen3ModelImpl final
   layer::RMSNorm hidden_norm_{nullptr};
   DFlash2CandidateSelector selector_;
   layer::DFlash2ContextKV context_kv_;
-  int32_t block_size_ = 0;
+  int64_t num_speculative_tokens_ = 0;
 };
 TORCH_MODULE(DFlash2Qwen3Model);
 

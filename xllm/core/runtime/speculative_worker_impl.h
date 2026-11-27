@@ -21,7 +21,6 @@ limitations under the License.
 #include <vector>
 
 #include "common/macros.h"
-#include "framework/sampling/rejection_sampler.h"
 #include "runtime/options.h"
 #include "runtime/worker_impl.h"
 
@@ -34,24 +33,6 @@ bool should_run_speculative_decode(const ModelInputParams& params);
 // Keep padded and raw DP token-count views in the same speculative layout.
 void scale_speculative_parallel_token_counts(ModelInputParams& params,
                                              int32_t multiplier);
-
-struct SpeculativeOutputStats {
-  std::vector<int64_t> accepted_per_position;
-  std::vector<SpeculativeTokenStats> sequence_stats;
-  int64_t committed_tokens = 0;
-};
-
-SpeculativeOutputStats calculate_speculative_output_stats(
-    const torch::Tensor& tokens,
-    int64_t num_speculative_tokens);
-
-std::vector<SpeculativeTokenStats> calculate_mtp_speculative_token_stats(
-    const torch::Tensor& tokens,
-    const std::vector<int32_t>& proposed_tokens);
-
-std::vector<SpeculativeTokenStats> calculate_block_speculative_token_stats(
-    const torch::Tensor& tokens,
-    const std::vector<int32_t>& proposed_tokens);
 
 // Base class for all speculative decoding workers.
 // Provides common logic: target model management, step dispatch, and
@@ -122,8 +103,6 @@ class SpeculativeWorkerImpl : public WorkerImpl {
   // Common step dispatch: prefill / decode / empty
   std::optional<ForwardOutput> step(const ForwardInput& input) override;
 
-  ForwardInput update_input_by_last_step_output(ForwardInput& inputs) override;
-
   folly::SemiFuture<bool> pull_kv_blocks_async(
       const uint64_t src_cluster_id,
       const std::string& src_addr,
@@ -132,6 +111,8 @@ class SpeculativeWorkerImpl : public WorkerImpl {
   };
 
  protected:
+  virtual void apply_target_model_overrides(ModelArgs& args) const;
+
   // Algorithm-specific virtual methods for subclasses to implement
   virtual std::optional<ForwardOutput> step_prefill(
       const ForwardInput& input) = 0;
@@ -140,14 +121,9 @@ class SpeculativeWorkerImpl : public WorkerImpl {
   virtual std::optional<ForwardOutput> step_empty(
       const ForwardInput& inputs) = 0;
 
-  // Common helper: update sampling params for validation
-  void update_sampling_params(SamplingParameters& sampling_params,
-                              const int32_t num_val_tokens,
-                              const int32_t total_num_val_tokens,
-                              bool repeat_unique_history = true);
-  void update_sampling_params(SamplingParameters& sampling_params,
-                              const std::vector<int32_t>& per_seq_val_tokens,
-                              const int32_t total_num_val_tokens);
+  void finalize_verify_output(ForwardOutput& target_output,
+                              SampleOutput sample_output,
+                              const ForwardInput& input) const;
 
   // prepare inputs for target model at Decode phase (validation).
   // repeat_unique_history=false skips repeating the unique-token history
@@ -156,14 +132,6 @@ class SpeculativeWorkerImpl : public WorkerImpl {
   void prepare_validate_inputs(const ForwardInput& inputs,
                                ForwardInput& validate_inputs,
                                bool repeat_unique_history = true);
-  // Per-seq variant used by adaptive-speculative pruning: each sequence's
-  // validate row width equals per_seq_val_tokens[i] (must be in [1, N+1]).
-  // The dense meta/token/position/kv-slot buffers are rebuilt as varlen with
-  // total_tokens = Σ per_seq_val_tokens.
-  void prepare_validate_inputs(const ForwardInput& inputs,
-                               ForwardInput& validate_inputs,
-                               const std::vector<int32_t>& per_seq_val_tokens);
-
   // Tokens covered by one column of the target's block table. The table holds
   // logical blocks, so when the KV cache is split across ranks a column spans
   // block_size * kv_split_size tokens; algorithms that carry that geometry
@@ -175,7 +143,5 @@ class SpeculativeWorkerImpl : public WorkerImpl {
  protected:
   // Target model worker
   std::unique_ptr<WorkerImpl> impl_;
-
-  bool enable_fused_kernel_ = false;
 };
 }  // namespace xllm

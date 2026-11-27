@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/load_config.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/sampling/sampler.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/kv_cache_transfer/kv_transfer_completion.h"
 #include "framework/model/model_args.h"
@@ -413,7 +414,7 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   if (prefill_layerwise_kv_cache_ != nullptr) {
 #if defined(USE_NPU) || defined(USE_MLU)
     if (!model_output.hidden_states.defined() &&
-        !model_output.draft_proposal.has_value() &&
+        !model_output.draft_token_ids.defined() &&
         layer_synchronizer != nullptr) {
       layer_synchronizer->abort();
     }
@@ -428,7 +429,7 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     eplb_executor_->finish_eplb_step();
   }
   if (!model_output.hidden_states.defined() &&
-      !model_output.draft_proposal.has_value()) {
+      !model_output.draft_token_ids.defined()) {
     fail_aborted_push();
     wait_kv_push();
     if (!failed_request_ids.empty()) {
@@ -445,8 +446,9 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     output.prepared_token = eplb_executor_->consume_ready_prepare_token();
   }
 
-  if (model_output.draft_proposal.has_value()) {
-    output.draft_proposal = std::move(model_output.draft_proposal);
+  if (model_output.draft_token_ids.defined()) {
+    output.draft_token_ids = std::move(model_output.draft_token_ids);
+    output.draft_logits = std::move(model_output.draft_logits);
     output.draft_confidence_probs =
         std::move(model_output.draft_confidence_probs);
   } else {
@@ -526,14 +528,9 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
       output.logprobs = sampling_params.logprobs;
       output.max_top_logprobs = sampling_params.max_top_logprobs;
       if (!input.skip_sampling_for_logits_only) {
-        auto sample_output = sampler_->forward(logits, sampling_params);
+        auto sample_output = sample(logits, sampling_params);
         synchronize_sampled_tokens_for_schedule_overlap(
             sample_output.next_tokens, sampling_params);
-        output.filter_bitmask_applied_to_logits =
-            sampling_params.filter_bitmask.defined();
-        output.filter_mask_applied_to_logits =
-            !sampling_params.filter_bitmask.defined() &&
-            sampling_params.filter_mask.defined();
 
         // beam search kernel
         BeamSearchOutput beam_search_output;

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import cast
 
 import torch
 
@@ -48,7 +49,7 @@ class Csa2BlockAttentionMetadataBuilder:
         if int(config.get("cp_size", 1)) != 1:
             raise ValueError("CSA2 block attention does not support context parallelism")
         return cls(
-            int(config["draft_query_width"]),
+            cast("int", config["num_speculative_tokens"]),
             int(config.get("window_size", 128)),
             int(config["max_position_embeddings"]),
         )

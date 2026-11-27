@@ -19,9 +19,6 @@ limitations under the License.
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
-#include "core/framework/config/execution_config.h"
-#include "core/framework/config/model_config.h"
-#include "core/platform/platform.h"
 
 DEFINE_string(draft_model, "", "draft hf model path to the model file.");
 
@@ -36,68 +33,90 @@ DEFINE_int32(speculative_suffix_cache_max_depth,
              64,
              "Maximum suffix tree depth for suffix speculative decoding.");
 
-DEFINE_double(speculative_suffix_max_spec_factor,
-              1.0,
-              "Suffix speculation max tokens factor relative to match length.");
-
-DEFINE_double(speculative_suffix_max_spec_offset,
-              0.0,
-              "Suffix speculation max tokens additive offset.");
-
-DEFINE_double(speculative_suffix_min_token_prob,
-              0.1,
-              "Minimum token probability used in suffix speculation.");
-
 DEFINE_int32(speculative_suffix_max_cached_requests,
              -1,
              "Maximum globally cached requests for suffix speculation (-1 "
              "unlimited, 0 disabled).");
 
-DEFINE_bool(speculative_suffix_use_tree_spec,
+DEFINE_bool(enable_probabilistic_draft,
             false,
-            "Whether to use tree-based suffix speculation instead of path "
-            "speculation.");
-
-DEFINE_string(draft_sampling_mode,
-              "greedy",
-              "Draft proposal sampling mode: greedy or probabilistic.");
+            "Drafts sample from their distribution (emitting q for rejection "
+            "sampling); the default is greedy argmax.");
 
 DEFINE_bool(enable_mtp_draft_body_tp1,
             false,
             "Whether to run the MTP draft body with tensor-parallel size 1 "
             "while keeping the draft LMHead on the target TP group.");
 
-DEFINE_bool(enable_atb_spec_kernel,
-            false,
-            "Whether to use ATB speculative kernel.");
-
-DEFINE_bool(enable_adaptive_speculative_decode,
-            false,
-            "Whether to enable adaptive speculative length for MTP decode.");
-
-DEFINE_double(
-    adaptive_speculative_min_gain,
-    0.0,
-    "Minimum relative throughput gain required to include a draft token in "
-    "adaptive speculative validation.");
-
 namespace xllm {
+
+bool SpeculativeConfig::is_eagle3_algorithm(std::string_view algorithm) {
+  return boost::iequals(algorithm, /*Input=*/"Eagle3");
+}
+
+bool SpeculativeConfig::is_suffix_algorithm(std::string_view algorithm) {
+  return boost::iequals(algorithm, /*Input=*/"Suffix");
+}
+
+bool SpeculativeConfig::drives_constraint_channel(std::string_view algorithm) {
+  return is_mtp_algorithm(algorithm) ||
+         is_block_diffusion_algorithm(algorithm) ||
+         is_suffix_algorithm(algorithm);
+}
+
+bool SpeculativeConfig::uses_ssm_engine(std::string_view draft_model_path,
+                                        std::string_view algorithm,
+                                        int32_t num_speculative_tokens) {
+  return !draft_model_path.empty() ||
+         (is_suffix_algorithm(algorithm) && num_speculative_tokens > 0);
+}
+
+bool SpeculativeConfig::requires_aux_hidden_capture(
+    std::string_view algorithm) {
+  return is_eagle3_algorithm(algorithm) ||
+         is_block_diffusion_algorithm(algorithm);
+}
+
+bool SpeculativeConfig::is_block_diffusion_algorithm(
+    std::string_view algorithm) {
+  return is_dflash_algorithm(algorithm) || is_dflash2_algorithm(algorithm) ||
+         is_dspark_algorithm(algorithm);
+}
+
+bool SpeculativeConfig::owns_replicated_kv_cache(std::string_view algorithm) {
+  return is_dflash_algorithm(algorithm) || is_dflash2_algorithm(algorithm);
+}
+
+bool SpeculativeConfig::requires_bootstrap_hidden(std::string_view algorithm) {
+  return is_mtp_algorithm(algorithm) || is_eagle3_algorithm(algorithm);
+}
+
+bool SpeculativeConfig::supports_host_kv_cache(std::string_view algorithm) {
+  return is_mtp_algorithm(algorithm) || is_eagle3_algorithm(algorithm) ||
+         is_block_diffusion_algorithm(algorithm);
+}
+
+const OptionCategory& SpeculativeConfig::option_category() {
+  static const OptionCategory kOptionCategory = {
+      "SPECULATIVE OPTIONS",
+      {"draft_model",
+       "num_speculative_tokens",
+       "speculative_algorithm",
+       "speculative_suffix_cache_max_depth",
+       "speculative_suffix_max_cached_requests",
+       "enable_probabilistic_draft",
+       "enable_mtp_draft_body_tp1"}};
+  return kOptionCategory;
+}
 
 void SpeculativeConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(draft_model);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(num_speculative_tokens);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_algorithm);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_cache_max_depth);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_max_spec_factor);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_max_spec_offset);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_min_token_prob);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_max_cached_requests);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_use_tree_spec);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(draft_sampling_mode);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_probabilistic_draft);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mtp_draft_body_tp1);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_atb_spec_kernel);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_adaptive_speculative_decode);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(adaptive_speculative_min_gain);
 }
 
 void SpeculativeConfig::from_json(const JsonReader& json) {
@@ -105,16 +124,9 @@ void SpeculativeConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(num_speculative_tokens);
   XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_algorithm);
   XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_cache_max_depth);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_max_spec_factor);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_max_spec_offset);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_min_token_prob);
   XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_max_cached_requests);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_use_tree_spec);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(draft_sampling_mode);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_probabilistic_draft);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mtp_draft_body_tp1);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_atb_spec_kernel);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_adaptive_speculative_decode);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(adaptive_speculative_min_gain);
 }
 
 void SpeculativeConfig::append_config_json(
@@ -129,25 +141,11 @@ void SpeculativeConfig::append_config_json(
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, speculative_suffix_cache_max_depth);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, speculative_suffix_max_spec_factor);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, speculative_suffix_max_spec_offset);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, speculative_suffix_min_token_prob);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, speculative_suffix_max_cached_requests);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, speculative_suffix_use_tree_spec);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, draft_sampling_mode);
+      config_json, default_config, enable_probabilistic_draft);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_mtp_draft_body_tp1);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, enable_atb_spec_kernel);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, enable_adaptive_speculative_decode);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, adaptive_speculative_min_gain);
 }
 
 SpeculativeConfig& SpeculativeConfig::get_instance() {
@@ -164,32 +162,13 @@ void SpeculativeConfig::initialize() {
 }
 
 void SpeculativeConfig::validate() const {
-  // ExecutionConfig and ModelConfig initialize first. Cross-config checks
-  // here use actual startup values, not SpeculativeConfig's initial defaults.
-  if (!ExecutionConfig::get_instance().graph_capture_sizes().empty()) {
-    CHECK(!enable_adaptive_speculative_decode())
-        << "graph_capture_sizes does not support adaptive speculative decode";
-    const bool native_speculative_decode =
-        num_speculative_tokens() > 0 &&
-        !ModelConfig::is_python_model_impl(
-            ModelConfig::get_instance().model_impl());
-    CHECK(!native_speculative_decode || !enable_atb_spec_kernel())
-        << "graph_capture_sizes does not support packed ATB speculative "
-           "kernels";
-  }
-  if (Platform::is_mlu()) {
-    CHECK(!enable_adaptive_speculative_decode())
-        << "Adaptive speculative decoding is currently disabled on MLU. "
-        << "Set enable_adaptive_speculative_decode=false.";
-  }
-  const DraftSamplingMode mode =
-      parse_draft_sampling_mode(draft_sampling_mode());
-  const std::string& algorithm = speculative_algorithm();
-  if (mode == DraftSamplingMode::PROBABILISTIC) {
-    CHECK(is_probabilistic_draft_sampling_supported(algorithm))
-        << algorithm << " does not support draft_sampling_mode="
-        << kDraftSamplingModeProbabilistic
-        << ". Supported: MTP, DSpark, Eagle3.";
+  if (enable_probabilistic_draft()) {
+    const std::string& algorithm = speculative_algorithm();
+    CHECK(is_mtp_algorithm(algorithm) || is_eagle3_algorithm(algorithm) ||
+          is_dspark_algorithm(algorithm) || is_dflash2_algorithm(algorithm))
+        << algorithm
+        << " does not support enable_probabilistic_draft. Supported: MTP, "
+           "DSpark, DFlash2, Eagle3.";
   }
 }
 

@@ -62,6 +62,7 @@ from xllm.python.model_executor.forward_context import (
 )
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
+from xllm.python.model_executor.runner import draft_tokens_per_sequence
 from xllm.python.model_executor.runners.acl_graph_capture import capture_acl_graph, device_capture_lock
 from xllm.python.model_executor.runners.base import (
     BaseRunner,
@@ -354,11 +355,11 @@ class DecodeAclGraphRunner(BaseRunner):
         dp_size: int = 1,
         dp_rank: int = 0,
         decode_batch_size_limit: int | None = None,
-        num_decoding_tokens: int = 1,
+        num_speculative_tokens: int = 0,
         enable_mega_moe_token_mask: bool = False,
         *,
         is_spec_draft: bool = False,
-        draft_query_width: int = 1,
+        model_type: str = "",
         eplv2_graph_token_limit: int | None = None,
         capture_sizes: Sequence[int] = (),
     ) -> None:
@@ -376,7 +377,7 @@ class DecodeAclGraphRunner(BaseRunner):
         # MTP spec-verify. Static paging buffers are sized in token rows so the
         # expanded-verify graph (N*width rows) gets matching capacity instead
         # of the sequence-only max_batch (item 二).
-        self.num_decoding_tokens = max(1, int(num_decoding_tokens))
+        self._verify_width = 1 if is_spec_draft else num_speculative_tokens + 1
         # Optional memory guardrail: buckets above the limit fall back to
         # eager instead of capturing ever-larger graphs (0 disables).
         self.decode_batch_size_limit = int(decode_batch_size_limit or 0)
@@ -386,10 +387,12 @@ class DecodeAclGraphRunner(BaseRunner):
         self._is_spec_draft = is_spec_draft
         # Draft metadata stays one row per token. Query width defines complete
         # blocks for sequence-capacity admission and graph padding.
-        self._draft_query_width = max(1, int(draft_query_width))
+        self._draft_tokens_per_sequence = (
+            draft_tokens_per_sequence(model_type, num_speculative_tokens) if is_spec_draft else 1
+        )
         # The native bridge normalizes raw sizes using the same policy as native
         # ACL capture and engine warmup. Python only consumes effective shapes.
-        query_width = self._draft_query_width if self._is_spec_draft else self.num_decoding_tokens
+        query_width = self._draft_tokens_per_sequence if self._is_spec_draft else self._verify_width
         if any(
             type(size) is not int or size <= 0 or size > 2**31 - 1 or size % query_width != 0 for size in capture_sizes
         ):
@@ -435,7 +438,7 @@ class DecodeAclGraphRunner(BaseRunner):
         """Floor, in token rows, for the graph-visible engram staging block.
 
         ``max_batch`` counts sequences (segments), not token rows: the captured
-        graph packs ``num_decoding_tokens`` token rows per sequence at the
+        graph packs ``verify_width`` token rows per sequence at the
         verify slots (1 for plain decode) -- the same per-sequence width
         ``_shared_graph_plan`` folds into ``verify_width``. A spec-draft runner
         additionally emits up to ``draft_query_width`` query rows per sequence;
@@ -457,9 +460,9 @@ class DecodeAclGraphRunner(BaseRunner):
             return self._capture_sizes[-1]
         if self.decode_batch_size_limit > 0:
             seq_capacity = min(seq_capacity, self.decode_batch_size_limit)
-        rows_per_seq = self.num_decoding_tokens
+        rows_per_seq = self._verify_width
         if self._is_spec_draft:
-            rows_per_seq = max(rows_per_seq, self._draft_query_width)
+            rows_per_seq = max(rows_per_seq, self._draft_tokens_per_sequence)
         return _decode_bucket(seq_capacity * rows_per_seq)
 
     def _padded_token_rows(self, token_rows: int, verify_width: int = 1) -> int:
@@ -469,11 +472,11 @@ class DecodeAclGraphRunner(BaseRunner):
             index = bisect_left(self._capture_sizes, token_rows)
             return self._capture_sizes[index] if index < len(self._capture_sizes) else 0
         if self._model_decode_graph_bucket is not None:
-            block_width = self._draft_query_width if self._is_spec_draft else verify_width
+            block_width = self._draft_tokens_per_sequence if self._is_spec_draft else verify_width
             model_bucket = self._model_decode_graph_bucket(token_rows, block_width)
             if model_bucket is not None:
                 return model_bucket
-        query_width = self._draft_query_width if self._is_spec_draft else 1
+        query_width = self._draft_tokens_per_sequence if self._is_spec_draft else 1
         num_groups = (token_rows + query_width - 1) // query_width
         return _decode_bucket(num_groups) * query_width
 
@@ -525,7 +528,6 @@ class DecodeAclGraphRunner(BaseRunner):
         metadata: AttentionMetadata,
         batch_size: int,
         local_expanded: bool | None = None,
-        packed_verify_width: int = 1,
         *,
         input_batch: InputBatch | None = None,
     ) -> tuple[bool, int, int | None]:
@@ -533,7 +535,7 @@ class DecodeAclGraphRunner(BaseRunner):
 
         ``(is_verify, verify_width, admission_batch)``. ``admission_batch`` is
         ``None`` when active token counts are not whole verify groups. Under DP
-        the width comes only from ``is_spec_verify`` and ``num_decoding_tokens``
+        the width comes only from ``is_spec_verify`` and ``verify_width``
         (or the configured draft query width / exported packed width), so an empty rank and a busy
         rank share one graph key. A local expanded layout that is not that
         group-wide verify raises instead of capturing a private graph. On a
@@ -550,16 +552,17 @@ class DecodeAclGraphRunner(BaseRunner):
             seq_count = linear_idx.numel() if linear_idx is not None and linear_idx.numel() > 0 else batch_size
             if batch_size % seq_count == 0:
                 local_width = batch_size // seq_count
+        packed_verify_width = getattr(metadata, "num_speculative_tokens", 0) + 1
         packed_plan = False
         if self.dp_size > 1:
             # Local expanded rows must not choose a width the empty rank cannot see.
-            if marked_spec_verify and self.num_decoding_tokens > 1:
-                if local_width > 1 and local_width != self.num_decoding_tokens:
+            if marked_spec_verify and self._verify_width > 1:
+                if local_width > 1 and local_width != self._verify_width:
                     raise RuntimeError(
-                        "DP spec-verify layout does not match num_decoding_tokens: "
-                        f"measured={local_width}, num_decoding_tokens={self.num_decoding_tokens}"
+                        "DP spec-verify layout does not match verify_width: "
+                        f"measured={local_width}, verify_width={self._verify_width}"
                     )
-                verify_width = self.num_decoding_tokens
+                verify_width = self._verify_width
             elif packed_verify_width > 1:
                 # Non-expanded packed verify (V4.1 DSpark): the C++-exported
                 # width folds every rank's rows — including the empty shard's
@@ -569,12 +572,12 @@ class DecodeAclGraphRunner(BaseRunner):
                 verify_width = packed_verify_width
                 packed_plan = True
             elif self._is_spec_draft and local_expanded and getattr(metadata, "use_dflash_proposal_attention", False):
-                verify_width = self._draft_query_width
+                verify_width = self._draft_tokens_per_sequence
             else:
                 if local_width > 1:
                     raise RuntimeError(
                         "DP expanded decode is not a group-wide spec verify: "
-                        f"measured={local_width}, num_decoding_tokens={self.num_decoding_tokens}"
+                        f"measured={local_width}, verify_width={self._verify_width}"
                     )
                 verify_width = 1
         elif (
@@ -589,8 +592,8 @@ class DecodeAclGraphRunner(BaseRunner):
             verify_width = local_width
         elif packed_verify_width > 1:
             verify_width = packed_verify_width
-        elif spec_verify and self.num_decoding_tokens > 1:
-            verify_width = self.num_decoding_tokens
+        elif spec_verify and self._verify_width > 1:
+            verify_width = self._verify_width
         else:
             verify_width = 1
         is_verify = self._uses_verify_graph(verify_width, marked_spec_verify, local_expanded)
@@ -603,7 +606,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 max_global_tokens = max(int(c) for c in metadata.dp_execution_token_counts)
                 admission_batch = max(
                     (max_global_tokens + verify_width - 1) // verify_width,
-                    self._spec_verify_sequence_count(metadata, batch_size, False, verify_width),
+                    max(1, batch_size // verify_width),
                 )
             else:
                 admission_batch = _dp_spec_sequence_batch(
@@ -615,7 +618,7 @@ class DecodeAclGraphRunner(BaseRunner):
             admission_batch = batch_size // verify_width
         else:
             admission_batch = batch_size
-        if self._is_spec_draft and verify_width <= 1 and self._draft_query_width > 1:
+        if self._is_spec_draft and verify_width <= 1 and self._draft_tokens_per_sequence > 1:
             # Capacity is in sequences. Draft rows are query_width per sequence
             # but the captured graph stays width 1, so fold only this gate.
             if self.dp_size > 1:
@@ -623,10 +626,10 @@ class DecodeAclGraphRunner(BaseRunner):
                     metadata.dp_execution_token_counts,
                     getattr(metadata, "raw_dp_execution_token_counts", None),
                 )
-                if active_counts and all(count % self._draft_query_width == 0 for count in active_counts):
-                    admission_batch = max(active_counts) // self._draft_query_width
-            elif batch_size % self._draft_query_width == 0:
-                admission_batch = batch_size // self._draft_query_width
+                if active_counts and all(count % self._draft_tokens_per_sequence == 0 for count in active_counts):
+                    admission_batch = max(active_counts) // self._draft_tokens_per_sequence
+            elif batch_size % self._draft_tokens_per_sequence == 0:
+                admission_batch = batch_size // self._draft_tokens_per_sequence
         return is_verify, verify_width, admission_batch
 
     def can_execute(self, inputs: ModelInput) -> bool:
@@ -746,59 +749,6 @@ class DecodeAclGraphRunner(BaseRunner):
             tuple(tables),
         )
 
-    def _spec_verify_width(
-        self,
-        batch_size: int,
-        metadata: AttentionMetadata | None = None,
-    ) -> int:
-        """Row multiplier of a NON-expanded packed spec-verify batch (1 = none).
-
-        MTP-style spec-verify packs ``num_decoding_tokens`` (num_spec+1) token
-        rows per logical sequence. The expanded (chunked-typed) flows expose
-        that packing through ``linear_state_indices``, but the V4.1 DSpark
-        verify batch does not: V4.1 has no linear-attention layers, so no
-        per-sequence state tensor is exported and ``is_spec_verify`` stays
-        False. Its paging metadata is per token row, i.e. it looks exactly like
-        a plain decode of ``batch_size`` sequences whose count is
-        ``row_multiplier`` times too large.
-
-        The C++ validate builder exports the true width on
-        ``AttentionMetadata.spec_verify_width``; use it when present. Older C++
-        binaries without the field keep the conservative width-1 decode path:
-        a plain decode is never shape-guessed into a packed verify, so the
-        historical group-wide plain-decode admission holds.
-        """
-        explicit = None if metadata is None else getattr(metadata, "spec_verify_width", None)
-        if explicit is not None:
-            return max(1, int(explicit))
-        return 1
-
-    def _spec_verify_sequence_count(
-        self,
-        metadata: AttentionMetadata,
-        batch_size: int,
-        is_expanded_spec_verify: bool,
-        verify_width: int,
-    ) -> int:
-        """Logical sequence count (SEQS) of a decode step.
-
-        ``input_ids.numel()`` counts TOKEN rows for a spec-verify batch while
-        the capacity gates (``max_batch``, ``decode_batch_size_limit``) are in
-        SEQS. Expanded verify carries one ``linear_state_indices`` entry per
-        logical sequence; the non-expanded packed verify folds via the exported
-        width. An empty DP shard executes a single fake row (batch_size <
-        width), which still stands for one logical sequence. Plain decode keeps
-        the row count.
-        """
-        if not is_expanded_spec_verify:
-            if verify_width <= 1:
-                return batch_size
-            return max(1, batch_size // verify_width)
-        lsi = getattr(metadata, "linear_state_indices", None)
-        if lsi is not None and lsi.numel() > 0:
-            return int(lsi.numel())
-        return batch_size
-
     def _can_execute_inner(
         self,
         input_ids: torch.Tensor,
@@ -827,32 +777,28 @@ class DecodeAclGraphRunner(BaseRunner):
         if self._is_spec_draft and not is_expanded_spec_verify and (metadata.is_prefill or metadata.is_chunked_prefill):
             return False
         marked_spec_verify = bool(getattr(metadata, "is_spec_verify", False))
-        # Non-expanded packed spec-verify width (V4.1 DSpark), resolved by
-        # ``_spec_verify_width``. Expanded (chunked-typed) and scheduler-marked
-        # MTP verify are NOT affected: they keep the mainline group-wide
-        # admission below.
-        verify_width = self._spec_verify_width(batch_size, metadata)
+        verify_width = getattr(metadata, "num_speculative_tokens", 0) + 1
         verify_graph_enabled = verify_width > 1
         # Debug switch. Under DP every rank must see it, not only the expanded one.
         disable_verify_graph = os.environ.get("XLLM_NO_VERIFY_GRAPH") == "1"
-        if disable_verify_graph and self.dp_size > 1 and self.num_decoding_tokens > 1:
+        if disable_verify_graph and self.dp_size > 1 and self._verify_width > 1:
             return False
         # Expanded (chunked-typed), scheduler-marked, and packed DSpark verify
         # all publish a group-wide admission decision; DP multi-token decode
         # steps share one graph bucket because the buckets derive from the
         # DP-visible workloads. A decode-typed batch the C++ DSpark exporter
-        # classified but never folded (exported spec_verify_width 1, so the
+        # classified but never folded (exported num_speculative_tokens 0, so the
         # packed width never materialises) is not a verifiable pack: the DP
         # group cannot prove uniform shape for it, so it keeps the fail-closed
         # eager gate. A legacy batch without the exported field keeps the
         # historical group-wide plain-decode admission below.
         if (
             self.dp_size > 1
-            and self.num_decoding_tokens > 1
+            and self._verify_width > 1
             and not is_expanded_spec_verify
             and not marked_spec_verify
             and not verify_graph_enabled
-            and getattr(metadata, "spec_verify_width", None) is not None
+            and getattr(metadata, "num_speculative_tokens", None) is not None
         ):
             return False
         # Debug isolation switch: force spec-verify batches through the eager
@@ -880,16 +826,11 @@ class DecodeAclGraphRunner(BaseRunner):
             # back to sequences via the exported width so the capacity gates
             # below compare SEQS to SEQS. Width 1 (plain decode) keeps
             # ``size_check_bs == batch_size`` exactly as before.
-            size_check_bs = self._spec_verify_sequence_count(
-                metadata,
-                batch_size,
-                False,
-                verify_width,
-            )
-        if self.dp_size == 1 and self._is_spec_draft and self._draft_query_width > 1:
-            if size_check_bs % self._draft_query_width != 0:
+            size_check_bs = max(1, batch_size // verify_width) if verify_width > 1 else batch_size
+        if self.dp_size == 1 and self._is_spec_draft and self._draft_tokens_per_sequence > 1:
+            if size_check_bs % self._draft_tokens_per_sequence != 0:
                 return False
-            size_check_bs //= self._draft_query_width
+            size_check_bs //= self._draft_tokens_per_sequence
         kpool_query_lens = tuple(int(length) for length in getattr(metadata, "kpool_query_lens", ()))
         if kpool_query_lens:
             spans_cover_rows = all(length > 0 for length in kpool_query_lens) and sum(kpool_query_lens) == batch_size
@@ -966,17 +907,16 @@ class DecodeAclGraphRunner(BaseRunner):
                 metadata,
                 batch_size,
                 local_expanded=is_expanded_spec_verify,
-                packed_verify_width=verify_width,
             )
             if global_batch is None:
                 return False
             max_global_tokens = max(int(c) for c in execution_counts)
             if not self._eplv2_graph_admits(max_global_tokens, verify_width):
                 return False
-            if self._is_spec_draft and verify_width <= 1 and self._draft_query_width > 1:
+            if self._is_spec_draft and verify_width <= 1 and self._draft_tokens_per_sequence > 1:
                 raw_counts = getattr(metadata, "raw_dp_execution_token_counts", None)
                 active_counts = _dp_active_execution_counts(execution_counts, raw_counts)
-                if any(count % self._draft_query_width != 0 for count in active_counts):
+                if any(count % self._draft_tokens_per_sequence != 0 for count in active_counts):
                     return False
             if verify_width > 1 and kpool_query_lens:
                 self._require_shared_kpool_layout(
@@ -1219,7 +1159,7 @@ class DecodeAclGraphRunner(BaseRunner):
         than being swallowed into a silent eager fallback).
 
         ``verify_width`` describes the non-expanded packed verify (one
-        ``spec_verify_width`` token rows per logical sequence, decode-typed). It
+        ``num_speculative_tokens + 1`` token rows per logical sequence, decode-typed). It
         carries several per-sequence tensors (``linear_state_indices`` /
         ``has_initial_state`` / cumulative lengths) exactly like the expanded
         verify does, so those accept one entry per logical sequence too.
@@ -1299,7 +1239,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 and 0 <= self.dp_rank < len(raw_counts)
                 and int(raw_counts[self.dp_rank]) <= 0
                 and bool(getattr(metadata, "is_spec_verify", False))
-                and self.num_decoding_tokens > 1
+                and self._verify_width > 1
             )
             if not placeholder_verify:
                 self._reject_dp_all_decode(
@@ -1635,7 +1575,6 @@ class DecodeAclGraphRunner(BaseRunner):
             metadata,
             batch_size,
             local_expanded=resolve_expanded_decode_metadata(metadata) is not None,
-            packed_verify_width=self._spec_verify_width(batch_size, metadata),
         )
         if admission_batch is None or self._sequence_capacity_bucket(admission_batch) > self.max_batch:
             raise ValueError("decode batch exceeds ACL graph capacity")
@@ -1715,7 +1654,6 @@ class DecodeAclGraphRunner(BaseRunner):
             metadata,
             batch_size,
             local_expanded=expanded_view is not None,
-            packed_verify_width=self._spec_verify_width(batch_size, metadata),
             input_batch=input_batch,
         )
         padded_batch_size = self._padded_token_rows(graph_token_rows, verify_width)
@@ -2326,9 +2264,9 @@ class DecodeAclGraphRunner(BaseRunner):
             max_blocks_per_sequence = (self.max_model_len + page_size - 1) // page_size
             # Capacity in TOKEN rows: MTP spec-verify captures N*width rows,
             # so the flat paged_kv_indices buffer must hold
-            # max_batch * num_decoding_tokens * max_blocks entries (item 二);
+            # max_batch * verify_width * max_blocks entries (item 二);
             # sizing it by sequences alone underflows on expanded-verify copy.
-            rows_per_sequence = max(self.num_decoding_tokens, self._draft_query_width if self._is_spec_draft else 1)
+            rows_per_sequence = max(self._verify_width, self._draft_tokens_per_sequence if self._is_spec_draft else 1)
             self._paged_kv_indices_buffer = torch.zeros(
                 self.max_batch * rows_per_sequence * max_blocks_per_sequence,
                 dtype=paged_kv_indices.dtype,
@@ -2386,7 +2324,7 @@ class DecodeAclGraphRunner(BaseRunner):
         needs_accepted_tokens = any(
             getattr(cache, "conv", None) is not None and getattr(cache, "ssm", None) is not None
             for cache in self.layer_caches
-        ) and (self.num_decoding_tokens > 1 or getattr(metadata, "num_accepted_tokens", None) is not None)
+        ) and (self._verify_width > 1 or getattr(metadata, "num_accepted_tokens", None) is not None)
         lookback = getattr(metadata, "engram_lookback_token_ids", None)
         cfg = getattr(self.model, "cfg", None)
         if lookback is not None and lookback.ndim != 2:
@@ -2841,7 +2779,7 @@ class DecodeAclGraphRunner(BaseRunner):
             entry.static_input_ids,
             entry.static_positions,
             entry.is_padding,
-            spec_verify_width=verify_width,
+            num_speculative_tokens=None if verify_width is None else verify_width - 1,
         )
 
     @staticmethod

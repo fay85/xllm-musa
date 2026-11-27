@@ -23,6 +23,32 @@ limitations under the License.
 
 namespace xllm::speculative_worker {
 
+// Speculative state is replicated across every model rank within one DP
+// replica. With orthogonal CP x TP, tp_group_ covers only one CP shard, while
+// cp_group_ connects the same TP rank across CP shards. Broadcast along both
+// axes so every replica caches and consumes the same sampled token, without
+// crossing into another DP replica through the world group.
+void broadcast_speculative_token_ids(torch::Tensor& tokens,
+                                     const ParallelArgs& parallel_args) {
+  // DeepSeek-V4 TORCH publishes orthogonal TP and CP groups. Other backends
+  // retain their existing single-group speculative broadcast behavior.
+  ProcessGroup* tp_group =
+      speculative_worker::sampling_process_group(parallel_args);
+  const bool use_orthogonal_cp_consensus =
+      parallel_args.cp_size() > 1 && parallel_args.tp_group_ != nullptr &&
+      parallel_args.cp_group_ != nullptr &&
+      parallel_args.cp_group_ != parallel_args.tp_group_;
+  if (!use_orthogonal_cp_consensus) {
+    broadcast_tokens_in_group(tokens, tp_group);
+    return;
+  }
+
+  broadcast_tokens_in_group(tokens, parallel_args.tp_group_);
+  if (parallel_args.cp_group_ != parallel_args.tp_group_) {
+    broadcast_tokens_in_group(tokens, parallel_args.cp_group_);
+  }
+}
+
 ProcessGroup* sampling_process_group(const ParallelArgs& parallel_args) {
   return parallel_args.tp_group_ != nullptr ? parallel_args.tp_group_
                                             : parallel_args.process_group_;

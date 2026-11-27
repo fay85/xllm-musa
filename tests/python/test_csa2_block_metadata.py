@@ -226,7 +226,7 @@ def test_block_attention_builder_rejects_context_parallelism_at_initialization()
     with pytest.raises(ValueError, match="context parallelism"):
         Csa2BlockAttentionMetadataBuilder.from_config(
             {
-                "draft_query_width": 3,
+                "num_speculative_tokens": 3,
                 "window_size": 8,
                 "max_position_embeddings": 64,
                 "cp_size": 2,

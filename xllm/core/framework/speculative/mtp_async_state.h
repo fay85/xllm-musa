@@ -44,11 +44,6 @@ bool supports_native_spec_verify_replay_update(TargetSpecVerifyMode mode,
 
 // Runtime graph conditions affect GLM DSA only; omitted conditions keep its
 // generic/native behavior conservative.
-bool requires_uniform_spec_verify(std::string_view model_type,
-                                  bool is_python_model = false,
-                                  bool graph_enabled = false,
-                                  bool requires_eager_execution = false);
-
 // Shared allocation/launch width for target verification block tables. The
 // extra entry covers the speculative token that can cross a block boundary.
 int64_t speculative_verify_block_table_capacity(int64_t max_position_embeddings,

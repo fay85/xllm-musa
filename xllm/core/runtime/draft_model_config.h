@@ -23,7 +23,7 @@ namespace xllm {
 
 struct ModelArgs;
 namespace runtime {
-struct Options;
+class Options;
 }
 
 class JsonReader;
@@ -41,14 +41,14 @@ std::vector<int32_t> read_capture_layer_ids(
 // present, for the caller to validate.
 int32_t read_mask_token_id(const JsonReader& reader);
 
-// Reads the DSpark draft's block size (which includes the anchor token) from
-// the draft's config.json. The root key wins over the nested ``text_config``
-// key. Returns 0 when no key is present, for the caller to default.
-int32_t read_block_size(const std::string& model_weights_path);
+void configure_block_diffusion_target(ModelArgs& args,
+                                      const runtime::Options& options);
 
-// Apply before model construction so draft layers and dummy inputs use the
-// same geometry. The caller selects a block-diffusion algorithm.
-void configure_block_diffusion_model(ModelArgs& args,
+// Apply before model construction so draft layers and dummy inputs agree.
+void configure_block_diffusion_draft(ModelArgs& args,
                                      const runtime::Options& options);
+
+void configure_mtp_family_draft(ModelArgs& args,
+                                const runtime::Options& options);
 
 }  // namespace xllm

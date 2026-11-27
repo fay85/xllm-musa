@@ -30,7 +30,7 @@ from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.runner import RunnerConfig
 from xllm.python.model_executor.runners import base as runner_base
-from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder
+from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder, SamplingMode
 from xllm.python.models.base import PyModelBase
 from xllm.python.models.qwen3_dflash import DFlashQwen3ForCausalLM
 from xllm.python.pipelines.dflash_pipeline import DFlashExecutionPipeline
@@ -47,8 +47,7 @@ class _Model(PyModelBase):
 
     def __init__(self, width: int = 4) -> None:
         super().__init__()
-        self.draft_query_width = width
-        self.cfg = SimpleNamespace(vocab_size=11)
+        self.cfg = SimpleNamespace(vocab_size=11, num_speculative_tokens=width - 1)
         self.model = _Backbone()
         del self.model.candidate_selector
         self.lm_head = _Head()
@@ -79,9 +78,11 @@ def _pipeline(model: _Model, *, graph: bool = False, dp_size: int = 1) -> DFlash
 
 def _reference(model: _Model, inputs: ModelInput) -> torch.Tensor:
     requests = inputs.input_batch.num_reqs
-    hidden = model.model(inputs.input_ids, inputs.positions).view(requests, model.draft_query_width, -1)[:, 1:]
+    hidden = model.model(inputs.input_ids, inputs.positions).view(requests, (model.cfg.num_speculative_tokens + 1), -1)[
+        :, 1:
+    ]
     logits = model.compute_logits(hidden.reshape(-1, hidden.shape[-1]), None)
-    return logits.argmax(-1).view(requests, model.draft_query_width - 1)
+    return logits.argmax(-1).view(requests, model.cfg.num_speculative_tokens)
 
 
 @pytest.mark.parametrize("width", [2, 4, 8])
@@ -94,8 +95,8 @@ def test_pipeline_preserves_parallel_greedy_sampling(width: int, requests: int, 
         model.lm_head.rows.clear()
         output = _pipeline(model).execute(inputs)
     assert isinstance(output, ModelOutput)
-    torch.testing.assert_close(output.draft_proposal.token_ids, expected)
-    assert output.draft_proposal.draft_probs is None
+    torch.testing.assert_close(output.draft_token_ids, expected)
+    assert output.draft_logits is None
     assert model.lm_head.rows == [requests * (width - 1)]
     sampling_runtime.sample_logits.assert_called_once()
 
@@ -110,8 +111,10 @@ def test_sampling_fallback_keeps_decoder_graph_and_recovers(
             inputs = _inputs(requests, constrained=constrained, offset=offset)
             expected = _reference(model, inputs)
             output = pipeline.execute(inputs)
-            torch.testing.assert_close(output.draft_proposal.token_ids, expected)
-            assert output.draft_proposal.draft_probs is None
+            assert isinstance(output, ModelOutput)
+            assert output.draft_token_ids is not None
+            torch.testing.assert_close(output.draft_token_ids, expected)
+            assert output.draft_logits is None
             assert pipeline.entry_runner.execution_mode == "graph"
             assert pipeline.proposal_runner.execution_mode == ("eager" if constrained else "graph")
 
@@ -124,7 +127,9 @@ def test_constrained_sampling_uses_native_parameters(sampling_runtime: ModuleTyp
     sampling_runtime.sample_logits.side_effect = lambda logits, sampling: (torch.full((logits.shape[0],), 7), None)
     with torch.no_grad():
         output = _pipeline(_Model()).execute(inputs)
-    assert output.draft_proposal.token_ids.tolist() == [[7, 7, 7], [7, 7, 7]]
+    assert isinstance(output, ModelOutput)
+    assert output.draft_token_ids is not None
+    assert output.draft_token_ids.tolist() == [[7, 7, 7], [7, 7, 7]]
     prepared = sampling_runtime.sample_logits.call_args.args[1]
     assert prepared.parameters.selected_token_idxes.numel() == 0
     assert prepared.parameters.sample_idxes.numel() == 0
@@ -158,7 +163,9 @@ def test_unsampled_graph_warmup_keeps_head_for_later_proposals(
         assert bool(model.lm_head.rows) is not dummy
         current = _inputs(3, offset=2)
         output = pipeline.execute(current)
-        torch.testing.assert_close(output.draft_proposal.token_ids, _reference(model, current))
+        assert isinstance(output, ModelOutput)
+        assert output.draft_token_ids is not None
+        torch.testing.assert_close(output.draft_token_ids, _reference(model, current))
 
 
 @pytest.mark.parametrize("agreed", [True, False])
@@ -191,7 +198,9 @@ def test_active_dp_sampling_uses_shared_agreement(
     inputs = _inputs(constrained=constrained)
     with torch.no_grad():
         output = pipeline.execute(inputs)
-        torch.testing.assert_close(output.draft_proposal.token_ids, _reference(model, inputs))
+        assert isinstance(output, ModelOutput)
+        assert output.draft_token_ids is not None
+        torch.testing.assert_close(output.draft_token_ids, _reference(model, inputs))
     vote.assert_called_once_with(not constrained, torch.device("cpu"), 2)
     assert pipeline.entry_runner.execution_mode == "graph"
     assert pipeline.proposal_runner.execution_mode == ("graph" if agreed else "eager")
@@ -203,8 +212,11 @@ def test_invalid_query_and_sampling_modes_are_rejected() -> None:
         pipeline.execute(_inputs(width=3))
     for probabilities, greedy in ((True, True), (False, False)):
         inputs = _inputs()
-        inputs.input_batch.sampling.return_probs = probabilities
-        inputs.input_batch.sampling.parameters.all_greedy_sample = greedy
+        assert inputs.input_batch is not None
+        sampling = inputs.input_batch.sampling
+        assert sampling is not None
+        sampling.return_draft_logits = probabilities
+        sampling.parameters.sampling_mode = SamplingMode.GREEDY if greedy else SamplingMode.RANDOM
         with torch.no_grad(), pytest.raises(ValueError, match="must remain greedy"):
             pipeline.execute(inputs)
 

@@ -39,6 +39,7 @@ limitations under the License.
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/config/speculative_config.h"
 #include "core/framework/constraint/snapshot.h"
 #include "core/framework/multimodal/mm_batch_data.h"
 #include "core/framework/request/request_timing_proto.h"
@@ -1149,7 +1150,9 @@ void DisaggPDScheduler::prefill_send_first_generation() {
         gen->set_dp_size(instance_info_.dp_size);
         gen->set_dp_rank(sequence->dp_rank());
       }
-      if (options_.num_speculative_tokens() > 0) {
+      if (options_.num_speculative_tokens() > 0 &&
+          SpeculativeConfig::requires_bootstrap_hidden(
+              SpeculativeConfig::get_instance().speculative_algorithm())) {
         torch::Tensor embedding =
             request->sequences()[0]->get_mtp_bootstrap_embedding();
         if (!embedding.defined()) {
@@ -1626,8 +1629,7 @@ bool DisaggPDScheduler::decode_recv_first_generation(
   }
   request->record_num_prefix_cache_tokens(
       static_cast<size_t>(num_cached_tokens));
-  const bool need_mtp_bootstrap = options_.num_speculative_tokens() > 0;
-  if (need_mtp_bootstrap) {
+  if (options_.num_speculative_tokens() > 0) {
     const int32_t slot_id = sequence->get_embedding_block_id();
     if (slot_id < 0) {
       LOG(ERROR) << "Invalid MTP bootstrap slot, request_id: " << req_id;
@@ -1641,12 +1643,15 @@ bool DisaggPDScheduler::decode_recv_first_generation(
       kv_cache_manager_->deallocate(request.get());
       return false;
     }
+  }
+  if (options_.num_speculative_tokens() > 0 &&
+      SpeculativeConfig::requires_bootstrap_hidden(
+          SpeculativeConfig::get_instance().speculative_algorithm())) {
     if (!mtp_bootstrap_embedding.defined()) {
       LOG(ERROR) << "Missing MTP bootstrap embedding, request_id: " << req_id;
       kv_cache_manager_->deallocate(request.get());
       return false;
     }
-
     sequence->update_mtp_bootstrap_embedding(mtp_bootstrap_embedding);
   }
 

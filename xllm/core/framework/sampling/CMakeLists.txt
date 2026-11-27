@@ -28,7 +28,6 @@ cc_library(
     :common
     glog::glog
     torch
-    $<$<BOOL:${USE_NPU}>:tilelang_kernels>
     $<$<BOOL:${USE_NPU}>:unified_dlog>
 )
 
@@ -36,31 +35,25 @@ cc_library(
   NAME 
     sampler
   HDRS
-    draft_proposal.h
-    draft_sampling_mode.h
     sampling_params.h
-    logits_utils.h
-    gumbel_sampling.h
-    rejection_sampler.h
+    logits_processor.h
     sampler.h
     rec_sampler.h
     beam_searcher.h
     rec_constrained_decoding.h
   SRCS
     sampling_params.cpp
-    logits_utils.cpp
-    gumbel_sampling.cpp
-    rejection_sampler.cpp
+    logits_processor.cpp
     sampler.cpp
     rec_sampler.cpp
     beam_searcher.cpp
     rec_constrained_decoding.cpp
   DEPS
-    :json_object_grammar
     :state_dict
     :common
     glog::glog
     torch
     :kernels
     $<$<BOOL:${USE_NPU}>:xllm_ops>
+    $<$<BOOL:${USE_NPU}>:tilelang_kernels>
 )

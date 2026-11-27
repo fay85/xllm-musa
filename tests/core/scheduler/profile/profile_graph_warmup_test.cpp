@@ -112,12 +112,10 @@ Sequence make_sequence(size_t index, const std::vector<int32_t>& tokens) {
 }
 
 runtime::DecodeGraphWarmupConfig make_decode_graph_warmup_config(
-    int64_t num_decoding_tokens,
     int32_t num_speculative_tokens,
     bool enable_no_padding,
     int32_t max_graph_batch_size = 0) {
   runtime::DecodeGraphWarmupConfig warmup_config;
-  warmup_config.num_decoding_tokens = num_decoding_tokens;
   warmup_config.num_speculative_tokens = num_speculative_tokens;
   warmup_config.enable_graph_mode_decode_no_padding = enable_no_padding;
   warmup_config.max_graph_batch_size = max_graph_batch_size;
@@ -189,8 +187,7 @@ class RecordingProfileEngine final : public Engine {
   const ModelArgs& model_args() const override { return model_args_; }
 
   runtime::DecodeGraphWarmupConfig decode_graph_warmup_config() const override {
-    return make_decode_graph_warmup_config(num_speculative_tokens_ + 1,
-                                           num_speculative_tokens_,
+    return make_decode_graph_warmup_config(num_speculative_tokens_,
                                            /*enable_no_padding=*/false);
   }
 
@@ -376,7 +373,6 @@ TEST(DecodeGraphWarmupPlanTest, CoversEveryPaddedMtpTokenBucket) {
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/false);
   const DecodeGraphWarmupPlan plan = build_decode_graph_warmup_plan(
@@ -416,8 +412,7 @@ TEST(DecodeGraphWarmupPlanTest, UsesLocalDpBatchesAndKeepsPartialBatch) {
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
-          /*num_speculative_tokens=*/0,
+          /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/false);
   const DecodeGraphWarmupPlan plan = build_decode_graph_warmup_plan(
       warmup_config, /*max_global_batch_size=*/66, /*dp_size=*/4);
@@ -432,7 +427,6 @@ TEST(DecodeGraphWarmupPlanTest, Dp32C64UsesLocalGraphBuckets) {
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/false);
   const DecodeGraphWarmupPlan plan = build_decode_graph_warmup_plan(
@@ -451,7 +445,6 @@ TEST(DecodeGraphWarmupPlanTest,
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/false,
           /*max_graph_batch_size=*/16);
@@ -470,7 +463,6 @@ TEST(DecodeGraphWarmupPlanTest,
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/2,
           /*num_speculative_tokens=*/1,
           /*enable_no_padding=*/false,
           /*max_graph_batch_size=*/16);
@@ -491,7 +483,6 @@ TEST(DecodeGraphWarmupPlanTest, GraphLimitIsLocalAcrossDpGroups) {
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/6,
           /*num_speculative_tokens=*/5,
           /*enable_no_padding=*/false,
           /*max_graph_batch_size=*/16);
@@ -503,9 +494,10 @@ TEST(DecodeGraphWarmupPlanTest, GraphLimitIsLocalAcrossDpGroups) {
   EXPECT_EQ(plan.batch_sizes, (std::vector<int32_t>{4, 8, 20, 32, 40, 52, 64}));
 
   std::vector<int64_t> warmed_buckets;
+  warmed_buckets.reserve(plan.batch_sizes.size());
   for (const int32_t batch_size : plan.batch_sizes) {
     const int64_t num_tokens = static_cast<int64_t>(batch_size / dp_size) *
-                               warmup_config.num_decoding_tokens;
+                               (warmup_config.num_speculative_tokens + 1);
     warmed_buckets.push_back(runtime::get_decode_graph_token_bucket(
         num_tokens, /*enable_no_padding=*/false));
   }
@@ -514,7 +506,7 @@ TEST(DecodeGraphWarmupPlanTest, GraphLimitIsLocalAcrossDpGroups) {
                                     warmup_config.max_graph_batch_size);
        ++local_batch_size) {
     const int64_t num_tokens = static_cast<int64_t>(local_batch_size) *
-                               warmup_config.num_decoding_tokens;
+                               (warmup_config.num_speculative_tokens + 1);
     const int64_t bucket = runtime::get_decode_graph_token_bucket(
         num_tokens, /*enable_no_padding=*/false);
     EXPECT_NE(std::find(warmed_buckets.begin(), warmed_buckets.end(), bucket),
@@ -527,7 +519,6 @@ TEST(DecodeGraphWarmupPlanTest, GraphLimitIsLocalAcrossDpGroups) {
 TEST(DecodeGraphWarmupPlanTest, NoPaddingKeepsCompatibilityBatches) {
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/true);
   const DecodeGraphWarmupPlan plan = build_decode_graph_warmup_plan(
@@ -545,7 +536,6 @@ TEST(DecodeGraphWarmupPlanTest,
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/true,
           /*max_graph_batch_size=*/16);
@@ -562,7 +552,6 @@ TEST(DecodeGraphWarmupPlanTest, NoPaddingMtpKeepsNonDivisibleDpTailBuckets) {
 
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/true,
           /*max_graph_batch_size=*/16);
@@ -575,13 +564,11 @@ TEST(DecodeGraphWarmupPlanTest, NoPaddingMtpKeepsNonDivisibleDpTailBuckets) {
 TEST(DecodeGraphWarmupPlanTest, PreservesSuppliedWarmupConfig) {
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/4,
           /*num_speculative_tokens=*/3,
           /*enable_no_padding=*/false);
   const DecodeGraphWarmupPlan plan = build_decode_graph_warmup_plan(
       warmup_config, /*max_global_batch_size=*/16, /*dp_size=*/1);
 
-  EXPECT_EQ(plan.warmup_config.num_decoding_tokens, 4);
   EXPECT_EQ(plan.warmup_config.num_speculative_tokens, 3);
   EXPECT_FALSE(plan.warmup_config.enable_graph_mode_decode_no_padding);
   EXPECT_EQ(plan.warmup_config.max_graph_batch_size, 0);
@@ -595,7 +582,6 @@ TEST(DecodeGraphWarmupPlanTest, PreservesSuppliedWarmupConfig) {
 TEST(DecodeGraphWarmupPlanTest, RespectsReducedWarmupCapacity) {
   const runtime::DecodeGraphWarmupConfig warmup_config =
       make_decode_graph_warmup_config(
-          /*num_decoding_tokens=*/1,
           /*num_speculative_tokens=*/0,
           /*enable_no_padding=*/false);
   const DecodeGraphWarmupPlan plan = build_decode_graph_warmup_plan(

@@ -248,24 +248,13 @@ Options create_options(const std::string& instance_name, bool is_local) {
           scheduler_config.max_tokens_per_chunk_for_prefill())
       .num_speculative_tokens(speculative_config.num_speculative_tokens())
       .speculative_algorithm(speculative_config.speculative_algorithm())
-      .draft_sampling_mode(speculative_config.draft_sampling_mode())
+      .enable_probabilistic_draft(
+          speculative_config.enable_probabilistic_draft())
       .speculative_suffix_cache_max_depth(
           speculative_config.speculative_suffix_cache_max_depth())
-      .speculative_suffix_max_spec_factor(
-          speculative_config.speculative_suffix_max_spec_factor())
-      .speculative_suffix_max_spec_offset(
-          speculative_config.speculative_suffix_max_spec_offset())
-      .speculative_suffix_min_token_prob(
-          speculative_config.speculative_suffix_min_token_prob())
       .speculative_suffix_max_cached_requests(
           speculative_config.speculative_suffix_max_cached_requests())
-      .speculative_suffix_use_tree_spec(
-          speculative_config.speculative_suffix_use_tree_spec())
       .enable_mtp_draft_body_tp1(speculative_config.enable_mtp_draft_body_tp1())
-      .enable_adaptive_speculative_decode(
-          speculative_config.enable_adaptive_speculative_decode())
-      .adaptive_speculative_min_gain(
-          speculative_config.adaptive_speculative_min_gain())
       .num_request_handling_threads(
           service_config.num_request_handling_threads())
       .communication_backend(parallel_config.communication_backend())

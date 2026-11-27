@@ -29,7 +29,7 @@ limitations under the License.
 namespace xllm {
 
 template <typename TargetEngine>
-class SpeculativeEngineBase : public Engine {
+class SpeculativeEngineBase final : public Engine {
  public:
   // create an engine with the given devices
   explicit SpeculativeEngineBase(const runtime::Options& options);
@@ -48,10 +48,6 @@ class SpeculativeEngineBase : public Engine {
   }
 
   const ModelArgs& model_args() const override { return model_args_; }
-
-  bool set_speculative_validate_time_predictor(
-      const SpeculativeProfileRegistry::ValidateTimePredictor& predictor)
-      override;
 
   runtime::DecodeGraphWarmupConfig decode_graph_warmup_config() const override;
 
@@ -92,15 +88,10 @@ class SpeculativeEngineBase : public Engine {
                       const int32_t src_dp_size,
                       const int32_t src_kv_split_size = 1) override;
 
- protected:
-  SpeculativeEngineBase(const runtime::Options& options, bool use_draft_engine);
-
  private:
   bool init_model(MasterStatus master_status);
 
   bool allocate_kv_cache();
-
-  bool should_skip_external_draft_kv_cache() const;
 
   int64_t calculate_kv_cache(const KVCacheCapacity& target_kv_cache_cap,
                              const KVCacheCapacity& draft_kv_cache_cap) const;
@@ -117,28 +108,9 @@ class SpeculativeEngineBase : public Engine {
   // draft engine
   std::unique_ptr<LLMEngine> draft_engine_;
 
-  // whether this speculative engine uses an external draft engine
-  const bool use_draft_engine_;
-
-  // whether target and draft engine are sharing the same device
-  bool share_device_ = false;
-
   ModelArgs model_args_;
 
   std::shared_ptr<DistManager> dist_manager_ = nullptr;
-};
-
-class SuffixSpeculativeEngine : public SpeculativeEngineBase<LLMEngine> {
- public:
-  explicit SuffixSpeculativeEngine(const runtime::Options& options);
-  ~SuffixSpeculativeEngine() override = default;
-};
-
-class SuffixVLMSpeculativeEngine final
-    : public SpeculativeEngineBase<VLMEngine> {
- public:
-  explicit SuffixVLMSpeculativeEngine(const runtime::Options& options);
-  ~SuffixVLMSpeculativeEngine() override = default;
 };
 
 }  // namespace xllm

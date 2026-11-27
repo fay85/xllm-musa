@@ -69,7 +69,7 @@ ModelArgs make_draft_args() {
       .rope_theta(10000)
       .rms_norm_eps(1e-5)
       .sliding_window(16)
-      .dflash2_block_size(4)
+      .num_speculative_tokens(/*value=*/3)
       .dflash2_conv_group_size(16)
       .dflash2_conv_kernel_size(2)
       .dflash2_selector_rank(8)
@@ -192,8 +192,8 @@ TEST(DFlash2MluModelTest, DraftGraphReplaysFreshBlocksForBfloat16AndInt8) {
     CountingDraftCausalLM causal(std::move(model), options);
     runtime::Options runtime_options;
     runtime_options.is_draft_engine(true)
-        .speculative_algorithm("DFlash2")
-        .draft_graph_query_width(4)
+        .speculative_algorithm(/*value=*/"DFlash2")
+        .num_speculative_tokens(/*num_speculative_tokens=*/3)
         .block_size(16)
         .max_seqs_per_batch(4);
     mlu::MluGraphExecutorImpl executor(&causal, args, device, runtime_options);

@@ -41,7 +41,6 @@ bool replay_compatible(TargetSpecVerifyMode target_mode,
                        bool target_capable,
                        bool draft_capable,
                        bool is_python_target,
-                       bool is_python_draft,
-                       bool uses_embedded_eagle3);
+                       bool is_python_draft);
 
 }  // namespace xllm::mtp_async

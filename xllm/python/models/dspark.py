@@ -123,8 +123,11 @@ class DSparkForCausalLMBase(PyModelBase):
     def get_token_embedding(self) -> nn.Module | None:
         return self.model.get_token_embedding()
 
-    def share_weights_from(self, source: PyModelBase) -> None:
-        self.model.share_weights_from(source)
+    def share_lm_head(self, target_model: PyModelBase) -> None:
+        self.model.share_lm_head(target_model)
+
+    def share_embed_tokens(self, target_model: PyModelBase) -> None:
+        self.model.share_embed_tokens(target_model)
 
     def dspark_markov_bias(self, previous_token_ids: torch.Tensor) -> torch.Tensor:
         return self.model.markov_head.bias(previous_token_ids)

@@ -302,7 +302,7 @@ TEST_F(WorkerHierarchyKVCacheTransferTest,
   runtime::Options options = make_runtime_options(0.0);
   options.world_size(2)
       .dp_size(2)
-      .num_decoding_tokens(4)
+      .num_speculative_tokens(/*num_speculative_tokens=*/3)
       .enable_speculative_decode(true)
       .enable_schedule_overlap(false);
   const ParallelArgs parallel_args(1, 2, 2, 1, nullptr, 1);
@@ -348,7 +348,7 @@ TEST_F(WorkerHierarchyKVCacheTransferTest,
     runtime::Options options = make_runtime_options(0.0);
     options.world_size(2)
         .dp_size(2)
-        .num_decoding_tokens(decoding_tokens)
+        .num_speculative_tokens(decoding_tokens - 1)
         .enable_speculative_decode(decoding_tokens > 1)
         .enable_schedule_overlap(false);
     const ParallelArgs parallel_args(1, 2, 2, 1, nullptr, 1);

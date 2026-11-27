@@ -359,9 +359,6 @@ inline bool load_deepseek_v41_model_args(const JsonReader& json,
       json.value_or<std::vector<int32_t>>("text_config.dspark_target_layer_ids",
                                           std::vector<int32_t>{})
           .size());
-  // Don't arm dspark_block_size on the target (mirrors deepseek_v4: it would
-  // enable non-causal DSpark attention; the draft worker sets it from the
-  // checkpoint).
   LOAD_ARG_OR(
       dspark_n_routed_experts, "text_config.dspark_n_routed_experts", 0);
   LOAD_ARG_OR(

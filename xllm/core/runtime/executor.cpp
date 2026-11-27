@@ -48,10 +48,6 @@ void Executor::set_device_only_decode_inputs(bool enabled) {
   impl_->set_device_only_decode_inputs(enabled);
 }
 
-ForwardInput Executor::prepare_inputs(Batch& batch) {
-  return impl_->prepare_inputs(batch);
-}
-
 void Executor::set_dp_process_group(ProcessGroup* group) {
   impl_->set_dp_process_group(group);
 }

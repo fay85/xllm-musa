@@ -957,44 +957,9 @@ torch::Tensor apply_top_k_top_p(TopKPParams& params) {
 #if defined(USE_MLU)
   return mlu::apply_top_k_top_p(
       params.logits, params.temperatures, params.top_k, params.top_p);
-#else
-  NOT_IMPLEMENTED();
-#endif
-}
-
-torch::Tensor random_sample(RandomSampleParams& params) {
-#if defined(USE_MLU)
-  return mlu::random_sample(params.logits);
-#elif defined(USE_CUDA) || defined(USE_MUSA)
-  return gpu_kernels::random_sample(params.logits);
-#elif defined(USE_DCU)
-  return dcu::random_sample(params.logits);
-#else
-  NOT_IMPLEMENTED();
-#endif
-}
-
-torch::Tensor rejection_sample(RejectionSampleParams& params) {
-#if defined(USE_MLU)
-  return mlu::rejection_sample(params.draft_token_ids,
-                               params.num_draft_tokens,
-                               params.cu_num_draft_tokens,
-                               params.draft_probs,
-                               params.target_probs,
-                               params.bonus_token_ids,
-                               params.uniform_rand,
-                               params.uniform_probs,
-                               params.max_spec_len);
-#elif defined(USE_DCU)
-  return dcu::rejection_sample(params.draft_token_ids,
-                               params.num_draft_tokens,
-                               params.cu_num_draft_tokens,
-                               params.draft_probs,
-                               params.target_probs,
-                               params.bonus_token_ids,
-                               params.uniform_rand,
-                               params.uniform_probs,
-                               params.max_spec_len);
+#elif defined(USE_NPU)
+  npu::top_k_top_p(params.logits, params.top_k, params.top_p);
+  return params.logits;
 #else
   NOT_IMPLEMENTED();
 #endif

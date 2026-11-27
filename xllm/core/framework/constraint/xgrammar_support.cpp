@@ -21,25 +21,12 @@ limitations under the License.
 
 namespace xllm {
 
-namespace {
-// Only these speculative algorithms drive their per-position verify masks
-// from the unified constraint channel. Suffix-style proposers never read
-// json_object_states, so they would emit unconstrained drafts and targets.
-// Delegate to SpeculativeConfig::drives_constraint_channel (MTP plus the
-// block-diffusion family) instead of re-listing the strings here.
-bool channel_supported_speculative(const std::string& algorithm) {
-  return SpeculativeConfig::drives_constraint_channel(algorithm);
-}
-}  // namespace
-
 std::vector<std::string> xgrammar_unsupported_features(
     const XGrammarSupportInputs& inputs) {
-  // schedule_overlap is supported (single-advance through the channel view)
-  // and needs no input. Speculative decoding is supported only for the
-  // channel-migrated algorithms; suffix-style proposers stay gated.
   std::vector<std::string> unsupported;
   if (inputs.num_speculative_tokens > 0 &&
-      !channel_supported_speculative(inputs.speculative_algorithm)) {
+      !SpeculativeConfig::drives_constraint_channel(
+          inputs.speculative_algorithm)) {
     unsupported.emplace_back("speculative_" +
                              (inputs.speculative_algorithm.empty()
                                   ? std::string("<unnamed>")
@@ -52,12 +39,8 @@ std::vector<std::string> xgrammar_unsupported_features(
   // never enters the captured graph. The graph executors capture only the
   // model forward (acl_graph_executor_impl.cpp builds the graph over
   // model->forward); every mask application site runs eagerly outside the
-  // graph on the replayed logits - the target decode sampler
-  // (llm_worker_impl), the MTP verify sampler (delegated to the same eager
-  // site after install_filter_bitmask on the validate input), the DSpark
-  // draft loop, and the VLM sampler. filter_bitmask_applied_to_logits is a
-  // post-sampling report flag for the verify consumers, not a captured
-  // tensor. The builtin backend rides the identical eager architecture with
+  // graph on the replayed logits in the target sampler or the speculative
+  // rejection sampler. The builtin backend uses the same eager mask path with
   // graph enabled in production, and piecewise graph is the graph
   // implementation of prefill segmentation - the matcher initializes at the
   // first decode token (the same argument that leaves chunked_prefill

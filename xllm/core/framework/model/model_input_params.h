@@ -802,11 +802,11 @@ struct BatchInputMeta {
   bool is_graph_warmup = false;
   // Rows per logical sequence of a NON-expanded spec-verify batch (1 = not a
   // packed verify). The validate builder that expands each sequence into
-  // num_speculative_tokens+1 q=1 decode rows sets this so the graph runner can
+  // Packed target verification carries the proposal count so graphs can
   // tell such a batch apart from a plain decode whose token-row count happens
   // to be the same; the chunked/expanded layout keeps 1 because its width is
   // already carried by the per-sequence linear-state / query-chunk metadata.
-  int32_t spec_verify_width = 1;
+  int32_t num_speculative_tokens = 0;
   // Local MTP scheduling metadata; Python owns the cross-step top-k state.
   int32_t mtp_draft_step = 0;
 };
@@ -1418,7 +1418,7 @@ struct ModelInputParams {
 // on device, so host token snapshots taken upstream do not describe them.
 inline bool has_device_rewritten_tokens(const ModelInputParams& params) {
   return params.is_spec_verify || params.use_dflash_proposal_attention ||
-         params.meta.spec_verify_width > 1;
+         params.meta.num_speculative_tokens > 0;
 }
 
 }  // namespace xllm

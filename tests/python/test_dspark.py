@@ -135,7 +135,8 @@ def test_shared_weights_bind_to_pipeline_components(own_head: bool, own_embeddin
     source.model = nn.Module()
     source.model.embed_tokens = nn.Embedding(4, 3)
     source.lm_head = nn.Linear(3, 4, bias=False)
-    draft.share_weights_from(source)
+    draft.share_lm_head(source)
+    draft.share_embed_tokens(source)
 
     assert draft.model is execution_model
     assert draft.get_lm_head() is (own_lm_head if own_head else source.lm_head)

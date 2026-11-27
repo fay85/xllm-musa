@@ -36,7 +36,7 @@ from xllm.python.model_executor.execution_context import (
 from xllm.python.model_executor.forward_context import EplbRuntimeState, LayerSynchronizer
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftCandidates, DraftDecoderOutput, DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import DraftCandidates, DraftDecoderOutput, ModelOutput
 
 ModelExecutionOutput = torch.Tensor | tuple[torch.Tensor, torch.Tensor] | DraftDecoderOutput | ModelOutput
 
@@ -128,21 +128,17 @@ class BaseRunner(ABC):
         def _trim_optional(tensor: torch.Tensor | None, count: int) -> torch.Tensor | None:
             return _trim(tensor, count) if tensor is not None else None
 
-        proposal = None
-        confidence = None
-        if output.draft_proposal is not None or output.draft_confidence_probs is not None:
-            if num_reqs is None:
+        if num_reqs is None:
+            if any(
+                field is not None
+                for field in (output.draft_token_ids, output.draft_logits, output.draft_confidence_probs)
+            ):
                 raise ValueError("Pipeline output with request-scoped fields requires num_reqs")
-            if output.draft_proposal is not None:
-                proposal = DraftProposal(
-                    token_ids=_trim(output.draft_proposal.token_ids, num_reqs),
-                    draft_probs=_trim_optional(output.draft_proposal.draft_probs, num_reqs),
-                )
-            confidence = _trim_optional(output.draft_confidence_probs, num_reqs)
-
+            num_reqs = 0
         return ModelOutput(
-            draft_proposal=proposal,
-            draft_confidence_probs=confidence,
+            draft_token_ids=_trim_optional(output.draft_token_ids, num_reqs),
+            draft_logits=_trim_optional(output.draft_logits, num_reqs),
+            draft_confidence_probs=_trim_optional(output.draft_confidence_probs, num_reqs),
             hidden_states=_trim_optional(output.hidden_states, num_tokens),
             residual=_trim_optional(output.residual, num_tokens),
             aux_hidden_states=_trim_optional(output.aux_hidden_states, num_tokens),

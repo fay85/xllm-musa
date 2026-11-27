@@ -96,10 +96,10 @@ class KdaMetadataBuilder:
         return KdaMetadata(verify)
 
     def allocate_persistent(self, input_batch: InputBatch, metadata: AttentionMetadata) -> KdaMetadata:
-        width = input_batch.graph_spec_verify_width
         stride = self._checkpoint_stride
-        if stride is None or width is None:
+        if stride is None or input_batch.num_speculative_tokens is None:
             return KdaMetadata()
+        width = input_batch.num_speculative_tokens + 1
         num_slots, tail_padding = divmod(input_batch.num_tokens_after_padding, width)
         if num_slots <= 0:
             raise ValueError("KDA spec verify requires room for one complete token block")

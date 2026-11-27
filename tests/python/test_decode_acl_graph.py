@@ -44,7 +44,7 @@ from xllm.python.attention.dsa_metadata import (
 from xllm.python.attention.expanded_decode_metadata import ExpandedDecodeMetadata
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.mtp_topk import MtpTopkReuse
 from xllm.python.model_executor.runners.decode_acl_graph import (
     DecodeAclGraphRunner,
@@ -54,6 +54,7 @@ from xllm.python.model_executor.runners.decode_acl_graph import (
 from xllm.python.model_executor.sampling_metadata import (
     ModelSamplingMetadata,
     ModelSamplingMetadataBuilder,
+    SamplingMode,
 )
 from xllm.python.models.engram_config import EngramConfig
 from xllm.python.models.multimodal import MultimodalInputs
@@ -103,12 +104,19 @@ def test_generated_cumulative_lengths_use_int32(lengths: list[int]) -> None:
 
 def test_draft_consumes_aligned_effective_shapes() -> None:
     width = 3
-    runner = _runner(is_spec_draft=True, draft_query_width=width, capture_sizes=(width, 2 * width, 3 * width))
+    runner = _runner(
+        is_spec_draft=True,
+        num_speculative_tokens=width,
+        model_type="DSparkDraftModel",
+        capture_sizes=(width, 2 * width, 3 * width),
+    )
     assert runner._padded_token_rows(2 * width - 1) == 2 * width
     assert runner._padded_token_rows(3 * width + 1) == 0
     assert runner._engram_graph_token_capacity() == 3 * width
     with pytest.raises(ValueError, match="aligned"):
-        _runner(is_spec_draft=True, draft_query_width=width, capture_sizes=(width + 1,))
+        _runner(
+            is_spec_draft=True, num_speculative_tokens=width, model_type="DSparkDraftModel", capture_sizes=(width + 1,)
+        )
 
 
 def test_custom_capture_selects_buckets_and_preserves_actual_sequence_capacity() -> None:
@@ -177,7 +185,8 @@ def test_draft_graph_uses_same_whole_block_plan_for_active_and_empty_dp_shards(
         max_model_len=256,
         dp_size=2,
         is_spec_draft=True,
-        draft_query_width=query_width,
+        num_speculative_tokens=query_width,
+        model_type="DSparkDraftModel",
     )
     num_tokens = num_sequences * query_width
     metadata = SimpleNamespace(
@@ -195,10 +204,14 @@ def test_draft_graph_uses_same_whole_block_plan_for_active_and_empty_dp_shards(
 
 
 def test_draft_graph_communication_limit_uses_complete_block_padding() -> None:
-    rejected = _runner(is_spec_draft=True, draft_query_width=5, eplv2_graph_token_limit=16)
+    rejected = _runner(
+        is_spec_draft=True, num_speculative_tokens=5, model_type="DSparkDraftModel", eplv2_graph_token_limit=16
+    )
     assert rejected._padded_token_rows(15) == 20
     assert not rejected._eplv2_graph_admits(15)
-    allowed = _runner(is_spec_draft=True, draft_query_width=5, eplv2_graph_token_limit=20)
+    allowed = _runner(
+        is_spec_draft=True, num_speculative_tokens=5, model_type="DSparkDraftModel", eplv2_graph_token_limit=20
+    )
     assert allowed._eplv2_graph_admits(15)
 
 
@@ -215,7 +228,8 @@ def test_expanded_draft_proposal_has_shared_plan_with_empty_dp(query_width: int)
             dp_size=2,
             dp_rank=dp_rank,
             is_spec_draft=True,
-            draft_query_width=query_width,
+            num_speculative_tokens=query_width,
+            model_type="DSparkDraftModel",
         )
         batch = _query_batch(num_reqs, query_width)
         row_count = batch.num_tokens if num_reqs else 1
@@ -257,7 +271,8 @@ def test_csa2_ring_paging_admission_and_dummy_replay(
         max_model_len=8192,
         dp_size=dp_size,
         is_spec_draft=True,
-        draft_query_width=query_width,
+        num_speculative_tokens=query_width,
+        model_type="DSparkDraftModel",
     )
     builder = Csa2BlockAttentionMetadataBuilder(query_width, page_size, 8192)
     runner.bind_execution_metadata_builders((builder,))
@@ -415,7 +430,8 @@ def test_draft_graph_key_keeps_whole_query_blocks() -> None:
         max_batch=8,
         max_model_len=256,
         is_spec_draft=True,
-        draft_query_width=5,
+        num_speculative_tokens=5,
+        model_type="DSparkDraftModel",
     )
     captured_keys: list[tuple[Any, ...]] = []
 
@@ -440,13 +456,12 @@ def test_draft_graph_key_keeps_whole_query_blocks() -> None:
 
 
 @pytest.mark.parametrize(
-    "is_spec_draft,num_decoding_tokens,query_width,expected_capacity",
-    [(False, 1, 5, 16), (False, 3, 5, 48), (True, 1, 2, 32), (True, 3, 2, 48)],
+    ("is_spec_draft", "num_speculative_tokens", "expected_capacity"),
+    [(False, 0, 16), (False, 2, 48), (True, 2, 32)],
 )
 def test_legacy_paged_buffer_covers_target_and_draft_token_rows(
     is_spec_draft: bool,
-    num_decoding_tokens: int,
-    query_width: int,
+    num_speculative_tokens: int,
     expected_capacity: int,
 ) -> None:
     runner = DecodeAclGraphRunner(
@@ -455,9 +470,9 @@ def test_legacy_paged_buffer_covers_target_and_draft_token_rows(
         torch.device("cpu"),
         max_batch=8,
         max_model_len=8,
-        num_decoding_tokens=num_decoding_tokens,
+        num_speculative_tokens=num_speculative_tokens,
         is_spec_draft=is_spec_draft,
-        draft_query_width=query_width,
+        model_type="DSparkDraftModel" if is_spec_draft else "",
     )
     input_ids = torch.arange(4, dtype=torch.int32)
     metadata = _metadata(input_ids)
@@ -475,7 +490,8 @@ def test_csa2_builder_updates_alongside_legacy_buffers_and_protects_capture() ->
         max_batch=8,
         max_model_len=8,
         is_spec_draft=True,
-        draft_query_width=2,
+        num_speculative_tokens=2,
+        model_type="DSparkDraftModel",
     )
     runner.bind_execution_metadata_builders((Csa2BlockAttentionMetadataBuilder(2, 4, 8),))
     batch = _query_batch(2, 2)
@@ -569,7 +585,7 @@ def test_sampling_graph_admission_checks_request_capability(sampling_mode: str) 
     runner.bind_execution_metadata_builders((ModelSamplingMetadataBuilder(),))
     sampling = SimpleNamespace(
         is_unconstrained_greedy=sampling_mode != "non_greedy",
-        return_probs=sampling_mode == "probabilities",
+        return_draft_logits=sampling_mode == "probabilities",
         return_confidence=sampling_mode == "confidence",
     )
     batch = replace(_query_batch(4, 1), sampling=None if sampling_mode == "missing" else sampling)
@@ -615,7 +631,7 @@ def test_sampling_graph_admission_is_unanimous_across_dp(
         runner.bind_execution_metadata_builders((ModelSamplingMetadataBuilder(),))
         is_dummy = empty_peer and rank == 1
         sampling = SimpleNamespace(
-            is_unconstrained_greedy=sampling_allowed[rank], return_probs=False, return_confidence=False
+            is_unconstrained_greedy=sampling_allowed[rank], return_draft_logits=False, return_confidence=False
         )
         batch = _query_batch(0 if is_dummy else 4, 1)
         batch = replace(batch, sampling=sampling, positions=torch.zeros(batch.num_tokens, dtype=torch.int32))
@@ -642,7 +658,7 @@ def test_sampling_graph_admission_propagates_dp_agreement_failure(monkeypatch: p
     monkeypatch.setattr(
         distributed, "dp_all_true", MagicMock(side_effect=RuntimeError("DP host agreement failed")), raising=False
     )
-    sampling = SimpleNamespace(is_unconstrained_greedy=True, return_probs=False, return_confidence=False)
+    sampling = SimpleNamespace(is_unconstrained_greedy=True, return_draft_logits=False, return_confidence=False)
     batch = replace(_query_batch(4, 1), sampling=sampling, positions=torch.zeros(4, dtype=torch.int32))
     metadata = _aligned_dp_decode_metadata(4)
     metadata.is_spec_verify = False
@@ -668,15 +684,15 @@ def test_sampling_graph_metadata_does_not_require_host_cached_counts() -> None:
     runner.bind_execution_metadata_builders((builder,))
 
     first_sampling = SimpleNamespace(
-        parameters=SimpleNamespace(all_greedy_sample=True),
+        parameters=SimpleNamespace(sampling_mode=SamplingMode.GREEDY),
         is_unconstrained_greedy=True,
-        return_probs=False,
+        return_draft_logits=False,
         return_confidence=False,
     )
     next_sampling = SimpleNamespace(
-        parameters=SimpleNamespace(all_greedy_sample=True),
+        parameters=SimpleNamespace(sampling_mode=SamplingMode.GREEDY),
         is_unconstrained_greedy=True,
-        return_probs=False,
+        return_draft_logits=False,
         return_confidence=False,
     )
     input_ids = torch.arange(4)
@@ -747,7 +763,7 @@ def test_sampling_graph_metadata_does_not_require_host_cached_counts() -> None:
     [(16, 1, True), (16, 2, True), (16, 3, False), (24, 3, False), (32, 3, True), (32, 4, True), (32, 5, False)],
 )
 def test_eplv2_graph_admission_uses_padded_token_rows_for_dflash2(limit: int, sequences: int, expected: bool) -> None:
-    runner = _runner(max_batch=128, num_decoding_tokens=8, eplv2_graph_token_limit=limit)
+    runner = _runner(max_batch=128, num_speculative_tokens=7, eplv2_graph_token_limit=limit)
     rows = sequences * 8
     metadata = _aligned_dp_decode_metadata(rows)
     metadata.linear_state_indices = torch.arange(sequences, dtype=torch.int32)
@@ -832,7 +848,7 @@ def _verify_batch_metadata(num_reqs: int, width: int) -> tuple[InputBatch, Simpl
 
 
 def test_accepted_tokens_use_live_per_sequence_graph_buffer() -> None:
-    runner = _runner(num_decoding_tokens=2)
+    runner = _runner(num_speculative_tokens=1)
     runner.bind_layer_caches([LayerCache(None, None, conv=torch.zeros(8, 1, 2), ssm=torch.zeros(16, 1, 1, 1))])
     batch, metadata = _verify_batch_metadata(2, 2)
     entry = runner._allocate_entry(8, batch.input_ids, batch.positions, metadata)
@@ -914,7 +930,7 @@ def test_host_dsa_fill_preserves_live_inputs_without_generic_paging(monkeypatch:
 
 
 def test_verify_graph_key_tracks_width_not_active_sequence_count() -> None:
-    runner = _runner(num_decoding_tokens=4)
+    runner = _runner(num_speculative_tokens=3)
     captured_keys: list[tuple[Any, ...]] = []
 
     class ProbeCache(dict):
@@ -943,7 +959,7 @@ def test_verify_graph_key_tracks_width_not_active_sequence_count() -> None:
 def test_accepted_tokens_reject_missing_or_invalid_replay_metadata(
     accepted_counts: torch.Tensor | None, error_type: type[Exception]
 ) -> None:
-    runner = _runner(num_decoding_tokens=2)
+    runner = _runner(num_speculative_tokens=1)
     runner.bind_layer_caches([LayerCache(None, None, conv=torch.zeros(8, 1, 2), ssm=torch.zeros(16, 1, 1, 1))])
     batch, metadata = _verify_batch_metadata(2, 2)
     metadata.is_dummy = True
@@ -971,7 +987,7 @@ def test_slice_output_preserves_aux_hidden_tuple() -> None:
 
 
 def test_linear_state_graph_buffers_are_stable() -> None:
-    runner = _runner(num_decoding_tokens=2)
+    runner = _runner(num_speculative_tokens=1)
     runner.bind_layer_caches(
         [
             LayerCache(
@@ -1011,7 +1027,7 @@ def test_linear_state_graph_buffers_are_stable() -> None:
 
 
 def test_dflash_proposal_mode_uses_a_distinct_graph_key() -> None:
-    runner = _runner(is_spec_draft=True, draft_query_width=4)
+    runner = _runner(is_spec_draft=True, num_speculative_tokens=4, model_type="DSparkDraftModel")
     captured: list[tuple[Any, ...]] = []
 
     class ProbeCache(dict):
@@ -1038,7 +1054,7 @@ def test_width_one_verify_uses_a_separate_graph_from_plain_decode(
     monkeypatch.setattr(
         import_module(DecodeAclGraphRunner.__module__), "device_capture_lock", lambda device: nullcontext()
     )
-    runner = _runner(num_decoding_tokens=configured_width)
+    runner = _runner(num_speculative_tokens=configured_width - 1)
     runner.attention_backend.prepare = MagicMock()
     builder = KdaMetadataBuilder()
     caches = [LayerCache(None, None, conv=torch.zeros(8, 5, 6), ssm=torch.zeros(32, 1, 2, 2))]
@@ -1073,7 +1089,7 @@ def test_kda_graph_refreshes_request_metadata_in_place() -> None:
     builder = KdaMetadataBuilder()
     caches = [LayerCache(None, None, conv=torch.zeros(8, 4, 6), ssm=torch.zeros(32, 1, 2, 2))]
     builder.bind_layer_caches(caches)
-    runner = _runner(num_decoding_tokens=width)
+    runner = _runner(num_speculative_tokens=width - 1)
     runner.bind_execution_metadata_builders((builder,))
     runner.bind_layer_caches(caches)
     batch, metadata = _verify_batch_metadata(2, width)
@@ -1133,7 +1149,7 @@ def test_capture_preserves_live_state_until_first_replay(monkeypatch: pytest.Mon
         import_module(DecodeAclGraphRunner.__module__), "device_capture_lock", lambda device: nullcontext()
     )
     builder = KdaMetadataBuilder()
-    runner = _runner(num_decoding_tokens=verify_width)
+    runner = _runner(num_speculative_tokens=verify_width - 1)
     runner.bind_execution_metadata_builders((builder,))
     batch, metadata = _verify_batch_metadata(4 // verify_width, verify_width)
     slots = torch.arange(1, 5, verify_width)
@@ -1193,7 +1209,7 @@ def test_static_collection_uses_capture_padding_without_caching_graph(
     )
     collection = MagicMock()
     collection.collect_forward.return_value = nullcontext()
-    runner = _runner(dp_size=2 if dp_counts else 1, num_decoding_tokens=verify_width)
+    runner = _runner(dp_size=2 if dp_counts else 1, num_speculative_tokens=verify_width - 1)
     if verify_width > 1:
         batch, metadata = _verify_batch_metadata(4 // verify_width, verify_width)
     else:
@@ -1819,7 +1835,7 @@ def test_dp_mtp_target_dummy_rank_uses_shared_graph_bucket() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=0,
-        num_decoding_tokens=4,
+        num_speculative_tokens=3,
     )
     empty_runner = DecodeAclGraphRunner(
         nn.Identity(),
@@ -1829,7 +1845,7 @@ def test_dp_mtp_target_dummy_rank_uses_shared_graph_bucket() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=1,
-        num_decoding_tokens=4,
+        num_speculative_tokens=3,
     )
     draft_runner = DecodeAclGraphRunner(
         nn.Identity(),
@@ -1839,7 +1855,7 @@ def test_dp_mtp_target_dummy_rank_uses_shared_graph_bucket() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=0,
-        num_decoding_tokens=1,
+        num_speculative_tokens=0,
     )
     metadata = _dp_metadata((4, 0))
 
@@ -1882,7 +1898,7 @@ def test_dp_expanded_verify_and_dummy_rank_share_graph_decision() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         for rank in range(2)
     ]
@@ -1927,7 +1943,7 @@ def test_dp_expanded_verify_and_dummy_rank_share_graph_decision() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         for rank in range(2)
     ]
@@ -1963,7 +1979,7 @@ def test_dp_plain_decode_with_empty_rank_keeps_width_one() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         for rank in range(2)
     ]
@@ -2012,7 +2028,7 @@ def test_dp_empty_spec_rank_matches_busy_verify_graph_key() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         for rank in range(2)
     ]
@@ -2070,9 +2086,9 @@ def test_dflash_draft_graph_capacity_uses_sequence_count() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=1,
             is_spec_draft=True,
-            draft_query_width=8,
+            num_speculative_tokens=8,
+            model_type="DSparkDraftModel",
         )
         for rank in range(2)
     ]
@@ -2137,7 +2153,7 @@ def test_dp_uneven_sequences_stay_in_graph_with_full_batch_capacity() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=6,
+            num_speculative_tokens=5,
         )
         for rank in range(2)
     ]
@@ -2181,7 +2197,7 @@ def test_dp_spec_verify_width_six_pads_to_bucket_eight() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=6,
+            num_speculative_tokens=5,
         )
         for rank in range(2)
     ]
@@ -2223,7 +2239,7 @@ def test_dp_spec_verify_refuses_bucket_not_divisible_by_width() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=3,
+            num_speculative_tokens=2,
         )
         for rank in range(2)
     ]
@@ -2263,7 +2279,7 @@ def test_dp_spec_verify_refuses_bucket_not_divisible_by_width() -> None:
         )
 
 
-def test_dp_spec_verify_uses_num_decoding_tokens_on_every_rank() -> None:
+def test_dp_verification_shares_token_count_across_ranks() -> None:
     attention_backend = SimpleNamespace(page_size=4, is_mla=False)
     runners = [
         DecodeAclGraphRunner(
@@ -2274,7 +2290,7 @@ def test_dp_spec_verify_uses_num_decoding_tokens_on_every_rank() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=8,
+            num_speculative_tokens=7,
         )
         for rank in range(2)
     ]
@@ -2305,14 +2321,14 @@ def test_dp_spec_verify_rejects_measured_width_mismatch() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=0,
-        num_decoding_tokens=8,
+        num_speculative_tokens=7,
     )
     active = _expanded_verify_metadata(4)
     active.dp_execution_token_counts = (4, 1)
     active.raw_dp_execution_token_counts = (4, 0)
     active.is_spec_verify = True
 
-    with pytest.raises(RuntimeError, match="num_decoding_tokens"):
+    with pytest.raises(RuntimeError, match="does not match verify_width"):
         runner._shared_graph_plan(active, 4)
 
 
@@ -2327,7 +2343,7 @@ def test_dp_spec_verify_stays_eager_when_active_count_is_not_a_multiple() -> Non
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         for rank in range(2)
     ]
@@ -2375,7 +2391,7 @@ def test_dp_kpool_spans_must_match_shared_bucket_layout() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=0,
-        num_decoding_tokens=8,
+        num_speculative_tokens=7,
     )
     runner.layer_caches = [SimpleNamespace(kpool_tail=torch.zeros((1, 1, 1, 1), dtype=torch.bfloat16))]
     aligned = _dp_metadata((8, 8))
@@ -2474,7 +2490,7 @@ def test_dp_all_decode_row_mismatch_raises() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=0,
-        num_decoding_tokens=8,
+        num_speculative_tokens=7,
     )
     aligned = _aligned_dp_decode_metadata(8)
     mismatched = _aligned_dp_decode_metadata(8)
@@ -2598,7 +2614,7 @@ def test_dp_all_decode_row_mismatch_raises() -> None:
         max_model_len=8,
         dp_size=2,
         dp_rank=1,
-        num_decoding_tokens=8,
+        num_speculative_tokens=7,
     )
     empty_runner.layer_caches = [SimpleNamespace(conv=object(), kpool_tail=None)]
     placeholder = _aligned_dp_decode_metadata(1)
@@ -2625,7 +2641,7 @@ def test_dp_kpool_spans_keep_complete_groups_only() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=6,
+            num_speculative_tokens=5,
         )
         for rank in range(2)
     ]
@@ -2680,7 +2696,7 @@ def test_dp_expanded_verify_without_placeholder_folds_to_sequences() -> None:
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=4,
+            num_speculative_tokens=3,
         )
         for rank in range(2)
     ]
@@ -2745,7 +2761,7 @@ def test_dp_mtp_target_fallback_is_group_wide(
             max_model_len=8,
             dp_size=2,
             dp_rank=rank,
-            num_decoding_tokens=width,
+            num_speculative_tokens=width - 1,
         )
         for rank in range(2)
     ]
@@ -2905,7 +2921,8 @@ def test_xfia_draft_proposal_graph_accepts_request_scoped_metadata(num_sequences
         max_batch=8,
         max_model_len=256,
         is_spec_draft=True,
-        draft_query_width=query_width,
+        num_speculative_tokens=query_width,
+        model_type="DSparkDraftModel",
     )
     num_tokens = num_sequences * query_width
     metadata = _metadata(torch.arange(num_sequences, dtype=torch.int64))
@@ -2957,7 +2974,7 @@ def test_acl_runner_pre_sizes_engram_graph_staging_capacity() -> None:
         torch.device("cpu"),
         max_batch=64,
         max_model_len=8,
-        num_decoding_tokens=2,
+        num_speculative_tokens=1,
     )
     # 64 sequences x 2 token rows, folded through the decode bucket.
     assert model.hints == [_decode_bucket(64 * 2)]
@@ -2972,7 +2989,7 @@ def test_acl_runner_pre_sizes_engram_graph_staging_capacity() -> None:
         max_batch=64,
         max_model_len=8,
         decode_batch_size_limit=32,
-        num_decoding_tokens=1,
+        num_speculative_tokens=0,
     )
     assert limited.hints == [_decode_bucket(32)]
 
@@ -2986,9 +3003,9 @@ def test_acl_runner_pre_sizes_engram_graph_staging_capacity() -> None:
         torch.device("cpu"),
         max_batch=64,
         max_model_len=8,
-        num_decoding_tokens=1,
         is_spec_draft=True,
-        draft_query_width=8,
+        num_speculative_tokens=8,
+        model_type="DSparkDraftModel",
     )
     assert draft.hints == [_decode_bucket(64 * 8)]
 
@@ -3283,7 +3300,7 @@ def test_acl_runner_slices_pipeline_replay_output_with_input_batch_counts(
     token_capacity = runner._padded_token_rows(batch.num_tokens)
     request_capacity = token_capacity // 3
     source = ModelOutput(
-        draft_proposal=DraftProposal(torch.arange(request_capacity * 3).reshape(request_capacity, 3)),
+        draft_token_ids=torch.arange(request_capacity * 3).reshape(request_capacity, 3),
         draft_confidence_probs=torch.ones(request_capacity, 3),
     )
     replay = MagicMock()
@@ -3306,11 +3323,14 @@ def test_acl_runner_slices_pipeline_replay_output_with_input_batch_counts(
     output = runner.execute(batch.input_ids, batch.positions, metadata, input_batch=batch)
 
     replay.assert_called_once()
-    assert torch.equal(output.draft_proposal.token_ids, source.draft_proposal.token_ids[:num_reqs])
+    assert isinstance(output, ModelOutput)
+    assert output.draft_token_ids is not None
+    assert source.draft_token_ids is not None
+    assert torch.equal(output.draft_token_ids, source.draft_token_ids[:num_reqs])
     assert torch.equal(output.draft_confidence_probs, source.draft_confidence_probs[:num_reqs])
     assert output.hidden_states is None
     if num_reqs:
-        assert output.draft_proposal.token_ids.data_ptr() == source.draft_proposal.token_ids.data_ptr()
+        assert output.draft_token_ids.data_ptr() == source.draft_token_ids.data_ptr()
         assert output.draft_confidence_probs.data_ptr() == source.draft_confidence_probs.data_ptr()
 
 

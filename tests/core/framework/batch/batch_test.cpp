@@ -41,6 +41,7 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
+#include "core/framework/speculative/rejection_sampler.h"
 #include "framework/block/block.h"
 #include "framework/block/block_manager_impl.h"
 #include "framework/block/block_manager_pool.h"
@@ -55,8 +56,6 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/prefix_cache/block_hasher.h"
 #include "framework/request/stopping_checker.h"
-#include "framework/sampling/draft_proposal.h"
-#include "framework/sampling/rejection_sampler.h"
 #include "framework/sampling/sampling_params.h"
 #include "framework/tokenizer/tokenizer.h"
 #include "platform/device.h"
@@ -1098,6 +1097,36 @@ TEST(BatchTest, ProcessRawOutputStoresMtpBootstrapEmbedding) {
   EXPECT_TRUE(torch::equal(stored, torch::tensor({3.0f, 4.0f})));
 }
 
+TEST(BatchTest, FailsDecodeSequenceWithMissingSample) {
+  BlockManager::Options options;
+  options.num_blocks(/*value=*/8).block_size(/*value=*/4);
+  BlockManagerImpl manager(options);
+  Sequence failed = make_basic_sequence(/*prompt_token_ids=*/{1, 2});
+  Sequence healthy = make_basic_sequence(/*prompt_token_ids=*/{3, 4});
+  failed.kv_state().add_blocks(/*type=*/BlockType::KV,
+                               manager.allocate(/*num_blocks=*/1));
+  healthy.kv_state().add_blocks(/*type=*/BlockType::KV,
+                                manager.allocate(/*num_blocks=*/1));
+  failed.kv_state().set_kv_cache_tokens_num(failed.num_tokens());
+  healthy.kv_state().set_kv_cache_tokens_num(healthy.num_tokens());
+  failed.append_token(Token(/*id=*/5));
+  healthy.append_token(Token(/*id=*/6));
+
+  Batch batch({&failed, &healthy});
+  (void)batch.prepare_forward_input(
+      /*num_decoding_tokens=*/2, /*min_decoding_batch_size=*/0, ModelArgs());
+
+  RawForwardOutput output;
+  output.outputs = {{}, make_raw_sample_output(/*token_id=*/7, std::nullopt)};
+  batch.process_sample_output(output, /*replace_fake_token=*/false);
+
+  EXPECT_TRUE(failed.finished());
+  ASSERT_TRUE(failed.error_status().has_value());
+  EXPECT_EQ(failed.error_status()->code(), StatusCode::UNAVAILABLE);
+  EXPECT_EQ(healthy.tokens().back(), 7);
+  EXPECT_EQ(healthy.num_need_compute_tokens(), 1);
+}
+
 TEST(BatchTest, ProcessRawOutputAccumulatesRequestSpeculativeStats) {
   BlockManager::Options options;
   options.num_blocks(8).block_size(4);
@@ -1951,18 +1980,17 @@ TEST(BatchTest, ReorderedMtpAcceptedRowsCommitToOwningSequences) {
   }
   const torch::Tensor bonus_token_ids =
       torch::tensor({{15}, {5}}, torch::kInt64);
-  const torch::Tensor do_sample = torch::tensor({false, false}, torch::kBool);
-  RejectionSampler rejection_sampler(do_sample,
-                                     /*all_random_sample=*/false,
-                                     /*all_greedy_sample=*/true,
-                                     /*logprobs=*/false,
-                                     /*max_top_logprobs=*/0);
-  DraftProposal draft_proposal = DraftProposal(draft_token_ids);
+  target_logits.select(/*dim=*/1, /*index=*/5)
+      .scatter_(/*dim=*/1, bonus_token_ids, /*value=*/20.0F);
+  SamplingParameters rejection_params;
+  rejection_params.sampling_mode = SamplingMode::GREEDY;
+  rejection_params.selected_token_idxes = torch::arange(/*end=*/12);
+  rejection_params.sample_idxes = rejection_params.selected_token_idxes;
   const SampleOutput accepted_output =
-      rejection_sampler.forward(draft_proposal,
-                                target_logits,
-                                bonus_token_ids,
-                                /*mask_out_rejected_tokens=*/true);
+      rejection_sample(rejection_params,
+                       draft_token_ids,
+                       {},
+                       target_logits.view(/*size=*/{12, 16}));
   EXPECT_TRUE(torch::equal(
       accepted_output.next_tokens,
       torch::tensor({{10, 11, 12, 13, 14, 15}, {0, 1, 2, -1, -1, -1}},

@@ -18,8 +18,12 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 #include <vector>
+
+#include "core/framework/batch/decode_input_builder.h"
+#include "core/framework/sampling/sampling_params.h"
 
 #if defined(USE_NPU)
 #include "kernels/npu/xllm_ops/xllm_ops_api.h"
@@ -388,6 +392,78 @@ void refresh_expanded_target_verify_metadata(
       params.graph.expanded_block_tables,
       std::move(expanded_kv_seq_lens),
       block_size);
+}
+
+std::vector<EmbeddingCache::DecodeState> advance_first_draft_template(
+    ForwardInput& metadata_template,
+    torch::Tensor embedding_placeholder,
+    int32_t num_speculative_tokens) {
+  CHECK_NE(num_speculative_tokens, /*disabled=*/0);
+  CHECK_LT(num_speculative_tokens, std::numeric_limits<int32_t>::max());
+  // The target verifier may accept every proposal and its bonus token.
+  // This N+1 template span fits the scheduler's N+(N+1) overlap reservation.
+  const int32_t advance = num_speculative_tokens + 1;
+  const int32_t num_sequences =
+      metadata_template.input_params.meta.num_sequences;
+  CHECK_GE(num_sequences, 0);
+  for (const torch::Tensor* tensor :
+       {&metadata_template.token_ids_host, &metadata_template.positions_host}) {
+    CHECK(tensor->defined()) << "first-draft host tensor must be defined";
+    CHECK(tensor->device().is_cpu());
+    CHECK_EQ(tensor->scalar_type(), torch::kInt32);
+    CHECK_GE(tensor->numel(), num_sequences);
+  }
+  CHECK_EQ(metadata_template.input_params.embedding.request_ids.size(),
+           static_cast<size_t>(num_sequences));
+  metadata_template.token_ids_host =
+      metadata_template.token_ids_host.clone(torch::MemoryFormat::Contiguous);
+  metadata_template.positions_host =
+      metadata_template.positions_host.clone(torch::MemoryFormat::Contiguous);
+  int32_t* positions = metadata_template.positions_host.data_ptr<int32_t>();
+  int32_t* tokens = metadata_template.token_ids_host.data_ptr<int32_t>();
+  const std::vector<int32_t>& source_kv_lens =
+      metadata_template.input_params.attention.host.kv_seq_lens;
+  std::vector<int32_t> kv_lens;
+  kv_lens.reserve(source_kv_lens.size());
+  EmbeddingCache::DecodeState template_state;
+  template_state.valid = true;
+  template_state.embedding = std::move(embedding_placeholder);
+  std::vector<EmbeddingCache::DecodeState> states(num_sequences,
+                                                  template_state);
+  for (int32_t seq = 0; seq < num_sequences; ++seq) {
+    positions[seq] += advance;
+    append_seq_len_by_layout(kv_lens,
+                             calc_kv_len(source_kv_lens, seq, advance));
+    tokens[seq] = std::max(tokens[seq], /*__b=*/0);
+    states[seq].request_id =
+        metadata_template.input_params.embedding.request_ids[seq];
+    states[seq].token_id = tokens[seq];
+  }
+  metadata_template.input_params.attention.host.kv_seq_lens =
+      std::move(kv_lens);
+  return states;
+}
+
+MtpTopkStatePtr select_mtp_topk_state_for_next_step(
+    const MtpTopkStatePtr& state,
+    const SamplingParameters& sampling_params) {
+  if (state == nullptr || !sampling_params.selected_token_idxes.defined()) {
+    return state;
+  }
+  const torch::Tensor& selected_idxes = sampling_params.selected_token_idxes;
+  if (selected_idxes.numel() == 0 ||
+      state->num_rows() == selected_idxes.numel()) {
+    return state;
+  }
+  if (selected_idxes.device().is_cpu()) {
+    CHECK_GT(state->num_rows(), selected_idxes.max().item<int64_t>())
+        << "MTP selected top-k index exceeds top-k rows.";
+  }
+  torch::Tensor index =
+      selected_idxes
+          .to(torch::dtype(/*dtype=*/torch::kLong).device(state->device()))
+          .contiguous();
+  return state->index_select_rows(index);
 }
 
 }  // namespace xllm::mtp_async

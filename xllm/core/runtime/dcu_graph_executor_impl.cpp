@@ -97,10 +97,7 @@ DcuGraphPersistentParam::DcuGraphPersistentParam(
     const ModelArgs& args,
     const torch::Device& device,
     const runtime::Options& options)
-    : args_(args),
-      device_(device),
-      options_(options),
-      num_decoding_tokens_(options.num_decoding_tokens()) {
+    : args_(args), device_(device), options_(options) {
   const int64_t max_tokens_per_batch =
       SchedulerConfig::get_instance().max_tokens_per_batch();
 
@@ -250,7 +247,12 @@ std::optional<ModelInputParams> DcuGraphPersistentParam::update(
   std::vector<int32_t> kv_seq_lens_vec(params.attention.host.kv_seq_lens);
 
   if (!q_seq_lens_vec.empty()) {
-    extend_q_cu_seq_lens(&q_seq_lens_vec, padding_needed, num_decoding_tokens_);
+    const uint32_t query_width =
+        static_cast<uint32_t>(options_.is_draft_engine()
+                                  ? 0
+                                  : options_.num_speculative_tokens()) +
+        1;
+    extend_q_cu_seq_lens(&q_seq_lens_vec, padding_needed, query_width);
 
     auto q_seq_lens =
         make_int_tensor_on_device(q_seq_lens_vec, q_seq_lens_.options());
@@ -452,7 +454,12 @@ void DcuGraphPersistentParam::update_decode_input_buffer(
   std::vector<int32_t> kv_seq_lens_vec(params.attention.host.kv_seq_lens);
 
   if (!q_seq_lens_vec.empty()) {
-    extend_q_cu_seq_lens(&q_seq_lens_vec, padding_needed, num_decoding_tokens_);
+    const uint32_t query_width =
+        static_cast<uint32_t>(options_.is_draft_engine()
+                                  ? 0
+                                  : options_.num_speculative_tokens()) +
+        1;
+    extend_q_cu_seq_lens(&q_seq_lens_vec, padding_needed, query_width);
 
     auto q_seq_lens =
         make_int_tensor_on_device(q_seq_lens_vec, q_seq_lens_.options());
@@ -834,11 +841,6 @@ DcuGraphExecutorImpl::DcuGraphExecutorImpl(CausalLM* model,
 DcuGraphExecutorImpl::~DcuGraphExecutorImpl() {
   prefill_graphs_.clear();
   graphs_.clear();
-}
-
-ForwardInput DcuGraphExecutorImpl::prepare_inputs(Batch& batch) {
-  return batch.prepare_forward_input(
-      options_.num_decoding_tokens(), 0, args_, options_.cp_size());
 }
 
 uint32_t DcuGraphExecutorImpl::get_bucket_num_tokens(

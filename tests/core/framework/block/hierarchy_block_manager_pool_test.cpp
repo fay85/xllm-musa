@@ -2155,7 +2155,9 @@ TEST(HierarchyBlockManagerPoolTest,
   const double fetched_before =
       COUNTER_VALUE(store_prefetch_master_fetched_tokens_total);
   const double sessions_before =
-      MULTI_COUNTER_VALUE(store_prefetch_master_sessions_total, "complete");
+      MULTI_COUNTER_store_prefetch_master_sessions_total
+          .get_stats(/*labels=*/{"complete"})
+          ->get_value();
   const int64_t samples_before =
       HISTOGRAM_store_prefetch_master_latency_microseconds.count();
   BlockManagerPool::Options options = make_flat_kv_options();
@@ -2203,9 +2205,10 @@ TEST(HierarchyBlockManagerPoolTest,
   EXPECT_EQ(sequence->kv_cache_tokens_num(), 1024u);
   EXPECT_EQ(COUNTER_VALUE(store_prefetch_master_fetched_tokens_total),
             fetched_before + 1024);
-  EXPECT_EQ(
-      MULTI_COUNTER_VALUE(store_prefetch_master_sessions_total, "complete"),
-      sessions_before + 1);
+  EXPECT_EQ(MULTI_COUNTER_store_prefetch_master_sessions_total
+                .get_stats(/*labels=*/{"complete"})
+                ->get_value(),
+            sessions_before + 1);
   EXPECT_EQ(HISTOGRAM_store_prefetch_master_latency_microseconds.count(),
             samples_before + 1);
   pool.deallocate(sequence);

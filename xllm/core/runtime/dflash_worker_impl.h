@@ -24,15 +24,14 @@ limitations under the License.
 #include <vector>
 
 #include "core/framework/config/speculative_config.h"
+#include "core/framework/kv_cache_transfer/kv_cache_transfer.h"
+#include "core/framework/kv_cache_transfer/kv_transfer_completion.h"
+#include "core/framework/model/model_args.h"
 #include "core/framework/speculative/dflash_async_input_builder.h"
 #include "core/framework/speculative/embedding_cache.h"
-#include "framework/kv_cache_transfer/kv_cache_transfer.h"
-#include "framework/kv_cache_transfer/kv_transfer_completion.h"
-#include "framework/model/model_args.h"
-#include "framework/sampling/draft_proposal.h"
-#include "runtime/draft_model_spec_worker_impl.h"
-#include "runtime/llm_worker_impl.h"
-#include "util/utils.h"
+#include "core/runtime/draft_model_spec_worker_impl.h"
+#include "core/runtime/llm_worker_impl.h"
+#include "core/util/utils.h"
 
 namespace xllm {
 
@@ -52,22 +51,6 @@ inline void reset_draft_model_metadata(ModelInputParams& input_params) {
   // sparse tiling values such as ori_win_left into opaque tensors. A draft
   // input copied from the target must rebuild those tensors for draft geometry.
   input_params.attn_metadata.reset();
-}
-
-enum class DSparkSasMode : uint8_t {
-  NOT_DSPARK,
-  COMPATIBILITY,
-  NATIVE,
-};
-
-inline DSparkSasMode classify_dspark_sas_mode(const ModelArgs& draft_args,
-                                              bool sample_from_anchor) {
-  if (!sample_from_anchor ||
-      !util::is_deepseek_v4_dspark_model_type(draft_args.model_type())) {
-    return DSparkSasMode::NOT_DSPARK;
-  }
-  return draft_args.dspark_use_native_sas() ? DSparkSasMode::NATIVE
-                                            : DSparkSasMode::COMPATIBILITY;
 }
 
 // Draft sampling params: clear the sequence-level constraint masks (drafts
@@ -103,16 +86,14 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
 
   ~DFlashWorkerImpl() override;
 
-  bool init_model(const std::string& model_weights_path,
-                  int32_t random_seed,
-                  MasterStatus master_status) override;
-
-  std::tuple<int64_t, int64_t> estimate_kv_cache_capacity() override;
-
  protected:
+  void apply_target_model_overrides(ModelArgs& args) const override;
+  void apply_draft_model_overrides(ModelArgs& args) const override;
+  void on_target_model_loaded() override;
+  void on_draft_model_loaded(const std::string& model_weights_path) override;
+
   bool can_prepare_without_compute_stream_wait(
       const ForwardInput& input) const override;
-  bool can_prelaunch_draft_for_this_step(const ForwardInput& input) const;
   bool can_prepare_device_draft_inputs(const ForwardInput& input) const;
   void prepare_target_metadata(ForwardInput& validate_input);
   std::pair<ForwardInput, torch::Tensor> prepare_pending_draft_query(
@@ -130,31 +111,15 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
                                    ForwardOutput& output,
                                    std::optional<ForwardOutput>& draft_output);
 
-  // Draft produces all speculative tokens of a block in one forward, so its
-  // output is a single [batch, num_speculative_tokens] block rather than the
-  // per-step outputs an autoregressive drafter (e.g. MTP) yields.
-  struct DraftBlock {
-    DraftProposal proposal;
-    // DSpark ConfidenceHead output for adaptive pruning; empty otherwise.
-    torch::Tensor confidence_probs;
-    std::vector<torch::Tensor> retained_tensors;
-    // No-sync draft inputs must outlive validation's stream sync.
-    std::vector<std::shared_ptr<ForwardInput>> retained_inputs;
-    std::vector<std::string> failed_request_ids;
-    std::vector<std::string> unsafe_request_ids;
-  };
-
-  // virtual: DSpark overrides the draft sampling (parallel block sample ->
-  // one forward + sequential Markov-head sampling loop).
-  virtual DraftBlock run_decode_draft(const ForwardInput& input,
-                                      ForwardInput& validate_input);
-  virtual DraftBlock run_decode_draft_from_pending(
+  virtual ForwardOutput run_decode_draft(const ForwardInput& input,
+                                         ForwardInput& validate_input);
+  virtual ForwardOutput run_decode_draft_from_pending(
       const ForwardInput& input,
       const std::vector<int64_t>& rows);
 
   virtual void prepare_validate_output_async(const ForwardInput& input);
   virtual void finalize_validate_output_async(const ForwardInput& input,
-                                              const SampleOutput& output,
+                                              SampleOutput output,
                                               ForwardOutput& target_output);
   std::vector<int64_t> build_batch_to_pending_row_mapping(
       const ForwardInput& input) const;
@@ -187,13 +152,13 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
   void prepare_validate_inputs(const ForwardInput& input,
                                ForwardInput& validate_input);
   std::optional<ForwardOutput> run_validate(const ForwardInput& input,
-                                            const DraftBlock& draft_block,
                                             ForwardInput& validate_input,
-                                            bool async_output = false);
+                                            ForwardOutput& draft_output,
+                                            bool async_output);
 
   // A replicated draft pool stores kv_split physical pages per logical block,
   // so the draft's own block table has to be expanded to address them. The
-  // logical slot arithmetic in specBuilder is unchanged: run against the
+  // decode input builder uses the logical slot arithmetic against the
   // expanded table with the physical dim it still resolves to the
   // draft's flat cache index (logical_block * kv_split + page_in_block).
   // No-op when the draft follows the target's kv_split sharding.
@@ -224,76 +189,12 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
  private:
   friend class DFlashWorkerImplTestAccess;
 
-  DraftBlock execute_greedy_draft_query(ForwardInput query, bool prepared);
-  bool draft_use_block_parallel_rows() const {
-    return draft_sas_mode_ == dflash_detail::DSparkSasMode::COMPATIBILITY;
-  }
+  ForwardOutput execute_greedy_draft_query(ForwardInput query, bool prepared);
   BatchForwardType draft_batch_forward_type() const {
     return draft_impl_->context_.get_model_args().draft_query_uses_decode()
                ? BatchForwardType::DECODE
                : BatchForwardType::CHUNKED_PREFILL;
   }
-
-  void fill_validate_input_from_draft_outputs(const DraftBlock& draft_block,
-                                              ForwardInput& validate_input,
-                                              Stream& compute_stream,
-                                              int32_t effective_val_tokens);
-
-  // Per-seq varlen variant. Handles the case where validate_input.token_ids
-  // is a flat [Σ per_seq_val_tokens] layout (i.e. the base per_seq builder
-  // produced it), copying draft tokens into the varlen slots per seq.
-  void fill_validate_input_from_draft_outputs_varlen(
-      const DraftBlock& draft_block,
-      ForwardInput& validate_input,
-      Stream& compute_stream,
-      const std::vector<int32_t>& per_seq_val_tokens);
-
-  // `per_seq_val_tokens` (optional): when non-empty, the target output was
-  // scattered from a per-seq varlen batch and each seq's bonus lives at
-  // dense col (per_seq_val_tokens[i] - 1), not the fixed last column. Passing
-  // it lets validate() gather the bonus token per-seq. Empty = uniform
-  // batch-max width (bonus at col effective_val_tokens - 1 for every seq).
-  SampleOutput validate(const SamplingParameters& sampling_params,
-                        const DraftBlock& draft_block,
-                        const ForwardOutput& target_output,
-                        int32_t effective_val_tokens,
-                        const std::vector<int32_t>& per_seq_val_tokens);
-
-  SampleOutput validate(const SamplingParameters& sampling_params,
-                        const DraftProposal& draft_proposal,
-                        const ForwardOutput& target_output,
-                        int32_t effective_val_tokens,
-                        const std::vector<int32_t>& per_seq_val_tokens);
-
-  // Adaptive-speculative helper: run controller on draft acceptance
-  // probabilities (ConfidenceHead output if available, sampler-gathered probs
-  // otherwise) and return per-seq prefix_len vector (each entry in
-  // [0, num_speculative_tokens]). Returns empty vector when adaptive is off,
-  // in which case the caller keeps the full draft block.
-  std::vector<int32_t> compute_adaptive_prefix_lengths(
-      const DraftBlock& draft_block,
-      const ForwardInput& input);
-
-  // Zero out draft probs beyond each sequence's prefix_len so the rejection
-  // Per-seq varlen prune: rebuild validate_input as a true varlen
-  // [Σ per_seq_val_tokens[i], ...] batch so target forward only spends
-  // compute on tokens each seq's prefix_len actually needs. Reuses the base
-  // SpeculativeWorkerImpl per-seq builder.
-  void apply_per_seq_varlen_prune(
-      const ForwardInput& input,
-      ForwardInput& validate_input,
-      const std::vector<int32_t>& per_seq_val_tokens);
-
-  // Record precise (draft, accepted) counters. Padded -1 slots at positions
-  // past per_seq_val_tokens[i]-1 are excluded — the count only walks each
-  // row up to its per-seq width. Passing an empty vector treats every row
-  // as full width (static). Caller must ensure val_output.next_tokens is on
-  // CPU (avoids a blocking device sync on the hot path).
-  void record_validate_metrics(
-      SampleOutput& val_output,
-      const std::vector<int32_t>& per_seq_val_tokens) const;
-
-  void process_draft_sample_output(SampleOutput& sample_output);
 
   // Mirrors sampled tokens to rank 0 under schedule-overlap so every rank
   // commits the same prefix. No-op for a single rank.
@@ -325,25 +226,11 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
                                       ForwardInput& validate_input);
 
  protected:
-  // Replays the accepted block through the sequence-level grammar states and
-  // records json_object_errors for sequences whose accepted tokens violate
-  // the grammar. Defense in depth on top of the per-position masks.
-  // `accepted_tokens_cpu` is [batch, num_val_tokens] with -1 padding.
-  void verify_json_accepted_tokens(const ForwardInput& input,
-                                   const torch::Tensor& accepted_tokens_cpu,
-                                   ForwardOutput& output);
-
   int32_t mask_token_id_ = -1;
   int64_t expected_context_hidden_size_ = 0;
   // Whether the target model owns recurrent (linear attention) layers.
-  // Fixed once the target finishes loading; the hybrid spec-verify gates and
-  // the adaptive-pruning guard read this instead of re-scanning layer_types.
   bool target_is_hybrid_recurrent_ = false;
-  // Preformatted labels keep per-position acceptance telemetry allocation-free
-  // on the decode hot path.
-  std::vector<std::string> speculative_position_labels_;
-  dflash_detail::DSparkSasMode draft_sas_mode_ =
-      dflash_detail::DSparkSasMode::NOT_DSPARK;
+  bool uses_block_parallel_draft_decode() const;
 };
 
 }  // namespace xllm

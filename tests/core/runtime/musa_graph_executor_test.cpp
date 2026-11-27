@@ -221,7 +221,7 @@ class MtpVerifyInputWorker final : public MTPWorkerImpl {
   using MTPWorkerImpl::MTPWorkerImpl;
 };
 
-TEST_F(MusaMtpGraphTest, JsonVerifyPaddingPreservesRejectedProposals) {
+TEST_F(MusaMtpGraphTest, JsonVerifyMasksUnconstrainedDraftTokens) {
   options_.num_speculative_tokens(3);
   const ParallelArgs parallel_args(
       /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
@@ -235,38 +235,23 @@ TEST_F(MusaMtpGraphTest, JsonVerifyPaddingPreservesRejectedProposals) {
   ForwardInput input;
   input.json_object_states = {make_builtin_test_state(grammar),
                               ConstraintState()};
-  std::vector<ConstraintState> draft_states = input.json_object_states;
-  std::vector<uint8_t> invalid_suffix(2, 0);
-  detail::JsonDraftValidationScratch scratch;
-  ASSERT_TRUE(detail::advance_json_draft_step(
-      draft_states, invalid_suffix, {4, 1}, scratch));
+  input.input_params.meta.num_sequences = 2;
   std::vector<ForwardOutput> draft_outputs(3);
   draft_outputs[0].sample_output.next_tokens =
       torch::tensor({4, 1}, ints.dtype(torch::kInt64));
-  for (int32_t step = 1; step < 3; ++step) {
-    draft_outputs[step].sample_output.next_tokens = torch::full_like(
-        draft_outputs[0].sample_output.next_tokens, /*fill_value=*/-1);
-    detail::advance_json_draft_step(
-        draft_states, invalid_suffix, {-1, -1}, scratch);
-  }
+  draft_outputs[1].sample_output.next_tokens =
+      torch::tensor(/*values=*/{1, 2}, ints.dtype(/*dtype=*/torch::kInt64));
+  draft_outputs[2].sample_output.next_tokens =
+      torch::tensor(/*values=*/{2, 3}, ints.dtype(/*dtype=*/torch::kInt64));
   ForwardInput verify;
   verify.token_ids = torch::tensor({2, -1, -2, -3, 3, -1, -2, -3}, ints);
   worker.fill_validate_input_from_draft_outputs(
-      input, draft_outputs, verify, {4, 4}, &scratch, *stream);
-  ASSERT_TRUE(torch::equal(verify.token_ids,
-                           torch::tensor({2, 4, 0, 0, 3, 1, 0, 0}, ints)));
+      input, draft_outputs, verify, *stream);
+  ASSERT_TRUE(
+      torch::equal(verify.token_ids,
+                   torch::tensor(/*values=*/{2, 4, 1, 2, 3, 1, 2, 3}, ints)));
   EXPECT_EQ(verify.json_object_invalid_draft,
             std::vector<uint8_t>({1, 1, 1, 0, 0, 0}));
-  EXPECT_TRUE(torch::equal(draft_outputs[0].sample_output.next_tokens,
-                           torch::tensor({4, 1}, ints.dtype(torch::kInt64))));
-  for (int32_t step = 1; step < 3; ++step) {
-    EXPECT_TRUE(torch::equal(draft_outputs[step].sample_output.next_tokens,
-                             torch::full({2}, -1, ints.dtype(torch::kInt64))));
-  }
-  const torch::Tensor weight = torch::arange(6, bf16_).unsqueeze(1);
-  const torch::Tensor embedding =
-      torch::nn::functional::embedding(verify.token_ids, weight);
-  EXPECT_TRUE(torch::equal(embedding.flatten(), verify.token_ids.to(bf16_)));
 }
 
 TEST(MusaGraphExecutorTest, ShrinkingDecodeReplayDoesNotUpdatePaddingState) {

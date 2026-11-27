@@ -370,7 +370,6 @@ class DeepseekV41Config(DeepseekV4Config):
     # -- DSpark draft geometry (consumed by the draft model, Phase 3) --
     num_nextn_predict_layers: int = 3
     dspark_target_layer_ids: list[int] = field(default_factory=lambda: [37, 38, 39])
-    dspark_block_size: int = 5
     dspark_markov_rank: int = 256
     dspark_noise_token_id: int = 128799
     dspark_n_routed_experts: int = 128
@@ -470,7 +469,6 @@ class DeepseekV41Config(DeepseekV4Config):
             engram_pad_token_id=int(_pick(merged, "engram_pad_token_id", default=-1)),
             num_nextn_predict_layers=int(_pick(merged, "num_nextn_predict_layers", default=3)),
             dspark_target_layer_ids=_int_list(merged, "dspark_target_layer_ids", default=[37, 38, 39]),
-            dspark_block_size=int(_pick(merged, "dspark_block_size", default=5)),
             dspark_markov_rank=int(_pick(merged, "dspark_markov_rank", default=256)),
             dspark_noise_token_id=int(_pick(merged, "dspark_noise_token_id", default=128799)),
             dspark_n_routed_experts=int(_pick(merged, "dspark_n_routed_experts", default=128)),

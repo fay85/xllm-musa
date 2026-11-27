@@ -1172,6 +1172,17 @@ TORCH_LIBRARY(xllm_ops, m) {
       "start_pos, int rope_head_dim, int cmp_ratio, int coff, float "
       "norm_eps, int rotary_mode, bool enable_grad) -> (Tensor, Tensor, "
       "Tensor, Tensor, Tensor)");
+  m.def(/*raw_schema=*/"supports_sparse_flash_mla_swa() -> bool");
+  m.def(
+      /*raw_schema=*/
+      "sparse_flash_mla_swa_metadata(Tensor cu_seqlens_q, Tensor "
+      "kv_seq_lens, Tensor ori_block_table, int max_kv_len, int num_heads, "
+      "int page_size, int visible_window) -> (Tensor, Tensor, Tensor)");
+  m.def(
+      /*raw_schema=*/
+      "sparse_flash_mla_swa(Tensor q, Tensor ori_kv, Tensor ori_block_table, "
+      "Tensor cu_seqlens_q, Tensor kv_seq_lens, Tensor ori_sparse_indices, "
+      "Tensor ori_topk_length, Tensor? sinks, Tensor metadata) -> Tensor");
   // Two-stage sparse attention over original + compressed KV.
   m.def(
       "sparse_attn_sharedkv(Tensor q, Tensor? ori_kv, Tensor? cmp_kv, "
@@ -1284,6 +1295,10 @@ TORCH_LIBRARY_IMPL(xllm_ops, PrivateUse1, m) {
   m.impl("quant_lightning_indexer_v2_va",
          TORCH_FN(xllm::kernel::npu::quant_lightning_indexer_v2_va));
   m.impl("compressor", TORCH_FN(xllm::kernel::npu::compressor));
+  m.impl(/*name=*/"sparse_flash_mla_swa_metadata",
+         TORCH_FN(xllm::kernel::npu::sparse_flash_mla_swa_metadata));
+  m.impl(/*name=*/"sparse_flash_mla_swa",
+         TORCH_FN(xllm::kernel::npu::sparse_flash_mla_swa));
   m.impl("sparse_attn_sharedkv",
          TORCH_FN(xllm::kernel::npu::sparse_attn_sharedkv));
   m.impl("sparse_flash_attention_lse",
@@ -1297,6 +1312,8 @@ TORCH_LIBRARY_IMPL(xllm_ops, PrivateUse1, m) {
 // runs only on the eager prefill path, so it needs no fake/meta registration;
 // decode graph capture is phase-disjoint.
 TORCH_LIBRARY_IMPL(xllm_ops, CompositeExplicitAutograd, m) {
+  m.impl(/*name=*/"supports_sparse_flash_mla_swa",
+         TORCH_FN(xllm::kernel::npu::supports_sparse_flash_mla_swa));
   m.impl("dsa_kv_offloading_selection_capacity",
          TORCH_FN(xllm::kernel::npu::dsa_kv_offloading_selection_capacity));
 

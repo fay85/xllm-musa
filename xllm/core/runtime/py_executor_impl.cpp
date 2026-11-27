@@ -68,28 +68,35 @@ PyExecutorImpl::PyExecutorImpl(CausalLM* model,
   py_model_output_type_ =
       py::module_::import("xllm.python.model_executor.model_output")
           .attr("ModelOutput");
-  const bool is_spec_draft =
-      options_.is_draft_engine() || (options_.enable_speculative_decode() &&
-                                     options_.num_decoding_tokens() == 1);
+  py::dict executor_config =
+      py_causal_lm_->config_dict().attr(/*key=*/"copy")();
+  executor_config[/*key=*/"is_draft_engine"] = options_.is_draft_engine();
+  executor_config[/*key=*/"num_speculative_tokens"] =
+      options_.num_speculative_tokens();
   const auto& raw_sizes = ExecutionConfig::get_instance().graph_capture_sizes();
   if (!raw_sizes.empty()) {
-    const py::dict& config = py_causal_lm_->config_dict();
-    const int64_t query_width =
-        is_spec_draft ? config["draft_query_width"].cast<int64_t>()
-                      : options_.num_decoding_tokens();
+    const int64_t num_speculative_tokens = options_.num_speculative_tokens();
+    int64_t tokens_per_sequence = num_speculative_tokens + 1;
+    if (options_.is_draft_engine()) {
+      tokens_per_sequence = 1;
+      const auto& algorithm = options_.speculative_algorithm();
+      if (SpeculativeConfig::is_block_diffusion_algorithm(algorithm)) {
+        tokens_per_sequence =
+            num_speculative_tokens +
+            !SpeculativeConfig::is_dspark_algorithm(algorithm);
+      }
+    }
     std::vector<int32_t> capture_sizes =
-        runtime::get_decode_graph_capture_sizes(options_, query_width);
+        runtime::get_decode_graph_capture_sizes(options_, tokens_per_sequence);
     // Pass effective shapes through the existing model config, not a second
     // Python implementation of query rounding / capacity normalization.
-    config["graph_capture_sizes"] = std::move(capture_sizes);
+    executor_config[/*key=*/"graph_capture_sizes"] = std::move(capture_sizes);
   }
   py_executor_ = executor_module.attr("ModelExecutor")(
       py_causal_lm_->python_model(),
-      py_causal_lm_->config_dict(),
+      executor_config,
       options_.max_seqs_per_batch(),
-      options_.num_decoding_tokens(),
-      ExecutionConfig::get_instance().acl_graph_decode_batch_size_limit(),
-      py::arg("is_spec_draft") = is_spec_draft);
+      ExecutionConfig::get_instance().acl_graph_decode_batch_size_limit());
 }
 
 PyExecutorImpl::~PyExecutorImpl() {
@@ -110,11 +117,6 @@ bool PyExecutorImpl::supports_device_only_decode_inputs() const {
 void PyExecutorImpl::set_device_only_decode_inputs(bool enabled) {
   py::gil_scoped_acquire gil;
   py_executor_.attr("set_device_only_decode_inputs")(enabled);
-}
-
-ForwardInput PyExecutorImpl::prepare_inputs(Batch& batch) {
-  return batch.prepare_forward_input(
-      options_.num_decoding_tokens(), 0, args_, options_.cp_size());
 }
 
 ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
@@ -264,16 +266,8 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
     output.residual = tensor("residual");
     output.aux_hidden_states = tensor("aux_hidden_states");
     output.aux_hidden_restore_index = tensor("aux_hidden_restore_index");
-    py::object proposal = py_output.attr("draft_proposal");
-    if (!proposal.is_none()) {
-      torch::Tensor tokens = proposal.attr("token_ids").cast<torch::Tensor>();
-      py::object probabilities = proposal.attr("draft_probs");
-      output.draft_proposal.emplace(
-          std::move(tokens),
-          probabilities.is_none()
-              ? std::nullopt
-              : std::make_optional(probabilities.cast<torch::Tensor>()));
-    }
+    output.draft_token_ids = tensor(/*name=*/"draft_token_ids");
+    output.draft_logits = tensor(/*name=*/"draft_logits");
     output.draft_confidence_probs = tensor("draft_confidence_probs");
     return output;
   }

@@ -164,7 +164,7 @@ std::optional<std::string> ModelConfig::validate_python_speculative_decode(
     std::string_view model_type,
     std::string_view speculative_algorithm,
     int32_t num_speculative_tokens) {
-  if (!is_python_model_impl(model_impl) || num_speculative_tokens <= 0 ||
+  if (!is_python_model_impl(model_impl) || num_speculative_tokens == 0 ||
       !is_qwen3_5_model_type(model_type)) {
     return std::nullopt;
   }

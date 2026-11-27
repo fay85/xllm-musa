@@ -95,7 +95,7 @@ bool StructuredOutputCompiler::validate_speculative_support(
     const RequestParams& sp,
     std::string& error) const {
   if (sp.response_format == ResponseFormatType::NONE ||
-      options_.num_speculative_tokens() <= 0 ||
+      options_.num_speculative_tokens() == 0 ||
       SpeculativeConfig::drives_constraint_channel(
           options_.speculative_algorithm())) {
     return true;
@@ -105,7 +105,8 @@ bool StructuredOutputCompiler::validate_speculative_support(
           ") is not supported with speculative algorithm " +
           options_.speculative_algorithm() +
           ": the constraint mask is applied per speculative position and this "
-          "drafter cannot drive it; use MTP, DFlash or DSpark, or disable "
+          "drafter cannot drive it; use MTP, DFlash, DFlash2, DSpark or "
+          "Suffix, or disable "
           "speculative decoding";
   return false;
 }

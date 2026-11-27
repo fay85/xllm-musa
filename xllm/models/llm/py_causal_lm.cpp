@@ -53,16 +53,10 @@ namespace xllm {
 
 namespace detail {
 
-void share_python_model_weights(py::object& draft_model,
-                                const py::object& target_model) {
-  draft_model.attr("share_weights_from")(target_model);
-}
-
 int64_t python_mega_moe_max_num_tokens_per_rank(int64_t max_seqs_per_batch,
                                                 int64_t num_speculative_tokens,
                                                 int64_t dp_size) {
   CHECK_GT(max_seqs_per_batch, 0);
-  CHECK_GE(num_speculative_tokens, 0);
   CHECK_GT(dp_size, 0);
 
   const int64_t speculative_width = num_speculative_tokens + 1;
@@ -90,7 +84,6 @@ int64_t python_qwen3_5_mega_moe_max_num_tokens_per_rank(
     int64_t num_speculative_tokens) {
   CHECK_GT(max_tokens_per_batch, 0);
   CHECK_GT(max_seqs_per_batch, 0);
-  CHECK_GE(num_speculative_tokens, 0);
 
   const int64_t speculative_width = num_speculative_tokens + 1;
   const int64_t max_decode_tokens = max_seqs_per_batch * speculative_width;
@@ -599,10 +592,7 @@ py::dict PyCausalLM::build_config_dict(
   d["ep_rank"] = ep_rank_;
   d["requires_framework_kpool_tail"] =
       uses_npu_compressed_kpool_tail(model_args_);
-  d["runtime_adaptive_speculative_decode_enabled"] =
-      speculative_runtime_config.adaptive_enabled;
   d["is_draft_engine"] = speculative_runtime_config.is_draft_engine;
-  d["draft_query_width"] = speculative_runtime_config.draft_query_width;
   d["dflash_xfia_enabled"] = speculative_runtime_config.dflash_xfia_enabled;
   // cp_size is a reflected ParallelArgs PROPERTY (already in d), but cp_rank is
   // a derived member function, so pass it explicitly for the Python executor.
@@ -700,8 +690,9 @@ py::dict PyCausalLM::build_config_dict(
 }
 
 void PyCausalLM::load_model(std::unique_ptr<ModelLoader> loader) {
+  const auto& state_dicts = loader->get_state_dicts();
+  load_d2t(state_dicts);
   py::gil_scoped_acquire gil;
-  auto& state_dicts = loader->get_state_dicts();
   ensure_xllm_weight_loader_module();
 
   py::list py_state_dicts;
@@ -805,21 +796,6 @@ DFlash2CandidateOutput PyCausalLM::dflash2_candidates(
   candidates.candidate_ids = output[0].cast<torch::Tensor>();
   candidates.edge_logits = output[1].cast<torch::Tensor>();
   return candidates;
-}
-
-torch::Tensor PyCausalLM::dspark_confidence_probs(
-    const torch::Tensor& hidden_all,
-    const torch::Tensor& prev_matrix) {
-  torch::NoGradGuard no_grad;
-  py::gil_scoped_acquire gil;
-  py::object previous = optional_tensor(prev_matrix);
-  return py_model_.attr("dspark_confidence_probs")(hidden_all, previous)
-      .cast<torch::Tensor>();
-}
-
-bool PyCausalLM::has_dspark_confidence_head() const {
-  py::gil_scoped_acquire gil;
-  return py_model_.attr("has_dspark_confidence_head")().cast<bool>();
 }
 
 void PyCausalLM::prepare_expert_weight(int32_t layer_id,
@@ -1004,15 +980,16 @@ void PyCausalLM::eplb_wait_batch_isend_irecv() {
 #endif
 }
 
-bool PyCausalLM::share_weights_from(CausalLM& source) {
-  auto* source_model = dynamic_cast<PyCausalLM*>(&source);
-  if (source_model == nullptr) {
-    return false;
-  }
-
+void PyCausalLM::share_lm_head(CausalLM& target_model) {
   py::gil_scoped_acquire gil;
-  detail::share_python_model_weights(py_model_, source_model->py_model_);
-  return true;
+  py_model_.attr(/*key=*/"share_lm_head")(
+      dynamic_cast<PyCausalLM&>(target_model).py_model_);
+}
+
+void PyCausalLM::share_embed_tokens(CausalLM& target_model) {
+  py::gil_scoped_acquire gil;
+  py_model_.attr(/*key=*/"share_embed_tokens")(
+      dynamic_cast<PyCausalLM&>(target_model).py_model_);
 }
 
 }  // namespace xllm

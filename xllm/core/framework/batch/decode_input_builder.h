@@ -17,33 +17,18 @@ limitations under the License.
 
 #include <torch/torch.h>
 
-#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
-#include "core/framework/model/mtp_topk_state.h"
-#include "core/framework/sampling/draft_proposal.h"
-#include "core/framework/speculative/embedding_cache.h"
-#include "util/slice.h"
+#include "core/util/slice.h"
 
 namespace xllm {
 
 struct ModelInputParams;
 struct ForwardInput;
-struct SamplingParameters;
-
-namespace specBuilder {
-
-// Advance a temporary combined-first-draft Host template for tail-row planning.
-// Clone its CPU int32 token/position tensors to preserve source tensor storage.
-// The first num_sequences entries are decode anchors used by the tail-row
-// builder to rebuild 1-D positions. This is not a full rotary-axis update;
-// the resulting template must not be used directly as replay position input.
-std::vector<EmbeddingCache::DecodeState> advance_first_draft_template(
-    ForwardInput& metadata_template,
-    const torch::Tensor& embedding_placeholder,
-    int32_t num_speculative_tokens);
 
 struct DecodeBuildMeta {
   int32_t kv_max_seq_len = 0;
@@ -70,23 +55,23 @@ struct DecodeBuildBuffers {
 
 // CPU-side row context shared by decode row builders.
 // It owns the contiguous block table tensor so row slices stay valid.
-struct DecodeRowContext {
+struct DecodeBatchContext {
   torch::Tensor block_tables_owner;
   std::vector<torch::Tensor> multi_block_tables_owner;
   Slice<int32_t> token_ids;
   Slice<int32_t> positions;
-  int32_t position_axes = 1;
+  int32_t num_rope_axes = 1;
   Slice<int32_t> kv_seq_lens;
   Slice<int32_t> block_tables;
   std::vector<std::vector<Slice<int32_t>>> multi_block_tables;
-  int32_t num_sequences = 0;
+  int32_t num_requests = 0;
   int32_t block_table_stride = 0;
   bool model_managed_multiblock = false;
 };
 
 // Check allocated lookahead pages before issuing speculative writes. Block 0
 // is valid; unallocated columns must use a negative sentinel.
-bool has_decode_lookahead_capacity(const DecodeRowContext& ctx,
+bool has_decode_lookahead_capacity(const DecodeBatchContext& ctx,
                                    int32_t num_tokens,
                                    int32_t block_size,
                                    int64_t max_position_embeddings);
@@ -94,11 +79,8 @@ bool has_decode_lookahead_capacity(const DecodeRowContext& ctx,
 // Declarative spec for one emitted decode row.
 // A row can selectively append token/kv/q/block fields depending on caller
 // needs.
-struct RowSpec {
-  int32_t seq_id = 0;
-  // When true, token_id is ignored and token comes from input
-  // token_ids[seq_id].
-  bool use_input_token = false;
+struct DecodeTokenInput {
+  int32_t req_id = 0;
   int32_t token_id = 0;
   int32_t position_offset = 0;
   bool append_token = true;
@@ -110,60 +92,22 @@ struct RowSpec {
   bool append_block_table = false;
 };
 
-struct MtpReplayInputs {
-  DecodeBuildBuffers rows;
-  std::vector<torch::Tensor> embeddings;
-  std::vector<int32_t> selected_rows;
-  std::vector<int32_t> source_sequences;
-  std::vector<int32_t> valid_rows;
-  std::vector<std::array<int32_t, 3>> mrope_positions;
-};
-
-// Replays the emitted target prefix at the positions of the target hidden
-// states, one position before the corresponding emitted tokens. A one-token
-// prefill/bootstrap span therefore overwrites the prefill tail slot. DP may
-// request a uniform width; the caller chooses the backend padding slot.
-MtpReplayInputs build_mtp_replay_inputs(
-    const DecodeRowContext& ctx,
-    const std::vector<EmbeddingCache::DecodeState>& states,
-    const torch::Tensor& placeholder,
-    int32_t block_size,
-    int32_t uniform_width = 0,
-    bool is_graph_warmup = false,
-    int32_t pad_cache_slot = 0);
-
-// Resolved token and relative position offset for placeholder token handling.
-struct TokenWithOffset {
-  int32_t token_id = 0;
-  int32_t position_offset = 0;
-};
-
 // Builds a reusable row context from ForwardInput host-side fields.
-DecodeRowContext make_decode_row_context(const ForwardInput& input);
+DecodeBatchContext make_decode_batch_context(const ForwardInput& input);
 
 // Appends one logical decode row into output buffers.
-void append_decode_row(const DecodeRowContext& ctx,
-                       const RowSpec& row,
-                       int32_t block_size,
-                       DecodeBuildBuffers& buf);
+void append_decode_token(const DecodeBatchContext& ctx,
+                         const DecodeTokenInput& row,
+                         int32_t block_size,
+                         DecodeBuildBuffers& buf);
 
 // Resolves direct/placeholder input token to a real token and position offset.
 // Placeholder tokens use negative ids (-1, -2, ...) and are read from last-step
 // outputs.
-TokenWithOffset resolve_token_with_position_offset(
+std::pair<int32_t, int32_t> resolve_token_with_position_offset(
     int32_t input_token_id,
-    int32_t seq_id,
     const Slice<int64_t>& last_step_tokens,
     int32_t last_step_decode_num);
-
-// Resolves a token from last-step output and appends one decode row.
-void append_decode_row_from_last_step(const DecodeRowContext& ctx,
-                                      int32_t seq_id,
-                                      int32_t input_token_id,
-                                      const Slice<int64_t>& last_step_tokens,
-                                      int32_t last_step_decode_num,
-                                      int32_t block_size,
-                                      DecodeBuildBuffers& buf);
 
 // Computes one cache slot id from absolute position and block table mapping.
 int32_t calc_slot_id(int32_t position,
@@ -202,14 +146,38 @@ void update_kv_seq_lens_and_max(std::vector<int32_t>& kv_seq_lens_vec,
                                 int32_t& kv_max_seq_len);
 
 // Updates common decode-side ModelInputParams fields from built buffers.
-void update_input_params(ModelInputParams& input_params,
-                         DecodeBuildBuffers& buf,
-                         int32_t q_max_seq_len,
-                         std::vector<int32_t> q_seq_lens_vec,
-                         std::vector<int32_t> q_cu_seq_lens_vec,
-                         int32_t kv_max_seq_len,
-                         std::vector<int32_t> kv_seq_lens_vec,
-                         bool update_block_tables = false);
+void update_decode_attention_metadata(ModelInputParams& input_params,
+                                      DecodeBuildBuffers& buf,
+                                      int32_t q_max_seq_len,
+                                      std::vector<int32_t> q_seq_lens_vec,
+                                      std::vector<int32_t> q_cu_seq_lens_vec,
+                                      int32_t kv_max_seq_len,
+                                      std::vector<int32_t> kv_seq_lens_vec,
+                                      bool update_block_tables = false);
+
+struct DecodeInputOptions {
+  int32_t num_speculative_tokens = 0;
+  bool per_request = false;
+  bool causal = true;
+};
+
+struct DecodeExpansionOptions : DecodeInputOptions {
+  int32_t block_size = 0;
+  std::optional<int32_t> mask_token_id;
+};
+
+void prepare_decode_buffers(DecodeBuildBuffers& buf,
+                            const DecodeBatchContext& ctx,
+                            size_t num_tokens,
+                            bool emit_block_tables);
+
+DecodeBuildBuffers expand_decode_inputs(const DecodeBatchContext& ctx,
+                                        const DecodeExpansionOptions& options);
+
+void build_decode_input(ForwardInput& input,
+                        DecodeBuildBuffers& buf,
+                        const DecodeInputOptions& options,
+                        bool materialize_tokens = true);
 
 // Rebuilds request-scoped execution metadata after speculative validation
 // expands each logical request to one or more execution tokens.
@@ -231,18 +199,5 @@ void set_token_position_tensors(ForwardInput& input,
                                 const std::vector<int32_t>& positions,
                                 const torch::TensorOptions& token_options,
                                 const torch::TensorOptions& position_options);
-
-// Reuses the NPU MTP draft-step row-selection flow for every backend. Backend
-// state implementations only interpret index_select_rows() for their payload.
-MtpTopkStatePtr select_mtp_topk_state_for_next_step(
-    const MtpTopkStatePtr& state,
-    const SamplingParameters& sampling_params);
-
-DraftProposal build_validate_proposal(
-    const std::vector<torch::Tensor>& draft_token_ids_steps,
-    const std::vector<torch::Tensor>& draft_probs_steps,
-    bool draft_probs_required);
-
-}  // namespace specBuilder
 
 }  // namespace xllm

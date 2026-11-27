@@ -17,6 +17,7 @@ cc_library(
   DEPS
     :common
     :common_layers
+    :config
     :kv_cache
     :parallel_state
     :processors

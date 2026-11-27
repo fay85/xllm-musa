@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "core/common/metrics.h"
 #include "core/framework/constraint/builtin_json_machine.h"
+#include "core/framework/sampling/logits_processor.h"
 #include "core/framework/tokenizer/tokenizer.h"
 #include "tests/core/framework/constraint/builtin_state_test_utils.h"
 

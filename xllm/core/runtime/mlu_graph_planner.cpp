@@ -93,8 +93,8 @@ bool is_dflash2_query(const xllm::runtime::Options& options,
          xllm::SpeculativeConfig::is_dflash2_algorithm(
              options.speculative_algorithm()) &&
          params.meta.batch_forward_type.is_chunked_prefill() &&
-         options.draft_graph_query_width() > 1 &&
-         params.meta.q_max_seq_len == options.draft_graph_query_width();
+         options.num_speculative_tokens() > 0 &&
+         params.meta.q_max_seq_len == options.num_speculative_tokens() + 1;
 }
 
 bool allows_graph_mode(const xllm::runtime::Options& options,
@@ -227,8 +227,8 @@ std::optional<GraphLayout> get_graph_layout(
   }
   const auto& spans = params.attention.host.kpool_query_lens;
   const int64_t tokens_per_request =
-      grouped && params.meta.spec_verify_width > 1
-          ? params.meta.spec_verify_width
+      grouped && params.meta.num_speculative_tokens > 0
+          ? params.meta.num_speculative_tokens + 1
           : (spans.empty() ? offsets[1] : spans.front());
   if (tokens_per_request <= 0 || tokens % tokens_per_request != 0) {
     return std::nullopt;
@@ -356,7 +356,7 @@ GraphDecision MluGraphPlanner::plan(const GraphStepMetadata& step) const {
   const bool grouped =
       config_.capabilities.supports_grouped_mtp_graph &&
       (config_.state_required || options.is_draft_engine() ||
-       params.is_spec_verify || params.meta.spec_verify_width > 1);
+       params.is_spec_verify || params.meta.num_speculative_tokens > 0);
   if (grouped ? !supports_grouped_graph(
                     options,
                     params,

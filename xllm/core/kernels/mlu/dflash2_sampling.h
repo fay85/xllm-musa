@@ -25,8 +25,8 @@ bool supports_dflash2_sampling(const torch::Tensor& candidate_ids,
                                const torch::Tensor& edge_log_probs,
                                const torch::Tensor& gumbel_noise,
                                const torch::Tensor& do_sample,
-                               bool all_random_sample,
-                               bool all_greedy_sample);
+                               bool use_random_sampling_for_batch,
+                               bool greedy_only);
 
 // Sample predecessor paths from already normalized edge log-probabilities.
 // Returns [B,S] tokens and the full [B,S,K] sparse proposal probabilities.
@@ -36,6 +36,6 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
     const torch::Tensor& edge_log_probs,
     const torch::Tensor& gumbel_noise,
     const torch::Tensor& do_sample,
-    bool all_random_sample);
+    bool use_random_sampling_for_batch);
 
 }  // namespace xllm::kernel::mlu

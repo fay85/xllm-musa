@@ -318,10 +318,12 @@ TEST_P(LLMWorkerOutputTest,
       torch::TensorOptions().device(device_.unwrap()).dtype(torch::kFloat);
   torch::Tensor token_ids =
       torch::tensor({{2, 3, 4}}, torch::kLong).to(device_.unwrap());
-  torch::Tensor probabilities = torch::full({1, 3, 5}, 0.2, tensor_options);
-  torch::Tensor confidence = torch::full({1, 3}, 0.75, tensor_options);
+  torch::Tensor draft_logits = torch::zeros(/*size=*/{1, 3, 5}, tensor_options);
+  torch::Tensor confidence =
+      torch::full(/*size=*/{1, 3}, /*fill_value=*/0.75, tensor_options);
   ModelOutput model_output;
-  model_output.draft_proposal.emplace(token_ids, probabilities);
+  model_output.draft_token_ids = token_ids;
+  model_output.draft_logits = draft_logits;
   model_output.draft_confidence_probs = confidence;
   auto model = std::make_unique<OutputTestModel>(std::move(model_output),
                                                  tensor_options);
@@ -334,16 +336,14 @@ TEST_P(LLMWorkerOutputTest,
   std::optional<ForwardOutput> output = worker.run(input, GetParam());
 
   ASSERT_TRUE(output.has_value());
-  ASSERT_TRUE(output->draft_proposal.has_value());
+  ASSERT_TRUE(output->draft_token_ids.defined());
   EXPECT_EQ(model_ptr->logits_calls(), 0);
   EXPECT_TRUE(model_ptr->received_sampling());
   EXPECT_FALSE(output->logits.defined());
   EXPECT_FALSE(output->selected_hidden.defined());
   EXPECT_FALSE(output->sample_output.next_tokens.defined());
-  EXPECT_TRUE(torch::equal(output->draft_proposal->token_ids(), token_ids));
-  ASSERT_TRUE(output->draft_proposal->draft_probs().has_value());
-  EXPECT_TRUE(
-      torch::equal(*output->draft_proposal->draft_probs(), probabilities));
+  EXPECT_TRUE(torch::equal(output->draft_token_ids, token_ids));
+  EXPECT_TRUE(torch::equal(output->draft_logits, draft_logits));
   EXPECT_TRUE(torch::equal(output->draft_confidence_probs, confidence));
   expect_retained_input(*output, input);
 }
@@ -366,7 +366,7 @@ TEST_P(LLMWorkerOutputTest, HiddenStatesKeepTheExistingLogitsPath) {
   std::optional<ForwardOutput> output = worker.run(input, GetParam());
 
   ASSERT_TRUE(output.has_value());
-  EXPECT_FALSE(output->draft_proposal.has_value());
+  EXPECT_FALSE(output->draft_token_ids.defined());
   EXPECT_EQ(model_ptr->logits_calls(), 1);
   EXPECT_TRUE(model_ptr->received_sampling());
   torch::Tensor expected =
@@ -400,7 +400,7 @@ TEST_P(LLMWorkerOutputTest, OrdinaryHiddenStatesStillRunSampling) {
   std::optional<ForwardOutput> output = worker.run(input, GetParam());
 
   ASSERT_TRUE(output.has_value());
-  EXPECT_FALSE(output->draft_proposal.has_value());
+  EXPECT_FALSE(output->draft_token_ids.defined());
   EXPECT_EQ(model_ptr->logits_calls(), 1);
   EXPECT_FALSE(model_ptr->received_sampling());
   EXPECT_TRUE(torch::equal(output->logits, hidden));

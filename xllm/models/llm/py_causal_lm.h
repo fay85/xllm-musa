@@ -39,9 +39,6 @@ class MegaMoeCommResource;
 #endif
 
 namespace detail {
-void share_python_model_weights(pybind11::object& draft_model,
-                                const pybind11::object& target_model);
-
 int64_t python_mega_moe_max_num_tokens_per_rank(int64_t max_seqs_per_batch,
                                                 int64_t num_speculative_tokens,
                                                 int64_t dp_size);
@@ -106,12 +103,6 @@ class __attribute__((visibility("hidden"))) PyCausalLM : public CausalVLM {
   torch::Tensor dspark_markov_bias(
       const torch::Tensor& previous_token_ids) override;
 
-  torch::Tensor dspark_confidence_probs(
-      const torch::Tensor& hidden_all,
-      const torch::Tensor& prev_matrix) override;
-
-  bool has_dspark_confidence_head() const override;
-
   void load_model(std::unique_ptr<ModelLoader> loader) override;
 
   torch::Device device() const override { return device_; }
@@ -123,7 +114,8 @@ class __attribute__((visibility("hidden"))) PyCausalLM : public CausalVLM {
   void update_expert_weight(int32_t layer_id) override;
   bool last_prepare_expert_weight_ok(int32_t layer_id) const override;
 
-  bool share_weights_from(CausalLM& source) override;
+  void share_lm_head(CausalLM& target_model) override;
+  void share_embed_tokens(CausalLM& target_model) override;
 
   void tp_all_reduce(torch::Tensor& tensor);
   torch::Tensor tp_all_gather(const torch::Tensor& tensor, int64_t dim);

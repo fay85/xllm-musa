@@ -36,7 +36,8 @@ TEST(XGrammarSupportTest, PlainEagerDecodeIsSupported) {
 }
 
 TEST(XGrammarSupportTest, ChannelMigratedSpeculativeAlgorithmsAreSupported) {
-  for (const char* algorithm : {"MTP", "dflash", "dflash2", "DSpark", "mtp"}) {
+  for (const char* algorithm :
+       {"MTP", "dflash", "dflash2", "DSpark", "suffix"}) {
     XGrammarSupportInputs inputs;
     inputs.num_speculative_tokens = 3;
     inputs.speculative_algorithm = algorithm;
@@ -44,16 +45,13 @@ TEST(XGrammarSupportTest, ChannelMigratedSpeculativeAlgorithmsAreSupported) {
   }
 }
 
-TEST(XGrammarSupportTest, SuffixStyleSpeculativeStaysGated) {
-  // SuffixWorkerImpl never reads json_object_states, so suffix-style
-  // proposals would run unconstrained; keep them gated even though the
-  // channel-migrated algorithms are unlocked.
+TEST(XGrammarSupportTest, Eagle3StaysGated) {
   XGrammarSupportInputs inputs;
   inputs.num_speculative_tokens = 3;
-  inputs.speculative_algorithm = "suffix";
+  inputs.speculative_algorithm = "eagle3";
   const auto unsupported = xgrammar_unsupported_features(inputs);
   ASSERT_EQ(unsupported.size(), 1u);
-  EXPECT_TRUE(contains(unsupported, "speculative_suffix"));
+  EXPECT_TRUE(contains(unsupported, /*name=*/"speculative_eagle3"));
 }
 
 TEST(XGrammarSupportTest, ZeroSpeculativeTokensNeverGates) {

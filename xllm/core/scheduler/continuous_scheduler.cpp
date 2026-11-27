@@ -296,9 +296,7 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
             ModelConfig::get_instance().model_impl()) &&
         options_.cp_size() == 1 &&
         (!options_.enable_disagg_pd() ||
-         options_.instance_role() == InstanceRole::DECODE) &&
-        !SpeculativeConfig::get_instance()
-             .enable_adaptive_speculative_decode()) {
+         options_.instance_role() == InstanceRole::DECODE)) {
       min_speculative_tokens_required_ += options_.num_speculative_tokens() + 1;
     }
   } else {
@@ -460,7 +458,7 @@ void ContinuousScheduler::create_queues(const Options& options) {
 }
 
 void ContinuousScheduler::clear_mtp_bootstrap(Request* request) {
-  if (!options_.enable_disagg_pd() || options_.num_speculative_tokens() <= 0 ||
+  if (!options_.enable_disagg_pd() || options_.num_speculative_tokens() == 0 ||
       request == nullptr || request->sequences().empty()) {
     return;
   }

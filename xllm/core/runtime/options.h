@@ -28,7 +28,8 @@ limitations under the License.
 namespace xllm {
 namespace runtime {
 
-struct Options {
+class Options {
+ public:
   PROPERTY(std::string, model_path);
 
   PROPERTY(std::string, model_id);
@@ -70,32 +71,16 @@ struct Options {
   // proportional budget otherwise.
   PROPERTY(int64_t, max_linear_state_cache_slots) = 0;
 
-  // number of decoding tokens per sequence
-  // in speculative decoding, it is the number of speculative tokens + 1
-  PROPERTY(int64_t, num_decoding_tokens) = 1;
-
   // the number of speculative tokens per step
   PROPERTY(int32_t, num_speculative_tokens) = 0;
 
   PROPERTY(std::string, speculative_algorithm) = "mtp";
 
-  PROPERTY(std::string, draft_sampling_mode) = "greedy";
+  PROPERTY(bool, enable_probabilistic_draft) = false;
 
   PROPERTY(int32_t, speculative_suffix_cache_max_depth) = 64;
 
-  PROPERTY(double, speculative_suffix_max_spec_factor) = 1.0;
-
-  PROPERTY(double, speculative_suffix_max_spec_offset) = 0.0;
-
-  PROPERTY(double, speculative_suffix_min_token_prob) = 0.1;
-
   PROPERTY(int32_t, speculative_suffix_max_cached_requests) = -1;
-
-  PROPERTY(bool, speculative_suffix_use_tree_spec) = false;
-
-  PROPERTY(bool, enable_adaptive_speculative_decode) = false;
-
-  PROPERTY(double, adaptive_speculative_min_gain) = 0.0;
 
   // enable speculative decode
   PROPERTY(bool, enable_speculative_decode) = false;
@@ -103,11 +88,6 @@ struct Options {
   PROPERTY(bool, enable_mtp_draft_body_tp1) = false;
 
   PROPERTY(bool, is_draft_engine) = false;
-
-  // Query rows per draft sequence, used for graph sequence-capacity admission
-  // and block-diffusion model geometry. The captured draft graph stays width 1.
-  // 1 means the rows are already one per sequence.
-  PROPERTY(int32_t, draft_graph_query_width) = 1;
 
   // DFlash2 proposal attention (XFIA) is enabled only for the prelaunch mode:
   // A3, Python, DP/CP 1, schedule overlap, and the same PD/adaptive limits.

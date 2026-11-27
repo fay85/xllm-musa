@@ -132,8 +132,6 @@ class MluGraphExecutorImpl final : public ExecutorImpl {
 
   ~MluGraphExecutorImpl() override;
 
-  ForwardInput prepare_inputs(Batch& batch) override;
-
   // Execute model with graph optimization for decode phase
   ModelOutput run(const torch::Tensor& tokens,
                   const torch::Tensor& positions,

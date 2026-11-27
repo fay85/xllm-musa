@@ -139,9 +139,8 @@ class DFlash2Qwen3ModelImpl final : public ::xllm::QWen3ModelImpl {
     head_dim_ = args.head_dim();
     rms_norm_eps_ = args.rms_norm_eps();
     sliding_window_ = args.sliding_window();
-    block_size_ = args.dflash2_block_size();
+    num_speculative_tokens_ = args.num_speculative_tokens();
     CHECK_GT(sliding_window_, 0);
-    CHECK_GT(block_size_, 0);
 
     const int32_t dp_size = parallel_args.dp_size();
     const int32_t cp_size = parallel_args.cp_size();
@@ -289,7 +288,7 @@ class DFlash2Qwen3ModelImpl final : public ::xllm::QWen3ModelImpl {
 #if defined(USE_NPU)
     metadata.fia_sparse_mode = 4;
     metadata.fia_pre_tokens = sliding_window_ - 1;
-    metadata.fia_next_tokens = block_size_ - 1;
+    metadata.fia_next_tokens = num_speculative_tokens_;
 #endif
     return metadata;
   }
@@ -313,7 +312,7 @@ class DFlash2Qwen3ModelImpl final : public ::xllm::QWen3ModelImpl {
     const torch::Tensor first_visible_key =
         query_offsets + first_query_position - (sliding_window_ - 1);
     const torch::Tensor last_visible_key =
-        query_offsets + first_query_position + (block_size_ - 1);
+        query_offsets + first_query_position + num_speculative_tokens_;
     const torch::Tensor masked = key_positions.lt(first_visible_key) |
                                  key_positions.gt(last_visible_key) |
                                  key_positions.ge(kv_len);
@@ -420,7 +419,7 @@ class DFlash2Qwen3ModelImpl final : public ::xllm::QWen3ModelImpl {
   int64_t local_kv_heads_ = 0;
   double rms_norm_eps_ = 1e-6;
   int32_t sliding_window_ = -1;
-  int32_t block_size_ = 0;
+  int64_t num_speculative_tokens_ = 0;
   int32_t tp_rank_ = 0;
   int32_t tp_size_ = 1;
 };

@@ -27,6 +27,8 @@ limitations under the License.
 
 namespace xllm {
 
+enum class SamplingMode : int8_t { GREEDY, RANDOM, MIXED };
+
 struct RequestSamplingParam {
   float frequency_penalty = 0.0;
   float presence_penalty = 0.0;
@@ -93,7 +95,48 @@ struct RequestSamplingParam {
   }
 };
 
-struct SamplingParameters {
+struct SamplingSelection {
+  torch::Tensor selected_token_idxes;
+  torch::Tensor sample_idxes;
+  torch::Tensor do_sample;
+  SamplingMode sampling_mode = SamplingMode::GREEDY;
+};
+
+struct SamplingDistribution {
+  torch::Tensor temperatures;
+  torch::Tensor top_p;
+  torch::Tensor top_k;
+};
+
+struct SamplingPenalties {
+  torch::Tensor frequency_penalties;
+  torch::Tensor presence_penalties;
+  torch::Tensor repetition_penalties;
+  torch::Tensor unique_token_ids;
+  torch::Tensor unique_token_counts;
+  torch::Tensor unique_token_ids_lens;
+};
+
+struct SamplingConstraints {
+  torch::Tensor filter_mask;
+  torch::Tensor filter_bitmask;
+};
+
+struct SamplingOutput {
+  bool logprobs = false;
+  bool is_embeddings = false;
+  torch::Tensor logprob_token_ids;
+  int64_t max_top_logprobs = 0;
+  torch::Tensor acc_logprob;
+  int32_t num_return_sequences = 0;
+  bool use_beam_search = false;
+};
+
+class SamplingParameters final : public SamplingSelection,
+                                 public SamplingDistribution,
+                                 public SamplingPenalties,
+                                 public SamplingConstraints,
+                                 public SamplingOutput {
  public:
   void init(const std::vector<const RequestSamplingParam*>& req_sampling_params,
             const std::vector<int32_t>& selected_token_idxes,
@@ -108,86 +151,6 @@ struct SamplingParameters {
 
   // concat two SamplingParameters into one
   void concat(const SamplingParameters& param);
-
-  // selected tokens are tokens for sampling the next token,
-  // including the generated tokens and the last prompt token
-  // IntTensor
-  torch::Tensor selected_token_idxes;
-
-  // Dense additive mask for token-level structured output constraints. Zero
-  // entries are allowed and negative entries are forbidden.
-  torch::Tensor filter_mask;
-
-  // Compact allowed-token bitmask [num_tokens, ceil(vocab/32)] int32. When
-  // defined, Sampler prefers this over filter_mask (smaller H2D).
-  torch::Tensor filter_bitmask;
-
-  // [num_tokens] FloatTensor
-  torch::Tensor frequency_penalties;
-
-  // [num_tokens] FloatTensor
-  torch::Tensor presence_penalties;
-
-  // [num_tokens] FloatTensor
-  torch::Tensor repetition_penalties;
-
-  // [num_tokens] FloatTensor
-  torch::Tensor temperatures;
-
-  // [num_tokens] FloatTensor
-  torch::Tensor top_p;
-
-  // [num_tokens] LongTensor
-  torch::Tensor top_k;
-
-  // the unique token id and count of each sequence in the batch.
-  // [num_tokens, max_unique_tokens] LongTensor
-  torch::Tensor unique_token_ids;
-
-  // [num_tokens, max_unique_tokens] IntTensor
-  torch::Tensor unique_token_counts;
-
-  // the number of unique tokens in each sequence.
-  // [num_tokens] IntTensor
-  torch::Tensor unique_token_ids_lens;
-
-  // the last index of the selected tokens for sampling.
-  // [num_seqs] IntTensor
-  torch::Tensor sample_idxes;
-
-  // whether to sample for each sequence.
-  // [num_seqs] BoolTensor
-  torch::Tensor do_sample;
-
-  // Beam search accumulated log probability.
-  // [num_seq, 1] FloatTensor
-  torch::Tensor acc_logprob;
-
-  bool all_random_sample = false;
-  bool all_greedy_sample = true;
-
-  // whether to output logprobs for each generated token.
-  bool logprobs = false;
-
-  // whether downstream validation needs sampled probabilities even when the
-  // request itself does not ask for logprobs.
-  bool return_probs = false;
-
-  // whether to get the embeddings of the tokens. used by embeddings model.
-  bool is_embeddings = false;
-
-  // [num_sampled_seqs, max_queried_ids] IntTensor; -1 marks padding.
-  torch::Tensor logprob_token_ids;
-
-  // max number of top logprobs in the batch.
-  // only used when logprobs is true.
-  int64_t max_top_logprobs = 0;
-
-  // requested final beam result width for request-level beam search output.
-  int32_t num_return_sequences = 0;
-
-  // for beam search
-  bool use_beam_search = false;
 };
 
 struct SpeculativeTokenStats {
@@ -200,7 +163,7 @@ struct SampleOutput {
   torch::Tensor next_tokens;
 
   // [num_seq, ...] FloatTensor
-  torch::Tensor probs;
+  torch::Tensor draft_logits;
 
   // [num_seq, ...] FloatTensor
   torch::Tensor logprobs;

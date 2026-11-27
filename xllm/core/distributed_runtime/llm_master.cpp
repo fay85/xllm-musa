@@ -29,6 +29,7 @@ limitations under the License.
 #include "api_service/call.h"
 #include "core/common/metrics.h"
 #include "core/distributed_runtime/speculative_engine.h"
+#include "core/framework/config/speculative_config.h"
 #include "core/framework/model/model_args.h"
 #include "core/framework/request/request.h"
 #include "core/platform/device_name_utils.h"
@@ -44,9 +45,10 @@ namespace xllm {
 namespace {
 
 bool should_use_ssm_engine(const Options& options) {
-  return !options.draft_model_path().value_or("").empty() ||
-         (options.speculative_algorithm() == "Suffix" &&
-          options.num_speculative_tokens() > 0);
+  return SpeculativeConfig::uses_ssm_engine(
+      options.draft_model_path().value_or(""),
+      options.speculative_algorithm(),
+      options.num_speculative_tokens());
 }
 
 }  // namespace

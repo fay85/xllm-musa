@@ -51,12 +51,12 @@ from xllm.python.model_executor.forward_context import (
 )
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.runner import Runner, RunnerConfig
 from xllm.python.model_executor.runners.acl_graph import AclGraphRunner
 from xllm.python.model_executor.runners.decode_acl_graph import DecodeAclGraphRunner
 from xllm.python.model_executor.runners.eager import EagerRunner
-from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder
+from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder, SamplingMode
 from xllm.python.models.dspark_model import DSparkDecoderModel, ProposalMetadata, ProposalMetadataBuilder
 from xllm.python.models.multimodal import MultimodalInputs
 from xllm.python.pipelines.dspark_pipeline import DSparkExecutionPipeline
@@ -271,11 +271,17 @@ def test_pipeline_construction_initializes_main_and_head_runners(monkeypatch: py
     )
     config = RunnerConfig(
         torch.device("cpu"),
-        model_config={"max_position_embeddings": 32, "cp_size": 2, "cp_rank": 1, "draft_query_width": 3},
+        model_config={
+            "is_draft_engine": True,
+            "max_position_embeddings": 32,
+            "cp_size": 2,
+            "cp_rank": 1,
+            "model_type": "DSparkDraftModel",
+            "num_speculative_tokens": 3,
+        },
         enable_graph=True,
         max_seqs_per_batch=8,
         acl_graph_decode_batch_size_limit=4,
-        is_spec_draft=True,
     )
     pipeline = create_execution_pipeline(
         model.model,
@@ -289,7 +295,7 @@ def test_pipeline_construction_initializes_main_and_head_runners(monkeypatch: py
     assert graph_factory.call_args.args[:2] == (pipeline.entry_runner.model, attention_backend)
     assert graph_factory.call_args.args[3:8] == (8, 32, 1, 0, 4)
     assert graph_factory.call_args.kwargs["is_spec_draft"]
-    assert graph_factory.call_args.kwargs["draft_query_width"] == 3
+    assert graph_factory.call_args.kwargs["num_speculative_tokens"] == 3
     assert isinstance(pipeline.entry_runner.model, DSparkDecoderModel)
     assert pipeline.entry_runner.eager_runner.model is pipeline.entry_runner.model
     assert pipeline.entry_runner.eager_runner.attention_backend is attention_backend
@@ -341,7 +347,7 @@ def test_pipeline_only_orchestrates_runner_calls(return_confidence: bool, monkey
     hidden = torch.ones(6, 2)
     logits = torch.ones(6, 7)
     output = ModelOutput(
-        draft_proposal=DraftProposal(inputs.input_ids.reshape(2, 3).clone()),
+        draft_token_ids=inputs.input_ids.reshape(2, 3).clone(),
         draft_confidence_probs=torch.full((2, 3), 1 / 7) if return_confidence else None,
     )
     calls = Mock()
@@ -723,16 +729,20 @@ def test_decoder_shares_one_capture_while_sampling_falls_back(
 
     for module in captured_contexts:
         module.register_forward_pre_hook(record_capture)
-    for sampling in (_SamplingInput(), _SamplingInput(return_probs=True, return_confidence=True), _SamplingInput()):
+    for sampling in (
+        _SamplingInput(),
+        _SamplingInput(return_draft_logits=True, return_confidence=True),
+        _SamplingInput(),
+    ):
         inputs = _inputs(sampling, rows=3)
         actual = pipeline.execute(inputs)
         expected = _reference(model, inputs.input_ids, inputs.positions, 3, sampling)
-        torch.testing.assert_close(actual.draft_proposal.token_ids, expected.draft_proposal.token_ids)
-        if sampling.return_probs:
-            torch.testing.assert_close(actual.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
+        torch.testing.assert_close(actual.draft_token_ids, expected.draft_token_ids)
+        if sampling.return_draft_logits:
+            torch.testing.assert_close(actual.draft_logits, expected.draft_logits)
             torch.testing.assert_close(actual.draft_confidence_probs, expected.draft_confidence_probs)
         assert pipeline.entry_runner.execution_mode == "graph"
-        assert pipeline.proposal_runner.execution_mode == ("eager" if sampling.return_probs else "graph")
+        assert pipeline.proposal_runner.execution_mode == ("eager" if sampling.return_draft_logits else "graph")
     assert len(pipeline.runners) == 2
     assert len(acl_graph_runtime) == 2
     assert len(pipeline.entry_runner.graph_runner._graphs) == 1
@@ -760,8 +770,10 @@ def test_sampling_fallback_does_not_disable_other_models_graph(
     requests = [
         _SamplingInput(),
         _SamplingInput(is_unconstrained_greedy=False),
-        _SamplingInput(is_unconstrained_greedy=False, parameters=_SamplingParameters(all_greedy_sample=False)),
-        _SamplingInput(return_probs=True),
+        _SamplingInput(
+            is_unconstrained_greedy=False, parameters=_SamplingParameters(sampling_mode=SamplingMode.RANDOM)
+        ),
+        _SamplingInput(return_draft_logits=True),
         _SamplingInput(return_confidence=True),
         _SamplingInput(),
     ]
@@ -769,17 +781,19 @@ def test_sampling_fallback_does_not_disable_other_models_graph(
         inputs = _inputs(sampling)
         actual = pipeline.execute(inputs)
         expected = _reference(model, inputs.input_ids, inputs.positions, 3, sampling)
-        torch.testing.assert_close(actual.draft_proposal.token_ids, expected.draft_proposal.token_ids)
-        if sampling.return_probs:
-            torch.testing.assert_close(actual.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
+        torch.testing.assert_close(actual.draft_token_ids, expected.draft_token_ids)
+        if sampling.return_draft_logits:
+            torch.testing.assert_close(actual.draft_logits, expected.draft_logits)
         else:
-            assert actual.draft_proposal.draft_probs is None
+            assert actual.draft_logits is None
         if sampling.return_confidence:
             torch.testing.assert_close(actual.draft_confidence_probs, expected.draft_confidence_probs)
         else:
             assert actual.draft_confidence_probs is None
         assert pipeline.entry_runner.execution_mode == "graph"
-        greedy_graph = sampling.is_unconstrained_greedy and not sampling.return_probs and not sampling.return_confidence
+        greedy_graph = (
+            sampling.is_unconstrained_greedy and not sampling.return_draft_logits and not sampling.return_confidence
+        )
         assert pipeline.proposal_runner.execution_mode == ("graph" if greedy_graph else "eager")
     pipeline.entry_runner.eager_runner.execute.assert_not_called()
     assert pipeline.entry_runner.graph_runner.execute.call_count == len(requests)
@@ -791,12 +805,12 @@ def test_sampling_fallback_does_not_disable_other_models_graph(
 def test_dspark_execution_with_graph_disabled_matches_reference(acl_graph_runtime: list[SimpleNamespace]) -> None:
     model = _DraftModel()
     pipeline = _make_pipeline(model, graph_enabled=False)
-    sampling = _SamplingInput(return_probs=True, return_confidence=True)
+    sampling = _SamplingInput(return_draft_logits=True, return_confidence=True)
     inputs = _inputs(sampling)
     actual = pipeline.execute(inputs)
     expected = _reference(model, inputs.input_ids, inputs.positions, 3, sampling)
-    torch.testing.assert_close(actual.draft_proposal.token_ids, expected.draft_proposal.token_ids)
-    torch.testing.assert_close(actual.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
+    torch.testing.assert_close(actual.draft_token_ids, expected.draft_token_ids)
+    torch.testing.assert_close(actual.draft_logits, expected.draft_logits)
     torch.testing.assert_close(actual.draft_confidence_probs, expected.draft_confidence_probs)
     assert pipeline.proposal_runner.graph_runner is None
     assert acl_graph_runtime == []
@@ -830,7 +844,9 @@ def test_runner_trims_dummy_request_rows(graph_enabled: bool, acl_graph_runtime:
     inputs = replace(inputs, input_batch=batch)
     pipeline.entry_runner.graph_runner.can_execute.return_value = False
     result = pipeline.execute(inputs)
-    assert result.draft_proposal.token_ids.shape == (0, 3)
+    assert isinstance(result, ModelOutput)
+    assert result.draft_token_ids is not None
+    assert result.draft_token_ids.shape == (0, 3)
     assert pipeline.entry_runner.execution_mode == "eager"
     assert pipeline.proposal_runner.execution_mode == "eager"
 
@@ -846,7 +862,7 @@ def test_decoder_model_uses_weights_shared_after_pipeline_creation(acl_graph_run
     assert pipeline.entry_runner.model.can_execute_graph(inputs)
     result = pipeline.execute(inputs)
     expected = _reference(model, inputs.input_ids, inputs.positions, 3, inputs.input_batch.sampling)
-    torch.testing.assert_close(result.draft_proposal.token_ids, expected.draft_proposal.token_ids)
+    torch.testing.assert_close(result.draft_token_ids, expected.draft_token_ids)
     assert list(pipeline.entry_runner.model.parameters()) == []
     assert list(pipeline.proposal_runner.model.parameters()) == []
 
@@ -926,13 +942,13 @@ def test_executor_constructs_and_runs_the_registered_dspark_pipeline(
     executor = ModelExecutor(
         model,
         {
+            "is_draft_engine": True,
             "model_type": "DSparkDraftModel",
             "enable_graph": True,
             "max_position_embeddings": 32,
-            "draft_query_width": 3,
+            "num_speculative_tokens": 3,
         },
         max_seqs_per_batch=4,
-        is_spec_draft=True,
     )
     executor.bind_kv_caches([(torch.zeros(1), torch.zeros(1))])
     assert isinstance(executor.execution_pipeline, DSparkExecutionPipeline)
@@ -940,7 +956,7 @@ def test_executor_constructs_and_runs_the_registered_dspark_pipeline(
     assert executor.eager_runner.model is executor.execution_pipeline.entry_runner.model
     assert executor.eager_runner.execution_metadata_builders == ()
     graph.bind_execution_metadata_builders.assert_called_once_with(())
-    inputs = _inputs(_SamplingInput(return_probs=True))
+    inputs = _inputs(_SamplingInput(return_draft_logits=True))
     output = executor.execute(
         inputs.input_ids,
         inputs.positions,
@@ -949,8 +965,10 @@ def test_executor_constructs_and_runs_the_registered_dspark_pipeline(
         sampling_input=inputs.input_batch.sampling,
     )
     assert isinstance(output, ModelOutput)
-    assert output.draft_proposal.token_ids.shape == (2, 3)
-    assert output.draft_proposal.draft_probs.shape == (2, 3, 7)
+    assert output.draft_token_ids is not None
+    assert output.draft_token_ids.shape == (2, 3)
+    assert output.draft_logits is not None
+    assert output.draft_logits.shape == (2, 3, 7)
     graph.execute.assert_called_once()
     pipeline = executor.execution_pipeline
     assert pipeline.entry_runner.execution_mode == "graph"

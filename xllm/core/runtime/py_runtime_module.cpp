@@ -63,8 +63,8 @@ class DeviceCaptureGuard final {
 
 bool is_unconstrained_greedy(const ModelSamplingInput& input) {
   const auto& sampling = input.parameters;
-  return sampling.all_greedy_sample && !sampling.return_probs &&
-         !sampling.unique_token_ids.defined() &&
+  return sampling.sampling_mode == SamplingMode::GREEDY &&
+         !input.return_draft_logits && !sampling.unique_token_ids.defined() &&
          !sampling.frequency_penalties.defined() &&
          !sampling.presence_penalties.defined() &&
          !sampling.repetition_penalties.defined() &&
@@ -73,8 +73,10 @@ bool is_unconstrained_greedy(const ModelSamplingInput& input) {
 
 void register_xllm_runtime_module(py::module_& m) {
   py::class_<SamplingParameters>(m, "SamplingParameters")
-      .def_readonly("all_greedy_sample", &SamplingParameters::all_greedy_sample)
-      .def_readonly("all_random_sample", &SamplingParameters::all_random_sample)
+      .def_property_readonly(/*name=*/"sampling_mode",
+                             [](const SamplingParameters& params) {
+                               return static_cast<int>(params.sampling_mode);
+                             })
       .def_readonly("do_sample", &SamplingParameters::do_sample)
       .def_readonly("temperatures", &SamplingParameters::temperatures)
       .def_readwrite("selected_token_idxes",
@@ -89,10 +91,8 @@ void register_xllm_runtime_module(py::module_& m) {
       .def_readwrite("parameters", &ModelSamplingInput::parameters)
       .def_readonly("return_confidence", &ModelSamplingInput::return_confidence)
       .def_readonly("gumbel_noise", &ModelSamplingInput::gumbel_noise)
-      .def_property_readonly("return_probs",
-                             [](const ModelSamplingInput& input) {
-                               return input.parameters.return_probs;
-                             })
+      .def_readonly(/*name=*/"return_draft_logits",
+                    &ModelSamplingInput::return_draft_logits)
       .def_property_readonly("is_unconstrained_greedy",
                              &is_unconstrained_greedy);
   m.def("sampling_parameters_to",
@@ -106,14 +106,18 @@ void register_xllm_runtime_module(py::module_& m) {
             py::gil_scoped_release release;
             if (is_unconstrained_greedy(input)) {
               output.next_tokens =
-                  Sampler::greedy_sample(logits).to(torch::kLong);
+                  greedy_sample(logits).to(/*dtype=*/torch::kLong);
             } else {
-              Sampler sampler;
-              output = sampler.forward(logits, input.parameters);
+              auto sampling = input.parameters;
+              sampling.filter_mask = torch::Tensor();
+              sampling.filter_bitmask = torch::Tensor();
+              output = sample(logits, sampling);
             }
           }
-          return py::make_tuple(output.next_tokens,
-                                optional_tensor(output.probs));
+          return py::make_tuple(
+              output.next_tokens,
+              optional_tensor(input.return_draft_logits ? logits
+                                                        : torch::Tensor()));
         });
   register_attention_metadata_views(m);
   register_input_batch_metadata_view(m);

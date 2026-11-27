@@ -36,19 +36,20 @@ limitations under the License.
 
 #include "api_service/call.h"
 #include "common/metrics.h"
+#include "core/framework/batch/decode_input_builder.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/kv_cache_store_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/multimodal/mm_visitor.h"
+#include "core/framework/speculative/mtp_async_input_builder.h"
 #include "core/scheduler/async_response_processor.h"
 #include "core/scheduler/scheduler_test_adapter.h"
 #include "distributed_runtime/engine.h"
 #include "framework/batch/batch_input_builder.h"
 #include "framework/block/block_manager_pool.h"
 #include "framework/model/model_args.h"
-#include "framework/speculative/spec_input_builder.h"
 #include "runtime/forward_params.h"
 #include "scheduler/linear_prefix_admission_policy.h"
 #include "util/utils.h"
@@ -2017,21 +2018,21 @@ TEST(SchedulerPolicyTest, MtpOverlapReservationControlsAdmissionAndPages) {
       const int32_t host_kv_len = kScheduledTokens + kDraftTokens;
       metadata_template.positions_host =
           torch::tensor({host_kv_len - 1}, torch::kInt32);
-      specBuilder::append_seq_len_by_layout(
+      append_seq_len_by_layout(
           metadata_template.input_params.attention.host.kv_seq_lens,
           host_kv_len);
-      const auto states = specBuilder::advance_first_draft_template(
+      const auto states = mtp_async::advance_first_draft_template(
           metadata_template, torch::Tensor(), kDraftTokens);
       ASSERT_EQ(states.size(), 1u);
       const int32_t position =
           metadata_template.positions_host[0].item<int32_t>();
       ASSERT_EQ(position, 16 * kPageSize);
       EXPECT_EQ(
-          specBuilder::calc_kv_len(
+          calc_kv_len(
               metadata_template.input_params.attention.host.kv_seq_lens, 0, 0),
           position + 1);
       ASSERT_EQ(block_ids.size(), 17u);
-      EXPECT_EQ(specBuilder::calc_slot_id(
+      EXPECT_EQ(calc_slot_id(
                     position, {block_ids.data(), block_ids.size()}, kPageSize),
                 blocks.back().id() * kPageSize);
     }

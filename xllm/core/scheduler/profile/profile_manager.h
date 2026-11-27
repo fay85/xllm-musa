@@ -125,10 +125,6 @@ class ProfileManager {
   void train_prefill_time_predictor(
       std::vector<std::pair<int32_t, double>> time_profiling_data);
 
-  void train_speculative_validate_time_predictor(
-      const std::vector<std::tuple<int32_t, int32_t, int32_t, double>>&
-          time_profiling_data);
-
   double get_constant_overhead();
 
   int32_t get_quadratic_root(Sequence* sequence, double budget);
@@ -164,13 +160,6 @@ class ProfileManager {
   std::string generate_filename(const std::string& file_suffix);
 
   void profile_token_budget();
-
-  // True when the validate-time predictor should be profiled: adaptive
-  // speculative decode enabled, SL > 1, and a supported algorithm. The
-  // predictor has no consumer otherwise.
-  bool should_profile_speculative_validate() const;
-
-  void profile_speculative_validate_time();
 
   // Warm up eager NPU operators before the service becomes ready.
   void warmup_for_eager();
@@ -211,7 +200,6 @@ class ProfileManager {
 
   std::unique_ptr<TimePredictor> prefill_time_predictor_;
   std::unique_ptr<TimePredictor> decode_time_predictor_;
-  std::unique_ptr<TimePredictor> speculative_validate_time_predictor_;
 
   const Options options_;
 

@@ -64,7 +64,6 @@ SpawnWorkerServer::SpawnWorkerServer(const std::string& master_node_addr,
                                      int32_t global_rank,
                                      int32_t world_size,
                                      int32_t device_idx,
-                                     int32_t num_decoding_tokens,
                                      int32_t block_size,
                                      const std::string& indexer_cache_dtype,
                                      int32_t max_tokens_per_batch,
@@ -95,7 +94,7 @@ SpawnWorkerServer::SpawnWorkerServer(const std::string& master_node_addr,
                                      int32_t ep_size,
                                      const InstanceRole& instance_role,
                                      bool enable_mtp_draft_body_tp1,
-                                     const std::string& draft_sampling_mode,
+                                     bool enable_probabilistic_draft,
                                      int32_t kv_split_size,
                                      int32_t vae_size,
                                      int32_t comm_buffer_offset) {
@@ -115,12 +114,11 @@ SpawnWorkerServer::SpawnWorkerServer(const std::string& master_node_addr,
       .world_size(world_size)
       .max_tokens_per_batch(max_tokens_per_batch)
       .max_seqs_per_batch(max_seqs_per_batch)
-      .num_decoding_tokens(num_decoding_tokens)
       .enable_speculative_decode(enable_speculative_decode)
       .enable_mtp_draft_body_tp1(enable_mtp_draft_body_tp1)
       .num_speculative_tokens(num_speculative_tokens)
       .speculative_algorithm(speculative_algorithm)
-      .draft_sampling_mode(draft_sampling_mode)
+      .enable_probabilistic_draft(enable_probabilistic_draft)
       .enable_schedule_overlap(/*enable_schedule_overlap=*/false)
       .enable_offline_inference(/*enable_offline_inference=*/true)
       .master_node_addr(master_node_addr)

@@ -20,7 +20,7 @@ limitations under the License.
 
 namespace xllm {
 
-class Eagle3WorkerImpl : public MTPWorkerImpl {
+class Eagle3WorkerImpl final : public MTPWorkerImpl {
  public:
   Eagle3WorkerImpl(const ParallelArgs& parallel_args,
                    const torch::Device& device,
@@ -29,30 +29,16 @@ class Eagle3WorkerImpl : public MTPWorkerImpl {
 
   ~Eagle3WorkerImpl() override = default;
 
-  // Override init_model to load hot_token_id_ for EAGLE-3
-  bool init_model(const std::string& model_weights_path,
-                  int32_t random_seed,
-                  MasterStatus master_status) override;
-
   // EAGLE-3 draft input_embedding is num_aux_layers * target_hidden_size
   int64_t get_embedding_placeholder_size() const override;
 
-  // Get hot_token_id for draft-to-target token mapping
-  torch::Tensor get_hot_token_id() const { return hot_token_id_; }
-
  protected:
+  void apply_target_model_overrides(ModelArgs& args) const override;
   // EAGLE-3 specific draft output post-processing during decode:
   // selected prob extraction + draft->target token id mapping.
-  void process_draft_sample_output(SampleOutput& sample_output) override;
 
   void check_draft_input_embedding(const torch::Tensor& embedding,
                                    const std::string& phase) const override;
-  bool share_target_lm_head_with_draft() const override { return false; }
-
-  // EAGLE-3 specific: hot_token_id for draft-to-target token mapping
-  // hot_token_id = d2t + arange(d2t.size(0))
-  torch::Tensor hot_token_id_;
-  bool use_draft_token_mapping_ = true;
 };
 
 }  // namespace xllm

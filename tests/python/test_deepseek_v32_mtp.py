@@ -174,7 +174,8 @@ def test_mtp_constructor_defers_shared_target_modules() -> None:
         get_lm_head=lambda: target_lm_head,
         get_token_embedding=lambda: target_embedding,
     )
-    draft.share_weights_from(source)
+    draft.share_lm_head(source)
+    draft.share_embed_tokens(source)
 
     assert draft.lm_head is target_lm_head
     assert draft.model.embed_tokens is target_embedding

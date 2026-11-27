@@ -40,8 +40,6 @@ cc_library(
     spin_rw_lock.h
     int32_map.h
     linalg.h
-    suffix_decoding_cache.h
-    suffix_tree.h
     tensor_helper.h
     threadpool.h
     timer.h
@@ -63,8 +61,6 @@ cc_library(
     model_config_utils.cpp
     net.cpp
     pretty_print.cpp
-    suffix_decoding_cache.cpp
-    suffix_tree.cpp
     threadpool.cpp
     timer.cpp
     utils.cpp

@@ -263,8 +263,6 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
                                        int64_t num_tokens,
                                        int64_t alignment);
 
-torch::Tensor random_sample(const torch::Tensor& probs);
-
 // Returns [B, 2] with rejected suffix positions masked to -1.
 torch::Tensor rejection_sample_target_only_k1(
     const torch::Tensor& draft_token_ids,

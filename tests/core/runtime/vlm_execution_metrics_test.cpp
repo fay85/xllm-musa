@@ -161,7 +161,7 @@ ForwardInput make_input(const torch::Device& device) {
   input.input_params.attention.host.kv_seq_lens = {1};
   input.sampling_params.selected_token_idxes = input.positions;
   input.sampling_params.sample_idxes = input.positions;
-  input.sampling_params.all_greedy_sample = true;
+  input.sampling_params.sampling_mode = SamplingMode::GREEDY;
   input.sampling_params.do_sample = torch::tensor({false}).to(device);
   return input;
 }

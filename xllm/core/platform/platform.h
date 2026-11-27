@@ -113,11 +113,6 @@ class Platform final {
     return is_mlu();
   }
 
-  // DFlash2 drafts may run a proposal block shorter than the trained block.
-  static constexpr bool supports_dflash2_runtime_block_size() {
-    return is_mlu();
-  }
-
   static constexpr bool is_ilu() {
 #if defined(USE_ILU)
     return true;

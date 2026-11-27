@@ -210,7 +210,7 @@ def _verify_context(
         is_prefilling=(metadata.is_prefill,) * len(widths),
         is_padding=None,
         is_dummy=False,
-        graph_spec_verify_width=widths[0] if graph_mode else None,
+        num_speculative_tokens=widths[0] - 1 if graph_mode else None,
     )
     if graph_mode:
         kda = builder.allocate_persistent(batch, metadata)

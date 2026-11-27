@@ -20,8 +20,8 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
+#include "core/framework/speculative/suffix_decoding_cache.h"
 #include "runtime/speculative_worker_impl.h"
-#include "util/suffix_decoding_cache.h"
 
 namespace xllm {
 
@@ -38,25 +38,22 @@ class SuffixWorkerImpl : public SpeculativeWorkerImpl {
   ~SuffixWorkerImpl() override = default;
 
  protected:
+  ForwardInput update_input_by_last_step_output(ForwardInput& inputs) override;
+
   std::optional<ForwardOutput> step_prefill(const ForwardInput& input) override;
   std::optional<ForwardOutput> step_decode(const ForwardInput& inputs) override;
   std::optional<ForwardOutput> step_empty(const ForwardInput& inputs) override;
 
  private:
-  SampleOutput validate(const SamplingParameters& sampling_params,
-                        const DraftProposal& draft_proposal,
-                        const ForwardOutput& target_output);
-
   void store_prompt_hint(const std::string& request_id,
                          std::vector<int32_t> hint);
   void drop_prompt_hint(const std::string& request_id);
 
  private:
-  std::unique_ptr<SuffixDecodingCache> suffix_cache_;
+  SuffixDecodingCache suffix_cache_;
   bool vlm_target_ = false;
   std::unordered_map<std::string, std::vector<int32_t>> model_prompt_hints_;
   std::deque<std::string> model_prompt_hints_order_;
-  std::unordered_map<std::string, std::vector<int32_t>> suffix_recent_tokens_;
   std::unordered_set<std::string> suffix_active_decode_req_ids_;
 };
 }  // namespace xllm

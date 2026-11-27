@@ -22,7 +22,7 @@ limitations under the License.
 
 namespace xllm {
 namespace runtime {
-struct Options;
+class Options;
 }
 
 // The prefill offload owner is only valid on an instance that never executes

@@ -326,20 +326,14 @@ DEFINE_HISTOGRAM(
     "JSON object non-blocking device copy submission latency in microseconds");
 DEFINE_COUNTER(json_object_mask_build_calls_normal_total,
                "JSON object normal mask build calls");
-DEFINE_COUNTER(json_object_mask_build_calls_draft_total,
-               "JSON object draft mask build calls");
 DEFINE_COUNTER(json_object_mask_build_calls_target_total,
                "JSON object target mask build calls");
 DEFINE_COUNTER(json_object_mask_build_rows_normal_total,
                "JSON object normal mask build rows");
-DEFINE_COUNTER(json_object_mask_build_rows_draft_total,
-               "JSON object draft mask build rows");
 DEFINE_COUNTER(json_object_mask_build_rows_target_total,
                "JSON object target mask build rows");
 DEFINE_COUNTER(json_object_mask_build_constrained_rows_normal_total,
                "JSON object constrained rows in normal mask builds");
-DEFINE_COUNTER(json_object_mask_build_constrained_rows_draft_total,
-               "JSON object constrained rows in draft mask builds");
 DEFINE_COUNTER(json_object_mask_build_constrained_rows_target_total,
                "JSON object constrained rows in target mask builds");
 
@@ -524,29 +518,6 @@ DEFINE_GAUGE(speculative_mean_acceptance_length,
              "Cumulative acceptance length: mean tokens committed per "
              "speculative proposal sequence, including the target bonus "
              "token (1.0 without accepted draft tokens)");
-DEFINE_MULTI_GAUGE(speculative_conditional_acceptance_rate_per_pos,
-                   "position",
-                   "Per-position conditional draft acceptance rate: P(accept "
-                   "position i | position i-1 accepted)");
-DEFINE_HISTOGRAM(speculative_draft_token_d2h_latency_microseconds,
-                 "Latency of draft token host copies in microseconds");
-DEFINE_MULTI_HISTOGRAM(
-    speculative_draft_token_copy_submission_latency_microseconds,
-    "draft_index",
-    "Latency of draft token asynchronous host-copy submission in microseconds");
-DEFINE_MULTI_HISTOGRAM(
-    speculative_draft_token_ready_wait_latency_microseconds,
-    "draft_index",
-    "Latency of draft token host event wait in microseconds");
-DEFINE_MULTI_HISTOGRAM(speculative_draft_token_bulk_read_latency_microseconds,
-                       "draft_index",
-                       "Latency of draft token bulk host read in microseconds");
-DEFINE_MULTI_HISTOGRAM(
-    speculative_draft_token_handoff_latency_microseconds,
-    "draft_index",
-    "Total latency of draft token host handoff in microseconds");
-DEFINE_COUNTER(speculative_draft_token_handoff_fallback_total,
-               "Draft token host handoff fallback count");
 DEFINE_COUNTER(speculative_num_accepted_tokens_constrained_total,
                "Accepted speculative tokens from constrained rows");
 DEFINE_COUNTER(speculative_num_accepted_tokens_plain_total,

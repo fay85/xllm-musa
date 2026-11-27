@@ -1435,12 +1435,6 @@ c10::cuda::CUDAStream CudaGraphExecutorImpl::get_capture_stream(
   return thread_capture_stream;
 }
 
-ForwardInput CudaGraphExecutorImpl::prepare_inputs(Batch& batch) {
-  // Prepare inputs for workers
-  return batch.prepare_forward_input(
-      options_.num_decoding_tokens(), 0, args_, options_.cp_size());
-}
-
 ModelOutput CudaGraphExecutorImpl::attach_aux_hidden_states_if_needed(
     const torch::Tensor& hidden_states,
     uint32_t n_tokens) const {

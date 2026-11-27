@@ -157,7 +157,6 @@ class DcuGraphPersistentParam final {
   runtime::Options options_;
 
   bool use_mrope_ = false;
-  uint32_t num_decoding_tokens_ = 1;
 
   // persistent input tensors
   torch::Tensor tokens_;
@@ -233,8 +232,6 @@ class DcuGraphExecutorImpl final : public ExecutorImpl {
                        const runtime::Options& options);
 
   ~DcuGraphExecutorImpl() override;
-
-  ForwardInput prepare_inputs(Batch& batch) override;
 
   ModelOutput run(const torch::Tensor& tokens,
                   const torch::Tensor& positions,

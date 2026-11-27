@@ -43,8 +43,9 @@ from xllm.python.attention.csa2_block_metadata import (
     Csa2BlockAttentionMetadataBuilder,
 )
 from xllm.python.model_executor.forward_context import ForwardContext, forward_context
-from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder
+from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder, SamplingMode
 from xllm.python.models import deepseek_v41_dspark as dsp
+from xllm.python.models.base import PyModelBase
 from xllm.python.models.deepseek_v41_dspark import (
     CSA2_MODE_SWA,
     DeepseekV41DSparkConfig,
@@ -83,7 +84,7 @@ _DEEPSEEK_V41_DSPARK_CONFIG = {
     "compress_ratios": [0] * 6,
     "num_nextn_predict_layers": 2,
     "dspark_target_layer_ids": [1, 2],
-    "dspark_block_size": 3,
+    "num_speculative_tokens": 3,
     "dspark_noise_token_id": 7,
     "dspark_markov_rank": 4,
     "dspark_n_routed_experts": 4,
@@ -868,7 +869,7 @@ def test_anchor_first_query_block_places_noise_after_the_anchor() -> None:
         anchor_first_query_block(torch.tensor([1]), block_size=0, noise_token_id=7)
     cfg = DeepseekV41DSparkConfig.from_dict(_config_dict())
     lm = DeepseekV41DSparkForCausalLM(_config_dict())
-    assert lm.model.backbone.block_size == cfg.dspark_block_size
+    assert lm.model.backbone.block_size == cfg.num_speculative_tokens
     assert lm.model.backbone.noise_token_id == cfg.dspark_noise_token_id
     assert lm.model.backbone.anchor_first_query_block(torch.tensor([5])).tolist() == [[5, 7, 7]]
 
@@ -919,10 +920,10 @@ def test_draft_step_runs_the_block_in_one_parallel_pass(
     backend = _DraftStubBackend(on_layer)
     _with_patched_forward_context(monkeypatch, backend)
     block = lm.model.backbone.anchor_first_query_block(torch.tensor([5]))
-    positions = torch.arange(cfg.dspark_block_size, dtype=torch.int64)
+    positions = torch.arange(cfg.num_speculative_tokens, dtype=torch.int64)
     out = lm.model.backbone(block.reshape(-1), positions)
 
-    block_size = cfg.dspark_block_size
+    block_size = cfg.num_speculative_tokens
     assert out.shape == (block_size, cfg.hidden_size)
     assert torch.isfinite(out).all()
     assert backend.group_limits == []
@@ -951,10 +952,10 @@ def test_draft_forward_applies_last_collapse_and_norm(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(lm.model.backbone, "_collapse_last_hidden", spy)
     block = lm.model.backbone.anchor_first_query_block(torch.tensor([5]))
-    out = lm.model.backbone(block.reshape(-1), torch.arange(cfg.dspark_block_size, dtype=torch.int64))
+    out = lm.model.backbone(block.reshape(-1), torch.arange(cfg.num_speculative_tokens, dtype=torch.int64))
     expected = lm.model.backbone.norm(original(captured["idden"], captured["pre_mix"]))
     torch.testing.assert_close(out, expected)
-    assert captured["idden"].shape == (cfg.dspark_block_size, cfg.hc_mult, cfg.hidden_size)
+    assert captured["idden"].shape == (cfg.num_speculative_tokens, cfg.hc_mult, cfg.hidden_size)
 
 
 # ---------------------------------------------------------------------------
@@ -1275,7 +1276,9 @@ def test_pipeline_checkpoint_without_own_head_can_share_target_head() -> None:
     _load(model, tensors)
     assert model.model.lm_head is None
     head = torch.nn.Linear(model.cfg.hidden_size, model.cfg.vocab_size, bias=False)
-    model.share_weights_from(SimpleNamespace(get_lm_head=lambda: head))
+    target_model = PyModelBase()
+    target_model.lm_head = head
+    model.share_lm_head(target_model)
     assert model.model.lm_head is head
 
 
@@ -1290,9 +1293,9 @@ def test_pipeline_matches_sequential_greedy_markov(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(model.model.backbone, "forward", lambda *args: hidden)
     sampling = SimpleNamespace(
         is_unconstrained_greedy=True,
-        return_probs=False,
+        return_draft_logits=False,
         return_confidence=False,
-        parameters=SimpleNamespace(all_greedy_sample=True),
+        parameters=SimpleNamespace(sampling_mode=SamplingMode.GREEDY),
     )
     runtime = ModuleType("xllm_runtime")
     runtime.ModelSamplingInput = lambda value: value
@@ -1308,8 +1311,8 @@ def test_pipeline_matches_sequential_greedy_markov(monkeypatch: pytest.MonkeyPat
     for token_index in range(3):
         previous = torch.argmax(base_logits[:, token_index] + model.model.markov_head.bias(previous), dim=-1)
         expected_steps.append(previous)
-    assert output.draft_proposal is not None
-    torch.testing.assert_close(output.draft_proposal.token_ids, torch.stack(expected_steps, dim=1))
+    assert output.draft_token_ids is not None
+    torch.testing.assert_close(output.draft_token_ids, torch.stack(expected_steps, dim=1))
     assert output.hidden_states is None
 
 

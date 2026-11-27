@@ -25,7 +25,7 @@ namespace xllm {
 
 // Forward declaration
 namespace runtime {
-struct Options;
+class Options;
 }
 
 namespace parallel_state {

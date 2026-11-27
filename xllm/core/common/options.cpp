@@ -55,23 +55,12 @@ std::string Options::to_string() const {
      << max_tokens_per_chunk_for_prefill()
      << ", num_speculative_tokens: " << num_speculative_tokens()
      << ", speculative_algorithm: " << speculative_algorithm()
-     << ", draft_sampling_mode: " << draft_sampling_mode()
+     << ", enable_probabilistic_draft: " << enable_probabilistic_draft()
      << ", speculative_suffix_cache_max_depth: "
      << speculative_suffix_cache_max_depth()
-     << ", speculative_suffix_max_spec_factor: "
-     << speculative_suffix_max_spec_factor()
-     << ", speculative_suffix_max_spec_offset: "
-     << speculative_suffix_max_spec_offset()
-     << ", speculative_suffix_min_token_prob: "
-     << speculative_suffix_min_token_prob()
      << ", speculative_suffix_max_cached_requests: "
      << speculative_suffix_max_cached_requests()
-     << ", speculative_suffix_use_tree_spec: "
-     << speculative_suffix_use_tree_spec()
      << ", enable_mtp_draft_body_tp1: " << enable_mtp_draft_body_tp1()
-     << ", enable_adaptive_speculative_decode: "
-     << enable_adaptive_speculative_decode()
-     << ", adaptive_speculative_min_gain: " << adaptive_speculative_min_gain()
      << ", num_request_handling_threads: " << num_request_handling_threads()
      << ", enable_eplb: " << optional_to_string(enable_eplb())
      << ", redundant_experts_num: "

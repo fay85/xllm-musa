@@ -36,7 +36,6 @@ limitations under the License.
 #include "framework/config/execution_config.h"
 #include "framework/model/model_input_params.h"
 #include "framework/sampling/beam_searcher.h"
-#include "framework/sampling/draft_proposal.h"
 #include "framework/sampling/json_object_grammar.h"
 #include "framework/sampling/sampling_params.h"
 #include "platform/device.h"
@@ -682,11 +681,6 @@ struct ForwardOutput {
   SampleOutput sample_output;
   // Local DFlash2 prefill metadata consumed before RPC or SHM serialization.
   torch::Tensor aux_hidden_restore_index;
-  // The target sampler publishes masked logits before returning sampled tokens.
-  // MTP validation uses these local flags to enforce filtering without applying
-  // the same mask twice. Logits-only execution leaves both flags false.
-  bool filter_bitmask_applied_to_logits = false;
-  bool filter_mask_applied_to_logits = false;
   std::vector<JsonObjectOutputError> json_object_errors;
   std::vector<std::string> failed_request_ids;
   // Requests whose PUSH transfer ended without proof that the destination
@@ -701,11 +695,14 @@ struct ForwardOutput {
   // handle is intentionally not included in proto or shared-memory transport.
   StreamEventPtr ready_event;
   bool requires_host_retirement = false;
-  bool defer_block_speculative_metrics = false;
+  // Local marker consumed after verified tokens are available on the host.
+  bool is_speculative_verify = false;
+  std::vector<char> speculative_constrained_mask;
   // Sampling publishes processed logits, possibly with a promoted dtype.
   // Logits-only execution returns raw model logits instead.
   torch::Tensor logits;
-  std::optional<DraftProposal> draft_proposal;
+  torch::Tensor draft_token_ids;
+  torch::Tensor draft_logits;
   torch::Tensor draft_confidence_probs;
   torch::Tensor embedding;
   // Selected hidden states matching `logits` layout: [num_selected,

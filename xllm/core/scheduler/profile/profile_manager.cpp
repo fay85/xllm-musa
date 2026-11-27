@@ -36,7 +36,6 @@ limitations under the License.
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/model/mtp_utils.h"
-#include "core/framework/speculative/speculative_profile_registry.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/request/request_state.h"
 #include "platform/platform.h"
@@ -84,12 +83,11 @@ int32_t decode_warmup_token_bucket(const DecodeGraphWarmupPlan& plan,
                                    int32_t dp_size) {
   CHECK_GT(global_batch_size, 0);
   CHECK_GT(dp_size, 0);
-  CHECK_GT(plan.warmup_config.num_decoding_tokens, 0);
   const int32_t local_sequence_batch_size =
       (global_batch_size + dp_size - 1) / dp_size;
   const int64_t num_token_rows =
       static_cast<int64_t>(local_sequence_batch_size) *
-      plan.warmup_config.num_decoding_tokens;
+      (static_cast<int64_t>(plan.warmup_config.num_speculative_tokens) + 1);
   return static_cast<int32_t>(runtime::get_decode_graph_token_bucket(
       num_token_rows,
       plan.warmup_config.enable_graph_mode_decode_no_padding,
@@ -109,17 +107,9 @@ ProfileManager::ProfileManager(Engine* engine, const Options& options)
       options.enable_profile_kv_blocks(), true /*is_prefill*/);
   decode_time_predictor_ = std::make_unique<TimePredictor>(
       options.enable_profile_kv_blocks(), false /*is_prefill*/);
-  speculative_validate_time_predictor_ = std::make_unique<TimePredictor>(
-      options.enable_profile_kv_blocks(), false /*is_prefill*/);
   if (options.enable_profile_step_time()) {
     LOG(INFO) << "Starting profiliing step time.";
     profile_step_time(false);
-    // The validate-time predictor is only consumed by the adaptive
-    // speculative controller, so skip the whole prefix/query/batch sweep
-    // unless adaptive speculative decode is actually enabled.
-    if (should_profile_speculative_validate()) {
-      profile_speculative_validate_time();
-    }
   }
   if (options.enable_profile_token_budget()) {
     LOG(INFO) << "Starting profiliing token budget.";
@@ -313,162 +303,6 @@ void ProfileManager::train_prefill_time_predictor(
 void ProfileManager::train_decode_time_predictor(
     std::vector<std::tuple<int32_t, int32_t, double>> time_profiling_data) {
   decode_time_predictor_->fit_for_decode(time_profiling_data);
-}
-
-void ProfileManager::train_speculative_validate_time_predictor(
-    const std::vector<std::tuple<int32_t, int32_t, int32_t, double>>&
-        time_profiling_data) {
-  if (time_profiling_data.empty()) {
-    return;
-  }
-
-  // The least-squares fit + error metrics + coefficient sanitization live in
-  // TimePredictor (shared with the prefill/decode predictors). Here we only
-  // map the fitted coefficients into the registry struct and publish them.
-  speculative_validate_time_predictor_->fit_for_speculative_validate(
-      time_profiling_data);
-  const std::vector<double> coefficients =
-      speculative_validate_time_predictor_->get_coefficients();
-  CHECK_EQ(coefficients.size(), 3u)
-      << "speculative validate predictor must have 3 coefficients";
-
-  SpeculativeProfileRegistry::ValidateTimePredictor predictor;
-  predictor.intercept_ms = coefficients[0];
-  predictor.query_token_ms = coefficients[1];
-  predictor.query_prefix_ms = coefficients[2];
-  // Broadcast to workers FIRST, then commit locally. Workers gate the
-  // adaptive path on their own SpeculativeProfileRegistry, so any rank
-  // that misses the predictor will diverge from ranks that received it:
-  // one side runs adaptive (per-seq variable validate width), the other
-  // runs static, which corrupts collectives and shape assumptions.
-  // Treat broadcast failure as fatal for the adaptive path and leave the
-  // registry unset so every rank consistently falls back to static.
-  if (!engine_->set_speculative_validate_time_predictor(predictor)) {
-    LOG(ERROR)
-        << "Failed to broadcast speculative validate predictor to workers. "
-        << "Disabling adaptive speculative decode on all ranks to avoid "
-        << "cross-rank divergence.";
-    SpeculativeProfileRegistry::get_instance().reset_validate_time_predictor();
-    return;
-  }
-  SpeculativeProfileRegistry::get_instance().set_validate_time_predictor(
-      predictor);
-}
-
-bool ProfileManager::should_profile_speculative_validate() const {
-  // The validate-time predictor is only consumed by the adaptive speculative
-  // controller: it needs adaptive explicitly enabled, more than one
-  // speculative token to prune, and a supported algorithm
-  // (MTP / DFlash / DSpark). Otherwise the prefix/query/batch sweep is wasted
-  // startup time.
-  const SpeculativeConfig& speculative_config =
-      ::xllm::SpeculativeConfig::get_instance();
-  const std::string& speculative_algorithm =
-      speculative_config.speculative_algorithm();
-  const bool is_supported_algo =
-      SpeculativeConfig::is_mtp_algorithm(speculative_algorithm) ||
-      SpeculativeConfig::is_block_diffusion_algorithm(speculative_algorithm);
-  return speculative_config.enable_adaptive_speculative_decode() &&
-         speculative_config.num_speculative_tokens() > 1 && is_supported_algo;
-}
-
-void ProfileManager::profile_speculative_validate_time() {
-  // The adaptive gate lives at the call site (should_profile_speculative_
-  // validate); guard here too so a direct call cannot profile a config the
-  // adaptive controller would never consume.
-  if (!should_profile_speculative_validate()) {
-    return;
-  }
-  const SpeculativeConfig& speculative_config =
-      ::xllm::SpeculativeConfig::get_instance();
-  const std::string& speculative_algorithm =
-      speculative_config.speculative_algorithm();
-  LOG(INFO) << "Starting speculative validate profile for "
-            << speculative_algorithm << ", "
-            << "adaptive_enabled="
-            << speculative_config.enable_adaptive_speculative_decode();
-
-  auto& model_args = engine_->model_args();
-  const int32_t max_context_len = model_args.max_position_embeddings();
-  const int32_t profile_max_prompt_length =
-      std::min(max_context_len, options_.profile_max_prompt_length());
-  if (profile_max_prompt_length <= 16) {
-    LOG(WARNING)
-        << "Skip speculative validate profile because prompt length is too "
-        << "small: " << profile_max_prompt_length;
-    return;
-  }
-
-  const int32_t max_query_len =
-      std::min<int32_t>(speculative_config.num_speculative_tokens() + 1, 10);
-  const int32_t max_batch_size =
-      std::min<int32_t>(options_.max_seqs_per_batch(), 256);
-  std::vector<int32_t> query_lens;
-  query_lens.push_back(1);
-  if (max_query_len > 2) {
-    query_lens.push_back((max_query_len + 1) / 2);
-  }
-  if (max_query_len > 1) {
-    query_lens.push_back(max_query_len);
-  }
-  query_lens.erase(std::unique(query_lens.begin(), query_lens.end()),
-                   query_lens.end());
-
-  constexpr int32_t kMaxProfileBatchSize = 32;
-  std::vector<int32_t> candidate_batch_sizes = {1, 16, 32};
-  std::vector<int32_t> batch_sizes;
-  for (const int32_t batch_size : candidate_batch_sizes) {
-    if (batch_size <= max_batch_size && batch_size <= kMaxProfileBatchSize) {
-      batch_sizes.push_back(batch_size);
-    }
-  }
-  if (batch_sizes.empty()) {
-    batch_sizes.push_back(std::min<int32_t>(
-        std::max<int32_t>(max_batch_size, 1), kMaxProfileBatchSize));
-  }
-
-  std::vector<int32_t> prefix_lens;
-  prefix_lens.push_back(profile_max_prompt_length);
-  if (profile_max_prompt_length >= 64) {
-    prefix_lens.push_back(profile_max_prompt_length / 4);
-  }
-  prefix_lens.push_back(16);
-  for (int32_t& prefix_len : prefix_lens) {
-    prefix_len = std::clamp(prefix_len, 16, profile_max_prompt_length);
-  }
-  std::sort(prefix_lens.begin(), prefix_lens.end());
-  prefix_lens.erase(std::unique(prefix_lens.begin(), prefix_lens.end()),
-                    prefix_lens.end());
-
-  std::vector<std::tuple<int32_t, int32_t, int32_t, double>>
-      time_profiling_data;
-  const int32_t total_blocks =
-      static_cast<int32_t>(block_manager_pool_->num_blocks());
-  const int32_t block_size = block_manager_pool_->block_size();
-  for (const int32_t prefix_len : prefix_lens) {
-    for (const int32_t query_len : query_lens) {
-      for (const int32_t batch_size : batch_sizes) {
-        const int32_t token_length = prefix_len + query_len;
-        const int32_t blocks_per_seq =
-            (prefix_len + block_size - 1) / block_size +
-            (token_length + block_size - 1) / block_size;
-        if (batch_size * blocks_per_seq > total_blocks * 9 / 10) {
-          continue;
-        }
-        double latency_mean = 0.0;
-        for (int32_t k = 0; k < profile_count_per_step_; ++k) {
-          latency_mean += run_request(token_length, prefix_len, batch_size);
-        }
-        latency_mean /= static_cast<double>(profile_count_per_step_);
-        LOG(INFO) << "[spec_validate_profile] batch=" << batch_size
-                  << " query_len=" << query_len << " prefix_len=" << prefix_len
-                  << " latency_ms=" << latency_mean;
-        time_profiling_data.emplace_back(
-            batch_size, query_len, prefix_len, latency_mean);
-      }
-    }
-  }
-  train_speculative_validate_time_predictor(time_profiling_data);
 }
 
 // ----------------------predict step time-----------------------
@@ -763,13 +597,10 @@ std::shared_ptr<Request> ProfileManager::try_generate_single_decode_request(
   req_state.is_graph_warmup = is_graph_warmup;
   const int32_t num_speculative_tokens =
       decode_graph_warmup_plan_.warmup_config.num_speculative_tokens;
-  const int64_t num_decoding_tokens =
-      decode_graph_warmup_plan_.warmup_config.num_decoding_tokens;
-  CHECK_GT(num_decoding_tokens, 0);
-  size_t seq_capacity = static_cast<size_t>(total_length) +
-                        static_cast<size_t>(num_decoding_tokens);
+  const size_t verify_width = static_cast<size_t>(num_speculative_tokens) + 1;
+  size_t seq_capacity = static_cast<size_t>(total_length) + verify_width;
   if (options_.enable_schedule_overlap()) {
-    seq_capacity += static_cast<size_t>(num_decoding_tokens);
+    seq_capacity += verify_width;
   }
   req_state.seq_capacity = seq_capacity;
   auto request = std::make_shared<Request>(

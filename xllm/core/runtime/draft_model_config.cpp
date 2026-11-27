@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -38,31 +39,9 @@ limitations under the License.
 namespace xllm {
 namespace {
 
-// The caller checks backend support before applying the runtime geometry.
-// Call before constructing layers so attention, convolution and dummy inputs
-// share the same block size, which includes the anchor token.
-void apply_dflash2_runtime_block_size(ModelArgs& args,
-                                      int32_t runtime_block_size) {
-  const int32_t trained_block_size = args.dflash2_block_size();
-  CHECK_GT(trained_block_size, 0);
-  CHECK_GT(runtime_block_size, 1) << "DFlash2 requires candidate tokens.";
-  CHECK_LE(runtime_block_size, trained_block_size)
-      << "DFlash2 runtime block must not exceed the checkpoint's "
-         "dflash_config.block_size (which includes the anchor).";
-  CHECK_LE(args.dflash2_conv_kernel_size(), runtime_block_size)
-      << "DFlash2 runtime block must cover the convolution kernel.";
-  args.dflash2_block_size(runtime_block_size);
-  args.num_speculative_tokens(runtime_block_size - 1);
-  LOG(INFO) << "DFlash2 trained block size: " << trained_block_size
-            << ", runtime block size: " << runtime_block_size
-            << ", candidate tokens: " << runtime_block_size - 1;
-}
-
-// Apply the selected draft implementation's cache and query geometry.
-void configure_deepseek_v4_dspark_args(ModelArgs& args,
-                                       const runtime::Options& options,
-                                       bool v41_draft,
-                                       bool native_sas) {
+void configure_deepseek_v4_dspark_args(ModelArgs& args) {
+  const bool v41_draft =
+      util::is_deepseek_v41_dspark_model_type(args.model_type());
   CHECK_GT(args.dspark_num_layers(), 0)
       << "DeepSeek-V4 DSpark requires at least one draft layer.";
   // The checkpoint lists the decoder layers first and appends the draft stages,
@@ -78,21 +57,7 @@ void configure_deepseek_v4_dspark_args(ModelArgs& args,
     args.num_experts_per_tok(args.dspark_num_experts_per_tok());
   }
 
-  // Default to the checkpoint's block_size; --num_speculative_tokens overrides.
-  const int32_t ckpt_block_size = read_block_size(options.model_path());
-  const int32_t user_num_spec = options.num_speculative_tokens();
-  if (user_num_spec > 0 && user_num_spec != ckpt_block_size) {
-    LOG(WARNING) << "--num_speculative_tokens=" << user_num_spec
-                 << " overrides DSpark checkpoint dspark_block_size="
-                 << ckpt_block_size << ".";
-  }
-  args.dspark_block_size(user_num_spec > 0 ? user_num_spec : ckpt_block_size);
-
-  // DSpark stages are all standard SWA layers. Their stage ids are not target
-  // model layer ids, so the target compress_ratios[0..N) must not be reused.
-  // V4 encoded pure SWA as compress ratio 1; V4.1 encodes it as 0.
-  // Checkpoints append one ratio per draft stage. V4.1 uses zero for SWA;
-  // the V4 attention implementation uses the normalized family value one.
+  // Draft stages use the checkpoint tail. V4 and V4.1 encode SWA differently.
   const size_t draft_layer_count =
       static_cast<size_t>(args.dspark_num_layers());
   std::vector<int32_t> draft_compress_ratios(draft_layer_count,
@@ -139,10 +104,7 @@ void configure_deepseek_v4_dspark_args(ModelArgs& args,
   args.engram_layer_ids({});
   args.engram_num_embeddings({});
 
-  args.dspark_use_native_sas(native_sas);
-  args.draft_query_uses_decode(args.dspark_use_native_sas() || v41_draft);
-  args.enable_confidence_head(options.enable_adaptive_speculative_decode());
-  args.confidence_head_with_markov(true);
+  args.draft_query_uses_decode(/*draft_query_uses_decode=*/true);
 }
 
 // The caller has already classified the algorithm as block diffusion.
@@ -231,83 +193,62 @@ int32_t read_mask_token_id(const JsonReader& reader) {
   return mask_token_id;
 }
 
-// Reads the DSpark draft's block size (which includes the anchor token). The
-// checkpoint nests the key under ``text_config`` while the deployment side
-// may patch it at the config root. The root key is listed first so an
-// existing patch keeps winning (idempotent with the fallback).
-int32_t read_block_size(const std::string& model_weights_path) {
-  JsonReader reader;
-  const std::string config_path = model_weights_path + "/config.json";
-  CHECK(reader.parse(config_path))
-      << "Failed to parse DSpark draft config: " << config_path;
-  const int32_t block_size = reader.value_or<int32_t>(
-      std::vector<std::string>{"dspark_block_size",
-                               "text_config.dspark_block_size"},
-      /*default=*/0);
-  // Config-drift probe: the root-level patch and the checkpoint's text_config
-  // disagree. The root value wins above, so surface the other side instead of
-  // silently ignoring it.
-  const int32_t text_block_size =
-      reader.value_or<int32_t>("text_config.dspark_block_size", block_size);
-  if (text_block_size != block_size) {
-    LOG(WARNING) << "DSpark config drift: dspark_block_size=" << block_size
-                 << " but text_config.dspark_block_size=" << text_block_size
-                 << "; the root-level value wins.";
+void configure_block_diffusion_target(ModelArgs& args,
+                                      const runtime::Options& options) {
+  CHECK(options.draft_model_path().has_value())
+      << "block-diffusion speculative decoding requires --draft_model.";
+  std::vector<int32_t> capture_ids =
+      read_capture_layer_ids(*options.draft_model_path());
+  std::unordered_set<int32_t> unique_ids;
+  for (const int32_t layer_id : capture_ids) {
+    CHECK_GE(layer_id, 0) << "Invalid target capture layer.";
+    CHECK_LT(layer_id, args.n_layers())
+        << "Target capture layer is out of range.";
+    CHECK(unique_ids.insert(layer_id).second)
+        << "Duplicate target capture layer.";
   }
-  return block_size;
+  args.layers_to_capture(std::move(capture_ids));
 }
 
-// Configure both target capture and draft identity in one place. Backend
-// capability checks precede changes to model arguments.
-void configure_block_diffusion_model(ModelArgs& args,
+void configure_block_diffusion_draft(ModelArgs& args,
                                      const runtime::Options& options) {
-  if (!options.is_draft_engine()) {
-    CHECK(options.draft_model_path().has_value())
-        << "block-diffusion speculative decoding requires --draft_model.";
-    std::vector<int32_t> capture_ids =
-        read_capture_layer_ids(*options.draft_model_path());
-    std::unordered_set<int32_t> unique_ids;
-    for (const int32_t layer_id : capture_ids) {
-      CHECK_GE(layer_id, 0) << "Invalid target capture layer.";
-      CHECK_LT(layer_id, args.n_layers())
-          << "Target capture layer is out of range.";
-      CHECK(unique_ids.insert(layer_id).second)
-          << "Duplicate target capture layer.";
-    }
-    args.layers_to_capture(std::move(capture_ids));
-    return;
-  }
-
   const std::string& algorithm = options.speculative_algorithm();
   CHECK(supports_block_diffusion_draft(algorithm, args.model_type()))
       << algorithm << " block-diffusion draft is not supported on "
       << Platform::type_str() << ".";
-  if (SpeculativeConfig::is_dflash2_algorithm(algorithm) &&
-      Platform::supports_dflash2_runtime_block_size()) {
-    apply_dflash2_runtime_block_size(args, options.draft_graph_query_width());
-  }
+  const int32_t num_speculative_tokens = options.num_speculative_tokens();
   const bool is_dspark = SpeculativeConfig::is_dspark_algorithm(algorithm);
   const bool is_deepseek_v4_dspark =
       is_dspark && util::is_deepseek_v4_model_type(args.model_type());
   const bool is_deepseek_v41_dspark =
       is_deepseek_v4_dspark &&
       util::is_deepseek_v41_model_type(args.model_type());
-  // Model selection and compress-ratio encoding must use the same predicate.
   const bool python_model_impl = ModelConfig::is_python_model_impl(
       ModelConfig::get_instance().model_impl());
   const bool v41_draft =
       is_deepseek_v41_dspark && (python_model_impl || Platform::is_mlu());
   const bool is_python_qwen3_pipeline =
-      (is_dspark || algorithm == "DFlash" ||
-       SpeculativeConfig::is_dflash2_algorithm(algorithm)) &&
-      args.model_type() == "qwen3" && Platform::is_npu() && python_model_impl;
+      Platform::is_npu() && python_model_impl && args.model_type() == "qwen3";
   std::string draft_model_type = std::string(kDFlashDraftModelType);
   if (is_dspark) {
     draft_model_type = std::string(kDSparkDraftModelType);
   } else if (SpeculativeConfig::is_dflash2_algorithm(algorithm)) {
+    const int64_t trained_num_speculative_tokens =
+        args.num_speculative_tokens();
+    CHECK_GT(trained_num_speculative_tokens, 0)
+        << "DFlash2 requires a positive checkpoint token budget.";
+    if (Platform::is_mlu()) {
+      CHECK_LE(num_speculative_tokens, trained_num_speculative_tokens)
+          << "DFlash2 runtime token count must not exceed the trained budget.";
+    } else {
+      CHECK_EQ(num_speculative_tokens, trained_num_speculative_tokens)
+          << "DFlash2 runtime token count must match dflash_config.block_size "
+             "excluding the anchor.";
+    }
+    CHECK_LE(args.dflash2_conv_kernel_size(), num_speculative_tokens + 1)
+        << "DFlash2 draft queries must cover the convolution kernel.";
     draft_model_type = std::string(kDFlash2DraftModelType);
-    CHECK_GT(args.dflash2_block_size(), 0);
-    args.dummy_token_count(args.dflash2_block_size());
+    args.dummy_token_count(num_speculative_tokens + 1);
   }
   if (is_deepseek_v4_dspark) {
     // Native MLU and Python select the V4.1 draft's SWA/cache semantics.
@@ -320,25 +261,66 @@ void configure_block_diffusion_model(ModelArgs& args,
             << " for block-diffusion speculative decoding";
   args.layers_to_capture({});
   args.model_type(draft_model_type);
+  args.num_speculative_tokens(num_speculative_tokens);
   args.draft_query_uses_decode(false);
   args.requires_eager_execution(!is_deepseek_v4_dspark &&
                                 !is_python_qwen3_pipeline);
-  if (algorithm == "DFlash" && is_python_qwen3_pipeline) {
-    args.dummy_token_count(
-        std::max<int32_t>(1, options.draft_graph_query_width()));
+  if (SpeculativeConfig::is_dflash_algorithm(algorithm) &&
+      is_python_qwen3_pipeline) {
+    args.dummy_token_count(num_speculative_tokens + 1);
   }
   if (is_dspark && (python_model_impl || v41_draft)) {
-    args.dummy_token_count(
-        std::max<int32_t>(1, options.num_speculative_tokens()));
+    args.dummy_token_count(num_speculative_tokens);
   }
   if (is_deepseek_v4_dspark) {
-    bool native_sas = Platform::is_mlu();
-#if defined(USE_NPU)
-    native_sas = KernelConfig::get_instance().enable_dspark_native_sas() &&
-                 !(python_model_impl && is_deepseek_v41_dspark);
-#endif
-    configure_deepseek_v4_dspark_args(args, options, v41_draft, native_sas);
+    configure_deepseek_v4_dspark_args(args);
   }
+}
+
+void configure_mtp_family_draft(ModelArgs& args,
+                                const runtime::Options& options) {
+#if !defined(USE_NPU)
+  args.num_speculative_tokens(options.num_speculative_tokens());
+#endif
+  if (options.num_speculative_tokens() != 0 ||
+      args.num_nextn_predict_layers() == 0) {
+    return;
+  }
+  const std::string& current_type = args.model_type();
+#if defined(USE_NPU)
+  const char* mtp_model_type = nullptr;
+  if (current_type == "qwen3_5_text" || current_type == "qwen3_5") {
+    mtp_model_type = "qwen3_5_mtp";
+  } else if (current_type == "qwen3_5_moe_text" ||
+             current_type == "qwen3_5_moe") {
+    mtp_model_type = "qwen3_5_moe_mtp";
+  }
+  if (mtp_model_type != nullptr) {
+    LOG(INFO) << "Overriding draft model_type from " << current_type << " to "
+              << mtp_model_type << " for speculative decoding";
+    args.model_type(mtp_model_type);
+  }
+#else
+  static const std::unordered_map<std::string, std::string>
+      kModelTypeToMtpType = {
+          {"deepseek_v3", "deepseek_v3_mtp"},
+          {"deepseek_v32", "deepseek_v32_mtp"},
+          {"deepseek_v4", "deepseek_v4_mtp"},
+          {"glm_moe_dsa", "glm_moe_dsa_mtp"},
+          {"joyai_llm_flash", "joyai_llm_flash_mtp"},
+          {"mimo", "mimo_mtp"},
+          {"qwen3_5", "qwen3_5_mtp"},
+          {"qwen3_5_moe", "qwen3_5_moe_mtp"},
+          {"qwen3_5_text", "qwen3_5_mtp"},
+          {"qwen3_5_moe_text", "qwen3_5_moe_mtp"},
+      };
+  auto it = kModelTypeToMtpType.find(current_type);
+  if (it != kModelTypeToMtpType.end()) {
+    LOG(INFO) << "Overriding draft model_type from " << current_type << " to "
+              << it->second << " for speculative decoding";
+    args.model_type(it->second);
+  }
+#endif
 }
 
 }  // namespace xllm
