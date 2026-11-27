@@ -41,6 +41,8 @@ import torch.nn as nn
 
 from scripts.logger import logger
 from xllm.python import kernels
+from xllm.python import lora_slots
+from xllm.python import lora_routing
 from xllm.python.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
@@ -230,6 +232,8 @@ class _DecodeGraphEntry:
         "static_positions",
         "static_input_embedding",
         "static_mtp_topk_indices",
+        "static_adapter_ids",
+        "slot_variant",
         "static_metadata",
         "kv_seq_lens_delta",
         "graph_tasks",
@@ -281,7 +285,7 @@ _GraphKey = tuple[
     tuple[int, ...],
     bool,
     tuple[torch.dtype, torch.device, tuple[int, ...]] | None,
-]
+    object | None,]
 
 
 class _DraftDerivedMetadataView:
@@ -414,6 +418,11 @@ class DecodeAclGraphRunner(BaseRunner):
         self._model_decode_graph_bucket = getattr(model, "decode_graph_token_bucket", None)
         self._eplv2_graph_token_limit = eplv2_graph_token_limit
         self._graphs: dict[_GraphKey, _DecodeGraphEntry] = {}
+        # Adapter install/uninstall changes tensor addresses; drop cached
+        # variants at the next execute (never mid-replay).
+        self._graphs_dirty = False
+        if lora_slots.store_mode():
+            lora_slots.add_change_listener(self._invalidate_graphs)
         self._graph_pool: Any | None = None
         self._paged_kv_indices_buffer: torch.Tensor | None = None
         self._max_blocks_per_sequence: int = 0
@@ -1605,6 +1614,18 @@ class DecodeAclGraphRunner(BaseRunner):
         mtp_topk_indices: torch.Tensor | None = None,
     ) -> ModelExecutionOutput:
         metadata = self._normalize_metadata(metadata)
+        if lora_routing.slot_mode():
+            # Eager/prefill steps read the ids from host routing; only the
+            # captured graph reads the static buffer set below.
+            lora_routing.set_slot_ids(None)
+        if self._graphs_dirty:
+            # Dropping entries frees their NPUGraphs, but a recapture into the
+            # same pool trips torch_npu's "use_count > 0" assert. Release the
+            # pool with the variants so the next capture starts from a fresh
+            # pool (old graphs keep their own allocations until collected).
+            self._graphs.clear()
+            self._graph_pool = None
+            self._graphs_dirty = False
         # Keep event wrappers alive until the H2D-ready event has signalled;
         # an ACL stream wait may still reference its native handle meanwhile.
         self._pending_graph_preparations = [
@@ -1674,6 +1695,17 @@ class DecodeAclGraphRunner(BaseRunner):
             padded_batch_size,
             verify_width,
         )
+        adapter_signature = None
+        if lora_slots.store_mode():
+            store = lora_slots.get_store()
+            if store is not None:
+                adapter_signature = store.signature()
+        slot_variant = (
+            1
+            if lora_routing.slot_mode() and lora_routing.has_adapter_routing()
+            else 0
+        )
+        lora_routing.set_slot_active(slot_variant == 1)
         graph_key = self._graph_key(
             padded_batch_size,
             is_verify,
@@ -1682,6 +1714,8 @@ class DecodeAclGraphRunner(BaseRunner):
             verify_width=verify_width,
             use_dflash_proposal_attention=bool(getattr(metadata, "use_dflash_proposal_attention", False)),
             mtp_topk_indices=mtp_topk_indices,
+            slot_variant=slot_variant,
+            adapter_signature=adapter_signature,
         )
         entry = None if static_kernel is not None else self._graphs.get(graph_key)
         first_capture = entry is None
@@ -1693,6 +1727,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 metadata,
                 input_batch,
                 verify_width=verify_width,
+                slot_variant=slot_variant,
             )
             entry.static_metadata.dsa_graph_token_capacity = self._graph_token_capacity
             entry.eplb = self._allocate_graph_eplb_state(eplb, padded_batch_size)
@@ -2094,6 +2129,10 @@ class DecodeAclGraphRunner(BaseRunner):
             )
             source_begin += count
 
+    def _invalidate_graphs(self, adapter_id: int, slot: int) -> None:
+        """Mark captured variants stale after an adapter load/unload."""
+        self._graphs_dirty = True
+
     @staticmethod
     def _graph_key(
         padded_batch_size: int,
@@ -2103,6 +2142,8 @@ class DecodeAclGraphRunner(BaseRunner):
         verify_width: int = 1,
         use_dflash_proposal_attention: bool = False,
         mtp_topk_indices: torch.Tensor | None = None,
+        slot_variant: int = 0,
+        adapter_signature: object | None = None,
     ) -> _GraphKey:
         """Key the captured attention mode and execution shape."""
         topk_schema = (
@@ -2121,6 +2162,8 @@ class DecodeAclGraphRunner(BaseRunner):
                 kpool_query_lens,
                 use_dflash_proposal_attention,
                 topk_schema,
+                slot_variant,
+                adapter_signature,
             )
         return (
             padded_batch_size,
@@ -2132,8 +2175,9 @@ class DecodeAclGraphRunner(BaseRunner):
             kpool_query_lens,
             use_dflash_proposal_attention,
             topk_schema,
+            slot_variant,
+            adapter_signature,
         )
-
     def _max_graph_context_len(self, metadata: AttentionMetadata) -> int:
         """Use the same length admission on every DP rank, including empty ranks."""
         if self.dp_size > 1:
@@ -2249,6 +2293,7 @@ class DecodeAclGraphRunner(BaseRunner):
         metadata: AttentionMetadata,
         input_batch: InputBatch | None = None,
         verify_width: int = 1,
+        slot_variant: int = 0,
     ) -> _DecodeGraphEntry:
         device = input_ids.device
         (
@@ -2289,6 +2334,8 @@ class DecodeAclGraphRunner(BaseRunner):
         entry.execution_state = AclGraphExecutionState({})
         entry.static_input_ids = torch.zeros(padded_batch_size, dtype=input_ids.dtype, device=device)
         entry.static_positions = torch.zeros(padded_batch_size, dtype=torch.int32, device=device)
+        entry.static_adapter_ids = torch.zeros(padded_batch_size, dtype=torch.long, device=device)
+        entry.slot_variant = slot_variant
         entry.is_padding = torch.ones(
             padded_batch_size,
             dtype=torch.bool,
@@ -2617,6 +2664,10 @@ class DecodeAclGraphRunner(BaseRunner):
                 static_metadata.paged_kv_last_page_len,
                 padded_batch_size,
             )
+        # B prototype: the captured graph reads per-token adapter slots from
+        # this static buffer, so copy this step's routing into it before replay.
+        if lora_routing.slot_mode():
+            lora_routing.fill_static_slot_ids(entry.static_adapter_ids, batch_size)
         # linear_state_indices is filled once below (the robust
         # repeat_interleave slice path), together with has_initial_state, so
         # there is no first redundant fill here.
@@ -3048,6 +3099,11 @@ class DecodeAclGraphRunner(BaseRunner):
         entry.graph_tasks = capture_context.tasks
 
     def _forward_static(self, entry: _DecodeGraphEntry) -> ModelExecutionOutput:
+        if lora_routing.slot_mode():
+            # Capture bakes this buffer's address into the graph; replay picks
+            # up whatever the per-step fill wrote into it.
+            lora_routing.set_slot_ids(entry.static_adapter_ids)
+            lora_routing.set_slot_active(getattr(entry, "slot_variant", 0) == 1)
         if entry.static_input_embedding is None:
             return self.model(entry.static_input_ids, entry.static_positions)
         return self.model(

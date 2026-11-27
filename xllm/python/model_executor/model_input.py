@@ -40,3 +40,7 @@ class ModelInput:
     layer_load_context: LayerLoadContext | None = None
     multimodal_inputs: MultimodalInputs | None = None
     mtp_topk_indices: torch.Tensor | None = None
+    # Per-sequence LoRA adapter routing (0 = base). Empty/None for pure-base
+    # batches and for engines without LoRA.
+    adapter_ids: list[int] | None = None
+    q_seq_lens: list[int] | None = None

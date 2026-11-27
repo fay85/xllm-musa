@@ -30,7 +30,7 @@ from typing import Any, cast
 import torch
 import torch.nn as nn
 
-from xllm.python import kernels
+from xllm.python import kernels, lora_routing, lora_slots
 from xllm.python.layers import (
     Attention,
     ColumnParallelLinear,
@@ -114,6 +114,34 @@ class Qwen3Config:
         return gqa_head_split(self.n_heads, self.n_kv_heads, self.tp_size)
 
 
+def _slot_qkv_delta(
+    layer_id: int,
+    hidden: torch.Tensor,
+    q_size: int,
+    kv_size: int,
+) -> torch.Tensor | None:
+    """q/k/v delta from the fixed-slot weight store."""
+    store = lora_slots.get_store()
+    adapter_id = lora_slots.batch_adapter(lora_routing.active_adapter_ids())
+    if store is None or adapter_id is None:
+        return None
+    return store.qkv_delta(adapter_id, layer_id, hidden, q_size, kv_size)
+
+
+def _slot_o_delta(
+    layer_id: int,
+    attn_out: torch.Tensor,
+    width: int,
+) -> torch.Tensor | None:
+    """Row-parallel o_proj delta from the fixed-slot weight store."""
+    store = lora_slots.get_store()
+    adapter_id = lora_slots.batch_adapter(lora_routing.active_adapter_ids())
+    if store is None or adapter_id is None:
+        return None
+    delta = store.delta(adapter_id, layer_id, "o_proj", attn_out, None)
+    return None if delta is None else lora_routing.all_reduce(delta)
+
+
 class Qwen3Attention(nn.Module):
     qkv_proj: ColumnParallelLinear
     o_proj: RowParallelLinear
@@ -177,6 +205,16 @@ class Qwen3Attention(nn.Module):
         mrope_section: list[int] | None = None,
     ) -> torch.Tensor:
         qkv = self.qkv_proj(hidden)
+        # q/k/v deltas land on the fused projection output before the fused
+        # qk-norm+rope, matching PEFT.
+        if lora_routing.slot_active():
+            # Fixed-slot pool + per-token device slot ids, so the delta ops can
+            # live inside the captured graph. Slot 0 is base. q/k/v are packed:
+            # one shrink + one block-diagonal expand per layer keeps the graph
+            # launch-bound instead of 6 GEMMs.
+            dqkv = _slot_qkv_delta(self.layer_id, hidden, self.q_size, self.kv_size)
+            if dqkv is not None:
+                qkv.addcmul_(lora_routing.slot_mask(hidden), dqkv)
 
         if mrope_section is not None and positions.dim() == 2:
             # mRoPE prefill: per-head Q/K RMSNorm (same math as the fused
@@ -223,7 +261,12 @@ class Qwen3Attention(nn.Module):
             )
 
         attn_out = self.attn(q, k, v)
-        return self.o_proj(attn_out)
+        o = self.o_proj(attn_out)
+        if lora_routing.slot_active():
+            do = _slot_o_delta(self.layer_id, attn_out, self.q_size)
+            if do is not None:
+                o.addcmul_(lora_routing.slot_mask(attn_out), do)
+        return o
 
     def load_weights(self, weights: ScopedWeightLoader, context: ParallelLoadContext) -> None:
         load_gqa_fused_attention(self, weights, context, self.cfg.n_kv_heads)

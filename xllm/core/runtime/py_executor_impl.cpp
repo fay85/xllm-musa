@@ -240,6 +240,22 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
   py::object eplb_decode_token_mask =
       optional_tensor(params.expert.eplb_decode_token_mask);
 
+  // LoRA routing for Python-impl models: per-sequence adapter ids and their
+  // q lengths. Empty when the batch is pure base (or LoRA is off).
+  py::object py_adapter_ids = py::none();
+  py::object py_q_seq_lens = py::none();
+  if (!params.adapter_ids.empty()) {
+    py::list adapter_ids;
+    py::list q_seq_lens;
+    for (size_t i = 0; i < params.adapter_ids.size(); ++i) {
+      adapter_ids.append(py::int_(params.adapter_ids[i]));
+      q_seq_lens.append(
+          py::int_(params.get_q_seq_len(static_cast<int32_t>(i))));
+    }
+    py_adapter_ids = adapter_ids;
+    py_q_seq_lens = q_seq_lens;
+  }
+
   py::object py_output = py_executor_.attr("execute")(
       execution_tokens,
       positions_arg,
@@ -255,7 +271,9 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
       params.parallel.draft_load_event_index,
       multimodal_inputs,
       py::arg("sampling_input") = sampling_input,
-      py::arg("mtp_draft_step") = params.meta.mtp_draft_step);
+      py::arg("mtp_draft_step") = params.meta.mtp_draft_step,
+      py::arg("adapter_ids") = py_adapter_ids,
+      py::arg("q_seq_lens") = py_q_seq_lens);
   if (py::isinstance(py_output, py_model_output_type_)) {
     ModelOutput output;
     auto tensor = [&](const char* name) {

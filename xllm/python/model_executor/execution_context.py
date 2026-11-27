@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from xllm.python.lora_routing import slot_graph_enabled
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
 
@@ -76,7 +77,16 @@ class GraphExecutionSupport(Protocol):
 
 
 def can_execute_graph(module: object, inputs: ModelInput) -> bool:
-    """Query an explicit capability; legacy modules keep backend-only admission."""
+    """Query an explicit capability; legacy modules keep backend-only admission.
+
+    LoRA batches are excluded: Python LoRA hooks are not part of a captured
+    graph (replay does not re-run Python), so a batch with any non-zero
+    adapter id must run eager. The fixed-slot path keeps the delta ops
+    graph-resident and reads a per-token device slot id, so admission stays on.
+    """
+    adapter_ids = getattr(inputs, "adapter_ids", None)
+    if adapter_ids and any(adapter_ids) and not slot_graph_enabled():
+        return False
     return not isinstance(module, GraphExecutionSupport) or module.can_execute_graph(inputs)
 
 

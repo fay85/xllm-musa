@@ -20,10 +20,12 @@ limitations under the License.
 #include <folly/futures/Future.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <pybind11/pybind11.h>
 #include <torch/torch.h>
 
 #include <algorithm>
 
+#include "core/framework/config/model_config.h"
 #include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/constraint/deny_machine.h"
 #include "core/framework/constraint/output_rows.h"
@@ -117,6 +119,8 @@ limitations under the License.
 #include "util/utils.h"
 
 #define USE_ASYNC true
+
+namespace py = pybind11;
 
 namespace xllm {
 
@@ -2289,12 +2293,76 @@ bool WorkerImpl::load_lora_adapter(const std::string& lora_name,
   // CPU->device copy fails with aclrtMemcpy 107017 on CANN 8.5).
   // lora_int_id comes from the API process: adopt it verbatim so the
   // name->id binding is identical on every rank (#506 review finding).
+  // Python-impl models keep the weights in the Python slot store: the
+  // C++ runtime only owns id assignment, pinning and rollback there.
+  if (ModelConfig::is_python_model_impl(
+          ModelConfig::get_instance().model_impl())) {
+    py::gil_scoped_acquire gil;
+    py::module_ slots = py::module_::import("xllm.python.lora_slots");
+    // Python models have no C++ consumers; without the fixed-slot store the
+    // weights would land in Python and never reach the model. Fail loudly
+    // instead of returning a 200 no-op.
+    if (!slots.attr("store_mode")().cast<bool>()) {
+      LOG(ERROR) << "Python-impl LoRA requires the fixed-slot store "
+                    "(XLLM_LORA_SLOTS_STORE=1); refusing to load '"
+                 << lora_name << "' as a no-op";
+      return false;
+    }
+    const torch::Device& target = device();
+    const int64_t device_index = target.has_index() ? target.index() : 0;
+    const int32_t max_loras = LoRARuntime::instance().config().max_loras;
+    // Pass the running model's dtype. Letting the Python store default to
+    // bf16 makes fp16/fp32 models load successfully and then fail on their
+    // first adapter batch, when the delta dtype check trips.
+    py::module_ torch_mod = py::module_::import("torch");
+    py::object py_dtype = py::none();
+    switch (dtype()) {
+      case torch::kBFloat16:
+        py_dtype = torch_mod.attr("bfloat16");
+        break;
+      case torch::kFloat16:
+        py_dtype = torch_mod.attr("float16");
+        break;
+      case torch::kFloat32:
+        py_dtype = torch_mod.attr("float32");
+        break;
+      default:
+        break;
+    }
+    try {
+      py::object installer = slots.attr("install_adapter");
+      const bool ok = installer(lora_int_id, lora_path, lora_name, max_loras,
+                                device_index, py_dtype)
+                          .cast<bool>();
+      if (!ok) {
+        LOG(ERROR) << "Python LoRA slot install failed for '" << lora_name
+                   << "' id=" << lora_int_id;
+      }
+      return ok;
+    } catch (const py::error_already_set& error) {
+      LOG(ERROR) << "Python LoRA slot install raised for '" << lora_name
+                 << "': " << error.what();
+      return false;
+    }
+  }
   auto id_opt = LoRARuntime::instance().load_and_activate_hotswap(
       lora_name, lora_path, base_model_name, lora_int_id);
   return id_opt.has_value() && *id_opt == lora_int_id;
 }
 
 bool WorkerImpl::unload_lora_adapter(const std::string& lora_name) {
+  if (ModelConfig::is_python_model_impl(
+          ModelConfig::get_instance().model_impl())) {
+    py::gil_scoped_acquire gil;
+    py::module_ slots = py::module_::import("xllm.python.lora_slots");
+    try {
+      return slots.attr("uninstall_adapter")(py::none(), lora_name).cast<bool>();
+    } catch (const py::error_already_set& error) {
+      LOG(ERROR) << "Python LoRA slot uninstall raised for '" << lora_name
+                 << "': " << error.what();
+      return false;
+    }
+  }
   return LoRARuntime::instance().unload(lora_name);
 }
 

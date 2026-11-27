@@ -3240,7 +3240,16 @@ def _engram_execute_harness(
     graphs = _KeyRecordingDict()
     runner._graphs = graphs
 
-    def fake_allocate_entry(padded_batch_size, input_ids, positions, metadata, input_batch=None, verify_width=1):
+    def fake_allocate_entry(
+        padded_batch_size,
+        input_ids,
+        positions,
+        metadata,
+        input_batch=None,
+        verify_width=1,
+        slot_variant=0,
+        adapter_signature=None,
+    ):
         return SimpleNamespace(
             static_metadata=SimpleNamespace(),
             static_input_ids=input_ids,

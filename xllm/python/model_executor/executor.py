@@ -29,6 +29,11 @@ from xllm.python.attention.backend import (
     normalize_layer_caches,
 )
 from xllm.python.layers.attention import Attention
+from xllm.python.lora_routing import (
+    has_adapter_routing,
+    set_lora_routing,
+    set_slot_active,
+)
 from xllm.python.model_executor.execution_context import (
     LayerCacheAwareExecutionMetadataBuilder,
 )
@@ -545,7 +550,15 @@ class ModelExecutor:
         multimodal_inputs: MultimodalInputs | None = None,
         sampling_input: ModelSamplingInput | None = None,
         mtp_draft_step: int = 0,
+        adapter_ids: list[int] | None = None,
+        q_seq_lens: list[int] | None = None,
     ) -> ModelExecutionOutput:
+        set_lora_routing(adapter_ids, q_seq_lens)
+        # Eager/prefill never replay a captured graph, so the per-variant flag
+        # the decode runner sets is not enough: without this, prefill would
+        # compute (and write KV) from base weights while decode applies the
+        # delta. The graph runner still overrides this per variant.
+        set_slot_active(has_adapter_routing())
         if not self._kv_bound:
             raise RuntimeError("KV caches are not bound")
         if multimodal_inputs is not None and input_embedding is not None:
@@ -610,6 +623,8 @@ class ModelExecutor:
             input_batch=input_batch,
             layer_load_context=layer_load_context,
             multimodal_inputs=multimodal_inputs,
+            adapter_ids=adapter_ids,
+            q_seq_lens=q_seq_lens,
         )
         if (
             self._static_kernel is not None

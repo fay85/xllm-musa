@@ -37,6 +37,7 @@ limitations under the License.
 #include "core/framework/state_dict/state_dict.h"
 #include "core/util/pybind_helper.h"
 #include "core/util/utils.h"
+#include "models/llm/lora_bootstrap.h"
 #include "models/py_model_helper.h"
 
 #if defined(USE_NPU)
@@ -507,6 +508,11 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
               << KernelConfig::get_instance().quantized_all_reduce_min_numel();
   }
 #endif
+
+  // Python models do not pass through the C++ CausalLM base ctors, so arm the
+  // LoRA runtime (registry + hot-swap executor) here. No-op unless
+  // --enable_lora is set; the Python side reads the same adapter ids.
+  bootstrap_lora_runtime(context);
 }
 
 PyCausalLM::~PyCausalLM() {
