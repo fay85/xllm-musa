@@ -25,29 +25,34 @@ import triton
 import triton.language as tl
 
 
-@triton.jit
+@triton.jit(do_not_specialize=["rows"])
 def _quantize_rows(
     x,
     codes,
     scales,
-    ROWS: tl.constexpr,
+    rows,
     WIDTH: tl.constexpr,
     BLOCK_ROWS: tl.constexpr,
 ):
     row = tl.program_id(0) * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)
     column = tl.arange(0, WIDTH)
-    value = tl.load(x + row[:, None] * WIDTH + column[None, :], row[:, None] < ROWS, 0).to(tl.float32)
+    valid_row = row < rows
+    value = tl.load(x + row[:, None] * WIDTH + column[None, :], valid_row[:, None], 0).to(tl.float32)
     maximum = tl.max(tl.abs(value), 1)
     # Preserve the intermediate FP16 scale before normalizing the input.
     scale = tl.maximum((maximum / 127.0).to(tl.float16).to(tl.float32), 2.0**-24)
     rounded = tl.extra.cann.libdevice.nearbyint(value / scale[:, None])
     result = tl.minimum(tl.maximum(rounded, -127.0), 127.0).to(tl.int8)
-    tl.store(codes + row[:, None] * WIDTH + column[None, :], result, row[:, None] < ROWS)
-    tl.store(scales + row, scale.to(tl.float16), row < ROWS)
+    tl.store(codes + row[:, None] * WIDTH + column[None, :], result, valid_row[:, None])
+    tl.store(scales + row, scale.to(tl.float16), valid_row)
 
 
 def quantize_indexer_rows_int8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Quantize contiguous BF16 [..., 128] rows with graph-stable shapes."""
+    """Quantize contiguous BF16 [..., 128] rows with graph-stable shapes.
+
+    The launch grid follows the actual row count. Row counts share a compiled
+    kernel within each tile size; the small and large tiles compile separately.
+    """
     if x.device.type != "npu" or x.dtype != torch.bfloat16 or x.ndim < 2:
         raise ValueError("Expected an NPU BF16 matrix or batch of matrices")
     if not x.is_contiguous() or x.size(-1) != 128:
@@ -58,6 +63,6 @@ def quantize_indexer_rows_int8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Ten
     if rows:
         block_rows = 4 if rows <= 256 else 32
         _quantize_rows[(triton.cdiv(rows, block_rows),)](
-            x, codes, scales, ROWS=rows, WIDTH=128, BLOCK_ROWS=block_rows, enable_fp_fusion=False
+            x, codes, scales, rows, WIDTH=128, BLOCK_ROWS=block_rows, enable_fp_fusion=False
         )
     return codes, scales

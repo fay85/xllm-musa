@@ -157,6 +157,43 @@ def _store_fused_pools_kernel(
     )
 
 
+@triton.jit
+def _update_small_fused_tail(
+    keys_ptr,
+    gates_ptr,
+    positions_ptr,
+    tail_valid_ptr,
+    first_row,
+    query_len,
+    write_id,
+    dims,
+    dim_valid,
+    tail_rows,
+    keys,
+    gates,
+    HEAD_DIM: tl.constexpr,
+    TAIL_CAPACITY: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    stash_rows: tl.constexpr = BLOCK_Q if BLOCK_Q <= TAIL_CAPACITY else TAIL_CAPACITY
+    stash_start = tl.maximum(0, query_len - TAIL_CAPACITY) if BLOCK_Q > TAIL_CAPACITY else 0
+    last_position = tl.full((), -1, tl.int64)
+    for offset in tl.static_range(stash_rows):
+        row = stash_start + offset
+        if BLOCK_Q == 4 and offset == 3:
+            row = tl.minimum(row, query_len - 1)
+        position = tl.load(positions_ptr + first_row + row).to(tl.int64)
+        valid = tl.load(tail_valid_ptr + first_row + row).to(tl.int1)
+        if TAIL_CAPACITY >= BLOCK_Q:
+            last_position = tl.maximum(last_position, tl.where(valid, position, -1))
+        current_keys = tl.load(keys_ptr + (first_row + row) * HEAD_DIM + dims, dim_valid, other=0)
+        current_gates = tl.load(gates_ptr + (first_row + row) * HEAD_DIM + dims, dim_valid, other=0)
+        replace = (write_id > 0) & (position >= 0) & (tail_rows[:, None] == position % TAIL_CAPACITY)
+        keys = tl.where(replace, tl.where(valid, current_keys, 0)[None, :], keys)
+        gates = tl.where(replace, tl.where(valid, current_gates, float("-inf"))[None, :], gates)
+    return keys, gates, last_position
+
+
 @triton.jit(
     do_not_specialize=[
         "keys_ptr",
@@ -213,7 +250,8 @@ def _store_fused_kpool_kernel(
     request = tl.program_id(0)
     dims = tl.arange(0, BLOCK_D)
     dim_valid = dims < HEAD_DIM
-    first_row = request * QUERY_LEN
+    query_len = BLOCK_Q if BLOCK_Q <= 2 else QUERY_LEN
+    first_row = request * query_len
     read_id = tl.load(read_ids_ptr + request).to(tl.int64)
     write_id = tl.load(write_ids_ptr + request).to(tl.int64)
     read_id = tl.minimum(tl.maximum(read_id, 0), NUM_TAIL_SLOTS - 1)
@@ -223,7 +261,7 @@ def _store_fused_kpool_kernel(
     # Write slots belong to one request. Read slots may alias other requests'
     # write slots; out-of-place restores read the batch snapshot instead.
     if SMALL_QUERY:
-        for pool in tl.static_range((8 + RATE - 1) // RATE):
+        for pool in tl.static_range((BLOCK_Q + RATE - 1) // RATE):
             _store_fused_pool(
                 valid_ptr,
                 positions_ptr,
@@ -242,7 +280,7 @@ def _store_fused_kpool_kernel(
                 TABLE_REQUEST_STRIDE,
                 TAIL_CAPACITY,
                 POOLED_ROWS,
-                QUERY_LEN,
+                query_len,
                 RATE,
                 HEAD_DIM,
                 BLOCK_D,
@@ -260,27 +298,47 @@ def _store_fused_kpool_kernel(
     gates = tl.load(read_tail_ptr + base + TAIL_CAPACITY * HEAD_DIM, tail_mask, other=float("-inf")).to(tl.float32)
     # Select the last current token for each ring row in registers. Padded
     # rows never write, even when their clamped position aliases a live row.
-    for offset in range(tl.maximum(0, QUERY_LEN - TAIL_CAPACITY), QUERY_LEN):
-        position = tl.load(positions_ptr + first_row + offset).to(tl.int64)
-        valid = tl.load(tail_valid_ptr + first_row + offset).to(tl.int1)
-        current_keys = tl.load(keys_ptr + (first_row + offset) * HEAD_DIM + dims, dim_valid, other=0)
-        current_gates = tl.load(gates_ptr + (first_row + offset) * HEAD_DIM + dims, dim_valid, other=0)
-        replace = (write_id > 0) & (position >= 0) & (tail_rows[:, None] == position % TAIL_CAPACITY)
-        keys = tl.where(replace, tl.where(valid, current_keys, 0)[None, :], keys)
-        gates = tl.where(replace, tl.where(valid, current_gates, float("-inf"))[None, :], gates)
+    if BLOCK_Q <= 4:
+        keys, gates, last_position = _update_small_fused_tail(
+            keys_ptr,
+            gates_ptr,
+            positions_ptr,
+            tail_valid_ptr,
+            first_row,
+            query_len,
+            write_id,
+            dims,
+            dim_valid,
+            tail_rows,
+            keys,
+            gates,
+            HEAD_DIM,
+            TAIL_CAPACITY,
+            BLOCK_Q,
+        )
+    else:
+        for offset in range(tl.maximum(0, query_len - TAIL_CAPACITY), query_len):
+            position = tl.load(positions_ptr + first_row + offset).to(tl.int64)
+            valid = tl.load(tail_valid_ptr + first_row + offset).to(tl.int1)
+            current_keys = tl.load(keys_ptr + (first_row + offset) * HEAD_DIM + dims, dim_valid, other=0)
+            current_gates = tl.load(gates_ptr + (first_row + offset) * HEAD_DIM + dims, dim_valid, other=0)
+            replace = (write_id > 0) & (position >= 0) & (tail_rows[:, None] == position % TAIL_CAPACITY)
+            keys = tl.where(replace, tl.where(valid, current_keys, 0)[None, :], keys)
+            gates = tl.where(replace, tl.where(valid, current_gates, float("-inf"))[None, :], gates)
 
     offsets = tl.arange(0, BLOCK_Q)
     # Like va, inspect the query end first: request positions are ordered and
     # the last valid tile contains the final position. Only padding requires
     # another tile. Keep UB bounded instead of reducing the whole query.
-    last_position = tl.full((), -1, tl.int64)
-    tile_end = QUERY_LEN
-    while (tile_end > 0) & (last_position < 0):
-        rows = tl.maximum(0, tile_end - BLOCK_Q) + offsets
-        positions = tl.load(positions_ptr + first_row + rows, rows < tile_end, other=-1).to(tl.int64)
-        tile_valid = tl.load(tail_valid_ptr + first_row + rows, rows < tile_end, other=0).to(tl.int1)
-        last_position = tl.max(tl.where(tile_valid & (positions >= 0), positions, -1), 0)
-        tile_end = tl.maximum(0, tile_end - BLOCK_Q)
+    if BLOCK_Q > 4 or TAIL_CAPACITY < BLOCK_Q:
+        last_position = tl.full((), -1, tl.int64)
+        tile_end = query_len
+        while (tile_end > 0) & (last_position < 0):
+            rows = tl.maximum(0, tile_end - BLOCK_Q) + offsets
+            positions = tl.load(positions_ptr + first_row + rows, rows < tile_end, other=-1).to(tl.int64)
+            tile_valid = tl.load(tail_valid_ptr + first_row + rows, rows < tile_end, other=0).to(tl.int1)
+            last_position = tl.max(tl.where(tile_valid & (positions >= 0), positions, -1), 0)
+            tile_end = tl.maximum(0, tile_end - BLOCK_Q)
     end = last_position + 1
     remainder = end % RATE
     pool_start = end - remainder
@@ -313,7 +371,11 @@ def store_fused_kpool(
     *,
     read_tail_cache: torch.Tensor | None = None,
 ) -> None:
-    """Persist uniform queries, retaining CANN's exact FP32 tail."""
+    """Persist uniform queries, retaining CANN's exact FP32 tail.
+
+    Prefill query lengths share a binary per power-of-two scan tile, capped at 256.
+    Keep the smaller scan tiles for decode.
+    """
     if len(fused_states) == 1:
         pooled = fused_states[0][0].unsqueeze(0).contiguous()
         states = fused_states[0][1].unsqueeze(0).contiguous()
@@ -324,6 +386,7 @@ def store_fused_kpool(
     snapshot_tail_io = read_tail_cache is not None
     read_tail_cache = tail_cache if read_tail_cache is None else read_tail_cache
     requests = len(fused_states)
+    block_q = min(256, triton.next_power_of_2(query_len))
     if block_table.ndim != 2 or block_table.shape[0] not in (requests, requests * query_len):
         raise ValueError("kPool block table must have one row per request or query token")
     table_stride = block_table.stride(0) * (query_len if block_table.shape[0] != requests else 1)
@@ -376,7 +439,7 @@ def store_fused_kpool(
         HEAD_DIM=head_dim,
         BLOCK_D=triton.next_power_of_2(head_dim),
         BLOCK_TAIL=triton.next_power_of_2(tail_cache.shape[2]),
-        BLOCK_Q=min(256, triton.next_power_of_2(query_len)),
+        BLOCK_Q=block_q,
         SMALL_QUERY=query_len <= 8,
         DISTINCT_TAIL_IO=tail_read_ids is not tail_write_ids,
     )

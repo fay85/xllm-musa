@@ -31,6 +31,87 @@ from xllm.python.models.glm5_next_kpool import (  # noqa: E402
 )
 
 
+@torch.inference_mode()
+def test_fused_kpool_store_reuses_kernels_within_prefill_length_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
+    if not torch.npu.is_available():
+        pytest.skip("requires an NPU")
+    from xllm.python.kernels_npu.triton import kpool_compress
+
+    torch.npu.set_device(0)
+    torch.manual_seed(42)
+    launches: dict[str, list[object]] = {}
+
+    def track_launch(name: str) -> None:
+        kernel = getattr(kpool_compress, name)
+        launch = kernel.run
+        compiled_kernels: list[object] = []
+        launches[name] = compiled_kernels
+
+        def record_launch(*args: torch.Tensor, **kwargs: object) -> object:
+            compiled = launch(*args, **kwargs)
+            assert compiled is not None
+            compiled_kernels.append(compiled)
+            return compiled
+
+        monkeypatch.setattr(kernel, "run", record_launch)
+
+    track_launch("_store_fused_pools_kernel")
+    track_launch("_store_fused_kpool_kernel")
+    head_dim, rate, page_size = 128, 4, 16
+    ids = torch.tensor([1], dtype=torch.int32, device="npu")
+    ape = torch.zeros(rate, head_dim, device="npu")
+    query_lengths = (16384, 576, 13, 15, 17, 25, 37, 63, 65, 97, 1, 2, 3, 4, 5, 8)
+    for query_len in query_lengths:
+        raw = torch.randn(query_len, head_dim, device="npu")
+        gates = torch.randn_like(raw)
+        valid = torch.ones(query_len, dtype=torch.bool, device="npu")
+        positions = torch.arange(3, query_len + 3, device="npu")
+        pool_count = (query_len + rate - 1) // rate
+        pages = (pool_count + page_size - 1) // page_size
+        table = torch.arange(1, pages + 1, device="npu", dtype=torch.int32).unsqueeze(0)
+        cache = torch.zeros(257, page_size, 1, head_dim, dtype=torch.bfloat16, device="npu")
+        tail_capacity = 5 if query_len in (2, 5, 8) else 9
+        tail = torch.randn(2, 2, tail_capacity, head_dim, device="npu")
+        states = [
+            (
+                torch.randn(pool_count, head_dim, dtype=torch.bfloat16, device="npu"),
+                torch.randn(2, rate, head_dim, device="npu"),
+            )
+        ]
+        expected_cache, expected_tail = cache.clone(), tail.clone()
+        _store_compressed_kpool_torch(
+            raw,
+            gates,
+            valid,
+            valid,
+            positions,
+            expected_cache,
+            expected_tail,
+            ids,
+            ids,
+            table,
+            [query_len],
+            ape,
+            rate,
+            fused_states=states,
+        )
+        kpool_compress.store_fused_kpool(
+            raw, gates, valid, valid, positions, cache, tail, ids, ids, table, query_len, rate, states
+        )
+        torch.testing.assert_close(cache, expected_cache, rtol=0, atol=0)
+        torch.testing.assert_close(tail, expected_tail, rtol=0, atol=0)
+
+    pool_launches = launches["_store_fused_pools_kernel"]
+    assert len(pool_launches) == 10
+    assert all(kernel is pool_launches[0] for kernel in pool_launches)
+
+    tail_launches = launches["_store_fused_kpool_kernel"]
+    assert len(tail_launches) == len(query_lengths)
+    for first in (0, 2, 4, 6, 8, 12, 14):
+        assert tail_launches[first] is tail_launches[first + 1]
+    assert len({id(kernel) for kernel in tail_launches}) == 9
+
+
 @pytest.mark.parametrize(
     "query_lens,prefix_lens",
     [((16384,), (0,)), ((16384,), (3,)), ((1, 16383), (16383, 0))],

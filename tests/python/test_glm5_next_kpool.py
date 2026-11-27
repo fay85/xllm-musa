@@ -809,24 +809,25 @@ def test_indexer_kpool_fp32_parameters_refresh_without_replacing_graph_storage()
 
 
 @pytest.mark.skipif(not os.getenv("XLLM_KDA_TEST_NPU_DEVICE"), reason="NPU device not configured")
+@pytest.mark.parametrize("width,tail_capacity", [(2, 5), (4, 9), (8, 11)])
 @torch.inference_mode()
-def test_fp32_tail_store_preserves_native_dtype_gate_rows_on_graph_replay() -> None:
+def test_fp32_tail_store_preserves_native_dtype_gate_rows_on_graph_replay(width: int, tail_capacity: int) -> None:
     pytest.importorskip("torch_npu")
     from xllm.python.kernels_npu.triton.kpool_compress import store_fused_kpool
 
     device = torch.device(os.environ["XLLM_KDA_TEST_NPU_DEVICE"])
     torch.npu.set_device(device)
     torch.manual_seed(42)
-    rows, width, rate, head_dim = 2, 8, 4, 128
+    rows, rate, head_dim = 2, 4, 128
     raw_k = torch.randn(rows * width, head_dim, device=device)
     gates = torch.randn(rows * width, head_dim, device=device, dtype=torch.bfloat16)
     valid = torch.ones(rows * width, device=device, dtype=torch.bool)
     valid[0] = False
     valid[-1] = False
-    positions = torch.cat((torch.arange(117, 125), torch.arange(120, 128))).to(device)
+    positions = torch.cat((torch.arange(117, 117 + width), torch.arange(120, 120 + width))).to(device)
     ids = torch.tensor([1, 2], device=device, dtype=torch.int32)
     table = torch.tensor([[0, 1, 2, 3], [2, 3, 0, 1]], device=device, dtype=torch.int32)
-    initial_tail = torch.randn(3, 2, rate + width - 1, head_dim, device=device)
+    initial_tail = torch.randn(3, 2, tail_capacity, head_dim, device=device)
     expected_tail, actual_tail = initial_tail.clone(), initial_tail.clone()
     expected_cache = torch.zeros(4, 4, 1, head_dim, device=device, dtype=torch.bfloat16)
     actual_cache = torch.zeros_like(expected_cache)
