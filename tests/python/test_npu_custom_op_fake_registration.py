@@ -24,13 +24,20 @@ start; graph capture through a genuinely missing operator keeps failing.
 
 from __future__ import annotations
 
+import ast
+import os
+import re
+import subprocess
+import sys
 import warnings
+from pathlib import Path
 
 import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from xllm.python.kernels_npu import _custom_op, sparse_attention
+from xllm.python.kernels_npu.kda import kda_replayssm_correction_fold, kda_replayssm_verify_record
 
 
 def test_register_fake_missing_operator_with_namespace_warns_and_skips(
@@ -236,3 +243,98 @@ def test_stable_resident_wrapper_preserves_reserved_payload_and_fake_aliases(
         assert args[14] is host_rope
         assert args[16].shape == (capacity * (width // page), page, 1, 64)
         assert args[17].shape == args[18].shape == (rows, 1, width)
+
+
+def _check_replayssm_fake_dispatch(*, require_native: bool = False) -> None:
+    specifications = (
+        (
+            "kda_replayssm_verify_record",
+            _custom_op._kda_replayssm_verify_record_fake,
+            ("normalized_keys", "corrections", "decays"),
+        ),
+        ("kda_replayssm_correction_fold", _custom_op._kda_replayssm_correction_fold_fake, ("states",)),
+    )
+    native = (
+        require_native
+        or _custom_op._loaded_xllm_ops_runtime()
+        or any(hasattr(torch.ops.xllm_ops, name) for name, _, _ in specifications)
+    )
+    if not native:
+        source_path = Path(__file__).resolve().parents[2] / "xllm/core/kernels/npu/npu_ops_library.cpp"
+        source = source_path.read_text(encoding="utf-8")
+    with torch.library._scoped_library("xllm_ops", "FRAGMENT") as library, FakeTensorMode():
+        for name, fake_impl, written in specifications:
+            qualified = f"xllm_ops::{name}"
+            if native:
+                assert torch._C._dispatch_has_kernel_for_dispatch_key(qualified, "PrivateUse1"), qualified
+            else:
+                definition = re.search(rf'm\.def\(\s*("{name}\([^;]+?)\s*\);', source)
+                assert definition is not None
+                schema_text = "".join(
+                    ast.literal_eval(literal) for literal in re.findall(r'"[^"]*"', definition.group(1))
+                )
+                library.define(schema_text)
+                torch.library.register_fake(qualified, fake_impl, lib=library)
+            assert torch._C._dispatch_has_kernel_for_dispatch_key(qualified, "Meta"), qualified
+            schema = getattr(torch.ops.xllm_ops, name).default._schema
+            assert tuple(arg.name for arg in schema.arguments if arg.alias_info and arg.alias_info.is_write) == written
+            if name == "kda_replayssm_correction_fold":
+                assert "Tensor(a!)[] states" in str(schema)
+
+        query = torch.empty((16, 3, 8, 128), dtype=torch.bfloat16)[:, 0]
+        state = torch.empty((4, 8, 128, 128), dtype=torch.float32)
+        records = [torch.empty((4, 8, 8, 128), dtype=torch.float32) for _ in range(3)]
+        indices = torch.empty(2, dtype=torch.int32)
+        output = kda_replayssm_verify_record(
+            query,
+            query,
+            query,
+            query.contiguous(),
+            torch.empty((16, 8), dtype=torch.bfloat16),
+            state,
+            torch.empty(8),
+            torch.empty(8 * 128),
+            indices,
+            *records,
+        )
+        assert output.shape == query.shape
+        assert output.dtype == query.dtype
+        assert output.device == query.device
+        assert output.is_contiguous()
+        assert kda_replayssm_correction_fold([state], *([record] for record in records), indices, indices) is None
+
+
+def test_replayssm_schemas_dispatch_with_fake_tensors() -> None:
+    library_path = os.environ.get("XLLM_REPLAYSSM_FOLD_RUNTIME_TEST_LIBRARY") or os.environ.get("XLLM_EXPORT_PATH")
+    if not library_path:
+        _check_replayssm_fake_dispatch()
+        return
+
+    # Runtime initialization assumes that native schemas are loaded before
+    # _custom_op is first imported. Pytest collection may have imported it.
+    script = """
+import runpy
+import sys
+
+import torch
+import torch_npu
+
+torch.ops.load_library(sys.argv[1])
+if hasattr(torch.ops.xllm_ops, "rms_norm"):
+    from xllm.python.kernels_npu import _initialize_runtime
+
+    _initialize_runtime()
+else:
+    # An operator-only test library supplies just the ReplaySSM schemas.
+    from xllm.python.kernels_npu import _custom_op
+
+runpy.run_path(sys.argv[2])["_check_replayssm_fake_dispatch"](require_native=True)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, library_path, str(Path(__file__).resolve())],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

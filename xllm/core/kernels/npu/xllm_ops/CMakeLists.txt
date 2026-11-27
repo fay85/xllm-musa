@@ -9,6 +9,7 @@ cc_library(
   SRCS
     replace_token.cpp
     dsa_kv_offloading.cpp
+    kda_replayssm.cpp
     laser_attention.cpp
     mtp_prepare_next_draft.cpp
     top_k_top_p.cpp

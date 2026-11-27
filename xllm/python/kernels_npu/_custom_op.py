@@ -1418,6 +1418,37 @@ def _sfa_dcp_remap_out_fake(
     return out
 
 
+def _kda_replayssm_verify_record_fake(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    state: torch.Tensor,
+    a_log: torch.Tensor,
+    dt_bias: torch.Tensor,
+    state_indices: torch.Tensor,
+    normalized_keys: torch.Tensor,
+    corrections: torch.Tensor,
+    decays: torch.Tensor,
+    scale: float,
+) -> torch.Tensor:
+    del key, value, gate, beta, state, a_log, dt_bias, state_indices
+    del normalized_keys, corrections, decays, scale
+    return query.new_empty(query.shape)
+
+
+def _kda_replayssm_correction_fold_fake(
+    states: list[torch.Tensor],
+    normalized_keys: list[torch.Tensor],
+    corrections: list[torch.Tensor],
+    decays: list[torch.Tensor],
+    state_indices: torch.Tensor,
+    accepted_lengths: torch.Tensor,
+) -> None:
+    del states, normalized_keys, corrections, decays, state_indices, accepted_lengths
+
+
 register_fake("xllm_ops::rms_norm", _rms_norm_fake)
 register_fake("xllm_ops::rms_norm_gated", _rms_norm_gated_fake)
 register_fake("xllm_ops::fused_add_gemma_rms_norm", _fused_add_gemma_rms_norm_fake)
@@ -1557,3 +1588,5 @@ register_fake(
     "xllm_ops::dsa_kv_offloading_update_rope_with_plan_out", _dsa_kv_offloading_update_rope_with_plan_out_fake
 )
 register_fake("xllm_ops::dsa_kv_offloading_serve_rope_planned_out", _dsa_kv_offloading_serve_rope_planned_out_fake)
+register_fake("xllm_ops::kda_replayssm_verify_record", _kda_replayssm_verify_record_fake)
+register_fake("xllm_ops::kda_replayssm_correction_fold", _kda_replayssm_correction_fold_fake)

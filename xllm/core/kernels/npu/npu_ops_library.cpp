@@ -869,6 +869,17 @@ TORCH_LIBRARY(xllm_ops, m) {
       "ori_win_right=-1, "
       "str layout_q='BSND', str layout_kv='BSND', int topk_value_mode=1, "
       "bool return_softmax_lse=False) -> (Tensor, Tensor)");
+  m.def(
+      "kda_replayssm_verify_record(Tensor query, Tensor key, Tensor value, "
+      "Tensor gate, Tensor beta, Tensor state, Tensor a_log, Tensor dt_bias, "
+      "Tensor state_indices, Tensor(a!) normalized_keys, Tensor(b!) "
+      "corrections, "
+      "Tensor(c!) decays, float scale) -> Tensor");
+  m.def(
+      "kda_replayssm_correction_fold(Tensor(a!)[] states, Tensor[] "
+      "normalized_keys, "
+      "Tensor[] corrections, Tensor[] decays, Tensor state_indices, "
+      "Tensor accepted_lengths) -> ()");
   m.def("rms_norm(Tensor input, Tensor weight, float eps) -> Tensor");
   m.def(
       "rms_norm_gated(Tensor input, Tensor gate, Tensor weight, float eps) -> "
@@ -1202,6 +1213,10 @@ TORCH_LIBRARY_IMPL(xllm_ops, PrivateUse1, m) {
          TORCH_FN(xllm::kernel::npu::dsa_kv_offloading_serve_rope_planned_out));
 
   m.impl("smla_va", TORCH_FN(xllm::kernel::npu::smla_va));
+  m.impl("kda_replayssm_verify_record",
+         TORCH_FN(xllm::kernel::npu::kda_replayssm_verify_record));
+  m.impl("kda_replayssm_correction_fold",
+         TORCH_FN(xllm::kernel::npu::kda_replayssm_correction_fold));
   m.impl("rms_norm", TORCH_FN(xllm::rms_norm_npu));
   m.impl("rms_norm_gated", TORCH_FN(xllm::rms_norm_gated_npu));
   m.impl("fused_add_gemma_rms_norm",

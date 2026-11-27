@@ -32,6 +32,34 @@ limitations under the License.
 #include <vector>
 
 namespace xllm::kernel::npu {
+
+// Verify eight tokens per request on Ascend 910_93, with eight heads of
+// dimension 128. This writes the record banks and reads the committed state.
+// Each live state index must be unique. Use -1 for padded rows.
+torch::Tensor kda_replayssm_verify_record(const torch::Tensor& query,
+                                          const torch::Tensor& key,
+                                          const torch::Tensor& value,
+                                          const torch::Tensor& gate,
+                                          const torch::Tensor& beta,
+                                          const torch::Tensor& state,
+                                          const torch::Tensor& a_log,
+                                          const torch::Tensor& dt_bias,
+                                          const torch::Tensor& state_indices,
+                                          torch::Tensor& normalized_keys,
+                                          torch::Tensor& corrections,
+                                          torch::Tensor& decays,
+                                          double scale);
+
+// Apply the accepted prefix in place across layers. Each request must select
+// a distinct live slot. Nonpositive lengths and invalid slots are ignored.
+void kda_replayssm_correction_fold(
+    const std::vector<torch::Tensor>& states,
+    const std::vector<torch::Tensor>& normalized_keys,
+    const std::vector<torch::Tensor>& corrections,
+    const std::vector<torch::Tensor>& decays,
+    const torch::Tensor& state_indices,
+    const torch::Tensor& accepted_lengths);
+
 inline constexpr int64_t kDsaMetadataBufferElements = 1024;
 
 namespace op_infer {
