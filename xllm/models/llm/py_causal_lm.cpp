@@ -572,6 +572,8 @@ py::dict PyCausalLM::build_config_dict(
   }
   d["enable_eplb"] = EPLBConfig::get_instance().enable_eplb();
   d["use_ctc"] = MultimodalConfig::get_instance().use_ctc();
+  d["enable_mm_encoder_dp"] =
+      MultimodalConfig::get_instance().enable_mm_encoder_dp();
   d["redundant_experts_num"] =
       EPLBConfig::get_instance().redundant_experts_num();
   d["eplb_use_decode_only_load"] =

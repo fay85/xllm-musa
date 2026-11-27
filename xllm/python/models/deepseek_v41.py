@@ -57,7 +57,7 @@ from __future__ import annotations
 import json
 import os
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass, field, replace
@@ -70,7 +70,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from scripts.logger import logger
-from xllm.python import kernels
+from xllm.python import distributed, kernels
 from xllm.python.distributed import (
     engram_all_gather_object,
     engram_barrier,
@@ -136,6 +136,10 @@ from xllm.python.models.swa_bounded_replay import (
     run_swa_bounded_consumers,
     should_run_swa_bounded_replay,
     validate_swa_bounded_replay,
+)
+from xllm.python.models.vision_parallel import (
+    all_gather_variable_rows,
+    lpt_item_assignment,
 )
 from xllm.python.models.weight_utils import W8A8WeightLoader
 from xllm.python.npu_streams import shared_expert_stream
@@ -3977,8 +3981,10 @@ class _PlainRotaryEmbedding(nn.Module):
 # Ported from the vllm DSV4 vision reference
 # (vllm/models/deepseek_v4/common/vision.py): patch-embed → bidirectional ViT
 # with 2D RoPE (theta 10000) → spatial-merge aligner projecting vision features
-# back to the language width. The tower + aligner are replicated across TP ranks
-# (no sharding) and are bf16 (not quantized) in both the fp8 and ascend exports.
+# back to the language width. Patch-embed, norms and the aligner stay
+# replicated; encoder TP shards heads/intermediate rows and encoder DP splits
+# media items across the TP group. The tower is bf16 (not quantized) in both
+# the fp8 and ascend exports.
 # Sentinel injection is handled by ``prepare_multimodal_inputs`` via
 # ``merge_multimodal_embeddings`` once ``encode_multimodal`` has produced rows.
 
@@ -3996,10 +4002,38 @@ class DeepseekV41VisionConfig:
     downsample_ratio: int = 3
     head_dim: int = 64
     norm_eps: float = 1e-6
+    tp_size: int = 1
+    tp_rank: int = 0
+    encoder_parallel: str = "replicated"
 
     @property
     def enabled(self) -> bool:
         return self.n_layers > 0 and self.hidden_size > 0 and self.num_heads > 0
+
+    def validate(self) -> None:
+        """Reject parallel layouts the tower cannot shard exactly."""
+        if self.encoder_parallel not in ("replicated", "dp", "tp"):
+            raise ValueError(
+                f"DeepSeek-V4.1 vision encoder_parallel must be replicated, dp or tp, got {self.encoder_parallel}"
+            )
+        if self.tp_size < 1 or not 0 <= self.tp_rank < self.tp_size:
+            raise ValueError(f"DeepSeek-V4.1 vision TP rank/size is invalid: {self.tp_rank}/{self.tp_size}")
+        if self.encoder_parallel != "tp" or self.tp_size == 1:
+            return
+        if self.hidden_size != self.num_heads * self.head_dim:
+            raise ValueError(
+                "DeepSeek-V4.1 vision hidden size must equal num_heads * head_dim "
+                f"for encoder TP: {self.hidden_size} != {self.num_heads} * {self.head_dim}"
+            )
+        if self.num_heads % self.tp_size:
+            raise ValueError(
+                f"DeepSeek-V4.1 vision heads {self.num_heads} are not divisible by encoder tp_size {self.tp_size}"
+            )
+        if self.intermediate_size % self.tp_size:
+            raise ValueError(
+                f"DeepSeek-V4.1 vision intermediate size {self.intermediate_size} is not "
+                f"divisible by encoder tp_size {self.tp_size}"
+            )
 
     @classmethod
     def from_dict(cls, config: dict) -> DeepseekV41VisionConfig:
@@ -4017,6 +4051,7 @@ class DeepseekV41VisionConfig:
         hidden = int(pick("mm_hidden_size", "hidden_size", 1024))
         heads = int(pick("mm_num_attention_heads", "num_attention_heads", 16))
         head_dim = int(pick("mm_head_dim", "head_dim", 0)) or (hidden // heads if heads else 0)
+        encoder_dp = bool(config.get("enable_mm_encoder_dp", False))
         return cls(
             n_layers=int(pick("mm_num_hidden_layers", "num_hidden_layers", 0)),
             hidden_size=hidden,
@@ -4028,6 +4063,9 @@ class DeepseekV41VisionConfig:
             rope_theta=float(pick("mm_rope_theta", "rope_theta", 10000.0)),
             downsample_ratio=int(pick("mm_downsample_ratio", "downsample_ratio", 3)),
             head_dim=head_dim,
+            tp_size=int(config.get("tp_size", 1)),
+            tp_rank=int(config.get("tp_rank", 0)),
+            encoder_parallel="dp" if encoder_dp else "tp",
         )
 
 
@@ -4078,10 +4116,15 @@ def _vision_cos_sin_batch(
 class DeepseekV41VisionAttention(nn.Module):
     def __init__(self, cfg: DeepseekV41VisionConfig, dtype: torch.dtype, device: torch.device) -> None:
         super().__init__()
-        self.num_heads = cfg.num_heads
+        # Encoder TP keeps one attention-head slice per rank; the replicated
+        # path (and tp_size == 1) owns every head and skips the reduction.
+        self.tp_size = cfg.tp_size if cfg.encoder_parallel == "tp" else 1
+        self.num_heads = cfg.num_heads // self.tp_size
         self.head_dim = cfg.head_dim
-        self.wqkv = nn.Linear(cfg.hidden_size, 3 * cfg.num_heads * cfg.head_dim, bias=True, dtype=dtype, device=device)
-        self.wo = nn.Linear(cfg.num_heads * cfg.head_dim, cfg.hidden_size, bias=True, dtype=dtype, device=device)
+        self.wqkv = nn.Linear(
+            cfg.hidden_size, 3 * self.num_heads * self.head_dim, bias=True, dtype=dtype, device=device
+        )
+        self.wo = nn.Linear(self.num_heads * self.head_dim, cfg.hidden_size, bias=True, dtype=dtype, device=device)
 
     def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, actual_seq: list[int]) -> torch.Tensor:
         n = x.size(0)
@@ -4101,18 +4144,32 @@ class DeepseekV41VisionAttention(nn.Module):
             scale=self.head_dim**-0.5,
             input_layout="TND",
         )
-        return self.wo(o.reshape(n, -1))
+        o = o.reshape(n, -1)
+        if self.tp_size == 1:
+            return self.wo(o)
+        # Row-parallel projection: sum the per-head partials, then add the
+        # replicated bias once (mirrors RowParallelLinear::forward_reduce).
+        out = F.linear(o, self.wo.weight)
+        distributed.tp_all_reduce(out)
+        return out + self.wo.bias
 
 
 class DeepseekV41VisionMLP(nn.Module):
     def __init__(self, cfg: DeepseekV41VisionConfig, dtype: torch.dtype, device: torch.device) -> None:
         super().__init__()
         # w1 is the fused gate|up projection (checkpoint shape [2*inter, hidden]).
-        self.w1 = nn.Linear(cfg.hidden_size, 2 * cfg.intermediate_size, bias=False, dtype=dtype, device=device)
-        self.w2 = nn.Linear(cfg.intermediate_size, cfg.hidden_size, bias=False, dtype=dtype, device=device)
+        # Encoder TP shards the intermediate dim, so each rank owns [2*inter/tp]
+        # rows (gate and up halves of the same slice).
+        self.tp_size = cfg.tp_size if cfg.encoder_parallel == "tp" else 1
+        intermediate = cfg.intermediate_size // self.tp_size
+        self.w1 = nn.Linear(cfg.hidden_size, 2 * intermediate, bias=False, dtype=dtype, device=device)
+        self.w2 = nn.Linear(intermediate, cfg.hidden_size, bias=False, dtype=dtype, device=device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.w2(kernels.silu_and_mul(self.w1(x)))
+        out = self.w2(kernels.silu_and_mul(self.w1(x)))
+        if self.tp_size > 1:
+            distributed.tp_all_reduce(out)
+        return out
 
 
 class DeepseekV41VisionBlock(nn.Module):
@@ -4129,10 +4186,16 @@ class DeepseekV41VisionBlock(nn.Module):
 
 
 class DeepseekV41VisionTower(nn.Module):
-    """ViT: patch-embed + N bidirectional blocks + final norm (replicated)."""
+    """ViT: patch-embed + N bidirectional blocks + final norm.
+
+    The tower weights are replicated in encoder-DP mode and sharded by heads /
+    intermediate rows in encoder-TP mode; patch-embed and the norms stay
+    replicated so every block starts and ends at the full hidden width.
+    """
 
     def __init__(self, cfg: DeepseekV41VisionConfig, dtype: torch.dtype, device: torch.device) -> None:
         super().__init__()
+        cfg.validate()
         self.cfg = cfg
         self.rope_dim = cfg.head_dim // 2
         self.patch_embed = nn.Linear(
@@ -4179,6 +4242,131 @@ class DeepseekV41Aligner(nn.Module):
         x = F.pad(x, (0, -n_w % r, 0, -n_h % r))
         x = F.unfold(x.unsqueeze(0), r, stride=r).squeeze(0).transpose(0, 1)  # (L, C*r*r)
         return self.w2(F.gelu(self.w1(x)))
+
+
+def _run_vision_tower(
+    vision_model: DeepseekV41VisionTower,
+    patches: torch.Tensor,
+    grids: list[tuple[int, int]],
+) -> Iterator[torch.Tensor]:
+    """Yield tower rows so non-packed images can be aligned immediately."""
+    sizes = [n_h * n_w for n_h, n_w in grids]
+    # Packed TND amortizes launch overhead for many small images but makes
+    # large images slower (see the constants above), so only batch then.
+    if len(grids) >= 2 and sum(sizes) <= _VISION_BATCH_MAX_TOTAL_PATCHES:
+        vit = vision_model.forward_batch(patches, grids)
+        offset = 0
+        for size in sizes:
+            yield vit[offset : offset + size]
+            offset += size
+        return
+    offset = 0
+    for (n_vit_h, n_vit_w), size in zip(grids, sizes):
+        yield vision_model.forward_batch(patches[offset : offset + size], [(n_vit_h, n_vit_w)])
+        offset += size
+
+
+def _data_parallel_tower_outputs(
+    vision_model: DeepseekV41VisionTower,
+    cfg: DeepseekV41VisionConfig,
+    patches: torch.Tensor,
+    grids: list[tuple[int, int]],
+) -> list[torch.Tensor]:
+    """Encode a disjoint media subset per TP rank, then AllGather the rows.
+
+    The assignment is deterministic (largest item first, least-loaded rank),
+    so every rank derives the same buckets and padded row counts without
+    extra communication.
+    """
+    world_size = cfg.tp_size
+    rank = cfg.tp_rank
+    sizes = [n_h * n_w for n_h, n_w in grids]
+    item_to_rank, item_counts, _ = lpt_item_assignment(sizes, world_size)
+    cumulative_sizes = [0, *accumulate(sizes)]
+    cumulative_counts = [0, *accumulate(item_counts)]
+    local_items = item_to_rank[cumulative_counts[rank] : cumulative_counts[rank + 1]]
+    rows_per_rank = [
+        sum(sizes[item] for item in item_to_rank[cumulative_counts[source] : cumulative_counts[source + 1]])
+        for source in range(world_size)
+    ]
+    if local_items:
+        local_pixels = torch.cat(
+            [patches[cumulative_sizes[item] : cumulative_sizes[item + 1]] for item in local_items],
+            dim=0,
+        )
+        local_outputs = list(_run_vision_tower(vision_model, local_pixels, [grids[item] for item in local_items]))
+        local_rows = torch.cat(local_outputs, dim=0)
+    else:
+        local_rows = patches.new_empty((0, cfg.hidden_size))
+    blocks = all_gather_variable_rows(local_rows, rows_per_rank, rank=rank, world_size=world_size)
+    outputs: list[torch.Tensor | None] = [None] * len(grids)
+    for source, block in enumerate(blocks):
+        offset = 0
+        for item in item_to_rank[cumulative_counts[source] : cumulative_counts[source + 1]]:
+            outputs[item] = block[offset : offset + sizes[item]]
+            offset += sizes[item]
+    if any(output is None for output in outputs):
+        raise RuntimeError("DeepSeek-V4.1 encoder DP left an image output unassigned")
+    return [output for output in outputs if output is not None]
+
+
+def _vision_tower_outputs(
+    vision_model: DeepseekV41VisionTower,
+    cfg: DeepseekV41VisionConfig,
+    patches: torch.Tensor,
+    grids: list[tuple[int, int]],
+) -> list[torch.Tensor] | Iterator[torch.Tensor]:
+    """Per-image ViT outputs for the whole batch, split by encoder mode."""
+    if cfg.encoder_parallel == "dp" and cfg.tp_size > 1:
+        return _data_parallel_tower_outputs(vision_model, cfg, patches, grids)
+    return _run_vision_tower(vision_model, patches, grids)
+
+
+def _shard_vision_checkpoint_tensor(
+    name: str,
+    tensor: torch.Tensor,
+    cfg: DeepseekV41VisionConfig,
+) -> torch.Tensor:
+    """Slice a full vision checkpoint tensor to this rank's encoder-TP shard.
+
+    Heads shard q/k/v and the output projection; the fused gate|up projection
+    shards its intermediate rows while keeping each rank's gate and up halves
+    adjacent (``silu_and_mul`` splits the last dim in half). Everything else
+    (patch embed, norms, aligner, image markers) stays replicated.
+    """
+    if cfg.encoder_parallel != "tp" or cfg.tp_size <= 1:
+        return tensor
+    hidden = cfg.hidden_size
+    expected_shape = None
+    if name.endswith("attn.wqkv.weight"):
+        expected_shape = (3 * hidden, hidden)
+    elif name.endswith("attn.wqkv.bias"):
+        expected_shape = (3 * hidden,)
+    elif name.endswith("mlp.w1.weight"):
+        expected_shape = (2 * cfg.intermediate_size, hidden)
+    if expected_shape is not None and tuple(tensor.shape) != expected_shape:
+        raise ValueError(f"checkpoint {name} has shape {tuple(tensor.shape)}, expected {expected_shape}")
+    head_width = cfg.num_heads // cfg.tp_size * cfg.head_dim
+    head_offset = cfg.tp_rank * head_width
+    local_inter = cfg.intermediate_size // cfg.tp_size
+    inter_offset = cfg.tp_rank * local_inter
+    if name.endswith("attn.wqkv.weight") or name.endswith("attn.wqkv.bias"):
+        return torch.cat(
+            [
+                tensor[segment * hidden + head_offset : segment * hidden + head_offset + head_width]
+                for segment in range(3)
+            ],
+            dim=0,
+        )
+    if name.endswith("mlp.w1.weight"):
+        return torch.cat(
+            [
+                tensor[inter_offset : inter_offset + local_inter],
+                tensor[cfg.intermediate_size + inter_offset : cfg.intermediate_size + inter_offset + local_inter],
+            ],
+            dim=0,
+        )
+    return tensor
 
 
 # Image-block layout (vllm deepseek_v4/common/mm_preprocess.py:54-237, ported).
@@ -4360,21 +4548,11 @@ class DeepseekV41ForCausalLM(PyModelBase):
         grids = [(int(row[-2]), int(row[-1])) for row in grid.tolist()]
         if not grids:
             return torch.empty(0)
-        sizes = [n_h * n_w for n_h, n_w in grids]
-        # Packed TND amortizes launch overhead for many small images but makes
-        # large images slower (see the constants above), so only batch then.
-        batch = len(grids) >= 2 and sum(sizes) <= _VISION_BATCH_MAX_TOTAL_PATCHES
-        vit = self.vision_model.forward_batch(patches, grids) if batch else None
+        tower_outputs = _vision_tower_outputs(self.vision_model, self.vision_cfg, patches, grids)
         embeds = []
-        offset = 0
-        for (n_vit_h, n_vit_w), n_patches in zip(grids, sizes):
-            tower_out = (
-                vit[offset : offset + n_patches]
-                if batch
-                else self.vision_model.forward_batch(patches[offset : offset + n_patches], [(n_vit_h, n_vit_w)])
-            )
+        for (n_vit_h, n_vit_w), tower_out in zip(grids, tower_outputs, strict=True):
             feats = self.aligner(tower_out, n_vit_h, n_vit_w)
-            offset += n_patches
+            del tower_out
             n_llm_h = -(-n_vit_h // r)
             n_llm_w = -(-n_vit_w // r)
             rows = []
@@ -4438,9 +4616,15 @@ class DeepseekV41ForCausalLM(PyModelBase):
         return MultimodalInputs(inputs_embeds=inputs_embeds)
 
     def _load_vision_weights(self, loader: W8A8WeightLoader) -> None:
-        """Load vision.* + aligner.* + image_* (bf16, replicated) from the checkpoint."""
+        """Load vision.* + aligner.* + image_* (bf16); TP shards by rank."""
         if self.vision_model is None or self.aligner is None:
             return
+        cfg = self.vision_cfg
+        if cfg.encoder_parallel == "tp" and (loader.tp_size != cfg.tp_size or loader.tp_rank != cfg.tp_rank):
+            raise ValueError(
+                f"DeepSeek-V4.1 vision TP loader {loader.tp_rank}/{loader.tp_size} does not "
+                f"match tower construction {cfg.tp_rank}/{cfg.tp_size}"
+            )
         copy = loader.copy_in
         load = loader.load_tensor
         # The checkpoint stores the patch embedding as a Conv2d weight
@@ -4465,7 +4649,14 @@ class DeepseekV41ForCausalLM(PyModelBase):
                 "norm1.weight",
                 "norm2.weight",
             ):
-                copy(f"{pm}.{suffix}", load(f"{ck}.{suffix}"))
+                checkpoint_name = f"{ck}.{suffix}"
+                if cfg.encoder_parallel == "tp" and suffix in ("attn.wo.weight", "mlp.w2.weight"):
+                    copy(f"{pm}.{suffix}", loader.load_shard(checkpoint_name, dim=1))
+                    continue
+                copy(
+                    f"{pm}.{suffix}",
+                    _shard_vision_checkpoint_tensor(checkpoint_name, load(checkpoint_name), self.vision_cfg),
+                )
         copy("vision_model.norm.weight", load("vision.norm.weight"))
         for name in ("w1", "w2"):
             copy(f"aligner.{name}.weight", load(f"aligner.{name}.weight"))

@@ -41,6 +41,30 @@ _MODULE_PATH = Path(__file__).parents[2] / "xllm" / "python" / "distributed" / "
 collectives = load_source_module(_MODULE_PATH, "_xllm_collectives_under_test")
 
 
+@pytest.mark.parametrize("counts", ([0, 2], [0, 0]))
+def test_vision_dp_gather_uses_native_tp_without_python_group(
+    monkeypatch: pytest.MonkeyPatch, counts: list[int]
+) -> None:
+    from xllm.python.models import vision_parallel
+
+    monkeypatch.setattr(collectives, "_groups", {})
+    monkeypatch.setattr(vision_parallel, "distributed", collectives)
+    bucket = max(max(counts), 1)
+    gathered = torch.arange(2 * bucket * 3, dtype=torch.float32).reshape(2 * bucket, 3)
+    calls = []
+
+    def native_gather(value: torch.Tensor, dim: int) -> torch.Tensor:
+        assert value.shape == (bucket, 3) and value.is_contiguous() and dim == 0
+        calls.append(True)
+        return gathered
+
+    monkeypatch.setitem(sys.modules, "xllm_runtime", SimpleNamespace(tp_all_gather=native_gather))
+    result = vision_parallel.all_gather_variable_rows(torch.empty(0, 3), counts, rank=0, world_size=2)
+    assert calls == [True]
+    assert [block.shape[0] for block in result] == counts
+    torch.testing.assert_close(result[1], gathered[bucket : bucket + counts[1]])
+
+
 def test_tp_all_to_all_uses_native_group_without_python_rendezvous(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
 

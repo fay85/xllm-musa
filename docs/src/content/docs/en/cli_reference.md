@@ -141,7 +141,7 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | `cfg_size` | `int64` | `1` | Classifier-free guidance parallelism size. Only used for DiT models. |
 | `vae_size` | `int64` | `1` | VAE patch parallelism size. Only used for DiT models. |
 | `communication_backend` | `string` | `"hccl"` | NPU communication backend, for example `lccl` or `hccl`. Uses `hccl` when DP is enabled. |
-| `enable_mm_encoder_dp` | `bool` | `false` | Whether to enable encoder data parallelism for multimodal models. |
+| `enable_mm_encoder_dp` | `bool` | `false` | Whether to enable encoder data parallelism for multimodal models. For DeepSeek-V4.1, false uses vision TP and true distributes images across the TP ranks with a full encoder per rank. |
 | `enable_multi_stream_parallel` | `bool` | `false` | Whether to enable computation/communication parallelism with two streams and two micro batches in the prefill stage. See [Multi-Stream Parallelism](/en/features/multi_streams/). |
 | `micro_batch_num` | `int32` | `1` | Number of micro batches used for multi-stream parallelism. |
 | `enable_dp_balance` | `bool` | `false` | Whether to enable DP load balancing. If true, sequences within a single DP batch are shuffled. |

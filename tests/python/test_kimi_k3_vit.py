@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 
 from xllm.python.models import kimi_k3_vit as _vit_module
+from xllm.python.models import vision_parallel as _vision_parallel
 from xllm.python.models.kimi_k3_vit import (
     KimiK3VisionConfig,
     KimiK3VisionModel,
@@ -194,11 +195,10 @@ def test_encoder_data_parallel_reuses_mainline_tp_group(monkeypatch) -> None:
 
     def all_gather(tensor, *, dim, world_size):
         assert tensor.shape == (1, 1, 2)
-        assert dim == 0
-        assert world_size == 2
+        assert dim == 0 and world_size == 2
         return gathered
 
-    monkeypatch.setattr(_vit_module.distributed, "tp_all_gather", all_gather)
+    monkeypatch.setattr(_vision_parallel.distributed, "tp_all_gather", all_gather)
     outputs = _run_data_parallel_vision_tower(
         _VisionTower(),
         torch.tensor([[10.0, 11.0], [20.0, 21.0]]).unsqueeze(1),
@@ -404,7 +404,7 @@ def test_encoder_dp_tracks_pooled_video_rows_and_empty_ranks(monkeypatch: pytest
             torch.testing.assert_close(x[: expected[0]], torch.full_like(x[: expected[0]], expected[1]))
         return gathered
 
-    monkeypatch.setattr(_vit_module.distributed, "tp_all_gather", all_gather)
+    monkeypatch.setattr(_vision_parallel.distributed, "tp_all_gather", all_gather)
     result = _run_data_parallel_vision_tower(Tower(), pixels, grids, rank, 4)
     assert [x.shape[0] for x in result] == [1, 1, 2]
     for x, label in zip(result, [10, 20, 30]):
@@ -436,7 +436,7 @@ def test_encoder_dp_rejects_wrong_tower_row_count_before_gather(monkeypatch: pyt
             return [torch.ones(2, 4, 1)]
 
     gather = MagicMock()
-    monkeypatch.setattr(_vit_module.distributed, "tp_all_gather", gather)
+    monkeypatch.setattr(_vision_parallel.distributed, "tp_all_gather", gather)
     with pytest.raises(ValueError, match="pooled grids"):
         _run_data_parallel_vision_tower(Tower(), torch.ones(8, 1), [[2, 2, 2]], 0, 2)
     gather.assert_not_called()

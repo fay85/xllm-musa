@@ -141,7 +141,7 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | `cfg_size` | `int64` | `1` | Classifier-free guidance parallel 规模，仅 DiT 模型使用。 |
 | `vae_size` | `int64` | `1` | VAE patch parallel 规模，仅 DiT 模型使用。 |
 | `communication_backend` | `string` | `"hccl"` | NPU 通信后端，例如 `lccl`、`hccl`；启用 DP 时使用 `hccl`。 |
-| `enable_mm_encoder_dp` | `bool` | `false` | 是否为多模态模型启用 encoder data parallel。 |
+| `enable_mm_encoder_dp` | `bool` | `false` | 是否为多模态模型启用 encoder data parallel。DeepSeek-V4.1 中 false 使用视觉 TP，true 在 TP 组内按图片分工，每个 rank 保留完整 encoder。 |
 | `enable_multi_stream_parallel` | `bool` | `false` | 是否在 prefill 阶段通过双 stream 和双 micro batch 启用计算通信并行；详见 [多流并行](/zh/features/multi_streams/)。 |
 | `micro_batch_num` | `int32` | `1` | 多流并行使用的 micro batch 数。 |
 | `enable_dp_balance` | `bool` | `false` | 是否启用 DP 负载均衡；启用后会 shuffle 单个 DP batch 内的 sequences。 |

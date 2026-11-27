@@ -26,10 +26,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from xllm.python import distributed, kernels
+from xllm.python import kernels
 from xllm.python.layers import ColumnParallelLinear, RowParallelLinear
 from xllm.python.model_loader import ScopedWeightLoader
 from xllm.python.models.base import PyModelBase
+from xllm.python.models.vision_parallel import (
+    all_gather_variable_rows,
+)
+from xllm.python.models.vision_parallel import (
+    lpt_item_assignment as _get_load_balance_assignment,
+)
 
 
 def _encoder_attention(
@@ -677,32 +683,6 @@ class KimiK3VisionTower(nn.Module):
         )
 
 
-def _get_load_balance_assignment(
-    sizes: list[int],
-    num_ranks: int,
-) -> tuple[list[int], list[int], list[int]]:
-    assignments: list[list[int]] = [[] for _ in range(num_ranks)]
-    loads = [0] * num_ranks
-    for image_index in sorted(
-        range(len(sizes)),
-        key=lambda index: sizes[index],
-        reverse=True,
-    ):
-        # Largest media first, assigned to the least-loaded rank by patch count.
-        target_rank = min(range(num_ranks), key=lambda rank: loads[rank])
-        assignments[target_rank].append(image_index)
-        loads[target_rank] += sizes[image_index]
-
-    # This is a rank-major permutation of original media indices, not a map
-    # from media index to rank. Each rank owns the next image_counts[rank] items.
-    image_to_rank: list[int] = []
-    image_counts: list[int] = []
-    for rank_assignment in assignments:
-        image_to_rank.extend(rank_assignment)
-        image_counts.append(len(rank_assignment))
-    return image_to_rank, image_counts, loads
-
-
 def _run_data_parallel_vision_tower(
     vision_tower: KimiK3VisionTower,
     pixel_values: torch.Tensor,
@@ -751,35 +731,15 @@ def _run_data_parallel_vision_tower(
         local_embeddings = pixel_values.new_empty((0, merge_size, vision_tower.config.hidden_size))
     if local_embeddings.shape[0] != rows_per_rank[rank]:
         raise ValueError("Kimi K3 encoder output rows do not match temporally pooled grids")
-    max_embeddings_per_rank = max(rows_per_rank)
-    # AllGather needs equal physical rows. Pad to the busiest rank's merged
-    # row count, including ranks assigned no media, so every rank participates.
-    padding_size = max_embeddings_per_rank - local_embeddings.shape[0]
-    if padding_size < 0:
-        raise ValueError("Kimi K3 encoder output exceeds its AllGather bucket")
-    if padding_size > 0:
-        padding = local_embeddings.new_empty(
-            (
-                padding_size,
-                local_embeddings.shape[1],
-                local_embeddings.shape[2],
-            )
-        )
-        local_embeddings = torch.cat([local_embeddings, padding], dim=0)
-
-    # Encoder data parallelism uses the text TP ranks and their mainline group.
-    gathered = distributed.tp_all_gather(
-        local_embeddings.contiguous(),
-        dim=0,
+    # Encoder data parallelism reuses the text TP ranks and their mainline
+    # group: pad to the busiest rank's merged row count, AllGather, then strip
+    # each bucket's padding using its real pooled row count.
+    rank_embeddings = all_gather_variable_rows(
+        local_embeddings,
+        rows_per_rank,
+        rank=rank,
         world_size=world_size,
     )
-    rank_embeddings: list[torch.Tensor] = []
-    # Gather concatenates equal buckets in rank order; discard each bucket's
-    # padding using its real pooled row count before splitting individual media.
-    for source_rank in range(world_size):
-        start = source_rank * max_embeddings_per_rank
-        length = rows_per_rank[source_rank]
-        rank_embeddings.append(gathered[start : start + length])
 
     outputs: list[torch.Tensor | None] = [None] * len(grids)
     assignment_offset = 0
