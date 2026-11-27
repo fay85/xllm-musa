@@ -407,9 +407,12 @@ bool DraftModelSpecWorkerImpl::allocate_kv_cache_with_transfer(
 #endif
 
 void DraftModelSpecWorkerImpl::force_greedy_draft_sampling(
-    SamplingParameters& sampling_params) {
+    SamplingParameters& sampling_params,
+    const torch::Tensor& false_mask) {
   if (sampling_params.do_sample.defined()) {
-    sampling_params.do_sample = torch::zeros_like(sampling_params.do_sample);
+    sampling_params.do_sample =
+        false_mask.defined() ? false_mask
+                             : torch::zeros_like(sampling_params.do_sample);
   }
   sampling_params.all_random_sample = false;
   sampling_params.all_greedy_sample = true;

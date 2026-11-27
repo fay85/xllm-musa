@@ -67,6 +67,7 @@ limitations under the License.
 #include "core/layers/common/dsa_topk_share_plan.h"
 #if defined(USE_MUSA)
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/lm_head.h"
 #include "core/layers/musa/glm5_next/glm5_next_graph_policy.h"
 #include "core/layers/musa/qwen3_gated_delta_net_base.h"
@@ -432,6 +433,25 @@ void build_expanded_spec_verify_graph_input(ModelInputParams& input_params,
       input_params, device, false, block_size, defer_paged_layout);
 }
 
+#endif
+
+#if defined(USE_MUSA)
+// Keep the eager predictor on a concrete TVM-FFI stream across proposals.
+// Destroy the FFI guard before restoring the caller so verify sees its output.
+class Glm5EagerDraftStream final {
+ public:
+  Glm5EagerDraftStream(Stream& caller, const torch::Device& device)
+      : caller_(caller.get_stream()->unwrap()),
+        ffi_(device),
+        stream_(c10::musa::getCurrentMUSAStream(device.index())) {}
+
+  Stream& stream() { return stream_; }
+
+ private:
+  c10::StreamGuard caller_;
+  kernel::musa::TvmffiComputeStreamGuard ffi_;
+  Stream stream_;
+};
 #endif
 
 void clear_ready_events(ForwardInput& input) {
@@ -1984,10 +2004,33 @@ void MTPWorkerImpl::prepare_prefill_inputs(const ForwardInput& input,
   record_metadata_ready_event(*prepare_stream_, prefill_input);
 }
 
+bool MTPWorkerImpl::uses_eager_glm5_decode_draft() const {
+  return Platform::is_musa() &&
+         options_.instance_role() == InstanceRole::DECODE &&
+         !ExecutionConfig::get_instance().enable_graph() &&
+         draft_impl_->context_.get_model_args().model_type() == "glm5_next_mtp";
+}
+
 void MTPWorkerImpl::prepare_draft_sampling(
-    SamplingParameters& sampling_params) const {
+    SamplingParameters& sampling_params) {
   if (draft_sampling_mode_ == DraftSamplingMode::GREEDY) {
-    force_greedy_draft_sampling(sampling_params);
+    torch::Tensor mask;
+    const auto& source = sampling_params.do_sample;
+    if (uses_eager_glm5_decode_draft() && source.defined() &&
+        source.scalar_type() == torch::kBool) {
+      // Prepared and initialized on prepare_stream_; every consumer only reads
+      // this view.
+      if (!draft_false_mask_.defined() ||
+          draft_false_mask_.device() != source.device() ||
+          draft_false_mask_.numel() < source.numel()) {
+        draft_false_mask_ = torch::zeros(
+            {std::max<int64_t>(source.numel(), options_.max_seqs_per_batch())},
+            source.options());
+      }
+      mask =
+          draft_false_mask_.narrow(0, 0, source.numel()).view(source.sizes());
+    }
+    force_greedy_draft_sampling(sampling_params, mask);
   } else {
     sampling_params.logprobs = false;
     sampling_params.max_top_logprobs = 0;
@@ -2181,6 +2224,9 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
       supports_python_dsv32_continuous_drafts(input);
   const bool use_continuous_drafts =
       use_continuous_dsa_drafts || use_continuous_python_dsv32_drafts;
+  const bool batch_recursive_inputs =
+      uses_eager_glm5_decode_draft() && !use_continuous_drafts &&
+      !use_adaptive_speculative_decode && !has_json_object_states;
   std::vector<ForwardInput> later_draft_inputs;
   torch::Tensor accepted_base_positions;
   torch::Tensor accepted_base_kv_seq_lens;
@@ -2208,9 +2254,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
       // Only the fixed B layout is needed on prepare_stream. Reusing offset 0
       // avoids extending an already conservative Host template past the
       // scheduler-allocated block range; device metadata is replaced below.
-      prepare_draft_inputs(metadata_template,
-                           later_draft_inputs[draft_idx],
-                           /*position_offset=*/0);
+      prepare_draft_inputs(
+          metadata_template,
+          std::span<ForwardInput>(&later_draft_inputs[draft_idx], 1),
+          /*position_offset=*/0);
     }
   }
 
@@ -2245,6 +2292,15 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
   const bool reuse_mtp_topk_state = layer::is_mtp_dsa_topk_reuse_enabled(
       draft_impl_->context_.get_model_args());
   MtpTopkStatePtr mtp_topk_state;
+  Stream* proposal_stream = compute_stream_.get();
+#if defined(USE_MUSA)
+  std::optional<Glm5EagerDraftStream> eager_stream;
+  if (batch_recursive_inputs && !use_device_target_context &&
+      !use_prelaunched_first_draft) {
+    eager_stream.emplace(*compute_stream_, device_.unwrap());
+    proposal_stream = &eager_stream->stream();
+  }
+#endif
   for (int32_t draft_idx = 0; draft_idx < num_speculative_tokens; ++draft_idx) {
     bool is_final_draft = draft_idx == num_speculative_tokens - 1;
 #if defined(USE_MUSA)
@@ -2303,8 +2359,8 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
       } else {
         draft_output_opt = run_worker_no_sync_impl(*draft_impl_,
                                                    current_draft_input,
-                                                   *compute_stream_,
-                                                   *compute_stream_,
+                                                   *proposal_stream,
+                                                   *proposal_stream,
                                                    draft_prepared[draft_idx]);
       }
     }
@@ -2400,8 +2456,23 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
                                                       accepted_base_kv_seq_lens,
                                                       draft_idx + 1,
                                                       logical_block_size());
+    } else if (batch_recursive_inputs) {
+      if (draft_idx == 0) {
+        // The first forward is in flight. All recursive offsets now have the
+        // same corrected host base and do not depend on the proposed tokens.
+        later_draft_inputs.resize(num_speculative_tokens - 1);
+        prepare_draft_inputs(
+            metadata_template, later_draft_inputs, /*first_offset=*/1);
+      }
+      next_step_input = std::move(later_draft_inputs[draft_idx]);
+      if (proposal_stream != compute_stream_.get() && draft_idx > 0) {
+        // All recursive views share the upload already waited on by proposal 2.
+        clear_ready_events(next_step_input);
+      }
     } else {
-      prepare_draft_inputs(metadata_template, next_step_input, draft_idx + 1);
+      prepare_draft_inputs(metadata_template,
+                           std::span<ForwardInput>(&next_step_input, 1),
+                           draft_idx + 1);
     }
 
     CHECK(draft_output_opt.has_value())
@@ -2411,7 +2482,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
     const SamplingParameters& draft_sampling_params =
         draft_prepared[draft_idx].sampling_params;
     {
-      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+      c10::StreamGuard stream_guard = proposal_stream->set_stream_guard();
       if (reuse_mtp_topk_state) {
         mtp_topk_state = specBuilder::select_mtp_topk_state_for_next_step(
             draft_outputs.back().mtp_topk_state, draft_sampling_params);
@@ -2475,12 +2546,11 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
     set_token_ids_device_tensor(current_draft_input,
                                 last_output.next_tokens,
                                 current_draft_input.token_ids.options(),
-                                *compute_stream_);
+                                *proposal_stream);
     if (last_output.embeddings.defined()) {
       current_draft_input.input_params.embedding.input_embedding =
           last_output.embeddings;
-      // input_embedding is produced and consumed on compute_stream_; FIFO
-      // ordering replaces the same-stream EventRecord/EventWait pair.
+      // The next forward consumes this embedding on the proposal stream.
     }
     if (has_json_object_states) {
       if (halt_json_draft) {
@@ -2510,8 +2580,14 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
               JsonObjectMaskBuildPhase::DRAFT);
       current_draft_input.sampling_params.filter_mask = torch::Tensor();
     }
-    record_current_metadata_ready_event(current_draft_input, *compute_stream_);
+    if (proposal_stream == compute_stream_.get()) {
+      record_current_metadata_ready_event(current_draft_input,
+                                          *compute_stream_);
+    }
   }
+#if defined(USE_MUSA)
+  eager_stream.reset();  // Join the proposal stream before verify consumes it.
+#endif
   COUNTER_ADD(speculative_execution_latency_seconds_draft,
               timer.elapsed_seconds());
   if (use_adaptive_speculative_decode) {
@@ -5039,10 +5115,9 @@ bool MTPWorkerImpl::should_use_uniform_two_draft_rows(
                      });
 }
 
-void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
-                                         ForwardInput& draft_input,
-                                         int32_t position_offset) {
-  c10::StreamGuard stream_guard = prepare_stream_->set_stream_guard();
+void MTPWorkerImpl::build_draft_input(const ForwardInput& input,
+                                      ForwardInput& draft_input,
+                                      int32_t position_offset) {
   draft_input = input;
   if (requires_full_target_replay()) {
     // The first proposal used the target hidden at current_position - 1.
@@ -5091,14 +5166,9 @@ void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
   CHECK_EQ(buf.out_new_cache_slots.size(), buf.out_positions.size())
       << "draft kv slots/positions mismatch";
 
-  torch::TensorOptions position_options = input.positions.options();
-  MtpInputUpload upload(Platform::is_musa() &&
-                        draft_impl_->context_.get_model_args().model_type() ==
-                            "glm5_next_mtp");
   draft_input.positions_host =
       specBuilder::make_cpu_int_tensor(buf.out_positions);
-  upload.stage(
-      draft_input.positions_host, position_options, draft_input.positions);
+
   specBuilder::update_input_params(
       input_params,
       buf,
@@ -5118,17 +5188,54 @@ void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
           input_params.get_q_seq_len(i));
     }
   }
-  upload.upload(input_params.attention, device_);
-#if defined(USE_NPU)
-  // Later draft steps share the B cache variant.
-  draft_impl_->prepare_dp_ep_padding_on_stream(input_params, *prepare_stream_);
-#endif
-  // token_ids is intentionally filled later from the previous draft output.
-  draft_input.device_tensors_ready = false;
+}
 
-  // Positions/KV metadata do not depend on the in-flight draft result. Prepare
-  // them concurrently; token ids and embeddings are filled on compute_stream.
-  record_metadata_ready_event(*prepare_stream_, draft_input);
+void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
+                                         std::span<ForwardInput> drafts,
+                                         int32_t first_offset) {
+  CHECK(!drafts.empty());
+  c10::StreamGuard stream_guard = prepare_stream_->set_stream_guard();
+  const bool pack =
+      Platform::is_musa() &&
+      draft_impl_->context_.get_model_args().model_type() == "glm5_next_mtp";
+  CHECK(pack || drafts.size() == 1);
+  MtpInputUpload upload(pack);
+  std::vector<AttentionInput::PackedIntInput> extra;
+  extra.reserve(2 * (drafts.size() - 1));
+  for (auto& draft : drafts) {
+    build_draft_input(input, draft, first_offset++);
+    upload.stage(
+        draft.positions_host, input.positions.options(), draft.positions);
+  }
+
+  auto& first = drafts.front();
+  auto& shared = first.input_params.attention;
+  // The row layout, page table and query lengths are identical for all
+  // recursive steps. Only positions, KV lengths and write slots advance.
+  for (auto& draft : drafts.subspan(1)) {
+    auto& attn = draft.input_params.attention;
+    extra.push_back(
+        {&attn.host.kv_seq_lens, nullptr, &attn.device.kv_seq_lens});
+    extra.push_back(
+        {&attn.host.new_cache_slots, nullptr, &attn.device.new_cache_slots});
+  }
+  upload.upload(shared, device_, extra);
+#if defined(USE_NPU)
+  draft_impl_->prepare_dp_ep_padding_on_stream(first.input_params,
+                                               *prepare_stream_);
+#endif
+  record_metadata_ready_event(*prepare_stream_, first);
+  for (auto& draft : drafts.subspan(1)) {
+    auto& attn = draft.input_params.attention;
+    auto kv_lens = std::move(attn.device.kv_seq_lens);
+    auto slots = std::move(attn.device.new_cache_slots);
+    auto host = std::move(attn.host);
+    attn = shared;
+    attn.host = std::move(host);
+    attn.device.kv_seq_lens = std::move(kv_lens);
+    attn.device.new_cache_slots = std::move(slots);
+    draft.metadata_ready_event = first.metadata_ready_event;
+  }
 }
 
 SampleOutput MTPWorkerImpl::validate(

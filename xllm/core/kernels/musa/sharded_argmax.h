@@ -21,4 +21,7 @@ namespace xllm::kernel::musa {
 torch::Tensor shard_argmax_candidates(const torch::Tensor& logits,
                                       int32_t vocab_offset);
 torch::Tensor merge_shard_argmax(const torch::Tensor& gathered, int64_t rows);
+torch::Tensor merge_shard_argmax(const torch::Tensor& gathered,
+                                 int64_t rows,
+                                 torch::ScalarType token_dtype);
 }  // namespace xllm::kernel::musa

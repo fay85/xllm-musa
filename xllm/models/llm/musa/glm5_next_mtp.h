@@ -113,7 +113,14 @@ class Glm5NextMtpModelImpl final
       : MtpModelImplBase<Glm5NextMtpDecoderLayer,
                          Glm5NextMtpLayerForwardAdapter>(context),
         cp_group_(context.get_parallel_args().cp_group_) {
-    CHECK_EQ(context.get_model_args().num_nextn_predict_layers(), 1)
+    const auto& args = context.get_model_args();
+    const auto layer_idx = args.mtp_start_layer_idx() >= 0
+                               ? args.mtp_start_layer_idx()
+                               : args.n_layers();
+    uses_linear_state_ =
+        layer::resolve_glm5_next_layer_role(args, layer_idx).attention ==
+        layer::Glm5NextAttentionRole::KDA;
+    CHECK_EQ(args.num_nextn_predict_layers(), 1)
         << "MUSA GLM5 MTP currently supports one predictor layer";
   }
   bool use_cp(const ModelInputParams& params, int64_t rows) const {
@@ -142,6 +149,23 @@ class Glm5NextMtpModelImpl final
                       const ModelInputParams& params) {
     using Base = MtpModelImplBase<Glm5NextMtpDecoderLayer,
                                   Glm5NextMtpLayerForwardAdapter>;
+    if (!params.attn_metadata && !params.enable_graph &&
+        !params.attention.host.kpool_query_lens.empty()) {
+      // Accepted-span replay and recursive GLM5 drafts consume the device
+      // block table. Building FA3 host page arrays here stalls the next step.
+      ModelInputParams local = params;
+      layer::AttentionMetadataBuildOptions options;
+      options.materialize_paged_kv_host = false;
+      options.materialize_linear_state_validity = uses_linear_state_;
+      options.allow_single_sequence_length_view = true;
+      local.attn_metadata = std::make_shared<layer::AttentionMetadata>(
+          layer::AttentionMetadataBuilder::build(local,
+                                                 /*enable_mla=*/true,
+                                                 /*attn_mask=*/std::nullopt,
+                                                 positions.device(),
+                                                 options));
+      return Base::forward(tokens, positions, caches, local);
+    }
     if (!use_cp(params, tokens.numel())) {
       return Base::forward(tokens, positions, caches, params);
     }
@@ -180,6 +204,7 @@ class Glm5NextMtpModelImpl final
 
  private:
   ProcessGroup* cp_group_;
+  bool uses_linear_state_;
 };
 TORCH_MODULE(Glm5NextMtpModel);
 

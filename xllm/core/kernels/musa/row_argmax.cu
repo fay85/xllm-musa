@@ -155,10 +155,11 @@ __global__ void __launch_bounds__(kThreads)
 }
 
 // Each rank contributes [score bits, global id] per row in rank-major order.
+template <typename Token>
 __global__ void merge_shards_kernel(const int32_t* pairs,
                                     int64_t rows,
                                     int32_t ranks,
-                                    int64_t* output) {
+                                    Token* output) {
   const int64_t row = blockIdx.x * blockDim.x + threadIdx.x;
   if (row >= rows) {
     return;
@@ -174,7 +175,7 @@ __global__ void merge_shards_kernel(const int32_t* pairs,
       winner = id;
     }
   }
-  output[row] = winner;
+  output[row] = static_cast<Token>(winner);
 }
 
 bool is_16b_aligned(const torch::Tensor& tensor) {
@@ -293,19 +294,30 @@ torch::Tensor shard_argmax_candidates(const torch::Tensor& input,
 }
 
 torch::Tensor merge_shard_argmax(const torch::Tensor& gathered, int64_t rows) {
+  return merge_shard_argmax(gathered, rows, torch::kLong);
+}
+
+torch::Tensor merge_shard_argmax(const torch::Tensor& gathered,
+                                 int64_t rows,
+                                 torch::ScalarType token_dtype) {
   RECORD_USER_SCOPE("kernel: merge_shard_argmax");
+  CHECK(token_dtype == torch::kInt || token_dtype == torch::kLong);
   CHECK_GT(rows, 0);
   CHECK(gathered.is_contiguous());
   CHECK_EQ(gathered.numel() % (2 * rows), 0);
   const int32_t ranks = static_cast<int32_t>(gathered.numel() / (2 * rows));
   const at::cuda::OptionalCUDAGuard device_guard(device_of(gathered));
   torch::Tensor output =
-      torch::empty({rows}, gathered.options().dtype(torch::kLong));
-  merge_shards_kernel<<<(rows + kThreads - 1) / kThreads,
-                        kThreads,
-                        0,
-                        at::cuda::getCurrentCUDAStream()>>>(
-      gathered.data_ptr<int32_t>(), rows, ranks, output.data_ptr<int64_t>());
+      torch::empty({rows}, gathered.options().dtype(token_dtype));
+  const auto blocks = (rows + kThreads - 1) / kThreads;
+  const auto stream = at::cuda::getCurrentCUDAStream();
+  if (token_dtype == torch::kInt) {
+    merge_shards_kernel<<<blocks, kThreads, 0, stream>>>(
+        gathered.data_ptr<int32_t>(), rows, ranks, output.data_ptr<int32_t>());
+  } else {
+    merge_shards_kernel<<<blocks, kThreads, 0, stream>>>(
+        gathered.data_ptr<int32_t>(), rows, ranks, output.data_ptr<int64_t>());
+  }
   C10_CUDA_CHECK(cudaGetLastError());
   return output;
 }

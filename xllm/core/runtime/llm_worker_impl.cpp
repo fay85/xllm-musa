@@ -43,6 +43,8 @@ limitations under the License.
 #include "models/model_registry.h"
 #include "runtime/params_utils.h"
 #if defined(USE_MUSA)
+#include "core/framework/config/execution_config.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/runtime/glm5_greedy_head.h"
 #endif
 #include "runtime/speculative_worker_utils.h"
@@ -255,6 +257,17 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     bool record_ready_event) {
   MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
 
+#if defined(USE_MUSA)
+  // Keep the predictor projection, decoder and vocabulary head on the same
+  // concrete stream. The guard joins back to the caller before returning.
+  std::optional<kernel::musa::TvmffiComputeStreamGuard> draft_stream;
+  if (sync_policy == ForwardSyncPolicy::NO_SYNC &&
+      options_.instance_role() == InstanceRole::DECODE &&
+      context_.get_model_args().model_type() == "glm5_next_mtp" &&
+      !ExecutionConfig::get_instance().enable_graph()) {
+    draft_stream.emplace(device_.unwrap());
+  }
+#endif
   Timer timer;
   auto& sampling_params = input.sampling_params;
 

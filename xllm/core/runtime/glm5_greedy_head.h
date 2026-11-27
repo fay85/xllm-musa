@@ -17,7 +17,9 @@ limitations under the License.
 
 #include <limits>
 
+#include "core/framework/config/execution_config.h"
 #include "core/framework/model/causal_lm.h"
+#include "core/framework/parallel_state/musa_process_group.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/kernels/musa/sharded_argmax.h"
@@ -79,9 +81,25 @@ inline torch::Tensor glm5_greedy_tokens(CausalLM& model,
       kernel::musa::matmul(selected_hidden, weight, head->bias(), local_scores);
   auto pairs = kernel::musa::shard_argmax_candidates(
       local_logits, static_cast<int32_t>(cols * group->rank()));
-  auto gathered = group->allgather_base_sync(pairs);
-  const torch::Tensor tokens =
-      kernel::musa::merge_shard_argmax(gathered, local_logits.size(0));
+  const bool eager_draft = model_type == "glm5_next_mtp" &&
+                           !ExecutionConfig::get_instance().enable_graph();
+  torch::Tensor gathered;
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+  auto* musa_group = dynamic_cast<ProcessGroupImpl*>(group);
+  if (musa_group != nullptr && eager_draft) {
+    gathered = musa_group->gather_rows_on_current_stream(pairs);
+  } else
+#endif
+  {
+    gathered = group->allgather_base_sync(pairs);
+  }
+  const torch::Tensor tokens = kernel::musa::merge_shard_argmax(
+      gathered,
+      local_logits.size(0),
+      eager_draft && input.token_ids.scalar_type() == torch::kInt
+          ? torch::kInt
+          : torch::kLong);
   static const bool validate =
       util::get_bool_env("XLLM_GLM5_VALIDATE_SHARDED_GREEDY", false);
   if (validate && is_glm5_width_audit(input.input_params) &&

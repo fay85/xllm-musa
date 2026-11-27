@@ -117,14 +117,15 @@ ensure_ops_cache() {
   # Older cache backups predate the MATE mHC finish modules. Check these even
   # when the sparse operator cache was already complete or restored above.
   local name
-  for name in mhc_pre_big_fuse_glm53_eps6_v1 mhc_pre_big_fuse_glm53_eps5_v1; do
+  local mhc_modules=(mhc_pre_big_fuse_glm53_{eps6,eps5}{,_small}_v1)
+  for name in "${mhc_modules[@]}"; do
     if [[ ! -f "${FLASHINFER_OPS_PATH}/${name}/${name}.so" ]]; then
       MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 \
         "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
       break
     fi
   done
-  for name in mhc_pre_big_fuse_glm53_eps6_v1 mhc_pre_big_fuse_glm53_eps5_v1; do
+  for name in "${mhc_modules[@]}"; do
     [[ -f "${FLASHINFER_OPS_PATH}/${name}/${name}.so" ]] || {
       echo "Missing MATE mHC module: ${name}" >&2
       return 1

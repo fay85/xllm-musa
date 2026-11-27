@@ -19,6 +19,7 @@ limitations under the License.
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -154,7 +155,9 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   // prepare inputs for draft model at Prefill phase.
   void prepare_prefill_inputs(const ForwardInput& inputs,
                               ForwardInput& prefill_inputs);
-  void prepare_draft_sampling(SamplingParameters& sampling_params) const;
+  bool uses_eager_glm5_decode_draft() const;
+  void prepare_draft_sampling(SamplingParameters& sampling_params);
+  torch::Tensor draft_false_mask_;
   bool supports_expanded_spec_verify() const;
   // Whether verify attention gets one expanded decode row per verify token.
   bool builds_expanded_spec_verify_attention() const;
@@ -216,8 +219,11 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
 
   // prepare inputs for draft model at Decode phase.
   void prepare_draft_inputs(const ForwardInput& inputs,
-                            ForwardInput& draft_inputs,
-                            int32_t position_offset);
+                            std::span<ForwardInput> drafts,
+                            int32_t first_offset);
+  void build_draft_input(const ForwardInput& input,
+                         ForwardInput& draft_input,
+                         int32_t position_offset);
 
   void update_decode_step_input(
       ForwardInput& input,

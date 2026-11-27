@@ -139,7 +139,8 @@ class DraftModelSpecWorkerImpl : public SpeculativeWorkerImpl {
       const runtime::Options& target_options,
       const runtime::Options& draft_options);
 
-  static void force_greedy_draft_sampling(SamplingParameters& sampling_params);
+  static void force_greedy_draft_sampling(SamplingParameters& sampling_params,
+                                          const torch::Tensor& false_mask = {});
 
   // Overwrite dp_global_token_nums / raw_dp_global_token_nums with the true
   // post-pruning validate token count of every DP peer, gathered over the DP

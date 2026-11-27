@@ -759,6 +759,35 @@ TEST(ReshardPlannerTest, MqaReplicationUsesOneStaticSourceWriter) {
   }
 }
 
+TEST(ReshardPlannerTest, GlmPullUsesMatchingMainReplicaAndOriginalDraftWriter) {
+  auto sources = make_instance(/*tp_size=*/2,
+                               /*global_heads=*/1,
+                               /*first_buffer_id=*/3,
+                               "source");
+  auto destination = make_head_manifest(/*tp_rank=*/1,
+                                        /*tp_size=*/2,
+                                        /*global_heads=*/1,
+                                        /*buffer_id=*/17,
+                                        "destination");
+  for (auto* manifest : {&sources[0], &sources[1], &destination}) {
+    manifest->layout_family = "glm5_musa_hybrid";
+    append_tp1_spec_tensor(manifest, /*global_heads=*/1, /*buffer_id=*/42);
+  }
+  std::vector<size_t> selected;
+  std::vector<ReshardPlanTemplate> plans;
+  const auto status = ReshardPlanner().build_incoming_plans(
+      sources, destination, &selected, &plans);
+  ASSERT_TRUE(status.ok()) << status.message();
+  ASSERT_EQ(plans.size(), 2);
+  for (size_t rank = 0; rank < plans.size(); ++rank) {
+    ASSERT_FALSE(plans[rank].regions.empty());
+    for (const auto& region : plans[rank].regions) {
+      EXPECT_EQ(region.cache_namespace,
+                rank == 0 ? CacheNamespace::SPEC_DRAFT : CacheNamespace::MAIN);
+    }
+  }
+}
+
 TEST(ReshardPlannerTest, PcpSelectsTp4HeadRangesForEveryTp8Destination) {
   tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
   ASSERT_TRUE(pcp.set("1"));
