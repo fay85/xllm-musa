@@ -1778,7 +1778,12 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                     const torch::Tensor& query_start_loc,
                                     const torch::Tensor& cache_indices,
                                     const torch::Tensor& has_initial_state,
-                                    bool silu_activation) {
+                                    bool silu_activation,
+                                    int32_t qk_channels,
+                                    bool* qk_normalized) {
+  if (qk_normalized != nullptr) {
+    *qk_normalized = false;
+  }
   CHECK(query_start_loc.defined() && is_torch_device(query_start_loc.device()))
       << "causal_conv1d_prefill requires device query_start_loc";
   CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))
@@ -1795,16 +1800,24 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
   if (use_token_major && x.is_contiguous() && weight.dim() == 2 &&
       weight.size(1) == 4) {
     torch::Tensor out = torch::empty_like(x);
-    causal_conv1d_fwd_token_major(x,
-                                  weight,
-                                  out,
-                                  bias,
-                                  conv_state,
-                                  query_start_loc,
-                                  cache_indices,
-                                  has_initial_state,
-                                  silu_activation,
-                                  /*pad_slot_id=*/-1);
+    const bool request_qk_norm =
+        qk_normalized != nullptr && x.scalar_type() == torch::kBFloat16 &&
+        qk_channels > 0 && qk_channels <= x.size(1) && qk_channels % 128 == 0;
+    const bool applied_qk_norm =
+        causal_conv1d_fwd_token_major(x,
+                                      weight,
+                                      out,
+                                      bias,
+                                      conv_state,
+                                      query_start_loc,
+                                      cache_indices,
+                                      has_initial_state,
+                                      silu_activation,
+                                      /*pad_slot_id=*/-1,
+                                      request_qk_norm ? qk_channels : 0);
+    if (qk_normalized != nullptr) {
+      *qk_normalized = applied_qk_norm;
+    }
     return out;
   }
 

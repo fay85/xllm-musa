@@ -198,7 +198,8 @@ void causal_conv1d_fwd(const torch::Tensor& x,
                        bool silu_activation,
                        int64_t pad_slot_id);
 
-void causal_conv1d_fwd_token_major(const torch::Tensor& x,
+// Returns true when the convolution also normalized the leading Q/K channels.
+bool causal_conv1d_fwd_token_major(const torch::Tensor& x,
                                    const torch::Tensor& weight,
                                    torch::Tensor& out,
                                    const std::optional<torch::Tensor>& bias,
@@ -207,7 +208,8 @@ void causal_conv1d_fwd_token_major(const torch::Tensor& x,
                                    const torch::Tensor& cache_indices,
                                    const torch::Tensor& has_initial_state,
                                    bool silu_activation,
-                                   int64_t pad_slot_id);
+                                   int64_t pad_slot_id,
+                                   int32_t qk_channels = 0);
 
 torch::Tensor causal_conv1d(const torch::Tensor& x,
                             const torch::Tensor& weight,
@@ -228,7 +230,9 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                     const torch::Tensor& query_start_loc,
                                     const torch::Tensor& cache_indices,
                                     const torch::Tensor& has_initial_state,
-                                    bool silu_activation);
+                                    bool silu_activation,
+                                    int32_t qk_channels = 0,
+                                    bool* qk_normalized = nullptr);
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);

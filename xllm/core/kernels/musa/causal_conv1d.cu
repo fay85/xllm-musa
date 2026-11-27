@@ -639,6 +639,137 @@ template void causal_conv1d_fwd_cuda<at::BFloat16, at::BFloat16>(
     ConvParamsBase& params,
     cudaStream_t stream);
 
+using Bf16Pack = uint16_t __attribute__((ext_vector_type(4)));
+
+__device__ __forceinline__ float unpack_bf16(uint16_t value) {
+  return __uint_as_float(static_cast<uint32_t>(value) << 16);
+}
+
+// One lane owns four adjacent BF16 channels, so one warp covers one 128-wide
+// head. Normalize Q/K immediately after SiLU with the same four-term sum as
+// l2_norm_pair_h128. V channels are left unchanged.
+template <int32_t BlockTokens>
+__global__ void causal_conv1d_bf16_pack4_kernel(ConvParamsBase params,
+                                                int32_t qk_channels) {
+  const int32_t seq = static_cast<int32_t>(blockIdx.x);
+  const int32_t offset = static_cast<int32_t>(blockIdx.y) * BlockTokens;
+  const int32_t channel =
+      4 * (static_cast<int32_t>(blockIdx.z) * static_cast<int32_t>(blockDim.x) +
+           static_cast<int32_t>(threadIdx.x));
+  const int32_t* starts =
+      static_cast<const int32_t*>(params.query_start_loc_ptr);
+  const int32_t start = starts[seq];
+  const int32_t len = starts[seq + 1] - start;
+  const int32_t* slots = static_cast<const int32_t*>(params.cache_indices_ptr);
+  const int32_t slot = slots[seq];
+  if (channel >= params.dim || offset >= len || slot == params.pad_slot_id) {
+    return;
+  }
+
+  const uint16_t* row_base = static_cast<const uint16_t*>(params.x_ptr) +
+                             static_cast<int64_t>(start) * params.x_l_stride +
+                             channel;
+  auto load_row = [&](int32_t token) {
+    return *reinterpret_cast<const Bf16Pack*>(
+        row_base + static_cast<int64_t>(token) * params.x_l_stride);
+  };
+
+  Bf16Pack history0{};
+  Bf16Pack history1{};
+  Bf16Pack history2{};
+  uint16_t* state = static_cast<uint16_t*>(params.conv_state_ptr) +
+                    static_cast<int64_t>(slot) * params.conv_state_batch_stride;
+  if (offset == 0) {
+    const bool has_state =
+        static_cast<const bool*>(params.has_initial_state_ptr)[seq];
+    if (has_state) {
+#pragma unroll
+      for (int32_t lane = 0; lane < 4; ++lane) {
+        const uint16_t* channel_state =
+            state + (channel + lane) * params.conv_state_c_stride;
+        history0[lane] = channel_state[0];
+        history1[lane] = channel_state[params.conv_state_l_stride];
+        history2[lane] = channel_state[2 * params.conv_state_l_stride];
+      }
+    }
+    const Bf16Pack tail0 =
+        len >= 3 ? load_row(len - 3) : (len == 2 ? history2 : history1);
+    const Bf16Pack tail1 = len >= 2 ? load_row(len - 2) : history2;
+    const Bf16Pack tail2 = load_row(len - 1);
+#pragma unroll
+    for (int32_t lane = 0; lane < 4; ++lane) {
+      uint16_t* channel_state =
+          state + (channel + lane) * params.conv_state_c_stride;
+      channel_state[0] = tail0[lane];
+      channel_state[params.conv_state_l_stride] = tail1[lane];
+      channel_state[2 * params.conv_state_l_stride] = tail2[lane];
+    }
+  } else {
+    history0 = load_row(offset - 3);
+    history1 = load_row(offset - 2);
+    history2 = load_row(offset - 1);
+  }
+
+  const uint16_t* weight = static_cast<const uint16_t*>(params.weight_ptr);
+  Bf16Pack taps[4];
+  float bias[4];
+#pragma unroll
+  for (int32_t lane = 0; lane < 4; ++lane) {
+    taps[lane] = reinterpret_cast<const Bf16Pack*>(weight)[channel + lane];
+    bias[lane] = params.bias_ptr == nullptr
+                     ? 0.0f
+                     : unpack_bf16(static_cast<const uint16_t*>(
+                           params.bias_ptr)[channel + lane]);
+  }
+  uint16_t* out = static_cast<uint16_t*>(params.out_ptr) +
+                  static_cast<int64_t>(start + offset) * params.out_l_stride +
+                  channel;
+  const int32_t segment_len =
+      offset + BlockTokens < len ? BlockTokens : len - offset;
+  const bool normalize_head = channel < qk_channels;
+#pragma unroll 1
+  for (int32_t token = 0; token < segment_len; ++token) {
+    const Bf16Pack row = load_row(offset + token);
+    Bf16Pack rounded;
+#pragma unroll
+    for (int32_t lane = 0; lane < 4; ++lane) {
+      float value = bias[lane] +
+                    unpack_bf16(history0[lane]) * unpack_bf16(taps[lane][0]) +
+                    unpack_bf16(history1[lane]) * unpack_bf16(taps[lane][1]) +
+                    unpack_bf16(history2[lane]) * unpack_bf16(taps[lane][2]) +
+                    unpack_bf16(row[lane]) * unpack_bf16(taps[lane][3]);
+      if (params.silu_activation) {
+        constexpr float kLog2e = 1.4426950408889634f;
+        value = value / (1.0f + exp2f(-value * kLog2e));
+      }
+      rounded[lane] = static_cast<at::BFloat16>(value).x;
+    }
+    if (normalize_head) {
+      float sum = 0.0f;
+#pragma unroll
+      for (int32_t lane = 0; lane < 4; ++lane) {
+        const float value = unpack_bf16(rounded[lane]);
+        sum += value * value;
+      }
+#pragma unroll
+      for (int32_t shift = 16; shift > 0; shift >>= 1) {
+        sum += __shfl_xor_sync(0xffffffffu, sum, shift, 32);
+      }
+      const float inv_norm = rsqrtf(sum + 1e-6f);
+#pragma unroll
+      for (int32_t lane = 0; lane < 4; ++lane) {
+        rounded[lane] =
+            static_cast<at::BFloat16>(unpack_bf16(rounded[lane]) * inv_norm).x;
+      }
+    }
+    *reinterpret_cast<Bf16Pack*>(out + static_cast<int64_t>(token) *
+                                           params.out_l_stride) = rounded;
+    history0 = history1;
+    history1 = history2;
+    history2 = row;
+  }
+}
+
 }  // namespace
 
 void causal_conv1d_fwd(const at::Tensor& x,
@@ -745,7 +876,7 @@ void causal_conv1d_fwd(const at::Tensor& x,
       });
 }
 
-void causal_conv1d_fwd_token_major(const at::Tensor& x,
+bool causal_conv1d_fwd_token_major(const at::Tensor& x,
                                    const at::Tensor& weight,
                                    at::Tensor& out,
                                    const std::optional<at::Tensor>& bias,
@@ -754,7 +885,8 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
                                    const at::Tensor& cache_indices,
                                    const at::Tensor& has_initial_state,
                                    bool silu_activation,
-                                   int64_t pad_slot_id) {
+                                   int64_t pad_slot_id,
+                                   int32_t qk_channels) {
   TORCH_CHECK(x.dim() == 2 && x.is_contiguous());
   TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
   TORCH_CHECK(weight.dim() == 2 && weight.size(1) == 4);
@@ -791,10 +923,33 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
 
   at::cuda::CUDAGuard device_guard{static_cast<char>(x.get_device())};
   auto stream = at::cuda::getCurrentCUDAStream().stream();
+  constexpr uintptr_t kPackAlignment = alignof(Bf16Pack);
+  const bool use_pack4 =
+      qk_channels > 0 && qk_channels <= x.size(1) && qk_channels % 128 == 0 &&
+      x.size(1) % 4 == 0 && x.stride(0) % 4 == 0 &&
+      x.scalar_type() == at::kBFloat16 &&
+      weight.scalar_type() == at::kBFloat16 &&
+      (!bias.has_value() || bias->scalar_type() == at::kBFloat16) &&
+      weight.stride(0) == 4 && weight.stride(1) == 1 &&
+      reinterpret_cast<uintptr_t>(params.x_ptr) % kPackAlignment == 0 &&
+      reinterpret_cast<uintptr_t>(params.weight_ptr) % kPackAlignment == 0 &&
+      reinterpret_cast<uintptr_t>(params.out_ptr) % kPackAlignment == 0;
+  if (use_pack4) {
+    constexpr int32_t kPackThreads = 128;
+    constexpr int32_t kPackTokens = 8;
+    const dim3 grid(params.batch,
+                    (params.seqlen + kPackTokens - 1) / kPackTokens,
+                    (params.dim + 4 * kPackThreads - 1) / (4 * kPackThreads));
+    causal_conv1d_bf16_pack4_kernel<kPackTokens>
+        <<<grid, kPackThreads, 0, stream>>>(params, qk_channels);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+    return true;
+  }
   DISPATCH_WTYPE_ITYPE_FLOAT_AND_HALF_AND_BF16(
       x.scalar_type(), "causal_conv1d_fwd_token_major", [&] {
         causal_conv1d_fwd_token_major_cuda<input_t, weight_t>(params, stream);
       });
+  return false;
 }
 
 }  // namespace musa

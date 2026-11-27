@@ -715,6 +715,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_flat_mixed_qkv_decode =
       use_fused_gdn_decode || use_mate_gdn_decode;
 
+  bool qk_normalized_by_conv = false;
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
     // Canonical recurrent-state validity from linear_state_validity_mask.
@@ -732,6 +733,14 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       musa_pcp::receive_prefix_cache_row(
           conv_cache, logical_state_indices, *pcp_context);
     }
+    // Q then K occupy the leading channels. Fuse their per-head L2 into the
+    // convolution for the single-sequence BF16 head-128 layout, and keep the
+    // standalone L2 when this kernel does not run.
+    const int32_t qk_channels =
+        batch_size == 1 && head_k_dim_ == 128 &&
+                conv_input.scalar_type() == torch::kBFloat16
+            ? static_cast<int32_t>(2 * local_nk * head_k_dim_)
+            : 0;
     mixed_qkv =
         xllm::kernel::musa::causal_conv1d_prefill(conv_input,
                                                   conv_weight,
@@ -740,7 +749,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                                   attn_metadata.q_cu_seq_lens,
                                                   logical_state_indices,
                                                   has_initial_state,
-                                                  /*silu_activation=*/true);
+                                                  /*silu_activation=*/true,
+                                                  qk_channels,
+                                                  &qk_normalized_by_conv);
     if (pcp_context != nullptr) {
       musa_pcp::send_prefix_cache_row(
           conv_cache, logical_state_indices, *pcp_context);
@@ -880,6 +891,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.v = processed_v;
     mate_params.g = g;
     mate_params.beta = beta;
+    mate_params.use_qk_l2norm_in_kernel = !qk_normalized_by_conv;
     if (batch_size == 1) {
       mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens;
       mate_params.cu_seqlens_host =
@@ -1032,7 +1044,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           initial_state_tensor[batch_idx].unsqueeze(0);
       chunk_gated_delta_params.output_final_state = true;
       chunk_gated_delta_params.head_first = false;
-      chunk_gated_delta_params.use_qk_l2norm_in_kernel = true;
+      chunk_gated_delta_params.use_qk_l2norm_in_kernel = !qk_normalized_by_conv;
 
       torch::Tensor sequence_output;
       torch::Tensor final_state;
