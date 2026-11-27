@@ -288,6 +288,11 @@ void AttentionImpl::prefill_forward(torch::Tensor& query,
 
   if (attn_metadata.is_prefill) {
     key = key.view({-1, num_kv_heads_, head_size_});
+    if (attn_metadata.fia_sparse_mode == 1) {
+      // CANN FIA allMask requires a contiguous value tensor in non-paged
+      // prefill.
+      value = value.contiguous();
+    }
     value = value.view({-1, num_kv_heads_, head_size_});
 
     const bool bidirectional = bidirectional_prompt_;

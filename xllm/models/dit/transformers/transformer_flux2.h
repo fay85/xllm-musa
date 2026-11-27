@@ -49,6 +49,35 @@ limitations under the License.
 
 namespace xllm {
 
+namespace {
+
+torch::Tensor apply_flux2_rotary_emb_fp32(const torch::Tensor& x,
+                                          const torch::Tensor& freqs_cis) {
+  torch::Tensor cos =
+      freqs_cis[0].unsqueeze(0).unsqueeze(2).to(torch::kFloat32);
+  torch::Tensor sin =
+      freqs_cis[1].unsqueeze(0).unsqueeze(2).to(torch::kFloat32);
+  torch::Tensor x_float = x.to(torch::kFloat32);
+
+  std::vector<int64_t> reshape_shape;
+  reshape_shape.reserve(x.dim() + 1);
+  for (int64_t i = 0; i < x.dim() - 1; ++i) {
+    reshape_shape.push_back(x.size(i));
+  }
+  reshape_shape.push_back(-1);
+  reshape_shape.push_back(2);
+
+  torch::Tensor reshaped = x_float.reshape(reshape_shape);
+  torch::Tensor x_real = reshaped.select(-1, 0);
+  torch::Tensor x_imag = reshaped.select(-1, 1);
+  torch::Tensor x_rotated =
+      torch::stack({-x_imag, x_real}, -1).flatten(3).to(torch::kFloat32);
+
+  return (x_float * cos + x_rotated * sin).to(x.dtype());
+}
+
+}  // namespace
+
 class Flux2SwiGLUImpl final : public torch::nn::Module {
  public:
   Flux2SwiGLUImpl() { gate_fn_ = torch::nn::SiLU(); }
@@ -184,12 +213,12 @@ class Flux2FeedForwardImpl final : public torch::nn::Module {
 };
 TORCH_MODULE(Flux2FeedForward);
 
-class Flux2AttentionImpl : public torch::nn::Module,
-                           public xllm::dit::SequenceParallelMixin {
+class Flux2AttentionImpl final : public torch::nn::Module,
+                                 public dit::SequenceParallelMixin {
  public:
   explicit Flux2AttentionImpl(const ModelContext& context,
                               const ParallelArgs& parallel_args)
-      : xllm::dit::SequenceParallelMixin(parallel_args.dit_sp_group_),
+      : dit::SequenceParallelMixin(parallel_args.dit_sp_group_),
         options_(context.get_tensor_options()),
         parallel_args_(parallel_args) {
     auto model_args = context.get_model_args();
@@ -432,8 +461,8 @@ class Flux2AttentionImpl : public torch::nn::Module,
     auto key1 = torch::cat({encoder_hidden_states_key_proj, key}, 1);
     auto value1 = torch::cat({encoder_hidden_states_value_proj, value}, 1);
     if (image_rotary_emb.defined()) {
-      query1 = apply_rotary_emb(query1, image_rotary_emb, false);
-      key1 = apply_rotary_emb(key1, image_rotary_emb, false);
+      query1 = apply_flux2_rotary_emb_fp32(query1, image_rotary_emb);
+      key1 = apply_flux2_rotary_emb_fp32(key1, image_rotary_emb);
     }
 
     // After SP all2all, attn_heads per rank = original_heads / (tp_size *
@@ -938,12 +967,12 @@ class Flux2TransformerBlockImpl : public torch::nn::Module {
 };
 TORCH_MODULE(Flux2TransformerBlock);
 
-class Flux2ParallelSelfAttentionImpl : public torch::nn::Module,
-                                       public xllm::dit::SequenceParallelMixin {
+class Flux2ParallelSelfAttentionImpl final : public torch::nn::Module,
+                                             public dit::SequenceParallelMixin {
  public:
   explicit Flux2ParallelSelfAttentionImpl(const ModelContext& context,
                                           const ParallelArgs& parallel_args)
-      : xllm::dit::SequenceParallelMixin(parallel_args.dit_sp_group_),
+      : dit::SequenceParallelMixin(parallel_args.dit_sp_group_),
         options_(context.get_tensor_options()),
         parallel_args_(parallel_args) {
     auto model_args = context.get_model_args();
@@ -1084,8 +1113,8 @@ class Flux2ParallelSelfAttentionImpl : public torch::nn::Module,
     v = unpad_tensor(v_fn(), "hidden_states", /*dim=*/1);
 
     if (image_rotary_emb.defined()) {
-      q = apply_rotary_emb(q, image_rotary_emb, false);
-      k = apply_rotary_emb(k, image_rotary_emb, false);
+      q = apply_flux2_rotary_emb_fp32(q, image_rotary_emb);
+      k = apply_flux2_rotary_emb_fp32(k, image_rotary_emb);
     }
 
     // After SP all2all, heads per rank = attn_heads / sp_size.
@@ -1332,13 +1361,13 @@ class Flux2SingleTransformerBlockImpl : public torch::nn::Module {
 };
 TORCH_MODULE(Flux2SingleTransformerBlock);
 
-class Flux2Transformer2DModelImpl : public torch::nn::Module,
-                                    public dit::DiTCacheMixin,
-                                    public xllm::dit::SequenceParallelMixin {
+class Flux2Transformer2DModelImpl final : public torch::nn::Module,
+                                          public dit::DiTCacheMixin,
+                                          public dit::SequenceParallelMixin {
  public:
   explicit Flux2Transformer2DModelImpl(const ModelContext& context,
                                        const ParallelArgs& parallel_args)
-      : xllm::dit::SequenceParallelMixin(parallel_args.dit_sp_group_),
+      : dit::SequenceParallelMixin(parallel_args.dit_sp_group_),
         options_(context.get_tensor_options()),
         parallel_args_(parallel_args) {
     auto model_args = context.get_model_args();
@@ -1355,8 +1384,8 @@ class Flux2Transformer2DModelImpl : public torch::nn::Module,
 
     int64_t inner_dim = num_attention_heads * attention_head_dim;
 
-    time_guidance_embed_ =
-        Flux2TimestepGuidanceEmbeddings(context, inner_dim, false, true);
+    time_guidance_embed_ = Flux2TimestepGuidanceEmbeddings(
+        context, inner_dim, /*bias=*/false, model_args.guidance_embeds());
     register_module("time_guidance_embed", time_guidance_embed_);
 
     double_stream_modulation_img_ =
@@ -1641,6 +1670,7 @@ REGISTER_MODEL_ARGS(Flux2Transformer2DModel, [&] {
   LOAD_ARG_OR(patch_size, "patch_size", 1);
   LOAD_ARG_OR(rope_theta, "rope_theta", 2000.0f);
   LOAD_ARG_OR(timestep_guidance_channels, "timestep_guidance_channels", 256);
+  LOAD_ARG_OR(guidance_embeds, "guidance_embeds", true);
 });
 
 }  // namespace xllm

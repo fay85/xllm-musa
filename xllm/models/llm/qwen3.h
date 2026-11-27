@@ -145,6 +145,7 @@ class QWen3ModelImplBase : public LlmModelImplBase<DecoderLayer> {
     }
 
     auto& attn_metadata = *(input_params_new.attn_metadata);
+
     bool only_prefill =
         (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
     if (positions.dim() == 2 && only_prefill && !mrope_section_.empty()) {
@@ -355,5 +356,13 @@ REGISTER_MODEL_ARGS(qwen3, [&] {
           std::unordered_set<int32_t>(args->eos_token_id_vec().begin(),
                                       args->eos_token_id_vec().end()));
 });
+
+// HF class-name alias: diffusers pipelines (e.g. FLUX.2-klein) reference the
+// text encoder in model_index.json as ["transformers", "Qwen3ForCausalLM"],
+// and the DiT component loader resolves model args by that class name.
+REGISTER_MODEL_ARGS_LOADER_WITH_VARNAME(
+    qwen3_hf_alias,
+    Qwen3ForCausalLM,
+    ModelRegistry::get_model_args_loader("qwen3"));
 
 }  // namespace xllm
