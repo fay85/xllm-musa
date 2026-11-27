@@ -19,16 +19,16 @@ limitations under the License.
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <glog/logging.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <sstream>
+#include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <vector>
 
 #include "core/common/macros.h"
@@ -847,24 +847,48 @@ std::string get_mate_gdn_decode_tvmffi_uri(int64_t num_q_heads,
   return oss.str();
 }
 
-bool mate_gdn_decode_module_available(const std::string& uri) {
-  const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
-  if (ops_path == nullptr || ops_path[0] == '\0') {
-    return false;
+struct MateGdnDecodeLaunch {
+  std::string uri;
+  bool use_direct_tvmffi = false;
+};
+
+std::optional<MateGdnDecodeLaunch> select_mate_gdn_decode_launch(
+    int64_t num_q_heads,
+    int64_t num_v_heads,
+    torch::ScalarType dtype,
+    int64_t batch_size) {
+  const std::string direct_uri = get_mate_gdn_decode_tvmffi_uri(
+      num_q_heads, num_v_heads, dtype, batch_size);
+  if (mate_module_available(direct_uri)) {
+    MateGdnDecodeLaunch launch;
+    launch.uri = direct_uri;
+    launch.use_direct_tvmffi = true;
+    return launch;
   }
-  const std::string so_path =
-      std::string(ops_path) + "/" + uri + "/" + uri + ".so";
-  static thread_local std::unordered_map<std::string, bool> availability;
-  const auto cached = availability.find(so_path);
-  if (cached != availability.end()) {
-    return cached->second;
+  if (batch_size > 2) {
+    return std::nullopt;
   }
-  const bool available = ::access(so_path.c_str(), R_OK) == 0;
-  availability.emplace(so_path, available);
-  return available;
+  const std::string wrapper_uri =
+      get_mate_gdn_decode_uri(num_q_heads, num_v_heads, dtype);
+  if (!mate_module_available(wrapper_uri)) {
+    return std::nullopt;
+  }
+  MateGdnDecodeLaunch launch;
+  launch.uri = wrapper_uri;
+  launch.use_direct_tvmffi = false;
+  return launch;
 }
 
 }  // namespace
+
+bool mate_gdn_decode_supported(int64_t num_k_heads,
+                               int64_t num_v_heads,
+                               torch::ScalarType dtype,
+                               int64_t batch_size) {
+  return select_mate_gdn_decode_launch(
+             num_k_heads, num_v_heads, dtype, batch_size)
+      .has_value();
+}
 
 torch::Tensor mate_gated_delta_rule_decode(
     musa::MateGatedDeltaRuleDecodeParams& params) {
@@ -959,19 +983,15 @@ torch::Tensor mate_gated_delta_rule_decode(
     return output;
   }
 
-  const std::string direct_uri = get_mate_gdn_decode_tvmffi_uri(
-      num_k_heads, num_v_heads, query.scalar_type(), batch_size);
-  const bool use_direct_tvmffi = mate_gdn_decode_module_available(direct_uri);
-  CHECK(use_direct_tvmffi || batch_size <= 2)
-      << "Mate GDN decode requires the batch-tuned TVM-FFI module "
-      << direct_uri << " for batch_size=" << batch_size
-      << "; refusing to reuse the B<=2 module because its TileLang grid "
-         "configuration is incorrect for this batch bucket";
-  const std::string uri =
-      use_direct_tvmffi ? direct_uri
-                        : get_mate_gdn_decode_uri(
-                              num_k_heads, num_v_heads, query.scalar_type());
-  auto run = get_function(uri, use_direct_tvmffi ? "main" : "run");
+  const std::optional<MateGdnDecodeLaunch> launch =
+      select_mate_gdn_decode_launch(
+          num_k_heads, num_v_heads, query.scalar_type(), batch_size);
+  CHECK(launch.has_value())
+      << "Mate GDN decode has no installed module for batch_size=" << batch_size
+      << ". Batches above 2 require the direct TVM-FFI module; smaller "
+         "batches can use that module or the wrapper URI.";
+  const bool use_direct_tvmffi = launch->use_direct_tvmffi;
+  auto run = get_function(launch->uri, use_direct_tvmffi ? "main" : "run");
 
   {
     // Synchronize the FFI pool-stream fallback with the current torch stream.

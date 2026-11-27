@@ -14,9 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
-#include <unistd.h>
 
 #include <cstdlib>
+#include <functional>
 #include <optional>
 #include <sstream>
 #include <tuple>
@@ -254,17 +254,6 @@ std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
 namespace {
 
 constexpr int64_t kGdnChunkSize = 64;
-
-bool is_readable_file(const std::string& path) {
-  static thread_local std::unordered_map<std::string, bool> availability;
-  const auto cached = availability.find(path);
-  if (cached != availability.end()) {
-    return cached->second;
-  }
-  const bool available = ::access(path.c_str(), R_OK) == 0;
-  availability.emplace(path, available);
-  return available;
-}
 
 int64_t chunk_pad_size(int64_t seq_len, int64_t chunk_size) {
   return (chunk_size - seq_len % chunk_size) % chunk_size;
@@ -573,11 +562,6 @@ std::string get_mate_kkt_solve_uri(int64_t num_q_heads,
   return oss.str();
 }
 
-bool mate_kkt_module_available(const std::string& uri) {
-  return is_musa_operator_built(uri) &&
-         is_readable_file(path_to_uri_so_lib(uri));
-}
-
 // Reference host KKT implementation for [B, T, Hqk, D] keys.
 torch::Tensor kkt_solve_torch(const torch::Tensor& key,
                               const torch::Tensor& beta,
@@ -770,11 +754,11 @@ torch::Tensor kkt_solve(
   // Fall back when only the varlen module is available.
   const bool use_c1_partial_kkt =
       c1_partial_kkt_candidate &&
-      mate_kkt_module_available(get_mate_kkt_solve_uri(key.size(2),
-                                                       beta.size(2),
-                                                       key.scalar_type(),
-                                                       /*is_varlen=*/false,
-                                                       use_strided_abi));
+      mate_module_available(get_mate_kkt_solve_uri(key.size(2),
+                                                   beta.size(2),
+                                                   key.scalar_type(),
+                                                   /*is_varlen=*/false,
+                                                   use_strided_abi));
   const bool use_varlen_kkt = is_varlen && !use_c1_partial_kkt;
   if (mate_kkt_enabled()) {
     const std::string uri = get_mate_kkt_solve_uri(key.size(2),
@@ -782,7 +766,7 @@ torch::Tensor kkt_solve(
                                                    key.scalar_type(),
                                                    use_varlen_kkt,
                                                    use_strided_abi);
-    if (mate_kkt_module_available(uri)) {
+    if (mate_module_available(uri)) {
       if (ensure_tilelang_loader()) {
         if (is_varlen) {
           if (use_c1_partial_kkt) {
@@ -893,11 +877,6 @@ bool mate_gdn_c1_partial_fixed_enabled() {
   return enabled;
 }
 
-bool mate_gdn_module_available(const std::string& uri) {
-  return is_musa_operator_built(uri) &&
-         is_readable_file(path_to_uri_so_lib(uri));
-}
-
 // Use packed varlen when padding exceeds this fraction.
 constexpr double kMateGdnPaddedWasteThreshold = 0.05;
 
@@ -944,6 +923,222 @@ bool mate_gdn_needs_varlen_packing(
     return input_batch == 1 && cu_n > 2;
   }
   return false;
+}
+
+namespace {
+
+struct MateGdnPrefillLaunch {
+  bool use_full_varlen = false;
+  bool use_full_padded = false;
+  bool use_strided_abi = false;
+  bool use_c1_partial_fixed = false;
+  std::string uri;
+};
+
+struct MateGdnPrefillUris {
+  std::string full;
+  std::string full_varlen;
+  std::string full_strided;
+  std::string full_varlen_strided;
+  std::string simple;
+  std::string kkt;
+  std::string kkt_varlen;
+  std::string kkt_strided;
+  std::string kkt_varlen_strided;
+};
+
+struct MateGdnPrefillUriKey {
+  int64_t num_q_heads = 0;
+  int64_t num_v_heads = 0;
+  int32_t dtype = 0;
+
+  bool operator==(const MateGdnPrefillUriKey& other) const {
+    return num_q_heads == other.num_q_heads &&
+           num_v_heads == other.num_v_heads && dtype == other.dtype;
+  }
+};
+
+struct MateGdnPrefillUriKeyHash {
+  size_t operator()(const MateGdnPrefillUriKey& key) const {
+    size_t value = std::hash<int64_t>{}(key.num_q_heads);
+    value ^= std::hash<int64_t>{}(key.num_v_heads) + 0x9e3779b9 + (value << 6) +
+             (value >> 2);
+    value ^= std::hash<int32_t>{}(key.dtype) + 0x9e3779b9 + (value << 6) +
+             (value >> 2);
+    return value;
+  }
+};
+
+MateGdnPrefillUris mate_gdn_prefill_uris(int64_t num_q_heads,
+                                         int64_t num_v_heads,
+                                         torch::ScalarType dtype) {
+  static thread_local std::unordered_map<MateGdnPrefillUriKey,
+                                         MateGdnPrefillUris,
+                                         MateGdnPrefillUriKeyHash>
+      uri_cache;
+  const MateGdnPrefillUriKey key{
+      num_q_heads, num_v_heads, static_cast<int32_t>(dtype)};
+  const auto cached = uri_cache.find(key);
+  if (cached != uri_cache.end()) {
+    return cached->second;
+  }
+  MateGdnPrefillUris uris;
+  uris.full = get_mate_gdn_prefill_full_uri(num_q_heads, num_v_heads, dtype);
+  uris.full_varlen =
+      get_mate_gdn_prefill_full_varlen_uri(num_q_heads, num_v_heads, dtype);
+  uris.full_strided =
+      get_mate_gdn_prefill_full_strided_uri(num_q_heads, num_v_heads, dtype);
+  uris.full_varlen_strided = get_mate_gdn_prefill_full_varlen_strided_uri(
+      num_q_heads, num_v_heads, dtype);
+  uris.simple =
+      get_mate_gdn_prefill_simple_uri(num_q_heads, num_v_heads, dtype);
+  uris.kkt = get_mate_kkt_solve_uri(num_q_heads, num_v_heads, dtype);
+  uris.kkt_varlen = get_mate_kkt_solve_uri(
+      num_q_heads, num_v_heads, dtype, /*is_varlen=*/true);
+  uris.kkt_strided = get_mate_kkt_solve_uri(num_q_heads,
+                                            num_v_heads,
+                                            dtype,
+                                            /*is_varlen=*/false,
+                                            /*is_strided=*/true);
+  uris.kkt_varlen_strided = get_mate_kkt_solve_uri(num_q_heads,
+                                                   num_v_heads,
+                                                   dtype,
+                                                   /*is_varlen=*/true,
+                                                   /*is_strided=*/true);
+  uri_cache.emplace(key, uris);
+  return uris;
+}
+
+MateGdnPrefillLaunch select_mate_gdn_prefill_launch(
+    const musa::MateGatedDeltaRulePrefillParams& params,
+    int64_t input_batch,
+    int64_t input_seq_len,
+    int64_t num_q_heads,
+    int64_t num_v_heads) {
+  const torch::ScalarType dtype = params.q.scalar_type();
+  const MateGdnPrefillUris uris =
+      mate_gdn_prefill_uris(num_q_heads, num_v_heads, dtype);
+  const std::string& full_varlen_uri = uris.full_varlen;
+  const std::string& full_uri = uris.full;
+  const std::string& full_varlen_strided_uri = uris.full_varlen_strided;
+  const std::string& full_strided_uri = uris.full_strided;
+  const bool strided_input_supported = params.q.stride(-1) == 1 &&
+                                       params.k.stride(-1) == 1 &&
+                                       params.v.stride(-1) == 1;
+  const bool allow_strided_abi =
+      mate_gdn_strided_abi_enabled() && strided_input_supported;
+  const bool strided_varlen_available =
+      !mate_gdn_force_simple_kernel() && allow_strided_abi &&
+      mate_module_available(full_varlen_strided_uri) &&
+      mate_module_available(uris.kkt_varlen_strided);
+  const bool legacy_varlen_available = !mate_gdn_force_simple_kernel() &&
+                                       mate_module_available(full_varlen_uri) &&
+                                       mate_module_available(uris.kkt_varlen);
+  const bool varlen_available =
+      strided_varlen_available || legacy_varlen_available;
+  const bool strided_padded_available =
+      !mate_gdn_force_simple_kernel() && allow_strided_abi &&
+      mate_module_available(full_strided_uri) &&
+      mate_module_available(uris.kkt_strided);
+  const bool legacy_padded_available = !mate_gdn_force_simple_kernel() &&
+                                       mate_module_available(full_uri) &&
+                                       mate_module_available(uris.kkt);
+
+  const bool needs_varlen_packing =
+      mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len);
+  const bool use_c1_partial_fixed =
+      mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
+      !needs_varlen_packing && input_seq_len >= kGdnChunkSize &&
+      input_seq_len % kGdnChunkSize != 0 &&
+      (strided_padded_available || legacy_padded_available);
+  // Full-varlen kernels accept a partial final chunk.
+  const bool use_unpadded_c1_varlen =
+      !use_c1_partial_fixed && mate_gdn_unpadded_c1_enabled() &&
+      input_batch == 1 && input_seq_len >= kGdnChunkSize &&
+      input_seq_len % kGdnChunkSize != 0 && varlen_available;
+  MateGdnPrefillLaunch launch;
+  launch.use_c1_partial_fixed = use_c1_partial_fixed;
+  launch.use_full_varlen =
+      !use_c1_partial_fixed && varlen_available &&
+      ((params.output.has_value() && params.output->defined()) ||
+       (params.final_state.has_value() && params.final_state->defined()) ||
+       (params.kkt_output.has_value() && params.kkt_output->defined()) ||
+       needs_varlen_packing || use_unpadded_c1_varlen);
+  launch.use_full_padded =
+      !launch.use_full_varlen &&
+      (strided_padded_available || legacy_padded_available);
+  launch.use_strided_abi =
+      (launch.use_full_varlen && strided_varlen_available) ||
+      (launch.use_full_padded && strided_padded_available);
+  launch.uri =
+      launch.use_full_varlen
+          ? (launch.use_strided_abi ? full_varlen_strided_uri : full_varlen_uri)
+          : (launch.use_full_padded
+                 ? (launch.use_strided_abi ? full_strided_uri : full_uri)
+                 : uris.simple);
+  return launch;
+}
+
+bool mate_prefill_tensors_match(
+    const musa::MateGatedDeltaRulePrefillParams& params) {
+  const torch::Tensor& query = params.q;
+  const torch::Tensor& key = params.k;
+  const torch::Tensor& value = params.v;
+  if (!query.defined() || !key.defined() || !value.defined() ||
+      !params.beta.defined() || !params.g.defined()) {
+    return false;
+  }
+  if (query.dim() != 4 || key.dim() != 4 || value.dim() != 4 ||
+      params.beta.dim() != 3 || params.g.dim() != 3) {
+    return false;
+  }
+  if (query.scalar_type() != key.scalar_type() ||
+      query.scalar_type() != value.scalar_type() ||
+      query.device() != key.device() || query.device() != value.device() ||
+      params.beta.device() != query.device() ||
+      params.g.device() != query.device()) {
+    return false;
+  }
+  if (query.size(0) != key.size(0) || query.size(0) != value.size(0) ||
+      query.size(1) != key.size(1) || query.size(1) != value.size(1) ||
+      query.size(2) != key.size(2) || query.size(3) != key.size(3)) {
+    return false;
+  }
+  const int64_t num_q_heads = query.size(2);
+  const int64_t num_v_heads = value.size(2);
+  const int64_t head_k_dim = query.size(3);
+  const int64_t head_v_dim = value.size(3);
+  if (num_q_heads <= 0 || num_v_heads <= 0 || head_k_dim <= 0 ||
+      head_v_dim <= 0 || head_k_dim != head_v_dim ||
+      num_v_heads % num_q_heads != 0) {
+    return false;
+  }
+  return params.beta.size(0) == query.size(0) &&
+         params.g.size(0) == query.size(0) &&
+         params.beta.size(1) == query.size(1) &&
+         params.g.size(1) == query.size(1) &&
+         params.beta.size(2) == num_v_heads && params.g.size(2) == num_v_heads;
+}
+
+}  // namespace
+
+bool mate_gdn_prefill_supported(
+    const musa::MateGatedDeltaRulePrefillParams& params) {
+  if (!mate_prefill_tensors_match(params)) {
+    return false;
+  }
+  const int64_t input_batch = params.q.size(0);
+  const int64_t input_seq_len = params.q.size(1);
+  if (input_batch == 0 || input_seq_len == 0) {
+    return true;
+  }
+  if (params.q.size(3) != 128) {
+    return false;
+  }
+  const MateGdnPrefillLaunch launch = select_mate_gdn_prefill_launch(
+      params, input_batch, input_seq_len, params.q.size(2), params.v.size(2));
+  return (launch.use_full_varlen || launch.use_full_padded) &&
+         mate_module_available(launch.uri);
 }
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
@@ -1017,76 +1212,13 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     return {output, final_state};
   }
 
-  const std::string full_varlen_uri = get_mate_gdn_prefill_full_varlen_uri(
-      num_q_heads, num_v_heads, query.scalar_type());
-  const std::string full_uri = get_mate_gdn_prefill_full_uri(
-      num_q_heads, num_v_heads, query.scalar_type());
-  const std::string full_varlen_strided_uri =
-      get_mate_gdn_prefill_full_varlen_strided_uri(
-          num_q_heads, num_v_heads, query.scalar_type());
-  const std::string full_strided_uri = get_mate_gdn_prefill_full_strided_uri(
-      num_q_heads, num_v_heads, query.scalar_type());
-  const bool strided_input_supported =
-      query.stride(-1) == 1 && key.stride(-1) == 1 && value.stride(-1) == 1;
-  const bool allow_strided_abi =
-      mate_gdn_strided_abi_enabled() && strided_input_supported;
-  const bool strided_varlen_available =
-      !mate_gdn_force_simple_kernel() && allow_strided_abi &&
-      mate_gdn_module_available(full_varlen_strided_uri) &&
-      mate_kkt_module_available(get_mate_kkt_solve_uri(num_q_heads,
-                                                       num_v_heads,
-                                                       query.scalar_type(),
-                                                       /*is_varlen=*/true,
-                                                       /*is_strided=*/true));
-  const bool legacy_varlen_available =
-      !mate_gdn_force_simple_kernel() &&
-      mate_gdn_module_available(full_varlen_uri) &&
-      mate_kkt_module_available(get_mate_kkt_solve_uri(
-          num_q_heads, num_v_heads, query.scalar_type(), /*is_varlen=*/true));
-  const bool varlen_available =
-      strided_varlen_available || legacy_varlen_available;
-  const bool strided_padded_available =
-      !mate_gdn_force_simple_kernel() && allow_strided_abi &&
-      mate_gdn_module_available(full_strided_uri) &&
-      mate_kkt_module_available(get_mate_kkt_solve_uri(num_q_heads,
-                                                       num_v_heads,
-                                                       query.scalar_type(),
-                                                       /*is_varlen=*/false,
-                                                       /*is_strided=*/true));
-  const bool legacy_padded_available =
-      !mate_gdn_force_simple_kernel() && mate_gdn_module_available(full_uri) &&
-      mate_kkt_module_available(get_mate_kkt_solve_uri(
-          num_q_heads, num_v_heads, query.scalar_type()));
-
-  const bool needs_varlen_packing =
-      mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len);
-  const bool use_c1_partial_fixed =
-      mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
-      !needs_varlen_packing && input_seq_len >= kGdnChunkSize &&
-      input_seq_len % kGdnChunkSize != 0 &&
-      (strided_padded_available || legacy_padded_available);
-  // Full-varlen kernels accept a partial final chunk.
-  const bool use_unpadded_c1_varlen =
-      !use_c1_partial_fixed && mate_gdn_unpadded_c1_enabled() &&
-      input_batch == 1 && input_seq_len >= kGdnChunkSize &&
-      input_seq_len % kGdnChunkSize != 0 && varlen_available;
-  const bool use_full_varlen =
-      !use_c1_partial_fixed && varlen_available &&
-      ((params.output.has_value() && params.output->defined()) ||
-       (params.final_state.has_value() && params.final_state->defined()) ||
-       (params.kkt_output.has_value() && params.kkt_output->defined()) ||
-       needs_varlen_packing || use_unpadded_c1_varlen);
-  const bool use_full_padded =
-      !use_full_varlen && (strided_padded_available || legacy_padded_available);
-  const bool use_strided_abi = (use_full_varlen && strided_varlen_available) ||
-                               (use_full_padded && strided_padded_available);
-  const std::string uri =
-      use_full_varlen
-          ? (use_strided_abi ? full_varlen_strided_uri : full_varlen_uri)
-          : (use_full_padded
-                 ? (use_strided_abi ? full_strided_uri : full_uri)
-                 : get_mate_gdn_prefill_simple_uri(
-                       num_q_heads, num_v_heads, query.scalar_type()));
+  const MateGdnPrefillLaunch launch = select_mate_gdn_prefill_launch(
+      params, input_batch, input_seq_len, num_q_heads, num_v_heads);
+  const bool use_full_varlen = launch.use_full_varlen;
+  const bool use_full_padded = launch.use_full_padded;
+  const bool use_strided_abi = launch.use_strided_abi;
+  const bool use_c1_partial_fixed = launch.use_c1_partial_fixed;
+  const std::string& uri = launch.uri;
 
   CHECK(head_k_dim == 128 && is_musa_operator_built(uri))
       << "Unsupported MUSA GDN prefill configuration: operator " << uri

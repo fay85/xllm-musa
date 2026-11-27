@@ -17,7 +17,9 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -30,9 +32,25 @@ namespace layer {
 
 namespace {
 constexpr bool kEnableFusedGdnDecode = true;
-constexpr bool kEnableMateGdnDecode = false;
-constexpr bool kEnableMateGdnPrefill = false;
 constexpr int64_t kDefaultMaxGraphBatchSize = 256;
+
+torch::Tensor gdn_decode_output_buffer(torch::Tensor& buffer,
+                                       const torch::Tensor& mixed_qkv,
+                                       int64_t num_v_heads,
+                                       int64_t head_v_dim) {
+  const int64_t batch = mixed_qkv.size(0);
+  const int64_t capacity = std::max(batch, kDefaultMaxGraphBatchSize);
+  const torch::TensorOptions options = mixed_qkv.options();
+  const bool needs = !buffer.defined() || buffer.size(0) < batch ||
+                     buffer.size(1) != num_v_heads ||
+                     buffer.size(2) != head_v_dim ||
+                     buffer.scalar_type() != options.dtype().toScalarType() ||
+                     buffer.device() != options.device();
+  if (needs) {
+    buffer = torch::empty({capacity, num_v_heads, head_v_dim}, options);
+  }
+  return buffer.narrow(/*dim=*/0, /*start=*/0, /*length=*/batch);
+}
 
 torch::Tensor l2norm(const torch::Tensor& x, int64_t dim, double eps = 1e-6) {
   auto norm =
@@ -407,6 +425,66 @@ torch::Tensor run_spec_verify_gated_delta_rule(
   return output;
 }
 
+// Zeros only the padded tail of each row. q/k/v may be views of mixed_qkv.
+// Valid tokens stay unchanged. The Mate prefill branch reads these tensors
+// in the following kernel call and does not use the cleared tail afterward.
+void zero_invalid_prefill_rows(torch::Tensor& query,
+                               torch::Tensor& key,
+                               torch::Tensor& value,
+                               torch::Tensor& g,
+                               torch::Tensor& beta,
+                               const std::vector<int32_t>& sequence_lengths) {
+  CHECK_GE(sequence_lengths.size(), static_cast<size_t>(query.size(0)))
+      << "q_seq_lens_vec must be populated for GDN prefill.";
+  CHECK_EQ(key.size(0), query.size(0));
+  CHECK_EQ(key.size(1), query.size(1));
+  CHECK_EQ(value.size(0), query.size(0));
+  CHECK_EQ(value.size(1), query.size(1));
+  CHECK_EQ(g.size(0), query.size(0));
+  CHECK_EQ(g.size(1), query.size(1));
+  CHECK_EQ(beta.size(0), query.size(0));
+  CHECK_EQ(beta.size(1), query.size(1));
+  const int64_t batch_size = query.size(0);
+  const int64_t padded_length = query.size(1);
+  for (int64_t batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+    const int64_t valid_length =
+        sequence_lengths[static_cast<size_t>(batch_idx)];
+    CHECK_GE(valid_length, 0);
+    CHECK_LE(valid_length, padded_length);
+    if (valid_length >= padded_length) {
+      continue;
+    }
+    const int64_t invalid_length = padded_length - valid_length;
+    query[batch_idx]
+        .narrow(/*dim=*/0, /*start=*/valid_length, /*length=*/invalid_length)
+        .zero_();
+    key[batch_idx]
+        .narrow(/*dim=*/0, /*start=*/valid_length, /*length=*/invalid_length)
+        .zero_();
+    value[batch_idx]
+        .narrow(/*dim=*/0, /*start=*/valid_length, /*length=*/invalid_length)
+        .zero_();
+    g[batch_idx]
+        .narrow(/*dim=*/0, /*start=*/valid_length, /*length=*/invalid_length)
+        .zero_();
+    beta[batch_idx]
+        .narrow(/*dim=*/0, /*start=*/valid_length, /*length=*/invalid_length)
+        .zero_();
+  }
+}
+
+const std::string& gdn_decode_backend() {
+  static const std::string backend = [] {
+    const char* env = std::getenv("XLLM_GDN_DECODE_BACKEND");
+    const std::string value =
+        env == nullptr ? std::string("fused") : std::string(env);
+    CHECK(value == "mate" || value == "fused" || value == "reference")
+        << "Unsupported XLLM_GDN_DECODE_BACKEND=" << value;
+    return value;
+  }();
+  return backend;
+}
+
 }  // namespace
 
 Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
@@ -613,10 +691,25 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   // attn).
   const bool decode_eligible = !is_any_prefill && !use_spec_verify &&
                                seq_len == 1 && checkpoint_stride == 1;
-  // Production defaults: fused decode on, mate decode/prefill off.
-  const bool use_fused_gdn_decode = kEnableFusedGdnDecode && decode_eligible;
+  // The fixed AOT bundle has no Mate decode operator. Leave the backend
+  // unset to stay on fused. Set XLLM_GDN_DECODE_BACKEND=mate to opt in; a
+  // missing module uses the generic path.
+  const std::string& decode_backend = gdn_decode_backend();
+  const bool use_fused_gdn_decode =
+      kEnableFusedGdnDecode && decode_eligible && decode_backend == "fused";
+  const bool mate_decode_requested =
+      decode_eligible && decode_backend == "mate";
+  const bool mate_decode_batch_supported =
+      !mate_decode_requested ||
+      kernel::musa::mate_gdn_decode_supported(
+          local_nk, local_nv, mixed_qkv.scalar_type(), batch_size);
+  if (mate_decode_requested && !mate_decode_batch_supported) {
+    LOG_FIRST_N(WARNING, 1) << "Mate GDN decode batch " << batch_size
+                            << " has no installed Mate decode kernel. "
+                               "Using the generic decode path.";
+  }
   const bool use_mate_gdn_decode =
-      kEnableMateGdnDecode && decode_eligible && !use_fused_gdn_decode;
+      mate_decode_requested && mate_decode_batch_supported;
   // Both fused and mate decode paths consume the flat [tokens, dim] mixed_qkv
   // and split q/k/v via strided reads (no contiguous() copies).
   const bool use_flat_mixed_qkv_decode =
@@ -770,31 +863,67 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
-  // Context-parallel prefill requires the single-sequence Mate GDN prefill;
-  // without PCP keep main's original Mate-vs-chunk selection.
-  const bool use_mate_gdn_prefill =
+  // Context-parallel prefill must use the single-sequence Mate kernel.
+  // Without PCP, use Mate when a fixed or varlen module is installed.
+  const bool use_mate_gdn_chunked_prefill =
+      attn_metadata.is_chunked_prefill && batch_size == 1;
+  const bool mate_prefill_requested =
       !use_spec_verify &&
-      (attn_metadata.pcp_context != nullptr
+      (pcp_context != nullptr
            ? (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill)
-           : (kEnableMateGdnPrefill && attn_metadata.is_prefill));
-  // Apply chunked or recurrent gated-delta attention and update caches.
-  CHECK(pcp_context == nullptr || (use_mate_gdn_prefill && batch_size == 1))
-      << "context-parallel prefill requires the single-sequence Mate GDN "
-         "prefill";
-  if (use_mate_gdn_prefill) {
-    xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
+           : (attn_metadata.is_prefill || use_mate_gdn_chunked_prefill));
+  xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
+  bool mate_prefill_supported = false;
+  if (mate_prefill_requested) {
     mate_params.q = processed_q;
     mate_params.k = processed_k;
     mate_params.v = processed_v;
     mate_params.g = g;
     mate_params.beta = beta;
-    mate_params.scale =
-        1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
+    if (batch_size == 1) {
+      mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens;
+      mate_params.cu_seqlens_host =
+          std::vector<int32_t>{0, static_cast<int32_t>(seq_len)};
+    }
+    mate_prefill_supported =
+        kernel::musa::mate_gdn_prefill_supported(mate_params);
+    if (!mate_prefill_supported) {
+      LOG_FIRST_N(WARNING, 1)
+          << "Mate GDN prefill heads " << processed_q.size(2) << "/"
+          << processed_v.size(2)
+          << " have no installed Mate prefill kernel. "
+             "Using the generic prefill path.";
+    }
+  }
+  const bool use_mate_gdn_prefill =
+      mate_prefill_requested && mate_prefill_supported;
+  CHECK(pcp_context == nullptr || (use_mate_gdn_prefill && batch_size == 1))
+      << "context-parallel prefill requires the single-sequence Mate GDN "
+         "prefill";
+  // Apply chunked or recurrent gated-delta attention and update caches.
+  if (use_mate_gdn_prefill) {
     if (pcp_context != nullptr &&
         musa_pcp::receives_prefix_state(*pcp_context)) {
       // This rank continues the prompt rows of the preceding rank: take its
       // recurrent state instead of reading the cache.
       mate_params.initial_state = musa_pcp::take_prefix_rows(*pcp_context);
+    } else {
+      torch::Tensor initial_state =
+          torch::index_select(ssm_cache, 0, linear_state_base_indices);
+      // Write real zeros. Multiplying a NaN cache slot by zero keeps NaN.
+      initial_state.masked_fill_(
+          ~attn_metadata.has_initial_states.view({-1, 1, 1, 1}), 0);
+      mate_params.initial_state = initial_state;
+    }
+    if (batch_size > 1) {
+      // The rectangular Mate prefill treats every row as a token. Zero the
+      // padded tail so a short sequence's state is not decayed.
+      zero_invalid_prefill_rows(processed_q,
+                                processed_k,
+                                processed_v,
+                                g,
+                                beta,
+                                attn_metadata.q_seq_lens_vec);
     }
     torch::Tensor mate_final_state;
     std::tie(core_attn_out, mate_final_state) =
@@ -808,62 +937,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       musa_pcp::defer_final_state(
           ssm_cache, linear_state_base_indices, *pcp_context);
     }
-  } else if (!use_spec_verify && attn_metadata.is_prefill &&
-             !attn_metadata.is_chunked_prefill) {
-    xllm::kernel::ChunkGatedDeltaRuleParams chunk_gated_delta_params;
-    chunk_gated_delta_params.q = processed_q;
-    chunk_gated_delta_params.k = processed_k;
-    chunk_gated_delta_params.v = processed_v;
-    CHECK_GE(attn_metadata.q_seq_lens_vec.size(),
-             static_cast<size_t>(processed_q.size(0)))
-        << "q_seq_lens_vec must be populated for GDN prefill.";
-    for (int64_t batch_idx = 0; batch_idx < processed_q.size(0); ++batch_idx) {
-      const int64_t valid_len = attn_metadata.q_seq_lens_vec[batch_idx];
-      CHECK_GE(valid_len, 0);
-      CHECK_LE(valid_len, processed_q.size(1));
-      if (valid_len < processed_q.size(1)) {
-        processed_q[batch_idx]
-            .narrow(/*dim=*/0,
-                    /*start=*/valid_len,
-                    /*length=*/processed_q.size(1) - valid_len)
-            .zero_();
-        processed_k[batch_idx]
-            .narrow(/*dim=*/0,
-                    /*start=*/valid_len,
-                    /*length=*/processed_k.size(1) - valid_len)
-            .zero_();
-        processed_v[batch_idx]
-            .narrow(/*dim=*/0,
-                    /*start=*/valid_len,
-                    /*length=*/processed_v.size(1) - valid_len)
-            .zero_();
-        g[batch_idx]
-            .narrow(/*dim=*/0,
-                    /*start=*/valid_len,
-                    /*length=*/processed_q.size(1) - valid_len)
-            .zero_();
-        beta[batch_idx]
-            .narrow(/*dim=*/0,
-                    /*start=*/valid_len,
-                    /*length=*/processed_q.size(1) - valid_len)
-            .zero_();
-      }
-    }
-    chunk_gated_delta_params.g = g;
-    chunk_gated_delta_params.beta = beta;
-    torch::Tensor initial_state_tensor =
-        torch::index_select(ssm_cache, 0, linear_state_base_indices);
-    initial_state_tensor.fill_(0.0);
-    chunk_gated_delta_params.initial_state = initial_state_tensor;
-    chunk_gated_delta_params.output_final_state = true;
-    chunk_gated_delta_params.cu_seqlens = attn_metadata.q_cu_seq_lens;
-    chunk_gated_delta_params.head_first = false;
-    chunk_gated_delta_params.use_qk_l2norm_in_kernel = true;
-    std::tie(core_attn_out, last_recurrent_state) =
-        xllm::kernel::chunk_gated_delta_rule(chunk_gated_delta_params);
-    ssm_cache.index_put_(
-        {linear_state_base_indices},
-        last_recurrent_state.transpose(-1, -2).to(ssm_cache.dtype()));
   } else if (use_spec_verify) {
     torch::Tensor spec_linear_state_base_indices =
         expand_sequence_tensor_to_batch(
@@ -1007,45 +1080,37 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     fused_params.head_v_dim = head_v_dim_;
     fused_params.scale = 1.0 / std::sqrt(static_cast<double>(head_k_dim_));
     fused_params.use_qk_l2norm = true;
-    {
-      const int64_t b = fused_params.mixed_qkv.size(0);
-      const int64_t hv = num_v_heads_ / tp_size_;
-      const int64_t v = head_v_dim_;
-      const int64_t capacity = std::max(b, kDefaultMaxGraphBatchSize);
-      const auto opts = mixed_qkv.options();
-      const bool needs = !fused_gdn_decode_out_buf_.defined() ||
-                         fused_gdn_decode_out_buf_.size(0) < b ||
-                         fused_gdn_decode_out_buf_.size(1) != hv ||
-                         fused_gdn_decode_out_buf_.size(2) != v ||
-                         fused_gdn_decode_out_buf_.scalar_type() !=
-                             opts.dtype().toScalarType() ||
-                         fused_gdn_decode_out_buf_.device() != opts.device();
-      if (needs) {
-        fused_gdn_decode_out_buf_ = torch::empty({capacity, hv, v}, opts);
-      }
-      fused_params.decode_output = fused_gdn_decode_out_buf_.narrow(
-          /*dim=*/0, /*start=*/0, /*length=*/b);
-    }
+    fused_params.decode_output =
+        gdn_decode_output_buffer(gdn_decode_out_buf_,
+                                 fused_params.mixed_qkv,
+                                 num_v_heads_ / tp_size_,
+                                 head_v_dim_);
     core_attn_out =
         xllm::kernel::musa::fused_gated_delta_rule_decode(fused_params)
             .unsqueeze(0);
   } else if (use_mate_gdn_decode) {
-    xllm::kernel::musa::MateGatedDeltaRuleDecodeParams mate_params;
-    mate_params.mixed_qkv = mixed_qkv;
-    mate_params.state = ssm_cache;
-    mate_params.A_log = A_log_;
-    mate_params.a = a.dim() == 3 ? a.select(1, 0) : a.squeeze(1);
-    mate_params.dt_bias = dt_bias_;
-    mate_params.b = b.dim() == 3 ? b.select(1, 0) : b.squeeze(1);
-    mate_params.state_indices = logical_state_indices;
-    mate_params.num_k_heads = num_k_heads_ / tp_size_;
-    mate_params.num_v_heads = num_v_heads_ / tp_size_;
-    mate_params.head_k_dim = head_k_dim_;
-    mate_params.head_v_dim = head_v_dim_;
-    mate_params.scale = 1.0 / std::sqrt(static_cast<double>(head_k_dim_));
-    mate_params.use_qk_l2norm = true;
+    xllm::kernel::musa::MateGatedDeltaRuleDecodeParams mate_decode_params;
+    mate_decode_params.mixed_qkv = mixed_qkv;
+    mate_decode_params.state = ssm_cache;
+    mate_decode_params.A_log = A_log_;
+    mate_decode_params.a = a.dim() == 3 ? a.select(1, 0) : a.squeeze(1);
+    mate_decode_params.dt_bias = dt_bias_;
+    mate_decode_params.b = b.dim() == 3 ? b.select(1, 0) : b.squeeze(1);
+    mate_decode_params.state_indices = logical_state_indices;
+    mate_decode_params.num_k_heads = num_k_heads_ / tp_size_;
+    mate_decode_params.num_v_heads = num_v_heads_ / tp_size_;
+    mate_decode_params.head_k_dim = head_k_dim_;
+    mate_decode_params.head_v_dim = head_v_dim_;
+    mate_decode_params.scale =
+        1.0 / std::sqrt(static_cast<double>(head_k_dim_));
+    mate_decode_params.use_qk_l2norm = true;
+    mate_decode_params.decode_output =
+        gdn_decode_output_buffer(gdn_decode_out_buf_,
+                                 mate_decode_params.mixed_qkv,
+                                 num_v_heads_ / tp_size_,
+                                 head_v_dim_);
     core_attn_out =
-        xllm::kernel::musa::mate_gated_delta_rule_decode(mate_params)
+        xllm::kernel::musa::mate_gated_delta_rule_decode(mate_decode_params)
             .unsqueeze(0);
   } else {
     double scale = 1.0 / std::sqrt(static_cast<float>(processed_q.size(-1)));

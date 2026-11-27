@@ -103,8 +103,8 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   // Persistent output for causal convolution during decode.
   mutable torch::Tensor conv1d_decode_out_buf_;
 
-  // Persistent output for the fused gated-delta-rule decode kernel.
-  mutable torch::Tensor fused_gdn_decode_out_buf_;
+  // Persistent output shared by fused and Mate gated-delta-rule decode.
+  mutable torch::Tensor gdn_decode_out_buf_;
 };
 
 }  // namespace layer

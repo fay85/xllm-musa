@@ -117,6 +117,10 @@ class TvmffiStreamGuard final {
 
 std::string path_to_uri_so_lib(const std::string& uri);
 
+// True when the operator is in this build and its shared library is readable.
+// The combined result is cached for the calling thread.
+bool mate_module_available(const std::string& uri);
+
 DLDataType to_dl_data_type(torch::ScalarType scalar_type);
 
 ffi::Tensor to_ffi_tensor(const torch::Tensor& torch_tensor);

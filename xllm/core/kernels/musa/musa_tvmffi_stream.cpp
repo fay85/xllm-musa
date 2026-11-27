@@ -937,6 +937,19 @@ std::string path_to_uri_so_lib(const std::string& uri) {
   return get_musa_ops_root() + "/" + uri + "/" + uri + ".so";
 }
 
+bool mate_module_available(const std::string& uri) {
+  static thread_local std::unordered_map<std::string, bool> availability;
+  const auto cached = availability.find(uri);
+  if (cached != availability.end()) {
+    return cached->second;
+  }
+  const std::string so_path = path_to_uri_so_lib(uri);
+  const bool available =
+      is_musa_operator_built(uri) && ::access(so_path.c_str(), R_OK) == 0;
+  availability.emplace(uri, available);
+  return available;
+}
+
 void validate_musa_ops_bundle(const std::string& root) {
   static std::mutex mutex;
   static std::unordered_set<std::string> verified_roots;

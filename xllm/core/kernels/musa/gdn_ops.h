@@ -72,7 +72,6 @@ struct MateGatedDeltaRulePrefillParams {
   torch::Tensor v;
   torch::Tensor g;
   torch::Tensor beta;
-  std::optional<float> scale = std::nullopt;
   std::optional<torch::Tensor> initial_state = std::nullopt;
   std::optional<torch::Tensor> cu_seqlens = std::nullopt;
   std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
@@ -169,8 +168,21 @@ torch::Tensor recurrent_gated_delta_rule(
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
 
+// True when this prefill launch selects a fixed or varlen Mate module that is
+// in the build and readable. Other head counts, head dims, and dtypes stay on
+// the generic chunk path.
+bool mate_gdn_prefill_supported(const MateGatedDeltaRulePrefillParams& params);
+
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
+
+// True when the Mate decode module that this batch would load is in the build
+// and its shared library is readable. Batches above 2 accept only the direct
+// TVM-FFI module. Smaller batches can use that module or the wrapper URI.
+bool mate_gdn_decode_supported(int64_t num_k_heads,
+                               int64_t num_v_heads,
+                               torch::ScalarType dtype,
+                               int64_t batch_size);
 
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);

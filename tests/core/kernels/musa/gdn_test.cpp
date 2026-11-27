@@ -144,7 +144,6 @@ TEST(MusaGdnTest, PrefillMatchesReferenceForBothHeadCountsAndSequenceLayouts) {
       params.initial_state = initial.to(target);
       params.cu_seqlens_host = cu;
       params.cu_seqlens = torch::tensor(cu, torch::kInt32).to(target);
-      params.scale = scale;
       auto [output, final_state] = mate_gated_delta_rule_prefill(params);
 
       const auto normalize = [](const torch::Tensor& input) {
