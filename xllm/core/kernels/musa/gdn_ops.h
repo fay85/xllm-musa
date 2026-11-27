@@ -199,17 +199,23 @@ void causal_conv1d_fwd(const torch::Tensor& x,
                        int64_t pad_slot_id);
 
 // Returns true when the convolution also normalized the leading Q/K channels.
-bool causal_conv1d_fwd_token_major(const torch::Tensor& x,
-                                   const torch::Tensor& weight,
-                                   torch::Tensor& out,
-                                   const std::optional<torch::Tensor>& bias,
-                                   const torch::Tensor& conv_states,
-                                   const torch::Tensor& query_start_loc,
-                                   const torch::Tensor& cache_indices,
-                                   const torch::Tensor& has_initial_state,
-                                   bool silu_activation,
-                                   int64_t pad_slot_id,
-                                   int32_t qk_channels = 0);
+bool causal_conv1d_fwd_token_major(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    torch::Tensor& out,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& conv_states,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation,
+    int64_t pad_slot_id,
+    int32_t qk_channels = 0,
+    int32_t num_q_heads = 0,
+    int32_t num_k_heads = 0,
+    const torch::Tensor& q_out = torch::Tensor(),
+    const torch::Tensor& k_out = torch::Tensor(),
+    const torch::Tensor& v_out = torch::Tensor());
 
 torch::Tensor causal_conv1d(const torch::Tensor& x,
                             const torch::Tensor& weight,
@@ -233,6 +239,25 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                     bool silu_activation,
                                     int32_t qk_channels = 0,
                                     bool* qk_normalized = nullptr);
+
+// Writes Q, K, and V directly. SiLU is the local expf formula. When
+// normalize_qk is set, Q/K use the l2_norm_pair_h128 reduction. Returns
+// whether that normalization ran.
+bool causal_conv1d_prefill_qkv(const torch::Tensor& x,
+                               const torch::Tensor& weight,
+                               const torch::Tensor& conv_state,
+                               const std::optional<torch::Tensor>& bias,
+                               const torch::Tensor& query_start_loc,
+                               const torch::Tensor& cache_indices,
+                               const torch::Tensor& has_initial_state,
+                               bool silu_activation,
+                               int32_t num_q_heads,
+                               int32_t num_k_heads,
+                               int32_t num_v_heads,
+                               torch::Tensor q,
+                               torch::Tensor k,
+                               torch::Tensor v,
+                               bool normalize_qk);
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);

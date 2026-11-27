@@ -716,6 +716,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       use_fused_gdn_decode || use_mate_gdn_decode;
 
   bool qk_normalized_by_conv = false;
+  bool conv_qkv_ready = false;
+  torch::Tensor conv_q;
+  torch::Tensor conv_k;
+  torch::Tensor conv_v;
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
     // Canonical recurrent-state validity from linear_state_validity_mask.
@@ -733,32 +737,56 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       musa_pcp::receive_prefix_cache_row(
           conv_cache, logical_state_indices, *pcp_context);
     }
-    // Q then K occupy the leading channels. Fuse their per-head L2 into the
-    // convolution for the single-sequence BF16 head-128 layout, and keep the
-    // standalone L2 when this kernel does not run.
-    const int32_t qk_channels =
-        batch_size == 1 && head_k_dim_ == 128 &&
-                conv_input.scalar_type() == torch::kBFloat16
-            ? static_cast<int32_t>(2 * local_nk * head_k_dim_)
-            : 0;
-    mixed_qkv =
-        xllm::kernel::musa::causal_conv1d_prefill(conv_input,
-                                                  conv_weight,
-                                                  conv_cache,
-                                                  std::nullopt,
-                                                  attn_metadata.q_cu_seq_lens,
-                                                  logical_state_indices,
-                                                  has_initial_state,
-                                                  /*silu_activation=*/true,
-                                                  qk_channels,
-                                                  &qk_normalized_by_conv);
+    // Four-wide convolution uses the local expf SiLU and writes Q, K, and V
+    // directly. Q/K normalization matches l2_norm_pair_h128. Gating stays in
+    // fused_gdn_gating. Other layouts keep the mixed convolution plus a
+    // standalone L2.
+    const bool split_conv = head_k_dim_ == 128 && head_v_dim_ == 128 &&
+                            conv_input.scalar_type() == torch::kBFloat16 &&
+                            local_nk > 0 && local_nv > 0;
+    if (split_conv) {
+      const torch::TensorOptions options = conv_input.options();
+      conv_q =
+          torch::zeros({batch_size, seq_len, local_nk, head_k_dim_}, options);
+      conv_k =
+          torch::zeros({batch_size, seq_len, local_nk, head_k_dim_}, options);
+      conv_v =
+          torch::zeros({batch_size, seq_len, local_nv, head_v_dim_}, options);
+      qk_normalized_by_conv = xllm::kernel::musa::causal_conv1d_prefill_qkv(
+          conv_input,
+          conv_weight,
+          conv_cache,
+          std::nullopt,
+          attn_metadata.q_cu_seq_lens,
+          logical_state_indices,
+          has_initial_state,
+          /*silu_activation=*/true,
+          static_cast<int32_t>(local_nk),
+          static_cast<int32_t>(local_nk),
+          static_cast<int32_t>(local_nv),
+          conv_q,
+          conv_k,
+          conv_v,
+          /*normalize_qk=*/true);
+      conv_qkv_ready = qk_normalized_by_conv;
+    }
+    if (!conv_qkv_ready) {
+      mixed_qkv =
+          xllm::kernel::musa::causal_conv1d_prefill(conv_input,
+                                                    conv_weight,
+                                                    conv_cache,
+                                                    std::nullopt,
+                                                    attn_metadata.q_cu_seq_lens,
+                                                    logical_state_indices,
+                                                    has_initial_state,
+                                                    /*silu_activation=*/true);
+      mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
+      mixed_qkv = mixed_qkv.transpose(1, 2);
+    }
     if (pcp_context != nullptr) {
       musa_pcp::send_prefix_cache_row(
           conv_cache, logical_state_indices, *pcp_context);
     }
-
-    mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
-    mixed_qkv = mixed_qkv.transpose(1, 2);
   } else if (use_spec_verify) {
     CHECK(input_params.num_accepted_tokens.defined())
         << "num_accepted_tokens must be populated for Qwen3.5 spec verify";
@@ -869,8 +897,14 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor processed_k;
   torch::Tensor processed_v;
   if (!use_flat_mixed_qkv_decode) {
-    std::tie(processed_q, processed_k, processed_v) =
-        process_mixed_qkv(mixed_qkv);
+    if (conv_qkv_ready) {
+      processed_q = conv_q;
+      processed_k = conv_k;
+      processed_v = conv_v;
+    } else {
+      std::tie(processed_q, processed_k, processed_v) =
+          process_mixed_qkv(mixed_qkv);
+    }
   }
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;

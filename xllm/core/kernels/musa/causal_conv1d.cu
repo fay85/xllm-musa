@@ -23,6 +23,7 @@ limitations under the License.
 #include <c10/util/Half.h>
 #include <torch/all.h>
 
+#include <array>
 #include <cub/block/block_load.cuh>
 #include <cub/block/block_store.cuh>
 
@@ -645,15 +646,43 @@ __device__ __forceinline__ float unpack_bf16(uint16_t value) {
   return __uint_as_float(static_cast<uint32_t>(value) << 16);
 }
 
+__device__ void store_bf16_pack(uint16_t* base,
+                                int64_t stride_seq,
+                                int64_t stride_token,
+                                int64_t stride_head,
+                                int32_t seq,
+                                int32_t token,
+                                int32_t head,
+                                int32_t dim,
+                                Bf16Pack value) {
+  uint16_t* dst = base + static_cast<int64_t>(seq) * stride_seq +
+                  static_cast<int64_t>(token) * stride_token +
+                  static_cast<int64_t>(head) * stride_head + dim;
+  *reinterpret_cast<Bf16Pack*>(dst) = value;
+}
+
 // One lane owns four adjacent BF16 channels, so one warp covers one 128-wide
-// head. Normalize Q/K immediately after SiLU with the same four-term sum as
-// l2_norm_pair_h128. V channels are left unchanged.
+// head. SiLU uses the local expf formula. Q/K use the same four-term sum and
+// xor reduction as l2_norm_pair_h128. Split outputs skip the mixed QKV write.
 template <int32_t BlockTokens>
 __global__ void causal_conv1d_bf16_pack4_kernel(ConvParamsBase params,
-                                                int32_t qk_channels) {
+                                                int32_t qk_channels,
+                                                uint16_t* q_ptr,
+                                                int64_t q_stride_seq,
+                                                int64_t q_stride_token,
+                                                int64_t q_stride_head,
+                                                uint16_t* k_ptr,
+                                                int64_t k_stride_seq,
+                                                int64_t k_stride_token,
+                                                int64_t k_stride_head,
+                                                uint16_t* v_ptr,
+                                                int64_t v_stride_seq,
+                                                int64_t v_stride_token,
+                                                int64_t v_stride_head,
+                                                int32_t num_q_heads,
+                                                int32_t num_k_heads) {
   const int32_t seq = static_cast<int32_t>(blockIdx.x);
-  const int32_t offset =
-      static_cast<int32_t>(blockIdx.y) * BlockTokens;
+  const int32_t offset = static_cast<int32_t>(blockIdx.y) * BlockTokens;
   const int32_t channel =
       4 * (static_cast<int32_t>(blockIdx.z) * static_cast<int32_t>(blockDim.x) +
            static_cast<int32_t>(threadIdx.x));
@@ -722,9 +751,15 @@ __global__ void causal_conv1d_bf16_pack4_kernel(ConvParamsBase params,
                      : unpack_bf16(static_cast<const uint16_t*>(
                            params.bias_ptr)[channel + lane]);
   }
-  uint16_t* out = static_cast<uint16_t*>(params.out_ptr) +
-                  static_cast<int64_t>(start + offset) * params.out_l_stride +
-                  channel;
+  const bool write_split = q_ptr != nullptr;
+  uint16_t* mixed_out = nullptr;
+  if (!write_split) {
+    mixed_out = static_cast<uint16_t*>(params.out_ptr) +
+                static_cast<int64_t>(start + offset) * params.out_l_stride +
+                channel;
+  }
+  const int32_t q_channels = num_q_heads * 128;
+  const int32_t k_channels = num_k_heads * 128;
   const int32_t segment_len =
       offset + BlockTokens < len ? BlockTokens : len - offset;
   const bool normalize_head = channel < qk_channels;
@@ -734,14 +769,13 @@ __global__ void causal_conv1d_bf16_pack4_kernel(ConvParamsBase params,
     Bf16Pack rounded;
 #pragma unroll
     for (int32_t lane = 0; lane < 4; ++lane) {
-      float value = bias[lane] +
-                    unpack_bf16(history0[lane]) * unpack_bf16(taps[lane][0]) +
-                    unpack_bf16(history1[lane]) * unpack_bf16(taps[lane][1]) +
-                    unpack_bf16(history2[lane]) * unpack_bf16(taps[lane][2]) +
-                    unpack_bf16(row[lane]) * unpack_bf16(taps[lane][3]);
+      float value = bias[lane];
+      value += unpack_bf16(history0[lane]) * unpack_bf16(taps[lane][0]);
+      value += unpack_bf16(history1[lane]) * unpack_bf16(taps[lane][1]);
+      value += unpack_bf16(history2[lane]) * unpack_bf16(taps[lane][2]);
+      value += unpack_bf16(row[lane]) * unpack_bf16(taps[lane][3]);
       if (params.silu_activation) {
-        constexpr float kLog2e = 1.4426950408889634f;
-        value = value / (1.0f + exp2f(-value * kLog2e));
+        value = value / (1.0f + expf(-value));
       }
       rounded[lane] = static_cast<at::BFloat16>(value).x;
     }
@@ -763,8 +797,44 @@ __global__ void causal_conv1d_bf16_pack4_kernel(ConvParamsBase params,
             static_cast<at::BFloat16>(unpack_bf16(rounded[lane]) * inv_norm).x;
       }
     }
-    *reinterpret_cast<Bf16Pack*>(out + static_cast<int64_t>(token) *
-                                           params.out_l_stride) = rounded;
+    const int32_t token_in_seq = offset + token;
+    if (!write_split) {
+      *reinterpret_cast<Bf16Pack*>(mixed_out + static_cast<int64_t>(token) *
+                                                   params.out_l_stride) =
+          rounded;
+    } else if (channel < q_channels) {
+      store_bf16_pack(q_ptr,
+                      q_stride_seq,
+                      q_stride_token,
+                      q_stride_head,
+                      seq,
+                      token_in_seq,
+                      channel / 128,
+                      channel % 128,
+                      rounded);
+    } else if (channel < q_channels + k_channels) {
+      const int32_t local = channel - q_channels;
+      store_bf16_pack(k_ptr,
+                      k_stride_seq,
+                      k_stride_token,
+                      k_stride_head,
+                      seq,
+                      token_in_seq,
+                      local / 128,
+                      local % 128,
+                      rounded);
+    } else {
+      const int32_t local = channel - q_channels - k_channels;
+      store_bf16_pack(v_ptr,
+                      v_stride_seq,
+                      v_stride_token,
+                      v_stride_head,
+                      seq,
+                      token_in_seq,
+                      local / 128,
+                      local % 128,
+                      rounded);
+    }
     history0 = history1;
     history1 = history2;
     history2 = row;
@@ -887,9 +957,17 @@ bool causal_conv1d_fwd_token_major(const at::Tensor& x,
                                    const at::Tensor& has_initial_state,
                                    bool silu_activation,
                                    int64_t pad_slot_id,
-                                   int32_t qk_channels) {
+                                   int32_t qk_channels,
+                                   int32_t num_q_heads,
+                                   int32_t num_k_heads,
+                                   const at::Tensor& q_out,
+                                   const at::Tensor& k_out,
+                                   const at::Tensor& v_out) {
+  const bool write_split = q_out.defined();
   TORCH_CHECK(x.dim() == 2 && x.is_contiguous());
-  TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
+  if (!write_split) {
+    TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
+  }
   TORCH_CHECK(weight.dim() == 2 && weight.size(1) == 4);
   TORCH_CHECK(weight.size(0) == x.size(1));
   TORCH_CHECK(query_start_loc.scalar_type() == at::ScalarType::Int);
@@ -907,7 +985,7 @@ bool causal_conv1d_fwd_token_major(const at::Tensor& x,
   params.x_ptr = x.data_ptr();
   params.weight_ptr = weight.data_ptr();
   params.bias_ptr = bias.has_value() ? bias.value().data_ptr() : nullptr;
-  params.out_ptr = out.data_ptr();
+  params.out_ptr = write_split ? nullptr : out.data_ptr();
   params.query_start_loc_ptr = query_start_loc.data_ptr();
   params.cache_indices_ptr = cache_indices.data_ptr();
   params.has_initial_state_ptr = has_initial_state.data_ptr();
@@ -915,8 +993,10 @@ bool causal_conv1d_fwd_token_major(const at::Tensor& x,
   params.x_l_stride = x.stride(0);
   params.weight_c_stride = weight.stride(0);
   params.weight_width_stride = weight.stride(1);
-  params.out_c_stride = out.stride(1);
-  params.out_l_stride = out.stride(0);
+  if (!write_split) {
+    params.out_c_stride = out.stride(1);
+    params.out_l_stride = out.stride(0);
+  }
   params.conv_state_ptr = conv_states.data_ptr();
   params.conv_state_batch_stride = conv_states.stride(0);
   params.conv_state_c_stride = conv_states.stride(-2);
@@ -924,27 +1004,65 @@ bool causal_conv1d_fwd_token_major(const at::Tensor& x,
 
   at::cuda::CUDAGuard device_guard{static_cast<char>(x.get_device())};
   auto stream = at::cuda::getCurrentCUDAStream().stream();
+  const bool write_split_launch = q_out.defined();
   constexpr uintptr_t kPackAlignment = alignof(Bf16Pack);
+  auto aligned = [kPackAlignment](const void* ptr) {
+    return reinterpret_cast<uintptr_t>(ptr) % kPackAlignment == 0;
+  };
   const bool use_pack4 =
-      qk_channels > 0 && qk_channels <= x.size(1) && qk_channels % 128 == 0 &&
-      x.size(1) % 4 == 0 && x.stride(0) % 4 == 0 &&
-      x.scalar_type() == at::kBFloat16 &&
+      (qk_channels > 0 || write_split_launch) && qk_channels <= x.size(1) &&
+      (qk_channels == 0 || qk_channels % 128 == 0) && x.size(1) % 4 == 0 &&
+      x.stride(0) % 4 == 0 && x.scalar_type() == at::kBFloat16 &&
       weight.scalar_type() == at::kBFloat16 &&
       (!bias.has_value() || bias->scalar_type() == at::kBFloat16) &&
-      weight.stride(0) == 4 && weight.stride(1) == 1 &&
-      reinterpret_cast<uintptr_t>(params.x_ptr) % kPackAlignment == 0 &&
-      reinterpret_cast<uintptr_t>(params.weight_ptr) % kPackAlignment == 0 &&
-      reinterpret_cast<uintptr_t>(params.out_ptr) % kPackAlignment == 0;
+      weight.stride(0) == 4 && weight.stride(1) == 1 && aligned(params.x_ptr) &&
+      aligned(params.weight_ptr) &&
+      (write_split_launch
+           ? aligned(q_out.data_ptr()) && aligned(k_out.data_ptr()) &&
+                 aligned(v_out.data_ptr())
+           : aligned(params.out_ptr));
   if (use_pack4) {
     constexpr int32_t kPackThreads = 128;
     constexpr int32_t kPackTokens = 8;
     const dim3 grid(params.batch,
                     (params.seqlen + kPackTokens - 1) / kPackTokens,
                     (params.dim + 4 * kPackThreads - 1) / (4 * kPackThreads));
+    auto strides = [](const at::Tensor& tensor) {
+      return std::array<int64_t, 3>{
+          tensor.stride(0), tensor.stride(1), tensor.stride(2)};
+    };
+    const std::array<int64_t, 3> q_strides =
+        write_split_launch ? strides(q_out) : std::array<int64_t, 3>{0, 0, 0};
+    const std::array<int64_t, 3> k_strides =
+        write_split_launch ? strides(k_out) : std::array<int64_t, 3>{0, 0, 0};
+    const std::array<int64_t, 3> v_strides =
+        write_split_launch ? strides(v_out) : std::array<int64_t, 3>{0, 0, 0};
     causal_conv1d_bf16_pack4_kernel<kPackTokens>
-        <<<grid, kPackThreads, 0, stream>>>(params, qk_channels);
+        <<<grid, kPackThreads, 0, stream>>>(
+            params,
+            qk_channels,
+            write_split_launch ? static_cast<uint16_t*>(q_out.data_ptr())
+                               : nullptr,
+            q_strides[0],
+            q_strides[1],
+            q_strides[2],
+            write_split_launch ? static_cast<uint16_t*>(k_out.data_ptr())
+                               : nullptr,
+            k_strides[0],
+            k_strides[1],
+            k_strides[2],
+            write_split_launch ? static_cast<uint16_t*>(v_out.data_ptr())
+                               : nullptr,
+            v_strides[0],
+            v_strides[1],
+            v_strides[2],
+            num_q_heads,
+            num_k_heads);
     C10_CUDA_KERNEL_LAUNCH_CHECK();
-    return true;
+    return qk_channels > 0;
+  }
+  if (write_split_launch) {
+    return false;
   }
   DISPATCH_WTYPE_ITYPE_FLOAT_AND_HALF_AND_BF16(
       x.scalar_type(), "causal_conv1d_fwd_token_major", [&] {

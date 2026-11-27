@@ -1800,10 +1800,9 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
   if (use_token_major && x.is_contiguous() && weight.dim() == 2 &&
       weight.size(1) == 4) {
     torch::Tensor out = torch::empty_like(x);
-    const bool request_qk_norm = qk_normalized != nullptr &&
-                                 x.scalar_type() == torch::kBFloat16 &&
-                                 qk_channels > 0 && qk_channels <= x.size(1) &&
-                                 qk_channels % 128 == 0;
+    const bool request_qk_norm =
+        qk_normalized != nullptr && x.scalar_type() == torch::kBFloat16 &&
+        qk_channels > 0 && qk_channels <= x.size(1) && qk_channels % 128 == 0;
     const bool applied_qk_norm =
         causal_conv1d_fwd_token_major(x,
                                       weight,
@@ -1835,6 +1834,66 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                     silu_activation,
                     /*pad_slot_id=*/-1);
   return out_t.t().contiguous();
+}
+
+bool causal_conv1d_prefill_qkv(const torch::Tensor& x,
+                               const torch::Tensor& weight,
+                               const torch::Tensor& conv_state,
+                               const std::optional<torch::Tensor>& bias,
+                               const torch::Tensor& query_start_loc,
+                               const torch::Tensor& cache_indices,
+                               const torch::Tensor& has_initial_state,
+                               bool silu_activation,
+                               int32_t num_q_heads,
+                               int32_t num_k_heads,
+                               int32_t num_v_heads,
+                               torch::Tensor q,
+                               torch::Tensor k,
+                               torch::Tensor v,
+                               bool normalize_qk) {
+  CHECK(query_start_loc.defined() && is_torch_device(query_start_loc.device()))
+      << "causal_conv1d_prefill_qkv requires device query_start_loc";
+  CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))
+      << "causal_conv1d_prefill_qkv requires device cache_indices";
+  CHECK(has_initial_state.defined() &&
+        is_torch_device(has_initial_state.device()))
+      << "causal_conv1d_prefill_qkv requires device has_initial_state";
+  CHECK_GT(num_q_heads, 0);
+  CHECK_GT(num_k_heads, 0);
+  CHECK_GT(num_v_heads, 0);
+  constexpr int32_t kHeadDim = 128;
+  const int32_t channels = (num_q_heads + num_k_heads + num_v_heads) * kHeadDim;
+  CHECK_EQ(x.size(1), channels);
+  CHECK_EQ(q.dim(), 4);
+  CHECK_EQ(k.dim(), 4);
+  CHECK_EQ(v.dim(), 4);
+  CHECK_EQ(q.size(0), query_start_loc.size(0) - 1);
+  CHECK_EQ(q.size(2), num_q_heads);
+  CHECK_EQ(k.size(2), num_k_heads);
+  CHECK_EQ(v.size(2), num_v_heads);
+  CHECK_EQ(q.size(3), kHeadDim);
+  CHECK_EQ(k.size(3), kHeadDim);
+  CHECK_EQ(v.size(3), kHeadDim);
+  CHECK(q.is_contiguous() && k.is_contiguous() && v.is_contiguous());
+  torch::Tensor unused_out;
+  const int32_t qk_channels =
+      normalize_qk ? (num_q_heads + num_k_heads) * kHeadDim : 0;
+  return causal_conv1d_fwd_token_major(x,
+                                       weight,
+                                       unused_out,
+                                       bias,
+                                       conv_state,
+                                       query_start_loc,
+                                       cache_indices,
+                                       has_initial_state,
+                                       silu_activation,
+                                       /*pad_slot_id=*/-1,
+                                       qk_channels,
+                                       num_q_heads,
+                                       num_k_heads,
+                                       q,
+                                       k,
+                                       v);
 }
 
 }  // namespace musa
