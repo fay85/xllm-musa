@@ -204,38 +204,39 @@ class MiniMaxH3VisualProcessorImpl final : public torch::nn::Module {
                                        bool is_follower) {
     CHECK_EQ(image.dim(), 3) << "MiniMax-H3 keyframe image must be [C,H,W]";
     CHECK_EQ(image.size(0), 3);
-    image = image.unsqueeze(0).to(torch::kFloat32);
-    const int64_t source_height = image.size(2);
-    const int64_t source_width = image.size(3);
+    CHECK_GT(height, 0);
+    CHECK_GT(width, 0);
+    image = image.to(torch::kCPU, torch::kUInt8);
+    const int64_t source_height = image.size(1);
+    const int64_t source_width = image.size(2);
+    CHECK_GT(source_height, 0);
+    CHECK_GT(source_width, 0);
     if (source_height == height && source_width == width) {
-      return image.squeeze(0).to(torch::kUInt8).contiguous();
+      return image.contiguous();
     }
     if (!is_follower) {
-      return image_processor_->resize(image, height, width, "bilinear")
-          .squeeze(0)
-          .to(torch::kUInt8)
+      return image_processor_->resize(image, height, width, "lanczos")
           .contiguous();
     }
 
     const double scale = std::max(
         static_cast<double>(width) / static_cast<double>(source_width),
         static_cast<double>(height) / static_cast<double>(source_height));
-    const int64_t resized_width =
-        std::max(width,
-                 static_cast<int64_t>(
-                     std::llround(static_cast<double>(source_width) * scale)));
-    const int64_t resized_height =
-        std::max(height,
-                 static_cast<int64_t>(
-                     std::llround(static_cast<double>(source_height) * scale)));
+    // Diffusers rounds the cover size with Python's ties-to-even round().
+    const int64_t resized_width = std::max(
+        width,
+        static_cast<int64_t>(
+            std::nearbyint(static_cast<double>(source_width) * scale)));
+    const int64_t resized_height = std::max(
+        height,
+        static_cast<int64_t>(
+            std::nearbyint(static_cast<double>(source_height) * scale)));
     torch::Tensor resized = image_processor_->resize(
-        image, resized_height, resized_width, "bilinear");
-    const int64_t left = std::max<int64_t>(0, (resized_width - width) / 2);
-    const int64_t top = std::max<int64_t>(0, (resized_height - height) / 2);
-    return resized.slice(2, top, top + height)
-        .slice(3, left, left + width)
-        .squeeze(0)
-        .to(torch::kUInt8)
+        image, resized_height, resized_width, "lanczos");
+    const int64_t left = (resized_width - width) / 2;
+    const int64_t top = (resized_height - height) / 2;
+    return resized.slice(/*dim=*/1, top, top + height)
+        .slice(/*dim=*/2, left, left + width)
         .contiguous();
   }
 

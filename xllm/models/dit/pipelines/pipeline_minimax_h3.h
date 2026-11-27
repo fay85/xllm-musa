@@ -171,9 +171,33 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
         << "MiniMax-H3 native T2VA currently supports batch_size=1";
     CHECK_EQ(input.generation_params.num_videos_per_prompt, 1)
         << "MiniMax-H3 currently supports num_videos_per_prompt=1";
-    std::optional<NamedTensor> encoded_prompt;
+    const DiTGenerationParams& generation_params = input.generation_params;
+    validate_media_sources(input.media_sources);
+    const int64_t requested_height = generation_params.height;
+    const int64_t requested_width = generation_params.width;
+    const int64_t height_multiple = vae_spatial_ratio_ * patch_h_;
+    const int64_t width_multiple = vae_spatial_ratio_ * patch_w_;
+    CHECK_GT(requested_height, 0);
+    CHECK_GT(requested_width, 0);
+    const int64_t height =
+        ((requested_height - 1) / height_multiple + 1) * height_multiple;
+    const int64_t width =
+        ((requested_width - 1) / width_multiple + 1) * width_multiple;
+    if (requested_height != height || requested_width != width) {
+      LOG(WARNING) << "MiniMax-H3 canvas rounded from " << requested_width
+                   << "x" << requested_height << " to " << width << "x"
+                   << height;
+    }
+    const bool is_ref2va = task_type_ == "ref2va";
     std::optional<NamedTensorConstRef> prompt_embed =
         input.tensor_sources.get_named_tensor("prompt_embed");
+    const std::vector<torch::Tensor> keyframes =
+        !is_ref2va && !input.media_sources.empty() &&
+                (is_video_vae_worker_ || !prompt_embed.has_value())
+            ? prepare_fl_keyframes(input.media_sources, height, width)
+            : std::vector<torch::Tensor>{};
+
+    std::optional<NamedTensor> encoded_prompt;
     if (!prompt_embed.has_value()) {
       CHECK(!text_encoder_.is_empty()) << "MiniMax-H3 requires prompt_embed or "
                                           "--dit_enable_text_encoder=true";
@@ -181,7 +205,7 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
           << "MiniMax-H3 in-process encode requires input.prompts";
       CHECK_LE(input.prompts.size(), static_cast<size_t>(1));
       encoded_prompt.emplace(
-          encode_prompt(input.prompts.front(), input.media_sources));
+          encode_prompt(input.prompts.front(), input.media_sources, keyframes));
       prompt_embed = std::cref(*encoded_prompt);
     }
     const std::vector<int64_t>* prompt_token_tags =
@@ -206,29 +230,12 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
                      (text_token_tags == text_tag_))
               .item<bool>())
         << "MiniMax-H3 prompt_token_tags may contain only video/text tags";
-    const DiTGenerationParams& generation_params = input.generation_params;
     const double video_fps = generation_params.video_fps;
     CHECK(std::isfinite(video_fps) && video_fps > 0.0)
         << "MiniMax-H3 fps must be finite and positive";
     CHECK_EQ(generation_params.audio_sampling_rate,
              audio_processor_->sampling_rate())
         << "MiniMax-H3 sampling_rate must match the audio VAE config";
-    validate_media_sources(input.media_sources);
-    const int64_t requested_height = generation_params.height;
-    const int64_t requested_width = generation_params.width;
-    const int64_t height_multiple = vae_spatial_ratio_ * patch_h_;
-    const int64_t width_multiple = vae_spatial_ratio_ * patch_w_;
-    CHECK_GT(requested_height, 0);
-    CHECK_GT(requested_width, 0);
-    const int64_t height =
-        ((requested_height - 1) / height_multiple + 1) * height_multiple;
-    const int64_t width =
-        ((requested_width - 1) / width_multiple + 1) * width_multiple;
-    if (requested_height != height || requested_width != width) {
-      LOG(WARNING) << "MiniMax-H3 canvas rounded from " << requested_width
-                   << "x" << requested_height << " to " << width << "x"
-                   << height;
-    }
     const int64_t requested_frames = generation_params.num_frames;
     CHECK_GT(requested_frames, 0);
     const int64_t num_frames = align_num_frames(requested_frames);
@@ -254,7 +261,6 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
         generation_params.seed_is_set ? generation_params.seed : 42;
 
     // 2. Check for FL2VA or Ref2VA
-    const bool is_ref2va = task_type_ == "ref2va";
     std::vector<std::string> keyframe_anchors;
     size_t image_count = 0;
     for (const MediaNamedTensor& source : input.media_sources.entries()) {
@@ -310,7 +316,7 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
       if (has_keyframes) {
         // Prepare FL2VA frame conditions.
         condition_rows = prepare_fl_frame_data(
-            input, height, width, generator, keyframe_anchors);
+            keyframes, height, width, generator, keyframe_anchors);
         if (tp_group_ != nullptr && tp_group_->world_size() > 1) {
           tp_group_->broadcast(condition_rows, /*root_rank=*/0);
         }
@@ -602,7 +608,8 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
   }
 
  private:
-  static constexpr int32_t kTextEncoderCaptureLayer = 50;
+  // Diffusers hidden_states[50] is the output of zero-based decoder block 49.
+  static constexpr int32_t kTextEncoderCaptureLayer = 49;
 
   void load_text_encoder(std::unique_ptr<ModelLoader> loader) {
     CHECK(loader != nullptr);
@@ -655,11 +662,12 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
   }
 
   NamedTensor encode_prompt(const std::string& prompt,
-                            const DiTMediaSources& media_sources) {
+                            const DiTMediaSources& media_sources,
+                            const std::vector<torch::Tensor>& keyframes) {
     MMContentVec content;
     content.reserve(media_sources.size() * 2 + 1);
     MMInput mm_input;
-    prepare_text_encoder_media(media_sources, content, mm_input);
+    prepare_text_encoder_media(media_sources, keyframes, content, mm_input);
     content.emplace_back(/*type=*/"text", prompt);
     ChatMessages messages;
     messages.reserve(/*new_cap=*/1);
@@ -747,6 +755,7 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
   }
 
   void prepare_text_encoder_media(const DiTMediaSources& media_sources,
+                                  const std::vector<torch::Tensor>& keyframes,
                                   MMContentVec& content,
                                   MMInput& mm_input) const {
     validate_text_encoder_media(media_sources);
@@ -766,7 +775,9 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
         MMInputItem item;
         item.type = MMType::IMAGE;
         item.decode_image =
-            source.tensor.select(/*dim=*/0, /*index=*/0).to(torch::kCPU);
+            keyframes.empty()
+                ? source.tensor.select(/*dim=*/0, /*index=*/0).to(torch::kCPU)
+                : keyframes[image_index - 1];
         items.emplace_back(std::move(item));
       } else if (source.name == "prompt_video") {
         if (index + 1 < sources.size() &&
@@ -1636,8 +1647,28 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
     return result;
   }
 
+  std::vector<torch::Tensor> prepare_fl_keyframes(
+      const DiTMediaSources& media_sources,
+      int64_t height,
+      int64_t width) {
+    std::vector<torch::Tensor> keyframes;
+    keyframes.reserve(media_sources.size());
+    for (const MediaNamedTensor& source : media_sources.entries()) {
+      CHECK_EQ(source.name, "image");
+      CHECK(source.tensor.defined());
+      CHECK_EQ(source.tensor.dim(), 4);
+      CHECK_EQ(source.tensor.size(0), 1);
+      keyframes.emplace_back(visual_processor_->prepare_keyframe_image(
+          source.tensor.select(/*dim=*/0, /*index=*/0),
+          height,
+          width,
+          /*is_follower=*/!keyframes.empty()));
+    }
+    return keyframes;
+  }
+
   torch::Tensor prepare_fl_frame_data(
-      const DiTForwardInput& input,
+      const std::vector<torch::Tensor>& keyframes,
       int64_t height,
       int64_t width,
       torch::Generator& generator,
@@ -1660,29 +1691,6 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
           options_.dtype(torch::kFloat32).device(options_.device()));
     }
 
-    std::vector<torch::Tensor> keyframes;
-    keyframes.reserve(keyframe_anchors.size());
-    std::vector<torch::Tensor> image_sources;
-    image_sources.reserve(/*new_cap=*/2);
-    for (const MediaNamedTensor& source : input.media_sources.entries()) {
-      if (source.name == "image") {
-        image_sources.emplace_back(source.tensor);
-      }
-    }
-    if (!image_sources.empty()) {
-      keyframes.emplace_back(visual_processor_->prepare_keyframe_image(
-          image_sources.front().select(0, 0),
-          height,
-          width,
-          /*is_follower=*/false));
-    }
-    if (image_sources.size() == 2) {
-      keyframes.emplace_back(visual_processor_->prepare_keyframe_image(
-          image_sources.back().select(0, 0),
-          height,
-          width,
-          /*is_follower=*/true));
-    }
     CHECK_EQ(keyframes.size(), keyframe_anchors.size());
 
     std::vector<torch::Tensor> rows;
