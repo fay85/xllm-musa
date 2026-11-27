@@ -446,6 +446,17 @@ void XServiceClient::set_scheduler(Scheduler* scheduler) {
 
 void XServiceClient::set_engine(Engine* engine) { engine_ = engine; }
 
+void XServiceClient::set_one_shot_engine_profile(uint32_t device_count,
+                                                 uint32_t tp_size) {
+  CHECK(!initialize_done_) << "One-shot profile must be set before init";
+  CHECK_GT(device_count, 0);
+  CHECK_GT(tp_size, 0);
+  CHECK_EQ(device_count % tp_size, 0)
+      << "One-shot topology must be divisible by TP";
+  one_shot_device_count_ = device_count;
+  one_shot_tp_size_ = tp_size;
+}
+
 std::optional<std::pair<proto::ProviderDescriptor, std::string>>
 XServiceClient::registered_provider_snapshot() const {
   std::lock_guard<std::mutex> lock(registration_mutex_);
@@ -526,6 +537,8 @@ void XServiceClient::shutdown() {
   }
   etcd_client_.reset();
   block_manager_pool_ = nullptr;
+  one_shot_device_count_ = 0;
+  one_shot_tp_size_ = 0;
   scheduler_ = nullptr;
   engine_ = nullptr;
   kv_failed_commit_version_.reset();
@@ -642,7 +655,19 @@ void XServiceClient::register_instance(const InstanceInfo& instance_info) {
   std::optional<proto::ProviderDescriptor> provider_descriptor;
   std::optional<ProviderDescriptorConfig> descriptor_config;
   bool journal_ready = false;
-  if (engine_ != nullptr && block_manager_pool_ != nullptr) {
+  if (engine_ != nullptr && one_shot_device_count_ > 0) {
+    std::string error;
+    descriptor_config =
+        collect_native_task_provider_descriptor_config(registered_info,
+                                                       *engine_,
+                                                       one_shot_device_count_,
+                                                       one_shot_tp_size_,
+                                                       &error);
+    if (!descriptor_config.has_value()) {
+      LOG(FATAL) << "Failed to collect one-shot Engine registration: " << error;
+      return;
+    }
+  } else if (engine_ != nullptr && block_manager_pool_ != nullptr) {
     std::string error;
     descriptor_config = collect_native_provider_descriptor_config(
         registered_info, *engine_, *block_manager_pool_, &error);
@@ -650,11 +675,11 @@ void XServiceClient::register_instance(const InstanceInfo& instance_info) {
       LOG(FATAL) << "Failed to collect Native V2 registration: " << error;
       return;
     }
-    if (descriptor_config.has_value()) {
-      // Keep the top-level registration field identical to
-      // descriptor.topology.super_node_id. An empty value stays a wildcard.
-      registered_info.super_node_id = descriptor_config->super_node_id;
-    }
+  }
+  if (descriptor_config.has_value()) {
+    // Keep the top-level registration field identical to
+    // descriptor.topology.super_node_id. An empty value stays a wildcard.
+    registered_info.super_node_id = descriptor_config->super_node_id;
   }
   nlohmann::json registration = registered_info.serialize_to_json();
   if (descriptor_config.has_value()) {
@@ -673,7 +698,8 @@ void XServiceClient::register_instance(const InstanceInfo& instance_info) {
     // The journal is ready for the life of the process. Its drain watermark
     // starts at 8192 and grows with the resident hash set; it does not need
     // the block-manager capacity.
-    journal_ready = block_manager_pool_->options().enable_prefix_cache();
+    journal_ready = block_manager_pool_ != nullptr &&
+                    block_manager_pool_->options().enable_prefix_cache();
   }
   const std::string value = registration.dump();
   {
@@ -983,18 +1009,23 @@ void XServiceClient::heartbeat() {
     lock.unlock();
     if (!register_done_.load()) continue;
 
-    if (block_manager_pool_ == nullptr || scheduler_ == nullptr) continue;
+    const bool one_shot = one_shot_device_count_ > 0;
+    if (!one_shot &&
+        (block_manager_pool_ == nullptr || scheduler_ == nullptr)) {
+      continue;
+    }
 
     brpc::Controller cntl;
     xllm_service::proto::HeartbeatRequest req;
     req.set_name(instance_name_);
     req.set_incarnation_id(incarnation_id_);
 
-    req.mutable_load_metrics()->set_gpu_cache_usage_perc(
-        block_manager_pool_->get_gpu_cache_usage_perc());
-
-    req.mutable_load_metrics()->set_waiting_requests_num(
-        scheduler_->get_waiting_requests_num());
+    if (!one_shot) {
+      req.mutable_load_metrics()->set_gpu_cache_usage_perc(
+          block_manager_pool_->get_gpu_cache_usage_perc());
+      req.mutable_load_metrics()->set_waiting_requests_num(
+          scheduler_->get_waiting_requests_num());
+    }
 
     std::shared_ptr<EngineStateBuilder> engine_state_builder;
     {
@@ -1002,36 +1033,40 @@ void XServiceClient::heartbeat() {
       engine_state_builder = engine_state_builder_;
     }
     if (engine_state_builder != nullptr) {
-      // Qualified calls stay on BlockManagerPool even when the object is a
-      // HierarchyBlockManagerPool. available is free plus evictable prefix
-      // cache; used is the remainder of the scheduler-facing total.
-      const std::vector<size_t> available =
-          block_manager_pool_->BlockManagerPool::num_available_blocks();
-      const std::vector<size_t> total =
-          block_manager_pool_->BlockManagerPool::num_total_blocks();
       EngineStateSnapshot snapshot;
-      if (available.size() == total.size()) {
-        snapshot.kv_free_blocks.reserve(available.size());
-        snapshot.kv_used_blocks.reserve(available.size());
-        snapshot.kv_total_blocks.reserve(available.size());
-        for (size_t dp_rank = 0; dp_rank < available.size(); ++dp_rank) {
-          const size_t free_blocks = available[dp_rank];
-          const size_t total_blocks = total[dp_rank];
-          const size_t used_blocks =
-              total_blocks >= free_blocks ? total_blocks - free_blocks : 0;
-          snapshot.kv_free_blocks.emplace_back(
-              static_cast<uint64_t>(free_blocks));
-          snapshot.kv_used_blocks.emplace_back(
-              static_cast<uint64_t>(used_blocks));
-          snapshot.kv_total_blocks.emplace_back(
-              static_cast<uint64_t>(total_blocks));
-        }
+      if (one_shot) {
+        // Liveness only. xllm-service owns the live image-node permit and is
+        // therefore the sole source of image admission truth.
       } else {
-        LOG(ERROR) << "BlockManagerPool capacity vectors disagree: available="
-                   << available.size() << " total=" << total.size();
+        // Qualified calls stay on BlockManagerPool even when the object is a
+        // HierarchyBlockManagerPool. available is free plus evictable prefix
+        // cache; used is the remainder of the scheduler-facing total.
+        const std::vector<size_t> available =
+            block_manager_pool_->BlockManagerPool::num_available_blocks();
+        const std::vector<size_t> total =
+            block_manager_pool_->BlockManagerPool::num_total_blocks();
+        if (available.size() == total.size()) {
+          snapshot.kv_free_blocks.reserve(available.size());
+          snapshot.kv_used_blocks.reserve(available.size());
+          snapshot.kv_total_blocks.reserve(available.size());
+          for (size_t dp_rank = 0; dp_rank < available.size(); ++dp_rank) {
+            const size_t free_blocks = available[dp_rank];
+            const size_t total_blocks = total[dp_rank];
+            const size_t used_blocks =
+                total_blocks >= free_blocks ? total_blocks - free_blocks : 0;
+            snapshot.kv_free_blocks.emplace_back(
+                static_cast<uint64_t>(free_blocks));
+            snapshot.kv_used_blocks.emplace_back(
+                static_cast<uint64_t>(used_blocks));
+            snapshot.kv_total_blocks.emplace_back(
+                static_cast<uint64_t>(total_blocks));
+          }
+        } else {
+          LOG(ERROR) << "BlockManagerPool capacity vectors disagree: available="
+                     << available.size() << " total=" << total.size();
+        }
       }
-      // Idleness is decided by Service from waiting and running counts. The
-      // heartbeat always publishes READY; DRAINING lives only in etcd.
+      // Heartbeats publish READY; DRAINING lives only in etcd.
       snapshot.lifecycle = proto::ENGINE_LIFECYCLE_READY;
       std::string error;
       const std::optional<proto::EngineState> state =
@@ -1043,17 +1078,18 @@ void XServiceClient::heartbeat() {
       }
     }
 
-    std::vector<int64_t> ttft;
-    std::vector<int64_t> tbt;
-    scheduler_->get_latency_metrics(ttft, tbt);
-    if (!ttft.empty()) {
-      auto max_ttft = std::max_element(ttft.begin(), ttft.end());
-      req.mutable_latency_metrics()->set_recent_max_ttft(*max_ttft);
-    }
-
-    if (!tbt.empty()) {
-      auto max_tbt = std::max_element(tbt.begin(), tbt.end());
-      req.mutable_latency_metrics()->set_recent_max_tbt(*max_tbt);
+    if (!one_shot) {
+      std::vector<int64_t> ttft;
+      std::vector<int64_t> tbt;
+      scheduler_->get_latency_metrics(ttft, tbt);
+      if (!ttft.empty()) {
+        auto max_ttft = std::max_element(ttft.begin(), ttft.end());
+        req.mutable_latency_metrics()->set_recent_max_ttft(*max_ttft);
+      }
+      if (!tbt.empty()) {
+        auto max_tbt = std::max_element(tbt.begin(), tbt.end());
+        req.mutable_latency_metrics()->set_recent_max_tbt(*max_tbt);
+      }
     }
 
     xllm_service::proto::Status resp;

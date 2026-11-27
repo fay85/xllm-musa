@@ -58,6 +58,9 @@ class XServiceClient {
   void stop_background_workers();
   void set_scheduler(Scheduler* scheduler);
   void set_engine(Engine* engine);
+  // Immutable discovery profile for one-shot engines. Real node selection and
+  // in-flight admission stay in xllm-service. Must be set before init().
+  void set_one_shot_engine_profile(uint32_t device_count, uint32_t tp_size);
   bool initialize_done() { return initialize_done_.load() && !exited_.load(); }
 
   std::string get_instance_name();
@@ -156,7 +159,9 @@ class XServiceClient {
   brpc::ChannelOptions chan_options_;
   std::unique_ptr<EtcdClient> etcd_client_;
   BlockManagerPool* block_manager_pool_ = nullptr;  // not own
-  Scheduler* scheduler_ = nullptr;                  // not own
+  uint32_t one_shot_device_count_ = 0;
+  uint32_t one_shot_tp_size_ = 0;
+  Scheduler* scheduler_ = nullptr;  // not own
   Engine* engine_ =
       nullptr;  // not own; model and tokenizer args for registration
   std::shared_ptr<EngineStateBuilder> engine_state_builder_;

@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -30,6 +31,7 @@ limitations under the License.
 #include "core/distributed_runtime/dit_engine.h"
 #include "core/framework/request/dit_request.h"
 #include "core/platform/device_name_utils.h"
+#include "core/runtime/xservice_client.h"
 #include "core/scheduler/scheduler_factory.h"
 #include "core/util/scope_guard.h"
 #include "core/util/timer.h"
@@ -52,6 +54,41 @@ DiTMaster::DiTMaster(const Options& options)
   scheduler_ = create_dit_scheduler(engine_.get(), scheduler_options);
   LOG(INFO) << "created dit scheduler in DiTMaster.";
 
+  if (options_.enable_service_routing()) {
+    XServiceClient* client = XServiceClient::get_instance();
+    client->set_engine(engine_.get());
+
+    const auto* dit_engine = static_cast<const DiTEngine*>(engine_.get());
+    const size_t local_device_count = dit_engine->options().devices().size();
+    const int32_t nnodes = dit_engine->options().nnodes();
+    const int32_t tp_size = dit_engine->options().tp_size();
+    CHECK_GT(local_device_count, 0);
+    CHECK_GT(nnodes, 0);
+    CHECK_LE(
+        local_device_count,
+        std::numeric_limits<uint32_t>::max() / static_cast<size_t>(nnodes));
+    const size_t device_count =
+        local_device_count * static_cast<size_t>(nnodes);
+    CHECK_GT(tp_size, 0);
+    client->set_one_shot_engine_profile(static_cast<uint32_t>(device_count),
+                                        static_cast<uint32_t>(tp_size));
+    if (!client->init(options_.etcd_addr().value_or(""),
+                      options_.instance_name().value_or(""),
+                      nullptr,
+                      options_.etcd_namespace().value_or(""))) {
+      LOG(FATAL) << "XServiceClient init failed for DiT Engine";
+    }
+
+    InstanceInfo instance_info;
+    instance_info.name = options_.instance_name().value_or("");
+    instance_info.rpc_address = instance_info.name;
+    CHECK(options_.instance_role() == InstanceRole::DEFAULT)
+        << "DiT task-only service routing requires DEFAULT instance role";
+    instance_info.type = options_.instance_role().to_string();
+    instance_info.dp_size = 1;
+    client->register_instance(instance_info);
+  }
+
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/options.num_request_handling_threads(),
       /*cpu_binding=*/false,
@@ -61,6 +98,9 @@ DiTMaster::DiTMaster(const Options& options)
 }
 
 DiTMaster::~DiTMaster() {
+  if (options_.enable_service_routing() && is_leader()) {
+    XServiceClient::get_instance()->shutdown();
+  }
   stoped_.store(true, std::memory_order_relaxed);
   // wait for the loop thread to finish
   if (loop_thread_.joinable()) {

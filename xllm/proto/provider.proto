@@ -453,6 +453,9 @@ message ProviderDescriptor {
   // Immutable deployment membership, independent of the execution profile.
   // Empty denotes the legacy unpooled resource domain.
   string instance_pool_id = 11;
+  // One-shot generation Engine without token KV ownership. Service owns
+  // node selection and concurrency admission for this Engine class.
+  bool task_only = 12;
 }
 
 message CanonicalRequest {

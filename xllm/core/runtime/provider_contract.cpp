@@ -246,13 +246,28 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
   }
   if (config.device_count == 0 || config.tp == 0 || config.dp == 0 ||
       config.pp == 0 || config.ep == 0 || config.cp == 0 ||
-      config.block_size == 0 || config.hash_version == 0 ||
-      config.hash_seed == 0 || config.cache_isolation_domain.empty() ||
-      config.max_num_seqs == 0 || config.max_num_batched_tokens == 0) {
+      config.block_size == 0 || config.max_num_seqs == 0 ||
+      config.max_num_batched_tokens == 0 ||
+      (!config.task_only &&
+       (config.hash_version == 0 || config.hash_seed == 0 ||
+        config.cache_isolation_domain.empty()))) {
     set_error("Native Provider Descriptor has an invalid zero capacity", error);
     return std::nullopt;
   }
-  if (config.cache_groups.empty() || config.api_features.empty() ||
+  // A task-only Engine is discoverable through the common provider contract,
+  // but it must not claim token execution or KV-transfer semantics.
+  if (config.task_only &&
+      (config.role != proto::ENGINE_ROLE_AGGREGATED || config.dp != 1 ||
+       config.supports_local_prefill_decode || config.supports_prefill_only ||
+       config.kv_cache_dtype != "none" || config.block_size != 1 ||
+       config.connector != "none" || !config.cache_groups.empty() ||
+       config.hash_version != 0 || config.hash_seed != 0 ||
+       !config.kv_transfer_layout_contract.empty())) {
+    set_error("Native task descriptor has an invalid token/KV contract", error);
+    return std::nullopt;
+  }
+  if ((!config.task_only && config.cache_groups.empty()) ||
+      config.api_features.empty() ||
       !has_unique_nonempty_strings(config.cache_groups) ||
       !has_unique_nonempty_strings(config.api_features)) {
     set_error("Native Provider Descriptor has invalid repeated fields", error);
@@ -290,6 +305,7 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
   proto::ProviderDescriptor descriptor;
   descriptor.set_instance_pool_id(config.instance_pool_id);
   descriptor.set_contract_version(kNativeProviderContractVersion);
+  descriptor.set_task_only(config.task_only);
   proto::ProviderIdentity* identity = descriptor.mutable_identity();
   identity->set_engine_uid(config.engine_uid);
   identity->set_provider_id(proto::PROVIDER_ID_XLLM_NATIVE);
@@ -301,7 +317,7 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
 
   proto::ProviderEndpoint* endpoint = descriptor.mutable_endpoint();
   endpoint->set_control_transport("brpc");
-  endpoint->set_data_transport(config.connector);
+  endpoint->set_data_transport(config.task_only ? "brpc" : config.connector);
   endpoint->set_address(config.api_address);
 
   proto::ServingDescriptor* serving = descriptor.mutable_serving();
@@ -366,7 +382,7 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
 
   proto::KVDescriptor* kv = descriptor.mutable_kv();
   kv->set_kv_layout_digest(*kv_layout_digest);
-  if (!config.kv_transfer_layout_contract.empty()) {
+  if (!config.task_only && !config.kv_transfer_layout_contract.empty()) {
     std::string transfer_contract =
         cache_contract(config,
                        *chat_template_digest,
@@ -383,15 +399,19 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
   }
   kv->set_cache_dtype(config.kv_cache_dtype);
   kv->set_block_size(config.block_size);
-  kv->set_hash_version(config.hash_version);
-  kv->set_hash_seed(config.hash_seed);
-  for (const std::string& cache_group : config.cache_groups) {
-    kv->add_cache_groups(cache_group);
+  if (!config.task_only) {
+    kv->set_hash_version(config.hash_version);
+    kv->set_hash_seed(config.hash_seed);
+    for (const std::string& cache_group : config.cache_groups) {
+      kv->add_cache_groups(cache_group);
+    }
   }
   kv->set_head_shard_mapping_digest(*head_shard_digest);
   kv->set_connector(config.connector);
   kv->set_connector_version(config.connector_version);
-  kv->add_transfer_modes(proto::TRANSFER_MODE_LAYERWISE_PUSH);
+  if (!config.task_only) {
+    kv->add_transfer_modes(proto::TRANSFER_MODE_LAYERWISE_PUSH);
+  }
   if (config.role == proto::ENGINE_ROLE_AGGREGATED ||
       config.supports_local_prefill_decode || config.supports_prefill_only) {
     kv->add_transfer_modes(proto::TRANSFER_MODE_NONE);
@@ -409,13 +429,16 @@ std::optional<proto::ProviderDescriptor> build_native_provider_descriptor(
     descriptor.add_capabilities(
         proto::PROVIDER_CAPABILITY_REMOTE_PD_LAYERWISE_PUSH);
   }
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_NATIVE_RESERVATION);
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_ATTEMPT_QUERY);
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_CANCEL_FENCE);
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_ENGINE_LOCAL_DEADLINE);
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_PER_DP_STATE);
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_SELF_FENCING);
-  descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_DRAIN);
+  if (!config.task_only) {
+    descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_PER_DP_STATE);
+    descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_NATIVE_RESERVATION);
+    descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_ATTEMPT_QUERY);
+    descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_CANCEL_FENCE);
+    descriptor.add_capabilities(
+        proto::PROVIDER_CAPABILITY_ENGINE_LOCAL_DEADLINE);
+    descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_SELF_FENCING);
+    descriptor.add_capabilities(proto::PROVIDER_CAPABILITY_DRAIN);
+  }
   if (config.supports_local_prefill_decode) {
     descriptor.add_capabilities(
         proto::PROVIDER_CAPABILITY_LOCAL_PREFILL_DECODE);
@@ -454,7 +477,8 @@ EngineStateBuilder::EngineStateBuilder(proto::ProviderDescriptor descriptor)
       !descriptor_.profile_digest().empty() &&
       !descriptor_.model().model_revision().empty() &&
       descriptor_.topology().dp() > 0 &&
-      has_capability(descriptor_, proto::PROVIDER_CAPABILITY_PER_DP_STATE);
+      (descriptor_.task_only() ||
+       has_capability(descriptor_, proto::PROVIDER_CAPABILITY_PER_DP_STATE));
 }
 
 std::optional<proto::EngineState> EngineStateBuilder::build(
@@ -468,20 +492,30 @@ std::optional<proto::EngineState> EngineStateBuilder::build(
     return std::nullopt;
   }
   const size_t expected_dp = static_cast<size_t>(descriptor_.topology().dp());
-  if (snapshot.kv_free_blocks.size() != expected_dp ||
-      snapshot.kv_used_blocks.size() != expected_dp ||
-      snapshot.kv_total_blocks.size() != expected_dp ||
-      snapshot.lifecycle != proto::ENGINE_LIFECYCLE_READY) {
-    set_error("Native EngineState snapshot is incomplete", error);
-    return std::nullopt;
-  }
-  for (size_t dp_rank = 0; dp_rank < expected_dp; ++dp_rank) {
-    const uint64_t free = snapshot.kv_free_blocks[dp_rank];
-    const uint64_t used = snapshot.kv_used_blocks[dp_rank];
-    const uint64_t total = snapshot.kv_total_blocks[dp_rank];
-    if (free > total || used > total) {
-      set_error("Native EngineState KV capacity is invalid", error);
+  const bool task_only = descriptor_.task_only();
+  if (task_only) {
+    if (snapshot.lifecycle != proto::ENGINE_LIFECYCLE_READY ||
+        !snapshot.kv_free_blocks.empty() || !snapshot.kv_used_blocks.empty() ||
+        !snapshot.kv_total_blocks.empty()) {
+      set_error("Native task EngineState must publish liveness only", error);
       return std::nullopt;
+    }
+  } else {
+    if (snapshot.kv_free_blocks.size() != expected_dp ||
+        snapshot.kv_used_blocks.size() != expected_dp ||
+        snapshot.kv_total_blocks.size() != expected_dp ||
+        snapshot.lifecycle != proto::ENGINE_LIFECYCLE_READY) {
+      set_error("Native EngineState snapshot is incomplete", error);
+      return std::nullopt;
+    }
+    for (size_t dp_rank = 0; dp_rank < expected_dp; ++dp_rank) {
+      const uint64_t free = snapshot.kv_free_blocks[dp_rank];
+      const uint64_t used = snapshot.kv_used_blocks[dp_rank];
+      const uint64_t total = snapshot.kv_total_blocks[dp_rank];
+      if (free > total || used > total) {
+        set_error("Native EngineState KV capacity is invalid", error);
+        return std::nullopt;
+      }
     }
   }
 
@@ -498,6 +532,9 @@ std::optional<proto::EngineState> EngineStateBuilder::build(
   state.set_heartbeat_age_ms_at_publish(0);
   state.set_state_age_ms_at_publish(0);
 
+  if (task_only) {
+    return state;
+  }
   for (size_t dp_rank = 0; dp_rank < expected_dp; ++dp_rank) {
     proto::PerDpEngineState* per_dp = state.add_per_dp();
     per_dp->set_dp_rank(static_cast<uint32_t>(dp_rank));
@@ -814,6 +851,92 @@ collect_native_provider_descriptor_config(
                                        scheduler.enable_mix_batch(),
       .supports_prefill_only = *role == proto::ENGINE_ROLE_PREFILL,
       .api_features = api_features,
+  };
+}
+
+std::optional<ProviderDescriptorConfig>
+collect_native_task_provider_descriptor_config(
+    const InstanceInfo& instance_info,
+    const Engine& engine,
+    uint32_t device_count,
+    uint32_t tp_size,
+    std::string* error) {
+  if (error != nullptr) {
+    error->clear();
+  }
+  const ModelConfig& model_config = ModelConfig::get_instance();
+  if (EngineType(model_config.backend()) != EngineType::DIT) {
+    set_error("Native task registration requires a DiT backend", error);
+    return std::nullopt;
+  }
+  if (instance_info.name.empty() || device_count == 0 || tp_size == 0) {
+    set_error("Native task identity or topology is invalid", error);
+    return std::nullopt;
+  }
+  const std::string model_revision = model_config.model_id().empty()
+                                         ? model_config.model()
+                                         : model_config.model_id();
+  if (model_revision.empty()) {
+    set_error("Native task model revision is empty", error);
+    return std::nullopt;
+  }
+  // The existing api_service owns all DiT request parsing and execution.
+  // Registration advertises only the endpoint routed by xllm-service; do not
+  // claim the backend's other media capabilities here.
+  std::vector<std::string> api_features = {"image_generation"};
+
+  const std::string runtime_version = XLLM_BUILD_VERSION;
+  const std::string hardware_runtime_version =
+      Platform::type_str() + ";torch=" + std::to_string(TORCH_VERSION_MAJOR) +
+      "." + std::to_string(TORCH_VERSION_MINOR) + "." +
+      std::to_string(TORCH_VERSION_PATCH);
+  const std::string model_dtype = engine.model_args().dtype().empty()
+                                      ? "unspecified"
+                                      : engine.model_args().dtype();
+  constexpr std::string_view kTaskNoKvContract = "task-no-kv-v1";
+  constexpr std::string_view kTaskRendererContract =
+      "xllm-dit-task-renderer-v1";
+  constexpr std::string_view kTaskSchedulerContract = "dit-one-shot-v1";
+
+  return ProviderDescriptorConfig{
+      .task_only = true,
+      .engine_uid = instance_info.name,
+      .instance_pool_id = DistributedConfig::get_instance().instance_pool_id(),
+      .api_address = instance_info.name,
+      .role = proto::ENGINE_ROLE_AGGREGATED,
+      .runtime_version = runtime_version,
+      .hardware_runtime_version = hardware_runtime_version,
+      .model_revision = model_revision,
+      .tokenizer_revision = model_revision,
+      .chat_template_contract = std::string(kTaskRendererContract),
+      .renderer_contract = std::string(kTaskRendererContract),
+      .quantization = "model-dtype=" + model_dtype,
+      .soc = Platform::type_str(),
+      .device_count = device_count,
+      .tp = tp_size,
+      .dp = 1,
+      .pp = 1,
+      .ep = 1,
+      .cp = 1,
+      .super_node_id =
+          util::get_optional_string_env("EA_SUPER_POD_ID").value_or(""),
+      .kv_layout_contract = std::string(kTaskNoKvContract),
+      .kv_cache_dtype = "none",
+      .block_size = 1,
+      .hash_version = 0,
+      .hash_seed = 0,
+      .cache_isolation_domain = "",
+      .cache_groups = {},
+      .head_shard_mapping_contract = std::string(kTaskNoKvContract),
+      .connector = "none",
+      .connector_version = "builtin-" + runtime_version,
+      .scheduler_class = "dit_one_shot",
+      .max_num_seqs = 1,
+      .max_num_batched_tokens = 1,
+      .scheduler_policy_contract = std::string(kTaskSchedulerContract),
+      .supports_local_prefill_decode = false,
+      .supports_prefill_only = false,
+      .api_features = std::move(api_features),
   };
 }
 

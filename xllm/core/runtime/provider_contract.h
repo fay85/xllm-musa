@@ -30,6 +30,8 @@ inline constexpr uint32_t kNativeProviderContractVersion = 1;
 // Callers must derive these fields from the loaded model and normalized runtime
 // configuration; the builder deliberately has no environment fallbacks.
 struct ProviderDescriptorConfig {
+  // One-shot engines expose generation RPCs but do not own token KV state.
+  bool task_only = false;
   std::string engine_uid;
   // Deployment identity, immutable for this Engine incarnation.
   std::string instance_pool_id;
@@ -79,6 +81,8 @@ struct ProviderDescriptorConfig {
 };
 
 struct EngineStateSnapshot {
+  // One-shot task engines publish only liveness. Service owns their node
+  // selection and admission permits, so EngineState must not mirror capacity.
   // num_available_blocks(): physically free blocks plus evictable prefix
   // cache residents. Service uses this as the dispatch free count.
   std::vector<uint64_t> kv_free_blocks;
@@ -112,6 +116,16 @@ collect_native_provider_descriptor_config(
     const InstanceInfo& instance_info,
     const Engine& engine,
     const BlockManagerPool& block_manager_pool,
+    std::string* error);
+
+// Collects the immutable identity needed to discover a DiT Engine through
+// xllm-service. Runtime admission stays owned by the Service image-node permit.
+std::optional<ProviderDescriptorConfig>
+collect_native_task_provider_descriptor_config(
+    const InstanceInfo& instance_info,
+    const Engine& engine,
+    uint32_t device_count,
+    uint32_t tp_size,
     std::string* error);
 
 // Builds one EngineState from an immutable descriptor and a capacity snapshot.
