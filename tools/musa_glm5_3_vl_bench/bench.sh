@@ -20,7 +20,7 @@ fi
 if [[ $mode == pd ]]; then
   export GLM5_URL=${GLM5_URL:-http://10.121.34.85:28888}
   export GLM5_LOG_DIR=$kit/pd_logs/prefill
-  export GLM5_WARM=${GLM5_WARM:-0} GLM5_OSL=${GLM5_OSL:-16}
+  export GLM5_WARM=${GLM5_WARM:-10} GLM5_OSL=${GLM5_OSL:-1024}
   export GLM5_PD_BENCH=1
   echo "Prefill: $GLM5_LOG_DIR/rank_0.log"
   echo "Decode:  $kit/pd_logs/decode/rank_0.log"
