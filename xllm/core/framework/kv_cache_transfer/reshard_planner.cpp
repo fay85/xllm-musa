@@ -228,24 +228,31 @@ class SpanWriters final {
     return writers;
   }
 
-  // The lowest TP rank of `candidates` that holds the span. The declared owner
+  // Prefer a matching MAIN replica when requested, otherwise the lowest TP
+  // rank of the candidates that holds the span. The declared owner
   // is not necessarily a candidate: with a partial kv_split layout every source
   // of a KV-split partition can be a non-owner replica. Spans whose holders
   // declare *different* owners stay unresolved, so validate_writer_coverage
   // keeps rejecting such a layout with "multiple writers".
-  static SpanWriters lowest_of(
+  static SpanWriters for_candidates(
       const std::vector<WorkerCacheLayoutManifest>& sources,
-      const std::vector<size_t>& candidates) {
+      const std::vector<size_t>& candidates,
+      int32_t preferred_main_rank) {
     struct SpanHolders {
       std::optional<int32_t> declared_owner;
       bool conflicting = false;
       int32_t lowest_tp_rank = -1;
+      bool preferred_holds_span = false;
     };
     std::map<SpanOwnerKey, SpanHolders> holders;
     for (size_t index : candidates) {
       const int32_t tp_rank = sources[index].coordinates.tp_rank;
       for (const auto& [key, declared_owner] : manifest_spans(sources[index])) {
         SpanHolders& entry = holders[key];
+        if (tp_rank == preferred_main_rank &&
+            std::get<0>(key) == static_cast<int32_t>(CacheNamespace::MAIN)) {
+          entry.preferred_holds_span = true;
+        }
         entry.lowest_tp_rank = entry.lowest_tp_rank < 0
                                    ? tp_rank
                                    : std::min(entry.lowest_tp_rank, tp_rank);
@@ -264,7 +271,10 @@ class SpanWriters final {
     writers.by_declaration_ = true;
     for (const auto& [key, entry] : holders) {
       if (!entry.conflicting) {
-        writers.resolved_.emplace(key, entry.lowest_tp_rank);
+        writers.resolved_.emplace(key,
+                                  entry.preferred_holds_span
+                                      ? preferred_main_rank
+                                      : entry.lowest_tp_rank);
       }
     }
     return writers;
@@ -1252,8 +1262,17 @@ Status select_source_writers(
       required_groups.emplace(coordinates.dp_rank, 0);
       homogeneous_candidates.emplace_back(index);
     }
-    homogeneous_writers =
-        SpanWriters::lowest_of(sources, homogeneous_candidates);
+    // GLM CP prefill writes the gathered MLA and indexer caches on each
+    // rank. Match decode readers to these replicas instead of saturating
+    // one peer. A sharded span still comes only from a physical holder.
+    const int32_t preferred_main_rank =
+        destination.layout_family == "glm5_musa_hybrid" &&
+                destination.coordinates.tp_size ==
+                    sources.front().coordinates.tp_size
+            ? destination.coordinates.tp_rank
+            : -1;
+    homogeneous_writers = SpanWriters::for_candidates(
+        sources, homogeneous_candidates, preferred_main_rank);
     for (size_t index : homogeneous_candidates) {
       if (has_logical_overlap(
               sources[index], destination_groups, homogeneous_writers)) {

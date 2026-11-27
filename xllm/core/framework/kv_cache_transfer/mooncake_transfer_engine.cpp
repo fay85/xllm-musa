@@ -1268,6 +1268,7 @@ bool MooncakeTransferEngine::move_memory_regions(
   std::vector<TransferRequest> entries;
   entries.reserve(transfer_regions->size());
   uint64_t total_bytes = 0;
+  const ByteRegion* previous = nullptr;
   for (const ByteRegion& region : *transfer_regions) {
     if (region.local_buffer_id >= local_segment_desc->buffers.size() ||
         region.remote_buffer_id >= remote_segment_desc->buffers.size()) {
@@ -1305,6 +1306,18 @@ bool MooncakeTransferEngine::move_memory_regions(
     }
     total_bytes += region.length;
 
+    // The binder preserves logical resource boundaries. RDMA only needs a
+    // registered range; join adjacent validated ranges within the same pair.
+    if (previous != nullptr &&
+        previous->local_buffer_id == region.local_buffer_id &&
+        previous->remote_buffer_id == region.remote_buffer_id &&
+        previous->local_offset + previous->length == region.local_offset &&
+        previous->remote_offset + previous->length == region.remote_offset) {
+      entries.back().length += region.length;
+      previous = &region;
+      continue;
+    }
+    previous = &region;
     TransferRequest entry;
     entry.opcode = opcode;
     entry.length = region.length;
@@ -1316,6 +1329,10 @@ bool MooncakeTransferEngine::move_memory_regions(
     entries.emplace_back(std::move(entry));
   }
 
+  LOG_FIRST_N(INFO, 8) << "Mooncake transfer regions="
+                       << transfer_regions->size()
+                       << ", requests=" << entries.size()
+                       << ", bytes=" << total_bytes;
   constexpr size_t kMaxRegionsPerBatch = 4096;
   Timer transfer_timer;
   for (size_t begin = 0; begin < entries.size(); begin += kMaxRegionsPerBatch) {

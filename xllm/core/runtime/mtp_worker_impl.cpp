@@ -1317,6 +1317,7 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
             util::get_bool_env("XLLM_GLM5_REPLICATE_DRAFT_EMBEDDING", true)) {
           word_embedding =
               replicate_draft_embedding(word_embedding, impl_->context_);
+          impl_->set_word_embedding(word_embedding);
         }
 #endif
         draft_impl_->set_word_embedding(word_embedding);
