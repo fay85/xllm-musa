@@ -652,7 +652,8 @@ template <int32_t BlockTokens>
 __global__ void causal_conv1d_bf16_pack4_kernel(ConvParamsBase params,
                                                 int32_t qk_channels) {
   const int32_t seq = static_cast<int32_t>(blockIdx.x);
-  const int32_t offset = static_cast<int32_t>(blockIdx.y) * BlockTokens;
+  const int32_t offset =
+      static_cast<int32_t>(blockIdx.y) * BlockTokens;
   const int32_t channel =
       4 * (static_cast<int32_t>(blockIdx.z) * static_cast<int32_t>(blockDim.x) +
            static_cast<int32_t>(threadIdx.x));

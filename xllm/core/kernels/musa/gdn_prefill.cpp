@@ -1800,9 +1800,10 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
   if (use_token_major && x.is_contiguous() && weight.dim() == 2 &&
       weight.size(1) == 4) {
     torch::Tensor out = torch::empty_like(x);
-    const bool request_qk_norm =
-        qk_normalized != nullptr && x.scalar_type() == torch::kBFloat16 &&
-        qk_channels > 0 && qk_channels <= x.size(1) && qk_channels % 128 == 0;
+    const bool request_qk_norm = qk_normalized != nullptr &&
+                                 x.scalar_type() == torch::kBFloat16 &&
+                                 qk_channels > 0 && qk_channels <= x.size(1) &&
+                                 qk_channels % 128 == 0;
     const bool applied_qk_norm =
         causal_conv1d_fwd_token_major(x,
                                       weight,

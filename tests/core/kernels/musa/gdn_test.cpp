@@ -501,5 +501,120 @@ TEST(MusaGdnTest, SpecVerifyMatchesCheckpointRecurrenceAndConvHistory) {
   }
 }
 
+torch::Tensor l2norm_last(const torch::Tensor& values, double eps) {
+  return values / (values.pow(2).sum(-1, /*keepdim=*/true) + eps).sqrt();
+}
+
+// Standalone Q/K L2 used when the convolution does not normalize. Each
+// 128-wide head is normalized from the BF16 convolution output in FP32.
+torch::Tensor normalize_leading_heads(const torch::Tensor& conv_out,
+                                      int32_t qk_channels) {
+  constexpr double kEps = 1e-6;
+  constexpr int64_t kHeadDim = 128;
+  torch::Tensor out = conv_out.to(torch::kFloat32);
+  const int64_t tokens = out.size(0);
+  const int64_t heads = qk_channels / kHeadDim;
+  torch::Tensor heads_view = out.narrow(/*dim=*/1, /*start=*/0, qk_channels)
+                                 .view({tokens, heads, kHeadDim});
+  torch::Tensor normalized = l2norm_last(heads_view, kEps);
+  out.narrow(/*dim=*/1, /*start=*/0, qk_channels)
+      .copy_(normalized.reshape({tokens, qk_channels}));
+  return out.to(torch::kBFloat16);
+}
+
+TEST(MusaGdnTest, FusedConvQkNormMatchesStandaloneL2) {
+  if (Platform::device_count() == 0) {
+    GTEST_SKIP() << "No MUSA device available";
+  }
+  Device device(/*device_index=*/0);
+  device.set_device();
+  device.init_device_context();
+  torch::manual_seed(27);
+  const torch::Device target(torch::kPrivateUse1, /*index=*/0);
+
+  constexpr int32_t kHeadDim = 128;
+  constexpr int32_t kQkChannels = 2 * kHeadDim;
+  constexpr int32_t kChannels = kQkChannels + kHeadDim;
+  constexpr int64_t kTokens = 24;
+  const torch::Tensor host_x =
+      (torch::randn({kTokens, kChannels}) * 0.25).to(torch::kBFloat16);
+  const torch::Tensor host_weight =
+      (torch::randn({kChannels, 4}) * 0.1).to(torch::kBFloat16).contiguous();
+  const torch::Tensor host_state =
+      (torch::randn({2, kChannels, 3}) * 0.1).to(torch::kBFloat16);
+  const std::vector<int32_t> cu_host = {0, 7, static_cast<int32_t>(kTokens)};
+  const torch::Tensor query_start_loc =
+      torch::tensor(cu_host, torch::kInt32).to(target);
+  const torch::Tensor cache_indices =
+      torch::tensor({0, 1}, torch::kInt32).to(target);
+  const torch::Tensor has_initial_state =
+      torch::tensor({true, false}, torch::kBool).to(target);
+  const torch::Tensor x = host_x.to(target);
+  const torch::Tensor weight = host_weight.to(target);
+
+  bool fused_normalized = false;
+  const torch::Tensor fused =
+      causal_conv1d_prefill(x,
+                            weight,
+                            host_state.clone().to(target),
+                            std::nullopt,
+                            query_start_loc,
+                            cache_indices,
+                            has_initial_state,
+                            /*silu_activation=*/true,
+                            kQkChannels,
+                            &fused_normalized);
+  bool plain_normalized = false;
+  const torch::Tensor plain =
+      causal_conv1d_prefill(x,
+                            weight,
+                            host_state.clone().to(target),
+                            std::nullopt,
+                            query_start_loc,
+                            cache_indices,
+                            has_initial_state,
+                            /*silu_activation=*/true,
+                            /*qk_channels=*/0,
+                            &plain_normalized);
+
+  // The layer keeps exactly one normalization: skip standalone L2 only when
+  // the convolution reports that it already normalized Q/K.
+  const bool fused_use_standalone_l2 = !fused_normalized;
+  const bool plain_use_standalone_l2 = !plain_normalized;
+  EXPECT_TRUE(fused_normalized);
+  EXPECT_FALSE(plain_normalized);
+  EXPECT_FALSE(fused_use_standalone_l2);
+  EXPECT_TRUE(plain_use_standalone_l2);
+
+  const torch::Tensor fused_cpu = fused.cpu();
+  const torch::Tensor plain_cpu = plain.cpu();
+  const torch::Tensor reference =
+      normalize_leading_heads(plain_cpu, kQkChannels);
+  EXPECT_TRUE(torch::allclose(fused_cpu.to(torch::kFloat32),
+                              reference.to(torch::kFloat32),
+                              /*rtol=*/1e-2,
+                              /*atol=*/1e-3))
+      << "Fused conv Q/K L2 diverges from standalone l2norm_last";
+  EXPECT_TRUE(torch::allclose(
+      fused_cpu.narrow(/*dim=*/1, kQkChannels, kChannels - kQkChannels)
+          .to(torch::kFloat32),
+      plain_cpu.narrow(/*dim=*/1, kQkChannels, kChannels - kQkChannels)
+          .to(torch::kFloat32),
+      /*rtol=*/1e-2,
+      /*atol=*/1e-3))
+      << "Value channels must stay on the unnormalized convolution";
+
+  const torch::Tensor normalized_twice =
+      normalize_leading_heads(fused_cpu, kQkChannels);
+  const float second_pass_delta =
+      (normalized_twice.narrow(/*dim=*/1, /*start=*/0, kQkChannels) -
+       fused_cpu.narrow(/*dim=*/1, /*start=*/0, kQkChannels))
+          .abs()
+          .max()
+          .item<float>();
+  EXPECT_GT(second_pass_delta, 1e-2f)
+      << "A second L2 must not be a no-op on this input";
+}
+
 }  // namespace
 }  // namespace xllm::kernel::musa
