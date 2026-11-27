@@ -23,21 +23,23 @@ RmsNorm 的平方和针对**已经舍入为 bf16 的中间结果**计算；公�
 
 ## 2. MIX 核与流水
 
-使用 28 个 MIX 逻辑块（28 AIC + 56 AIV），每组 16 个 token 仅做一次 `sync_all(MIX)`：
+使用 28 个 MIX 逻辑块（28 AIC + 56 AIV），每个 barrier chunk（`GPCH=32` 组 = 512 token）仅做一次 `sync_all(MIX)`；t=1024 时共 2 次：
 
 ```text
 AIC：预加载权重分片 → 每组加载 x → 分 K 矩阵乘 → 写入部分结果 → MIX 同步
-AIV：预加载辅助参数和 gamma → 并行计算 x 平方和 → 等待 MIX 同步
+AIV：预加载辅助参数和 gamma → 按 chunk 并行计算完整 token 平方和（写入 r_ws）→ 等待 MIX 同步
      → 跨 28 个部分结果归约 → 求 r 和门控
-     → y 第一遍（8×512，保留 bf16 中间值并累加平方和）
-     → rstd → y 第二遍（融合 gamma 的归一化）→ Sinkhorn → 写回
+     → y 第一遍（整个 token 一个 VF，内部遍历 8×512，保留 bf16 中间值并累加平方和，尾部折叠 rstd）
+     → y 第二遍（融合 gamma 的归一化）→ 批处理 Sinkhorn（lane=token）→ 写回
 ```
 
 Cube 从 GM 直接读取 bf16 的 `x` 和 `hc_fn`，与 Vector 计算输入平方和并行。同步后，Cube 的下一 token 组矩阵乘可与 Vector 的当前组后处理重叠。中间 `y` 留在 UB，省去向 GM 写回再读取以及独立的 RmsNorm Kernel 启动。
 
+> 当前实现：包装函数对所有 t 统一启动 `kernel_k`（NB=28；该文件历史上也只有 `kernel_k` 一条路径）。workspace 按 (t, device, stream) 缓存：ACL graph 捕获期间创建的条目常驻，其余 eager 调用使用有界 LRU（真 LRU，上限 8 条），多流不会共享同一份工作区。
+
 ## 3. Cube：K 维切分
 
-`K=16384` 被分给 28 个 AIC：核 0–26 的起点为 `core*592`，各处理 592 个元素；核 27 处理末尾 400 个元素，`27*592+400=16384`。两个分片均为 16 的整数倍，分别使用 `[16,592]×[592,32]` 与 `[16,400]×[400,32]` 的 tile，无需补零或尾块。权重分片对同一核的各 token 组保持不变，预加载一次。28 份 FP32 部分乘积写入工作区 `pmix3[28, ceil(t/16)*16, 32]`，由 Vector 侧归约为 24 个有效门控通道。
+`K=16384` 被分给 28 个 AIC：核 0–26 的起点为 `core*592`，各处理 592 个元素；核 27 处理末尾 400 个元素，`27*592+400=16384`。两个分片均为 16 的整数倍，分别使用 `[32,592]×[592,32]` 与 `[32,400]×[400,32]` 的 tile（`TGC=32`，即两个 16-token 组），无需补零或尾块。权重分片对同一核的各 token 组保持不变，预加载一次。28 份 FP32 部分乘积写入工作区 `pmix3[28, ceil(t/16)*16+64, 24]`，由 Vector 侧归约为 24 个有效门控通道。
 
 Mat tile 不支持 `fillpad`；原设计亦指出 Cube 段无法借助所需 GM→L1 barrier 安全地实现补零方案，因此采用上述两种 tile 形状。
 
@@ -45,25 +47,25 @@ Mat tile 不支持 `fillpad`；原设计亦指出 Cube 段无法借助所需 GM�
 
 ### 4.1 归约及门控
 
-`_gates1_vf` 对 28 路矩阵乘部分结果和 32 路输入平方和分片分别求和；用 `scale24`、`pmul24`、`eps24` 模式向量及前缀掩码并行处理三类门控：`pre` 为 sigmoid 后加 `eps`，`post` 为 sigmoid 后乘 2，`comb_flag` 走线性分支。
+`_gates1_vf` 对 28 路矩阵乘部分结果求和；per-token r 直接从 `r_ws[j,0]` 读取（Phase 1 已算完整 token 的平方和，不再做 32 路分片归约）；用 `scale24`、`pmul24`、`eps24` 模式向量及前缀掩码并行处理三类门控：`pre` 为 sigmoid 后加 `eps`，`post` 为 sigmoid 后乘 2，`comb_flag` 走线性分支。
 
 ### 4.2 两遍 y 数据流
 
 | 阶段 | 实现 | 作用 |
 | --- | --- | --- |
-| 第一遍，8 个 512 维片段 | `_y_pass1_vf` | 展开 4 条 hc 行的 FMA，bf16 中间 `y` 保存在 UB，同时累计 `y` 的平方和 |
-| rstd | `_rstd_vf` | 对平方和归约，计算 `rsqrt(mean(y_bf16²)+RMS_EPS)` 并写回 `[t,1]` fp32 |
-| 第二遍，8 个 512 维片段 | `_y_norm_vf` | 从 UB 读取中间 `y` 和预加载的 `gamma`，生成并写回 bf16 `y_norm` |
+| 第一遍（整个 token 一次 VF） | `_y_pass1_vf` | VF 内部遍历 8 个 512 维片段，展开 4 条 hc 行的 FMA，bf16 中间 `y` 保存在 UB，同时累计 `y` 的平方和 |
+| rstd（折叠在 `_y_pass1_vf` 尾部） | `_y_pass1_vf` | 对平方和归约，计算 `rsqrt(mean(y_bf16²)+RMS_EPS)` 并写回 `[t,1]` fp32；不再单独调用 `_rstd_vf` |
+| 第二遍（整个 token 一次 VF） | `_y_norm_vf` | VF 内部遍历 8 个 512 维片段，从 UB 读取中间 `y` 和预加载的 `gamma`，生成并写回 bf16 `y_norm` |
 
 `x` 子块使用双缓冲；加载下一片段可与上一片段的 VF 计算重叠。`gamma` 每个 AIV 预加载一次。
 
 ### 4.3 Sinkhorn
 
-`_sinkhorn_vf` 将 4×4 门控矩阵展开为寄存器值。首轮先减去行最大值，做稳定行 softmax（其分母不加 `eps`），在结果上加 `eps`，再除以列和加 `eps`。后续 19 轮依次按行、列归一化，各自的分母均为对应的和加 `eps`；输出 `comb` 和 `post` 写回 GM。
+`_sinkhorn_batch_vf` 按批处理：lane = token，tile 容量 `NT=32`，实际批深 `nt=wc=ceil(chunk_t/56) <= TPC/NAIV = 10`。每个 token 的 4×4 门控矩阵展开为寄存器值，首轮先减去行最大值，做稳定行 softmax（其分母不加 `eps`），在结果上加 `eps`，再除以列和加 `eps`。后续 19 轮依次按行、列归一化，各自的分母均为对应的和加 `eps`；整批 `comb` 转置后一次写回 GM，`post` 在第一遍 y 中从门控向量取出。
 
 ## 5. 存储及平台约束
 
-- UB 地址跨度为 `[0, 0x10100)`，即 65,792 B（64.25 KiB），小于 248 KiB 容量，覆盖输入平方和片段、中间 `y`、`gamma`、双缓冲 `x` 子块及归一化输出、门控归约和 Sinkhorn 临时值。该跨度包含双缓冲槽及 padding，部分小临时 tile 在不同阶段复用重叠存储；不能将其理解为独立 tile 大小之和或统一的最小槽位间距保证。
+- UB 总跨度约 190KB（`0x0`–`0x2F600`，小于 248KB）：存放 28 路门控归约、per-token r、双缓冲 x 子块（2×32KB）、双缓冲 y_norm（2×8KB）、整行 y/gamma、Sinkhorn 批处理临时值和 rstd 广播；具体基址见 mhcpresinkhorn_rmsnorm.py 的 UB 布局常量，上界由 CPU 测试 `test_ub_layout_does_not_overlap` 的 248KB 断言校验。
 - L1 使用分别适配 K=592 和 K=400 的源 tile；L0B 最大占用约 63.5 KB（64 KB 上限）。
 - ZN/Acc tile 的 N 必须按 16 宽内框对齐，24 个有效门控通道使用 N=32。
 - Vec tile 仅在 Vector 段使用；`.next()` 在 Kernel 主体轮换槽位，不在 VF 中调用。
@@ -71,14 +73,8 @@ Mat tile 不支持 `fillpad`；原设计亦指出 Cube 段无法借助所需 GM�
 
 `post` 转置在整个 `pl.transpose` 调用期间必须保持源、目的存储不重叠，不能用仍在读取的源矩阵行作为目的缓冲区。
 
-| Tile | 物理形状及类型 | 字节数 | UB 字节范围（半开区间） |
-|------|----------------|--------|------------------------|
-| `PST_UB` | `[4,8]` fp32 | 128 | `[0x08540, 0x085C0)` |
-| `PSTT_UB` | `[1,8]` fp32 | 32 | `[0x08600, 0x08620)` |
-| `PRE_UB` | `[1,8]` fp32 | 32 | `[0x08640, 0x08660)` |
-
-源矩阵四行的起始地址分别为 `0x08540`、`0x08560`、`0x08580`、`0x085A0`。下一块 `XSUB_UB` 从 `0x09000` 开始，因此总 UB 地址跨度不变。
-两遍 y 计算每段显式使用 128 元素的 bf16 掩码，最后一段从 3968 开始，到 4096 结束（不含）。保留行及片段展开是为了维持八个独立的偶/奇 FMA 累加器及其累加顺序，并不表示 VF 普遍不支持循环。Sinkhorn 对每个 token 始终只启用一个 fp32 lane。
+当前 UB 基址和大小由 mhcpresinkhorn_rmsnorm.py 中的 SLAB_UB、MIXR_UB、SSQR_UB、SCALE3_UB、SCALE24_UB、PMUL24_UB、EPS24_UB、BASE_UB、ZBAT_UB、ZSD_UB、CBBAT_UB、CBTT_UB、PRE_UB、POST_UB、XSUB_UB、YUB_UB、YROW_UB、GAMMA_UB 和 RSTD_UB 常量定义；Vector 侧 UB 布局跨度约 190KB（最高地址 `0x2F600`，上界 248KB）。
+两遍 y 计算每段显式使用 128 元素的 bf16 掩码，最后一段从 3968 开始，到 4096 结束（不含）。保留行及片段展开是为了维持八个独立的偶/奇 FMA 累加器及其累加顺序，并不表示 VF 普遍不支持循环。Sinkhorn 使用 lane=token 的批处理，`NT=32` 为 tile 容量，实际批深不超过 10。
 
 ## 6. 演进与历史测量
 

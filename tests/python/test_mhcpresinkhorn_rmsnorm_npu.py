@@ -19,20 +19,23 @@ is covered by ``test_mhcpresinkhorn_rmsnorm.py`` on CPU.  This module runs the
 real kernel on an Ascend device and compares it against a pure-torch
 re-implementation of the fused chain:
 
-1. ``mix = x @ hc_fn``            (bf16 matmul, K = 4 * 4096 split over cores)
+1. ``mix = x @ hc_fn``            (bf16 inputs, FP32 output; K = 4 * 4096 split
+   over cores)
 2. ``r = 1 / sqrt(mean(x^2) + eps)`` per token over all ``4 * 4096`` lanes
 3. ``z = mix * r * hc_scale + hc_base``
-4. ``pp = sigmoid(z) * pmul + eps`` for the 8 "comb" lanes, ``z`` for the 16
-   "post" lanes
-5. ``y = sum_m pp[m] * x[m]`` then ``y_norm = y * rstd * gamma``
+4. ``pp = sigmoid(z) * pmul + eps`` for the first 8 lanes (4 pre + 4 post),
+   ``z`` for the 16 comb_flag lanes
+5. ``y = bf16(sum_m pre[m] * x[m])`` then ``y_norm = y * rstd * gamma``
 6. Sinkhorn normalization (20 iterations) over the 4x4 comb matrix
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 import torch
@@ -74,11 +77,13 @@ HC_D = op.HC_D
 EPS = op.EPS
 RMS_EPS = op.RMS_EPS
 SINKHORN_ITERS = op.SINKHORN_ITERS
+_DEVICE_ID = int(os.environ.get("TILE_FWK_DEVICE_ID", "0"))
 
 
-def _pmul() -> torch.Tensor:
+def _pmul(device: torch.device) -> torch.Tensor:
     """Per-lane multiplier used by the kernel (4x1, 4x2, 16x1)."""
-    return torch.tensor([1.0] * 4 + [2.0] * 4 + [1.0] * 16, dtype=torch.float32)
+    return torch.tensor([1.0] * 4 + [2.0] * 4 + [1.0] * 16,
+                        dtype=torch.float32, device=device)
 
 
 def _reference(
@@ -93,8 +98,8 @@ def _reference(
     x_fp32 = x.float()
     x_2d = x_fp32.reshape(t, HC_D)
 
-    # 1. mix = x @ hc_fn, computed in bf16 like the cube unit does.
-    mix = (x.reshape(t, HC_D) @ hc_fn).float()
+    # 1. mix = x @ hc_fn with fp32 accumulation (the Cube output is FP32).
+    mix = x_fp32.reshape(t, HC_D) @ hc_fn.float().T
 
     # 2. r = 1 / sqrt(mean(x^2) + eps) over the whole 4 * 4096 row.
     ssq = x_2d.square().sum(dim=-1, keepdim=True)
@@ -108,24 +113,24 @@ def _reference(
     ])
     z = mix * r * scale + hc_base
 
-    # 4. sigmoid on the 8 comb lanes, linear on the 16 post lanes.
+    # 4. sigmoid + pmul + eps on lanes 0-7, linear comb_flag on lanes 8-23.
     sig = torch.sigmoid(z[:, :8])
-    pp = torch.cat([sig * _pmul()[:8] + EPS, z[:, 8:]], dim=-1)
+    pp = torch.cat([sig * _pmul(sig.device)[:8] + EPS, z[:, 8:]], dim=-1)
 
-    # 5. y = sum_m pp[m] * x[m], then RmsNorm with the fused gamma.
-    y = torch.einsum("tm,tmd->td", pp[:, :HC], x_fp32)
-    rstd = torch.rsqrt(y.square().mean(dim=-1, keepdim=True) + RMS_EPS)
-    y_norm = (y * rstd * gamma.float()).to(torch.bfloat16)
+    # 5. y = bf16(sum_m pre[m] * x[m]); RmsNorm reads that bf16 y.
+    y = torch.einsum("tm,tmd->td", pp[:, :HC], x_fp32).to(torch.bfloat16)
+    rstd = torch.rsqrt(y.float().square().mean(dim=-1, keepdim=True) + RMS_EPS)
+    y_norm = (y.float() * rstd * gamma.float()).to(torch.bfloat16)
 
-    # 6. Sinkhorn over the 4x4 comb matrix (row softmax, then 20 iterations).
-    comb = pp[:, :HC * HC].reshape(t, HC, HC).clone()
+    # 6. Sinkhorn over comb_flag lanes 8-23 (row softmax, then 20 iterations).
+    comb = pp[:, 2 * HC:].reshape(t, HC, HC).clone()
     comb = torch.softmax(comb, dim=-1) + EPS
     comb = comb / (comb.sum(dim=-2, keepdim=True) + EPS)
     for _ in range(SINKHORN_ITERS - 1):
         comb = comb / (comb.sum(dim=-1, keepdim=True) + EPS)
         comb = comb / (comb.sum(dim=-2, keepdim=True) + EPS)
 
-    post = pp[:, HC * HC:HC * HC + HC].contiguous()
+    post = pp[:, HC:2 * HC].contiguous()
     return y_norm, rstd, post, comb
 
 
@@ -140,13 +145,46 @@ def _inputs(t: int, seed: int = 2026) -> dict[str, torch.Tensor]:
     )
 
 
-@pytest.mark.parametrize("t", [1, 15, 16, 33])
+def _call_with_comb_canary(
+        args: dict[str, torch.Tensor], t: int
+) -> tuple[tuple[torch.Tensor, ...], torch.Tensor | None, int]:
+    """Run the operator with an extra canary block right after comb16.
+
+    ``comb16`` is allocated inside the wrapper, so the canary is appended by
+    intercepting the exact allocation.  The kernel computes its stores from
+    the comb16 base pointer, therefore any row written past the requested
+    ``_comb16_rows(t)`` shows up as a modified NaN canary row.
+    """
+    real_empty = torch.empty
+    rows = op._comb16_rows(t)
+    canary_rows = op.NAIV
+    captured: dict[str, torch.Tensor] = {}
+
+    def tracked_empty(shape: tuple[int, ...], *a: object,
+                      **kw: object) -> torch.Tensor:
+        if (tuple(shape) == (rows, HC * HC)
+                and kw.get("dtype") is torch.float32):
+            padded = real_empty((rows + canary_rows, HC * HC), *a, **kw)
+            padded[rows:].fill_(float("nan"))
+            captured["padded"] = padded
+            return padded[:rows]
+        return real_empty(shape, *a, **kw)
+
+    with mock.patch.object(torch, "empty", tracked_empty):
+        outs = op.mhcpresinkhorn_rmsnorm(**args)
+    torch_npu.npu.synchronize()
+    return outs, captured.get("padded"), rows
+
+
+@pytest.mark.parametrize("t", [1, 15, 16, 33, 513, 560, 1024, 1064, 2048])
 def test_matches_reference(t: int) -> None:
-    torch_npu.npu.set_device(0)
+    torch_npu.npu.set_device(_DEVICE_ID)
     args = _inputs(t)
 
-    y, rstd, post, comb = op.mhcpresinkhorn_rmsnorm(**args)
-    torch_npu.npu.synchronize()
+    (y, rstd, post, comb), padded, rows = _call_with_comb_canary(args, t)
+    if padded is not None:
+        assert torch.isnan(padded[rows:]).all(), (
+            f"comb16 overflowed its {rows}-row allocation at t={t}")
 
     ref_y, ref_rstd, ref_post, ref_comb = _reference(**args)
     assert (tuple(y.shape), y.dtype) == ((t, D), torch.bfloat16)
@@ -160,8 +198,8 @@ def test_matches_reference(t: int) -> None:
     torch.testing.assert_close(comb.cpu(), ref_comb.cpu(), rtol=2e-3, atol=2e-3)
 
 
-def test_sinkhorn_output_is_doubly_stochastic() -> None:
-    torch_npu.npu.set_device(0)
+def test_sinkhorn_output_columns_are_normalized() -> None:
+    torch_npu.npu.set_device(_DEVICE_ID)
     args = _inputs(8)
 
     _, _, _, comb = op.mhcpresinkhorn_rmsnorm(**args)
@@ -170,16 +208,16 @@ def test_sinkhorn_output_is_doubly_stochastic() -> None:
     comb = comb.cpu()
     assert torch.isfinite(comb).all()
     assert (comb > 0).all()
-    # Every row and every column sums to ~1 + HC * eps.
-    expected = 1.0 + HC * EPS
-    torch.testing.assert_close(comb.sum(dim=-1), torch.full_like(comb[:, :, 0], expected),
-                               rtol=1e-3, atol=1e-3)
-    torch.testing.assert_close(comb.sum(dim=-2), torch.full_like(comb[:, :, 0], expected),
+    # The final Sinkhorn step normalizes columns, so every column sum is
+    # S / (S + eps) ~= 1.  Rows are not normalized afterwards, so they are only
+    # approximately stochastic and are covered by the reference comparison.
+    col_sums = comb.sum(dim=-2)
+    torch.testing.assert_close(col_sums, torch.ones_like(col_sums),
                                rtol=1e-3, atol=1e-3)
 
 
 def test_rmsnorm_output_matches_standalone_rmsnorm() -> None:
-    torch_npu.npu.set_device(0)
+    torch_npu.npu.set_device(_DEVICE_ID)
     args = _inputs(4)
 
     y, rstd, _, _ = op.mhcpresinkhorn_rmsnorm(**args)

@@ -2,6 +2,8 @@
 
 A PyPTO-Pro MIX kernel for Ascend 950PR (A5), fusing hyper-connection inverse RMS, gating matmul, pre/post gates, Sinkhorn normalization, and RmsNorm. The K dimension is split across 28 Cube cores; Vector processing overlaps the matmul and computes the final normalized output.
 
+All token counts use the single `kernel_k` K-split path (it is the only kernel path this file has ever had). Workspaces are cached per (t, device, stream): entries created while an ACL graph is being captured are pinned, while every eager call uses a bounded LRU (8 entries), so concurrent streams never share one workspace.
+
 [中文说明](../../../../zh/ops/pypto-pro/mhcpresinkhorn_rmsnorm/README_zh.md)
 
 ## Requirements
@@ -15,7 +17,7 @@ Load the CANN environment for your installation before running the example. The 
 
 ## Public API
 
-The entry point is `mhcpresinkhorn_rmsnorm(x, hc_fn, hc_scale, hc_base, gamma, hc_mult=4, sinkhorn_iters=20, eps=1e-6)`.
+The entry point is `mhcpresinkhorn_rmsnorm(x, hc_fn, hc_scale, hc_base, gamma, hc_mult=4, sinkhorn_iters=20, eps=1e-6, rms_eps=1e-6)`.
 
 | Input | Shape | dtype |
 | --- | --- | --- |
@@ -25,7 +27,7 @@ The entry point is `mhcpresinkhorn_rmsnorm(x, hc_fn, hc_scale, hc_base, gamma, h
 | `hc_base` | `[24]` | fp32 |
 | `gamma` | `[4096]` | bf16 |
 
-Provide a nonempty token dimension (`t >= 1`). The implementation requires contiguous `x`, `hc_fn`, `hc_scale`, `hc_base`, and `gamma` and only accepts `hc_mult=4`, `sinkhorn_iters=20`, and `eps=1e-6`. The RmsNorm epsilon is not an argument: it is the compile-time constant `RMS_EPS = 1e-6`. The wrapper selects the NPU via `TILE_FWK_DEVICE_ID` and moves inputs to it.
+Provide a nonempty token dimension (`t >= 1`). `x`, `hc_fn`, `hc_scale`, `hc_base`, and `gamma` must all be contiguous, and `x` must be on an NPU (a CPU input raises `ValueError`). It only accepts `hc_mult=4`, `sinkhorn_iters=20`, and `eps=1e-6`. `rms_eps` is an argument for signature compatibility but only its default `1e-6` is accepted. The wrapper selects the NPU via `TILE_FWK_DEVICE_ID`, moves inputs to it, and allocates all outputs on it.
 
 Returns `(y, rstd, post, comb)` with shapes and dtypes `[t,4096]` bf16, `[t,1]` fp32, `[t,4]` fp32, and `[t,4,4]` fp32, respectively. **`y` is already RmsNorm-normalized**; the intermediate unnormalized bf16 value is not returned.
 

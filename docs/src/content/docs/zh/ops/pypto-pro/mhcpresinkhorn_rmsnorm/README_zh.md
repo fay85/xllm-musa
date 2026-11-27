@@ -2,6 +2,8 @@
 
 面向 Ascend 950PR（A5）的 PyPTO-Pro MIX 算子，将超连接逆 RMS、门控矩阵乘、前后置门控、Sinkhorn 归一化和 RmsNorm 融合在一个 Kernel 中。矩阵乘按 K 维分给 28 个 Cube 核，并与 Vector 侧计算形成流水。
 
+所有 token 数统一使用唯一的 `kernel_k` K 分片路径（该文件历史上也只有这一条 kernel 路径）。workspace 按 (t, device, stream) 缓存：ACL graph 捕获期间创建的条目常驻，其余 eager 调用使用有界 LRU（上限 8 条），多流不会共享同一份工作区。
+
 [English README](../../../../en/ops/pypto-pro/mhcpresinkhorn_rmsnorm/README_en.md)
 
 ## 运行要求
@@ -15,7 +17,7 @@
 
 ## 公开接口
 
-入口为 `mhcpresinkhorn_rmsnorm(x, hc_fn, hc_scale, hc_base, gamma, hc_mult=4, sinkhorn_iters=20, eps=1e-6)`。
+入口为 `mhcpresinkhorn_rmsnorm(x, hc_fn, hc_scale, hc_base, gamma, hc_mult=4, sinkhorn_iters=20, eps=1e-6, rms_eps=1e-6)`。
 
 | 输入 | 形状 | 类型 |
 | --- | --- | --- |
@@ -25,7 +27,7 @@
 | `hc_base` | `[24]` | fp32 |
 | `gamma` | `[4096]` | bf16 |
 
-需提供非空的 token 维度（`t >= 1`）。`x`、`hc_fn`、`hc_scale`、`hc_base`、`gamma` 必须连续；`hc_mult`、`sinkhorn_iters` 和 `eps` 目前分别固定为 `4`、`20` 和 `1e-6`。RmsNorm 的 epsilon 不是入参，而是编译期常量 `RMS_EPS = 1e-6`。包装函数根据 `TILE_FWK_DEVICE_ID` 选择 NPU 并将输入移至该设备。
+需提供非空的 token 维度（`t >= 1`）。`x`、`hc_fn`、`hc_scale`、`hc_base` 和 `gamma` 都必须连续，且 `x` 必须位于 NPU（CPU 输入报错）。`hc_mult`、`sinkhorn_iters` 和 `eps` 目前分别固定为 `4`、`20` 和 `1e-6`。`rms_eps` 为签名兼容保留为入参，但只接受默认值 `1e-6`，否则报错；融合 kernel 使用编译期常量 `RMS_EPS = 1e-6`。包装函数根据 `TILE_FWK_DEVICE_ID` 选择 NPU 并将输入移至该设备，输出也在该设备上。
 
 返回 `(y, rstd, post, comb)`，形状及类型依次为 `[t,4096]` bf16、`[t,1]` fp32、`[t,4]` fp32、`[t,4,4]` fp32。**`y` 已完成 RmsNorm**，不另外返回未经归一化的 bf16 中间结果。
 

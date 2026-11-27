@@ -22,20 +22,20 @@ y_norm[t,4096]   = y_bf16 * rstd * gamma                       # bf16 (the y out
 Note: the sum of squares is taken over the y that has **already been rounded to
 bf16** (matching the semantics of the production RmsNorm, which reads the bf16 y).
 
-## 2. Overall structure (NB=28 MIX blocks = 28 AIC + 56 AIV, 1 barrier per token group)
+## 2. Overall structure (NB=28 MIX blocks = 28 AIC + 56 AIV, 1 barrier per 512-token chunk)
 
 ```
 AIC(28): [preload rhs (once)] - g loop: load lhs(g) -> MM(g) -> store pmix(g) -> B(g) -+
                                                                                       | B(g) = sync_all(MIX)
-AIV(56): [preload aux/gamma] - g loop: ssq(g) (32 slices) --------------------------- +
+AIV(56): [preload aux/gamma] - c loop: per-token complete ssq -> r_ws ------------- +
                                    | after B(g)                                       |
-           Stage2(g) (token-distributed, one token per AIV; runs in parallel with
-           the AIC's g+1 pass):
+           Stage2(c) (token-distributed contiguous windows, one chunk per barrier;
+           runs in parallel with the AIC's c+1 pass):
              28-way reduction of mixes -> r -> gates (pre/post/comb_flag)
-             -> y pass1 (8x512: FMA computes y + staged in UB + accumulates sum of squares)
-             -> rstd -> write GM [t,1]
-             -> y pass2 (8x512: y*rstd*gamma -> y_norm written to GM, double buffered)
-             -> Sinkhorn (4x4, 20 rounds) -> comb/post outputs
+             -> y pass1 (one whole-token VF: 8x512 FMA, y staged in UB, ssq
+                accumulated, rstd folded into the VF tail) -> write GM [t,1]
+             -> y pass2 (one whole-token VF: y*rstd*gamma -> y_norm, double buffered)
+             -> batched Sinkhorn (4x4, 20 rounds, lane=token) -> comb/post outputs
 ```
 
 - **matmul in parallel with RMSNorm**: the Cube reads bf16 x (ND->NZ) and
@@ -44,28 +44,36 @@ AIV(56): [preload aux/gamma] - g loop: ssq(g) (32 slices) ----------------------
 - **Cube mm(g+1) in parallel with Vector Stage2(g)**: right after the barrier
   the Cube immediately starts the next pass.
 
+> Current implementation note: the wrapper launches `kernel_k[None, 28]` for
+> every t; this has always been the only kernel path in this file. Workspaces
+> are cached per `(t, device, stream)`: entries created while a graph is being
+> captured are pinned for replay, while every eager call uses a bounded true
+> LRU (8 entries), so concurrent streams never share one workspace.
+
 ## 3. Cube side: K-axis split (scheme K)
 
 - `kstart = core * 592`; 27 full-block cores x K=592 plus a last core with
   K=400 (`27*592+400=16384` covers it exactly with no overlap, and both are
   16-aligned fractals).
-- **Two tile shapes cover everything**: full-block cores use `[16,592]/[592,32]`
-  and the last core uses `[16,400]/[400,32]` (L0B totals 63.5KB <= 64KB) -- no
+- **Two tile shapes cover everything**: full-block cores use `[32,592]/[592,32]`
+  and the last core uses `[32,400]/[400,32]` (`TGC=32`, two 16-token groups;
+  L0B totals 63.5KB <= 64KB) -- no
   tail block and no zero padding needed.
   (fillpad cannot be used for padding: Mat tiles do not support it; a
   zero-baseline load cannot be used either: the cube section has no usable
   barrier for GM->L1, so there would be a load race.)
 - rhs (the per-core slice of hc_fn) does not vary with g and is preloaded once;
   each (core, g) issues a single `[16,K]x[K,32]` BF16xBF16->FP32 matmul; the 28
-  partials are stored in GM as `pmix3[28,t,32]` and reduced in Stage2 with
-  `pl.sum(dim=1)`.
+  partials are stored in GM as `pmix3[28, ceil(t/16)*16 + 64, 24]` and
+  reduced in Stage2 with `pl.sum(dim=1)`.
 
 ## 4. Vector-side Stage2 (token-distributed)
 
 ### 4.1 Reduction and gating (`_gates1_vf`)
 
-- mixes: a `[28,32]` slab load on the `pmix3f` flat view + `pl.sum` -> 24 channels.
-- r: `ssq_ws [32,t]` slab + `pl.sum` -> BRC picks out the ssq of this token.
+- mixes: a `[28,24]` slab load on the `pmix3f` flat view + `pl.sum` -> 24 channels.
+- r: a scalar load from `r_ws[j,0]` (Phase 1 stored the complete per-token
+  ssq; there is no 32-slice reduction).
 - The gating decomposition uses a **select prefix mask plus pattern vectors**
   (`scale24=[s0]x4+[s1]x4+[s2]x16`, `pmul24=[1]x4+[2]x4+[1]x16`,
   `eps24=[eps]x4+[0]x20`) to encode the three heterogeneous path semantics
@@ -76,9 +84,9 @@ AIV(56): [preload aux/gamma] - g loop: ssq(g) (32 slices) ----------------------
 
 | pass | VF | Contents |
 |------|----|------|
-| pass1 x8 | `_y_pass1_vf` | 4 rows (m) x 4 segments (128) `load_align` + `astype ZERO/ONE` even/odd unpacking + an 8-accumulator `mul_add_dst` FMA chain; pk (bf16) is **not written to GM** but kept in the yrow UB `[1,4096]`; the even/odd halves of pk are re-fetched for a squared FMA that accumulates yssq (64 lanes carried across chunks) |
-| rstd | `_rstd_vf` | `reduce_sum -> muls(1/4096) -> adds(eps) -> sqrt -> div`; broadcast over 64 lanes into the rstd tile; stored to GM as `[t,1]` fp32 with 4B stores (`[1,64] tile valid [1,1]`, verified legal by a platform probe) |
-| pass2 x8 | `_y_norm_vf` | Takes segments from the yrow/gamma UB (gamma is preloaded once per AIV, 8KB), computes `y*rstd*gamma`, packs ZERO/ONE and writes y_norm to GM double buffered |
+| pass1 (one VF per token, 8x512 inside) | `_y_pass1_vf` | 4 rows (m) x 4 segments (128) `load_align` + `astype ZERO/ONE` even/odd unpacking + an 8-accumulator `mul_add_dst` FMA chain; pk (bf16) is **not written to GM** but kept in the yrow UB `[1,4096]`; the even/odd halves of pk are re-fetched for a squared FMA that accumulates yssq |
+| rstd (folded into the pass1 tail) | `_y_pass1_vf` | `reduce_sum -> muls(1/4096) -> adds(eps) -> sqrt -> div`; broadcast over 64 lanes into the rstd tile; stored to GM as `[t,1]` fp32 with 4B stores (`[1,64] tile valid [1,1]`, verified legal by a platform probe); `_rstd_vf` no longer exists |
+| pass2 (one VF per token, 8x512 inside) | `_y_norm_vf` | Takes segments from the yrow/gamma UB (gamma is preloaded once per AIV, 8KB), computes `y*rstd*gamma`, packs ZERO/ONE and writes y_norm to GM double buffered |
 
 - **Double buffering of the x input**: the two `[4,512]` xsub slots rotate --
   the prefetch of chunk0 overlaps with the reduction/gates;
@@ -87,8 +95,10 @@ AIV(56): [preload aux/gamma] - g loop: ssq(g) (32 slices) ----------------------
 - **What the fusion saves**: the GM write + read of y (8KB x2 per token) and
   the entire RmsNorm kernel launch.
 
-### 4.3 Sinkhorn (`_sinkhorn_vf`)
+### 4.3 Sinkhorn (`_sinkhorn_batch_vf`)
 
+The Sinkhorn is evaluated for a batch with lane = token. The tile capacity is
+`NT=32`, while the actual depth is `nt=wc=ceil(chunk_t/56) <= TPC/NAIV = 10`.
 comb_flag's 4x4 is unrolled into 16 registers. The first round applies a
 stable row softmax (subtract the row maximum; no eps in the softmax denominator),
 adds eps to its result, then divides by the column sum plus eps. The remaining
@@ -97,13 +107,11 @@ corresponding sum plus eps. comb/post are written to GM through a transposed til
 
 ## 5. Memory layout
 
-- **UB address span [0, 0x10100): 65,792 B (64.25 KiB) of 248 KiB**:
-  16 KiB ssq input, 8 KiB yrow, 8 KiB gamma, 2x4 KiB xsub,
-  2x1 KiB y_norm, slab/ssq reduction buffers, aux
-  (scale24/pmul24/eps24/base), Sinkhorn scratch and 256 B rstd.
-  This span includes double-buffer slots and padding; some small temporary
-  tiles reuse overlapping storage at different stages. It is not a sum of
-  independent tile sizes or a uniform minimum-spacing guarantee.
+- **UB (span ~190 KiB of 248 KiB, highest address 0x2F600)**: slab/mixr reduction buffers, per-token `r_ws`
+  staging, 2x32 KiB xsub, 2x8 KiB y_norm, 8 KiB yrow, 8 KiB gamma, aux
+  (scale3/scale24/pmul24/eps24/base), Sinkhorn batch scratch and a 256 B
+  rstd broadcast. Tile base addresses are listed by the UB layout constants
+  in mhcpresinkhorn_rmsnorm.py.
 - **L1 (~94KB of 512KB)**: the two-shape source tiles for lhs/rhs.
 - **L0**: L0A 31KB, L0B 63.5KB, L0C 2KB.
 - mutex id in [0,31]; the five aux tiles share id 16 (sharing across tiles is
@@ -112,19 +120,18 @@ corresponding sum plus eps. comb/post are written to GM through a transposed til
 The post transpose must keep its source and destination disjoint throughout
 `pl.transpose`; it cannot reuse source rows as destination storage.
 
-| Tile | Physical shape / dtype | Bytes | UB byte span (half-open) |
-|------|------------------------|-------|-------------------------|
-| `PST_UB` | `[4,8]` fp32 | 128 | `[0x08540, 0x085C0)` |
-| `PSTT_UB` | `[1,8]` fp32 | 32 | `[0x08600, 0x08620)` |
-| `PRE_UB` | `[1,8]` fp32 | 32 | `[0x08640, 0x08660)` |
-
-The four source rows start at `0x08540`, `0x08560`, `0x08580`, and `0x085A0`.
-The next `XSUB_UB` region starts at `0x09000`, so the total UB span is unchanged.
+The current UB base addresses and sizes are defined by the SLAB_UB, MIXR_UB,
+SSQR_UB, SCALE3_UB, SCALE24_UB, PMUL24_UB, EPS24_UB, BASE_UB, ZBAT_UB,
+ZSD_UB, CBBAT_UB, CBTT_UB, PRE_UB, POST_UB, XSUB_UB, YUB_UB, YROW_UB,
+GAMMA_UB and RSTD_UB constants in mhcpresinkhorn_rmsnorm.py; the vector UB
+layout spans about 190 KiB (up to `0x2F600`), and the 248 KiB bound is asserted
+by the CPU test `test_ub_layout_does_not_overlap`.
 The y passes use an explicit 128-element bf16 mask per segment: the last
 segment starts at 3968 and ends at 4096 (exclusive). Row/segment expansion
 preserves the eight independent even/odd FMA accumulators and their order;
-it does not imply that VF loops are generally unsupported. Sinkhorn always
-uses one active fp32 lane per token.
+it does not imply that VF loops are generally unsupported. Sinkhorn uses
+lane = token batching; `NT=32` is the tile capacity and the actual depth is
+at most 10.
 
 ## 6. Platform constraints and design rationale (measured)
 

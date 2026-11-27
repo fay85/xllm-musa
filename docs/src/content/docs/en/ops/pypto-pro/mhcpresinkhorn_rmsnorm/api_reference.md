@@ -33,7 +33,13 @@ y, rstd, post, comb = mod.mhcpresinkhorn_rmsnorm(
 | `hc_mult` | int = 4 | Hyper-connection multiplier hc (fixed to 4 by contract) | Raises if != 4 |
 | `sinkhorn_iters` | int = 20 | Number of Sinkhorn row/column alternating normalization rounds (fixed to 20 by contract) | Raises if != 20 |
 | `eps` | float = 1e-6 | Numerical-stability constant of the gating paths (added to `pre` and to the Sinkhorn denominators/results, matching golden) | Raises if != 1e-6 |
-| `rms_eps` | -- | Not an argument: the fused RmsNorm epsilon is the compile-time constant `RMS_EPS = 1e-6` baked into the kernel (`rstd = 1/sqrt(mean(y^2) + RMS_EPS)`) | Not tunable |
+| `rms_eps` | float = 1e-6 | RmsNorm epsilon. It is an argument for signature compatibility, but only the default is accepted; the fused kernel uses the compile-time constant `RMS_EPS = 1e-6` (`rstd = 1/sqrt(mean(y^2) + RMS_EPS)`) | Raises if != 1e-6 |
+
+`x` must be on an NPU device; a CPU input raises `ValueError`. All inputs are
+moved to the device selected by `TILE_FWK_DEVICE_ID` (default `npu:0`), and all
+four outputs plus the internal workspaces are allocated on that device. Inputs
+that live on a different NPU are therefore moved to the selected device rather
+than rejected.
 
 ### 1.2 Outputs
 
@@ -60,7 +66,10 @@ y, rstd, post, comb = mod.mhcpresinkhorn_rmsnorm(
 | `MIXC` | 32 | Tile width of the gating output (24 -> padded to 32 for 16-wide inner-frame alignment) |
 | `DC` | 512 | Chunk width of the y d-loop (tile width of `x_sub`/`y_ub`; 4096/512 = 8 iterations) |
 | `NDC` | 8 | Iteration count of the y d-loop, `D/DC` |
-| `SSQ_SLICES` / `SSQ_DK` | 32 / 512 | Slicing scheme of the RMSNorm ssq: 32 AIV slices x 512 wide, reduced in Stage 2 |
+| `PWC` | 24 | pmix3 workspace row width (effective gating channels, unpadded) |
+| `SGRP` | 16 | Max tokens per partial-reduction group |
+| `NAIV` | 56 | AIV count; each token-flat owner computes the complete per-token ssq |
+| `NT` | 32 | Sinkhorn batch depth (one lane per token) |
 | `KA` | 592 | K-slice width of the full-block K-split cores (`kstart = core*592`; aligned to 37x16 fractals) |
 | `KLAST` | 400 | K-slice width of the last core (core 27), `16384 - 27*592` (aligned to 25x16) |
 
@@ -83,19 +92,22 @@ mhcpresinkhorn_rmsnorm_kernel_k[None, 28](
     y,         # [t, 4096] bf16 (out: y_norm)
     rstd,      # [t, 1] fp32 (out)
     post,      # [t, 4] fp32 (out)
-    comb16,    # [t, 16] fp32 (out: flattened view of comb, comb.view(t, 16))
-    pmix3,     # workspace [28, ceil(t/16)*16, 32] fp32 (K-split partial)
-    pmix3f,    # 2D flat view of the pmix3 workspace, [28, .*32]
-    ssq_ws)    # workspace [32, ceil(t/16)*16] fp32 (32-slice ssq partial)
+    comb16,    # [_comb16_rows(t), 16] fp32 (out: flattened view of comb; last AIV window padded)
+    pmix3,     # workspace [28, ceil(t/16)*16 + 64, 24] fp32 (K-split partials, +64-row pad)
+    pmix3f,    # 2D flat view [28, (ceil(t/16)*16 + 64) * 24] fp32
+    r_ws)      # workspace [t, 8] fp32 (per-token complete ssq, read by Phase 2)
 ```
 
-Note that `x_2d`/`x_3d` are two views of the same `x` (same GM data); the
-workspaces must be allocated with `ceil(t/TG)*TG` alignment (the wrapper's
-`_get_workspaces` already implements cached allocation). When calling the
-kernel directly, the caller owns the workspace lifetime: the two workspaces are
-read back by the kernel, so they must not be reused by another launch until the
-current kernel has completed (synchronize, or gate reuse on an event recorded
-after the launch).
+Note that `x_2d`/`x_3d` are two views of the same `x` (same GM data).
+The wrapper's `_get_workspaces` caches workspaces by `(t, device, stream)`:
+entries allocated while an ACL graph is being captured are pinned for replay,
+while every eager call uses a bounded true LRU (8 entries), so concurrent
+streams never share one workspace. `pmix3` has 64 extra token rows; `r_ws` is
+`[t, 8]` fp32; `comb16` uses `_comb16_rows(t)` rows, which covers the last
+chunk's padded AIV window (e.g. 1072 rows at t=1024, not
+`NAIV * ceil(t/NAIV)` = 1064). When calling the kernel directly, the caller
+owns the workspace lifetime and must not reuse it until the kernel has
+completed.
 
 ## 4. Runtime environment variables
 
