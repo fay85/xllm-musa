@@ -45,6 +45,23 @@ namespace xllm {
 
 namespace {
 
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
+bool push_bound_regions(MooncakeTransferEngine& engine,
+                        const MooncakePeerTransfer& peer,
+                        const std::vector<ByteRegion>& regions) {
+#if defined(USE_MUSA)
+  return engine.move_memory_regions(peer,
+                                    regions,
+                                    MooncakeTransferEngine::MoveOpcode::WRITE,
+                                    /*stats=*/nullptr);
+#else
+  return engine.move_memory_regions(
+      peer.address(), regions, MooncakeTransferEngine::MoveOpcode::WRITE);
+#endif
+}
+#endif
+
 std::string get_merge_key(const uint64_t dst_cluster_id,
                           const std::string& dst_addr) {
   return std::to_string(dst_cluster_id) + "_" + dst_addr;
@@ -707,6 +724,7 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
     const std::vector<KVTransferMapping>& mappings) {
 #if defined(USE_MUSA)
   const MusaTpCaptureReadLock tp_capture_lock(device_id_);
+  const MooncakePeerTransfer peer(src_addr);
   // Keep ReshardPlan bind_incoming_regions, but submit one (or few) Mooncake
   // READ batches across all layers. Per-layer submit+wait was ~15ms * 64
   // layers ~= 950ms on same-host RDMA.
@@ -762,13 +780,13 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   move_stats.staged = staged;
   const bool moved =
       all_regions.empty() ||
-      (staged ? mooncake_te_->move_memory_regions_staged(src_addr,
+      (staged ? mooncake_te_->move_memory_regions_staged(peer,
                                                          all_regions,
                                                          &staged_read_ms,
                                                          &staged_scatter_ms,
                                                          &move_stats)
               : mooncake_te_->move_memory_regions(
-                    src_addr,
+                    peer,
                     all_regions,
                     MooncakeTransferEngine::MoveOpcode::READ,
                     &move_stats));
@@ -795,9 +813,8 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
             << ", bound_regions=" << all_regions.size()
             << ", packed_regions=" << move_stats.packed_regions
             << ", batches=" << move_stats.batches
-            << ", bytes=" << move_stats.total_bytes
-            << ", bind_ms=" << bind_ms << ", move_ms=" << move_ms
-            << ", success=true";
+            << ", bytes=" << move_stats.total_bytes << ", bind_ms=" << bind_ms
+            << ", move_ms=" << move_ms << ", success=true";
   return true;
 #else
   std::vector<int64_t> layer_ids;
@@ -886,6 +903,7 @@ MooncakeKVCacheTransferDefault::push_kv_blocks(
     }
     for (const std::string& key : keys) {
       const KVCacheInfo& kv_info = merged_kv_infos.at(key);
+      const MooncakePeerTransfer peer(kv_info.dst_addr);
       std::vector<ByteRegion> regions;
       const Status bind_status =
           mooncake_te_->bind_outgoing_regions(kv_info.dst_addr,
@@ -903,8 +921,7 @@ MooncakeKVCacheTransferDefault::push_kv_blocks(
       if (regions.empty()) {
         continue;
       }
-      const bool success = mooncake_te_->move_memory_regions(
-          kv_info.dst_addr, regions, MooncakeTransferEngine::MoveOpcode::WRITE);
+      const bool success = push_bound_regions(*mooncake_te_, peer, regions);
       if (!success) {
         LOG(ERROR) << "Push KV byte regions failed, layer=" << layer_index
                    << ", destination=" << kv_info.dst_addr;
@@ -1309,6 +1326,7 @@ MooncakeKVCacheTransferXTensor::push_kv_blocks_impl(
             dst_offsets[offset_index + 1]);
       }
 
+      const MooncakePeerTransfer peer(kv_info.dst_addr);
       std::vector<ByteRegion> regions;
       const Status bind_status = xtensor_te->bind_outgoing_regions_explicit(
           kv_info.dst_addr,
@@ -1324,10 +1342,7 @@ MooncakeKVCacheTransferXTensor::push_kv_blocks_impl(
         continue;
       }
       const bool ret =
-          regions.empty() || xtensor_te->move_memory_regions(
-                                 kv_info.dst_addr,
-                                 regions,
-                                 MooncakeTransferEngine::MoveOpcode::WRITE);
+          regions.empty() || push_bound_regions(*xtensor_te, peer, regions);
       if (!ret) {
         LOG(ERROR) << "push_kv_blocks_impl failed at layer " << layer_index;
         failed_keys.insert(key);

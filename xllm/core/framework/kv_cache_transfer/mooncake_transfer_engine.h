@@ -23,6 +23,8 @@ limitations under the License.
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -42,6 +44,20 @@ enum class CachePeerMode : int8_t {
   ACTIVE = 0,
   PLAN_ONLY = 1,
   ABSENT = 2,
+};
+
+// Pin one peer from region binding until its last RDMA completion.
+class MooncakePeerTransfer final {
+ public:
+  explicit MooncakePeerTransfer(std::string address);
+  const std::string& address() const { return address_; }
+
+ private:
+  std::string address_;
+#if defined(USE_MUSA)
+  std::shared_ptr<std::shared_mutex> mutex_;
+  std::shared_lock<std::shared_mutex> lock_;
+#endif
 };
 
 // Singleton core that holds the actual TransferEngine and brpc Server.
@@ -136,6 +152,9 @@ class MooncakeTransferEngineCore {
     CachePeerMode mode = CachePeerMode::PLAN_ONLY;
     std::optional<ReshardPlanTemplate> plan;
     bool holds_session = false;
+#if defined(USE_MUSA)
+    std::shared_ptr<std::shared_mutex> transfer_mutex;
+#endif
   };
   std::unordered_map<std::string, SessionInfo> handles_;
   std::optional<WorkerCacheLayoutManifest> local_cache_layout_;
@@ -191,6 +210,11 @@ class MooncakeTransferEngine {
                            MoveOpcode move_opcode,
                            MoveRegionStats* stats);
 
+  bool move_memory_regions(const MooncakePeerTransfer& peer,
+                           const std::vector<ByteRegion>& regions,
+                           MoveOpcode move_opcode,
+                           MoveRegionStats* stats);
+
   // Heterogeneous-TP PULL produces many small, destination-strided regions
   // whose source bytes are contiguous (one source block holds its whole head
   // shard). Read the remote-contiguous runs into a registered device staging
@@ -200,6 +224,11 @@ class MooncakeTransferEngine {
                                   double* read_ms,
                                   double* scatter_ms,
                                   MoveRegionStats* stats = nullptr);
+  bool move_memory_regions_staged(const MooncakePeerTransfer& peer,
+                                  const std::vector<ByteRegion>& regions,
+                                  double* read_ms,
+                                  double* scatter_ms,
+                                  MoveRegionStats* stats);
   static size_t count_remote_runs(const std::vector<ByteRegion>& regions);
 
   bool link_sessions(const std::vector<uint64_t>& cluster_ids,

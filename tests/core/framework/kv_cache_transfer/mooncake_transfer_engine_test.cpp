@@ -28,9 +28,11 @@ limitations under the License.
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -59,6 +61,14 @@ namespace xllm {
 namespace {
 
 constexpr size_t kScaleBlockBytes = 96 * sizeof(float);
+
+#if defined(USE_MUSA)
+constexpr char kMissingPeerTransportMessage[] =
+    "failed to refresh cache peer transport";
+#else
+constexpr char kMissingPeerTransportMessage[] =
+    "failed to open cache peer data session";
+#endif
 
 TransferKVInfo make_info(int32_t dst_dp_size,
                          int32_t dst_tp_size,
@@ -766,6 +776,36 @@ TEST(MooncakeTransferEngineTest, PlanOnlyPeerRequiresCurrentLayoutIdentity) {
   EXPECT_FALSE(
       core.is_cache_peer_current(local, peer, CachePeerMode::PLAN_ONLY));
 }
+
+TEST(MooncakeTransferEngineTest, PeerRetirementDrainsOnlyItsOwnTransfers) {
+  MooncakeTransferEngineCore& core = MooncakeTransferEngineCore::get_instance();
+  const auto local = make_peer_manifest("drain-local", "local", 1);
+  const auto peer = make_peer_manifest("drain-peer", "peer", 1);
+  const auto other = make_peer_manifest("drain-other", "other", 1);
+  ASSERT_TRUE(core.set_local_cache_layout(local).ok());
+  ASSERT_TRUE(core.set_cache_peer(peer, CachePeerMode::PLAN_ONLY).ok());
+  ASSERT_TRUE(core.set_cache_peer(other, CachePeerMode::PLAN_ONLY).ok());
+
+  std::optional<MooncakePeerTransfer> transfer(std::in_place, peer.addr);
+  std::promise<void> retire_started;
+  auto retire_peer = std::async(std::launch::async, [&] {
+    retire_started.set_value();
+    return core.set_cache_peer(peer, CachePeerMode::ABSENT).ok();
+  });
+  retire_started.get_future().wait();
+  EXPECT_EQ(retire_peer.wait_for(std::chrono::milliseconds(100)),
+            std::future_status::timeout);
+  auto retire_other = std::async(std::launch::async, [&] {
+    return core.set_cache_peer(other, CachePeerMode::ABSENT).ok();
+  });
+  EXPECT_EQ(retire_other.wait_for(std::chrono::seconds(5)),
+            std::future_status::ready);
+  transfer.reset();
+  EXPECT_TRUE(retire_peer.get());
+  EXPECT_TRUE(retire_other.get());
+  EXPECT_FALSE(core.has_reshard_plan(peer.addr));
+  EXPECT_FALSE(core.has_reshard_plan(other.addr));
+}
 #endif
 
 TEST(MooncakeKVCacheTransferDefaultTest,
@@ -1406,7 +1446,7 @@ TEST(MooncakeTransferEngineServiceTest, ReplicatedReceiverRequiresSession) {
     const Status status = core.set_cache_peer(
         sender, CachePeerMode::ACTIVE, require_outgoing_plan);
     EXPECT_EQ(status.code(), StatusCode::UNAVAILABLE);
-    EXPECT_EQ(status.message(), "failed to open cache peer data session");
+    EXPECT_EQ(status.message(), kMissingPeerTransportMessage);
     EXPECT_FALSE(core.has_reshard_plan(sender.addr));
     EXPECT_FALSE(core.has_outgoing_plan(sender.addr, CacheNamespace::MAIN));
   }
@@ -1455,8 +1495,7 @@ TEST(MooncakeTransferEngineServiceTest,
   const Status receiver_status = core.set_cache_peer(
       prefill, CachePeerMode::ACTIVE, /*require_outgoing_plan=*/false);
   EXPECT_EQ(receiver_status.code(), StatusCode::UNAVAILABLE);
-  EXPECT_EQ(receiver_status.message(),
-            "failed to open cache peer data session");
+  EXPECT_EQ(receiver_status.message(), kMissingPeerTransportMessage);
   EXPECT_FALSE(core.has_reshard_plan(prefill.addr));
 
   // The sending RPC contract is unchanged: an active sender still requires
@@ -1569,7 +1608,7 @@ TEST(MooncakeTransferEngineServiceTest,
   // only fails on this transport-less fixture at session setup.
   const Status status = core.set_cache_peer(decode, CachePeerMode::ACTIVE);
   EXPECT_EQ(status.code(), StatusCode::UNAVAILABLE);
-  EXPECT_EQ(status.message(), "failed to open cache peer data session");
+  EXPECT_EQ(status.message(), kMissingPeerTransportMessage);
   EXPECT_FALSE(core.has_reshard_plan(decode.addr));
 
   WorkerCacheLayoutManifest updated_prefill = prefill;

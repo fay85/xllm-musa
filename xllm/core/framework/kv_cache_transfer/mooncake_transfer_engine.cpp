@@ -45,6 +45,27 @@ namespace xllm {
 
 namespace {
 
+#if defined(USE_MUSA)
+std::shared_ptr<std::shared_mutex> peer_transfer_mutex(
+    const std::string& addr) {
+  static std::mutex mutex;
+  static std::unordered_map<std::string, std::weak_ptr<std::shared_mutex>>
+      peers;
+  std::lock_guard lock(mutex);
+  const auto it = peers.find(addr);
+  if (it != peers.end()) {
+    if (auto live = it->second.lock()) {
+      return live;
+    }
+  }
+  std::erase_if(peers,
+                [](const auto& entry) { return entry.second.expired(); });
+  auto created = std::make_shared<std::shared_mutex>();
+  peers[addr] = created;
+  return created;
+}
+#endif
+
 Status check_active_plan_requirement(
     const std::optional<ReshardPlanTemplate>& plan,
     CachePeerMode mode,
@@ -135,10 +156,8 @@ bool wait_batch(TransferEngine* engine, BatchID batch_id) {
       LOG(ERROR) << "getBatchTransferStatus failed";
       return false;
     }
-    if (status.s == TransferStatusEnum::TIMEOUT) {
-      LOG(ERROR) << "Sync data transfer timeout";
-      return false;
-    }
+    // Mooncake can report TIMEOUT while a submitted task is still
+    // progressing. Keep the batch alive until it reaches a terminal state.
     if (++polls <= 64) {
 #if defined(__x86_64__) || defined(_M_X64)
       __builtin_ia32_pause();
@@ -154,6 +173,16 @@ bool wait_batch(TransferEngine* engine, BatchID batch_id) {
 // ============================================================================
 // MooncakeTransferEngineCore (Singleton)
 // ============================================================================
+
+MooncakePeerTransfer::MooncakePeerTransfer(std::string address)
+    : address_(std::move(address))
+#if defined(USE_MUSA)
+      ,
+      mutex_(peer_transfer_mutex(address_)),
+      lock_(*mutex_)
+#endif
+{
+}
 
 MooncakeTransferEngineCore::~MooncakeTransferEngineCore() {
   for (auto& pair : stub_map_) {
@@ -231,13 +260,25 @@ bool MooncakeTransferEngineCore::initialize(uint16_t listen_port,
 bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
                                               const std::string& remote_addr,
                                               bool increment_existing) {
+#if defined(USE_MUSA)
+  const auto peer_mutex = peer_transfer_mutex(remote_addr);
+  std::unique_lock peer_lock(*peer_mutex);
+#endif
   std::lock_guard<std::mutex> lock(mutex_);
 
   LOG(INFO) << "open_session, cluster_id=" << cluster_id
             << ", remote_addr=" << remote_addr;
 
   auto it = handles_.find(remote_addr);
-  if (it != handles_.end()) {
+  if (it != handles_.end() &&
+      it->second.handle == static_cast<SegmentHandle>(-1) &&
+      it->second.ref_count > 0) {
+    LOG(ERROR) << "Cannot open a replacement session with live owners for "
+               << remote_addr << ", ref_count=" << it->second.ref_count;
+    return false;
+  }
+  if (it != handles_.end() &&
+      it->second.handle != static_cast<SegmentHandle>(-1)) {
     if (!increment_existing) {
       LOG(INFO) << "Session already exists for " << remote_addr;
       return true;
@@ -250,11 +291,9 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
   }
 
 #if defined(USE_MUSA)
-  // Reaching this branch means no application session remains for this peer.
-  // Mooncake closeSegment() does not evict its descriptor or connected QPs;
-  // reopening a recycled endpoint must refresh both before any peer refcount
-  // increment or publication in handles_. Fail closed if refresh fails.
-  if (!detail::prepare_mooncake_segment_reopen(
+  // The previous handle is absent or was invalidated by a failed refresh.
+  if (engine_ == nullptr ||
+      !detail::prepare_mooncake_segment_reopen(
           *engine_, remote_addr, /*invalidate_endpoints=*/true)) {
     return false;
   }
@@ -330,9 +369,19 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
 bool MooncakeTransferEngineCore::acquire_session_locked(
     const std::string& remote_addr) {
   auto it = handles_.find(remote_addr);
-  if (it != handles_.end()) {
+  if (it != handles_.end() &&
+      it->second.handle != static_cast<SegmentHandle>(-1)) {
     ++it->second.ref_count;
     return true;
+  }
+  if (it != handles_.end() &&
+      it->second.handle == static_cast<SegmentHandle>(-1)) {
+    if (it->second.ref_count > 0) {
+      LOG(ERROR) << "Cannot replace an invalid session with live owners for "
+                 << remote_addr << ", ref_count=" << it->second.ref_count;
+      return false;
+    }
+    handles_.erase(it);
   }
   if (engine_ == nullptr) {
     LOG(ERROR) << "Mooncake engine is not initialized.";
@@ -343,7 +392,9 @@ bool MooncakeTransferEngineCore::acquire_session_locked(
     LOG(ERROR) << "Fail to connect to " << remote_addr;
     return false;
   }
-  handles_[remote_addr] = SessionInfo{handle, 1};
+  SessionInfo& session = handles_[remote_addr];
+  session.handle = handle;
+  ++session.ref_count;
   return true;
 }
 
@@ -353,11 +404,22 @@ void MooncakeTransferEngineCore::release_session_locked(
   if (it == handles_.end()) {
     return;
   }
+  if (it->second.ref_count <= 0) {
+    LOG(ERROR) << "Discarding invalid Mooncake session ref_count for "
+               << remote_addr;
+    if (it->second.handle != static_cast<SegmentHandle>(-1) &&
+        engine_ != nullptr) {
+      engine_->closeSegment(it->second.handle);
+    }
+    handles_.erase(it);
+    return;
+  }
   --it->second.ref_count;
   if (it->second.ref_count > 0) {
     return;
   }
-  if (it->second.handle != static_cast<SegmentHandle>(-1)) {
+  if (it->second.handle != static_cast<SegmentHandle>(-1) &&
+      engine_ != nullptr) {
     engine_->closeSegment(it->second.handle);
   }
   handles_.erase(it);
@@ -365,6 +427,10 @@ void MooncakeTransferEngineCore::release_session_locked(
 
 bool MooncakeTransferEngineCore::close_session(const uint64_t cluster_id,
                                                const std::string& remote_addr) {
+#if defined(USE_MUSA)
+  const auto peer_mutex = peer_transfer_mutex(remote_addr);
+  std::unique_lock peer_lock(*peer_mutex);
+#endif
   std::unique_lock<std::mutex> lock(mutex_);
 
   LOG(INFO) << "close_session, cluster_id=" << cluster_id
@@ -373,22 +439,30 @@ bool MooncakeTransferEngineCore::close_session(const uint64_t cluster_id,
   auto it = handles_.find(remote_addr);
   if (cluster_id != 0) {
     if (it != handles_.end()) {
-      it->second.ref_count--;
+      if (it->second.ref_count <= 0) {
+        LOG(ERROR) << "Ignoring stale close for " << remote_addr;
+        return true;
+      }
+      --it->second.ref_count;
       LOG(INFO) << "Decremented ref_count for " << remote_addr
                 << ", ref_count=" << it->second.ref_count;
       if (it->second.ref_count > 0) {
         return true;
       }
       Transport::SegmentHandle handle = it->second.handle;
-      if (handle != static_cast<Transport::SegmentHandle>(-1)) {
+      if (handle != static_cast<Transport::SegmentHandle>(-1) &&
+          engine_ != nullptr) {
         engine_->closeSegment(handle);
       }
       handles_.erase(it);
     }
     // close_remote_session() obtains the core mutex through
-    // get_or_create_stub(). Release it after updating local state to avoid
-    // recursively locking the same non-recursive mutex.
+    // get_or_create_stub(). Release both locks after updating local state so
+    // a peer-side close cannot wait on this peer's transfer gate.
     lock.unlock();
+#if defined(USE_MUSA)
+    peer_lock.unlock();
+#endif
     return close_remote_session(this, cluster_id);
   }
 
@@ -396,7 +470,11 @@ bool MooncakeTransferEngineCore::close_session(const uint64_t cluster_id,
     return true;
   }
 
-  it->second.ref_count--;
+  if (it->second.ref_count <= 0) {
+    LOG(ERROR) << "Ignoring stale close for " << remote_addr;
+    return true;
+  }
+  --it->second.ref_count;
   LOG(INFO) << "Decremented ref_count for " << remote_addr
             << ", ref_count=" << it->second.ref_count;
 
@@ -405,7 +483,7 @@ bool MooncakeTransferEngineCore::close_session(const uint64_t cluster_id,
   }
 
   SegmentHandle handle = it->second.handle;
-  if (handle != static_cast<SegmentHandle>(-1)) {
+  if (handle != static_cast<SegmentHandle>(-1) && engine_ != nullptr) {
     engine_->closeSegment(handle);
   }
   handles_.erase(it);
@@ -461,7 +539,14 @@ Status MooncakeTransferEngineCore::set_cache_peer(
     return manifest_status;
   }
 
+#if defined(USE_MUSA)
+  const auto peer_mutex = peer_transfer_mutex(peer_manifest.addr);
+  std::unique_lock peer_lock(*peer_mutex);
+#endif
   std::optional<WorkerCacheLayoutManifest> local_manifest;
+#if defined(USE_MUSA)
+  TransferEngine* transport_engine = nullptr;
+#endif
   {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto existing = cache_peer_links_.find(peer_manifest.addr);
@@ -497,7 +582,23 @@ Status MooncakeTransferEngineCore::set_cache_peer(
       return Status(StatusCode::INVALID_ARGUMENT,
                     "peer cache layout generation is stale");
     }
+    if (mode == CachePeerMode::ACTIVE) {
+      const auto session = handles_.find(peer_manifest.addr);
+      const int32_t cache_session_refs =
+          existing != cache_peer_links_.end() && existing->second.holds_session
+              ? 1
+              : 0;
+      if (session != handles_.end() &&
+          session->second.ref_count > cache_session_refs) {
+        return Status(
+            StatusCode::UNAVAILABLE,
+            "cache peer transport is in use by independent session owners");
+      }
+    }
     local_manifest = local_cache_layout_;
+#if defined(USE_MUSA)
+    transport_engine = engine_.get();
+#endif
   }
   if (!local_manifest.has_value()) {
     fprintf(stderr, "LINK_STAGE no_local_layout\n");
@@ -554,6 +655,18 @@ Status MooncakeTransferEngineCore::set_cache_peer(
     return requirement_status;
   }
 
+  const bool holds_session = mode == CachePeerMode::ACTIVE;
+#if defined(USE_MUSA)
+  // closeSegment retains both descriptors and QPs. Refresh a new ACTIVE
+  // attachment even after an explicit ABSENT. Only transfers to this peer
+  // have to wait for the remote metadata RPC.
+  const bool transport_ready =
+      !holds_session ||
+      (transport_engine != nullptr &&
+       detail::prepare_mooncake_segment_reopen(*transport_engine,
+                                               peer_manifest.addr,
+                                               /*invalidate_endpoints=*/true));
+#endif
   std::lock_guard<std::mutex> lock(mutex_);
   if (!local_cache_layout_.has_value() ||
       local_cache_layout_->incarnation_id != local_manifest->incarnation_id ||
@@ -585,8 +698,27 @@ Status MooncakeTransferEngineCore::set_cache_peer(
                   "peer cache layout generation is stale");
   }
 
-  const bool holds_session = mode == CachePeerMode::ACTIVE;
+#if defined(USE_MUSA)
+  if (!transport_ready) {
+    if (existing != cache_peer_links_.end()) {
+      if (existing->second.holds_session) {
+        release_session_locked(peer_manifest.addr);
+      }
+      cache_peer_links_.erase(existing);
+    }
+    return Status(StatusCode::UNAVAILABLE,
+                  "failed to refresh cache peer transport");
+  }
+#endif
+  // Retire the cache-owned descriptor before acquiring the replacement.  The
+  // peer gate proves that no transfer or independent session can use it.
+  if (existing != cache_peer_links_.end() && existing->second.holds_session) {
+    release_session_locked(peer_manifest.addr);
+  }
   if (holds_session && !acquire_session_locked(peer_manifest.addr)) {
+    if (existing != cache_peer_links_.end()) {
+      cache_peer_links_.erase(existing);
+    }
     return Status(StatusCode::UNAVAILABLE,
                   "failed to open cache peer data session");
   }
@@ -597,9 +729,9 @@ Status MooncakeTransferEngineCore::set_cache_peer(
   link.mode = mode;
   link.plan = std::move(plan);
   link.holds_session = holds_session;
-  if (existing != cache_peer_links_.end() && existing->second.holds_session) {
-    release_session_locked(peer_manifest.addr);
-  }
+#if defined(USE_MUSA)
+  link.transfer_mutex = peer_mutex;
+#endif
   cache_peer_links_[peer_manifest.addr] = std::move(link);
   return Status();
 }
@@ -989,7 +1121,8 @@ bool MooncakeTransferEngine::link_sessions(
       linked = false;
       break;
     }
-    fprintf(stderr, "LINK_STAGE peer_ok i=%zu active=%d\n", index, active ? 1 : 0);
+    fprintf(
+        stderr, "LINK_STAGE peer_ok i=%zu active=%d\n", index, active ? 1 : 0);
     fflush(stderr);
   }
 
@@ -1257,6 +1390,16 @@ bool MooncakeTransferEngine::move_memory_regions(
     const std::vector<ByteRegion>& regions,
     MoveOpcode move_opcode,
     MoveRegionStats* stats) {
+  const MooncakePeerTransfer peer(remote_addr);
+  return move_memory_regions(peer, regions, move_opcode, stats);
+}
+
+bool MooncakeTransferEngine::move_memory_regions(
+    const MooncakePeerTransfer& peer,
+    const std::vector<ByteRegion>& regions,
+    MoveOpcode move_opcode,
+    MoveRegionStats* stats) {
+  const std::string& remote_addr = peer.address();
   if (stats != nullptr) {
     *stats = MoveRegionStats{};
     stats->input_regions = regions.size();
@@ -1465,6 +1608,30 @@ bool MooncakeTransferEngine::move_memory_regions(
       return false;
     }
     const bool transfer_success = wait_batch(engine, batch_id);
+#if defined(USE_MUSA)
+    // Batch status returns on the first failed task. Drain its siblings before
+    // releasing the peer lock or destroying their request storage.
+    if (!transfer_success) {
+      for (size_t index = 0; index < batch_entries.size(); ++index) {
+        TransferStatus task;
+        while (true) {
+          const mooncake::Status status =
+              engine->getTransferStatus(batch_id, index, task);
+          CHECK(status.ok())
+              << "Cannot drain submitted Mooncake task: " << status.ToString();
+          if (task.s == TransferStatusEnum::COMPLETED ||
+              task.s == TransferStatusEnum::FAILED) {
+            break;
+          }
+          CHECK(task.s == TransferStatusEnum::WAITING ||
+                task.s == TransferStatusEnum::PENDING ||
+                task.s == TransferStatusEnum::TIMEOUT)
+              << "Cannot confirm completion of Mooncake task " << index;
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
+      }
+    }
+#endif
     const mooncake::Status free_status = engine->freeBatchID(batch_id);
     if (!free_status.ok() || !transfer_success) {
       LOG(ERROR) << "MoonCake byte-region batch failed";
@@ -1598,6 +1765,16 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
     double* read_ms,
     double* scatter_ms,
     MoveRegionStats* stats) {
+  const MooncakePeerTransfer peer(remote_addr);
+  return move_memory_regions_staged(peer, regions, read_ms, scatter_ms, stats);
+}
+
+bool MooncakeTransferEngine::move_memory_regions_staged(
+    const MooncakePeerTransfer& peer,
+    const std::vector<ByteRegion>& regions,
+    double* read_ms,
+    double* scatter_ms,
+    MoveRegionStats* stats) {
   if (stats != nullptr) {
     *stats = MoveRegionStats{};
     stats->input_regions = regions.size();
@@ -1718,8 +1895,7 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
     }
     Timer read_timer;
     MoveRegionStats chunk_stats;
-    if (!move_memory_regions(
-            remote_addr, reads, MoveOpcode::READ, &chunk_stats)) {
+    if (!move_memory_regions(peer, reads, MoveOpcode::READ, &chunk_stats)) {
       return false;
     }
     if (stats != nullptr) {
