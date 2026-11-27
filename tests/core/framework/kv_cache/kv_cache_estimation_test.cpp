@@ -207,7 +207,9 @@ TEST(KVCacheEstimationTest,
                                           target,
                                           draft,
                                           /*num_buffers=*/2,
-                                          /*draft_replicated_block_pages=*/1);
+                                          /*draft_replicated_block_pages=*/1,
+                                          /*draft_body_uses_tp1=*/false,
+                                          /*draft_manages_own_kv_shape=*/true);
   EXPECT_EQ(replicated_once.n_blocks, (1024 * 1024) / combined_block_bytes);
   EXPECT_EQ(replicated_once.budget_bytes,
             replicated_once.n_blocks * combined_block_bytes);
@@ -218,11 +220,44 @@ TEST(KVCacheEstimationTest,
                                           target,
                                           draft,
                                           /*num_buffers=*/2,
-                                          /*draft_replicated_block_pages=*/2);
+                                          /*draft_replicated_block_pages=*/2,
+                                          /*draft_body_uses_tp1=*/false,
+                                          /*draft_manages_own_kv_shape=*/true);
   EXPECT_EQ(replicated_twice.n_blocks,
             (1024 * 1024) / replicated_twice_block_bytes);
   EXPECT_EQ(replicated_twice.budget_bytes,
             replicated_twice.n_blocks * replicated_twice_block_bytes);
+}
+
+TEST(KVCacheEstimationTest, PrefillLayerwiseMtpBudgetUsesTargetKvShape) {
+  ModelArgs args = make_standard_args();
+  args.index_n_heads(1).index_head_dim(16);
+  KVCacheCapacity target;
+  target.n_blocks(1000)
+      .cache_size_in_bytes(1024 * 1024)
+      .block_size(16)
+      .slot_size(128)
+      .index_cache_sizes(8, 128)
+      .n_layers(4)
+      .num_full_attention_layers(4)
+      .num_indexer_layers(4);
+  KVCacheCapacity draft = target;
+  draft.slot_size(32)
+      .n_layers(1)
+      .num_full_attention_layers(1)
+      .num_indexer_layers(1);
+
+  const PrefillLayerwiseSpecPlan plan =
+      prefill_layerwise_blocks_with_draft(args,
+                                          target,
+                                          draft,
+                                          /*num_buffers=*/2,
+                                          /*draft_replicated_block_pages=*/1,
+                                          /*draft_body_uses_tp1=*/false,
+                                          /*draft_manages_own_kv_shape=*/false);
+  const int64_t combined_block_bytes = 4 * (16 * 128 + 128);
+  EXPECT_EQ(plan.n_blocks, (1024 * 1024) / combined_block_bytes);
+  EXPECT_EQ(plan.budget_bytes, plan.n_blocks * combined_block_bytes);
 }
 
 TEST(KVCacheEstimationTest, IgnoresLinearStateSlotsWithoutLinearAttention) {

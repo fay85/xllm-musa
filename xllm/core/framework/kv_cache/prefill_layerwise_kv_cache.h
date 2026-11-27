@@ -42,7 +42,8 @@ class PrefillLayerwiseHostPool final {
   struct BatchState;
 
   void initialize(const std::vector<KVCache>& device_caches,
-                  int64_t host_memory_bytes);
+                  int64_t host_memory_bytes,
+                  int32_t kv_split_rank);
   bool shared() const { return rank_count_ > 1; }
   bool is_writer(int64_t layer) const;
   bool enter(uint64_t batch_id,
@@ -71,7 +72,9 @@ class PrefillLayerwiseKVCache final : public LayerSynchronizer {
                           int32_t num_buffers,
                           int64_t host_memory_bytes,
                           std::vector<KVCache>& device_caches,
-                          ProcessGroup* host_group = nullptr);
+                          ProcessGroup* host_group = nullptr,
+                          int32_t kv_split_size = 1,
+                          int32_t kv_split_rank = 0);
   ~PrefillLayerwiseKVCache() override;
 
   // Validate all block ids before changing cache state. Blocks use the same
@@ -124,6 +127,7 @@ class PrefillLayerwiseKVCache final : public LayerSynchronizer {
 
   std::vector<KVCache>* device_caches_;
   PrefillLayerwiseHostPool host_pool_;
+  const int32_t kv_split_size_;
   int32_t num_buffers_;
   int64_t block_count_;
   int64_t device_bytes_ = 0;

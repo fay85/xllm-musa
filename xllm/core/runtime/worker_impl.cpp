@@ -631,7 +631,9 @@ bool WorkerImpl::allocate_kv_cache_storage(
         prefill_layerwise_num_buffers,
         cache_config.prefill_layerwise_host_memory_bytes(),
         kv_caches_,
-        host_group);
+        host_group,
+        parallel_args_.kv_split_size_effective(),
+        parallel_args_.kv_split_rank());
   } else {
     allocate_kv_caches(kv_caches_, kv_cache_shape, create_options);
     init_hierarchy_kv_cache_transfer(kv_cache_shape, create_options);

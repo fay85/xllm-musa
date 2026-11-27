@@ -1393,6 +1393,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
       run_worker_no_sync(*impl_, input, target_prepared).value();
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
+  if (!output.sample_output.embeddings.defined() &&
+      !output.failed_request_ids.empty()) {
+    return output;
+  }
 
   // MTP path that depends on hidden states.
   ForwardInput prefill_input;

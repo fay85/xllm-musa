@@ -48,6 +48,7 @@ limitations under the License.
 #include "framework/block/block_manager_pool.h"
 #include "framework/block/block_manager_test_access.h"
 #include "framework/config/disagg_pd_config.h"
+#include "framework/config/kv_cache_config.h"
 #include "framework/config/model_config.h"
 #include "framework/config/parallel_config.h"
 #include "framework/config/rec_config.h"
@@ -306,6 +307,17 @@ class TestDisaggPDScheduler final
 
   bool reject_queued_for_test(const std::shared_ptr<Request>& request) {
     return reject_queued_request(request);
+  }
+
+  std::optional<InstanceInfo> admit_kv_split_for_test(
+      const std::shared_ptr<Request>& request,
+      int32_t prefill_width,
+      const InstanceInfo& decode) {
+    instance_info_.kv_split_size = prefill_width;
+    instance_info_.cp_index_write_mode = kCpIndexWriteModeReplicated;
+    remote_instances_info_.emplace(decode.name, decode);
+    return admit_kv_split_request(
+        request, decode.name, /*release_prefill_blocks=*/false);
   }
 
   bool has_channel(const std::string& req_id) {
@@ -2095,6 +2107,26 @@ TEST(DisaggPDSchedulerTest,
   EXPECT_EQ(settled.plan, KvSplitWidthPlan::STRIDED);
   EXPECT_FALSE(settled.rank_local_mapping);
   EXPECT_TRUE(settled.reason.empty());
+}
+
+TEST(DisaggPDSchedulerTest, AdmitsStridedKvSplitWithPrefillOffload) {
+  int32_t& buffers =
+      KVCacheConfig::get_instance().prefill_layerwise_num_buffers();
+  const int32_t previous_buffers = buffers;
+  ScopeGuard restore([&] { buffers = previous_buffers; });
+  buffers = 2;
+
+  FakeEngine engine(/*num_blocks=*/8, /*block_size=*/16);
+  auto options = make_options();
+  options.enable_pd_ooc(false);
+  TestDisaggPDScheduler scheduler(&engine, options, /*start_services=*/false);
+  auto request = make_request({1, 2, 3});
+  request->state().output_func = [](const RequestOutput&) { return true; };
+
+  const auto admitted = scheduler.admit_kv_split_for_test(
+      request, /*prefill_width=*/4, make_remote_info(/*kv_split_size=*/1));
+  ASSERT_TRUE(admitted.has_value());
+  EXPECT_EQ(admitted->kv_split_size, 1);
 }
 
 TEST(DisaggPDSchedulerTest, TemporaryDecodeBlockPressureIsNotPermanent) {

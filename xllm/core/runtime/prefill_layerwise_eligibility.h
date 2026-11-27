@@ -27,9 +27,8 @@ struct Options;
 
 // The prefill offload owner is only valid on an instance that never executes
 // decode: its Device slots are overwritten layer by layer, while the scheduler
-// still addresses the same logical blocks. DFlash2 target prefill is admitted
-// because its draft context is written into a separate full cache after the
-// target forward; the draft engine itself must keep the ordinary cache.
+// still addresses the same logical blocks. Supported speculative targets keep
+// their draft context in a separate full cache outside the offload owner.
 //
 // This object owns the complete target admission: worker lifecycle (backend and
 // task), topology, graph mode, and the cache/budget predicates. Engine and
@@ -44,7 +43,6 @@ class PrefillLayerwiseEligibility final {
   bool generate_task = false;
   bool pd_prefill_only = false;
   bool push_transfer = false;
-  bool enable_graph = false;
   bool enable_prefill_piecewise_graph = false;
   bool is_draft_engine = false;
   bool enable_sleep_mode = false;
@@ -54,16 +52,13 @@ class PrefillLayerwiseEligibility final {
   int32_t cp_size = 1;
   int32_t layerwise_split_size = 1;
   int32_t kv_split_size_effective = 1;
+  bool python_model = false;
+  bool replicated_index = false;
   // True when the deployment declares any speculative intent. The target
   // engine's own Options never carry enable_speculative_decode (it is set on
-  // the worker options), so num_speculative_tokens is the only signal a DFlash2
-  // target exposes. It also counts when this prefill instance would never
-  // consume the tokens: MTP and Suffix wrap the target with a speculative
-  // worker, and only the DFlash2 path reserves the draft cache and pushes it
-  // alongside the target, so every other speculative shape must fail fast
-  // instead of silently taking the layerwise cache.
+  // the worker options), so num_speculative_tokens also signals intent.
   bool has_speculative_decode = false;
-  bool dflash2_target = false;
+  bool supported_speculative_target = false;
   std::string kv_cache_dtype;
   std::string model_type;
 
@@ -104,25 +99,17 @@ class PrefillLayerwiseEligibility final {
     if (layerwise_split_size != 1) {
       return "Prefill layerwise offload requires layerwise_split_size=1.";
     }
-    if (kv_split_size_effective > 1) {
-      return "Prefill layerwise offload requires effective kv_split_size<=1; "
-             "kv_split_size=0 inherits cp_size, so set kv_split_size=1 "
-             "explicitly when CP>1.";
+    if (kv_split_size_effective < 1 || cp_size % kv_split_size_effective != 0) {
+      return "Prefill layerwise offload requires a positive effective "
+             "kv_split_size that divides cp_size.";
     }
-    if (has_speculative_decode && !dflash2_target) {
+    if (kv_split_size_effective > 1 && (!python_model || !replicated_index)) {
+      return "Prefill layerwise offload with KV split requires Python CP, "
+             "replicated Index writes; otherwise set kv_split_size=1.";
+    }
+    if (has_speculative_decode && !supported_speculative_target) {
       return "Prefill layerwise offload only supports speculative decoding for "
-             "the glm_moe_dsa python DFlash2 target.";
-    }
-    // enable_graph only drives decode graph capture/replay (the worker checks
-    // batch_forward_type.is_decode before bucketing). A prefill-only instance
-    // never executes decode and prefill stays eager, so the layer save/PUSH
-    // fence is never captured into an ACL graph. Piecewise prefill graphs are
-    // still rejected below. The DFlash2 target is admitted because deployments
-    // inherit enable_graph from the shared PD configuration.
-    if (enable_graph && !(has_speculative_decode && dflash2_target)) {
-      return "Prefill layerwise offload requires eager execution; only the "
-             "glm_moe_dsa python DFlash2 target is admitted with graph mode on "
-             "a prefill-only instance.";
+             "Python glm_moe_dsa targets with DFlash, DFlash2, or MTP.";
     }
     if (enable_prefill_piecewise_graph) {
       return "Prefill layerwise offload does not support piecewise prefill "

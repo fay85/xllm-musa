@@ -128,7 +128,9 @@ PrefillLayerwiseSpecPlan prefill_layerwise_blocks_with_draft(
     const KVCacheCapacity& target_capacity,
     const KVCacheCapacity& draft_capacity,
     int32_t num_buffers,
-    int32_t draft_replicated_block_pages);
+    int32_t draft_replicated_block_pages,
+    bool draft_body_uses_tp1,
+    bool draft_manages_own_kv_shape);
 
 // Co-located KPool drafts inherit the target's request slots and verify window.
 // Each capacity retains its own model's layer counts and page costs.
@@ -142,8 +144,8 @@ struct SpeculativeFullAttentionBlockCost {
   int64_t draft_full_attention_block_size_in_bytes = 0;
 };
 
-// Shared draft-slot sizing for SpeculativeEngine::calculate_kv_cache, the
-// only production caller. `draft_body_uses_tp1` marks an MTP draft body
+// Shared draft-slot sizing for ordinary and layerwise speculative allocation.
+// `draft_body_uses_tp1` marks an MTP draft body
 // running TP1; `draft_manages_own_kv_shape` mirrors
 // SpeculativeConfig::draft_manages_own_kv_shape. Both draft flavors are
 // sized by the draft's own slot geometry; only workers that reuse the

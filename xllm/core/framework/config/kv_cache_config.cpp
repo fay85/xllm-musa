@@ -76,9 +76,11 @@ DEFINE_int32(
     "budget, unchanged B < layers gives about B/(B+1) of the previous "
     "block count. 0 disables offload; positive "
     "values require task=generate, NPU TORCH PREFILL-only/PUSH on "
-    "glm_moe_dsa with DP=1. CP>1 additionally requires an explicit "
-    "kv_split_size=1. Prefill stays eager; graph mode is admitted "
-    "only with the python DFlash2 target, and a positive "
+    "glm_moe_dsa with DP=1. KV split requires Python, cp_size divisible by "
+    "effective kv_split_size and replicated Index writes. Otherwise use "
+    "kv_split_size=1. Prefill stays eager even with enable_graph=true; "
+    "piecewise prefill graph is unsupported. Speculative decoding requires a "
+    "Python glm_moe_dsa target with DFlash, DFlash2, or MTP, and a positive "
     "num_speculative_tokens counts as speculative intent.");
 
 DEFINE_double(prefill_layerwise_host_memory_gb,

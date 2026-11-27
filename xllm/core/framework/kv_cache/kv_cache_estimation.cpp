@@ -1030,7 +1030,9 @@ PrefillLayerwiseSpecPlan prefill_layerwise_blocks_with_draft(
     const KVCacheCapacity& target_capacity,
     const KVCacheCapacity& draft_capacity,
     int32_t num_buffers,
-    int32_t draft_replicated_block_pages) {
+    int32_t draft_replicated_block_pages,
+    bool draft_body_uses_tp1,
+    bool draft_manages_own_kv_shape) {
   CHECK_GT(target_capacity.n_blocks(), 0)
       << "target n_blocks=" << target_capacity.n_blocks();
   CHECK_GT(draft_capacity.n_blocks(), 0)
@@ -1040,9 +1042,15 @@ PrefillLayerwiseSpecPlan prefill_layerwise_blocks_with_draft(
   const int64_t target_device_block_bytes =
       prefill_layerwise_device_block_size_in_bytes(
           target_model_args, target_capacity, num_buffers);
+  const SpeculativeFullAttentionBlockCost cost =
+      estimate_speculative_full_attention_block_cost(
+          target_capacity,
+          draft_capacity,
+          draft_body_uses_tp1,
+          draft_manages_own_kv_shape);
   const int64_t draft_device_block_bytes =
       static_cast<int64_t>(draft_replicated_block_pages) *
-      standard_full_cache_block_size_in_bytes(draft_capacity);
+      cost.draft_full_attention_block_size_in_bytes;
   const int64_t combined_device_block_bytes =
       target_device_block_bytes + draft_device_block_bytes;
   CHECK_GT(combined_device_block_bytes, 0)

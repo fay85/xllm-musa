@@ -960,7 +960,10 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
                 timer.elapsed_seconds());
   }
 
-  if (input.sampling_params.selected_token_idxes.defined()) {
+  const bool target_prefill_failed =
+      !embeddings.defined() && !output.failed_request_ids.empty();
+  if (!target_prefill_failed &&
+      input.sampling_params.selected_token_idxes.defined()) {
     const auto& embedding_ids = input.input_params.embedding.embedding_ids;
     torch::Tensor bootstrap_embeddings = embeddings;
     if (restore_index.defined() ||

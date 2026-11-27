@@ -240,7 +240,8 @@ bool PrefillLayerwiseHostPool::is_writer(int64_t layer) const {
 
 void PrefillLayerwiseHostPool::initialize(
     const std::vector<KVCache>& device_caches,
-    int64_t host_memory_bytes) {
+    int64_t host_memory_bytes,
+    int32_t kv_split_rank) {
   {
     layers_ = static_cast<int64_t>(device_caches.size());
     const torch::Tensor& first_key = device_caches.front().get_k_cache();
@@ -277,13 +278,18 @@ void PrefillLayerwiseHostPool::initialize(
       const auto integer = torch::TensorOptions().dtype(torch::kInt64);
       const auto info = gather_host_metadata(
           group,
-          torch::tensor({host_tag, namespace_tag, layout_tag, host_data_bytes},
+          torch::tensor({host_tag,
+                         namespace_tag,
+                         layout_tag,
+                         host_data_bytes,
+                         static_cast<int64_t>(kv_split_rank)},
                         integer));
       const auto ranks = info.accessor<int64_t, 2>();
       int32_t leader = -1;
       rank_count_ = 0;
       for (int32_t index = 0; index < group.world_size(); ++index) {
-        if (ranks[index][0] != host_tag || ranks[index][1] != namespace_tag) {
+        if (ranks[index][0] != host_tag || ranks[index][1] != namespace_tag ||
+            ranks[index][4] != kv_split_rank) {
           continue;
         }
         CHECK(ranks[index][2] == layout_tag &&
@@ -522,9 +528,12 @@ PrefillLayerwiseKVCache::PrefillLayerwiseKVCache(
     int32_t num_buffers,
     int64_t host_memory_bytes,
     std::vector<KVCache>& device_caches,
-    ProcessGroup* host_group)
+    ProcessGroup* host_group,
+    int32_t kv_split_size,
+    int32_t kv_split_rank)
     : device_caches_(&device_caches),
       host_pool_(host_group),
+      kv_split_size_(kv_split_size),
       num_buffers_(num_buffers),
       block_count_(shape.key_cache_shape().at(0)) {
   // These are startup allocation invariants, not request validation.
@@ -534,6 +543,9 @@ PrefillLayerwiseKVCache::PrefillLayerwiseKVCache(
   CHECK_LE(num_buffers_, options.num_layers());
   CHECK_GT(host_memory_bytes, 0);
   CHECK_GT(block_count_, 0);
+  CHECK_GT(kv_split_size_, 0);
+  CHECK_GE(kv_split_rank, 0);
+  CHECK_LT(kv_split_rank, kv_split_size_);
   CHECK(!shape.has_grouped_cache_layout());
   CHECK(!shape.has_kpool_tail_shape());
   CHECK(!options.enable_linear_attention());
@@ -582,6 +594,16 @@ PrefillLayerwiseKVCache::PrefillLayerwiseKVCache(
     }
     slots.emplace_back(make_cache(kv, index, scale));
     for (const KVCacheTensor& tensor : slots.back().get_cache_tensors()) {
+      if (kv_split_size_ > 1) {
+        CHECK_EQ(fold_tensor_rows_for_transfer(
+                     tensor.tensor, tensor.role, /*replicated_block_pages=*/1)
+                     .size(0),
+                 block_count_)
+            << "Invalid folded Prefill KV row count: slot=" << slot
+            << ", role=" << tensor.role.to_string()
+            << ", shape=" << tensor.tensor.sizes()
+            << ", kv_split_size=" << kv_split_size_;
+      }
       device_bytes_ += static_cast<int64_t>(tensor.tensor.nbytes());
     }
   }
@@ -597,7 +619,7 @@ PrefillLayerwiseKVCache::PrefillLayerwiseKVCache(
         has_index(layer) ? slot.get_indexer_cache_scale() : std::nullopt;
     device_caches.emplace_back(make_cache(device_kv, index, scale));
   }
-  host_pool_.initialize(device_caches, host_memory_bytes);
+  host_pool_.initialize(device_caches, host_memory_bytes, kv_split_rank);
   load_ready_.resize(static_cast<size_t>(layers));
   save_ready_.resize(static_cast<size_t>(layers));
   push_completed_layers_.resize(static_cast<size_t>(layers), 0);
@@ -618,7 +640,8 @@ PrefillLayerwiseKVCache::PrefillLayerwiseKVCache(
             << ", visible_host_bytes=" << host_bytes() << ", unique_host_bytes="
             << (host_pool_.local_rank_ == 0 ? host_bytes() : 0)
             << ", local_host_ranks=" << host_pool_.rank_count_
-            << ", PD PUSH source=Device";
+            << ", kv_split_size=" << kv_split_size_
+            << ", kv_split_rank=" << kv_split_rank << ", PD PUSH source=Device";
 }
 
 PrefillLayerwiseKVCache::~PrefillLayerwiseKVCache() {
@@ -665,20 +688,23 @@ bool PrefillLayerwiseKVCache::begin(const ModelInputParams& params,
                tables.size(0) == static_cast<int64_t>(kv_lengths.size()) &&
                q_lengths.size() == kv_lengths.size();
   if (valid) {
+    const int64_t logical_block_size = block_size * kv_split_size_;
     const auto block_ids = tables.accessor<int32_t, 2>();
     read_blocks.reserve(static_cast<size_t>(tables.numel()));
     write_blocks.reserve(static_cast<size_t>(tables.numel()));
     for (size_t row = 0; row < kv_lengths.size(); ++row) {
       const int64_t kv_length = kv_lengths[row];
       const int64_t q_length = q_lengths[row];
-      const int64_t count = (kv_length + block_size - 1) / block_size;
+      const int64_t count =
+          (kv_length + logical_block_size - 1) / logical_block_size;
       if (q_length < 0 || kv_length < q_length || count > tables.size(1)) {
         valid = false;
         break;
       }
       const int64_t prefix_length = kv_length - q_length;
-      const int64_t first_write_block = prefix_length / block_size;
-      const bool first_write_block_has_prefix = prefix_length % block_size != 0;
+      const int64_t first_write_block = prefix_length / logical_block_size;
+      const bool first_write_block_has_prefix =
+          prefix_length % logical_block_size != 0;
       for (int64_t col = 0; col < count; ++col) {
         // Blocks after the first write block contain only this batch's tokens,
         // so attention writes them before reading and an H2D load would move
@@ -877,10 +903,21 @@ bool PrefillLayerwiseKVCache::copy_layer(int64_t layer_index, bool load) {
   sources.reserve(device.size() * blocks.size());
   destinations.reserve(device.size() * blocks.size());
   for (size_t role = 0; role < device.size(); ++role) {
+    const torch::Tensor device_rows =
+        kv_split_size_ == 1
+            ? device[role].tensor
+            : fold_tensor_rows_for_transfer(device[role].tensor,
+                                            device[role].role,
+                                            /*replicated_block_pages=*/1);
+    const torch::Tensor host_rows =
+        kv_split_size_ == 1
+            ? host[role].tensor
+            : fold_tensor_rows_for_transfer(host[role].tensor,
+                                            host[role].role,
+                                            /*replicated_block_pages=*/1);
     for (int64_t block : blocks) {
-      sources.emplace_back((load ? host[role] : device[role]).tensor[block]);
-      destinations.emplace_back(
-          (load ? device[role] : host[role]).tensor[block]);
+      sources.emplace_back((load ? host_rows : device_rows)[block]);
+      destinations.emplace_back((load ? device_rows : host_rows)[block]);
     }
   }
   if (batch_memcpy_ == nullptr) {

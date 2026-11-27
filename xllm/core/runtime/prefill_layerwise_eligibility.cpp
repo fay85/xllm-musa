@@ -17,8 +17,10 @@ limitations under the License.
 
 #include "core/common/instance_role_util.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/model_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/speculative_config.h"
+#include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #include "platform/platform.h"
 #include "runtime/options.h"
 
@@ -35,7 +37,6 @@ PrefillLayerwiseEligibility build_prefill_layerwise_eligibility(
   eligibility.generate_task = options.task_type() == "generate";
   eligibility.pd_prefill_only = is_pd_prefill_only(options);
   eligibility.push_transfer = options.kv_cache_transfer_mode() == "PUSH";
-  eligibility.enable_graph = options.enable_graph();
   eligibility.enable_prefill_piecewise_graph =
       options.enable_prefill_piecewise_graph();
   eligibility.is_draft_engine = options.is_draft_engine();
@@ -48,10 +49,18 @@ PrefillLayerwiseEligibility build_prefill_layerwise_eligibility(
       ParallelConfig::get_instance().layerwise_split_size();
   eligibility.kv_split_size_effective =
       ParallelConfig::get_instance().kv_split_size_effective();
+  eligibility.python_model = ModelConfig::is_python_model_impl(model_impl);
+  eligibility.replicated_index =
+      eligibility.kv_split_size_effective > 1 &&
+      declared_cp_index_write_mode() == kCpIndexWriteModeReplicated;
   eligibility.has_speculative_decode = options.enable_speculative_decode() ||
                                        options.num_speculative_tokens() > 0;
-  eligibility.dflash2_target = SpeculativeConfig::is_glm_moe_dsa_dflash2(
-      model_type, options.speculative_algorithm(), model_impl);
+  const std::string_view algorithm = options.speculative_algorithm();
+  eligibility.supported_speculative_target =
+      model_type == "glm_moe_dsa" && eligibility.python_model &&
+      (SpeculativeConfig::is_dflash_algorithm(algorithm) ||
+       SpeculativeConfig::is_dflash2_algorithm(algorithm) ||
+       SpeculativeConfig::is_mtp_algorithm(algorithm));
   eligibility.kv_cache_dtype = std::string(options.kv_cache_dtype());
   eligibility.model_type = std::string(model_type);
   return eligibility;

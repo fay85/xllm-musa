@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <array>
+#include <barrier>
 #include <chrono>
 #include <cstdint>
 #include <future>
@@ -39,6 +40,7 @@ limitations under the License.
 #include "framework/model/model_input_params.h"
 #include "framework/parallel_state/process_group.h"
 #include "layers/common/kv_shard_batch_metadata.h"
+#include "platform/platform.h"
 #include "worker.pb.h"
 
 namespace xllm {
@@ -71,19 +73,30 @@ class PreparationProcessGroup final : public ProcessGroup {
 
 class HostPoolProcessGroup final : public ProcessGroup {
  public:
-  using Exchange = std::array<std::array<std::promise<torch::Tensor>, 3>, 2>;
+  class Exchange final {
+   public:
+    explicit Exchange(int32_t world_size = 2)
+        : world_size(world_size), ready(world_size), inputs(world_size) {}
+
+    const int32_t world_size;
+    std::barrier<> ready;
+    std::vector<std::array<torch::Tensor, 3>> inputs;
+  };
 
   HostPoolProcessGroup(int32_t rank, Exchange& exchange)
-      : ProcessGroup(rank, 2, torch::Device(torch::kCPU)),
+      : ProcessGroup(rank, exchange.world_size, torch::Device(torch::kCPU)),
         exchange_(exchange) {}
 
   torch::Tensor allgather_base_sync(const torch::Tensor& input) override {
     const size_t phase = phase_++;
-    exchange_.at(rank()).at(phase).set_value(input);
-    const torch::Tensor peer =
-        exchange_.at(1 - rank()).at(phase).get_future().get();
-    return rank() == 0 ? torch::stack({input, peer})
-                       : torch::stack({peer, input});
+    exchange_.inputs.at(rank()).at(phase) = input;
+    exchange_.ready.arrive_and_wait();
+    std::vector<torch::Tensor> gathered;
+    gathered.reserve(world_size());
+    for (const auto& rank_inputs : exchange_.inputs) {
+      gathered.emplace_back(rank_inputs.at(phase));
+    }
+    return torch::stack(gathered);
   }
 
  private:
@@ -860,6 +873,157 @@ TEST(CacheLayoutBuilderTest, PrefillHostPoolSharesHistoryAcrossBatches) {
   }
   EXPECT_TRUE(first.finish());
   EXPECT_TRUE(second.finish());
+}
+
+namespace {
+
+template <int32_t kKvSplitSize>
+void check_prefill_split_sharing_and_index_copies() {
+  SCOPED_TRACE(kKvSplitSize);
+  auto& model = ModelConfig::get_instance();
+  auto& parallel = ParallelConfig::get_instance();
+  const std::string old_model_impl = model.model_impl();
+  const int32_t old_kv_split_size = parallel.kv_split_size();
+  const ScopeGuard restore([&] {
+    model.model_impl(old_model_impl);
+    parallel.kv_split_size(old_kv_split_size);
+  });
+  model.model_impl("python");
+  parallel.kv_split_size(kKvSplitSize);
+
+  constexpr int32_t kPhysicalBlockSize = 2;
+  proto::KVCacheShape proto_shape;
+  for (int64_t dim : {2, kPhysicalBlockSize, 1, 8}) {
+    proto_shape.add_key_cache_shape(dim);
+    proto_shape.add_value_cache_shape(dim);
+  }
+  for (int64_t dim : {2 * kKvSplitSize, kPhysicalBlockSize, 1, 4}) {
+    proto_shape.add_index_cache_shape(dim);
+  }
+  for (int64_t dim : {2 * kKvSplitSize, kPhysicalBlockSize, 1}) {
+    proto_shape.add_index_cache_scale_shape(dim);
+  }
+  const KVCacheShape shape = KVCacheShape::from_proto(proto_shape);
+  KVCacheCreateOptions options;
+  options.device(torch::Device(torch::kCPU))
+      .dtype(torch::kFloat32)
+      .num_layers(2)
+      .enable_indexer_cache_quant(true);
+  constexpr int32_t kRanksPerShard = 2;
+  constexpr int32_t kWorldSize = kKvSplitSize * kRanksPerShard;
+  HostPoolProcessGroup::Exchange exchange(kWorldSize);
+  std::array<std::vector<KVCache>, kWorldSize> caches;
+  std::array<std::unique_ptr<HostPoolProcessGroup>, kWorldSize> groups;
+  std::array<std::future<std::unique_ptr<PrefillLayerwiseKVCache>>, kWorldSize>
+      allocations;
+  std::array<std::unique_ptr<PrefillLayerwiseKVCache>, kWorldSize> owners;
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    groups[rank] = std::make_unique<HostPoolProcessGroup>(rank, exchange);
+    allocations[rank] = std::async(std::launch::async, [&, rank] {
+      return std::make_unique<PrefillLayerwiseKVCache>(
+          shape,
+          options,
+          /*num_buffers=*/1,
+          /*host_memory_bytes=*/1024 * 1024,
+          caches[rank],
+          groups[rank].get(),
+          kKvSplitSize,
+          /*kv_split_rank=*/rank / kRanksPerShard);
+    });
+  }
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    owners[rank] = allocations[rank].get();
+  }
+  constexpr int64_t kBlock = 1;
+  constexpr int64_t kIndexPage = kKvSplitSize * kBlock;
+  constexpr int64_t kLastIndexPage = kIndexPage + kKvSplitSize - 1;
+  for (int32_t shard = 0; shard < kKvSplitSize; ++shard) {
+    const KVCache& history = owners[kRanksPerShard * shard]->host_caches()[1];
+    history.get_k_cache()[kBlock].fill_(10 + shard);
+    for (int64_t page = 0; page < kKvSplitSize; ++page) {
+      history.get_index_cache()[kIndexPage + page].fill_(21 + page);
+      (*history.get_indexer_cache_scale())[kIndexPage + page].fill_(31 + page);
+    }
+  }
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    const KVCache& history = owners[rank]->host_caches()[1];
+    EXPECT_TRUE(history.get_k_cache()[kBlock]
+                    .eq(10 + rank / kRanksPerShard)
+                    .all()
+                    .item<bool>());
+  }
+
+  ModelInputParams params;
+  params.meta.batch_id = 1;
+  params.meta.batch_forward_type = BatchForwardType::PREFILL;
+  params.attention.host.block_tables = torch::tensor({{kBlock}}, torch::kInt32);
+  params.attention.host.kv_seq_lens = {kPhysicalBlockSize * kKvSplitSize};
+  params.attention.host.q_seq_lens = {1};
+  std::array<std::future<bool>, kWorldSize> steps;
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    steps[rank] = std::async(std::launch::async, [&, rank] {
+      return owners[rank]->begin(params, kPhysicalBlockSize, nullptr);
+    });
+  }
+  for (auto& step : steps) {
+    ASSERT_TRUE(step.get());
+  }
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    ASSERT_TRUE(owners[rank]->synchronize_layer(0));
+    const KVCache& resident = caches[rank][0];
+    EXPECT_TRUE(resident.get_k_cache()[kBlock].eq(0).all().item<bool>());
+    ASSERT_TRUE(owners[rank]->synchronize_layer(1));
+    const KVCache& device = caches[rank][1];
+    EXPECT_TRUE(device.get_k_cache()[kBlock]
+                    .eq(10 + rank / kRanksPerShard)
+                    .all()
+                    .item<bool>());
+    const torch::Tensor scales = *device.get_indexer_cache_scale();
+    for (int64_t page = 0; page < kKvSplitSize; ++page) {
+      EXPECT_TRUE(device.get_index_cache()[kIndexPage + page]
+                      .eq(21 + page)
+                      .all()
+                      .item<bool>());
+      EXPECT_TRUE(scales[kIndexPage + page].eq(31 + page).all().item<bool>());
+    }
+    device.get_k_cache()[kBlock].fill_(40 + rank);
+    device.get_index_cache()[kLastIndexPage].fill_(50 + rank);
+    scales[kLastIndexPage].fill_(60 + rank);
+  }
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    steps[rank] = std::async(std::launch::async,
+                             [&, rank] { return owners[rank]->finish(); });
+  }
+  for (auto& step : steps) {
+    ASSERT_TRUE(step.get());
+  }
+  for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+    const int32_t writer = (rank / kRanksPerShard) * kRanksPerShard + 1;
+    const KVCache& history = owners[rank]->host_caches()[1];
+    EXPECT_TRUE(
+        history.get_k_cache()[kBlock].eq(40 + writer).all().item<bool>());
+    EXPECT_TRUE(
+        history.get_index_cache()[kIndexPage].eq(21).all().item<bool>());
+    EXPECT_TRUE(history.get_index_cache()[kLastIndexPage]
+                    .eq(50 + writer)
+                    .all()
+                    .item<bool>());
+    EXPECT_TRUE((*history.get_indexer_cache_scale())[kLastIndexPage]
+                    .eq(60 + writer)
+                    .all()
+                    .item<bool>());
+  }
+}
+
+}  // namespace
+
+TEST(CacheLayoutBuilderTest,
+     PrefillKvSplitSharesOnlySameShardAndCopiesIndexPages) {
+  if (!Platform::is_npu()) {
+    GTEST_SKIP() << "Replicated DSA Index pages are an NPU layout";
+  }
+  ASSERT_NO_FATAL_FAILURE(check_prefill_split_sharing_and_index_copies<2>());
+  check_prefill_split_sharing_and_index_copies<4>();
 }
 
 TEST(CacheLayoutBuilderTest, SelectsStableOwnerForMqaReplicas) {

@@ -192,12 +192,15 @@ bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
         SpeculativeConfig::draft_replicated_block_pages(
             options_.speculative_algorithm(),
             ParallelConfig::get_instance().kv_split_size_effective());
-    const PrefillLayerwiseSpecPlan plan =
-        prefill_layerwise_blocks_with_draft(model_args_,
-                                            target_kv_cache_cap,
-                                            draft_kv_cache_cap,
-                                            prefill_layerwise_num_buffers,
-                                            replicated_block_pages);
+    const PrefillLayerwiseSpecPlan plan = prefill_layerwise_blocks_with_draft(
+        model_args_,
+        target_kv_cache_cap,
+        draft_kv_cache_cap,
+        prefill_layerwise_num_buffers,
+        replicated_block_pages,
+        options_.enable_mtp_draft_body_tp1(),
+        SpeculativeConfig::draft_manages_own_kv_shape(
+            options_.speculative_algorithm()));
     CHECK_GT(plan.n_blocks, 0) << "no memory for target/draft kv cache";
     target_kv_cache_cap.n_blocks(plan.n_blocks)
         .cache_size_in_bytes(plan.budget_bytes);
