@@ -37,8 +37,7 @@ DFlash2WorkerImpl::DFlash2WorkerImpl(const ParallelArgs& parallel_args,
   async_output_enabled_ = enable_schedule_overlap() &&
                           !options_.enable_adaptive_speculative_decode();
   draft_prelaunch_enabled_for_init_ =
-      async_output_enabled_ && proposal_xfia_enabled_ &&
-      parallel_args_.kv_split_size_effective() == 1;
+      async_output_enabled_ && proposal_xfia_enabled_;
 }
 
 torch::Tensor DFlash2WorkerImpl::prepare_draft_noise(

@@ -234,7 +234,6 @@ def _create_attention_backend(
             draft_graph_options = {
                 "draft_query_width": int(config.get("draft_query_width", 1)),
                 "draft_graph_window_size": window if isinstance(window, int) else None,
-                "graph_capturable": dcp_group is None or dcp_group.size() == 1,
             }
         return NpuPagedAttentionBackend(
             num_heads=first_attention.num_heads,

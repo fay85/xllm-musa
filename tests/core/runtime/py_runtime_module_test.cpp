@@ -29,10 +29,14 @@ limitations under the License.
 #include <vector>
 
 #include "core/framework/model/model_input_params.h"
+#include "core/framework/model_context.h"
+#include "core/framework/parallel_state/process_group.h"
 #include "core/framework/state_dict/state_dict.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/runtime/py_attention_metadata.h"
+#include "core/runtime/py_executor_impl.h"
 #include "core/runtime/py_input_batch.h"
+#include "models/llm/py_causal_lm.h"
 #include "models/py_model_helper.h"
 #include "platform/npu/device_capture_lock.h"
 
@@ -239,6 +243,69 @@ TEST_F(PyRuntimeModuleTest, RegistersWeightLoaderAndReadsStateDict) {
             (std::vector<std::string>{"weight"}));
   EXPECT_TRUE(
       view.attr("get_tensor")("weight").cast<torch::Tensor>().is_same(weight));
+}
+
+TEST_F(PyRuntimeModuleTest, PythonExecutorKeepsReplicatedDraftKvUnsharded) {
+  py::gil_scoped_acquire gil;
+  py::module_::import("torch");
+  ensure_xllm_runtime_module();
+  py::dict globals;
+  globals["initialize_runtime"] = py::cpp_function(&ensure_python_interpreter);
+  globals["expect_kv_split_size"] = py::cpp_function(
+      [](bool is_draft_engine, const std::string& algorithm, int32_t expected) {
+        torch::Device device(torch::kCPU);
+        ProcessGroup tp_group(/*rank=*/0, /*world_size=*/4, device);
+        ParallelArgs parallel_args(/*rank=*/0, /*world_size=*/4, &tp_group);
+        parallel_args.tp_group_ = &tp_group;
+        parallel_args.moe_tp_group_ = &tp_group;
+        parallel_args.kv_split_size(4);
+        parallel_args.python_rendezvous_host_ = "localhost";
+        parallel_args.python_rendezvous_port_ = 1;
+        ModelArgs model_args;
+        model_args.model_type("qwen3");
+        ModelContext context(
+            parallel_args,
+            model_args,
+            QuantArgs{},
+            torch::TensorOptions().device(device).dtype(torch::kFloat32),
+            /*context=*/nullptr);
+        PyCausalLM model(context, /*is_vlm=*/false);
+        runtime::Options options;
+        options.is_draft_engine(is_draft_engine)
+            .speculative_algorithm(algorithm);
+        PyExecutorImpl executor(&model, model_args, device, options);
+        ModelInputParams params;
+        params.attn_metadata = std::make_shared<layer::AttentionMetadata>();
+        const torch::Tensor tokens = torch::zeros({1}, torch::kLong);
+        params.attn_metadata->slot_mapping = tokens;
+        std::vector<KVCache> caches;
+        const int32_t actual = executor.run(tokens, tokens, caches, params)
+                                   .hidden_states.item<int32_t>();
+        EXPECT_EQ(actual, expected)
+            << "algorithm=" << algorithm
+            << ", role=" << (is_draft_engine ? "draft" : "target");
+      });
+  py::exec(R"(
+import torch
+from types import SimpleNamespace
+from unittest.mock import patch
+
+with patch("xllm.python.platform.current_platform.is_npu", return_value=True):
+    initialize_runtime()
+
+with (
+    patch("xllm.python.distributed.init_process_group"),
+    patch("xllm.python.registry.get_model_class", return_value=lambda _: torch.nn.Identity()),
+    patch("xllm.python.model_executor.executor.ModelExecutor", return_value=SimpleNamespace(
+        bind_kv_caches=lambda _: None,
+        execute=lambda _tokens, _positions, metadata, *_args, **_kwargs: torch.tensor(metadata.kv_split_size),
+    )),
+):
+    expect_kv_split_size(False, "DFlash2", 4)
+    expect_kv_split_size(True, "DFlash2", 1)
+    expect_kv_split_size(True, "DSpark", 4)
+)",
+           globals);
 }
 
 }  // namespace

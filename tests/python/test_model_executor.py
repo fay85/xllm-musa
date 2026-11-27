@@ -645,30 +645,62 @@ class TestCreateAttentionBackend:
         assert backend.init_kwargs["xfia_query_width"] == 8
         native_query.assert_not_called()
 
-    @pytest.mark.parametrize("dcp_size", [None, 2])
-    def test_block_query_graph_uses_draft_kv_layout(self, dcp_size: int | None) -> None:
+    @pytest.mark.parametrize(
+        ("dcp_size", "model_type"),
+        [(None, "DFlashDraftModel"), (4, "DFlashDraftModel"), (4, "DFlash2DraftModel")],
+    )
+    def test_block_query_graph_uses_draft_kv_layout(self, dcp_size: int | None, model_type: str) -> None:
+        pytest.importorskip("torch_npu")
+
         dcp_group = None if dcp_size is None else MagicMock()
         if dcp_group is not None:
             dcp_group.size.return_value = dcp_size
         attention = _make_attention_layer(num_kv_heads=1, head_dim=128)
         attention.attention_window = (7, 3)
+        device = torch.device("cpu")
+        query_width = 4
         with (
             patch("xllm.python.model_executor.executor.current_platform.is_npu", return_value=True),
             patch("xllm.python.model_executor.executor.distributed.dcp_group", return_value=dcp_group),
-            patch("xllm.python.attention.npu_paged_attention.NpuPagedAttentionBackend", StubAttentionBackend),
         ):
             backend = _create_attention_backend(
                 attention,
-                MagicMock(type="npu", index=0),
+                device,
                 torch.bfloat16,
-                {"cp_size": 2, "is_draft_engine": True, "draft_query_width": 4},
+                {"is_draft_engine": True, "draft_query_width": query_width, "model_type": model_type},
                 block_query_graph_metadata=True,
             )
-        assert isinstance(backend, StubAttentionBackend)
-        assert backend.init_kwargs["graph_capturable"] is (dcp_size is None)
-        assert backend.init_kwargs["draft_query_width"] == 4
-        assert backend.init_kwargs["draft_graph_window_size"] is None
-        assert backend.init_kwargs["sliding_window"] == attention.sliding_window
+        cache = torch.empty(1, 128, 1, 128, dtype=torch.bfloat16, device=device)
+        backend.bind_kv_caches([LayerCache(key=cache, value=torch.empty_like(cache))])
+        runner = DecodeAclGraphRunner(
+            nn.Identity(),
+            backend,
+            device,
+            max_batch=1,
+            max_model_len=128,
+            is_spec_draft=True,
+            draft_query_width=query_width,
+        )
+        metadata = SimpleNamespace(
+            is_prefill=False,
+            is_chunked_prefill=True,
+            is_dummy=False,
+            is_mixed=False,
+            use_dflash_proposal_attention=True,
+            kv_split_size=1,
+            slot_mapping=torch.arange(query_width, dtype=torch.int32),
+            block_table=torch.tensor([[0]], dtype=torch.int32),
+            kv_seq_lens=torch.tensor([query_width], dtype=torch.int32),
+            kv_seq_lens_host_values=[query_width],
+            q_cu_seq_lens=torch.tensor([0, query_width], dtype=torch.int32),
+            dp_global_kv_max_seq_lens=(),
+        )
+        input_ids = torch.zeros(query_width, dtype=torch.int32)
+        model_input = ModelInput(input_ids, torch.arange(query_width), metadata)
+        assert runner.can_execute(model_input)
+        if dcp_size is not None:
+            metadata.kv_split_size = dcp_size
+            assert not runner.can_execute(model_input)
 
     @pytest.mark.parametrize("is_ascend_a3", [False, True])
     @pytest.mark.parametrize("dflash_xfia_enabled", [False, True])

@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "common/metrics.h"
 #include "core/framework/config/execution_config.h"
+#include "core/framework/config/speculative_config.h"
 #include "core/framework/kv_cache/kv_shard_layout.h"
 #include "core/framework/model/model_sampling_input.h"
 #include "core/framework/speculative/mtp_async_state.h"
@@ -133,13 +134,17 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
             params, enable_mla_, std::nullopt, device_));
   }
   // The dense-DCP case is a model with no MLA latent cache (Qwen3.5), which
-  // needs KV-shard metadata on every step. An MLA model with cp_size == 1 has
-  // no CP group for the DSA prefill to shard across, so attaching the metadata
-  // there only trips the sharded-MLA-prefill guard in npu_paged_attention.py;
-  // keep the pre-main behavior for MLA and require the active CP group.
-  const bool is_decode_context_parallel = !enable_mla_ &&
-                                          py_causal_lm_->cp_size() == 1 &&
-                                          py_causal_lm_->kv_split_size() > 1;
+  // needs KV-shard metadata on every step. Replicated drafts keep a complete
+  // local KV history despite the target's DCP group, so omit shard metadata.
+  // An MLA model with cp_size == 1 has no CP group to shard DSA prefill.
+  // Attaching shard metadata there trips the sharded-MLA-prefill guard in
+  // npu_paged_attention.py, so MLA requires an active CP group below.
+  const bool is_decode_context_parallel =
+      !enable_mla_ && py_causal_lm_->cp_size() == 1 &&
+      py_causal_lm_->kv_split_size() > 1 &&
+      !(options_.is_draft_engine() &&
+        SpeculativeConfig::owns_replicated_kv_cache(
+            options_.speculative_algorithm()));
   const bool is_mla_prefill_kv_shard =
       enable_mla_ && py_causal_lm_->cp_size() > 1 &&
       py_causal_lm_->kv_split_size() > 1 &&

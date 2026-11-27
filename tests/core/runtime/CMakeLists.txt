@@ -63,7 +63,7 @@ if(USE_NPU)
     CPU_ONLY
     SRCS py_runtime_module_test.cpp
     DEPS :runtime :models :state_dict torch_python Python::Python GTest::gtest_main
-    ENVIRONMENT "TORCH_DEVICE_BACKEND_AUTOLOAD=0"
+    ENVIRONMENT "TORCH_DEVICE_BACKEND_AUTOLOAD=0;PYTHONPATH=${PROJECT_SOURCE_DIR}:$ENV{PYTHONPATH}"
   )
   target_link_libraries(py_runtime_module_test PRIVATE
     torch_npu ascendcl hccl c_sec nnopbase)

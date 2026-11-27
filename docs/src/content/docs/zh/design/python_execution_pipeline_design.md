@@ -347,7 +347,7 @@ DFlash、DFlash2 与 DSpark 采用同一种跨 step 生命周期，而不是在�
 公共 pending-context 提交、异步收尾和空 DP rank 的生命周期由已有 `DFlashWorkerImpl` 承担，
 DFlash/DFlash2 进一步共用 decode-step 编排、target metadata 准备和 pending-device query 构造，
 各自保留 proposal 算法；DSpark 保留自身 draft 计算和逐 batch 准入条件。
-异步收尾与 prelaunch 是不同决定：CP/KV split 等 prelaunch 限制不关闭异步收尾。
+异步收尾与 prelaunch 是不同决定：不满足 prelaunch 准入条件不关闭异步收尾。
 本轮 DFlash/DFlash2 的非空 KV transfer batch 暂时保留原同步收尾，避免绕过既有 draft PUSH completion 协议。
 prelaunch 的容量检查包含尚未确认的接受长度上界；普通路径完成 host 修正后，仍可独立选择 draft graph。
 
@@ -357,9 +357,9 @@ native sampler，保留 penalty 和 mask，而不是一律替换成 argmax。仅
 有约束时只回退 sampling，不连带关闭 decoder graph。这里没有 candidate selector、Markov 采样循环和
 dense draft probabilities；target 请求仍可随机采样，普通 DFlash 仍不支持 probabilistic draft sampling。
 
-NPU Python DFlash 在 overlap 开启且未启用 adaptive speculation 时使用异步输出。prelaunch 沿用
-DFlash2 proposal attention 的支持范围（A3、CP1、effective KV split1、fused 或 PD decode）、pending 请求身份
-校验和保守的 lookahead 容量检查。host restore、KV 搬运、结构化约束及依赖历史的 draft penalty 阻止 prelaunch，
+NPU Python DFlash 在 overlap 开启且未启用 adaptive speculation 时使用异步输出。DFlash 的 prelaunch 要求
+A3、target 的有效 KV split 为 1、fused 或 PD decode，并保留 pending 请求身份校验和保守的 lookahead 容量检查。
+host restore、KV 搬运、结构化约束及依赖历史的 draft penalty 阻止 prelaunch，
 不连带关闭异步输出或独立满足条件的图。native DFlash 保留原同步路径；target backbone 的图边界和验证语义不变。
 
 Python DFlash2 通过 `DFlash2ExecutionPipeline` 编排两个 Runner：
@@ -407,7 +407,11 @@ penalty、filter 和 JSON grammar 仍在 target verification 应用，不重复�
   不能据此宣称对 prelaunch 重叠或吞吐没有影响。其他 Pipeline 默认不启用这项 sampling 协调。
 
 C++ worker 不再持有 DFlash2 draft ACL Graph；Python 路径直接消费 proposal，非 Python 路径保留原生采样。
-NPU Python DFlash2 不再被启动期 `requires_eager_execution` 强制关闭 graph，普通 DFlash 与 native 路径保持原门控。
+NPU Python DFlash2 不再被启动期 `requires_eager_execution` 强制关闭 graph，其他模型的启动门控保持不变。
+普通 block-query draft Graph 检查批次的实际 KV 布局：`kv_split_size == 1` 是必要条件，
+不按 target 的 DCP group 大小或 draft 模型名拒绝。实际分片的 draft batch 仍不允许进入 proposal attention。
+DFlash2 draft 在每个 rank 保留完整的 token 历史，prelaunch 不按 target 的分片宽度拒绝。
+prelaunch 的 lookahead 检查按 target 逻辑块大小检查原始块表；展开为 draft 的本地物理页表后，再按物理页大小计算 slot。
 backbone 复用 `DecodeAclGraphRunner` 的输入管理与捕获逻辑；XFIA 通过 proposal 标记保持展开后逐 token 的 sliding-window
 左边界，不把图中的逐 token block table 误当成互相独立的单 token 请求。
 上一轮 context KV 写入与本轮设备输入准备均不在 draft 图内。

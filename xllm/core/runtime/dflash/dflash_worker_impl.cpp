@@ -1275,7 +1275,7 @@ bool DFlashWorkerImpl::can_prelaunch_draft_for_this_step(
   return specBuilder::has_decode_lookahead_capacity(
       rows,
       max_query_tokens_with_pending_acceptance,
-      options_.block_size(),
+      block_size(),
       draft_impl_->context_.get_model_args().max_position_embeddings());
 }
 
@@ -1309,7 +1309,7 @@ bool DFlashWorkerImpl::can_prepare_device_draft_inputs(
          specBuilder::has_decode_lookahead_capacity(
              rows,
              options_.num_speculative_tokens() + 1,
-             options_.block_size(),
+             block_size(),
              draft_impl_->context_.get_model_args().max_position_embeddings());
 }
 
