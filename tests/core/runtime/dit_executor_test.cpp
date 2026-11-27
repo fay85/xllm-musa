@@ -62,7 +62,7 @@ class RecordingDiTModel final : public DiTModel {
 
 TEST(DiTExecutorMetricsTest, CountsTopLevelForwardNotRequestsOrDenoiseSteps) {
   RecordingDiTModel model;
-  DiTExecutor executor(&model, runtime::Options());
+  NativeDiTExecutor executor(&model, runtime::Options());
   DiTForwardInput input;
   input.batch_size = 3;
   input.generation_params.num_inference_steps = 20;
@@ -80,7 +80,7 @@ TEST(DiTExecutorMetricsTest, CountsTopLevelForwardNotRequestsOrDenoiseSteps) {
 
 TEST(DiTExecutorMetricsTest, FailedForwardStillCountsOneAttempt) {
   RecordingDiTModel model(/*fail=*/true);
-  DiTExecutor executor(&model, runtime::Options());
+  NativeDiTExecutor executor(&model, runtime::Options());
   const double before = COUNTER_VALUE(num_model_execution_total_eager);
 
   EXPECT_THROW(executor.forward(DiTForwardInput()), std::runtime_error);

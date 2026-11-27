@@ -29,8 +29,6 @@ _FUSED_ADD_RMS_NORM_DYNAMIC_QUANT = torch_npu.npu_add_rms_norm_dynamic_quant
 # RMSNorm result cast back to the input dtype and ``y_fp32`` is the widened
 # ROUNDED result (``y.float()``), i.e. ``RMSNorm`` + ``Tensor.float()``.
 rms_norm_cast_va = torch.ops.xllm_ops.rms_norm_cast_va
-
-
 def gemma_rms_norm(
     value: torch.Tensor,
     weight: torch.Tensor,
@@ -39,6 +37,35 @@ def gemma_rms_norm(
     """Apply Gemma RMSNorm with the checkpoint's additive gamma."""
     output, _ = torch_npu.npu_gemma_rms_norm(value, weight, eps)
     return output
+
+
+def rms_norm_fp32(
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float = 1e-6,
+) -> torch.Tensor:
+    """RMSNorm over the last dim computed in float32 (Wan DiT per-head norm).
+
+    ``torch_npu.npu_rms_norm`` accumulates in fp32 and, when ``weight`` is kept
+    in fp32, is bit-exact with the eager fp32 reference used by the DiT
+    ``RMSNorm`` layers. Casting ``weight`` to the activation dtype would round
+    it and drift the result, so the weight is passed through untouched.
+
+    Args:
+        value: ``[..., D]`` tensor (2-8 dims).
+        weight: ``[D]`` RMSNorm scale, typically fp32.
+        eps: Epsilon added before the reciprocal square root.
+
+    Returns:
+        A tensor with the shape and dtype of ``value``.
+    """
+    if value.device.type == "npu" and value.dim() >= 2:
+        return torch_npu.npu_rms_norm(value.contiguous(), weight, epsilon=eps)[0]
+
+    # Eager fp32 reference (matches models/dit/transformers/common.py RMSNorm).
+    x_float = value.to(torch.float32)
+    normed = x_float * torch.rsqrt(x_float.pow(2).mean(-1, keepdim=True) + eps)
+    return (normed * weight.to(torch.float32)).to(value.dtype)
 
 
 def fused_add_rms_norm_dynamic_quant(
@@ -151,6 +178,7 @@ def fused_eh_norm(
 __all__ = [
     "rms_norm",
     "gemma_rms_norm",
+    "rms_norm_fp32",
     "fused_add_rms_norm",
     "fused_add_gemma_rms_norm",
     "fused_add_rms_norm_dynamic_quant",

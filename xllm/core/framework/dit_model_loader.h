@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <torch/torch.h>
 
+#include <nlohmann/json.hpp>
+#include <unordered_map>
 #include <vector>
 
 #include "core/framework/model/model_args.h"
@@ -32,6 +34,7 @@ class DiTFolderLoader : public ModelLoader {
                   const std::string& component_name,
                   const std::string& model_type);
 
+  const nlohmann::json& component_config() const;
   std::unique_ptr<Tokenizer> tokenizer() const override;
   std::vector<std::unique_ptr<StateDict>>& get_state_dicts() override;
   std::string model_weights_path() const override {
@@ -45,6 +48,7 @@ class DiTFolderLoader : public ModelLoader {
   bool load_tokenizer_args(const std::string& model_weights_path);
   bool load_quant_args(const std::string& model_weights_path);
 
+  std::unordered_map<std::string, nlohmann::json> parsed_configs_;
   std::string model_weights_path_;
 
   std::string model_type_;

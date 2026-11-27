@@ -82,6 +82,8 @@ void DiTCollectiveCommunicator::create_process_groups(
                                         device);
 
   parallel_args_->process_group_ = process_group_.get();
+  parallel_args_->python_rendezvous_host_ = host_;
+  parallel_args_->python_rendezvous_port_ = port_;
   parallel_args_->dit_tp_group_ =
       create_process_group_by_type("tp", dit_tp_group_, device);
   parallel_args_->dit_sp_group_ =
@@ -109,6 +111,10 @@ ProcessGroup* DiTCollectiveCommunicator::create_process_group_by_type(
     auto local_rank = parallel_info.rank();
     auto& rank_per_group = parallel_info.rank_per_group()[group_id];
     int port_offset = group_id + 1;
+    // Record singleton layouts too: an explicitly configured size-one group
+    // must be distinguishable from missing communication metadata in Python.
+    parallel_args_->python_group_layouts_["dit_" + group_type] =
+        parallel_info.rank_per_group();
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
     member_group = std::move(create_process_group(global_rank_,
                                                   local_rank,

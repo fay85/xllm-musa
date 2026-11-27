@@ -91,6 +91,8 @@ assert options.model_impl == "native"
 options.model_impl = "python"
 assert options.model_impl == "python"
 assert "xllm_weight_loader" not in sys.modules
+# DiT worker-only bindings must stay lazy when importing the extension.
+assert "xllm_dit_runtime" not in sys.modules
 
 if hasattr(module, "_shutdown_python_host"):
     assert hasattr(module.LLMMaster, "_shutdown")

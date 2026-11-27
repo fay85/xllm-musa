@@ -44,6 +44,7 @@ limitations under the License.
 #include "core/framework/request/request_params.h"
 #include "core/framework/request/sample_slot.h"
 #include "core/platform/platform.h"
+#include "core/runtime/py_dit_types.h"
 #include "core/runtime/py_runtime_module.h"
 #include "core/util/binary_payload.h"
 #include "core/util/pybind_helper.h"
@@ -545,24 +546,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .value("VIDEO", DiTRequestKind::kVideo);
 
   // 17. export DiTGenerationParams
-  py::class_<DiTGenerationParams>(m, "DiTGenerationParams")
-      .def(py::init<>())
-      .def_readwrite("width", &DiTGenerationParams::width)
-      .def_readwrite("height", &DiTGenerationParams::height)
-      .def_readwrite("num_inference_steps",
-                     &DiTGenerationParams::num_inference_steps)
-      .def_readwrite("guidance_scale", &DiTGenerationParams::guidance_scale)
-      .def_readwrite("true_cfg_scale", &DiTGenerationParams::true_cfg_scale)
-      .def_readwrite("seed", &DiTGenerationParams::seed)
-      .def_readwrite("seed_is_set", &DiTGenerationParams::seed_is_set)
-      .def_readwrite("max_sequence_length",
-                     &DiTGenerationParams::max_sequence_length)
-      .def_readwrite("num_images_per_prompt",
-                     &DiTGenerationParams::num_images_per_prompt)
-      .def_readwrite("num_frames", &DiTGenerationParams::num_frames)
-      .def_readwrite("video_fps", &DiTGenerationParams::video_fps)
-      .def_readwrite("audio_sampling_rate",
-                     &DiTGenerationParams::audio_sampling_rate);
+  bind_dit_generation_params(m);
 
   // 18. export DiTMediaSources
   py::class_<DiTMediaSources>(m, "DiTMediaSources")

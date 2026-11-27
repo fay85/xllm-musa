@@ -33,6 +33,8 @@ cc_library(
     vlm_executor_impl.h
     base_executor_impl.h
     dit_executor.h
+    py_dit_executor.h
+    py_dit_types.h
     $<$<BOOL:${USE_NPU}>:acl_graph_bucket_policy.h>
     $<$<BOOL:${USE_NPU}>:acl_graph_executor_impl.h>
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.h>
@@ -77,6 +79,8 @@ cc_library(
     base_executor_impl.cpp
     vlm_executor_impl.cpp
     dit_executor.cpp
+    py_dit_executor.cpp
+    py_dit_types.cpp
     $<$<BOOL:${USE_NPU}>:acl_graph_executor_impl.cpp>
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.cpp>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.cpp>

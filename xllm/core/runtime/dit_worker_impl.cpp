@@ -30,8 +30,10 @@ limitations under the License.
 #include "common/types.h"
 #include "core/common/global_flags.h"
 #include "core/framework/config/dit_config.h"
+#include "core/framework/config/model_config.h"
 #include "core/framework/dit_model_loader.h"
 #include "core/platform/device.h"
+#include "core/runtime/py_dit_executor.h"
 #include "framework/dit_cache/dit_cache.h"
 #include "framework/lora/dit_lora_context.h"
 #include "framework/lora/dit_lora_runtime.h"
@@ -107,7 +109,8 @@ bool DiTWorkerImpl::init_model(ModelContext& context) {
 bool DiTWorkerImpl::init_model(const std::string& model_weights_path,
                                int32_t random_seed,
                                MasterStatus master_status) {
-  CHECK(dit_model_ == nullptr) << "Model is already initialized.";
+  CHECK(dit_model_ == nullptr && dit_model_executor_ == nullptr)
+      << "Model is already initialized.";
   torch::DeviceGuard device_guard(device_);
 
   // set same random seed for all worker
@@ -143,19 +146,28 @@ bool DiTWorkerImpl::init_model(const std::string& model_weights_path,
     adapters = dit::DiTLoRARuntime::register_adapters(
         lora_config, options_.model_id(), LoRARuntime::instance().registry());
   }
-  dit_model_ = create_dit_model(dit_context_);
-  CHECK(dit_model_ != nullptr) << "Failed to create model.";
-  dit_model_->load_model(std::move(loader));
-  if (lora_config.enable_lora) {
-    if (!dit_model_->load_lora_model(lora_config, adapters)) {
-      LOG(ERROR) << "Failed to load DiT LoRA adapters for " << model_type;
-      return false;
+  const bool use_python = ModelConfig::is_python_model_impl(
+      ModelConfig::get_instance().model_impl());
+  if (use_python) {
+    CHECK(!lora_config.enable_lora) << "Python Joyo V2 does not support LoRA";
+    auto executor = std::make_unique<PyDiTExecutor>(dit_context_);
+    executor->load_model(std::move(loader));
+    dit_model_executor_ = std::move(executor);
+  } else {
+    dit_model_ = create_dit_model(dit_context_);
+    CHECK(dit_model_ != nullptr) << "Failed to create model.";
+    dit_model_->load_model(std::move(loader));
+    if (lora_config.enable_lora) {
+      if (!dit_model_->load_lora_model(lora_config, adapters)) {
+        LOG(ERROR) << "Failed to load DiT LoRA adapters for " << model_type;
+        return false;
+      }
+      CHECK_EQ(device_.synchronize_default_stream(), 0);
     }
-    CHECK_EQ(device_.synchronize_default_stream(), 0);
-  }
 
-  dit_model_executor_ =
-      std::make_unique<DiTExecutor>(dit_model_.get(), options_);
+    dit_model_executor_ =
+        std::make_unique<NativeDiTExecutor>(dit_model_.get(), options_);
+  }
 
   DiTCache::get_instance().init(cache_config, parallel_args_);
 

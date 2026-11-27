@@ -829,6 +829,40 @@ class Qwen3VLModel(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
         deepstack_input_embeds: tuple[torch.Tensor, ...] | None = None,
     ) -> torch.Tensor:
+        hidden, _ = self._forward_with_residual(
+            input_ids,
+            positions,
+            inputs_embeds=inputs_embeds,
+            deepstack_input_embeds=deepstack_input_embeds,
+            gather_residual=False,
+        )
+        return hidden
+
+    def forward_with_residual(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        *,
+        inputs_embeds: torch.Tensor | None = None,
+        deepstack_input_embeds: tuple[torch.Tensor, ...] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return self._forward_with_residual(
+            input_ids,
+            positions,
+            inputs_embeds=inputs_embeds,
+            deepstack_input_embeds=deepstack_input_embeds,
+            gather_residual=True,
+        )
+
+    def _forward_with_residual(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        *,
+        inputs_embeds: torch.Tensor | None,
+        deepstack_input_embeds: tuple[torch.Tensor, ...] | None,
+        gather_residual: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         hidden = inputs_embeds if inputs_embeds is not None else self.embed_tokens(input_ids)
 
         positions = positions.to(torch.int64).contiguous()
@@ -864,10 +898,12 @@ class Qwen3VLModel(nn.Module):
             if deepstack_input_embeds is not None and i < len(deepstack_input_embeds):
                 hidden = hidden + deepstack_input_embeds[i]
 
-        hidden, _ = self.norm(hidden, residual)
+        hidden, pre_norm_residual = self.norm(hidden, residual)
         if cp_context is not None:
             hidden = cp_merge_rows(hidden, cp_context)
-        return hidden
+            if gather_residual:
+                pre_norm_residual = cp_merge_rows(pre_norm_residual, cp_context)
+        return hidden, pre_norm_residual
 
 
 # ---------------------------------------------------------------------------

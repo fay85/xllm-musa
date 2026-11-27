@@ -55,6 +55,18 @@ DiTFolderLoader::DiTFolderLoader(const std::string& folder_path,
   }
 }
 
+const nlohmann::json& DiTFolderLoader::component_config() const {
+  for (const char* name : {"config.json", "scheduler_config.json"}) {
+    auto found = parsed_configs_.find(name);
+    if (found != parsed_configs_.end()) {
+      return found->second;
+    }
+  }
+  CHECK_EQ(parsed_configs_.size(), 1)
+      << "Expected one unambiguous component config in " << model_weights_path_;
+  return parsed_configs_.begin()->second;
+}
+
 std::unique_ptr<Tokenizer> DiTFolderLoader::tokenizer() const {
   // When vocab_file is already an absolute path (e.g. loaded from HF cache),
   // pass empty dir_path so the tokenizer uses it directly without prepending
@@ -131,6 +143,8 @@ bool DiTFolderLoader::load_model_args(const std::string& model_weights_path) {
       return false;
     }
 
+    parsed_configs_[json_filename] = reader.data();
+
     auto model_args_loader = ModelRegistry::get_model_args_loader(model_type_);
     if (model_args_loader != nullptr) {
       model_args_loader(reader, &args_);
@@ -146,13 +160,10 @@ bool DiTFolderLoader::load_model_args(const std::string& model_weights_path) {
       LOG(ERROR) << "Failed to load required config.json for safetensors model";
       return false;
     }
-    // Read text_encoder_model for tokenizer fallback resolution.
-    const std::string config_json_path = model_weights_path + "/config.json";
-    JsonReader cfg_reader;
-    if (cfg_reader.parse(config_json_path)) {
-      if (auto v = cfg_reader.value<std::string>("text_encoder_model")) {
-        text_encoder_model_ = v.value();
-      }
+    const auto& config = parsed_configs_.at("config.json");
+    auto encoder_model = config.find("text_encoder_model");
+    if (encoder_model != config.end() && encoder_model->is_string()) {
+      text_encoder_model_ = encoder_model->get<std::string>();
     }
     load_image_preprocessor_args(model_weights_path);
   } else {

@@ -15,36 +15,28 @@ limitations under the License.
 
 #pragma once
 
-#include <torch/torch.h>
-
-#include <cstdint>
-#include <memory>
-
-#include "common/macros.h"
-#include "core/framework/dit_model_loader.h"
-#include "forward_params.h"
-#include "framework/batch/dit_batch.h"
-#include "framework/model/dit_model.h"
-#include "framework/model/model_input_params.h"
-#include "framework/request/dit_request_state.h"
-#include "runtime/options.h"
+#include "core/framework/batch/dit_batch.h"
+#include "core/framework/model/dit_model.h"
+#include "core/runtime/dit_forward_params.h"
+#include "core/runtime/options.h"
 
 namespace xllm {
 
 class DiTExecutor {
  public:
-  DiTExecutor(DiTModel* model, const runtime::Options& options);
-
-  ~DiTExecutor() = default;
-
+  virtual ~DiTExecutor() = default;
   DiTForwardInput prepare_inputs(DiTBatch& batch);
+  virtual DiTForwardOutput forward(const DiTForwardInput& input) = 0;
+};
 
-  DiTForwardOutput forward(const DiTForwardInput& input);
+class NativeDiTExecutor final : public DiTExecutor {
+ public:
+  NativeDiTExecutor(DiTModel* model, const runtime::Options& options);
+  DiTForwardOutput forward(const DiTForwardInput& input) override;
 
  private:
-  // not own
+  // Non-owning: the worker retains the native model.
   DiTModel* model_;
-  runtime::Options options_;
 };
 
 }  // namespace xllm

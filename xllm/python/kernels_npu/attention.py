@@ -20,8 +20,6 @@ graph can replay them without re-planning.
 
 from __future__ import annotations
 
-from typing import List
-
 import torch
 
 # Full bidirectional window (INT32_MAX), matching C++ kSwaIntMax.
@@ -29,6 +27,7 @@ _FULL_ATTENTION_WINDOW = 2147483647
 
 reshape_paged_cache = torch.ops.xllm_ops.reshape_paged_cache
 update_decode_graph_metadata = torch.ops.xllm_ops.update_decode_graph_metadata
+
 
 
 def vision_fusion_attention(

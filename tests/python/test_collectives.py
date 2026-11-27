@@ -412,16 +412,31 @@ def _run_glm53_dp_cp_ep_collectives(global_rank: int, rendezvous_path: str) -> N
             dist.destroy_process_group()
 
 
-def test_parallel_groups_share_one_multitenant_tcp_store(monkeypatch):
+@pytest.mark.parametrize(
+    "api,timeout",
+    [("legacy", None), ("legacy", timedelta(minutes=30)), ("dit", timedelta(minutes=30))],
+)
+def test_parallel_groups_share_one_multitenant_tcp_store(
+    monkeypatch: pytest.MonkeyPatch, api: str, timeout: timedelta | None
+) -> None:
     base_store, tcp_store, init_world, new_group = _mock_process_groups(monkeypatch, global_rank=0)
 
-    collectives.init_process_group("tp", "127.0.0.1", 46001, 0, 2, "cuda:0", 0, 2, 0)
-    collectives.init_process_group("moe_tp", "127.0.0.1", 46001, 0, 2, "cuda:0", 0, 2, 0)
+    if api == "dit":
+        collectives.init_group("dit_sp", "127.0.0.1", 46001, [[0, 1]], 0, "cuda:0", 0, 2, timeout=timeout)
+        collectives.init_group("dit_vae", "127.0.0.1", 46001, [[0, 1]], 0, "cuda:0", 0, 2, timeout=timeout)
+    else:
+        options = {} if timeout is None else {"timeout": timeout}
+        collectives.init_process_group("tp", "127.0.0.1", 46001, 0, 2, "cuda:0", 0, 2, 0, **options)
+        collectives.init_process_group("moe_tp", "127.0.0.1", 46001, 0, 2, "cuda:0", 0, 2, 0, **options)
 
     tcp_store.assert_called_once()
     assert tcp_store.call_args.args[:4] == ("127.0.0.1", 46001, 2, True)
     assert tcp_store.call_args.kwargs["wait_for_workers"] is False
     assert tcp_store.call_args.kwargs["multi_tenant"] is True
+    expected_timeout = timedelta(minutes=5) if timeout is None else timeout
+    assert tcp_store.call_args.args[4] == expected_timeout
+    assert init_world.call_args.kwargs["timeout"] == expected_timeout
+    assert all(call.kwargs["timeout"] == expected_timeout for call in new_group.call_args_list)
 
     # Every parallel group is a subgroup of one world, so the world rendezvous
     # happens once no matter how many groups the caller asks for.
@@ -1323,3 +1338,56 @@ def test_reduce_scatter_one_rank_does_not_alias_input() -> None:
     actual = collectives.reduce_scatter(value, 1)
     torch.testing.assert_close(actual, value)
     assert actual.data_ptr() != value.data_ptr()
+
+
+def test_nested_component_tp_scope_routes_and_restores(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    value = torch.ones(2)
+    monkeypatch.setattr(collectives, "_native_runtime_op", lambda _: lambda *_: calls.append("native"))
+    monkeypatch.setattr(collectives, "all_reduce_", lambda tensor, group: calls.append(group))
+    monkeypatch.setattr(collectives, "all_gather", lambda tensor, dim, size, group: (calls.append(group), tensor)[1])
+    with collectives.tp_group_scope("dit_text_encoder_tp"):
+        collectives.tp_all_reduce(value)
+        with collectives.tp_group_scope("nested"):
+            assert collectives.tp_all_gather(value, -1, 1) is value
+        collectives.tp_all_reduce(value)
+    assert calls == ["dit_text_encoder_tp", "nested", "dit_text_encoder_tp"]
+    calls.clear()
+    with pytest.raises(ValueError), collectives.tp_group_scope("dit_text_encoder_tp"):
+        raise ValueError("encoder failed")
+    collectives.tp_all_reduce(value)
+    assert calls == ["native", "tp"]
+
+
+def test_init_group_cache_rejects_changed_global_members(monkeypatch: pytest.MonkeyPatch) -> None:
+    key = ("dit_sp", "cpu")
+    group = _FakeGroup(0, 2)
+    monkeypatch.setitem(collectives._groups, key, group)
+    monkeypatch.setitem(collectives._group_members, key, [0, 1])
+    options = ("dit_sp", "127.0.0.1", 46001)
+    assert collectives.init_group(*options, [[0, 1]], 0, "cpu", 0, 4) is group
+    with pytest.raises(RuntimeError, match="different members"):
+        collectives.init_group(*options, [[0, 2]], 0, "cpu", 0, 4)
+    with pytest.raises(RuntimeError, match="exactly once"):
+        collectives.init_group(*options, [[1, 2]], 0, "cpu", 0, 4)
+
+
+def test_recv_fake_preserves_new_buffer_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    from torch._subclasses.fake_tensor import FakeTensorMode
+
+    key = ("dit_vae", "cpu")
+    monkeypatch.setitem(collectives._groups, key, _FakeGroup(0, 2))
+    monkeypatch.setitem(collectives._group_members, key, [0, 1])
+    monkeypatch.setattr(dist, "recv", lambda buffer, src, group: buffer.fill_(7))
+    value = torch.arange(12.0).reshape(3, 4).t()
+    original = value.clone()
+    actual = collectives.recv(value, 1, "dit_vae")
+    with FakeTensorMode() as mode:
+        fake_input = mode.from_tensor(value)
+        fake = collectives.recv(fake_input, 1, "dit_vae")
+        assert not torch._C._is_alias_of(fake, fake_input)
+    assert actual.data_ptr() != value.data_ptr()
+    assert fake.shape == actual.shape and fake.stride() == actual.stride()
+    assert fake.dtype == actual.dtype and fake.device == actual.device
+    torch.testing.assert_close(value, original)
+    torch.testing.assert_close(actual, torch.full_like(value, 7))

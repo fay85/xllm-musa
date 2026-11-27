@@ -39,6 +39,7 @@ cc_library(
     util
     $<$<BOOL:${USE_NPU}>:npu_layers>
     $<$<BOOL:${USE_CUDA}>:cuda_kernels>
+    nlohmann_json::nlohmann_json
     torch_python
     Python::Python
 )

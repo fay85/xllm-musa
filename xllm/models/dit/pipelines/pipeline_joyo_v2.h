@@ -63,6 +63,7 @@ limitations under the License.
 #include "core/framework/request/dit_request_state.h"
 #include "core/framework/tokenizer/tokenizer.h"
 #include "core/runtime/dit_forward_params.h"
+#include "core/util/module_utils.h"
 #include "models/dit/autoencoders/autoencoder_kl_xdac.h"
 #include "models/dit/autoencoders/autoencoder_kl_xvae.h"
 #include "models/dit/transformers/transformer_joyo_v2.h"
@@ -98,26 +99,6 @@ inline int64_t module_npu_tensor_count(torch::nn::Module& module) {
     count_one(kv.value());
   }
   return count;
-}
-
-// nn::Module::to(cpu) often leaves NPU CachingAllocator blocks alive because
-// Parameter still holds the old Device storage. Copy to host then set_data so
-// the NPU TensorImpl is dropped, then empty_cache.
-inline void force_module_storage_to_cpu(torch::nn::Module& module) {
-  torch::NoGradGuard no_grad;
-  auto move_one = [](torch::Tensor& tensor) {
-    if (!tensor.defined() || tensor.device().is_cpu()) {
-      return;
-    }
-    torch::Tensor host = tensor.to(torch::kCPU).contiguous();
-    tensor.set_data(host);
-  };
-  for (auto& kv : module.named_parameters(/*recurse=*/true)) {
-    move_one(kv.value());
-  }
-  for (auto& kv : module.named_buffers(/*recurse=*/true)) {
-    move_one(kv.value());
-  }
 }
 
 template <typename ModuleHolder>
