@@ -1057,7 +1057,8 @@ Glm5NextMLAAttentionImpl::forward(
     const torch::Tensor& hidden_states,
     const AttentionMetadata& metadata,
     KVCache& cache,
-    const kernel::musa::Glm5NextIndexerSelection* shared_selection) {
+    const kernel::musa::Glm5NextIndexerSelection* shared_selection,
+    kernel::musa::SparseMlaDecodePlan* verify_plan) {
   CHECK(loaded_)
       << "Load and verify the complete GLM attention state before forward";
   CHECK_EQ(hidden_states.dim(), 2);
@@ -1075,6 +1076,22 @@ Glm5NextMLAAttentionImpl::forward(
   CHECK_EQ(metadata.glm5_prefill_cp_enabled, use_prefill_cp);
   if (use_prefill_cp) {
     return forward_cp(hidden_states, metadata, cache, shared_selection);
+  }
+  // The row mask is determined by positions, request slots and the tail
+  // capacity. The selected pool IDs vary by layer but their count does not.
+  if (verify_plan && enable_indexer_ && metadata.is_spec_verify) {
+    const int64_t state_slots = cache.get_kpool_tail().size(0);
+    const int64_t local_heads = w_k_.size(0);
+    if (verify_plan->state_slots != state_slots ||
+        verify_plan->token_topk != token_topk_ ||
+        verify_plan->heads != local_heads) {
+      *verify_plan = {};
+      verify_plan->state_slots = state_slots;
+      verify_plan->token_topk = token_topk_;
+      verify_plan->heads = local_heads;
+    }
+  } else {
+    verify_plan = nullptr;
   }
   auto main_cache = cache.get_k_cache();
   CHECK_EQ(main_cache.dim(), 4);
@@ -1139,8 +1156,10 @@ Glm5NextMLAAttentionImpl::forward(
   }
   auto slots = metadata.slot_mapping.to(torch::kInt64).contiguous();
   CHECK_EQ(slots.sizes(), pos.sizes());
-  slots =
-      torch::where(selection.rows.ge(0), slots, torch::full_like(slots, -1));
+  if (main_cache.scalar_type() != torch::kUInt8) {
+    slots =
+        torch::where(selection.rows.ge(0), slots, torch::full_like(slots, -1));
+  }
   torch::Tensor attention;
   {
     RECORD_USER_SCOPE("nn.Module: DeepseekV2AttentionMLA.SparseAttention");
@@ -1154,7 +1173,9 @@ Glm5NextMLAAttentionImpl::forward(
                                         pos,
                                         table,
                                         slots,
-                                        main_cache);
+                                        main_cache,
+                                        /*write_cache=*/true,
+                                        verify_plan);
   }
   // MUSA Linear may reuse its matmul scratch on the next invocation. The
   // attention layer returns owned activations so callers can retain a prefill

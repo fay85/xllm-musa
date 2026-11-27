@@ -75,7 +75,8 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
       const ModelInputParams& input_params,
       std::optional<PendingMHC>* pending_mhc = nullptr,
       bool is_last_layer = true,
-      kernel::musa::Glm5NextIndexerSelection* shared_selection = nullptr);
+      kernel::musa::Glm5NextIndexerSelection* shared_selection = nullptr,
+      kernel::musa::SparseMlaDecodePlan* verify_plan = nullptr);
 
  private:
   int32_t layer_id_ = 0;

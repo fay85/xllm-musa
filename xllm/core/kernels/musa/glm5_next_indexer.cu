@@ -62,14 +62,17 @@ __global__ void fill_pool_byte_indices(const int64_t* slots,
 // before any lane overwrites shared memory.
 __device__ float hadamard(float value, float* shared) {
   const int32_t lane = threadIdx.x;
-  shared[lane] = value;
-  __syncthreads();
-  for (int32_t stride = 1; stride < 128; stride *= 2) {
-    const float other = shared[lane ^ stride];
-    const float next = (lane & stride) ? other - value : value + other;
+#pragma unroll
+  for (int32_t stride = 1; stride < 32; stride <<= 1) {
+    const float other = __shfl_xor_sync(0xffffffffu, value, stride, 32);
+    value = (lane & stride) ? other - value : value + other;
+  }
+#pragma unroll
+  for (int32_t stride = 32; stride < 128; stride <<= 1) {
+    shared[lane] = value;
     __syncthreads();
-    shared[lane] = next;
-    value = next;
+    const float other = shared[lane ^ stride];
+    value = (lane & stride) ? other - value : value + other;
     __syncthreads();
   }
   return static_cast<float>(c10::BFloat16(value * 0.08838834764831845f));
@@ -77,15 +80,17 @@ __device__ float hadamard(float value, float* shared) {
 
 __device__ float quant_scale(float value, float* shared) {
   const int32_t lane = threadIdx.x;
-  shared[lane] = fabsf(value);
-  __syncthreads();
-  for (int32_t offset = 64; offset > 0; offset /= 2) {
-    if (lane < offset) {
-      shared[lane] = fmaxf(shared[lane], shared[lane + offset]);
-    }
-    __syncthreads();
+  float maximum = fabsf(value);
+#pragma unroll
+  for (int32_t delta = 16; delta > 0; delta >>= 1) {
+    maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffffu, maximum, delta, 32));
   }
-  return exp2f(ceilf(log2f(fmaxf(shared[0], 1.0e-4f) / 448.0f)));
+  if (lane % 32 == 0) {
+    shared[lane / 32] = maximum;
+  }
+  __syncthreads();
+  maximum = fmaxf(fmaxf(shared[0], shared[1]), fmaxf(shared[2], shared[3]));
+  return exp2f(ceilf(log2f(fmaxf(maximum, 1.0e-4f) / 448.0f)));
 }
 
 __global__ void update_pools(const c10::BFloat16* keys,
@@ -1037,8 +1042,18 @@ __global__ void gather_pool_prefix(const uint8_t* cache,
     return;
   }
   const uint8_t* source = cache + static_cast<int64_t>(physical) * 64 * 132;
-  for (int64_t i = threadIdx.x; i < count * 128; i += blockDim.x) {
-    keys[offset * 128 + i] = source[i];
+  uint8_t* destination = keys + offset * 128;
+  if (reinterpret_cast<uintptr_t>(source) % alignof(uint4) == 0 &&
+      reinterpret_cast<uintptr_t>(destination) % alignof(uint4) == 0) {
+    for (int64_t i = threadIdx.x; i < count * 128 / sizeof(uint4);
+         i += blockDim.x) {
+      reinterpret_cast<uint4*>(destination)[i] =
+          reinterpret_cast<const uint4*>(source)[i];
+    }
+  } else {
+    for (int64_t i = threadIdx.x; i < count * 128; i += blockDim.x) {
+      destination[i] = source[i];
+    }
   }
   if (threadIdx.x < count) {
     scales[offset + threadIdx.x] =
@@ -1200,14 +1215,18 @@ Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
                                             block_table.size(1));
   }
   check_musa_kernel_launch("GLM IndexPool update");
-  return glm5_next_indexer_select(query,
-                                  weights,
+  Glm5NextIndexerQuery prepared;
+  if (max_context > token_topk) {
+    prepared = glm5_next_indexer_prepare_query(query, weights);
+  }
+  return glm5_next_indexer_select(prepared,
                                   positions,
                                   query_rows,
                                   block_table,
                                   cache,
                                   max_context,
-                                  token_topk);
+                                  token_topk,
+                                  pool_lengths);
 }
 
 Glm5NextIndexerQuery glm5_next_indexer_prepare_query(
@@ -1266,7 +1285,8 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     const torch::Tensor& block_table,
     const torch::Tensor& cache,
     int64_t max_context,
-    int64_t token_topk) {
+    int64_t token_topk,
+    const torch::Tensor& updated_pool_lengths) {
   RECORD_USER_SCOPE("kernel: glm5_next_indexer_select");
   XLLMDeviceGuard device_guard(positions.device());
   check_tensor(positions, positions, torch::kInt64);
@@ -1292,9 +1312,15 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
   if (tokens == 0) {
     return result;
   }
+  if (updated_pool_lengths.defined()) {
+    check_tensor(updated_pool_lengths, positions, torch::kInt32);
+    CHECK_EQ(updated_pool_lengths.sizes(), positions.sizes());
+  }
   const torch::Tensor pool_lengths =
-      torch::where(rows.ge(0), (positions + 1).div(4, "floor"), 0)
-          .to(torch::kInt32);
+      updated_pool_lengths.defined()
+          ? updated_pool_lengths
+          : torch::where(rows.ge(0), (positions + 1).div(4, "floor"), 0)
+                .to(torch::kInt32);
   musaDeviceProp properties{};
   CHECK_EQ(musaGetDeviceProperties(&properties, positions.device().index()),
            musaSuccess);

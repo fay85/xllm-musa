@@ -199,7 +199,8 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     const ModelInputParams& input_params,
     std::optional<PendingMHC>* pending_mhc,
     bool is_last_layer,
-    kernel::musa::Glm5NextIndexerSelection* shared_selection) {
+    kernel::musa::Glm5NextIndexerSelection* shared_selection,
+    kernel::musa::SparseMlaDecodePlan* verify_plan) {
   // Keep Torch and TVM-FFI work on one concrete compute stream for the whole
   // layer.  The KDA path contains collectives on the MCCL stream; its
   // ProcessGroup wait joins those collectives back to this current stream.
@@ -274,7 +275,8 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
                                 attention_input,
                                 attn_metadata,
                                 kv_cache,
-                                enable_indexer_ ? nullptr : shared_selection);
+                                enable_indexer_ ? nullptr : shared_selection,
+                                verify_plan);
     if (enable_indexer_ && shared_selection != nullptr) {
       *shared_selection = std::move(selection);
     }

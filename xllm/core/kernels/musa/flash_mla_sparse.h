@@ -36,11 +36,22 @@ torch::Tensor sparse_mla_bf16(const torch::Tensor& query,
 // values and four FP32 group-128 scales. Q [B,1,H,512] BF16, indices
 // [B,1,1,K] int32, lengths [B] int32. MP31 single-query decode, including graph
 // replay.
+// Within one forward, layers with identical per-row candidate lengths can
+// share the MATE scheduling tensors. Never retain this across requests.
+struct SparseMlaDecodePlan {
+  torch::Tensor metadata;
+  torch::Tensor splits;
+  int64_t heads = 0;
+  int64_t token_topk = 0;
+  int64_t state_slots = 0;
+};
+
 torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
                                   const torch::Tensor& cache,
                                   const torch::Tensor& indices,
                                   const torch::Tensor& lengths,
-                                  double scale);
+                                  double scale,
+                                  SparseMlaDecodePlan* plan = nullptr);
 
 // Update token-major BF16 latent cache [pages,page_size,1,512]. Negative slots
 // are padding and do not mutate cache. Valid destination slots must be unique.
@@ -50,7 +61,8 @@ void sparse_mla_cache_write(const torch::Tensor& latent,
 
 void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
                                 const torch::Tensor& slots,
-                                torch::Tensor& cache);
+                                torch::Tensor& cache,
+                                const torch::Tensor& rows = {});
 
 // Pack BF16 latent rows into the inline FP8 cache format before a CP
 // collective. Each row contains 512 E4M3 values followed by four FP32 scales.
@@ -80,12 +92,14 @@ inline torch::Tensor flash_mla_sparse_bf16(const torch::Tensor& query,
   return sparse_mla_bf16(query, cache, indices, lengths, scale);
 }
 
-inline torch::Tensor flash_mla_sparse_nope_fp8(const torch::Tensor& query,
-                                               const torch::Tensor& cache,
-                                               const torch::Tensor& indices,
-                                               const torch::Tensor& lengths,
-                                               double scale) {
-  return sparse_mla_nope_fp8(query, cache, indices, lengths, scale);
+inline torch::Tensor flash_mla_sparse_nope_fp8(
+    const torch::Tensor& query,
+    const torch::Tensor& cache,
+    const torch::Tensor& indices,
+    const torch::Tensor& lengths,
+    double scale,
+    SparseMlaDecodePlan* plan = nullptr) {
+  return sparse_mla_nope_fp8(query, cache, indices, lengths, scale, plan);
 }
 
 inline void flash_mla_sparse_cache_write(const torch::Tensor& latent,
@@ -96,8 +110,9 @@ inline void flash_mla_sparse_cache_write(const torch::Tensor& latent,
 
 inline void flash_mla_sparse_fp8_cache_write(const torch::Tensor& latent,
                                              const torch::Tensor& slots,
-                                             torch::Tensor& cache) {
-  sparse_mla_fp8_cache_write(latent, slots, cache);
+                                             torch::Tensor& cache,
+                                             const torch::Tensor& rows = {}) {
+  sparse_mla_fp8_cache_write(latent, slots, cache, rows);
 }
 
 inline torch::Tensor flash_mla_sparse_fp8_cache_pack(

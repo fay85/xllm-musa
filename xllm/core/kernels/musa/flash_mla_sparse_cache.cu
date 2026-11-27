@@ -25,40 +25,18 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 namespace {
-__global__ void write_fp8_cache(const c10::BFloat16* latent,
-                                const int64_t* slots,
-                                uint8_t* cache,
-                                int64_t capacity) {
-  const int64_t slot = slots[blockIdx.x];
-  if (slot < 0 || slot >= capacity) {
+// Each warp packs one 128-value scale group. The CP packer and direct
+// paged-cache writer share the quantization and the byte layout.
+__global__ void pack_fp8_cache(const c10::BFloat16* latent,
+                               uint8_t* packed,
+                               const int64_t* slots,
+                               int64_t capacity,
+                               const int32_t* rows) {
+  const int64_t row = blockIdx.x;
+  const int64_t slot = slots ? slots[row] : row;
+  if (slot < 0 || slot >= capacity || (rows && rows[row] < 0)) {
     return;
   }
-  __shared__ float values[128];
-  const int32_t lane = threadIdx.x;
-  for (int32_t group = 0; group < 4; ++group) {
-    const float value =
-        static_cast<float>(latent[blockIdx.x * 512 + group * 128 + lane]);
-    values[lane] = fabsf(value);
-    __syncthreads();
-    for (int32_t offset = 64; offset > 0; offset /= 2) {
-      if (lane < offset) {
-        values[lane] = fmaxf(values[lane], values[lane + offset]);
-      }
-      __syncthreads();
-    }
-    const float scale = fmaxf(__fdiv_rn(values[0], 448.0f), 1.0e-4f);
-    if (lane == 0) {
-      reinterpret_cast<float*>(cache + slot * 528 + 512)[group] = scale;
-    }
-    reinterpret_cast<c10::Float8_e4m3fn*>(cache +
-                                          slot * 528)[group * 128 + lane] =
-        QuantConverter<c10::Float8_e4m3fn>::convert(__fdiv_rn(value, scale));
-    __syncthreads();
-  }
-}
-
-__global__ void pack_fp8_cache(const c10::BFloat16* latent, uint8_t* packed) {
-  const int64_t row = blockIdx.x;
   const int32_t group = threadIdx.x / 32;
   const int32_t lane = threadIdx.x % 32;
   const int32_t first = group * 128 + lane * 4;
@@ -74,7 +52,7 @@ __global__ void pack_fp8_cache(const c10::BFloat16* latent, uint8_t* packed) {
     maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffffu, maximum, offset, 32));
   }
   const float scale = fmaxf(__fdiv_rn(maximum, 448.0f), 1.0e-4f);
-  uint8_t* dest = packed + row * 528;
+  uint8_t* dest = packed + slot * 528;
   if (lane == 0) {
     reinterpret_cast<float*>(dest + 512)[group] = scale;
   }
@@ -187,7 +165,8 @@ void sparse_mla_cache_write(const torch::Tensor& latent,
 
 void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
                                 const torch::Tensor& slots,
-                                torch::Tensor& cache) {
+                                torch::Tensor& cache,
+                                const torch::Tensor& rows) {
   RECORD_USER_SCOPE("kernel: sparse_mla_fp8_cache_write");
   CHECK(latent.device().is_privateuseone());
   check_tensor(latent, latent, torch::kBFloat16);
@@ -201,18 +180,23 @@ void sparse_mla_fp8_cache_write(const torch::Tensor& latent,
   CHECK_EQ(cache.size(2), 1);
   CHECK_EQ(cache.size(3), 528);
   CHECK_GT(cache.size(1), 0);
+  if (rows.defined()) {
+    check_tensor(rows, latent, torch::kInt32);
+    CHECK_EQ(rows.sizes(), slots.sizes());
+  }
   if (latent.size(0) == 0) {
     return;
   }
   XLLMDeviceGuard device_guard(latent.device());
-  write_fp8_cache<<<latent.size(0),
-                    128,
-                    0,
-                    current_musa_stream(latent.device())>>>(
+  pack_fp8_cache<<<latent.size(0),
+                   128,
+                   0,
+                   current_musa_stream(latent.device())>>>(
       latent.data_ptr<c10::BFloat16>(),
-      slots.data_ptr<int64_t>(),
       cache.data_ptr<uint8_t>(),
-      cache.size(0) * cache.size(1));
+      slots.data_ptr<int64_t>(),
+      cache.size(0) * cache.size(1),
+      rows.defined() ? rows.data_ptr<int32_t>() : nullptr);
   check_musa_kernel_launch("sparse MLA FP8 cache write");
 }
 
@@ -232,7 +216,11 @@ torch::Tensor sparse_mla_fp8_cache_pack(const torch::Tensor& latent) {
                    128,
                    0,
                    current_musa_stream(latent.device())>>>(
-      latent.data_ptr<c10::BFloat16>(), packed.data_ptr<uint8_t>());
+      latent.data_ptr<c10::BFloat16>(),
+      packed.data_ptr<uint8_t>(),
+      nullptr,
+      latent.size(0),
+      nullptr);
   check_musa_kernel_launch("sparse MLA FP8 cache pack");
   return packed;
 }

@@ -92,7 +92,8 @@ class Glm5NextMLAAttentionImpl final : public torch::nn::Module {
       const torch::Tensor& hidden_states,
       const AttentionMetadata& metadata,
       KVCache& cache,
-      const kernel::musa::Glm5NextIndexerSelection* shared_selection = nullptr);
+      const kernel::musa::Glm5NextIndexerSelection* shared_selection = nullptr,
+      kernel::musa::SparseMlaDecodePlan* verify_plan = nullptr);
 
   // Exact layer cache layout, using the existing IndexedKVCache ownership and
   // transfer interface. Slot zero of the tail pool is reserved for padding.
@@ -152,18 +153,20 @@ using Glm5NextSparseAttention = Glm5NextMLAAttention;
 // All inputs are device tensors. Supports eager and graph execution on MP31.
 // write_cache=false requires the caller to have populated the complete current
 // batch's latent cache already (the Hybrid CP AllGather path).
-inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
-                                             const torch::Tensor& latent,
-                                             const torch::Tensor& w_k,
-                                             const torch::Tensor& w_v,
-                                             const torch::Tensor& candidates,
-                                             const torch::Tensor& lengths,
-                                             const torch::Tensor& rows,
-                                             const torch::Tensor& positions,
-                                             const torch::Tensor& block_table,
-                                             const torch::Tensor& slots,
-                                             torch::Tensor& cache,
-                                             bool write_cache = true) {
+inline torch::Tensor glm5_next_mla_attention(
+    const torch::Tensor& q,
+    const torch::Tensor& latent,
+    const torch::Tensor& w_k,
+    const torch::Tensor& w_v,
+    const torch::Tensor& candidates,
+    const torch::Tensor& lengths,
+    const torch::Tensor& rows,
+    const torch::Tensor& positions,
+    const torch::Tensor& block_table,
+    const torch::Tensor& slots,
+    torch::Tensor& cache,
+    bool write_cache = true,
+    kernel::musa::SparseMlaDecodePlan* verify_plan = nullptr) {
   CHECK_EQ(q.dim(), 3);
   CHECK_EQ(q.size(2), 256);
   CHECK_EQ(q.scalar_type(), torch::kBFloat16);
@@ -207,14 +210,15 @@ inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
   if (fp8) {
     if (write_cache) {
       kernel::musa::flash_mla_sparse_fp8_cache_write(
-          latent.contiguous(), slots, cache);
+          latent.contiguous(), slots, cache, rows);
     }
     z = kernel::musa::flash_mla_sparse_nope_fp8(
             q_latent.unsqueeze(1),
             cache,
             indices.unsqueeze(1).unsqueeze(1),
             lengths,
-            0.0625)
+            0.0625,
+            verify_plan)
             .squeeze(1);
   } else {
     if (write_cache) {

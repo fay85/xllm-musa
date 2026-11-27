@@ -114,7 +114,8 @@ torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
                                   const torch::Tensor& cache,
                                   const torch::Tensor& indices,
                                   const torch::Tensor& lengths,
-                                  double scale) {
+                                  double scale,
+                                  SparseMlaDecodePlan* plan) {
   RECORD_USER_SCOPE("kernel: sparse_mla_nope_fp8");
   CHECK(query.device().is_privateuseone());
   check_tensor(query, query.device(), torch::kBFloat16);
@@ -153,7 +154,7 @@ torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
     return output;
   }
   CHECK(ensure_tilelang_loader());
-  auto metadata_function = get_function("mla_ops", "get_mla_decoding_metadata");
+
   const int64_t parts = std::max<int64_t>(properties.multiProcessorCount, 1);
   CHECK_GT(parts, 1);
   CHECK_LE(parts, 64)
@@ -165,8 +166,8 @@ torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
                    "main");
   auto ints = query.options().dtype(torch::kInt32);
   auto floats = query.options().dtype(torch::kFloat32);
-  auto metadata = torch::empty({parts, 8}, ints);
-  auto splits = torch::empty({batch + 1}, ints);
+  SparseMlaDecodePlan local;
+  auto& schedule = plan ? *plan : local;
   auto lse = torch::empty({batch, heads, 1}, floats);
   auto glse = torch::empty({batch + parts, 1, heads}, floats);
   auto partial = torch::empty({batch + parts, 1, heads, 512}, floats);
@@ -177,28 +178,34 @@ torch::Tensor sparse_mla_nope_fp8(const torch::Tensor& query,
   auto ffi_query = to_ffi_tensor(query);
   auto ffi_lengths = to_ffi_tensor(lengths);
   TvmffiStreamGuard stream_guard(query.device());
-  metadata_function(
-      ffi::Optional<ffi::Tensor>(),
-      heads,
-      int64_t{1},
-      ffi::Optional<int64_t>(heads),
-      true,
-      ffi::Optional<int64_t>(indices.size(3)),
-      ffi::Optional<ffi::Tensor>(to_ffi_tensor(metadata)),
-      ffi::Optional<ffi::Tensor>(to_ffi_tensor(splits)),
-      ffi::Optional<ffi::TensorView>(ffi::TensorView(ffi_query)),
-      ffi::Optional<int64_t>(batch),
-      ffi::Optional<ffi::TensorView>(ffi::TensorView(ffi_lengths)),
-      ffi::Optional<ffi::TensorView>(),
-      ffi::Optional<int64_t>());
+  if (!schedule.metadata.defined()) {
+    schedule.metadata = torch::empty({parts, 8}, ints);
+    schedule.splits = torch::empty({batch + 1}, ints);
+    auto metadata_function =
+        get_function("mla_ops", "get_mla_decoding_metadata");
+    metadata_function(
+        ffi::Optional<ffi::Tensor>(),
+        heads,
+        int64_t{1},
+        ffi::Optional<int64_t>(heads),
+        true,
+        ffi::Optional<int64_t>(indices.size(3)),
+        ffi::Optional<ffi::Tensor>(to_ffi_tensor(schedule.metadata)),
+        ffi::Optional<ffi::Tensor>(to_ffi_tensor(schedule.splits)),
+        ffi::Optional<ffi::TensorView>(ffi::TensorView(ffi_query)),
+        ffi::Optional<int64_t>(batch),
+        ffi::Optional<ffi::TensorView>(ffi::TensorView(ffi_lengths)),
+        ffi::Optional<ffi::TensorView>(),
+        ffi::Optional<int64_t>());
+  }
   function(ffi_query,
            to_ffi_tensor(fp8_cache),
            to_ffi_tensor(bf16_cache),
            to_ffi_tensor(scales),
            to_ffi_tensor(indices),
            ffi_lengths,
-           to_ffi_tensor(metadata),
-           to_ffi_tensor(splits),
+           to_ffi_tensor(schedule.metadata),
+           to_ffi_tensor(schedule.splits),
            to_ffi_tensor(glse),
            to_ffi_tensor(partial),
            to_ffi_tensor(output),

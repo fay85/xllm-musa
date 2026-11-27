@@ -83,7 +83,8 @@ Glm5NextIndexerSelection glm5_next_indexer_select(
     const torch::Tensor& block_table,
     const torch::Tensor& cache,
     int64_t max_context,
-    int64_t token_topk);
+    int64_t token_topk,
+    const torch::Tensor& updated_pool_lengths = {});
 
 // CP cache update uses natural-order projected key/gate rows [key_begin,
 // first_row+count), including up to three predecessor rows. It writes only

@@ -298,6 +298,7 @@ class Glm5NextModelImpl final
     std::optional<torch::Tensor> residual;
     std::optional<layer::PendingMHC> pending_mhc;
     std::optional<kernel::musa::Glm5NextIndexerSelection> shared_selection;
+    kernel::musa::SparseMlaDecodePlan verify_plan;
     for (size_t layer_id = 0; layer_id < layers_.size(); ++layer_id) {
       if (!modified_input_params.synchronize_layer(
               static_cast<uint32_t>(layer_id))) {
@@ -316,7 +317,8 @@ class Glm5NextModelImpl final
           &pending_mhc,
           /*is_last_layer=*/layer_id + 1 == layers_.size(),
           shared_selection.has_value() ? &shared_selection.value()
-                                       : &shared_selection.emplace());
+                                       : &shared_selection.emplace(),
+          modified_input_params.is_spec_verify ? &verify_plan : nullptr);
       if (!modified_input_params.record_layer(static_cast<uint32_t>(layer_id),
                                               hidden_states.device())) {
         return ModelOutput();
