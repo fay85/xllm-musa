@@ -425,7 +425,7 @@ __global__ void quantize_single_layer_ssm_to_int8_kernel(
 // Specialization for the 128 x 128 SSM state. The caller dispatches all other
 // shapes to quantize_single_layer_ssm_to_int8_kernel.
 template <typename SsmT>
-__global__ void quantize_single_layer_ssm_to_int8_tiled_kernel(
+__device__ __forceinline__ void quantize_ssm_tile(
     const SsmT* __restrict__ src_layer_ssm,
     int8_t* __restrict__ qdata,
     __mt_bfloat16* __restrict__ scales,
@@ -472,6 +472,79 @@ __global__ void quantize_single_layer_ssm_to_int8_tiled_kernel(
     const float q = nearbyintf(values[i] * inv_scale);
     dst[(i * kParts + part) * kTiledStateDim] =
         static_cast<int8_t>(fminf(fmaxf(q, -127.0f), 127.0f));
+  }
+}
+
+template <typename SsmT>
+__global__ void quantize_single_layer_ssm_to_int8_tiled_kernel(
+    const SsmT* __restrict__ src_layer_ssm,
+    int8_t* __restrict__ qdata,
+    __mt_bfloat16* __restrict__ scales,
+    int64_t layer,
+    int64_t num_ckpt_slots,
+    int64_t num_heads,
+    int64_t ckpt_slot) {
+  quantize_ssm_tile(src_layer_ssm,
+                    qdata,
+                    scales,
+                    layer,
+                    num_ckpt_slots,
+                    num_heads,
+                    ckpt_slot);
+}
+
+template <typename SsmT>
+__global__ void quantize_ssm_tile_and_store_conv_kernel(
+    const SsmT* __restrict__ src_layer_ssm,
+    int8_t* __restrict__ qdata,
+    __mt_bfloat16* __restrict__ scales,
+    int64_t layer,
+    int64_t num_ckpt_slots,
+    int64_t num_heads,
+    int64_t ckpt_slot,
+    const uint32_t* __restrict__ history,
+    uint32_t* __restrict__ checkpoint,
+    int64_t history_row_pairs,
+    int64_t channel_pairs,
+    int64_t dst_cols) {
+  const int64_t quant_blocks = num_heads * (kTiledStateDim / kTiledColumns);
+  if (blockIdx.x < quant_blocks) {
+    quantize_ssm_tile(src_layer_ssm,
+                      qdata,
+                      scales,
+                      layer,
+                      num_ckpt_slots,
+                      num_heads,
+                      ckpt_slot);
+    return;
+  }
+
+  const int64_t pair =
+      (static_cast<int64_t>(blockIdx.x) - quant_blocks) * blockDim.x +
+      threadIdx.x;
+  if (pair >= channel_pairs) {
+    return;
+  }
+  // Each word holds neighboring channels at one timestep. Interleave their
+  // three history values directly into the channel-major checkpoint slot.
+  const uint32_t first = history[pair];
+  const uint32_t second = history[history_row_pairs + pair];
+  const uint32_t third = history[2 * history_row_pairs + pair];
+  constexpr uint32_t kLow = 0xffffu;
+  constexpr uint32_t kHigh = 0xffff0000u;
+  if (dst_cols == 3) {
+    uint32_t* out = checkpoint + 3 * pair;
+    out[0] = (first & kLow) | (second << 16);
+    out[1] = (third & kLow) | (first & kHigh);
+    out[2] = (second >> 16) | (third & kHigh);
+  } else {
+    uint32_t* out = checkpoint + 6 * pair;
+    out[0] = (first & kLow) | (second << 16);
+    out[1] = third & kLow;
+    out[2] = 0;
+    out[3] = (first >> 16) | (second & kHigh);
+    out[4] = third >> 16;
+    out[5] = 0;
   }
 }
 
@@ -862,18 +935,15 @@ void store_gdn_int8_checkpoint_from_tensors(
   CHECK_EQ(ssm_contig.size(1), pool->head_v_dim);
   CHECK_EQ(ssm_contig.size(2), pool->head_k_dim);
 
-  torch::Tensor conv_contig = layer_conv_state;
-  if (conv_contig.scalar_type() != pool->conv_dtype) {
-    conv_contig = conv_contig.to(pool->conv_dtype);
+  torch::Tensor conv = layer_conv_state;
+  if (conv.scalar_type() != pool->conv_dtype) {
+    conv = conv.to(pool->conv_dtype);
   }
-  if (!conv_contig.is_contiguous()) {
-    conv_contig = conv_contig.contiguous();
-  }
-  CHECK_EQ(conv_contig.dim(), 2);
-  CHECK_GT(conv_contig.size(0), 0);
-  CHECK_EQ(pool->conv_elems_per_slot % conv_contig.size(0), 0);
-  const int64_t src_conv_cols = conv_contig.size(1);
-  const int64_t dst_conv_cols = pool->conv_elems_per_slot / conv_contig.size(0);
+  CHECK_EQ(conv.dim(), 2);
+  CHECK_GT(conv.size(0), 0);
+  CHECK_EQ(pool->conv_elems_per_slot % conv.size(0), 0);
+  const int64_t src_conv_cols = conv.size(1);
+  const int64_t dst_conv_cols = pool->conv_elems_per_slot / conv.size(0);
   CHECK_GT(src_conv_cols, 0);
   CHECK_LE(src_conv_cols, dst_conv_cols);
 
@@ -884,8 +954,48 @@ void store_gdn_int8_checkpoint_from_tensors(
       c10::utils::check_env("XLLM_MUSA_GDN_TILED_CHECKPOINT").value_or(true);
   const bool use_tiled = tiled_enabled && pool->head_v_dim == kTiledStateDim &&
                          pool->head_k_dim == kTiledStateDim;
+
+  const int64_t channels = conv.size(0);
+  // Read adjacent 16-bit channels in pairs. An even channel count keeps
+  // every destination slot word-aligned, including three-column slots.
+  const bool combine =
+      use_tiled && src_conv_cols == 3 &&
+      (dst_conv_cols == 3 || dst_conv_cols == 6) && channels % 2 == 0 &&
+      conv.stride(0) == 1 && conv.stride(1) % 2 == 0 && !conv.is_neg() &&
+      !conv.is_conj() &&
+      reinterpret_cast<uintptr_t>(conv.data_ptr()) % alignof(uint32_t) == 0;
+  if (!combine && !conv.is_contiguous()) {
+    conv = conv.contiguous();
+  }
   const auto launch_quantize = [&](const auto* src) {
-    if (use_tiled) {
+    if (combine) {
+      const int64_t quant_blocks =
+          pool->num_heads * (kTiledStateDim / kTiledColumns);
+      const int64_t pairs = channels / 2;
+      const int64_t conv_blocks = (pairs + kQuantThreads - 1) / kQuantThreads;
+      const int64_t slot_offset =
+          (layer_idx * pool->num_ckpt_slots + ckpt_slot) *
+          pool->conv_elems_per_slot;
+      uint32_t* dst = reinterpret_cast<uint32_t*>(pool->conv_ckpt.data_ptr()) +
+                      slot_offset / 2;
+      const dim3 grid(static_cast<uint32_t>(quant_blocks + conv_blocks));
+      quantize_ssm_tile_and_store_conv_kernel<<<grid,
+                                                kQuantThreads,
+                                                0,
+                                                stream>>>(
+          src,
+          qdata,
+          scales,
+          layer_idx,
+          pool->num_ckpt_slots,
+          pool->num_heads,
+          ckpt_slot,
+          reinterpret_cast<const uint32_t*>(conv.data_ptr()),
+          dst,
+          conv.stride(1) / 2,
+          pairs,
+          dst_conv_cols);
+    } else if (use_tiled) {
       const dim3 grid(static_cast<uint32_t>(pool->num_heads *
                                             (kTiledStateDim / kTiledColumns)));
       quantize_single_layer_ssm_to_int8_tiled_kernel<<<grid,
@@ -926,21 +1036,28 @@ void store_gdn_int8_checkpoint_from_tensors(
     LOG(FATAL) << "Unsupported GDN SSM dtype for Int8 checkpoint: "
                << pool->ssm_dtype;
   }
-  check_musa_kernel_launch("quantize_single_layer_ssm_to_int8_kernel");
+  check_musa_kernel_launch(combine
+                               ? "quantize_ssm_tile_and_store_conv_kernel"
+                               : "quantize_single_layer_ssm_to_int8_kernel");
 
-  const int64_t conv_blocks_x =
-      (pool->conv_elems_per_slot + kConvCopyThreads - 1) / kConvCopyThreads;
-  const dim3 conv_grid(static_cast<uint32_t>(conv_blocks_x), 1u);
-  copy_single_layer_conv_to_ckpt_kernel<<<conv_grid, kConvCopyThreads, 0, stream>>>(
-      reinterpret_cast<const uint16_t*>(conv_contig.data_ptr()),
-      reinterpret_cast<uint16_t*>(pool->conv_ckpt.data_ptr()),
-      layer_idx,
-      pool->num_ckpt_slots,
-      pool->conv_elems_per_slot,
-      src_conv_cols,
-      dst_conv_cols,
-      ckpt_slot);
-  check_musa_kernel_launch("copy_single_layer_conv_to_ckpt_kernel");
+  if (!combine) {
+    const int64_t conv_blocks_x =
+        (pool->conv_elems_per_slot + kConvCopyThreads - 1) / kConvCopyThreads;
+    const dim3 conv_grid(static_cast<uint32_t>(conv_blocks_x), 1u);
+    copy_single_layer_conv_to_ckpt_kernel<<<conv_grid,
+                                            kConvCopyThreads,
+                                            0,
+                                            stream>>>(
+        reinterpret_cast<const uint16_t*>(conv.data_ptr()),
+        reinterpret_cast<uint16_t*>(pool->conv_ckpt.data_ptr()),
+        layer_idx,
+        pool->num_ckpt_slots,
+        pool->conv_elems_per_slot,
+        src_conv_cols,
+        dst_conv_cols,
+        ckpt_slot);
+    check_musa_kernel_launch("copy_single_layer_conv_to_ckpt_kernel");
+  }
 
   if (layer_idx == 0 && tls_active_singlepass_plan != nullptr) {
     tls_active_singlepass_plan->mark_written(ckpt_logical_id);

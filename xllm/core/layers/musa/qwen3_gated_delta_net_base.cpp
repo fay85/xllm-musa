@@ -776,8 +776,7 @@ std::pair<torch::Tensor, torch::Tensor> run_segmented_gdn_prefill(
             pre_conv_rows
                 .narrow(
                     0, local_start + next_c - conv_state_len, conv_state_len)
-                .t()
-                .contiguous();
+                .t();
         xllm::kernel::musa::store_gdn_int8_checkpoint_from_tensors(
             ssm_cache,
             cur_state->squeeze(0),
