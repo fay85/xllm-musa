@@ -145,6 +145,7 @@ TEST(SparseMlaTest, PagedNopeAbsorptionMatchesExplicitKeysAndValues) {
   auto latent = torch::randn({3, 512}, opts) * 0.1;
   auto wk = torch::randn({8, 512, 256}, opts) * 0.01;
   auto wv = torch::randn({8, 512, 256}, opts) * 0.01;
+  auto absorbed_wk = wk.transpose(1, 2).contiguous().to(device);
   auto ids = torch::full({3, 64}, -1, torch::kInt32);
   ids[0][0] = 0;
   ids[0][1] = 4;
@@ -167,7 +168,7 @@ TEST(SparseMlaTest, PagedNopeAbsorptionMatchesExplicitKeysAndValues) {
   device_cache[3][0].zero_();
   auto result = layer::glm5_next_mla_attention(q.to(device),
                                                latent.to(device),
-                                               wk.to(device),
+                                               absorbed_wk,
                                                wv.to(device),
                                                ids.to(device),
                                                lengths.to(device),
@@ -191,7 +192,7 @@ TEST(SparseMlaTest, PagedNopeAbsorptionMatchesExplicitKeysAndValues) {
       cache.view({16, 512}).to(device), all_slots, fp8_cache);
   auto fp8_result = layer::glm5_next_mla_attention(q.to(device),
                                                    latent.to(device),
-                                                   wk.to(device),
+                                                   absorbed_wk,
                                                    wv.to(device),
                                                    ids.to(device),
                                                    lengths.to(device),

@@ -989,6 +989,49 @@ TEST_F(GlmSparseTest,
                               0.004));
 }
 
+TEST_F(GlmSparseTest, VerifyScheduleCanBeReusedAcrossIndependentLayerCaches) {
+  auto args = model_args();
+  args.index_topk(2048);
+  ProcessGroup group(0, 1, device_);
+  ParallelArgs parallel(0, 1, &group);
+  parallel.tp_group_ = &group;
+  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+  Glm5NextSparseAttention layer(args, parallel, opts);
+  layer->load_state_dict(StateDict(make_weights(args)));
+  auto pos = torch::arange(62, 68, opts.dtype(torch::kLong));
+  auto meta = metadata(62, 6, device_);
+  meta.is_spec_verify = true;
+  meta.linear_state_indices.fill_(2);
+  kernel::musa::SparseMlaDecodePlan plan;
+  for (int64_t state_slots : {4, 4, 2}) {
+    // With two slots, state ID 2 is padding and no latent row may be written.
+    auto cache =
+        Glm5NextSparseAttentionImpl::create_cache(2, state_slots, opts, true);
+    auto reference =
+        Glm5NextSparseAttentionImpl::create_cache(2, state_slots, opts, true);
+    auto x = torch::randn({6, args.hidden_size()}, opts);
+    auto expected = layer->forward(pos, x, meta, reference);
+    const auto previous_metadata = plan.metadata;
+    const auto previous_slots = plan.state_slots;
+    auto actual = layer->forward(pos, x, meta, cache, nullptr, &plan);
+    ASSERT_TRUE(plan.metadata.defined());
+    ASSERT_TRUE(plan.splits.defined());
+    EXPECT_EQ(plan.state_slots, state_slots);
+    if (previous_metadata.defined()) {
+      EXPECT_EQ(plan.metadata.is_same(previous_metadata),
+                previous_slots == state_slots);
+    }
+    EXPECT_TRUE(torch::equal(actual.first.cpu(), expected.first.cpu()));
+    EXPECT_TRUE(torch::equal(actual.second.lengths.cpu(),
+                             expected.second.lengths.cpu()));
+    EXPECT_TRUE(
+        torch::equal(cache.get_k_cache().cpu(), reference.get_k_cache().cpu()));
+    if (state_slots == 2) {
+      EXPECT_EQ(cache.get_k_cache().cpu().count_nonzero().item<int64_t>(), 0);
+    }
+  }
+}
+
 TEST_F(GlmSparseTest, FullFp8LayerMatchesChunkedDecode) {
   auto args = model_args();
   auto weights = make_weights(args);
