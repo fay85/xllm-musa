@@ -40,6 +40,8 @@ enum class PrefetchControl : uint8_t {
   STOP = 1,
 };
 
+inline constexpr uint32_t kLinearStorePrefetchBatchSize = 1;
+
 class PrefetchUnit final {
  public:
   std::vector<BlockTransferInfo> gated_blocks;
@@ -67,6 +69,14 @@ class StoragePrefetchRequest final {
   // Identifies the owning request in worker-side prefetch logs.
   std::string request_id;
   std::vector<PrefetchUnit> units;
+  // LINEAR tails can land on any KV block. Use the same single-unit batch
+  // on the worker and when interpreting streamed hit results.
+  bool force_single_unit_batches = false;
+
+  size_t effective_batch_size(size_t configured_batch_size) const {
+    return force_single_unit_batches ? kLinearStorePrefetchBatchSize
+                                     : configured_batch_size;
+  }
 
   bool valid() const {
     return !units.empty() &&
@@ -159,7 +169,7 @@ class PrefetchResult final {
       : workers_(worker_count),
         remaining_workers_(worker_count),
         request_(request),
-        batch_size_(batch_size),
+        batch_size_(request.effective_batch_size(batch_size)),
         timeout_ms_(timeout_ms),
         stop_requested_(std::move(stop_requested)),
         done_(std::move(done)) {

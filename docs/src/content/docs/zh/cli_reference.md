@@ -86,7 +86,7 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | 参数名称 | 类型 | 默认值 | 参数含义 |
 |:---------|:-----|:-------|:---------|
 | `prefetch_timeout` | `uint32` | `0` | 到期后停止下发新的 KV Cache Store 预取批次，并等待在途批次完成；`0` 表示无限等待。 |
-| `prefetch_batch_size` | `uint32` | `2` | 从 KV Cache Store 预取并拷贝的 batch size。 |
+| `prefetch_batch_size` | `uint32` | `2` | 从 KV Cache Store 预取并拷贝的 batch size。 对于普通 KV + LINEAR 布局，Store 回读固定使用 `prefetch_batch_size=1` 和 `prefetch_valid_blocks_per_batch=1`，以逐个 KV 块检查 LINEAR checkpoint。 |
 | `layers_wise_copy_batchs` | `uint32` | `4` | 按层执行 H2D 拷贝的 batch 数。 |
 | `host_blocks_factor` | `double` | `0.0` | host block 系数，例如 `host block num = host_blocks_factor * hbm block num`。 |
 | `enable_kvcache_store` | `bool` | `false` | 是否启用 KV Cache Store。 |

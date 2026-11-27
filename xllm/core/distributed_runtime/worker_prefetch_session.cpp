@@ -140,7 +140,7 @@ WorkerPrefetchSession::WorkerPrefetchSession(ThreadPool* copy_pool,
     : copy_pool_(copy_pool),
       stats_pool_(stats_pool),
       request_(std::move(request)),
-      batch_size_(batch_size),
+      batch_size_(request_.effective_batch_size(batch_size)),
       worker_rank_(worker_rank),
       callbacks_(std::move(callbacks)) {
   CHECK(copy_pool_ != nullptr);

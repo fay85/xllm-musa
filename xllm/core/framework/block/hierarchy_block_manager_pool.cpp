@@ -207,6 +207,7 @@ StoragePrefetchRequest build_flat_kv_linear_prefetch_request(
   }
 
   StoragePrefetchRequest request;
+  request.force_single_unit_batches = true;
   request.units.reserve(kv_blocks.size() - base_units);
   for (size_t unit = base_units; unit < kv_blocks.size(); ++unit) {
     PrefetchUnit prefetch_unit;
@@ -516,9 +517,11 @@ HierarchyBlockManagerPool::HierarchyBlockManagerPool(
       } else if (type == BlockType::LINEAR) {
         host_options.num_blocks(num_blocks);
         host_options.block_type(BlockType::LINEAR);
-        host_options.prefetch_batch_size(options_.prefetch_batch_size());
+        // Try the LINEAR key at every KV block, including a partial final
+        // chunk. The flat KV + LINEAR Store request uses this same width.
+        host_options.prefetch_batch_size(kLinearStorePrefetchBatchSize);
         host_options.prefetch_valid_blocks_per_batch(
-            options_.prefetch_valid_blocks_per_batch());
+            kLinearStorePrefetchBatchSize);
         host_options.preserve_decode_checkpoint(
             host_options.instance_is_decode() &&
             options_.enable_host_offload());
@@ -641,20 +644,31 @@ void HierarchyBlockManagerPool::collect_offload_pairs(Sequence* sequence) {
         continue;
       }
 
-      auto pair = std::make_shared<OffloadBlockPair>();
-      pair->block_type = BlockType::LINEAR;
-      size_t checkpoint_index = 0;
       // Offload covers tokens already in the HBM cache. Host may already be
       // ahead from an earlier pair, so the boundary is the HBM cursor.
       const size_t cached_tokens = hbm_state.kv_cache_tokens_num();
-      if (sequence->is_prefill_stage()) {
+      if (cached_tokens < block_size) {
+        continue;
+      }
+      const bool is_prefill = sequence->is_prefill_stage();
+      if (is_prefill) {
+        // Keep intermediate checkpoints in HBM only. Offload the prompt's
+        // last block-aligned checkpoint without rounding down the HBM state.
+        const size_t prompt_tokens = sequence->num_prompt_tokens();
+        if (cached_tokens > prompt_tokens ||
+            prompt_tokens - cached_tokens >= block_size ||
+            cached_tokens % block_size != 0) {
+          continue;
+        }
+      }
+
+      auto pair = std::make_shared<OffloadBlockPair>();
+      pair->block_type = BlockType::LINEAR;
+      const size_t checkpoint_index = cached_tokens / block_size - 1;
+      if (is_prefill) {
         // Prefill copies the completed HBM front and keeps both HBM blocks
         // valid. Host moves the front into the pair, so that slot becomes
         // invalid while both vectors stay length 2.
-        if (cached_tokens < block_size) {
-          continue;
-        }
-        checkpoint_index = cached_tokens / block_size - 1;
         pair->src = hbm_blocks->front();
         pair->dst = std::move(host_blocks->front());
         pair->checkpoint_row = 0;
@@ -664,10 +678,9 @@ void HierarchyBlockManagerPool::collect_offload_pairs(Sequence* sequence) {
         // moves the preserved front slot. Each vector keeps the live block.
         const std::optional<size_t> crossed_row =
             last_decode_step_checkpoint_row(*sequence, block_size);
-        if (!crossed_row.has_value() || cached_tokens < block_size) {
+        if (!crossed_row.has_value()) {
           continue;
         }
-        checkpoint_index = cached_tokens / block_size - 1;
         pair->src = std::move(hbm_blocks->front());
         pair->dst = std::move(host_blocks->front());
         pair->checkpoint_row = crossed_row.value();

@@ -522,6 +522,8 @@ bool storage_prefetch_request_to_proto(const StoragePrefetchRequest& request,
     proto_info->set_checkpoint_row(info.checkpoint_row);
   };
   proto_request->set_request_id(request.request_id);
+  proto_request->set_force_single_unit_batches(
+      request.force_single_unit_batches);
   proto_request->mutable_units()->Reserve(request.units.size());
   for (const PrefetchUnit& unit : request.units) {
     proto::PrefetchUnit* proto_unit = proto_request->add_units();
@@ -544,6 +546,8 @@ bool proto_to_storage_prefetch_request(
   }
 
   request->request_id = proto_request.request_id();
+  request->force_single_unit_batches =
+      proto_request.force_single_unit_batches();
   request->units.clear();
   auto parse = [](const proto::BlockTransferInfo& proto_info,
                   BlockTransferInfo* info) {

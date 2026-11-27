@@ -86,7 +86,7 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
 | `prefetch_timeout` | `uint32` | `0` | Stops issuing new KV Cache Store prefetch batches after the timeout and waits for in-flight batches; `0` waits indefinitely. |
-| `prefetch_batch_size` | `uint32` | `2` | Copy batch size for prefetching from KV Cache Store. |
+| `prefetch_batch_size` | `uint32` | `2` | Copy batch size for prefetching from KV Cache Store. For the flat KV + LINEAR layout, Store reads use `prefetch_batch_size=1` and `prefetch_valid_blocks_per_batch=1` so each KV block is checked for a LINEAR checkpoint. |
 | `layers_wise_copy_batchs` | `uint32` | `4` | Number of batches for layer-wise H2D copy. |
 | `host_blocks_factor` | `double` | `0.0` | Host block factor, for example `host block num = host_blocks_factor * hbm block num`. |
 | `enable_kvcache_store` | `bool` | `false` | Whether to enable KV Cache Store. |

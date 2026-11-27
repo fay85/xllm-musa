@@ -164,6 +164,8 @@ message PrefetchRequest {
   repeated PrefetchUnit units = 1;
   // Owning request id, used only to correlate prefetch logs.
   string request_id = 2;
+  // LINEAR lookups use one KV unit per batch, regardless of worker settings.
+  bool force_single_unit_batches = 3;
 }
 
 message TransferStatus {

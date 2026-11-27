@@ -256,12 +256,13 @@ class FakePrefetchEngine final : public Engine {
                      size_t hit_units,
                      bool worker_ok = true) {
     CHECK(result_ != nullptr);
+    const size_t batch_size = result_->batch_wire_size();
     size_t remaining_hits = hit_units;
     for (size_t batch_index = 0;
-         batch_index < request_->batch_count(batch_size_);
+         batch_index < request_->batch_count(batch_size);
          ++batch_index) {
       const size_t batch_units =
-          request_->batch_unit_count(batch_index, batch_size_);
+          request_->batch_unit_count(batch_index, batch_size);
       const uint8_t batch_hits =
           static_cast<uint8_t>(std::min(remaining_hits, batch_units));
       const std::optional<PrefetchControl> control =
@@ -281,16 +282,17 @@ class FakePrefetchEngine final : public Engine {
                                        const std::vector<uint8_t>& logical_hits,
                                        bool worker_ok = true) {
     CHECK(result_ != nullptr);
+    const size_t batch_size = result_->batch_wire_size();
     size_t logical_index = 0;
     for (size_t batch_index = 0;
-         batch_index < request_->batch_count(batch_size_);
+         batch_index < request_->batch_count(batch_size);
          ++batch_index) {
       const size_t unit_begin =
-          request_->batch_unit_begin(batch_index, batch_size_);
+          request_->batch_unit_begin(batch_index, batch_size);
       const size_t unit_count =
-          request_->batch_unit_count(batch_index, batch_size_);
-      std::vector<uint8_t> gated(batch_size_, 0);
-      std::vector<uint8_t> non_gated(batch_size_, 0);
+          request_->batch_unit_count(batch_index, batch_size);
+      std::vector<uint8_t> gated(batch_size, 0);
+      std::vector<uint8_t> non_gated(batch_size, 0);
       for (size_t local = 0; local < unit_count; ++local) {
         const PrefetchUnit& unit = request_->units[unit_begin + local];
         bool gated_hit = true;
@@ -1497,12 +1499,21 @@ TEST(HierarchyBlockManagerPoolTest,
     HierarchyBlockManagerPool pool(options, &engine, 1);
     auto shutdown =
         folly::makeGuard([&pool, &engine]() { shutdown_pool(pool, engine); });
+    const std::vector<int32_t> shorter_tokens(9, 19);
+    if (warmup) {
+      // Seed the 8-token checkpoint as the tail of a different prompt, not
+      // as an intermediate chunk of the 13-token prompt below.
+      Sequence shorter_source = make_test_sequence(/*index=*/0, shorter_tokens);
+      const auto cleanup = folly::makeGuard([&pool, &shorter_source] {
+        pool.deallocate(&shorter_source);
+        pool.transfer_blocks();
+      });
+      ASSERT_TRUE(pool.allocate(&shorter_source, shorter_tokens.size()));
+      shorter_source.kv_state().set_kv_cache_tokens_num(8);
+      ASSERT_TRUE(pool.allocate(&shorter_source, shorter_tokens.size()));
+    }
     const std::vector<int32_t> tokens(13, 19);
     Sequence source = make_test_sequence(0, tokens);
-    if (warmup) {
-      ASSERT_TRUE(pool.allocate(&source, 8));
-      source.kv_state().set_kv_cache_tokens_num(8);
-    }
     ASSERT_TRUE(pool.allocate(&source, 12));
     pool.transfer_blocks();
     engine.hold_offloads(2);
@@ -1544,7 +1555,7 @@ TEST(HierarchyBlockManagerPoolTest,
 
     // The tail's actual hash must not be published under a regular boundary.
     // With no 8-token checkpoint, a shorter prompt cannot restore this tail.
-    auto shorter = make_test_request(std::vector<int32_t>(9, 19));
+    auto shorter = make_test_request(shorter_tokens);
     bool shorter_done = false;
     pool.prefetch_from_storage(
         shorter,
@@ -2493,11 +2504,11 @@ TEST(HierarchyBlockManagerPoolTest,
       .linear_state_num_slots(80)
       .host_num_blocks_by_type({{BlockType::KV, 128}, {BlockType::LINEAR, 80}})
       .enable_kvcache_store(true)
-      .prefetch_batch_size(8)
-      .prefetch_valid_blocks_per_batch(8);
+      .prefetch_batch_size(2)
+      .prefetch_valid_blocks_per_batch(1);
   FakePrefetchEngine engine(/*worker_count=*/1,
                             /*timeout_ms=*/-1,
-                            /*batch_size=*/8);
+                            /*batch_size=*/2);
   HierarchyBlockManagerPool pool(options, &engine, /*dp_size=*/1);
   const auto& host = HierarchyPoolTestPeer::host_leaves(pool);
   const std::vector<int32_t> cached_tokens(kMatchedTailTokens, 17);
@@ -2531,6 +2542,7 @@ TEST(HierarchyBlockManagerPoolTest,
       [&completed](std::shared_ptr<Request> /*request*/) { completed = true; });
 
   ASSERT_NE(engine.result(), nullptr);
+  EXPECT_EQ(engine.result()->batch_wire_size(), 1u);
   ASSERT_EQ(engine.request().units.size(), 1u);
   EXPECT_EQ(engine.request().units.front().gated_blocks.size() * kKvBlockSize,
             kTargetTailTokens - kMatchedTailTokens);
@@ -2676,6 +2688,57 @@ INSTANTIATE_TEST_SUITE_P(
                       LinearTailPrefetchCase{8, 4, 21, true},
                       LinearTailPrefetchCase{8192, 128, 9000, false},
                       LinearTailPrefetchCase{8192, 128, 9000, true}));
+
+TEST(HierarchyBlockManagerPoolTest, PrefillOffloadsOnlyTailLinearCheckpoint) {
+  constexpr int32_t kChunkSize = 4096;
+  constexpr uint32_t kBlockSize = 128;
+  constexpr size_t kTailCheckpoint = 2 * kChunkSize + 1024;
+  constexpr size_t kPromptTokens = kTailCheckpoint + 1;
+  int32_t& chunk_size =
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  const auto restore_chunk_size = folly::makeGuard(
+      [&chunk_size, original = chunk_size] { chunk_size = original; });
+  chunk_size = kChunkSize;
+
+  BlockManagerPool::Options options = make_flat_kv_options();
+  options.block_size(kBlockSize)
+      .num_blocks(128)
+      .enable_linear_state(true)
+      .linear_state_num_slots(16)
+      .host_num_blocks_by_type({{BlockType::KV, 128}, {BlockType::LINEAR, 16}});
+  HierarchyBlockManagerPool pool(options, /*engine=*/nullptr, /*dp_size=*/1);
+  Sequence sequence =
+      make_test_sequence(/*index=*/0, std::vector<int32_t>(kPromptTokens, 7));
+  const auto cleanup = folly::makeGuard([&pool, &sequence] {
+    pool.deallocate(&sequence);
+    HierarchyPoolTestPeer::release_pending_offload_pairs(pool);
+  });
+  ASSERT_TRUE(pool.allocate(&sequence, kPromptTokens));
+
+  size_t previous_kv_blocks = 0;
+  for (const size_t cached_tokens : {size_t{kChunkSize},
+                                     size_t{2 * kChunkSize},
+                                     kTailCheckpoint - 1,
+                                     kTailCheckpoint}) {
+    SCOPED_TRACE(cached_tokens);
+    sequence.kv_state().set_kv_cache_tokens_num(cached_tokens);
+    ASSERT_TRUE(pool.allocate(&sequence, kPromptTokens));
+    const auto stored = HierarchyPoolTestPeer::complete_offload_pairs(pool);
+
+    const auto hashes = sequence.block_hashes(kBlockSize);
+    const size_t kv_blocks = cached_tokens / kBlockSize;
+    const bool offloads_linear = cached_tokens == kTailCheckpoint;
+    EXPECT_EQ(stored.size(), kv_blocks - previous_kv_blocks + offloads_linear);
+    for (size_t i = previous_kv_blocks; i < kv_blocks; ++i) {
+      const std::string key(reinterpret_cast<const char*>(hashes[i].data),
+                            XXH3_128BITS_HASH_VALUE_LEN);
+      EXPECT_EQ(stored.count({BlockType::KV, key}), 1u);
+      EXPECT_EQ(stored.count({BlockType::LINEAR, key}),
+                offloads_linear && i == kv_blocks - 1 ? 1u : 0u);
+    }
+    previous_kv_blocks = kv_blocks;
+  }
+}
 
 TEST(HierarchyBlockManagerPoolTest,
      DecodeLinearOffloadKeepsLiveSlotWithInflightReferences) {
